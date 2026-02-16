@@ -18,10 +18,10 @@ export enum CustomerStatus {
 }
 
 export enum SalesInquiryStatus {
-  DRAFT = 'draft',
-  APPROVED = 'approved',
-  CONVERTED_TO_ORDER = 'converted_to_order',
-  CANCELLED = 'cancelled',
+  DRAFT = 'Pending',
+  APPROVED = 'Submitted',
+  CONVERTED_TO_ORDER = 'Converted',
+  CANCELLED = 'Cancelled',
 }
 
 export enum SalesOrderStatus {

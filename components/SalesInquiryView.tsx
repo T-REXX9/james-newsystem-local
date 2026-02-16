@@ -17,15 +17,16 @@ import {
   SalesInquiryItem,
   SalesInquiryStatus,
 } from '../types';
-import { fetchContacts } from '../services/supabaseService';
+import { fetchContacts } from '../services/customerDatabaseLocalApiService';
 import {
   approveInquiry,
   convertToOrder,
   createSalesInquiry,
   deleteSalesInquiry,
+  getSalesInquiry,
   getAllSalesInquiries,
   updateSalesInquiry,
-} from '../services/salesInquiryService';
+} from '../services/salesInquiryLocalApiService';
 import { getProductPrice } from '../services/productService';
 import { getSalesOrderByInquiry } from '../services/salesOrderService';
 
@@ -108,6 +109,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   const { data: customers } = useRealtimeList<Contact>({
     tableName: 'contacts',
     initialFetchFn: fetchContacts,
+    realtimeEnabled: false,
   });
 
   // Use real-time nested list for inquiries with items
@@ -126,6 +128,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     childParentIdField: 'inquiry_id',
     childrenField: 'items',
     sortParentFn: sortByCreatedAt,
+    enabled: true,
   });
 
   // Form State
@@ -205,6 +208,10 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   }, []);
 
   const customerMap = useMemo(() => new Map(customers.map((customer) => [customer.id, customer])), [customers]);
+  const oldSystemInquiryStatuses = useMemo(
+    () => [SalesInquiryStatus.DRAFT, SalesInquiryStatus.APPROVED, SalesInquiryStatus.CANCELLED],
+    []
+  );
 
   const filteredInquiries = useMemo(() => {
     const query = searchTerm.toLowerCase();
@@ -323,17 +330,19 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     resetFormForNew();
   }, [resetFormForNew]);
 
-  const selectInquiry = useCallback((inquiry: SalesInquiry) => {
+  const selectInquiry = useCallback(async (inquiry: SalesInquiry) => {
     setIsCreatingNew(false);
-    setSelectedInquiry(inquiry);
-    loadInquiryIntoForm(inquiry);
+    const detailed = await getSalesInquiry(inquiry.id);
+    const selected = detailed || inquiry;
+    setSelectedInquiry(selected);
+    loadInquiryIntoForm(selected);
   }, [loadInquiryIntoForm]);
 
   useEffect(() => {
     if (isCreatingNew) return;
     if (selectedInquiry) return;
     if (inquiries.length === 0) return;
-    selectInquiry(inquiries[0]);
+    void selectInquiry(inquiries[0]);
   }, [inquiries, isCreatingNew, selectInquiry, selectedInquiry]);
 
   // When customer is selected, populate metrics and delivery address
@@ -646,14 +655,10 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   };
   const activeInquiryNumber = !isCreatingNew && selectedInquiry?.inquiry_no ? selectedInquiry.inquiry_no : inquiryNo;
   const customerOutstanding = selectedCustomer?.balance || 0;
-  const isReadOnly = selectedInquiry?.status === SalesInquiryStatus.CONVERTED_TO_ORDER;
+  const isReadOnly = selectedInquiry?.status === SalesInquiryStatus.CANCELLED;
   const canFinalizeInquiry = Boolean(selectedInquiry && !isCreatingNew && selectedInquiry.status === SalesInquiryStatus.DRAFT);
   const canConvertInquiry = Boolean(selectedInquiry && !isCreatingNew && selectedInquiry.status === SalesInquiryStatus.APPROVED);
-  const canOpenConvertedOrder = Boolean(
-    selectedInquiry &&
-    !isCreatingNew &&
-    selectedInquiry.status === SalesInquiryStatus.CONVERTED_TO_ORDER
-  );
+  const canOpenConvertedOrder = false;
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-950">
@@ -743,7 +748,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                   className="flex-1 text-sm border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200"
                 >
                   <option value="all">All Statuses</option>
-                  {Object.values(SalesInquiryStatus).map((status) => (
+                  {oldSystemInquiryStatuses.map((status) => (
                     <option key={status} value={status}>
                       {status.replace(/_/g, ' ')}
                     </option>
