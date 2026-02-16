@@ -5,7 +5,7 @@ import {
     FileText, DollarSign, Activity, Clock, UserCog, Save, X as XIcon, Pencil
 } from 'lucide-react';
 import { Contact, CustomerStatus, UserProfile } from '../types';
-import { fetchContactTransactions, fetchCustomerMetrics, fetchSalesAgents, updateContact, fetchUpdatedContactDetails } from '../services/supabaseService';
+import { fetchContactTransactions, fetchCustomerMetrics, fetchSalesAgents, updateContact, fetchUpdatedContactDetails } from '../services/customerDatabaseLocalApiService';
 import CompanyName from './CompanyName';
 import { toast } from 'sonner';
 

@@ -17,9 +17,10 @@ vi.mock('../../hooks/useRealtimeList', () => ({
 }));
 
 const createContactMock = vi.fn();
-vi.mock('../../services/supabaseService', () => ({
+vi.mock('../../services/customerDatabaseLocalApiService', () => ({
   fetchContacts: vi.fn(),
   bulkUpdateContacts: vi.fn(),
+  updateContact: vi.fn(),
   createContact: (...args: any[]) => createContactMock(...args),
 }));
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, UserCog, Save } from 'lucide-react';
 import { UserProfile } from '../types';
-import { fetchSalesAgents } from '../services/supabaseService';
+import { fetchSalesAgents } from '../services/customerDatabaseLocalApiService';
 
 interface BulkAssignAgentModalProps {
     isOpen: boolean;
@@ -141,4 +141,3 @@ const BulkAssignAgentModal: React.FC<BulkAssignAgentModalProps> = ({
 };
 
 export default BulkAssignAgentModal;
-

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useRealtimeList } from '../hooks/useRealtimeList';
-import { fetchContacts, bulkUpdateContacts, createContact, updateContact } from '../services/supabaseService';
+import { fetchContacts, bulkUpdateContacts, createContact, updateContact } from '../services/customerDatabaseLocalApiService';
 import { Contact } from '../types';
 import CustomerListSidebar from './CustomerListSidebar';
 import CustomerDetailPanel from './CustomerDetailPanel';
@@ -17,7 +17,8 @@ const CustomerDatabase: React.FC = () => {
   const { data: customers, setData: setCustomers, refetch: reload } = useRealtimeList<Contact>({
     tableName: 'contacts',
     initialFetchFn: fetchContacts,
-    sortFn: (a, b) => (a.company || a.name || '').localeCompare(b.company || b.name || '')
+    sortFn: (a, b) => (a.company || a.name || '').localeCompare(b.company || b.name || ''),
+    realtimeEnabled: false,
   });
 
   // UI State
