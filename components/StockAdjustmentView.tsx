@@ -25,6 +25,7 @@ import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 
 interface StockAdjustmentViewProps {
   initialAdjustmentId?: string;
+  initialAdjustmentNo?: string;
 }
 
 const WAREHOUSES = ['WH1', 'WH2', 'WH3', 'WH4', 'WH5', 'WH6'];
@@ -40,7 +41,7 @@ const documentStatusMeta: Record<StockAdjustmentStatus, { label: string; tone: '
   'finalized': { label: 'Finalized', tone: 'success' },
 };
 
-const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjustmentId }) => {
+const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjustmentId, initialAdjustmentNo }) => {
   const [selectedAdjustment, setSelectedAdjustment] = useState<StockAdjustment | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | StockAdjustmentStatus>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -124,6 +125,14 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
     const adjustment = stockAdjustments.find(entry => entry.id === initialAdjustmentId);
     if (adjustment) setSelectedAdjustment(adjustment);
   }, [initialAdjustmentId, stockAdjustments]);
+
+  useEffect(() => {
+    if (!initialAdjustmentNo || !stockAdjustments.length) return;
+    const adjustment = stockAdjustments.find(
+      (entry) => String(entry.adjustment_no || '').toLowerCase() === initialAdjustmentNo.toLowerCase()
+    );
+    if (adjustment) setSelectedAdjustment(adjustment);
+  }, [initialAdjustmentNo, stockAdjustments]);
 
   const filteredAdjustments = useMemo(() => {
     const query = searchTerm.toLowerCase();

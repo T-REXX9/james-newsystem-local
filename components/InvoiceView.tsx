@@ -18,6 +18,7 @@ import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 
 interface InvoiceViewProps {
   initialInvoiceId?: string;
+  initialInvoiceRefNo?: string;
 }
 
 const VAT_RATE = 0.12;
@@ -32,7 +33,7 @@ const documentStatusMeta: Record<InvoiceStatus, { label: string; tone: 'neutral'
   [InvoiceStatus.CANCELLED]: { label: 'Cancelled', tone: 'danger' },
 };
 
-const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId }) => {
+const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvoiceRefNo }) => {
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | InvoiceStatus>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -100,10 +101,14 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId }) => {
   }, [invoices, selectedInvoice]);
 
   useEffect(() => {
-    if (!initialInvoiceId || !invoices.length) return;
-    const invoice = invoices.find(entry => entry.id === initialInvoiceId);
+    if (!invoices.length) return;
+    const invoiceById = initialInvoiceId ? invoices.find(entry => entry.id === initialInvoiceId) : null;
+    const invoiceByNo = initialInvoiceRefNo
+      ? invoices.find(entry => String(entry.invoice_no || '').toLowerCase() === initialInvoiceRefNo.toLowerCase())
+      : null;
+    const invoice = invoiceById || invoiceByNo;
     if (invoice) setSelectedInvoice(invoice);
-  }, [initialInvoiceId, invoices]);
+  }, [initialInvoiceId, initialInvoiceRefNo, invoices]);
 
   const filteredInvoices = useMemo(() => {
     const query = searchTerm.toLowerCase();

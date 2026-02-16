@@ -442,7 +442,7 @@ export interface InventoryLog {
   id: string;
   item_id: string;
   date: string;
-  transaction_type: 'Purchase Order' | 'Invoice' | 'Order Slip' | 'Transfer Receipt' | 'Credit Memo' | 'Stock Adjustment';
+  transaction_type: 'Purchase Order' | 'Invoice' | 'Order Slip' | 'Transfer Receipt' | 'Credit Memo' | 'Stock Adjustment' | string;
   reference_no: string;
   partner: string;
   warehouse_id: string;

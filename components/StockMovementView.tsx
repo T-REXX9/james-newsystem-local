@@ -1,14 +1,12 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
-  Search, Calendar, Filter, RefreshCw, Package, ArrowRight, ArrowLeft,
-  ChevronDown, AlertCircle, FileText, X
+  Search, Filter, Package, ArrowRight, ArrowLeft, AlertCircle, FileText, X
 } from 'lucide-react';
-import type { Product, InventoryLog, InventoryLogWithProduct, InventoryLogFilters } from '../types';
+import type { Product, InventoryLogWithProduct } from '../types';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
-import { fetchProducts } from '../services/supabaseService';
-import { getInventoryLogsByItem, fetchInventoryLogs } from '../services/inventoryLogService';
-import { useRealtimeList } from '../hooks/useRealtimeList';
+import { fetchStockMovementLogs, searchStockMovementProducts } from '../services/stockMovementLocalApiService';
 import InventoryLogRow from './InventoryLogRow';
+import { resolveStockMovementNavigationTarget } from '../utils/stockMovementNavigation';
 
 const WAREHOUSES = ['WH1', 'WH2', 'WH3', 'WH4', 'WH5', 'WH6'];
 const TRANSACTION_TYPES = ['Purchase Order', 'Invoice', 'Order Slip', 'Transfer Receipt', 'Credit Memo', 'Stock Adjustment'];
@@ -24,26 +22,38 @@ const StockMovementView: React.FC = () => {
   const [itemSearch, setItemSearch] = useState<string>('');
   const [showItemDropdown, setShowItemDropdown] = useState(false);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [logs, setLogs] = useState<InventoryLogWithProduct[]>([]);
+  const [productOptions, setProductOptions] = useState<Product[]>([]);
+  const [debouncedReferenceSearch, setDebouncedReferenceSearch] = useState('');
 
-  // Fetch products
-  const { data: products, isLoading: loadingProducts } = useRealtimeList<Product>({
-    tableName: 'products',
-    initialFetchFn: fetchProducts,
-    sortFn: (a, b) => a.part_no.localeCompare(b.part_no),
-  });
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedReferenceSearch(referenceSearch.trim());
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [referenceSearch]);
 
-  // Filter products for autocomplete
-  const filteredProducts = useMemo(() => {
-    if (!itemSearch) return products.slice(0, 50); // Limit initial results
-    const query = itemSearch.toLowerCase();
-    return products.filter(p =>
-      p.part_no.toLowerCase().includes(query) ||
-      p.description.toLowerCase().includes(query) ||
-      p.brand.toLowerCase().includes(query) ||
-      p.item_code.toLowerCase().includes(query)
-    ).slice(0, 50);
-  }, [products, itemSearch]);
+  useEffect(() => {
+    let isMounted = true;
+    const timer = window.setTimeout(async () => {
+      try {
+        setIsLoadingProducts(true);
+        const rows = await searchStockMovementProducts(itemSearch.trim(), 50);
+        if (isMounted) setProductOptions(rows);
+      } catch (error) {
+        console.error('Error loading stock movement products:', error);
+        if (isMounted) setProductOptions([]);
+      } finally {
+        if (isMounted) setIsLoadingProducts(false);
+      }
+    }, 200);
+
+    return () => {
+      isMounted = false;
+      window.clearTimeout(timer);
+    };
+  }, [itemSearch]);
 
   // Fetch logs when product or filters change
   useEffect(() => {
@@ -55,59 +65,27 @@ const StockMovementView: React.FC = () => {
 
       setIsLoadingLogs(true);
       try {
-        const filters: InventoryLogFilters = {
+        const result = await fetchStockMovementLogs({
           item_id: selectedProduct.id,
-        };
-
-        if (warehouseFilter !== 'all') {
-          filters.warehouse_id = warehouseFilter;
-        }
-
-        if (transactionTypeFilter !== 'all') {
-          filters.transaction_type = transactionTypeFilter;
-        }
-
-        if (dateFrom) {
-          filters.date_from = dateFrom;
-        }
-
-        if (dateTo) {
-          filters.date_to = dateTo;
-        }
-
-        const fetchedLogs = await fetchInventoryLogs(filters);
-        
-        // Calculate running balance
-        let runningBalance = 0;
-        const logsWithBalance = fetchedLogs.map(log => {
-          if (log.status_indicator === '+') {
-            runningBalance += log.qty_in;
-          } else {
-            runningBalance -= log.qty_out;
-          }
-          return { ...log, balance: runningBalance };
+          warehouse_id: warehouseFilter,
+          transaction_type: transactionTypeFilter,
+          date_from: dateFrom || undefined,
+          date_to: dateTo || undefined,
+          search: debouncedReferenceSearch || undefined,
+          page: 1,
+          per_page: 1000,
         });
-
-        setLogs(logsWithBalance);
+        setLogs(result.logs);
       } catch (error) {
         console.error('Error fetching inventory logs:', error);
+        setLogs([]);
       } finally {
         setIsLoadingLogs(false);
       }
     };
 
     fetchLogs();
-  }, [selectedProduct, warehouseFilter, transactionTypeFilter, dateFrom, dateTo]);
-
-  // Filter logs by reference search
-  const filteredLogs = useMemo(() => {
-    if (!referenceSearch) return logs;
-    const query = referenceSearch.toLowerCase();
-    return logs.filter(log =>
-      log.reference_no.toLowerCase().includes(query) ||
-      log.partner.toLowerCase().includes(query)
-    );
-  }, [logs, referenceSearch]);
+  }, [selectedProduct, warehouseFilter, transactionTypeFilter, dateFrom, dateTo, debouncedReferenceSearch]);
 
   // Calculate total stock for selected product
   const totalStock = useMemo(() => {
@@ -124,19 +102,11 @@ const StockMovementView: React.FC = () => {
 
   // Handle reference click for navigation
   const handleReferenceClick = useCallback((log: InventoryLogWithProduct) => {
-    const routeMap: Record<string, string> = {
-      'Invoice': 'sales-transaction-invoice',
-      'Order Slip': 'sales-transaction-order-slip',
-      'Sales Order': 'sales-transaction-sales-order',
-      'Purchase Order': 'warehouse-purchasing-purchase-order',
-    };
-
-    const route = routeMap[log.transaction_type];
-    if (route) {
-      window.dispatchEvent(new CustomEvent('workflow:navigate', {
-        detail: { tab: route, payload: { documentId: log.reference_no } }
-      }));
-    }
+    const target = resolveStockMovementNavigationTarget(log);
+    if (!target) return;
+    window.dispatchEvent(new CustomEvent('workflow:navigate', {
+      detail: { tab: target.tab, payload: target.payload }
+    }));
   }, []);
 
   // Handle product selection
@@ -167,19 +137,19 @@ const StockMovementView: React.FC = () => {
 
   // Calculate summary stats
   const summaryStats = useMemo(() => {
-    if (!selectedProduct || filteredLogs.length === 0) {
+    if (!selectedProduct || logs.length === 0) {
       return { totalIn: 0, totalOut: 0, netMovement: 0 };
     }
 
-    const totalIn = filteredLogs.reduce((sum, log) => sum + (log.status_indicator === '+' ? log.qty_in : 0), 0);
-    const totalOut = filteredLogs.reduce((sum, log) => sum + (log.status_indicator === '-' ? log.qty_out : 0), 0);
+    const totalIn = logs.reduce((sum, log) => sum + (log.status_indicator === '+' ? log.qty_in : 0), 0);
+    const totalOut = logs.reduce((sum, log) => sum + (log.status_indicator === '-' ? log.qty_out : 0), 0);
 
     return {
       totalIn,
       totalOut,
       netMovement: totalIn - totalOut,
     };
-  }, [selectedProduct, filteredLogs]);
+  }, [selectedProduct, logs]);
 
   return (
     <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950">
@@ -235,9 +205,13 @@ const StockMovementView: React.FC = () => {
                 </div>
 
                 {/* Dropdown */}
-                {showItemDropdown && filteredProducts.length > 0 && (
+                {showItemDropdown && (
                   <div className="absolute z-10 w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-                    {filteredProducts.map(product => (
+                    {isLoadingProducts ? (
+                      <div className="p-3 text-xs text-slate-500">Loading products...</div>
+                    ) : productOptions.length === 0 ? (
+                      <div className="p-3 text-xs text-slate-500">No products found</div>
+                    ) : productOptions.map(product => (
                       <button
                         key={product.id}
                         onClick={() => handleProductSelect(product)}
@@ -401,7 +375,7 @@ const StockMovementView: React.FC = () => {
                   <span>Loading movement logs...</span>
                 </div>
               </div>
-            ) : filteredLogs.length === 0 ? (
+            ) : logs.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center text-slate-500">
                 <AlertCircle className="w-12 h-12 text-slate-300 mb-3" />
                 <p className="text-lg font-medium">No movement logs found</p>
@@ -431,7 +405,7 @@ const StockMovementView: React.FC = () => {
                       </div>
                     </div>
                     <div className="text-slate-400">
-                      {filteredLogs.length} {filteredLogs.length === 1 ? 'entry' : 'entries'}
+                      {logs.length} {logs.length === 1 ? 'entry' : 'entries'}
                     </div>
                   </div>
                 </div>
@@ -453,11 +427,11 @@ const StockMovementView: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredLogs.map(log => (
+                      {logs.map(log => (
                         <InventoryLogRow
                           key={log.id}
                           log={log}
-                          showWarehouse={warehouseFilter === 'all'}
+                          showWarehouse
                           onReferenceClick={handleReferenceClick}
                         />
                       ))}

@@ -7,7 +7,12 @@ import ReceivingList from './ReceivingList';
 import ReceivingForm from './ReceivingForm';
 import ReceivingView from './ReceivingView';
 
-const ReceivingStock: React.FC = () => {
+interface ReceivingStockProps {
+    initialRRId?: string;
+    initialRRRefNo?: string;
+}
+
+const ReceivingStock: React.FC<ReceivingStockProps> = ({ initialRRId, initialRRRefNo }) => {
     const [loading, setLoading] = useState(true);
     const [rrs, setRrs] = useState<ReceivingReportWithDetails[]>([]);
 
@@ -43,6 +48,21 @@ const ReceivingStock: React.FC = () => {
     }, [month, year, statusFilter]); // Search usually triggers on button or debounce, but here on enter or effect if debounced? I'll leave search for manual trigger or effect if simple. 
     // For simplicity, I'll trigger search on Enter or blur in the input, or just add a button.
     // Or adds search to dependency array with debounce. I'll add a search button logic in UI.
+
+    useEffect(() => {
+        if (!rrs.length) return;
+
+        const byId = initialRRId ? rrs.find((entry) => entry.id === initialRRId) : null;
+        const byRefNo = initialRRRefNo
+            ? rrs.find((entry) => String(entry.rr_no || '').toLowerCase() === initialRRRefNo.toLowerCase())
+            : null;
+
+        const matched = byId || byRefNo;
+        if (matched) {
+            setSelectedRrId(matched.id);
+            setViewMode('view');
+        }
+    }, [rrs, initialRRId, initialRRRefNo]);
 
     const handleCreateSuccess = () => {
         setViewMode('list');

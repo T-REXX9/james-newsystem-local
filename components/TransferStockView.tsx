@@ -49,7 +49,12 @@ const statusMeta: Record<TransferStatusType, { label: string; tone: 'neutral' | 
   'deleted': { label: 'Deleted', tone: 'danger' },
 };
 
-const TransferStockView: React.FC = () => {
+interface TransferStockViewProps {
+  initialTransferId?: string;
+  initialTransferNo?: string;
+}
+
+const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId, initialTransferNo }) => {
   const { addToast } = useToast();
   const [selectedTransfer, setSelectedTransfer] = useState<TransferStock | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | TransferStatusType>('all');
@@ -153,6 +158,19 @@ const TransferStockView: React.FC = () => {
       setSelectedTransfer(transferStocks[0]);
     }
   }, [transferStocks, selectedTransfer]);
+
+  useEffect(() => {
+    if (!transferStocks.length) return;
+    const byId = initialTransferId ? transferStocks.find((entry) => entry.id === initialTransferId) : null;
+    const byNo = initialTransferNo
+      ? transferStocks.find((entry) => String(entry.transfer_no || '').toLowerCase() === initialTransferNo.toLowerCase())
+      : null;
+    const matched = byId || byNo;
+    if (matched) {
+      setSelectedTransfer(matched);
+      setShowCreateForm(false);
+    }
+  }, [transferStocks, initialTransferId, initialTransferNo]);
 
   const filteredTransfers = useMemo(() => {
     const query = searchTerm.toLowerCase();

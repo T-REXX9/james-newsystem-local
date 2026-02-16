@@ -26,6 +26,7 @@ import InquiryReportFilter from './components/InquiryReportFilter';
 import SalesDevelopmentReport from './components/SalesDevelopmentReport';
 import StockMovementView from './components/StockMovementView';
 import TransferStockView from './components/TransferStockView';
+import StockAdjustmentView from './components/StockAdjustmentView';
 import SalesReport from './components/SalesReport';
 import FastSlowInventoryReport from './components/FastSlowInventoryReport';
 import InventoryAuditReport from './components/InventoryAuditReport';
@@ -304,7 +305,31 @@ const App: React.FC = () => {
       case 'warehouse-inventory-transfer-stock':
         return (
           <div className="h-full overflow-y-auto">
-            <TransferStockView />
+            <TransferStockView
+              initialTransferId={
+                moduleContext['warehouse-inventory-transfer-stock']?.transferId ||
+                moduleContext.transferstock?.transferId
+              }
+              initialTransferNo={
+                moduleContext['warehouse-inventory-transfer-stock']?.transferNo ||
+                moduleContext.transferstock?.transferNo
+              }
+            />
+          </div>
+        );
+      case 'warehouse-inventory-stock-adjustment':
+        return (
+          <div className="h-full overflow-y-auto">
+            <StockAdjustmentView
+              initialAdjustmentId={
+                moduleContext['warehouse-inventory-stock-adjustment']?.adjustmentId ||
+                moduleContext.stockadjustment?.adjustmentId
+              }
+              initialAdjustmentNo={
+                moduleContext['warehouse-inventory-stock-adjustment']?.adjustmentNo ||
+                moduleContext.stockadjustment?.adjustmentNo
+              }
+            />
           </div>
         );
       case 'warehouse-inventory-inventory-audit':
@@ -323,13 +348,26 @@ const App: React.FC = () => {
                 moduleContext['warehouse-purchasing-purchase-order']?.poId ||
                 moduleContext.purchaseorder?.poId
               }
+              initialPORefNo={
+                moduleContext['warehouse-purchasing-purchase-order']?.poRefNo ||
+                moduleContext.purchaseorder?.poRefNo
+              }
             />
           </div>
         );
       case 'warehouse-purchasing-receiving-stock':
         return (
           <div className="h-full overflow-y-auto">
-            <ReceivingStock />
+            <ReceivingStock
+              initialRRId={
+                moduleContext['warehouse-purchasing-receiving-stock']?.rrId ||
+                moduleContext.receivingstock?.rrId
+              }
+              initialRRRefNo={
+                moduleContext['warehouse-purchasing-receiving-stock']?.rrRefNo ||
+                moduleContext.receivingstock?.rrRefNo
+              }
+            />
           </div>
         );
       case 'warehouse-purchasing-return-to-supplier':
@@ -400,6 +438,10 @@ const App: React.FC = () => {
                 moduleContext['sales-transaction-order-slip']?.orderSlipId ||
                 moduleContext.orderslip?.orderSlipId
               }
+              initialSlipRefNo={
+                moduleContext['sales-transaction-order-slip']?.orderSlipRefNo ||
+                moduleContext.orderslip?.orderSlipRefNo
+              }
             />
           </div>
         );
@@ -411,6 +453,10 @@ const App: React.FC = () => {
               initialInvoiceId={
                 moduleContext['sales-transaction-invoice']?.invoiceId ||
                 moduleContext.invoice?.invoiceId
+              }
+              initialInvoiceRefNo={
+                moduleContext['sales-transaction-invoice']?.invoiceRefNo ||
+                moduleContext.invoice?.invoiceRefNo
               }
             />
           </div>
@@ -494,7 +540,20 @@ const App: React.FC = () => {
       case 'accounting-transactions-sales-return-credit':
         return renderComingSoon('Sales Return (Credit)');
       case 'accounting-transactions-adjustment-entry':
-        return renderComingSoon('Adjustment Entry');
+        return (
+          <div className="h-full overflow-y-auto">
+            <StockAdjustmentView
+              initialAdjustmentId={
+                moduleContext['accounting-transactions-adjustment-entry']?.adjustmentId ||
+                moduleContext.adjustmententry?.adjustmentId
+              }
+              initialAdjustmentNo={
+                moduleContext['accounting-transactions-adjustment-entry']?.adjustmentNo ||
+                moduleContext.adjustmententry?.adjustmentNo
+              }
+            />
+          </div>
+        );
       case 'accounting-transactions-daily-collection-entry':
         return renderComingSoon('Daily Collection Entry');
       case 'accounting-accounting-customer-ledger':

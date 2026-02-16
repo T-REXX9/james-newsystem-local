@@ -2380,7 +2380,16 @@ export const fetchSalesPerformanceByPaymentType = async (year: number, month: nu
 
 // --- NOTIFICATIONS SERVICE ---
 
+const UUID_V4_LIKE_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const canQueryNotificationTables = (userId: string): boolean =>
+  typeof userId === 'string' && UUID_V4_LIKE_REGEX.test(userId.trim());
+
 export const fetchNotifications = async (userId: string, limit: number = 50): Promise<Notification[]> => {
+  if (!canQueryNotificationTables(userId)) {
+    return [];
+  }
+
   try {
     const { data, error } = await supabase
       .from('notifications')
@@ -2398,6 +2407,10 @@ export const fetchNotifications = async (userId: string, limit: number = 50): Pr
 };
 
 export const fetchUnreadNotifications = async (userId: string): Promise<Notification[]> => {
+  if (!canQueryNotificationTables(userId)) {
+    return [];
+  }
+
   try {
     const { data, error } = await supabase
       .from('notifications')
@@ -2415,6 +2428,10 @@ export const fetchUnreadNotifications = async (userId: string): Promise<Notifica
 };
 
 export const getUnreadCount = async (userId: string): Promise<number> => {
+  if (!canQueryNotificationTables(userId)) {
+    return 0;
+  }
+
   try {
     const { data, error } = await supabase
       .from('notifications')

@@ -24,17 +24,22 @@ const POStatusBadge = ({ status }: { status: string }) => {
 
 interface PurchaseOrderViewProps {
   initialPOId?: string;
+  initialPORefNo?: string;
 }
 
 const PAGE_SIZE = 10;
 
-const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId }) => {
+const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, initialPORefNo }) => {
   const { addToast } = useToast();
+  const today = new Date();
   // List State
   const [orders, setOrders] = useState<PurchaseOrderWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [filterMonth, setFilterMonth] = useState<number>(today.getMonth() + 1);
+  const [filterYear, setFilterYear] = useState<number>(today.getFullYear());
   const [page, setPage] = useState(0);
 
   // View/Edit State
@@ -60,18 +65,40 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId }) =>
 
   // Fetch initial data
   useEffect(() => {
-    fetchOrders();
     fetchSuppliers();
     fetchProducts();
   }, []);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(searchTerm.trim());
+      setPage(0);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    fetchOrders();
+  }, [filterMonth, filterYear, filterStatus, debouncedSearch]);
+
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      const data = await purchaseOrderService.getPurchaseOrders({});
-      setOrders(data as unknown as PurchaseOrderWithDetails[] || []);
+      const data = await purchaseOrderService.getPurchaseOrders({
+        month: filterMonth,
+        year: filterYear,
+        status: filterStatus || 'all',
+        search: debouncedSearch,
+      });
+      const rows = (data as unknown as PurchaseOrderWithDetails[]) || [];
+      setOrders(rows);
+      if (rows.length === 0) {
+        setSelectedPO(null);
+      }
     } catch (err) {
       console.error(err);
+      setOrders([]);
+      setSelectedPO(null);
     } finally {
       setLoading(false);
     }
@@ -87,35 +114,43 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId }) =>
     setProducts(data || []);
   };
 
-  // Filter Logic
-  const filteredOrders = useMemo(() => {
-    return orders.filter(po => {
-      const matchesStatus = !filterStatus || po.status === filterStatus;
-      const matchesSearch = !searchTerm || po.po_number.toLowerCase().includes(searchTerm.toLowerCase()) || po.supplier?.company.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesStatus && matchesSearch;
-    });
-  }, [orders, filterStatus, searchTerm]);
+  // Data is already server-filtered by month/year/status/search.
+  const filteredOrders = useMemo(() => orders, [orders]);
 
   const paginatedOrders = filteredOrders.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
   const totalPages = Math.ceil(filteredOrders.length / PAGE_SIZE);
 
-  // Selection Logic
-  useEffect(() => {
-    if (initialPOId && orders.length > 0 && !selectedPO) {
-      const found = orders.find(o => o.id === initialPOId);
-      if (found) setSelectedPO(found);
-    } else if (orders.length > 0 && !selectedPO && !isCreating) {
-      // Optional: Auto-select first?
-      setSelectedPO(orders[0]);
-    }
-  }, [orders, initialPOId]);
-
-  const handleSelectPO = (po: PurchaseOrderWithDetails) => {
-    setSelectedPO(po);
+  const handleSelectPO = async (po: PurchaseOrderWithDetails) => {
     setIsCreating(false);
     setShowAddItem(false);
     setPrintMode(false);
+    try {
+      const fullPO = await purchaseOrderService.getPurchaseOrderById(po.id);
+      setSelectedPO(fullPO as unknown as PurchaseOrderWithDetails);
+    } catch (err) {
+      console.error('Error loading purchase order details:', err);
+      setSelectedPO(po);
+    }
   };
+
+  // Selection Logic
+  useEffect(() => {
+    if (orders.length > 0 && !selectedPO) {
+      const foundById = initialPOId ? orders.find(o => o.id === initialPOId) : null;
+      const foundByRef = initialPORefNo
+        ? orders.find(o => String(o.po_number || '').toLowerCase() === initialPORefNo.toLowerCase())
+        : null;
+      const found = foundById || foundByRef;
+      if (found) {
+        handleSelectPO(found);
+        return;
+      }
+    }
+    if (orders.length > 0 && !selectedPO && !isCreating) {
+      // Optional: Auto-select first?
+      handleSelectPO(orders[0]);
+    }
+  }, [orders, initialPOId, initialPORefNo, selectedPO, isCreating]);
 
   const startCreate = async () => {
     setIsCreating(true);
@@ -329,6 +364,27 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId }) =>
             <div className="flex items-center gap-2 px-2 py-1 round border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800">
               <Search className="w-4 h-4 text-slate-400" />
               <input className="flex-1 text-xs bg-transparent outline-none" placeholder="Search PO # or Supplier..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                value={filterMonth}
+                onChange={e => setFilterMonth(Number(e.target.value))}
+                className="w-full text-xs border border-slate-200 dark:border-slate-800 rounded px-2 py-1 bg-slate-50 dark:bg-slate-800"
+              >
+                {Array.from({ length: 12 }, (_, i) => (
+                  <option key={i + 1} value={i + 1}>
+                    {new Date(0, i).toLocaleString('default', { month: 'long' })}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="number"
+                min={2000}
+                max={2100}
+                value={filterYear}
+                onChange={e => setFilterYear(Number(e.target.value) || today.getFullYear())}
+                className="w-full text-xs border border-slate-200 dark:border-slate-800 rounded px-2 py-1 bg-slate-50 dark:bg-slate-800"
+              />
             </div>
             <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="w-full text-xs border border-slate-200 dark:border-slate-800 rounded px-2 py-1 bg-slate-50 dark:bg-slate-800">
               <option value="">All Statuses</option>

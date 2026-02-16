@@ -14,6 +14,7 @@ import {
 import { sanitizeObject, SanitizationConfig } from '../utils/dataSanitization';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { ENTITY_TYPES, logCreate, logDelete, logStatusChange, logUpdate } from './activityLogService';
+import { getLocalAuthSession } from './localAuthService';
 
 const receivingReportSanitizationConfig: SanitizationConfig<ReceivingReportInsert> = {
     rr_no: { type: 'string', placeholder: 'n/a', required: true },
@@ -38,9 +39,33 @@ const receivingReportItemSanitizationConfig: SanitizationConfig<ReceivingReportI
 };
 
 export const receivingService = {
+    isLikelyValidJwt(token: string | undefined | null): boolean {
+        if (!token || typeof token !== 'string') return false;
+        return token.split('.').length === 3;
+    },
+
+    async hasSupabaseAuthSession(): Promise<boolean> {
+        try {
+            // When running in local API auth mode, Supabase table access should be bypassed.
+            if (getLocalAuthSession()) {
+                return false;
+            }
+
+            const { data } = await supabase.auth.getSession();
+            const userId = data?.session?.user?.id;
+            const token = data?.session?.access_token;
+            return Boolean(userId) && this.isLikelyValidJwt(token);
+        } catch {
+            return false;
+        }
+    },
+
     // --- Receiving Reports ---
 
     async getReceivingReports(filters?: { month?: number; year?: number; status?: string; search?: string }): Promise<ReceivingReportWithDetails[]> {
+        const hasSession = await this.hasSupabaseAuthSession();
+        if (!hasSession) return [];
+
         let query = supabase
             .from('receiving_reports')
             .select('*, supplier_name, received_by');
@@ -72,6 +97,11 @@ export const receivingService = {
     },
 
     async getReceivingReportById(id: string): Promise<ReceivingReportWithDetails> {
+        const hasSession = await this.hasSupabaseAuthSession();
+        if (!hasSession) {
+            throw new Error('Receiving reports require Supabase-authenticated session.');
+        }
+
         const { data, error } = await supabase
             .from('receiving_reports')
             .select(`
@@ -305,6 +335,9 @@ export const receivingService = {
     },
 
     async getSuppliers(): Promise<Supplier[]> {
+        const hasSession = await this.hasSupabaseAuthSession();
+        if (!hasSession) return [];
+
         const { data, error } = await supabase
             .from('contacts')
             .select('*')
@@ -318,6 +351,9 @@ export const receivingService = {
     },
 
     async getProducts(): Promise<Product[]> {
+        const hasSession = await this.hasSupabaseAuthSession();
+        if (!hasSession) return [];
+
         const { data, error } = await supabase
             .from('products')
             .select('*')

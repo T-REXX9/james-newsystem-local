@@ -1,459 +1,361 @@
 // @ts-nocheck
-import { supabase } from '../lib/supabaseClient';
-import { Database } from '../database.types';
 import {
-    PurchaseOrder,
-    PurchaseOrderInsert,
-    PurchaseOrderUpdate,
-    PurchaseOrderItem,
-    PurchaseOrderItemInsert,
-    PurchaseOrderItemUpdate,
-    PurchaseOrderWithDetails,
-    Product,
-    Supplier
+  PurchaseOrder,
+  PurchaseOrderInsert,
+  PurchaseOrderUpdate,
+  PurchaseOrderItem,
+  PurchaseOrderItemInsert,
+  PurchaseOrderItemUpdate,
+  PurchaseOrderWithDetails,
+  Product,
+  Supplier,
 } from '../purchaseOrderTypes';
-import { sanitizeObject, SanitizationConfig } from '../utils/dataSanitization';
-import { parseSupabaseError } from '../utils/errorHandler';
-import {
-    ENTITY_TYPES,
-    logCreate,
-    logDelete,
-    logStatusChange,
-    logUpdate
-} from './activityLogService';
+import { fetchProductsPage } from './supabaseService';
+import { getLocalAuthSession } from './localAuthService';
 
-// Suppressing strict type checks for Supabase query chains due to complexity/depth limits
-const purchaseOrderSanitizationConfig: SanitizationConfig<PurchaseOrderInsert> = {
-    po_number: { type: 'string', placeholder: 'n/a', required: true },
-    order_date: { type: 'string', placeholder: 'n/a', required: true },
-    supplier_id: { type: 'string', placeholder: 'n/a', required: true },
-    warehouse_id: { type: 'string', placeholder: 'n/a' },
-    remarks: { type: 'string', placeholder: 'n/a' },
-    pr_reference: { type: 'string', placeholder: 'n/a' },
-    status: { type: 'string', placeholder: 'Draft' },
-    grand_total: { type: 'number', placeholder: 0 },
+const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || 'http://127.0.0.1:8081/api/v1';
+const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
+
+const toNumber = (value: unknown): number => {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? n : 0;
 };
 
-const purchaseOrderItemSanitizationConfig: SanitizationConfig<PurchaseOrderItemInsert> = {
-    item_id: { type: 'string', placeholder: 'n/a', required: true },
-    description: { type: 'string', placeholder: 'n/a' },
-    qty: { type: 'number', placeholder: 0 },
-    unit_price: { type: 'number', placeholder: 0 },
-    amount: { type: 'number', placeholder: 0 },
-    remark: { type: 'string', placeholder: 'n/a' },
+const parseApiErrorMessage = async (response: Response): Promise<string> => {
+  try {
+    const payload = await response.json();
+    if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error.trim();
+    if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message.trim();
+  } catch {
+    // ignore parse errors
+  }
+  return `API request failed (${response.status})`;
+};
+
+const getUserContext = () => {
+  const session = getLocalAuthSession();
+  const userId = Number(session?.context?.user?.id || 1);
+  return {
+    mainId: API_MAIN_ID,
+    userId: Number.isFinite(userId) && userId > 0 ? userId : 1,
+  };
+};
+
+const toSupplier = (raw: any): Supplier => ({
+  id: String(raw?.id ?? ''),
+  company: String(raw?.name ?? raw?.company ?? ''),
+  address: String(raw?.address ?? ''),
+  transactionType: 'PO',
+});
+
+const toProduct = (raw: any): Product => ({
+  id: String(raw?.id ?? raw?.product_session ?? raw?.product_id ?? ''),
+  part_no: String(raw?.part_no ?? ''),
+  description: String(raw?.description ?? ''),
+  item_code: String(raw?.item_code ?? ''),
+  brand: String(raw?.brand ?? ''),
+  cost: toNumber(raw?.supplier_price ?? 0),
+});
+
+const toPurchaseOrderItem = (raw: any): PurchaseOrderItem => ({
+  id: String(raw?.id ?? ''),
+  po_id: String(raw?.po_refno ?? ''),
+  item_id: String(raw?.product_session ?? raw?.product_id ?? ''),
+  qty: toNumber(raw?.qty),
+  unit_price: toNumber(raw?.supplier_price),
+  amount: toNumber(raw?.line_total),
+  eta_date: raw?.eta_date || null,
+  quantity_received: toNumber(raw?.receiving_qty),
+  product: toProduct(raw),
+});
+
+const toPurchaseOrder = (raw: any): PurchaseOrderWithDetails => {
+  const supplierName = String(raw?.supplier_name ?? '');
+  const supplierAddress = String(raw?.address ?? '');
+
+  return {
+    id: String(raw?.refno ?? raw?.id ?? ''),
+    po_number: String(raw?.po_number ?? ''),
+    order_date: String(raw?.order_date ?? new Date().toISOString().slice(0, 10)),
+    supplier_id: String(raw?.supplier_id ?? ''),
+    warehouse_id: 'WH1',
+    remarks: String(raw?.reference ?? ''),
+    pr_reference: String(raw?.pr_number ?? ''),
+    status: String(raw?.status ?? 'Pending'),
+    grand_total: toNumber(raw?.total_cogs ?? 0),
+    supplier: {
+      id: String(raw?.supplier_id ?? ''),
+      company: supplierName,
+      address: supplierAddress,
+      transactionType: 'PO',
+    },
+    items: [],
+    creator: null,
+    approver: null,
+  } as PurchaseOrderWithDetails;
+};
+
+const toPurchaseOrderDetail = (payload: any): PurchaseOrderWithDetails => {
+  const order = payload?.order || {};
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  const summary = payload?.summary || {};
+
+  return {
+    id: String(order?.refno ?? order?.id ?? ''),
+    po_number: String(order?.po_number ?? ''),
+    order_date: String(order?.order_date ?? new Date().toISOString().slice(0, 10)),
+    supplier_id: String(order?.supplier_id ?? ''),
+    warehouse_id: 'WH1',
+    remarks: String(order?.reference ?? ''),
+    pr_reference: String(order?.pr_number ?? ''),
+    status: String(order?.status ?? 'Pending'),
+    grand_total: toNumber(summary?.total_cogs ?? 0),
+    supplier: {
+      id: String(order?.supplier_id ?? ''),
+      company: String(order?.supplier_name ?? ''),
+      address: String(order?.address ?? ''),
+      transactionType: 'PO',
+    },
+    items: items.map(toPurchaseOrderItem),
+    creator: null,
+    approver: null,
+  } as PurchaseOrderWithDetails;
 };
 
 export const purchaseOrderService = {
-    // --- Purchase Orders ---
+  async getPurchaseOrders(filters?: { month?: number; year?: number; status?: string; search?: string; page?: number; perPage?: number }): Promise<PurchaseOrderWithDetails[]> {
+    const now = new Date();
+    const month = Math.max(1, Math.min(12, Number(filters?.month || now.getMonth() + 1)));
+    const year = Number(filters?.year || now.getFullYear());
+    const status = String(filters?.status || 'all').trim().toLowerCase() || 'all';
+    const search = String(filters?.search || '').trim();
+    const page = Math.max(1, Number(filters?.page || 1));
+    const perPage = Math.max(1, Math.min(500, Number(filters?.perPage || 200)));
 
-    async getPurchaseOrders(filters?: { month?: number; year?: number; status?: string }): Promise<PurchaseOrderWithDetails[]> {
-        let query = supabase
-            .from('purchase_orders')
-            .select('*, supplier:contacts(*)');
+    const query = new URLSearchParams({
+      main_id: String(API_MAIN_ID),
+      month: String(month),
+      year: String(year),
+      status,
+      page: String(page),
+      per_page: String(perPage),
+    });
+    if (search) query.set('search', search);
 
-        if (filters?.year) {
-            const startDate = `${filters.year}-${String(filters.month || 1).padStart(2, '0')}-01`;
-            // Calculate end date properly for filtering
-            const endDate = filters.month
-                ? new Date(filters.year, filters.month, 0).toISOString().split('T')[0] // Last day of month
-                : `${filters.year}-12-31`;
+    const response = await fetch(`${API_BASE_URL}/purchase-orders?${query.toString()}`);
+    if (!response.ok) throw new Error(await parseApiErrorMessage(response));
 
-            if (filters.month) {
-                query = query.gte('order_date', startDate).lte('order_date', endDate);
-            } else {
-                query = query.gte('order_date', `${filters.year}-01-01`).lte('order_date', `${filters.year}-12-31`);
-            }
-        }
+    const payload = await response.json();
+    const items = Array.isArray(payload?.data?.items) ? payload.data.items : [];
+    return items.map(toPurchaseOrder);
+  },
 
-        if (filters?.status) {
-            query = query.eq('status', filters.status);
-        }
+  async getPurchaseOrderById(id: string): Promise<PurchaseOrderWithDetails> {
+    const response = await fetch(
+      `${API_BASE_URL}/purchase-orders/${encodeURIComponent(String(id))}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`
+    );
+    if (!response.ok) throw new Error(await parseApiErrorMessage(response));
 
-        const { data, error } = await query.order('created_at', { ascending: false });
-        if (error) throw error;
-        return data as unknown as PurchaseOrderWithDetails[];
-    },
+    const payload = await response.json();
+    return toPurchaseOrderDetail(payload?.data || {});
+  },
 
-    async getPurchaseOrderById(id: string): Promise<PurchaseOrderWithDetails> {
-        const { data, error } = await supabase
-            .from('purchase_orders')
-            .select(`
-        *,
-        supplier:contacts(*),
-        items:purchase_order_items(
-          *,
-          product:products(*)
-        )
-      `)
-            .eq('id', id)
-            .single();
+  async createPurchaseOrder(po: PurchaseOrderInsert): Promise<PurchaseOrder> {
+    const { mainId, userId } = getUserContext();
 
-        if (error) throw error;
-        return data as unknown as PurchaseOrderWithDetails;
-    },
+    const response = await fetch(`${API_BASE_URL}/purchase-orders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        main_id: mainId,
+        user_id: userId,
+        po_number: po?.po_number || undefined,
+        order_date: po?.order_date,
+        supplier_id: po?.supplier_id || '',
+        status: po?.status || 'Draft',
+        reference: po?.remarks || '',
+      }),
+    });
+    if (!response.ok) throw new Error(await parseApiErrorMessage(response));
 
-    async createPurchaseOrder(po: PurchaseOrderInsert): Promise<PurchaseOrder> {
-        try {
-            const sanitizedPO = sanitizeObject(po, purchaseOrderSanitizationConfig);
-            const { data, error } = await supabase
-                .from('purchase_orders')
-                .insert(sanitizedPO)
-                .select()
-                .single();
-            if (error) throw error;
-            try {
-                await logCreate(ENTITY_TYPES.PURCHASE_ORDER, data.id, {
-                    po_number: data.po_number,
-                    supplier_id: data.supplier_id,
-                    grand_total: data.grand_total,
-                });
-            } catch (logError) {
-                console.error('Failed to log activity:', logError);
-            }
-            return data as unknown as PurchaseOrder;
-        } catch (err) {
-            console.error('Error creating purchase order:', err);
-            throw new Error(parseSupabaseError(err, 'purchase order'));
-        }
-    },
+    const payload = await response.json();
+    const created = payload?.data?.order || {};
+    return {
+      id: String(created?.refno ?? created?.id ?? ''),
+      po_number: String(created?.po_number ?? ''),
+      order_date: String(created?.order_date ?? new Date().toISOString().slice(0, 10)),
+      supplier_id: String(created?.supplier_id ?? ''),
+      warehouse_id: 'WH1',
+      remarks: String(created?.reference ?? ''),
+      pr_reference: String(created?.pr_number ?? ''),
+      status: String(created?.status ?? 'Pending'),
+      grand_total: 0,
+    } as PurchaseOrder;
+  },
 
-    async updatePurchaseOrder(id: string, updates: PurchaseOrderUpdate): Promise<PurchaseOrder> {
-        try {
-            const sanitizedUpdates = sanitizeObject(
-                updates as PurchaseOrderInsert,
-                purchaseOrderSanitizationConfig,
-                { enforceRequired: false, onlyProvided: true }
-            );
-            const { data, error } = await supabase
-                .from('purchase_orders')
-                .update(sanitizedUpdates)
-                .eq('id', id)
-                .select()
-                .single();
-            if (error) throw error;
-            try {
-                await logUpdate(ENTITY_TYPES.PURCHASE_ORDER, id, {
-                    updated_fields: Object.keys(sanitizedUpdates),
-                });
-            } catch (logError) {
-                console.error('Failed to log activity:', logError);
-            }
-            return data as unknown as PurchaseOrder;
-        } catch (err) {
-            console.error('Error updating purchase order:', err);
-            throw new Error(parseSupabaseError(err, 'purchase order'));
-        }
-    },
+  async updatePurchaseOrder(id: string, updates: PurchaseOrderUpdate): Promise<PurchaseOrder> {
+    const response = await fetch(`${API_BASE_URL}/purchase-orders/${encodeURIComponent(String(id))}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        main_id: API_MAIN_ID,
+        order_date: updates?.order_date,
+        supplier_id: updates?.supplier_id,
+        status: updates?.status,
+        reference: updates?.remarks,
+        terms: (updates as any)?.terms,
+        address: (updates as any)?.address,
+        pr_number: (updates as any)?.pr_reference,
+      }),
+    });
+    if (!response.ok) throw new Error(await parseApiErrorMessage(response));
 
-    async deletePurchaseOrder(id: string): Promise<void> {
-        const { data: existing } = await supabase
-            .from('purchase_orders')
-            .select('po_number')
-            .eq('id', id)
-            .single();
-        const { error } = await supabase
-            .from('purchase_orders')
-            .delete()
-            .eq('id', id);
-        if (error) throw error;
-        try {
-            await logDelete(ENTITY_TYPES.PURCHASE_ORDER, id, {
-                po_number: existing?.po_number ?? null,
-            });
-        } catch (logError) {
-            console.error('Failed to log activity:', logError);
-        }
-    },
+    const payload = await response.json();
+    const order = payload?.data?.order || {};
+    const summary = payload?.data?.summary || {};
 
-    // --- Purchase Order Items ---
+    return {
+      id: String(order?.refno ?? order?.id ?? ''),
+      po_number: String(order?.po_number ?? ''),
+      order_date: String(order?.order_date ?? new Date().toISOString().slice(0, 10)),
+      supplier_id: String(order?.supplier_id ?? ''),
+      warehouse_id: 'WH1',
+      remarks: String(order?.reference ?? ''),
+      pr_reference: String(order?.pr_number ?? ''),
+      status: String(order?.status ?? 'Pending'),
+      grand_total: toNumber(summary?.total_cogs ?? 0),
+    } as PurchaseOrder;
+  },
 
-    async getPurchaseOrderItems(poId: string): Promise<PurchaseOrderItem[]> {
-        const { data, error } = await supabase
-            .from('purchase_order_items')
-            .select('*, product:products(*)')
-            .eq('po_id', poId);
-        if (error) throw error;
-        return data as unknown as PurchaseOrderItem[];
-    },
+  async deletePurchaseOrder(id: string): Promise<void> {
+    const response = await fetch(
+      `${API_BASE_URL}/purchase-orders/${encodeURIComponent(String(id))}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`,
+      { method: 'DELETE' }
+    );
+    if (!response.ok) throw new Error(await parseApiErrorMessage(response));
+  },
 
-    async addPurchaseOrderItem(item: PurchaseOrderItemInsert): Promise<PurchaseOrderItem> {
-        try {
-            const sanitizedItem = sanitizeObject(item, purchaseOrderItemSanitizationConfig);
-            const { data, error } = await supabase
-                .from('purchase_order_items')
-                .insert(sanitizedItem)
-                .select()
-                .single();
-            if (error) throw error;
-            return data as unknown as PurchaseOrderItem;
-        } catch (err) {
-            console.error('Error adding purchase order item:', err);
-            throw new Error(parseSupabaseError(err, 'purchase order item'));
-        }
-    },
+  async getPurchaseOrderItems(poId: string): Promise<PurchaseOrderItem[]> {
+    const detail = await this.getPurchaseOrderById(poId);
+    return detail.items || [];
+  },
 
-    async updatePurchaseOrderItem(id: string, updates: PurchaseOrderItemUpdate): Promise<PurchaseOrderItem> {
-        try {
-            const sanitizedUpdates = sanitizeObject(
-                updates as PurchaseOrderItemInsert,
-                purchaseOrderItemSanitizationConfig,
-                { enforceRequired: false, onlyProvided: true }
-            );
-            const { data, error } = await supabase
-                .from('purchase_order_items')
-                .update(sanitizedUpdates)
-                .eq('id', id)
-                .select()
-                .single();
-            if (error) throw error;
-            return data as unknown as PurchaseOrderItem;
-        } catch (err) {
-            console.error('Error updating purchase order item:', err);
-            throw new Error(parseSupabaseError(err, 'purchase order item'));
-        }
-    },
-
-    async deletePurchaseOrderItem(id: string): Promise<void> {
-        const { error } = await supabase
-            .from('purchase_order_items')
-            .delete()
-            .eq('id', id);
-        if (error) throw error;
-    },
-
-    // --- Suppliers ---
-
-    async getSuppliers(): Promise<Supplier[]> {
-        const { data, error } = await supabase
-            .from('contacts')
-            .select('*')
-            // Assuming 'PO' identifies suppliers based on user input, 
-            // or we just fetch all and filter in UI, or fetch specific types.
-            // Based on discovery: transactionType='PO' might be the key.
-            .ilike('transactionType', '%PO%')
-            .order('company', { ascending: true });
-
-        if (error) throw error;
-        return data as unknown as Supplier[];
-    },
-
-    // --- Products ---
-
-    async getProducts(): Promise<Product[]> {
-        const { data, error } = await supabase
-            .from('products')
-            .select('*')
-            .order('part_no', { ascending: true });
-        if (error) throw error;
-        return data as unknown as Product[];
-    },
-
-    // --- Utils ---
-
-    async generatePONumber(): Promise<string> {
-        const year = new Date().getFullYear().toString().slice(-2);
-        // Simple count query - in production consider a dedicated sequence or more robust locking
-        const { count, error } = await supabase
-            .from('purchase_orders')
-            .select('*', { count: 'exact', head: true })
-            .ilike('po_number', `PO-${year}%`);
-
-        if (error) throw error;
-
-        const sequence = String((count || 0) + 1).padStart(2, '0');
-        return `PO-${year}${sequence}`;
+  async addPurchaseOrderItem(item: PurchaseOrderItemInsert): Promise<PurchaseOrderItem> {
+    const { mainId, userId } = getUserContext();
+    const poRefno = String(item?.po_id || '');
+    if (!poRefno) {
+      throw new Error('po_id is required');
     }
+
+    const response = await fetch(`${API_BASE_URL}/purchase-orders/${encodeURIComponent(poRefno)}/items`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        main_id: mainId,
+        user_id: userId,
+        product_session: String(item?.item_id || ''),
+        qty: toNumber(item?.qty),
+        eta_date: (item as any)?.eta_date || undefined,
+      }),
+    });
+    if (!response.ok) throw new Error(await parseApiErrorMessage(response));
+
+    const payload = await response.json();
+    return toPurchaseOrderItem(payload?.data || {});
+  },
+
+  async updatePurchaseOrderItem(id: string, updates: PurchaseOrderItemUpdate): Promise<PurchaseOrderItem> {
+    const response = await fetch(`${API_BASE_URL}/purchase-order-items/${encodeURIComponent(String(id))}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        main_id: API_MAIN_ID,
+        qty: updates?.qty,
+        supplier_price: updates?.unit_price,
+        eta_date: (updates as any)?.eta_date,
+      }),
+    });
+    if (!response.ok) throw new Error(await parseApiErrorMessage(response));
+
+    const payload = await response.json();
+    return toPurchaseOrderItem(payload?.data || {});
+  },
+
+  async deletePurchaseOrderItem(id: string): Promise<void> {
+    const response = await fetch(
+      `${API_BASE_URL}/purchase-order-items/${encodeURIComponent(String(id))}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`,
+      { method: 'DELETE' }
+    );
+    if (!response.ok) throw new Error(await parseApiErrorMessage(response));
+  },
+
+  async getSuppliers(): Promise<Supplier[]> {
+    const response = await fetch(
+      `${API_BASE_URL}/purchase-orders/suppliers?main_id=${encodeURIComponent(String(API_MAIN_ID))}`
+    );
+    if (!response.ok) throw new Error(await parseApiErrorMessage(response));
+
+    const payload = await response.json();
+    const rows = Array.isArray(payload?.data) ? payload.data : [];
+    return rows.map(toSupplier);
+  },
+
+  async getProducts(): Promise<Product[]> {
+    const merged: Product[] = [];
+    let page = 1;
+    let totalPages = 1;
+
+    while (page <= totalPages) {
+      const result = await fetchProductsPage({
+        search: '',
+        status: 'all',
+        page,
+        perPage: 200,
+      });
+      merged.push(...result.items);
+      totalPages = Number(result?.meta?.total_pages || 1);
+      page += 1;
+    }
+
+    return merged;
+  },
+
+  async generatePONumber(): Promise<string> {
+    const now = new Date();
+    const yy = String(now.getFullYear()).slice(-2);
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const hh = String(now.getHours()).padStart(2, '0');
+    const min = String(now.getMinutes()).padStart(2, '0');
+    const sec = String(now.getSeconds()).padStart(2, '0');
+    return `PO-${yy}${mm}${dd}${hh}${min}${sec}`;
+  },
 };
 
-const calculateGrandTotal = (items: Array<{ qty: number; unit_price: number }>) =>
-    items.reduce((sum, item) => sum + (item.qty || 0) * (item.unit_price || 0), 0);
-
 export const getPurchaseOrder = async (id: string): Promise<PurchaseOrderWithDetails | null> => {
-    const { data, error } = await supabase
-        .from('purchase_orders')
-        .select('*, purchase_order_items(*)')
-        .eq('id', id)
-        .eq('is_deleted', false)
-        .single();
-
-    if (error) {
-        if (!data) return null;
-        throw error;
-    }
-
-    return data as unknown as PurchaseOrderWithDetails;
+  try {
+    return await purchaseOrderService.getPurchaseOrderById(id);
+  } catch {
+    return null;
+  }
 };
 
 export const getAllPurchaseOrders = async (filters?: { status?: string }): Promise<PurchaseOrderWithDetails[]> => {
-    let query = supabase
-        .from('purchase_orders')
-        .select('*, purchase_order_items(*)')
-        .eq('is_deleted', false);
-
-    if (filters?.status) {
-        query = query.eq('status', filters.status);
-    }
-
-    const { data, error } = await query.order('created_at', { ascending: false });
-    if (error) throw error;
-    return (data as unknown as PurchaseOrderWithDetails[]) || [];
+  return purchaseOrderService.getPurchaseOrders({ status: filters?.status });
 };
 
 export const createPurchaseOrder = async (data: PurchaseOrderInsert & { items?: PurchaseOrderItemInsert[] }) => {
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    const user = authData?.user;
-
-    if (authError || !user) {
-        throw new Error('User not authenticated');
-    }
-
-    const { items = [], ...poData } = data as any;
-    const { data: created, error } = await supabase
-        .from('purchase_orders')
-        .insert({
-            ...poData,
-            created_by: user.id,
-            is_deleted: false,
-            grand_total: calculateGrandTotal(items),
-        })
-        .select()
-        .single();
-
-    if (error) throw error;
-
-    if (items.length > 0) {
-        const itemsPayload = items.map((item: any) => ({
-            ...item,
-            po_id: created.id,
-            amount: (item.qty || 0) * (item.unit_price || 0),
-        }));
-        const { error: itemsError } = await supabase
-            .from('purchase_order_items')
-            .insert(itemsPayload);
-
-        if (itemsError) {
-            await supabase.from('purchase_orders').delete().eq('id', created.id);
-            throw itemsError;
-        }
-    }
-
-    try {
-        await logCreate(ENTITY_TYPES.PURCHASE_ORDER, created.id, {
-            po_number: created.po_number,
-            supplier_id: created.supplier_id,
-            grand_total: created.grand_total,
-        });
-    } catch (logError) {
-        console.error('Failed to log activity:', logError);
-    }
-
-    return await getPurchaseOrder(created.id);
+  return purchaseOrderService.createPurchaseOrder(data as PurchaseOrderInsert);
 };
 
 export const updatePurchaseOrder = async (
-    id: string,
-    updates: PurchaseOrderUpdate & { items?: PurchaseOrderItemInsert[] }
+  id: string,
+  updates: PurchaseOrderUpdate & { items?: PurchaseOrderItemInsert[] }
 ) => {
-    const existing = await getPurchaseOrder(id);
-    if (!existing) {
-        throw new Error('Purchase Order not found');
-    }
-
-    if (existing.status !== 'draft') {
-        throw new Error('Only draft purchase orders can be updated');
-    }
-
-    const { items = [], ...poUpdates } = updates as any;
-
-    const { data: updated, error: updateError } = await supabase
-        .from('purchase_orders')
-        .update({
-            ...poUpdates,
-            grand_total: items.length > 0 ? calculateGrandTotal(items) : existing.grand_total,
-        })
-        .eq('id', id)
-        .select()
-        .single();
-
-    if (updateError) throw updateError;
-
-    if (items.length > 0) {
-        const { error: deleteError } = await supabase
-            .from('purchase_order_items')
-            .delete()
-            .eq('po_id', id);
-        if (deleteError) throw deleteError;
-
-        const itemsPayload = items.map((item: any) => ({
-            ...item,
-            po_id: id,
-            amount: (item.qty || 0) * (item.unit_price || 0),
-        }));
-
-        const { error: itemsError } = await supabase
-            .from('purchase_order_items')
-            .insert(itemsPayload);
-        if (itemsError) throw itemsError;
-    }
-
-    try {
-        const updatedFields = [
-            ...Object.keys(poUpdates),
-            ...(items.length > 0 ? ['items'] : []),
-        ];
-        await logUpdate(ENTITY_TYPES.PURCHASE_ORDER, id, { updated_fields: updatedFields });
-    } catch (logError) {
-        console.error('Failed to log activity:', logError);
-    }
-
-    return updated ? await getPurchaseOrder(id) : null;
+  return purchaseOrderService.updatePurchaseOrder(id, updates as PurchaseOrderUpdate);
 };
 
 export const markAsDelivered = async (id: string) => {
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    const user = authData?.user;
-    if (authError || !user) {
-        throw new Error('User not authenticated');
-    }
-
-    const existing = await getPurchaseOrder(id);
-    if (!existing) {
-        throw new Error('Purchase Order not found');
-    }
-
-    if (existing.status !== 'ordered') {
-        throw new Error('Only ordered purchase orders can be marked as delivered');
-    }
-
-    const now = new Date().toISOString();
-    const deliveryDate = now.split('T')[0];
-
-    const { error: updateError } = await supabase
-        .from('purchase_orders')
-        .update({
-            status: 'delivered',
-            delivery_date: deliveryDate,
-            updated_at: now,
-        })
-        .eq('id', id)
-        .select()
-        .single();
-
-    if (updateError) throw updateError;
-
-    const { createInventoryLogFromPO } = await import('./inventoryLogService');
-    await createInventoryLogFromPO(id, user.id);
-
-    try {
-        await logStatusChange(
-            ENTITY_TYPES.PURCHASE_ORDER,
-            id,
-            existing.status || 'ordered',
-            'delivered'
-        );
-    } catch (logError) {
-        console.error('Failed to log activity:', logError);
-    }
-
-    return await getPurchaseOrder(id);
+  await purchaseOrderService.updatePurchaseOrder(id, { status: 'Posted' } as PurchaseOrderUpdate);
+  return purchaseOrderService.getPurchaseOrderById(id);
 };

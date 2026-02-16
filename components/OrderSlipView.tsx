@@ -16,9 +16,10 @@ import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 
 interface OrderSlipViewProps {
   initialSlipId?: string;
+  initialSlipRefNo?: string;
 }
 
-const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId }) => {
+const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSlipRefNo }) => {
   const [selectedSlip, setSelectedSlip] = useState<OrderSlip | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | OrderSlipStatus>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -85,10 +86,14 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId }) => {
   }, [orderSlips, selectedSlip]);
 
   useEffect(() => {
-    if (!initialSlipId || !orderSlips.length) return;
-    const slip = orderSlips.find(entry => entry.id === initialSlipId);
+    if (!orderSlips.length) return;
+    const slipById = initialSlipId ? orderSlips.find(entry => entry.id === initialSlipId) : null;
+    const slipByNo = initialSlipRefNo
+      ? orderSlips.find(entry => String(entry.slip_no || '').toLowerCase() === initialSlipRefNo.toLowerCase())
+      : null;
+    const slip = slipById || slipByNo;
     if (slip) setSelectedSlip(slip);
-  }, [initialSlipId, orderSlips]);
+  }, [initialSlipId, initialSlipRefNo, orderSlips]);
 
   const filteredSlips = useMemo(() => {
     const query = searchTerm.toLowerCase();
