@@ -1,17 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FileOutput, ListFilter, Search, RefreshCw, Printer, CheckCircle2 } from 'lucide-react';
+import { FileOutput, ListFilter, Search, RefreshCw, Printer, CheckCircle2, Calendar } from 'lucide-react';
 import StatusBadge from './StatusBadge';
 import WorkflowStepper from './WorkflowStepper';
 import {
   finalizeOrderSlip,
-  getAllOrderSlips,
+  getOrderSlip,
+  getOrderSlipsPage,
   printOrderSlip,
-} from '../services/orderSlipService';
-import { dispatchWorkflowNotification, fetchContacts } from '../services/supabaseService';
-import { isOrderSlipAllowedForTransactionType, syncDocumentPolicyState } from '../services/salesOrderService';
-import { Contact, OrderSlip, OrderSlipItem, OrderSlipStatus } from '../types';
-import { useRealtimeNestedList } from '../hooks/useRealtimeNestedList';
-import { useRealtimeList } from '../hooks/useRealtimeList';
+} from '../services/orderSlipLocalApiService';
+import { dispatchWorkflowNotification } from '../services/supabaseService';
+import { fetchContacts } from '../services/customerDatabaseLocalApiService';
+import { isOrderSlipAllowedForTransactionType, syncDocumentPolicyState } from '../services/salesOrderLocalApiService';
+import { Contact, OrderSlip, OrderSlipStatus } from '../types';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 
 interface OrderSlipViewProps {
@@ -23,32 +23,56 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
   const [selectedSlip, setSelectedSlip] = useState<OrderSlip | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | OrderSlipStatus>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [dateRange, setDateRange] = useState<{ from: string; to: string }>({ from: '', to: '' });
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [finalizing, setFinalizing] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [orderSlips, setOrderSlips] = useState<OrderSlip[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Use real-time list for contacts
-  const { data: contacts } = useRealtimeList<Contact>({
-    tableName: 'contacts',
-    initialFetchFn: fetchContacts,
-  });
+  const loadContacts = useCallback(async () => {
+    try {
+      const contactsData = await fetchContacts();
+      setContacts(contactsData);
+    } catch (err) {
+      console.error('Failed loading order slip contacts:', err);
+      setContacts([]);
+    }
+  }, []);
 
-  // Use real-time nested list for order slips with items
-  const sortByCreatedAt = (a: OrderSlip, b: OrderSlip) => {
-    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
-  };
+  const loadOrderSlips = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await getOrderSlipsPage({
+        status: statusFilter === 'all' ? 'all' : statusFilter,
+        search: debouncedSearch,
+        dateFrom: dateRange.from || undefined,
+        dateTo: dateRange.to || undefined,
+        page: 1,
+        perPage: 100,
+      });
+      setOrderSlips(result.items);
+    } catch (err) {
+      console.error('Failed loading order slips:', err);
+      setOrderSlips([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [dateRange.from, dateRange.to, debouncedSearch, statusFilter]);
 
-  const {
-    data: orderSlips,
-    isLoading: loading,
-    setData: setOrderSlips,
-  } = useRealtimeNestedList<OrderSlip, OrderSlipItem>({
-    parentTableName: 'order_slips',
-    childTableName: 'order_slip_items',
-    parentFetchFn: getAllOrderSlips,
-    childParentIdField: 'order_slip_id',
-    childrenField: 'items',
-    sortParentFn: sortByCreatedAt,
-  });
+  useEffect(() => {
+    loadContacts();
+  }, [loadContacts]);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300);
+    return () => window.clearTimeout(t);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    loadOrderSlips();
+  }, [loadOrderSlips]);
 
   const customerMap = useMemo(() => new Map(contacts.map(contact => [contact.id, contact])), [contacts]);
 
@@ -78,7 +102,6 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
     window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab, payload } }));
   }, []);
 
-  // Auto-select first slip when slips change
   useEffect(() => {
     if (orderSlips.length > 0 && !selectedSlip) {
       setSelectedSlip(orderSlips[0]);
@@ -95,17 +118,21 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
     if (slip) setSelectedSlip(slip);
   }, [initialSlipId, initialSlipRefNo, orderSlips]);
 
-  const filteredSlips = useMemo(() => {
-    const query = searchTerm.toLowerCase();
-    return orderSlips.filter(slip => {
-      const matchesStatus = statusFilter === 'all' || slip.status === statusFilter;
-      const matchesSearch =
-        !query ||
-        slip.slip_no.toLowerCase().includes(query) ||
-        (customerMap.get(slip.contact_id)?.company || '').toLowerCase().includes(query);
-      return matchesStatus && matchesSearch;
-    });
-  }, [customerMap, orderSlips, searchTerm, statusFilter]);
+  useEffect(() => {
+    if (!selectedSlip?.id) return;
+    let active = true;
+    getOrderSlip(selectedSlip.id)
+      .then((detail) => {
+        if (!active || !detail) return;
+        setSelectedSlip(detail);
+      })
+      .catch((err) => {
+        console.error('Failed loading selected order slip detail:', err);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedSlip?.id]);
 
   const selectedCustomer = selectedSlip ? customerMap.get(selectedSlip.contact_id) : null;
   const canProcessOrderSlip = isOrderSlipAllowedForTransactionType(selectedCustomer?.transactionType);
@@ -118,20 +145,23 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
     if (!selectedSlip || !canProcessOrderSlip) return;
     setFinalizing(true);
 
-    // Optimistic update
     setOrderSlips(prev => applyOptimisticUpdate(prev, selectedSlip.id, { status: OrderSlipStatus.FINALIZED } as Partial<OrderSlip>));
     setSelectedSlip(prev => prev ? { ...prev, status: OrderSlipStatus.FINALIZED } : null);
 
     try {
-      await finalizeOrderSlip(selectedSlip.id);
+      const updated = await finalizeOrderSlip(selectedSlip.id);
+      if (updated) {
+        setOrderSlips(prev => prev.map(row => row.id === updated.id ? updated : row));
+        setSelectedSlip(updated);
+      }
       await notifyOrderSlipEvent('Order Slip Finalized', `Order Slip ${selectedSlip.slip_no} marked as finalized.`, 'finalize', 'success', selectedSlip.id);
     } catch (err) {
       console.error('Error finalizing order slip:', err);
       await notifyOrderSlipEvent('Order Slip Finalization Failed', `Failed to finalize order slip ${selectedSlip.slip_no}.`, 'finalize', 'failed', selectedSlip.id, 'error');
       alert('Failed to finalize order slip');
-      // Real-time subscription will correct the state
     } finally {
       setFinalizing(false);
+      await loadOrderSlips();
     }
   };
 
@@ -139,22 +169,25 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
     if (!selectedSlip || !canProcessOrderSlip) return;
     setPrinting(true);
 
-    // Optimistic update
     const printedAt = new Date().toISOString();
     setOrderSlips(prev => applyOptimisticUpdate(prev, selectedSlip.id, { printed_at: printedAt } as Partial<OrderSlip>));
     setSelectedSlip(prev => prev ? { ...prev, printed_at: printedAt } : null);
 
     try {
-      await printOrderSlip(selectedSlip.id);
+      const updated = await printOrderSlip(selectedSlip.id);
+      if (updated) {
+        setOrderSlips(prev => prev.map(row => row.id === updated.id ? updated : row));
+        setSelectedSlip(updated);
+      }
       await notifyOrderSlipEvent('Order Slip Printed', `Order Slip ${selectedSlip.slip_no} was printed.`, 'print', 'success', selectedSlip.id);
       window.print();
     } catch (err) {
       console.error('Error printing order slip:', err);
       await notifyOrderSlipEvent('Order Slip Print Failed', `Failed to print order slip ${selectedSlip.slip_no}.`, 'print', 'failed', selectedSlip.id, 'error');
       alert('Failed to mark order slip as printed');
-      // Real-time subscription will correct the state
     } finally {
       setPrinting(false);
+      await loadOrderSlips();
     }
   };
 
@@ -166,7 +199,6 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
           <h1 className="text-lg font-semibold">Order Slips</h1>
           <p className="text-xs text-slate-300">Track document issuance and print status</p>
         </div>
-
       </div>
       <div className="flex-1 flex overflow-hidden">
         <aside className="w-72 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col">
@@ -195,6 +227,26 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                 ))}
               </select>
             </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <label className="flex flex-col gap-1">
+                <span className="flex items-center gap-1 text-slate-500"><Calendar className="w-3 h-3" /> From</span>
+                <input
+                  type="date"
+                  value={dateRange.from}
+                  onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
+                  className="border border-slate-200 dark:border-slate-800 rounded px-2 py-1 bg-white dark:bg-slate-800"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="flex items-center gap-1 text-slate-500"><Calendar className="w-3 h-3" /> To</span>
+                <input
+                  type="date"
+                  value={dateRange.to}
+                  onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
+                  className="border border-slate-200 dark:border-slate-800 rounded px-2 py-1 bg-white dark:bg-slate-800"
+                />
+              </label>
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
             {loading && (
@@ -202,7 +254,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                 <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading slips...
               </div>
             )}
-            {!loading && filteredSlips.map(slip => {
+            {!loading && orderSlips.map(slip => {
               const customer = customerMap.get(slip.contact_id);
               const isActive = selectedSlip?.id === slip.id;
               return (
@@ -220,7 +272,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                 </button>
               );
             })}
-            {!loading && filteredSlips.length === 0 && (
+            {!loading && orderSlips.length === 0 && (
               <div className="p-4 text-xs text-slate-500">No order slips found.</div>
             )}
           </div>

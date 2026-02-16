@@ -1,19 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Receipt, ListFilter, Search, RefreshCw, DollarSign, Printer } from 'lucide-react';
+import { Receipt, ListFilter, Search, RefreshCw, DollarSign, Printer, Calendar } from 'lucide-react';
 import StatusBadge from './StatusBadge';
 import WorkflowStepper from './WorkflowStepper';
 import {
-  getAllInvoices,
+  getInvoice,
+  getInvoicesPage,
   sendInvoice,
   recordPayment,
   markOverdue,
   printInvoice,
-} from '../services/invoiceService';
-import { dispatchWorkflowNotification, fetchContacts } from '../services/supabaseService';
-import { isInvoiceAllowedForTransactionType, syncDocumentPolicyState } from '../services/salesOrderService';
-import { Contact, Invoice, InvoiceItem, InvoiceStatus } from '../types';
-import { useRealtimeNestedList } from '../hooks/useRealtimeNestedList';
-import { useRealtimeList } from '../hooks/useRealtimeList';
+} from '../services/invoiceLocalApiService';
+import { dispatchWorkflowNotification } from '../services/supabaseService';
+import { fetchContacts } from '../services/customerDatabaseLocalApiService';
+import { isInvoiceAllowedForTransactionType, syncDocumentPolicyState } from '../services/salesOrderLocalApiService';
+import { Contact, Invoice, InvoiceStatus } from '../types';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 
 interface InvoiceViewProps {
@@ -22,7 +22,6 @@ interface InvoiceViewProps {
 }
 
 const VAT_RATE = 0.12;
-
 const FINAL_DOCUMENT_STATUSES = new Set<InvoiceStatus>([InvoiceStatus.PAID, InvoiceStatus.OVERDUE, InvoiceStatus.CANCELLED]);
 
 const documentStatusMeta: Record<InvoiceStatus, { label: string; tone: 'neutral' | 'info' | 'success' | 'warning' | 'danger' }> = {
@@ -37,6 +36,8 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | InvoiceStatus>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [dateRange, setDateRange] = useState<{ from: string; to: string }>({ from: '', to: '' });
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sending, setSending] = useState(false);
   const [markingOverdue, setMarkingOverdue] = useState(false);
   const [printing, setPrinting] = useState(false);
@@ -44,30 +45,52 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
   const [paymentDate, setPaymentDate] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Use real-time list for contacts
-  const { data: contacts } = useRealtimeList<Contact>({
-    tableName: 'contacts',
-    initialFetchFn: fetchContacts,
-  });
+  const loadContacts = useCallback(async () => {
+    try {
+      const contactsData = await fetchContacts();
+      setContacts(contactsData);
+    } catch (err) {
+      console.error('Failed loading invoice contacts:', err);
+      setContacts([]);
+    }
+  }, []);
 
-  // Use real-time nested list for invoices with items
-  const sortByCreatedAt = (a: Invoice, b: Invoice) => {
-    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
-  };
+  const loadInvoices = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await getInvoicesPage({
+        status: statusFilter === 'all' ? 'all' : statusFilter,
+        search: debouncedSearch,
+        dateFrom: dateRange.from || undefined,
+        dateTo: dateRange.to || undefined,
+        page: 1,
+        perPage: 100,
+      });
+      setInvoices(result.items);
+    } catch (err) {
+      console.error('Failed loading invoices:', err);
+      setInvoices([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [dateRange.from, dateRange.to, debouncedSearch, statusFilter]);
 
-  const {
-    data: invoices,
-    isLoading: loading,
-    setData: setInvoices,
-  } = useRealtimeNestedList<Invoice, InvoiceItem>({
-    parentTableName: 'invoices',
-    childTableName: 'invoice_items',
-    parentFetchFn: getAllInvoices,
-    childParentIdField: 'invoice_id',
-    childrenField: 'items',
-    sortParentFn: sortByCreatedAt,
-  });
+  useEffect(() => {
+    loadContacts();
+  }, [loadContacts]);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300);
+    return () => window.clearTimeout(t);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    loadInvoices();
+  }, [loadInvoices]);
 
   const customerMap = useMemo(() => new Map(contacts.map(contact => [contact.id, contact])), [contacts]);
 
@@ -93,7 +116,6 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
     });
   }, []);
 
-  // Auto-select first invoice when invoices change
   useEffect(() => {
     if (invoices.length > 0 && !selectedInvoice) {
       setSelectedInvoice(invoices[0]);
@@ -110,17 +132,21 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
     if (invoice) setSelectedInvoice(invoice);
   }, [initialInvoiceId, initialInvoiceRefNo, invoices]);
 
-  const filteredInvoices = useMemo(() => {
-    const query = searchTerm.toLowerCase();
-    return invoices.filter(invoice => {
-      const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
-      const matchesSearch =
-        !query ||
-        invoice.invoice_no.toLowerCase().includes(query) ||
-        (customerMap.get(invoice.contact_id)?.company || '').toLowerCase().includes(query);
-      return matchesStatus && matchesSearch;
-    });
-  }, [customerMap, invoices, searchTerm, statusFilter]);
+  useEffect(() => {
+    if (!selectedInvoice?.id) return;
+    let active = true;
+    getInvoice(selectedInvoice.id)
+      .then((detail) => {
+        if (!active || !detail) return;
+        setSelectedInvoice(detail);
+      })
+      .catch((err) => {
+        console.error('Failed loading selected invoice detail:', err);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedInvoice?.id]);
 
   const selectedCustomer = selectedInvoice ? customerMap.get(selectedInvoice.contact_id) : null;
   const subtotal = selectedInvoice?.items.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
@@ -136,24 +162,27 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
     if (!selectedInvoice || !canProcessInvoice) return;
     setSending(true);
 
-    // Optimistic update
     const sentAt = new Date().toISOString();
     setInvoices(prev => applyOptimisticUpdate(prev, selectedInvoice.id, {
       status: InvoiceStatus.SENT,
-      sent_at: sentAt
+      sent_at: sentAt,
     } as Partial<Invoice>));
     setSelectedInvoice(prev => prev ? { ...prev, status: InvoiceStatus.SENT, sent_at: sentAt } : null);
 
     try {
-      await sendInvoice(selectedInvoice.id);
+      const updated = await sendInvoice(selectedInvoice.id);
+      if (updated) {
+        setInvoices(prev => prev.map(row => row.id === updated.id ? updated : row));
+        setSelectedInvoice(updated);
+      }
       await notifyInvoiceEvent('Invoice Sent', `Invoice ${selectedInvoice.invoice_no} sent to customer.`, 'send', 'success', selectedInvoice.id);
     } catch (err) {
       console.error('Error sending invoice:', err);
       await notifyInvoiceEvent('Invoice Send Failed', `Failed to send invoice ${selectedInvoice.invoice_no}.`, 'send', 'failed', selectedInvoice.id, 'error');
       alert('Failed to send invoice');
-      // Real-time subscription will correct the state
     } finally {
       setSending(false);
+      await loadInvoices();
     }
   };
 
@@ -161,44 +190,50 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
     if (!selectedInvoice || !canProcessInvoice) return;
     setMarkingOverdue(true);
 
-    // Optimistic update
     setInvoices(prev => applyOptimisticUpdate(prev, selectedInvoice.id, { status: InvoiceStatus.OVERDUE } as Partial<Invoice>));
     setSelectedInvoice(prev => prev ? { ...prev, status: InvoiceStatus.OVERDUE } : null);
 
     try {
-      await markOverdue(selectedInvoice.id);
+      const updated = await markOverdue(selectedInvoice.id);
+      if (updated) {
+        setInvoices(prev => prev.map(row => row.id === updated.id ? updated : row));
+        setSelectedInvoice(updated);
+      }
       await notifyInvoiceEvent('Invoice Overdue', `Invoice ${selectedInvoice.invoice_no} marked as overdue.`, 'mark_overdue', 'success', selectedInvoice.id, 'warning');
     } catch (err) {
       console.error('Error marking overdue:', err);
       await notifyInvoiceEvent('Invoice Overdue Update Failed', `Failed to mark invoice ${selectedInvoice.invoice_no} as overdue.`, 'mark_overdue', 'failed', selectedInvoice.id, 'error');
       alert('Failed to mark invoice overdue');
-      // Real-time subscription will correct the state
     } finally {
       setMarkingOverdue(false);
+      await loadInvoices();
     }
   };
 
   const handleRecordPayment = async () => {
     if (!selectedInvoice || !canProcessInvoice) return;
 
-    // Optimistic update
     setInvoices(prev => applyOptimisticUpdate(prev, selectedInvoice.id, {
       status: InvoiceStatus.PAID,
       payment_date: paymentDate,
-      payment_method: paymentMethod
+      payment_method: paymentMethod,
     } as Partial<Invoice>));
     setSelectedInvoice(prev => prev ? {
       ...prev,
       status: InvoiceStatus.PAID,
       payment_date: paymentDate,
-      payment_method: paymentMethod
+      payment_method: paymentMethod,
     } : null);
 
     try {
-      await recordPayment(selectedInvoice.id, {
+      const updated = await recordPayment(selectedInvoice.id, {
         payment_date: paymentDate,
         payment_method: paymentMethod,
       });
+      if (updated) {
+        setInvoices(prev => prev.map(row => row.id === updated.id ? updated : row));
+        setSelectedInvoice(updated);
+      }
       await notifyInvoiceEvent('Payment Recorded', `Invoice ${selectedInvoice.invoice_no} marked as paid (${paymentAmount || 'Full amount'}).`, 'record_payment', 'success', selectedInvoice.id);
       setPaymentModalOpen(false);
       setPaymentDate('');
@@ -208,7 +243,6 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
       console.error('Error recording payment:', err);
       await notifyInvoiceEvent('Payment Recording Failed', `Failed to record payment for invoice ${selectedInvoice.invoice_no}.`, 'record_payment', 'failed', selectedInvoice.id, 'error');
       alert('Failed to record payment');
-      // Real-time subscription will correct the state
     }
   };
 
@@ -216,22 +250,25 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
     if (!selectedInvoice || !canProcessInvoice) return;
     setPrinting(true);
 
-    // Optimistic update
     const printedAt = new Date().toISOString();
     setInvoices(prev => applyOptimisticUpdate(prev, selectedInvoice.id, { printed_at: printedAt } as Partial<Invoice>));
     setSelectedInvoice(prev => prev ? { ...prev, printed_at: printedAt } : null);
 
     try {
-      await printInvoice(selectedInvoice.id);
+      const updated = await printInvoice(selectedInvoice.id);
+      if (updated) {
+        setInvoices(prev => prev.map(row => row.id === updated.id ? updated : row));
+        setSelectedInvoice(updated);
+      }
       await notifyInvoiceEvent('Invoice Printed', `Invoice ${selectedInvoice.invoice_no} printed.`, 'print', 'success', selectedInvoice.id);
       window.print();
     } catch (err) {
       console.error('Error printing invoice:', err);
       await notifyInvoiceEvent('Invoice Print Failed', `Failed to print invoice ${selectedInvoice.invoice_no}.`, 'print', 'failed', selectedInvoice.id, 'error');
       alert('Failed to print invoice');
-      // Real-time subscription will correct the state
     } finally {
       setPrinting(false);
+      await loadInvoices();
     }
   };
 
@@ -253,14 +290,18 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
           <h1 className="text-lg font-semibold">Invoices</h1>
           <p className="text-xs text-slate-300">Monitor billing, payments, and overdue accounts</p>
         </div>
-
       </div>
       <div className="flex-1 flex overflow-hidden">
         <aside className="w-80 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col">
           <div className="p-4 space-y-3">
             <div className="flex items-center gap-2 px-2 py-1 rounded border border-slate-200 dark:border-slate-800">
               <Search className="w-4 h-4 text-slate-400" />
-              <input className="flex-1 text-xs bg-transparent outline-none" placeholder="Search invoice or customer" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+              <input
+                className="flex-1 text-xs bg-transparent outline-none"
+                placeholder="Search invoice or customer"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
             </div>
             <div>
               <label className="text-xs text-slate-500 flex items-center gap-1 mb-1">
@@ -273,6 +314,26 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                 ))}
               </select>
             </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <label className="flex flex-col gap-1">
+                <span className="flex items-center gap-1 text-slate-500"><Calendar className="w-3 h-3" /> From</span>
+                <input
+                  type="date"
+                  value={dateRange.from}
+                  onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
+                  className="border border-slate-200 dark:border-slate-800 rounded px-2 py-1 bg-white dark:bg-slate-800"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="flex items-center gap-1 text-slate-500"><Calendar className="w-3 h-3" /> To</span>
+                <input
+                  type="date"
+                  value={dateRange.to}
+                  onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
+                  className="border border-slate-200 dark:border-slate-800 rounded px-2 py-1 bg-white dark:bg-slate-800"
+                />
+              </label>
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
             {loading && (
@@ -280,7 +341,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                 <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading invoices...
               </div>
             )}
-            {!loading && filteredInvoices.map(invoice => {
+            {!loading && invoices.map(invoice => {
               const customer = customerMap.get(invoice.contact_id);
               const isActive = selectedInvoice?.id === invoice.id;
               return (
@@ -298,8 +359,8 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                 </button>
               );
             })}
-            {!loading && filteredInvoices.length === 0 && (
-              <div className="p-4 text-xs text-slate-500">No invoices match current filters.</div>
+            {!loading && invoices.length === 0 && (
+              <div className="p-4 text-xs text-slate-500">No invoices found.</div>
             )}
           </div>
         </aside>
@@ -307,7 +368,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
           {selectedInvoice ? (
             <div className="space-y-4">
               <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-4 space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs text-slate-500">Invoice</p>
                     <h2 className="text-2xl font-semibold text-slate-800 dark:text-white">{selectedInvoice.invoice_no}</h2>
@@ -315,36 +376,27 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                   </div>
                   <StatusBadge status={selectedInvoice.status} />
                 </div>
-                <WorkflowStepper currentStage={workflowStage} documentLabel="Invoice" documentSubStatus={workflowDocumentStatus} />
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-slate-600">
-                  <div>
-                    <p className="font-semibold text-slate-500">Due Date</p>
-                    <p className={isOverdue ? 'text-rose-600 font-semibold' : ''}>{selectedInvoice.due_date ? new Date(selectedInvoice.due_date).toLocaleDateString() : 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-slate-500">Payment Method</p>
-                    <p>{selectedInvoice.payment_method || 'Pending'}</p>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-slate-500">Sent At</p>
-                    <p>{selectedInvoice.sent_at ? new Date(selectedInvoice.sent_at).toLocaleString() : 'Not sent'}</p>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-slate-500">Printed At</p>
-                    <p>{selectedInvoice.printed_at ? new Date(selectedInvoice.printed_at).toLocaleString() : 'Not printed'}</p>
-                  </div>
-                </div>
+                <WorkflowStepper
+                  currentStage={workflowStage}
+                  documentLabel="Invoice"
+                  documentStatus={workflowDocumentStatus}
+                />
                 {!canProcessInvoice && selectedCustomer && (
                   <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded p-2">
-                    {selectedCustomer.company} is configured for Order Slip issuance only. Invoice actions are disabled for this customer.
+                    {selectedCustomer.company} is configured for order slip issuance. Invoice actions are disabled for this customer.
                   </div>
                 )}
-                <div className="flex flex-wrap gap-2 text-xs">
+                {isOverdue && (
+                  <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded p-2">
+                    This invoice is overdue based on the due date.
+                  </div>
+                )}
+                <div className="flex flex-wrap items-center gap-2 text-xs">
                   <button
                     type="button"
                     onClick={handleSend}
                     disabled={selectedInvoice.status !== InvoiceStatus.DRAFT || sending || !canProcessInvoice}
-                    title={!canProcessInvoice ? 'Customer is not permitted to send invoices.' : undefined}
+                    title={!canProcessInvoice ? 'Customer is not permitted to issue invoices.' : undefined}
                     className="px-4 py-2 rounded bg-slate-900 text-white disabled:opacity-40"
                   >
                     {sending ? 'Sending...' : 'Send Invoice'}
@@ -362,10 +414,10 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                     type="button"
                     onClick={handleMarkOverdue}
                     disabled={selectedInvoice.status !== InvoiceStatus.SENT || markingOverdue || !canProcessInvoice}
-                    title={!canProcessInvoice ? 'Customer is not permitted to manage invoice status.' : undefined}
-                    className="px-4 py-2 rounded bg-amber-500 text-white disabled:opacity-40"
+                    title={!canProcessInvoice ? 'Customer is not permitted to mark invoices overdue.' : undefined}
+                    className="px-4 py-2 rounded bg-rose-600 text-white disabled:opacity-40"
                   >
-                    {markingOverdue ? 'Marking...' : 'Mark Overdue'}
+                    {markingOverdue ? 'Updating...' : 'Mark Overdue'}
                   </button>
                   <button
                     type="button"
@@ -374,20 +426,21 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                     title={!canProcessInvoice ? 'Customer is not permitted to print invoices.' : undefined}
                     className="px-4 py-2 rounded bg-brand-blue text-white disabled:opacity-40 flex items-center gap-2"
                   >
-                    <Printer className="w-4 h-4" /> {printing ? 'Printing...' : 'Print'}
+                    <Printer className="w-4 h-4" /> {printing ? 'Printing...' : 'Print Invoice'}
                   </button>
                 </div>
               </div>
-              <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-4 print:p-6">
-                <div className="flex justify-between mb-4 print:flex-col print:gap-2">
+
+              <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-4 print:p-6 print:border-0">
+                <div className="flex justify-between items-center mb-4 print:flex-col print:items-start print:gap-2">
                   <div>
-                    <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Billing To</h3>
-                    <p className="text-xs text-slate-500">{selectedCustomer?.company || 'N/A'}</p>
-                    <p className="text-xs text-slate-500">{selectedInvoice.delivery_address || 'No address on file'}</p>
+                    <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Billing Details</h3>
+                    <p className="text-xs text-slate-500">{selectedInvoice.delivery_address || 'No billing address specified'}</p>
                   </div>
                   <div className="text-right text-xs text-slate-500">
-                    <p>Invoice #: {selectedInvoice.invoice_no}</p>
-                    <p>Order #: {selectedInvoice.order_id}</p>
+                    <p>Reference: {selectedInvoice.reference_no || 'N/A'}</p>
+                    <p>PO Number: {selectedInvoice.po_number || 'N/A'}</p>
+                    <p>Terms: {selectedInvoice.terms || 'N/A'}</p>
                   </div>
                 </div>
                 <div className="overflow-x-auto">
@@ -415,53 +468,52 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                     </tbody>
                   </table>
                 </div>
-                <div className="mt-4 space-y-1 text-sm">
-                  <div className="flex justify-between text-slate-600"><span>Subtotal</span><span>₱{subtotal.toLocaleString()}</span></div>
-                  <div className="flex justify-between text-slate-600"><span>VAT ({(VAT_RATE * 100).toFixed(0)}%)</span><span>₱{vatAmount.toFixed(2)}</span></div>
-                  <div className="flex justify-between font-semibold text-slate-800 dark:text-white text-base"><span>Grand Total</span><span>₱{Number(grandTotal).toLocaleString()}</span></div>
+                <div className="flex justify-end mt-3">
+                  <div className="text-sm text-slate-700 dark:text-slate-200 space-y-1 min-w-[220px]">
+                    <div className="flex justify-between"><span>Subtotal</span><span>₱{subtotal.toLocaleString()}</span></div>
+                    <div className="flex justify-between"><span>VAT (12%)</span><span>₱{vatAmount.toLocaleString()}</span></div>
+                    <div className="flex justify-between font-semibold text-base pt-1 border-t border-slate-200 dark:border-slate-700">
+                      <span>Total</span>
+                      <span>₱{Number(grandTotal || 0).toLocaleString()}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
-              {(selectedInvoice.payment_date || selectedInvoice.status === InvoiceStatus.PAID) && (
-                <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-3 text-xs text-emerald-700">
-                  Paid on {selectedInvoice.payment_date ? new Date(selectedInvoice.payment_date).toLocaleDateString() : 'recorded'} via {selectedInvoice.payment_method || 'N/A'}
-                </div>
-              )}
             </div>
           ) : (
             <div className="h-full flex items-center justify-center text-slate-500 text-sm">
-              Select an invoice to view billing details.
+              Select an invoice to view details.
             </div>
           )}
         </section>
       </div>
 
       {paymentModalOpen && selectedInvoice && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-40 p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-md w-full p-5 border border-slate-200 dark:border-slate-800 space-y-3">
+        <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-4 space-y-3">
             <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Record Payment</h3>
-            <div className="space-y-2 text-xs">
-              <label className="flex flex-col gap-1">
-                <span className="text-slate-500">Payment Date</span>
-                <input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="border border-slate-200 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-800" />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-slate-500">Payment Method</span>
-                <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="border border-slate-200 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-800">
-                  <option value="Cash">Cash</option>
-                  <option value="Check">Check</option>
-                  <option value="Bank Transfer">Bank Transfer</option>
-                </select>
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-slate-500">Amount Received (optional)</span>
-                <input type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} className="border border-slate-200 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-800" placeholder="₱" />
-              </label>
-            </div>
-            <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setPaymentModalOpen(false)} className="px-3 py-1 text-sm rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+            <label className="text-xs text-slate-500 flex flex-col gap-1">
+              Payment Date
+              <input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="border border-slate-200 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-800" />
+            </label>
+            <label className="text-xs text-slate-500 flex flex-col gap-1">
+              Payment Method
+              <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="border border-slate-200 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-800">
+                <option value="Cash">Cash</option>
+                <option value="Bank Transfer">Bank Transfer</option>
+                <option value="Cheque">Cheque</option>
+                <option value="GCash">GCash</option>
+              </select>
+            </label>
+            <label className="text-xs text-slate-500 flex flex-col gap-1">
+              Amount
+              <input type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} placeholder={String(grandTotal || '')} className="border border-slate-200 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-800" />
+            </label>
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setPaymentModalOpen(false)} className="px-3 py-2 text-xs rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
                 Cancel
               </button>
-              <button type="button" onClick={handleRecordPayment} disabled={!paymentDate} className="px-4 py-1 text-sm rounded bg-emerald-600 text-white disabled:opacity-40">
+              <button type="button" onClick={handleRecordPayment} disabled={!paymentDate} className="px-3 py-2 text-xs rounded bg-emerald-600 text-white disabled:opacity-40">
                 Save Payment
               </button>
             </div>

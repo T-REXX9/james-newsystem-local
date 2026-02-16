@@ -12,6 +12,7 @@ const STATUS_COLORS: Record<string, string> = {
   submitted: 'bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200',
   confirmed: 'bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200',
   approved: 'bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200',
+  posted: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200',
   finalized: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200',
   paid: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200',
   overdue: 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-200',
