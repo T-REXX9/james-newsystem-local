@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ReceivingReportWithDetails } from '../../receiving.types';
 import { receivingService } from '../../services/receivingService';
 import { Plus, Search, Filter } from 'lucide-react';
@@ -25,6 +25,7 @@ const ReceivingStock: React.FC<ReceivingStockProps> = ({ initialRRId, initialRRR
     // Views
     const [viewMode, setViewMode] = useState<'list' | 'create' | 'view'>('list');
     const [selectedRrId, setSelectedRrId] = useState<string | null>(null);
+    const consumedDeepLinkRef = useRef<string>('');
 
     const fetchRRs = async () => {
         setLoading(true);
@@ -50,19 +51,17 @@ const ReceivingStock: React.FC<ReceivingStockProps> = ({ initialRRId, initialRRR
     // Or adds search to dependency array with debounce. I'll add a search button logic in UI.
 
     useEffect(() => {
-        if (!rrs.length) return;
+        const deepLinkTarget = String(initialRRId || initialRRRefNo || '').trim();
+        if (!deepLinkTarget) return;
 
-        const byId = initialRRId ? rrs.find((entry) => entry.id === initialRRId) : null;
-        const byRefNo = initialRRRefNo
-            ? rrs.find((entry) => String(entry.rr_no || '').toLowerCase() === initialRRRefNo.toLowerCase())
-            : null;
+        // Prevent repeated reopen on the same deep-link while component remains mounted.
+        if (consumedDeepLinkRef.current === deepLinkTarget) return;
+        consumedDeepLinkRef.current = deepLinkTarget;
 
-        const matched = byId || byRefNo;
-        if (matched) {
-            setSelectedRrId(matched.id);
-            setViewMode('view');
-        }
-    }, [rrs, initialRRId, initialRRRefNo]);
+        // The local API uses receiving refno as the primary route key.
+        setSelectedRrId(deepLinkTarget);
+        setViewMode('view');
+    }, [initialRRId, initialRRRefNo]);
 
     const handleCreateSuccess = () => {
         setViewMode('list');
