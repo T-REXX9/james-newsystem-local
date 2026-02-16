@@ -1,0 +1,5 @@
+{
+  "name": "role based permission of TND-OPC",
+  "description": "A specialized CRM for TND-OPC, featuring predictive inventory scoring and automated dealer management.",
+  "requestFramePermissions": []
+}

@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TND-OPC</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+            colors: {
+              brand: {
+                blue: '#0F5298', // Professional Sapphire Blue
+                dark: '#000000', // Pure Black
+                light: '#e0f2fe',
+              },
+              // Override slate to be a neutral/black scale
+              slate: {
+                50: '#fafafa',
+                100: '#f4f4f5',
+                200: '#e4e4e7',
+                300: '#d4d4d8',
+                400: '#a1a1aa',
+                500: '#71717a',
+                600: '#52525b',
+                700: '#27272a', // Borders
+                800: '#121212', // Cards / Elements
+                900: '#050505', // Sidebar / Nav / Headers
+                950: '#000000', // App Background
+              },
+              // Map gray to the same neutral scale
+              gray: {
+                50: '#fafafa',
+                100: '#f4f4f5',
+                200: '#e4e4e7',
+                300: '#d4d4d8',
+                400: '#a1a1aa',
+                500: '#71717a',
+                600: '#52525b',
+                700: '#27272a',
+                800: '#121212',
+                900: '#050505',
+                950: '#000000',
+              }
+            },
+            boxShadow: {
+              'card': '0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1)',
+              'card-hover': '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)',
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        background-color: #f8fafc; /* Slate 50 */
+        color: #334155; /* Slate 700 */
+      }
+      /* Custom scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #f1f5f9;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+      }
+
+      /* Thin scrollbar for sidebar */
+      .scrollbar-thin::-webkit-scrollbar {
+        width: 4px;
+      }
+      .scrollbar-thin::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .scrollbar-thin::-webkit-scrollbar-thumb {
+        background: #d1d5db;
+        border-radius: 2px;
+      }
+      .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+        background: #9ca3af;
+      }
+
+      /* Dark Mode Overrides */
+      .dark body {
+        background-color: #000000; /* Pure Black */
+        color: #e2e8f0; /* Slate 200 */
+      }
+      .dark ::-webkit-scrollbar-track {
+        background: #050505;
+      }
+      .dark ::-webkit-scrollbar-thumb {
+        background: #262626;
+      }
+      .dark ::-webkit-scrollbar-thumb:hover {
+        background: #404040;
+      }
+
+      /* Dark mode thin scrollbar for sidebar */
+      .dark .scrollbar-thin::-webkit-scrollbar-thumb {
+        background: #374151;
+      }
+      .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+        background: #4b5563;
+      }
+
+      /* Animation utilities */
+      .animate-fadeIn {
+        animation: fadeIn 0.3s ease-out;
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(5px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      /* Ripple effect for sidebar buttons */
+      @keyframes ripple {
+        0% {
+          transform: scale(0);
+          opacity: 1;
+        }
+        100% {
+          transform: scale(2);
+          opacity: 0;
+        }
+      }
+      .ripple-effect {
+        animation: ripple 0.6s ease-out;
+      }
+
+      /* Pulse animation for notifications */
+      @keyframes pulse-subtle {
+        0%, 100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.8;
+          transform: scale(1.05);
+        }
+      }
+      .animate-pulse-subtle {
+        animation: pulse-subtle 2s ease-in-out infinite;
+      }
+
+      /* Slide in from left for sidebar expansion */
+      @keyframes slideInLeft {
+        from {
+          opacity: 0;
+          transform: translateX(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      .animate-slideInLeft {
+        animation: slideInLeft 0.2s ease-out;
+      }
+
+      /* Smooth scale hover effect */
+      .hover-scale {
+        transition: transform 0.2s ease-in-out;
+      }
+      .hover-scale:hover {
+        transform: scale(1.05);
+      }
+
+      /* Glassmorphism effect */
+      .glass-effect {
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+      }
+
+      /* Enhanced Glassmorphism for modern cards */
+      .glass-card {
+        background: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.5);
+      }
+      .dark .glass-card {
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+      }
+
+      /* Clip path for pipeline headers */
+      .clip-path-chevron {
+        clip-path: polygon(0% 0%, 95% 0%, 100% 50%, 95% 100%, 0% 100%, 5% 50%);
+      }
+      /* First item needs straight left edge */
+      .clip-path-chevron:first-child {
+        clip-path: polygon(0% 0%, 95% 0%, 100% 50%, 95% 100%, 0% 100%);
+      }
+
+      /* Slide In Up Animation */
+      @keyframes slideInUp {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .animate-slideInUp {
+        animation: slideInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+
+      /* Slide In Right Animation */
+      @keyframes slideInRight {
+        from {
+          opacity: 0;
+          transform: translateX(-20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      .animate-slideInRight {
+        animation: slideInRight 0.4s ease-out forwards;
+      }
+
+      /* Shimmer Effect for Loading */
+      @keyframes shimmer {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
+      }
+      .animate-shimmer {
+        background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.4) 50%, rgba(255,255,255,0) 100%);
+        background-size: 200% 100%;
+        animation: shimmer 1.5s infinite;
+      }
+      
+      /* Count Up Animation (simulated with opacity/transform for now) */
+      @keyframes countUp {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .animate-countUp {
+        animation: countUp 0.8s ease-out forwards;
+      }
+
+      /* Soft Badge Glow */
+      .badge-glow {
+        box-shadow: 0 0 10px rgba(15, 82, 152, 0.15);
+      }
+      .dark .badge-glow {
+        box-shadow: 0 0 15px rgba(15, 82, 152, 0.3);
+      }
+
+      /* Custom loading animation */
+      .custom-loading-spinner {
+        --square: 26px;
+        --offset: 30px;
+        --duration: 2.4s;
+        --delay: 0.2s;
+        --timing-function: ease-in-out;
+        --in-duration: 0.4s;
+        --in-delay: 0.1s;
+        --in-timing-function: ease-out;
+        width: calc(3 * var(--offset) + var(--square));
+        height: calc(2 * var(--offset) + var(--square));
+        position: relative;
+      }
+
+      .custom-loading-square {
+        display: inline-block;
+        background: darkorange;
+        border: none;
+        border-radius: 2px;
+        width: var(--square);
+        height: var(--square);
+        position: absolute;
+        padding: 0;
+        margin: 0;
+      }
+
+      .custom-loading-square:nth-child(1) {
+        left: calc(0 * var(--offset));
+        top: calc(0 * var(--offset));
+        animation: custom-square-1 var(--duration) var(--delay) var(--timing-function) infinite,
+                   custom-square-fadein var(--in-duration) calc(1 * var(--in-delay)) var(--in-timing-function) both;
+      }
+
+      .custom-loading-square:nth-child(2) {
+        left: calc(0 * var(--offset));
+        top: calc(1 * var(--offset));
+        animation: custom-square-2 var(--duration) var(--delay) var(--timing-function) infinite,
+                   custom-square-fadein var(--in-duration) calc(1 * var(--in-delay)) var(--in-timing-function) both;
+      }
+
+      .custom-loading-square:nth-child(3) {
+        left: calc(1 * var(--offset));
+        top: calc(1 * var(--offset));
+        animation: custom-square-3 var(--duration) var(--delay) var(--timing-function) infinite,
+                   custom-square-fadein var(--in-duration) calc(2 * var(--in-delay)) var(--in-timing-function) both;
+      }
+
+      .custom-loading-square:nth-child(4) {
+        left: calc(2 * var(--offset));
+        top: calc(1 * var(--offset));
+        animation: custom-square-4 var(--duration) var(--delay) var(--timing-function) infinite,
+                   custom-square-fadein var(--in-duration) calc(3 * var(--in-delay)) var(--in-timing-function) both;
+      }
+
+      .custom-loading-square:nth-child(5) {
+        left: calc(3 * var(--offset));
+        top: calc(1 * var(--offset));
+        animation: custom-square-5 var(--duration) var(--delay) var(--timing-function) infinite,
+                   custom-square-fadein var(--in-duration) calc(4 * var(--in-delay)) var(--in-timing-function) both;
+      }
+
+      @keyframes custom-square-1 {
+        0% {
+          left: calc(0 * var(--offset));
+          top: calc(0 * var(--offset));
+        }
+        8.333% {
+          left: calc(0 * var(--offset));
+          top: calc(1 * var(--offset));
+        }
+        100% {
+          left: calc(0 * var(--offset));
+          top: calc(1 * var(--offset));
+        }
+      }
+
+      @keyframes custom-square-2 {
+        0% {
+          left: calc(0 * var(--offset));
+          top: calc(1 * var(--offset));
+        }
+        8.333% {
+          left: calc(0 * var(--offset));
+          top: calc(2 * var(--offset));
+        }
+        16.67% {
+          left: calc(1 * var(--offset));
+          top: calc(2 * var(--offset));
+        }
+        25% {
+          left: calc(1 * var(--offset));
+          top: calc(1 * var(--offset));
+        }
+        83.33% {
+          left: calc(1 * var(--offset));
+          top: calc(1 * var(--offset));
+        }
+        91.67% {
+          left: calc(1 * var(--offset));
+          top: calc(0 * var(--offset));
+        }
+        100% {
+          left: calc(0 * var(--offset));
+          top: calc(0 * var(--offset));
+        }
+      }
+
+      @keyframes custom-square-3 {
+        0%, 100% {
+          left: calc(1 * var(--offset));
+          top: calc(1 * var(--offset));
+        }
+        16.67% {
+          left: calc(1 * var(--offset));
+          top: calc(1 * var(--offset));
+        }
+        25% {
+          left: calc(1 * var(--offset));
+          top: calc(0 * var(--offset));
+        }
+        33.33% {
+          left: calc(2 * var(--offset));
+          top: calc(0 * var(--offset));
+        }
+        41.67% {
+          left: calc(2 * var(--offset));
+          top: calc(1 * var(--offset));
+        }
+        66.67% {
+          left: calc(2 * var(--offset));
+          top: calc(1 * var(--offset));
+        }
+        75% {
+          left: calc(2 * var(--offset));
+          top: calc(2 * var(--offset));
+        }
+        83.33% {
+          left: calc(1 * var(--offset));
+          top: calc(2 * var(--offset));
+        }
+        91.67% {
+          left: calc(1 * var(--offset));
+          top: calc(1 * var(--offset));
+        }
+      }
+
+      @keyframes custom-square-4 {
+        0% {
+          left: calc(2 * var(--offset));
+          top: calc(1 * var(--offset));
+        }
+        33.33% {
+          left: calc(2 * var(--offset));
+          top: calc(1 * var(--offset));
+        }
+        41.67% {
+          left: calc(2 * var(--offset));
+          top: calc(2 * var(--offset));
+        }
+        50% {
+          left: calc(3 * var(--offset));
+          top: calc(2 * var(--offset));
+        }
+        58.33% {
+          left: calc(3 * var(--offset));
+          top: calc(1 * var(--offset));
+        }
+        100% {
+          left: calc(3 * var(--offset));
+          top: calc(1 * var(--offset));
+        }
+      }
+
+      @keyframes custom-square-5 {
+        0% {
+          left: calc(3 * var(--offset));
+          top: calc(1 * var(--offset));
+        }
+        50% {
+          left: calc(3 * var(--offset));
+          top: calc(1 * var(--offset));
+        }
+        58.33% {
+          left: calc(3 * var(--offset));
+          top: calc(0 * var(--offset));
+        }
+        66.67% {
+          left: calc(2 * var(--offset));
+          top: calc(0 * var(--offset));
+        }
+        75% {
+          left: calc(2 * var(--offset));
+          top: calc(1 * var(--offset));
+        }
+        100% {
+          left: calc(2 * var(--offset));
+          top: calc(1 * var(--offset));
+        }
+      }
+
+      @keyframes custom-square-fadein {
+        0% {
+          transform: scale(0.75);
+          opacity: 0;
+        }
+        100% {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "recharts": "https://aistudiocdn.com/recharts@^3.4.1",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
