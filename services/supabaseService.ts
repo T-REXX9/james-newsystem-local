@@ -9,6 +9,7 @@ import { Contact, ContactPerson, PipelineDeal, Product, Task, UserProfile, CallL
 import { sanitizeObject, SanitizationConfig } from '../utils/dataSanitization';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { ENTITY_TYPES, logCreate, logDelete, logUpdate } from './activityLogService';
+import { getLocalAuthSession } from './localAuthService';
 
 // Helper to generate restore token and expiry for recycle bin items
 const generateRecycleBinMeta = () => ({
@@ -93,6 +94,94 @@ const productSanitizationConfig: SanitizationConfig<Omit<Product, 'id'>> = {
   price_vip1: { type: 'number', placeholder: 0 },
   price_vip2: { type: 'number', placeholder: 0 },
 };
+
+const LOCAL_API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || 'http://127.0.0.1:8081/api/v1';
+const LOCAL_API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
+
+const toNumber = (value: unknown): number => {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const toProductStatus = (value: unknown): Product['status'] => {
+  const text = String(value ?? '').toLowerCase();
+  if (text === 'inactive') return 'Inactive';
+  if (text === 'discontinued') return 'Discontinued';
+  return 'Active';
+};
+
+const normalizeApiProduct = (raw: any): Product => ({
+  id: String(raw?.id ?? ''),
+  part_no: String(raw?.part_no ?? ''),
+  oem_no: String(raw?.oem_no ?? ''),
+  brand: String(raw?.brand ?? ''),
+  barcode: String(raw?.barcode ?? ''),
+  no_of_pieces_per_box: toNumber(raw?.no_of_pieces_per_box),
+  item_code: String(raw?.item_code ?? ''),
+  description: String(raw?.description ?? ''),
+  size: String(raw?.size ?? ''),
+  reorder_quantity: toNumber(raw?.reorder_quantity),
+  status: toProductStatus(raw?.status),
+  category: String(raw?.category ?? ''),
+  descriptive_inquiry: String(raw?.descriptive_inquiry ?? ''),
+  no_of_holes: String(raw?.no_of_holes ?? ''),
+  replenish_quantity: toNumber(raw?.replenish_quantity),
+  original_pn_no: String(raw?.original_pn_no ?? ''),
+  application: String(raw?.application ?? ''),
+  no_of_cylinder: String(raw?.no_of_cylinder ?? ''),
+  cost: toNumber(raw?.cost),
+  price_aa: toNumber(raw?.price_aa),
+  price_bb: toNumber(raw?.price_bb),
+  price_cc: toNumber(raw?.price_cc),
+  price_dd: toNumber(raw?.price_dd),
+  price_vip1: toNumber(raw?.price_vip1),
+  price_vip2: toNumber(raw?.price_vip2),
+  stock_wh1: toNumber(raw?.stock_wh1),
+  stock_wh2: toNumber(raw?.stock_wh2),
+  stock_wh3: toNumber(raw?.stock_wh3),
+  stock_wh4: toNumber(raw?.stock_wh4),
+  stock_wh5: toNumber(raw?.stock_wh5),
+  stock_wh6: toNumber(raw?.stock_wh6),
+  is_deleted: toNumber(raw?.is_deleted) === 1,
+});
+
+const productApiErrorMessage = async (response: Response): Promise<string> => {
+  try {
+    const payload = await response.json();
+    if (payload?.error) return String(payload.error);
+  } catch {
+    // ignore parsing error
+  }
+  return `API request failed (${response.status})`;
+};
+
+const getLocalProductContext = () => {
+  const session = getLocalAuthSession();
+  const userId = Number(session?.context?.user?.id || 0);
+  return {
+    mainId: LOCAL_API_MAIN_ID,
+    userId: Number.isFinite(userId) ? userId : 0,
+  };
+};
+
+export type ProductListStatus = 'all' | 'active' | 'inactive';
+
+export interface FetchProductsPageParams {
+  search?: string;
+  status?: ProductListStatus;
+  page?: number;
+  perPage?: number;
+}
+
+export interface FetchProductsPageResult {
+  items: Product[];
+  meta: {
+    page: number;
+    per_page: number;
+    total: number;
+    total_pages: number;
+  };
+}
 
 // With our local mock DB, we can just query directly.
 // The Mock DB handles the seeding from constants, so we trust it returns data.
@@ -349,16 +438,72 @@ export const bulkUpdateDeals = async (
 
 export const fetchProducts = async (): Promise<Product[]> => {
   try {
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .eq('is_deleted', false);
-    if (error) throw error;
-    return (data as Product[]) || [];
+    const perPage = 500;
+    let page = 1;
+    let totalPages = 1;
+    const merged: Product[] = [];
+
+    while (page <= totalPages) {
+      const params = new URLSearchParams({
+        main_id: String(LOCAL_API_MAIN_ID),
+        page: String(page),
+        per_page: String(perPage),
+        status: 'all',
+      });
+
+      const response = await fetch(`${LOCAL_API_BASE_URL}/products?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error(await productApiErrorMessage(response));
+      }
+
+      const payload = await response.json();
+      const rows = Array.isArray(payload?.data?.items) ? payload.data.items : [];
+      merged.push(...rows.map(normalizeApiProduct));
+      totalPages = Number(payload?.data?.meta?.total_pages || 1);
+      page += 1;
+    }
+
+    return merged;
   } catch (err) {
     console.error("Error fetching products:", err);
     return [];
   }
+};
+
+export const fetchProductsPage = async (params: FetchProductsPageParams = {}): Promise<FetchProductsPageResult> => {
+  const {
+    search = '',
+    status = 'all',
+    page = 1,
+    perPage = 100,
+  } = params;
+
+  const query = new URLSearchParams({
+    main_id: String(LOCAL_API_MAIN_ID),
+    search,
+    status,
+    page: String(Math.max(1, page)),
+    per_page: String(Math.min(500, Math.max(1, perPage))),
+  });
+
+  const response = await fetch(`${LOCAL_API_BASE_URL}/products?${query.toString()}`);
+  if (!response.ok) {
+    throw new Error(await productApiErrorMessage(response));
+  }
+
+  const payload = await response.json();
+  const rows = Array.isArray(payload?.data?.items) ? payload.data.items : [];
+  const meta = payload?.data?.meta || {};
+
+  return {
+    items: rows.map(normalizeApiProduct),
+    meta: {
+      page: Number(meta.page || page),
+      per_page: Number(meta.per_page || perPage),
+      total: Number(meta.total || 0),
+      total_pages: Number(meta.total_pages || 1),
+    },
+  };
 };
 
 // --- REORDER REPORT SERVICE ---
@@ -442,8 +587,21 @@ export const fetchReorderReportEntries = async (): Promise<ReorderReportEntry[]>
 export const createProduct = async (product: Omit<Product, 'id'>): Promise<void> => {
   try {
     const sanitizedProduct = sanitizeObject(product as Omit<Product, 'id'>, productSanitizationConfig);
-    const { data, error } = await supabase.from('products').insert(sanitizedProduct).select().single();
-    if (error) throw error;
+    const { mainId, userId } = getLocalProductContext();
+    const response = await fetch(`${LOCAL_API_BASE_URL}/products`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...sanitizedProduct,
+        main_id: mainId,
+        user_id: userId,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(await productApiErrorMessage(response));
+    }
+    const payload = await response.json();
+    const data = payload?.data ? normalizeApiProduct(payload.data) : null;
     try {
       if (data) {
         await logCreate(ENTITY_TYPES.PRODUCT, data.id, {
@@ -468,8 +626,19 @@ export const updateProduct = async (id: string, updates: Partial<Product>): Prom
       productSanitizationConfig,
       { enforceRequired: false, onlyProvided: true }
     );
-    const { error } = await supabase.from('products').update(sanitizedUpdates).eq('id', id);
-    if (error) throw error;
+    const { mainId, userId } = getLocalProductContext();
+    const response = await fetch(`${LOCAL_API_BASE_URL}/products/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...sanitizedUpdates,
+        main_id: mainId,
+        user_id: userId,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(await productApiErrorMessage(response));
+    }
     try {
       await logUpdate(ENTITY_TYPES.PRODUCT, id, {
         updated_fields: Object.keys(sanitizedUpdates),
@@ -493,12 +662,19 @@ export const bulkUpdateProducts = async (
       productSanitizationConfig,
       { enforceRequired: false, onlyProvided: true }
     );
-    const { error } = await supabase
-      .from('products')
-      .update(sanitizedUpdates)
-      .in('id', ids);
-
-    if (error) throw error;
+    const { mainId } = getLocalProductContext();
+    const response = await fetch(`${LOCAL_API_BASE_URL}/products/bulk-update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        main_id: mainId,
+        ids,
+        updates: sanitizedUpdates,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(await productApiErrorMessage(response));
+    }
   } catch (err) {
     console.error("Error bulk updating products:", err);
     throw new Error(parseSupabaseError(err, 'product'));
@@ -507,50 +683,19 @@ export const bulkUpdateProducts = async (
 
 export const deleteProduct = async (id: string): Promise<void> => {
   try {
-    // Fetch the current user
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
-
-    // Get the product data before deletion
-    const { data: product } = await supabase
-      .from('products')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (!product) throw new Error('Product not found');
-
-    // Insert into recycle bin
-    const { error: recycleError } = await supabase
-      .from('recycle_bin_items')
-      .insert({
-        item_type: RecycleBinItemType.PRODUCT,
-        item_id: id,
-        original_data: product,
-        deleted_by: user.id,
-        deleted_at: new Date().toISOString(),
-        ...generateRecycleBinMeta(),
-      });
-
-    if (recycleError) throw recycleError;
-
-    // Soft delete the product
-    const { error } = await supabase
-      .from('products')
-      .update({
-        is_deleted: true,
-        deleted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', id);
-
-    if (error) throw error;
+    const response = await fetch(
+      `${LOCAL_API_BASE_URL}/products/${encodeURIComponent(id)}?main_id=${encodeURIComponent(String(LOCAL_API_MAIN_ID))}`,
+      { method: 'DELETE' }
+    );
+    if (!response.ok) {
+      throw new Error(await productApiErrorMessage(response));
+    }
 
     try {
       await logDelete(ENTITY_TYPES.PRODUCT, id, {
-        part_no: product.part_no,
-        item_code: product.item_code,
-        description: product.description,
+        part_no: id,
+        item_code: id,
+        description: 'Deleted via local API',
       });
     } catch (logError) {
       console.error('Failed to log activity:', logError);

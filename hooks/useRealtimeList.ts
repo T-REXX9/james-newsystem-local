@@ -7,6 +7,7 @@ export interface UseRealtimeListOptions<T> {
   sortFn?: (a: T, b: T) => number;
   filterFn?: (item: T) => boolean;
   enabled?: boolean;
+  realtimeEnabled?: boolean;
   idField?: keyof T;
 }
 
@@ -16,6 +17,7 @@ export function useRealtimeList<T extends { id: string }>({
   sortFn,
   filterFn,
   enabled = true,
+  realtimeEnabled = enabled,
   idField = 'id' as keyof T,
 }: UseRealtimeListOptions<T>) {
   const [data, setData] = useState<T[]>([]);
@@ -89,7 +91,7 @@ export function useRealtimeList<T extends { id: string }>({
   useRealtimeSubscription<T>({
     tableName,
     callbacks,
-    enabled,
+    enabled: realtimeEnabled,
   });
 
   // Apply client-side filter if provided

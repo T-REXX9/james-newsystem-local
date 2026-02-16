@@ -4,9 +4,14 @@ import {
 } from 'lucide-react';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
 import { Product, UserProfile } from '../types';
-import { fetchProducts, createProduct, updateProduct, deleteProduct, bulkUpdateProducts } from '../services/supabaseService';
+import {
+  fetchProductsPage,
+  type ProductListStatus,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+} from '../services/supabaseService';
 import { fetchProductMovementClassifications } from '../services/inventoryMovementService';
-import { useRealtimeList } from '../hooks/useRealtimeList';
 import { applyOptimisticUpdate, applyOptimisticDelete } from '../utils/optimisticUpdates';
 import ConfirmModal from './ConfirmModal';
 import ValidationSummary from './ValidationSummary';
@@ -22,6 +27,14 @@ interface ProductDatabaseProps {
 const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
   const { addToast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<ProductListStatus>('all');
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [perPage] = useState(100);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   const isMasterAccess = currentUser?.role === 'Owner' || currentUser?.role === 'Developer';
 
@@ -86,16 +99,44 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
 
   const [formData, setFormData] = useState<Omit<Product, 'id'>>(initialFormState);
 
-  // Use real-time list hook for products
-  const sortByPartNo = (a: Product, b: Product) => {
-    return a.part_no.localeCompare(b.part_no);
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearch(searchQuery.trim());
+      setPage(1);
+    }, 250);
+    return () => window.clearTimeout(timeout);
+  }, [searchQuery]);
+
+  const loadProducts = async (targetPage = page) => {
+    setIsLoading(true);
+    try {
+      const result = await fetchProductsPage({
+        search: debouncedSearch,
+        status: statusFilter,
+        page: targetPage,
+        perPage,
+      });
+      setProducts(result.items);
+      setPage(result.meta.page);
+      setTotalItems(result.meta.total);
+      setTotalPages(Math.max(1, result.meta.total_pages));
+    } catch (error) {
+      console.error('Error loading product page:', error);
+      addToast({
+        type: 'error',
+        title: 'Unable to load products',
+        description: parseSupabaseError(error, 'product'),
+        durationMs: 6000,
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const { data: products, isLoading, setData: setProducts } = useRealtimeList<Product>({
-    tableName: 'products',
-    initialFetchFn: fetchProducts,
-    sortFn: sortByPartNo,
-  });
+  useEffect(() => {
+    loadProducts(page);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, debouncedSearch, statusFilter]);
 
   // Movement classification state
   type MovementCategory = 'fast' | 'slow' | 'normal';
@@ -113,15 +154,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
     loadMovementData();
   }, []);
 
-  const filteredProducts = useMemo(() => {
-    const lowerQuery = searchQuery.toLowerCase();
-    return products.filter(p =>
-      p.part_no.toLowerCase().includes(lowerQuery) ||
-      p.description.toLowerCase().includes(lowerQuery) ||
-      p.brand.toLowerCase().includes(lowerQuery) ||
-      p.item_code.toLowerCase().includes(lowerQuery)
-    );
-  }, [products, searchQuery]);
+  const filteredProducts = products;
 
   const handleOpenAdd = () => {
     setEditingProduct(null);
@@ -146,6 +179,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
         setProducts(prev => applyOptimisticDelete(prev, id));
         try {
           await deleteProduct(id);
+          await loadProducts(page);
           addToast({ 
             type: 'success', 
             title: 'Product deleted',
@@ -178,6 +212,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
         // Optimistic update
         setProducts(prev => applyOptimisticUpdate(prev, editingProduct.id, formData));
         await updateProduct(editingProduct.id, formData);
+        await loadProducts(page);
         addToast({ 
           type: 'success', 
           title: 'Product updated',
@@ -186,6 +221,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
         });
       } else {
         await createProduct(formData);
+        await loadProducts(1);
         addToast({ 
           type: 'success', 
           title: 'Product created',
@@ -281,9 +317,8 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
       onConfirm: async () => {
         setIsBulkUpdating(true);
         try {
-          for (const item of affectedProducts) {
-            await updateProduct(item.id, item.updates);
-          }
+          await Promise.all(affectedProducts.map((item) => updateProduct(item.id, item.updates)));
+          await loadProducts(page);
           setIsBulkUpdateModalOpen(false);
           addToast({ 
             type: 'success', 
@@ -403,9 +438,26 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-        <button className="flex items-center gap-2 px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-          <Filter className="w-4 h-4" /> Filters
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg">
+            <Filter className="w-4 h-4 text-slate-400" />
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value as ProductListStatus);
+                setPage(1);
+              }}
+              className="bg-transparent text-sm text-slate-600 dark:text-slate-300 outline-none"
+            >
+              <option value="all">All</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+          <div className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+            {totalItems.toLocaleString()} records
+          </div>
+        </div>
       </div>
 
       {/* Product Table */}
@@ -426,7 +478,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
               {filteredProducts.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="p-8 text-center text-slate-500 dark:text-slate-400 italic">
-                    No products found.
+                    No products found for the selected filters.
                   </td>
                 </tr>
               ) : filteredProducts.map((product) => (
@@ -546,6 +598,28 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
         </div>
       </div>
 
+      <div className="mt-4 flex items-center justify-between text-sm text-slate-600 dark:text-slate-300">
+        <div>
+          Page {page} of {Math.max(1, totalPages)}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+            disabled={page <= 1 || isLoading}
+            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Previous
+          </button>
+          <button
+            onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+            disabled={page >= totalPages || isLoading}
+            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+
       {/* Bulk Price Update Modal */}
       {isBulkUpdateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
@@ -605,7 +679,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
                 <div className="p-3 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-100 dark:border-blue-900/30">
                   <p className="text-xs font-medium text-brand-blue flex items-center gap-2">
                     <AlertCircle className="w-3 h-3" />
-                    Currently matches: <strong>{filteredForBulk.length} products</strong>
+                    Current page matches: <strong>{filteredForBulk.length} products</strong>
                   </p>
                 </div>
                 {zeroCostCount > 0 && (
