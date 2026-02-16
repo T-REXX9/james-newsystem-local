@@ -70,14 +70,19 @@ import LoyaltyDiscountRulesView from './components/LoyaltyDiscountRulesView';
 import ProfitThresholdSettings from './components/ProfitThresholdSettings';
 import AIMessageTemplatesView from './components/AIMessageTemplatesView';
 
-import { supabase } from './lib/supabaseClient';
 import { logAuth } from './services/activityLogService';
 import { UserProfile } from './types';
 import { Filter, Lock } from 'lucide-react';
 import { ToastProvider } from './components/ToastProvider';
 import { NotificationProvider } from './components/NotificationProvider';
 import CustomLoadingSpinner from './components/CustomLoadingSpinner';
-import { AVAILABLE_APP_MODULES, DEFAULT_STAFF_ACCESS_RIGHTS, MODULE_ID_ALIASES } from './constants';
+import { AVAILABLE_APP_MODULES, MODULE_ID_ALIASES } from './constants';
+import {
+  LocalAuthSession,
+  localAuthChangedEventName,
+  logoutFromLocalApi,
+  restoreLocalAuthSession,
+} from './services/localAuthService';
 
 const CANONICAL_TO_ALIASES: Record<string, string[]> = Object.entries(MODULE_ID_ALIASES).reduce(
   (acc, [alias, canonical]) => {
@@ -109,29 +114,51 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [moduleContext, setModuleContext] = useState<Record<string, Record<string, string>>>({});
 
+  const applyLocalAuthSession = (authSession: LocalAuthSession | null) => {
+    if (!authSession) {
+      setSession(null);
+      setUserProfile(null);
+      return;
+    }
+
+    setSession({
+      token: authSession.token,
+      user: { id: authSession.userProfile.id },
+    });
+    setUserProfile(authSession.userProfile);
+  };
+
   // 1. Auth Logic
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session?.user) fetchUserProfile(session.user.id);
-      else setAppLoading(false);
-    });
+    let mounted = true;
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session?.user) {
-        // Reset to dashboard on every login to prevent access issues when switching accounts
-        setActiveTab('dashboard');
-        fetchUserProfile(session.user.id);
-      } else {
-        setUserProfile(null);
-        setAppLoading(false);
+    const bootstrap = async () => {
+      try {
+        const restored = await restoreLocalAuthSession();
+        if (!mounted) return;
+        applyLocalAuthSession(restored);
+      } catch (error) {
+        console.error('Error restoring local auth session:', error);
+        if (mounted) applyLocalAuthSession(null);
+      } finally {
+        if (mounted) setAppLoading(false);
       }
-    });
+    };
 
-    return () => subscription.unsubscribe();
+    const handler = (event: Event) => {
+      const custom = event as CustomEvent<LocalAuthSession | null>;
+      applyLocalAuthSession(custom.detail || null);
+      setActiveTab('dashboard');
+      setAppLoading(false);
+    };
+
+    bootstrap();
+    window.addEventListener(localAuthChangedEventName, handler as EventListener);
+
+    return () => {
+      mounted = false;
+      window.removeEventListener(localAuthChangedEventName, handler as EventListener);
+    };
   }, []);
 
   useEffect(() => {
@@ -149,69 +176,13 @@ const App: React.FC = () => {
     return () => window.removeEventListener('workflow:navigate', handler as EventListener);
   }, []);
 
-  const fetchUserProfile = async (userId: string) => {
-    const setFallbackProfile = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const role = user.user_metadata?.role || 'Owner';
-        const fallbackProfile = {
-          id: user.id,
-          email: user.email || '',
-          full_name: user.user_metadata?.full_name,
-          avatar_url: user.user_metadata?.avatar_url,
-          role,
-          access_rights:
-            user.user_metadata?.access_rights ||
-            (role === 'Owner'
-              ? ['*']
-              : DEFAULT_STAFF_ACCESS_RIGHTS)
-        };
-        setUserProfile(fallbackProfile);
-      } else {
-        setUserProfile({
-          id: userId,
-          email: '',
-          role: 'Unknown',
-          access_rights: [],
-        });
-      }
-    };
-
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (error) {
-        console.error('Error fetching profile', error);
-        await setFallbackProfile();
-        return;
-      }
-
-      if (data) {
-        setUserProfile(data);
-      } else {
-        await setFallbackProfile();
-      }
-    } catch (e) {
-      console.error('Error fetching profile', e);
-      await setFallbackProfile();
-    } finally {
-      setAppLoading(false);
-    }
-  };
-
   const handleSignOut = async () => {
     try {
       await logAuth('LOGOUT');
     } catch (error) {
       console.error('Failed to log activity:', error);
     }
-    await supabase.auth.signOut();
-    setSession(null);
-    setUserProfile(null);
+    await logoutFromLocalApi();
   };
 
   const handleSetActiveTab = (tab: string) => {

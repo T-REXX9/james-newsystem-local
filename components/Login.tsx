@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabaseClient';
 import { Lock, User, Eye, EyeOff, AlertCircle, CheckCircle, Loader2, Sun, Moon } from 'lucide-react';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
 import { logAuth } from '../services/activityLogService';
 import { dispatchWorkflowNotification } from '../services/supabaseService';
+import { loginWithLocalApi } from '../services/localAuthService';
 
 export default function Login() {
   const { addToast } = useToast();
@@ -52,11 +52,9 @@ export default function Login() {
   };
 
   const getEmail = (input: string) => {
-    // Map 'main' to the admin email for convenience
-    if (input.trim().toLowerCase() === 'main') {
-      return 'main@tnd-opc.com';
-    }
-    return input;
+    // Keep legacy behavior aligned with old-system credentials
+    // (e.g. owner account username can be "main")
+    return input.trim();
   };
 
   const getAuthDeviceMetadata = () => ({
@@ -106,46 +104,16 @@ export default function Login() {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    
-    const { error } = await supabase.auth.signUp({
-      email: getEmail(formData.email),
-      password: formData.password,
-      options: {
-        data: {
-          full_name: formData.fullName,
-          avatar_url: `https://i.pravatar.cc/150?u=${Math.random()}`
-        }
-      }
+    setMessage({
+      type: 'warning',
+      text: 'Sign up via UI is disabled in local API mode. Please create users in MySQL/old system for now.',
     });
-
-    if (error) {
-      setMessage({ type: 'error', text: error.message });
-      addToast({
-        type: 'error',
-        title: 'Unable to create account',
-        description: parseSupabaseError(error, 'account'),
-        durationMs: 6000,
-      });
-    } else {
-      setMessage({ 
-        type: 'success', 
-        text: 'Account created! You can now sign in.' 
-      });
-      try {
-        await logAuth('SIGNUP', { email: getEmail(formData.email) });
-      } catch (logError) {
-        console.error('Failed to log activity:', logError);
-      }
-      addToast({
-        type: 'success',
-        title: 'Account created',
-        description: 'Account created successfully. You can now sign in.',
-        durationMs: 4000,
-      });
-      setView('signin');
-    }
-    setLoading(false);
+    addToast({
+      type: 'warning',
+      title: 'Sign up disabled',
+      description: 'Use an existing account from the local MySQL database.',
+      durationMs: 6000,
+    });
   };
 
   const handleSignIn = async (e: React.FormEvent) => {
@@ -153,50 +121,35 @@ export default function Login() {
     setLoading(true);
     setMessage({ type: '', text: '' });
     
-    const attemptedEmail = getEmail(formData.email).trim().toLowerCase();
+    const attemptedEmail = getEmail(formData.email);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: attemptedEmail,
-        password: formData.password
-      });
+      await loginWithLocalApi(attemptedEmail, formData.password);
 
-      if (error) {
-        if (isSuspiciousLoginError(error.message)) {
-          await notifySuspiciousLoginSignal(attemptedEmail, 'failed', error.message);
-        }
-        setMessage({ type: 'error', text: error.message });
-        addToast({
-          type: 'error',
-          title: 'Unable to sign in',
-          description: parseSupabaseError(error, 'authentication'),
-          durationMs: 6000,
-        });
-        setLoading(false);
-      } else {
-        // Success: The supabase client 'onAuthStateChange' event will fire,
-        // causing App.tsx to update the session state and remove this component.
-        // We keep loading=true to prevent the user from interacting while the swap happens.
-        try {
-          await logAuth('LOGIN', { email: getEmail(formData.email) });
-        } catch (logError) {
-          console.error('Failed to log activity:', logError);
-        }
-        addToast({
-          type: 'success',
-          title: 'Welcome back!',
-          description: 'You have signed in successfully.',
-          durationMs: 4000,
-        });
+      // Success: localAuthService dispatches auth-changed event for App.tsx to swap views.
+      try {
+        await logAuth('LOGIN', { email: attemptedEmail });
+      } catch (logError) {
+        console.error('Failed to log activity:', logError);
       }
+      addToast({
+        type: 'success',
+        title: 'Welcome back!',
+        description: 'You have signed in successfully.',
+        durationMs: 4000,
+      });
     } catch (err: any) {
        console.error("Unexpected Login Error:", err);
+       const message = err instanceof Error ? err.message : 'Unable to sign in';
+       if (isSuspiciousLoginError(message)) {
+         await notifySuspiciousLoginSignal(attemptedEmail, 'failed', message);
+       }
        await notifySuspiciousLoginSignal(
          attemptedEmail,
          'error',
-         err instanceof Error ? err.message : 'unexpected_login_error'
+         message || 'unexpected_login_error'
        );
-       setMessage({ type: 'error', text: "An unexpected error occurred." });
+       setMessage({ type: 'error', text: message || "An unexpected error occurred." });
        addToast({
          type: 'error',
          title: 'Unable to sign in',

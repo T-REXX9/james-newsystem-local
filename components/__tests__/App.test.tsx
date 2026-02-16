@@ -2,24 +2,13 @@ import React from 'react';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
 import App from '../../App';
-import { supabase } from '../../lib/supabaseClient';
+import { restoreLocalAuthSession, logoutFromLocalApi, localAuthChangedEventName } from '../../services/localAuthService';
 
-vi.mock('../../lib/supabaseClient', () => {
-  const auth = {
-    getSession: vi.fn(),
-    getUser: vi.fn(),
-    onAuthStateChange: vi.fn(),
-    signOut: vi.fn()
-  };
-  const from = vi.fn();
-
-  return {
-    supabase: {
-      auth,
-      from
-    }
-  };
-});
+vi.mock('../../services/localAuthService', () => ({
+  restoreLocalAuthSession: vi.fn(),
+  logoutFromLocalApi: vi.fn(),
+  localAuthChangedEventName: 'local-auth-changed',
+}));
 
 vi.mock('../../components/Login', () => ({
   default: () => <div>LoginComponent</div>
@@ -60,26 +49,13 @@ vi.mock('../../components/DailyCallMonitoringView', () => ({
   default: () => <div>DailyCallMonitoringView</div>
 }));
 
-const typedSupabase = supabase as unknown as {
-  auth: {
-    getSession: ReturnType<typeof vi.fn>;
-    getUser: ReturnType<typeof vi.fn>;
-    onAuthStateChange: ReturnType<typeof vi.fn>;
-    signOut: ReturnType<typeof vi.fn>;
-  };
-  from: ReturnType<typeof vi.fn>;
-};
-
-const subscription = { unsubscribe: vi.fn() };
+const mockedRestoreLocalAuthSession = vi.mocked(restoreLocalAuthSession);
+const mockedLogoutFromLocalApi = vi.mocked(logoutFromLocalApi);
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
-  typedSupabase.auth.getSession.mockReset();
-  typedSupabase.auth.getUser.mockReset();
-  typedSupabase.auth.onAuthStateChange.mockReset();
-  typedSupabase.auth.signOut.mockReset();
-  typedSupabase.from.mockReset();
-  typedSupabase.auth.onAuthStateChange.mockReturnValue({ data: { subscription } });
+  mockedRestoreLocalAuthSession.mockReset();
+  mockedLogoutFromLocalApi.mockReset();
   consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
@@ -90,68 +66,83 @@ afterEach(() => {
 
 describe('App authentication flow', () => {
   it('renders login when there is no active session', async () => {
-    typedSupabase.auth.getSession.mockResolvedValue({ data: { session: null }, error: null });
-    typedSupabase.auth.getUser.mockResolvedValue({ data: { user: null }, error: null });
+    mockedRestoreLocalAuthSession.mockResolvedValue(null);
 
     render(<App />);
 
     expect(await screen.findByText('LoginComponent')).toBeInTheDocument();
   });
 
-  it('loads the profile and renders the dashboard when a session exists', async () => {
-    typedSupabase.auth.getSession.mockResolvedValue({
-      data: { session: { user: { id: 'user-1' } } },
-      error: null
-    });
-    typedSupabase.auth.getUser.mockResolvedValue({ data: { user: null }, error: null });
-
-    const profile = { id: 'user-1', role: 'Owner', access_rights: ['*'] };
-    const single = vi.fn().mockResolvedValue({ data: profile, error: null });
-    const eq = vi.fn().mockReturnValue({ single });
-    const select = vi.fn().mockReturnValue({ eq, single });
-    typedSupabase.from.mockReturnValue({ select, eq, single });
+  it('loads and renders dashboard when a local auth session exists', async () => {
+    mockedRestoreLocalAuthSession.mockResolvedValue({
+      token: 'token-1',
+      context: {
+        token: 'token-1',
+        user: {
+          id: 1,
+          main_userid: 1,
+          email: 'owner@example.com',
+        },
+        main_userid: 1,
+        user_type: '1',
+        session_branch: 'mainbranch',
+        logintype: '1',
+        industry: 'Shop',
+      },
+      userProfile: {
+        id: '1',
+        email: 'owner@example.com',
+        full_name: 'Owner User',
+        role: 'Owner',
+        access_rights: ['*'],
+      },
+    } as any);
 
     render(<App />);
 
     await waitFor(() => expect(screen.getByTestId('topnav')).toBeInTheDocument());
     fireEvent.click(screen.getByTestId('topnav'));
-    await waitFor(() => expect(typedSupabase.auth.signOut).toHaveBeenCalled());
+    await waitFor(() => expect(mockedLogoutFromLocalApi).toHaveBeenCalled());
   });
 
-  it('falls back to user metadata when profile fetch fails', async () => {
-    typedSupabase.auth.getSession.mockResolvedValue({
-      data: { session: { user: { id: 'user-1' } } },
-      error: null
-    });
-    typedSupabase.auth.getUser.mockResolvedValue({
-      data: { user: { id: 'user-1', email: 'main@tnd-opc.com', user_metadata: { role: 'Owner', access_rights: ['*'] } } },
-      error: null
-    });
-
-    const single = vi.fn().mockResolvedValue({ data: null, error: { message: 'boom' } });
-    const eq = vi.fn().mockReturnValue({ single });
-    const select = vi.fn().mockReturnValue({ eq, single });
-    typedSupabase.from.mockReturnValue({ select, eq, single });
+  it('reacts to local auth changed event after bootstrap', async () => {
+    mockedRestoreLocalAuthSession.mockResolvedValue(null);
 
     render(<App />);
+    expect(await screen.findByText('LoginComponent')).toBeInTheDocument();
+
+    window.dispatchEvent(
+      new CustomEvent(localAuthChangedEventName, {
+        detail: {
+          token: 'token-2',
+          context: {
+            token: 'token-2',
+            user: { id: 2, main_userid: 1, email: 'agent@example.com' },
+            main_userid: 1,
+            user_type: '2',
+            session_branch: 'mainbranch',
+            logintype: '2',
+            industry: 'Shop',
+          },
+          userProfile: {
+            id: '2',
+            email: 'agent@example.com',
+            full_name: 'Sales Agent',
+            role: 'Sales Agent',
+            access_rights: ['home'],
+          },
+        },
+      })
+    );
 
     expect(await screen.findByTestId('topnav')).toBeInTheDocument();
   });
 
-  it('shows access denied if profile and user metadata are unavailable', async () => {
-    typedSupabase.auth.getSession.mockResolvedValue({
-      data: { session: { user: { id: 'user-1' } } },
-      error: null
-    });
-    typedSupabase.auth.getUser.mockResolvedValue({ data: { user: null }, error: null });
-
-    const single = vi.fn().mockResolvedValue({ data: null, error: { message: 'boom' } });
-    const eq = vi.fn().mockReturnValue({ single });
-    const select = vi.fn().mockReturnValue({ eq, single });
-    typedSupabase.from.mockReturnValue({ select, eq, single });
+  it('renders login when restored session fails', async () => {
+    mockedRestoreLocalAuthSession.mockRejectedValue(new Error('restore failed'));
 
     render(<App />);
 
-    expect(await screen.findByText('Access Denied')).toBeInTheDocument();
+    expect(await screen.findByText('LoginComponent')).toBeInTheDocument();
   });
 });
