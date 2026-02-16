@@ -21,6 +21,7 @@ Default local URL:
 - `lib/` client setup and generated/shared library types
 - `data/` local/static seed data used by UI
 - `docs/` implementation notes, migration notes, and technical references
+- `md files/root-archive/` legacy root markdown/text files archived for cleanup
 - `scripts/` maintenance and seed scripts
 - `supabase/` legacy Supabase migrations/functions kept for reference and phased migration
 - `references/` source requirement and planning references
