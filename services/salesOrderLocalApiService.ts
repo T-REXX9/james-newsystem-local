@@ -1,4 +1,4 @@
-import { Contact, SalesOrder, SalesOrderItem, SalesOrderStatus } from '../types';
+import { Contact, Invoice, InvoiceStatus, OrderSlip, OrderSlipStatus, SalesOrder, SalesOrderItem, SalesOrderStatus } from '../types';
 import { getLocalAuthSession } from './localAuthService';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || 'http://127.0.0.1:8081/api/v1';
@@ -88,6 +88,7 @@ const mapApiOrderSummary = (raw: any): SalesOrder => {
     urgency_date: '',
     grand_total: toNumber(raw?.grand_total, 0),
     status: normalizeOldSystemStatus(raw?.status || raw?.transaction_status) as SalesOrderStatus,
+    can_approve: Boolean(raw?.viewer_is_approver),
     approved_by: '',
     approved_at: '',
     created_by: String(raw?.created_by || ''),
@@ -133,6 +134,7 @@ export interface SalesOrdersPageResult {
 }
 
 export const getSalesOrdersPage = async (filters: SalesOrdersPageFilters): Promise<SalesOrdersPageResult> => {
+  const userContext = getUserContext();
   const month = filters.month !== undefined
     ? Math.max(1, Math.min(12, Number(filters.month)))
     : undefined;
@@ -146,6 +148,7 @@ export const getSalesOrdersPage = async (filters: SalesOrdersPageFilters): Promi
 
   const query = new URLSearchParams({
     main_id: String(API_MAIN_ID),
+    viewer_user_id: String(userContext.userId),
     status,
     page: String(page),
     per_page: String(perPage),
@@ -181,8 +184,9 @@ export const getAllSalesOrders = async (): Promise<SalesOrder[]> => {
 
 export const getSalesOrder = async (id: string): Promise<SalesOrder | null> => {
   try {
+    const userContext = getUserContext();
     const data = await requestApi(
-      `${API_BASE_URL}/sales-orders/${encodeURIComponent(id)}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`
+      `${API_BASE_URL}/sales-orders/${encodeURIComponent(id)}?main_id=${encodeURIComponent(String(API_MAIN_ID))}&viewer_user_id=${encodeURIComponent(String(userContext.userId))}`
     );
     return mapApiOrderDetail(data);
   } catch {
@@ -221,8 +225,122 @@ export const confirmSalesOrder = async (id: string): Promise<SalesOrder | null> 
   return mapApiOrderDetail(data);
 };
 
-export const convertToDocument = async (_orderId: string): Promise<never> => {
-  throw new Error('Sales order to document conversion is not available in local API mode yet.');
+const mapConvertedOrderSlip = (payload: any): OrderSlip => {
+  const doc = payload?.order_slip || {};
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  const summary = payload?.summary || {};
+  const id = String(doc?.order_slip_refno || '');
+  return {
+    id,
+    slip_no: String(doc?.slip_no || ''),
+    order_id: String(doc?.order_id || ''),
+    contact_id: String(doc?.contact_id || ''),
+    sales_date: String(doc?.sales_date || ''),
+    sales_person: String(doc?.sales_person || ''),
+    delivery_address: String(doc?.delivery_address || ''),
+    reference_no: String(doc?.reference_no || ''),
+    customer_reference: String(doc?.customer_reference || ''),
+    send_by: String(doc?.send_by || ''),
+    price_group: String(doc?.price_group || ''),
+    credit_limit: toNumber(doc?.credit_limit, 0),
+    terms: String(doc?.terms || ''),
+    promise_to_pay: String(doc?.promise_to_pay || ''),
+    po_number: String(doc?.po_number || ''),
+    remarks: String(doc?.remarks || ''),
+    inquiry_type: '',
+    urgency: '',
+    urgency_date: '',
+    grand_total: toNumber(summary?.grand_total, 0),
+    status: OrderSlipStatus.FINALIZED,
+    created_by: String(doc?.created_by || ''),
+    created_at: String(doc?.created_at || ''),
+    items: items.map((item: any) => ({
+      id: String(item?.id || ''),
+      order_slip_id: id,
+      item_id: String(item?.item_refno || item?.item_id || ''),
+      qty: toNumber(item?.qty, 0),
+      part_no: String(item?.part_no || ''),
+      item_code: String(item?.item_code || ''),
+      location: String(item?.location || ''),
+      description: String(item?.description || ''),
+      unit_price: toNumber(item?.unit_price, 0),
+      amount: toNumber(item?.amount, toNumber(item?.qty, 0) * toNumber(item?.unit_price, 0)),
+      remark: String(item?.remark || ''),
+    })),
+    is_deleted: false,
+  };
+};
+
+const mapConvertedInvoice = (payload: any): Invoice => {
+  const doc = payload?.invoice || {};
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  const summary = payload?.summary || {};
+  const id = String(doc?.invoice_refno || '');
+  return {
+    id,
+    invoice_no: String(doc?.invoice_no || ''),
+    order_id: String(doc?.order_id || ''),
+    contact_id: String(doc?.contact_id || ''),
+    sales_date: String(doc?.sales_date || ''),
+    sales_person: String(doc?.sales_person || ''),
+    delivery_address: String(doc?.delivery_address || ''),
+    reference_no: String(doc?.reference_no || ''),
+    customer_reference: String(doc?.customer_reference || ''),
+    send_by: String(doc?.send_by || ''),
+    price_group: String(doc?.price_group || ''),
+    credit_limit: toNumber(doc?.credit_limit, 0),
+    terms: String(doc?.terms || ''),
+    promise_to_pay: String(doc?.promise_to_pay || ''),
+    po_number: String(doc?.po_number || ''),
+    remarks: String(doc?.remarks || ''),
+    inquiry_type: '',
+    urgency: '',
+    urgency_date: '',
+    grand_total: toNumber(summary?.grand_total, 0),
+    status: InvoiceStatus.SENT,
+    created_by: String(doc?.created_by || ''),
+    created_at: String(doc?.created_at || ''),
+    items: items.map((item: any) => ({
+      id: String(item?.id || ''),
+      invoice_id: id,
+      item_id: String(item?.item_refno || item?.item_id || ''),
+      qty: toNumber(item?.qty, 0),
+      part_no: String(item?.part_no || ''),
+      item_code: String(item?.item_code || ''),
+      description: String(item?.description || ''),
+      unit_price: toNumber(item?.unit_price, 0),
+      amount: toNumber(item?.amount, toNumber(item?.qty, 0) * toNumber(item?.unit_price, 0)),
+      vat_rate: 0,
+    })),
+    is_deleted: false,
+  };
+};
+
+export const convertToDocument = async (orderId: string): Promise<OrderSlip | Invoice | null> => {
+  const order = await getSalesOrder(orderId);
+  if (!order) throw new Error('Order not found');
+
+  const transactionType = readDocumentPolicyFromStorage();
+  const suggestedType = getDocumentTypeForTransaction(transactionType);
+  const documentType = suggestedType === 'orderslip' ? 'orderslip' : 'invoice';
+
+  const payload = {
+    main_id: API_MAIN_ID,
+    user_id: getUserContext().userId,
+  };
+
+  const result = await requestApi(`${API_BASE_URL}/sales-orders/${encodeURIComponent(orderId)}/convert/${documentType}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  const convertedType = String(result?.type || documentType).toLowerCase();
+  const docPayload = result?.document || {};
+  if (convertedType === 'orderslip') {
+    return mapConvertedOrderSlip(docPayload);
+  }
+  return mapConvertedInvoice(docPayload);
 };
 
 export const readDocumentPolicyFromStorage = (): string | null => {

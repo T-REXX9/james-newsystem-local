@@ -211,8 +211,68 @@ export const approveInquiry = async (id: string): Promise<SalesInquiry | null> =
   return getSalesInquiry(id);
 };
 
-export const convertToOrder = async (_inquiryId: string): Promise<SalesOrder> => {
-  throw new Error('Sales inquiry to sales order conversion is not available in local API mode yet.');
+const mapConvertedSalesOrder = (payload: any): SalesOrder => {
+  const order = payload?.order || {};
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  const summary = payload?.summary || {};
+  const id = String(order?.sales_refno || '');
+  return {
+    id,
+    order_no: String(order?.sales_no || ''),
+    inquiry_id: String(order?.inquiry_refno || ''),
+    contact_id: String(order?.contact_id || ''),
+    sales_date: String(order?.sales_date || ''),
+    sales_person: String(order?.sales_person || ''),
+    delivery_address: String(order?.delivery_address || ''),
+    reference_no: String(order?.reference_no || ''),
+    customer_reference: String(order?.customer_reference || ''),
+    send_by: '',
+    price_group: String(order?.price_group || ''),
+    credit_limit: toNumber(order?.credit_limit, 0),
+    terms: String(order?.terms || ''),
+    promise_to_pay: String(order?.promise_to_pay || ''),
+    po_number: String(order?.po_number || ''),
+    remarks: String(order?.remarks || ''),
+    inquiry_type: '',
+    urgency: String(order?.urgency || ''),
+    urgency_date: String(order?.urgency_date || ''),
+    grand_total: toNumber(summary?.grand_total, 0),
+    status: String(order?.status || 'Submitted') as any,
+    approved_by: '',
+    approved_at: '',
+    created_by: String(order?.created_by || ''),
+    created_at: String(order?.sales_date || ''),
+    updated_at: '',
+    is_deleted: false,
+    items: items.map((row: any) => ({
+      id: String(row?.id || ''),
+      order_id: id,
+      item_id: String(row?.item_refno || row?.item_id || ''),
+      qty: toNumber(row?.qty, 0),
+      part_no: String(row?.part_no || ''),
+      item_code: String(row?.item_code || ''),
+      location: String(row?.location || ''),
+      description: String(row?.description || ''),
+      unit_price: toNumber(row?.unit_price, 0),
+      amount: toNumber(row?.amount, toNumber(row?.qty, 0) * toNumber(row?.unit_price, 0)),
+      remark: String(row?.remark || ''),
+      approval_status: 'approved',
+    })),
+  };
+};
+
+export const convertToOrder = async (inquiryId: string): Promise<SalesOrder> => {
+  const context = getUserContext();
+  const payload = {
+    main_id: context.mainId,
+    user_id: context.userId,
+  };
+  const converted = await requestApi(`${API_BASE_URL}/sales-inquiries/${encodeURIComponent(inquiryId)}/actions/convert-to-order`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return mapConvertedSalesOrder(converted);
 };
 
 export const deleteSalesInquiry = async (id: string): Promise<boolean> => {
@@ -222,4 +282,3 @@ export const deleteSalesInquiry = async (id: string): Promise<boolean> => {
   );
   return true;
 };
-

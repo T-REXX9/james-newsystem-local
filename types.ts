@@ -1021,6 +1021,7 @@ export interface SalesOrder {
   urgency_date?: string;
   grand_total: number;
   status: SalesOrderStatus;
+  can_approve?: boolean;
   approved_by?: string;
   approved_at?: string;
   created_by: string;

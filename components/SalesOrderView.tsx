@@ -206,6 +206,12 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
     setConfirming(true);
 
     const currentStatus = normalizeStatus(selectedOrder.status);
+    const isApprover = Boolean(selectedOrder.can_approve);
+    if (currentStatus === 'submitted' && !isApprover) {
+      alert('Only approver accounts can approve this sales order.');
+      setConfirming(false);
+      return;
+    }
     const optimisticNextStatus = currentStatus === 'pending' ? 'Submitted' : 'Approved';
 
     // Optimistic update
@@ -213,13 +219,17 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
 
     try {
       const refreshed = await confirmSalesOrder(selectedOrder.id);
+      const successStatus = refreshed?.status || optimisticNextStatus;
+      const successLabel = normalizeStatus(successStatus) === 'submitted' ? 'submitted' : 'approved';
       if (refreshed) {
         setOrders(prev => prev.map(row => row.id === refreshed.id ? refreshed : row));
         setSelectedOrder(refreshed);
       }
       await notifySalesOrderEvent(
-        'Sales Order Confirmed',
-        `Order ${selectedOrder.order_no} has been approved.`,
+        successLabel === 'submitted' ? 'Sales Order Submitted' : 'Sales Order Approved',
+        successLabel === 'submitted'
+          ? `Order ${selectedOrder.order_no} was submitted for approval.`
+          : `Order ${selectedOrder.order_no} has been approved.`,
         'confirm',
         'success',
         selectedOrder.id,
@@ -299,7 +309,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
 
   const workflowStage = normalizeStatus(selectedOrder?.status) === 'posted' ? 'document' : 'order';
   const selectedOrderStatus = normalizeStatus(selectedOrder?.status);
-  const canConfirm = selectedOrderStatus === 'pending' || selectedOrderStatus === 'submitted';
+  const canConfirm = selectedOrderStatus === 'pending' || (selectedOrderStatus === 'submitted' && Boolean(selectedOrder?.can_approve));
   const confirmLabel = selectedOrderStatus === 'pending' ? 'Submit SO' : 'Approve SO';
   const canConvert = selectedOrderStatus === 'approved' || selectedOrderStatus === 'posted';
 
@@ -424,6 +434,11 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
                   </div>
                 </div>
                 <WorkflowStepper currentStage={workflowStage} documentLabel="Order Slip / Invoice" />
+                {selectedOrderStatus === 'submitted' && !selectedOrder?.can_approve && (
+                  <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded p-2">
+                    This sales order is waiting for an assigned approver account.
+                  </div>
+                )}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-slate-600">
                   <div>
                     <p className="font-semibold text-slate-500">Sales Person</p>
