@@ -12,6 +12,15 @@ npm run dev
 Default local URL:
 - `http://localhost:5173/james-newsystem/`
 
+Run frontend + API together using shared env config:
+
+```bash
+/Volumes/ORICO/james-system/start-dev.sh
+```
+
+Single source config file for API URL/ports:
+- `/Volumes/ORICO/james-system/.env.shared`
+
 ## Project Layout
 
 - `components/` UI screens, feature views, and reusable UI parts
