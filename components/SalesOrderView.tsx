@@ -13,31 +13,31 @@ import {
   Invoice,
   OrderSlip,
   SalesOrder,
-  SalesOrderItem,
-  SalesOrderStatus,
 } from '../types';
 import {
   confirmSalesOrder,
   convertToDocument,
-  getAllSalesOrders,
+  getSalesOrder,
+  getSalesOrdersPage,
   syncDocumentPolicyState,
-} from '../services/salesOrderService';
-import { dispatchWorkflowNotification, fetchContacts } from '../services/supabaseService';
+} from '../services/salesOrderLocalApiService';
+import { fetchContacts } from '../services/customerDatabaseLocalApiService';
+import { dispatchWorkflowNotification } from '../services/supabaseService';
 import StatusBadge from './StatusBadge';
 import WorkflowStepper from './WorkflowStepper';
-import { useRealtimeNestedList } from '../hooks/useRealtimeNestedList';
-import { useRealtimeList } from '../hooks/useRealtimeList';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 
 interface SalesOrderViewProps {
   initialOrderId?: string;
 }
 
-const pageSize = 8;
+const OLD_SYSTEM_STATUSES = ['Pending', 'Submitted', 'Approved', 'Posted', 'Cancelled'];
+
+const normalizeStatus = (status: unknown): string => String(status || '').trim().toLowerCase();
 
 const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
   const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null);
-  const [statusFilter, setStatusFilter] = useState<'all' | SalesOrderStatus>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [dateRange, setDateRange] = useState<{ from: string; to: string }>({ from: '', to: '' });
   const [confirming, setConfirming] = useState(false);
@@ -45,31 +45,71 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
   const [conversionLoading, setConversionLoading] = useState(false);
   const [documentMessage, setDocumentMessage] = useState('');
   const [documentLink, setDocumentLink] = useState<{ type: 'orderslip' | 'invoice'; id: string; label: string } | null>(null);
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [orders, setOrders] = useState<SalesOrder[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  // Use real-time list for contacts
-  const { data: contacts } = useRealtimeList<Contact>({
-    tableName: 'contacts',
-    initialFetchFn: fetchContacts,
-  });
+  const targetMonthYear = useMemo(() => {
+    if (!dateRange.from) {
+      return {
+        month: undefined as number | undefined,
+        year: undefined as number | undefined,
+      };
+    }
+    const src = new Date(dateRange.from);
+    return {
+      month: src.getMonth() + 1,
+      year: src.getFullYear(),
+    };
+  }, [dateRange.from]);
 
-  // Use real-time nested list for sales orders with items
-  const sortByCreatedAt = (a: SalesOrder, b: SalesOrder) => {
-    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
-  };
+  const loadContacts = useCallback(async () => {
+    try {
+      const contactsData = await fetchContacts();
+      setContacts(contactsData);
+    } catch (err) {
+      console.error('Failed loading sales order contacts:', err);
+      setContacts([]);
+    }
+  }, []);
 
-  const {
-    data: orders,
-    isLoading: loading,
-    setData: setOrders,
-  } = useRealtimeNestedList<SalesOrder, SalesOrderItem>({
-    parentTableName: 'sales_orders',
-    childTableName: 'sales_order_items',
-    parentFetchFn: getAllSalesOrders,
-    childParentIdField: 'order_id',
-    childrenField: 'items',
-    sortParentFn: sortByCreatedAt,
-  });
+  const loadOrders = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await getSalesOrdersPage({
+        month: targetMonthYear.month,
+        year: targetMonthYear.year,
+        status: statusFilter === 'all' ? 'all' : statusFilter,
+        search: debouncedSearch,
+        page,
+        perPage: 50,
+      });
+      setOrders(result.items);
+      setTotalPages(Math.max(1, result.meta.total_pages || 1));
+    } catch (err) {
+      console.error('Failed loading sales order list:', err);
+      setOrders([]);
+      setTotalPages(1);
+    } finally {
+      setLoading(false);
+    }
+  }, [debouncedSearch, page, statusFilter, targetMonthYear.month, targetMonthYear.year]);
+
+  useEffect(() => {
+    loadContacts();
+  }, [loadContacts]);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300);
+    return () => window.clearTimeout(t);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    loadOrders();
+  }, [loadOrders]);
 
   const customerMap = useMemo(() => new Map(contacts.map(contact => [contact.id, contact])), [contacts]);
 
@@ -106,7 +146,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
     [customerMap]
   );
 
-  const applyOptimisticStatusUpdate = useCallback((orderId: string, status: SalesOrderStatus) => {
+  const applyOptimisticStatusUpdate = useCallback((orderId: string, status: string) => {
     setOrders(prev => applyOptimisticUpdate(prev, orderId, { status } as Partial<SalesOrder>));
     setSelectedOrder(prev => prev ? { ...prev, status } : null);
   }, [setOrders]);
@@ -119,7 +159,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
     navigateToModule('invoice', { invoiceId: link.id });
   }, [navigateToModule]);
 
-  // Auto-select first order when orders change
+  // Auto-select first order when list page changes.
   useEffect(() => {
     if (orders.length > 0 && !selectedOrder) {
       setSelectedOrder(orders[0]);
@@ -135,27 +175,24 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
   }, [initialOrderId, orders]);
 
   useEffect(() => {
-    setPage(0);
+    setPage(1);
   }, [statusFilter, searchTerm, dateRange.from, dateRange.to]);
 
-  const filteredOrders = useMemo(() => {
-    const query = searchTerm.toLowerCase();
-    return orders.filter(order => {
-      const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
-      const matchesSearch =
-        !query ||
-        order.order_no.toLowerCase().includes(query) ||
-        (customerMap.get(order.contact_id)?.company || '').toLowerCase().includes(query);
-      const orderDate = new Date(order.sales_date).getTime();
-      const from = dateRange.from ? new Date(dateRange.from).getTime() : null;
-      const to = dateRange.to ? new Date(dateRange.to).getTime() : null;
-      const matchesDate = (!from || orderDate >= from) && (!to || orderDate <= to);
-      return matchesStatus && matchesSearch && matchesDate;
-    });
-  }, [customerMap, dateRange.from, dateRange.to, orders, searchTerm, statusFilter]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
-  const paginatedOrders = filteredOrders.slice(page * pageSize, page * pageSize + pageSize);
+  useEffect(() => {
+    if (!selectedOrder?.id) return;
+    let active = true;
+    getSalesOrder(selectedOrder.id)
+      .then((detail) => {
+        if (!active || !detail) return;
+        setSelectedOrder(detail);
+      })
+      .catch((err) => {
+        console.error('Failed loading selected sales order detail:', err);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedOrder?.id]);
 
   const selectedCustomer = selectedOrder ? customerMap.get(selectedOrder.contact_id) : null;
   const documentSuggestion = selectedCustomer?.transactionType || 'Invoice';
@@ -168,11 +205,18 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
     if (!selectedOrder) return;
     setConfirming(true);
 
+    const currentStatus = normalizeStatus(selectedOrder.status);
+    const optimisticNextStatus = currentStatus === 'pending' ? 'Submitted' : 'Approved';
+
     // Optimistic update
-    applyOptimisticStatusUpdate(selectedOrder.id, SalesOrderStatus.CONFIRMED);
+    applyOptimisticStatusUpdate(selectedOrder.id, optimisticNextStatus);
 
     try {
-      await confirmSalesOrder(selectedOrder.id);
+      const refreshed = await confirmSalesOrder(selectedOrder.id);
+      if (refreshed) {
+        setOrders(prev => prev.map(row => row.id === refreshed.id ? refreshed : row));
+        setSelectedOrder(refreshed);
+      }
       await notifySalesOrderEvent(
         'Sales Order Confirmed',
         `Order ${selectedOrder.order_no} has been approved.`,
@@ -196,15 +240,13 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
       // Real-time subscription will correct the state
     } finally {
       setConfirming(false);
+      await loadOrders();
     }
   };
 
   const handleConversion = async () => {
     if (!selectedOrder) return;
     setConversionLoading(true);
-
-    // Optimistic update
-    applyOptimisticStatusUpdate(selectedOrder.id, SalesOrderStatus.CONVERTED_TO_DOCUMENT);
 
     try {
       const document = await convertToDocument(selectedOrder.id);
@@ -251,10 +293,15 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
       // Real-time subscription will correct the state
     } finally {
       setConversionLoading(false);
+      await loadOrders();
     }
   };
 
-  const workflowStage = selectedOrder?.status === SalesOrderStatus.CONVERTED_TO_DOCUMENT ? 'document' : 'order';
+  const workflowStage = normalizeStatus(selectedOrder?.status) === 'posted' ? 'document' : 'order';
+  const selectedOrderStatus = normalizeStatus(selectedOrder?.status);
+  const canConfirm = selectedOrderStatus === 'pending' || selectedOrderStatus === 'submitted';
+  const confirmLabel = selectedOrderStatus === 'pending' ? 'Submit SO' : 'Approve SO';
+  const canConvert = selectedOrderStatus === 'approved' || selectedOrderStatus === 'posted';
 
   return (
     <div className="h-full flex flex-col bg-slate-100 dark:bg-slate-950">
@@ -288,12 +335,12 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
               </label>
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as 'all' | SalesOrderStatus)}
+                onChange={(e) => setStatusFilter(e.target.value as 'all' | string)}
                 className="w-full text-xs border border-slate-200 dark:border-slate-800 rounded px-2 py-1 bg-slate-50 dark:bg-slate-800"
               >
                 <option value="all">All</option>
-                {Object.values(SalesOrderStatus).map(status => (
-                  <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>
+                {OLD_SYSTEM_STATUSES.map(status => (
+                  <option key={status} value={status}>{status}</option>
                 ))}
               </select>
             </div>
@@ -314,7 +361,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
                 <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading orders...
               </div>
             )}
-            {!loading && paginatedOrders.map(order => {
+            {!loading && orders.map(order => {
               const customer = customerMap.get(order.contact_id);
               const isActive = selectedOrder?.id === order.id;
               return (
@@ -332,16 +379,16 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
                 </button>
               );
             })}
-            {!loading && paginatedOrders.length === 0 && (
+            {!loading && orders.length === 0 && (
               <div className="p-4 text-xs text-slate-500">No orders match the current filters.</div>
             )}
           </div>
           <div className="p-3 flex items-center justify-between text-xs text-slate-500 border-t border-slate-200 dark:border-slate-800">
-            <button disabled={page === 0} onClick={() => setPage(p => Math.max(0, p - 1))} className="p-1 rounded border border-slate-200 dark:border-slate-800 disabled:opacity-40">
+            <button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))} className="p-1 rounded border border-slate-200 dark:border-slate-800 disabled:opacity-40">
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span>Page {page + 1} / {totalPages}</span>
-            <button disabled={page + 1 >= totalPages} onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} className="p-1 rounded border border-slate-200 dark:border-slate-800 disabled:opacity-40">
+            <span>Page {page} / {totalPages}</span>
+            <button disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))} className="p-1 rounded border border-slate-200 dark:border-slate-800 disabled:opacity-40">
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
@@ -361,15 +408,15 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
                     <button
                       type="button"
                       onClick={handleConfirmOrder}
-                      disabled={selectedOrder.status !== SalesOrderStatus.PENDING || confirming}
+                      disabled={!canConfirm || confirming}
                       className="px-4 py-2 rounded bg-slate-900 text-white text-xs disabled:opacity-40"
                     >
-                      {confirming ? 'Confirming...' : 'Confirm Order'}
+                      {confirming ? 'Processing...' : confirmLabel}
                     </button>
                     <button
                       type="button"
                       onClick={() => setConversionModalOpen(true)}
-                      disabled={selectedOrder.status !== SalesOrderStatus.CONFIRMED}
+                      disabled={!canConvert}
                       className="px-4 py-2 rounded bg-brand-blue text-white text-xs disabled:opacity-40"
                     >
                       Convert to {documentSuggestion}
