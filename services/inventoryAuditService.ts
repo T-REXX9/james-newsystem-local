@@ -1,181 +1,110 @@
-import { supabase } from '../lib/supabaseClient';
-import type { InventoryAuditFilters, InventoryAuditRecord, InventoryAuditReportData, Product } from '../types';
+import type { InventoryAuditFilters, InventoryAuditRecord, InventoryAuditReportData } from '../types';
 
-function getDateRange(filters: InventoryAuditFilters): { from: string; to: string } {
-  const now = new Date();
-  let from: Date;
-  let to: Date = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || 'http://127.0.0.1:8081/api/v1';
+const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
 
-  switch (filters.timePeriod) {
-    case 'today':
-      from = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-      break;
-    case 'week':
-      from = new Date(now);
-      from.setDate(from.getDate() - 7);
-      from.setHours(0, 0, 0, 0);
-      break;
-    case 'month':
-      from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
-      break;
-    case 'year':
-      from = new Date(now.getFullYear(), 0, 1, 0, 0, 0);
-      break;
-    case 'custom':
-      from = filters.dateFrom ? new Date(filters.dateFrom) : new Date(now.getFullYear(), 0, 1);
-      to = filters.dateTo ? new Date(filters.dateTo + 'T23:59:59') : to;
-      break;
-    default:
-      from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+const parseApiErrorMessage = async (response: Response): Promise<string> => {
+  try {
+    const payload = await response.json();
+    if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error.trim();
+    if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message.trim();
+  } catch {
+    // no-op
   }
+  return `Request failed (${response.status})`;
+};
+
+const requestApi = async (url: string): Promise<any> => {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(await parseApiErrorMessage(response));
+  }
+  const payload = await response.json();
+  if (!payload?.ok) {
+    throw new Error(payload?.error || 'API request failed');
+  }
+  return payload.data || {};
+};
+
+const toNumber = (value: unknown, fallback = 0): number => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+export interface InventoryAuditFilterOptions {
+  partNumbers: string[];
+  itemCodes: string[];
+}
+
+export async function fetchInventoryAuditFilterOptions(): Promise<InventoryAuditFilterOptions> {
+  const params = new URLSearchParams({
+    main_id: String(API_MAIN_ID),
+  });
+  const data = await requestApi(`${API_BASE_URL}/inventory-audits/filter-options?${params.toString()}`);
 
   return {
-    from: from.toISOString().split('T')[0],
-    to: to.toISOString().split('T')[0],
+    partNumbers: Array.isArray(data?.part_numbers) ? data.part_numbers.map(String) : [],
+    itemCodes: Array.isArray(data?.item_codes) ? data.item_codes.map(String) : [],
   };
 }
 
-export async function fetchProducts(): Promise<Product[]> {
-  const { data, error } = await supabase
-    .from('products')
-    .select('id, part_no, item_code, description, brand')
-    .eq('is_deleted', false)
-    .order('part_no', { ascending: true });
+const mapApiRecord = (row: any): InventoryAuditRecord => {
+  const systemQty = toNumber(row?.qty_stock, 0);
+  const physicalQty = toNumber(row?.physical_count, 0);
+  const signedDifference = physicalQty - systemQty;
 
-  if (error) {
-    console.error('Error fetching products:', error);
-    throw error;
-  }
-
-  return (data || []) as Product[];
-}
+  return {
+    id: String(row?.id ?? ''),
+    item_id: String(row?.item_session ?? ''),
+    item_code: String(row?.item_code || ''),
+    part_no: String(row?.part_no || ''),
+    description: String(row?.description || ''),
+    brand: String(row?.brand || ''),
+    adjustment_date: String(row?.adjustment_date || ''),
+    adjustment_type: 'physical_count',
+    adjustment_no: String(row?.adjustment_refno || ''),
+    warehouse_id: String(row?.warehouse || ''),
+    system_qty: systemQty,
+    physical_qty: physicalQty,
+    difference: signedDifference,
+    reason: String(row?.remarks || ''),
+    processed_by: '',
+    processor_name: 'System',
+    notes: String(row?.remarks || ''),
+  };
+};
 
 export async function generateInventoryAuditReport(
   filters: InventoryAuditFilters
 ): Promise<InventoryAuditReportData> {
-  const dateRange = getDateRange(filters);
+  const params = new URLSearchParams({
+    main_id: String(API_MAIN_ID),
+    time_period: filters.timePeriod || 'all',
+    page: '1',
+    per_page: '500',
+  });
 
-  let adjustmentsQuery = (supabase as any)
-    .from('stock_adjustments')
-    .select(`
-      id,
-      adjustment_no,
-      adjustment_date,
-      adjustment_type,
-      warehouse_id,
-      notes,
-      status,
-      processed_by,
-      stock_adjustment_items (
-        id,
-        item_id,
-        system_qty,
-        physical_qty,
-        difference,
-        reason
-      )
-    `)
-    .eq('is_deleted', false)
-    .eq('status', 'finalized')
-    .gte('adjustment_date', dateRange.from)
-    .lte('adjustment_date', dateRange.to)
-    .order('adjustment_date', { ascending: false });
-
-  const { data: adjustments, error: adjustmentsError } = await adjustmentsQuery;
-
-  if (adjustmentsError) {
-    console.error('Error fetching stock adjustments:', adjustmentsError);
-    throw adjustmentsError;
+  if (filters.timePeriod === 'custom') {
+    if (filters.dateFrom) params.set('date_from', filters.dateFrom);
+    if (filters.dateTo) params.set('date_to', filters.dateTo);
   }
+  if (filters.partNo) params.set('part_no', filters.partNo);
+  if (filters.itemCode) params.set('item_code', filters.itemCode);
 
-  if (!adjustments || adjustments.length === 0) {
-    return {
-      records: [],
-      totalAdjustments: 0,
-      totalPositive: 0,
-      totalNegative: 0,
-      generatedAt: new Date().toISOString(),
-      filters,
-    };
-  }
+  const data = await requestApi(`${API_BASE_URL}/inventory-audits?${params.toString()}`);
+  const flat = Array.isArray(data?.flat_records) ? data.flat_records : [];
+  const records = flat.map(mapApiRecord);
 
-  const itemIds = new Set<string>();
-  const processorIds = new Set<string>();
-
-  for (const adj of adjustments) {
-    if (adj.processed_by) processorIds.add(adj.processed_by);
-    for (const item of adj.stock_adjustment_items || []) {
-      if (item.item_id) itemIds.add(item.item_id);
-    }
-  }
-
-  const { data: products, error: productsError } = await supabase
-    .from('products')
-    .select('id, item_code, part_no, description, brand')
-    .in('id', Array.from(itemIds));
-
-  if (productsError) {
-    console.error('Error fetching products:', productsError);
-  }
-
-  const productMap = new Map<string, any>();
-  for (const product of products || []) {
-    productMap.set(product.id, product);
-  }
-
-  let processorMap = new Map<string, string>();
-  if (processorIds.size > 0) {
-    const { data: profiles, error: profilesError } = await supabase
-      .from('profiles')
-      .select('id, full_name, email')
-      .in('id', Array.from(processorIds));
-
-    if (!profilesError && profiles) {
-      for (const profile of profiles) {
-        processorMap.set(profile.id, profile.full_name || profile.email || 'Unknown');
-      }
-    }
-  }
-
-  const records: InventoryAuditRecord[] = [];
   let totalPositive = 0;
   let totalNegative = 0;
-
-  for (const adj of adjustments) {
-    for (const item of adj.stock_adjustment_items || []) {
-      const product = productMap.get(item.item_id);
-
-      if (!product) continue;
-
-      if (filters.partNo && product.part_no !== filters.partNo) continue;
-      if (filters.itemCode && product.item_code !== filters.itemCode) continue;
-
-      if (item.difference > 0) totalPositive += item.difference;
-      if (item.difference < 0) totalNegative += Math.abs(item.difference);
-
-      records.push({
-        id: item.id,
-        item_id: item.item_id,
-        item_code: product.item_code || '',
-        part_no: product.part_no || '',
-        description: product.description || '',
-        brand: product.brand || '',
-        adjustment_date: adj.adjustment_date,
-        adjustment_type: adj.adjustment_type,
-        adjustment_no: adj.adjustment_no,
-        warehouse_id: adj.warehouse_id,
-        system_qty: item.system_qty,
-        physical_qty: item.physical_qty,
-        difference: item.difference,
-        reason: item.reason || '',
-        processed_by: adj.processed_by || '',
-        processor_name: processorMap.get(adj.processed_by) || 'System',
-        notes: adj.notes || '',
-      });
-    }
+  for (const record of records) {
+    if (record.difference > 0) totalPositive += record.difference;
+    if (record.difference < 0) totalNegative += Math.abs(record.difference);
   }
 
-  records.sort((a, b) => new Date(b.adjustment_date).getTime() - new Date(a.adjustment_date).getTime());
+  records.sort(
+    (a, b) => new Date(b.adjustment_date).getTime() - new Date(a.adjustment_date).getTime()
+  );
 
   return {
     records,

@@ -12,15 +12,18 @@ import {
   Package,
 } from 'lucide-react';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
-import { generateInventoryAuditReport, fetchProducts } from '../services/inventoryAuditService';
+import {
+  fetchInventoryAuditFilterOptions,
+  generateInventoryAuditReport,
+} from '../services/inventoryAuditService';
 import type {
   InventoryAuditFilters,
   InventoryAuditReportData,
   InventoryAuditTimePeriod,
-  Product,
 } from '../types';
 
 const TIME_PERIOD_OPTIONS: { value: InventoryAuditTimePeriod; label: string }[] = [
+  { value: 'all', label: 'All Time' },
   { value: 'today', label: 'Today' },
   { value: 'week', label: 'This Week' },
   { value: 'month', label: 'This Month' },
@@ -46,16 +49,20 @@ const WAREHOUSE_LABELS: Record<string, string> = {
 const InventoryAuditReport: React.FC = () => {
   const [reportData, setReportData] = useState<InventoryAuditReportData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [partNumbers, setPartNumbers] = useState<string[]>([]);
+  const [itemCodes, setItemCodes] = useState<string[]>([]);
   const [filters, setFilters] = useState<InventoryAuditFilters>({
     timePeriod: 'month',
   });
   const [validationError, setValidationError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchProducts()
-      .then(setProducts)
-      .catch((err) => console.error('Error loading products:', err));
+    fetchInventoryAuditFilterOptions()
+      .then((options) => {
+        setPartNumbers(options.partNumbers);
+        setItemCodes(options.itemCodes);
+      })
+      .catch((err) => console.error('Error loading inventory audit filter options:', err));
   }, []);
 
   const validateFilters = useCallback((): boolean => {
@@ -140,9 +147,6 @@ const InventoryAuditReport: React.FC = () => {
     link.click();
   }, [reportData]);
 
-  const uniquePartNumbers = [...new Set(products.map((p) => p.part_no).filter(Boolean))].sort();
-  const uniqueItemCodes = [...new Set(products.map((p) => p.item_code).filter(Boolean))].sort();
-
   return (
     <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950 p-8 animate-fadeIn print:p-0 print:bg-white">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 print:mb-4">
@@ -226,7 +230,7 @@ const InventoryAuditReport: React.FC = () => {
               className="px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue min-w-[150px]"
             >
               <option value="">All</option>
-              {uniquePartNumbers.map((pn) => (
+              {partNumbers.map((pn) => (
                 <option key={pn} value={pn}>
                   {pn}
                 </option>
@@ -242,7 +246,7 @@ const InventoryAuditReport: React.FC = () => {
               className="px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue min-w-[150px]"
             >
               <option value="">All</option>
-              {uniqueItemCodes.map((ic) => (
+              {itemCodes.map((ic) => (
                 <option key={ic} value={ic}>
                   {ic}
                 </option>

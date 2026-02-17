@@ -1606,7 +1606,7 @@ export interface FastSlowReportData {
   generatedAt: string;
 }
 
-export type InventoryAuditTimePeriod = 'today' | 'week' | 'month' | 'year' | 'custom';
+export type InventoryAuditTimePeriod = 'all' | 'today' | 'week' | 'month' | 'year' | 'custom';
 
 export interface InventoryAuditFilters {
   timePeriod: InventoryAuditTimePeriod;
