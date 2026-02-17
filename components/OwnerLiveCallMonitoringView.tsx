@@ -398,6 +398,7 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
   const [selectedQueueType, setSelectedQueueType] = useState<ReportType | null>(null);
   const [showAlertDialog, setShowAlertDialog] = useState(false);
   const [activeAlert, setActiveAlert] = useState<AlertItem | null>(null);
+  const [showAttendanceDialog, setShowAttendanceDialog] = useState(false);
 
   const [notesByCustomer, setNotesByCustomer] = useState<Record<string, string>>(() => STORAGE_HELPER.readNotes());
   const [reports, setReports] = useState<ReportItem[]>(() => STORAGE_HELPER.readReports(seedReports()));
@@ -1193,22 +1194,27 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
             </div>
           </div>
 
-          <div className="self-start rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm lg:col-span-1">
+          <button
+            type="button"
+            onClick={() => setShowAttendanceDialog(true)}
+            className="self-start rounded-2xl border border-slate-200 bg-white p-2.5 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/20 lg:col-span-1"
+          >
             <h3 className="mb-1.5 text-sm font-semibold text-slate-700">Attendance</h3>
             <p className="text-xs text-slate-500">
               <span className="font-semibold text-emerald-600">{attendance.online.length}</span> online / {attendance.offline.length} offline
             </p>
-            <div className="mt-2 space-y-1.5">
-              {agents.map((agent) => (
-                <div key={agent.id} className="flex items-center justify-between text-xs">
-                  <span className="truncate text-slate-700">{agent.name}</span>
-                  <span className={`rounded-full px-2 py-0.5 font-semibold ${agent.online ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                    {agent.online ? 'Online' : 'Offline'}
-                  </span>
-                </div>
-              ))}
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5">
+                <p className="text-[11px] font-semibold text-emerald-700">Present</p>
+                <p className="text-base font-bold text-emerald-700">{attendance.online.length}</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5">
+                <p className="text-[11px] font-semibold text-slate-600">Absent</p>
+                <p className="text-base font-bold text-slate-700">{attendance.offline.length}</p>
+              </div>
             </div>
-          </div>
+            <p className="mt-2 text-[11px] font-medium text-blue-600">Click to view full attendance details</p>
+          </button>
         </div>
 
         <div className="lg:hidden">
@@ -1945,6 +1951,61 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
               {queueReports.length === 0 && (
                 <p className="rounded-lg border border-slate-200 p-3 text-xs text-slate-500">No reports in this category.</p>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAttendanceDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-800">Attendance Details</h3>
+              <button onClick={() => setShowAttendanceDialog(false)} className="rounded-md p-1 text-slate-500 hover:bg-slate-100">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="mb-3 text-xs text-slate-500">
+              <span className="font-semibold text-emerald-600">{attendance.online.length}</span> online / {attendance.offline.length} offline
+            </p>
+            <div className="max-h-[60vh] overflow-auto rounded-lg border border-slate-200">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead className="sticky top-0 bg-slate-50">
+                  <tr>
+                    <th className="border-b border-slate-200 px-2 py-2 font-semibold text-slate-700">Agent</th>
+                    <th className="border-b border-slate-200 px-2 py-2 font-semibold text-slate-700">Status</th>
+                    <th className="border-b border-slate-200 px-2 py-2 font-semibold text-slate-700">Calls Today</th>
+                    <th className="border-b border-slate-200 px-2 py-2 font-semibold text-slate-700">Texts Today</th>
+                    <th className="border-b border-slate-200 px-2 py-2 font-semibold text-slate-700">Success Rate</th>
+                    <th className="border-b border-slate-200 px-2 py-2 font-semibold text-slate-700">Sales MTD</th>
+                    <th className="border-b border-slate-200 px-2 py-2 font-semibold text-slate-700">Quota</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {agents.map((agent) => (
+                    <tr key={agent.id} className="border-b border-slate-100">
+                      <td className="px-2 py-2 font-medium text-slate-700">{agent.name}</td>
+                      <td className="px-2 py-2">
+                        <span className={`rounded-full px-2 py-0.5 font-semibold ${agent.online ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                          {agent.online ? 'Online' : 'Offline'}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2 text-slate-700">{agent.callsToday}</td>
+                      <td className="px-2 py-2 text-slate-700">{agent.textsToday}</td>
+                      <td className="px-2 py-2 text-slate-700">{Math.round(agent.successRate * 100)}%</td>
+                      <td className="px-2 py-2 text-slate-700">{toCurrency(agent.salesMTD)}</td>
+                      <td className="px-2 py-2 text-slate-700">{toCurrency(agent.quota)}</td>
+                    </tr>
+                  ))}
+                  {agents.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-2 py-3 text-center text-slate-500">
+                        No attendance records available.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
