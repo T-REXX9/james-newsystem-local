@@ -1,111 +1,177 @@
-import { supabase } from '../lib/supabaseClient';
 import type { TransferStock, TransferStockDTO, TransferStockItem } from '../types';
-import { ENTITY_TYPES, logDelete, logStatusChange, logUpdate, logCreate } from './activityLogService';
+import { getLocalAuthSession } from './localAuthService';
+
+const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || 'http://127.0.0.1:8081/api/v1';
+const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
+
+const toNumber = (value: unknown, fallback = 0): number => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const normalizeStatus = (value: unknown): TransferStock['status'] => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'submitted') return 'submitted';
+  if (normalized === 'approved') return 'approved';
+  if (normalized === 'deleted' || normalized === 'cancelled' || normalized === 'canceled') return 'deleted';
+  return 'pending';
+};
+
+const parseApiErrorMessage = async (response: Response): Promise<string> => {
+  try {
+    const payload = await response.json();
+    if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error.trim();
+    if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message.trim();
+  } catch {
+    // ignore parse errors
+  }
+  return `API request failed (${response.status})`;
+};
+
+const requestApi = async (url: string, init?: RequestInit): Promise<any> => {
+  const response = await fetch(url, init);
+  if (!response.ok) {
+    throw new Error(await parseApiErrorMessage(response));
+  }
+  const payload = await response.json();
+  if (!payload?.ok) {
+    throw new Error(payload?.error || 'API request failed');
+  }
+  return payload.data;
+};
+
+const getUserContext = () => {
+  const session = getLocalAuthSession();
+  const userId = Number(session?.context?.user?.id || 1);
+  return {
+    mainId: API_MAIN_ID,
+    userId: Number.isFinite(userId) && userId > 0 ? userId : 1,
+  };
+};
+
+const mapTransferItem = (raw: any): TransferStockItem => ({
+  id: String(raw?.id ?? ''),
+  transfer_id: String(raw?.transfer_id ?? ''),
+  item_id: String(raw?.item_id ?? ''),
+  from_warehouse_id: String(raw?.from_warehouse_id ?? ''),
+  to_warehouse_id: String(raw?.to_warehouse_id ?? ''),
+  transfer_qty: toNumber(raw?.transfer_qty, 0),
+  notes: typeof raw?.notes === 'string' ? raw.notes : undefined,
+  created_at: String(raw?.created_at || ''),
+});
+
+const mapTransferSummary = (raw: any): TransferStock => {
+  const id = String(raw?.transfer_refno || raw?.id || '');
+  return {
+    id,
+    transfer_no: String(raw?.transfer_no || ''),
+    transfer_date: String(raw?.transfer_date || ''),
+    status: normalizeStatus(raw?.status || raw?.status_key),
+    notes: typeof raw?.notes === 'string' ? raw.notes : undefined,
+    processed_by: String(raw?.processed_by || raw?.user_id || ''),
+    approved_by: String(raw?.approved_by || ''),
+    approved_at: String(raw?.approved_at || ''),
+    created_at: String(raw?.transfer_datetime || raw?.created_at || ''),
+    updated_at: String(raw?.transfer_datetime || raw?.updated_at || ''),
+    is_deleted: normalizeStatus(raw?.status || raw?.status_key) === 'deleted',
+    deleted_at: undefined,
+    items: [],
+    ...(typeof raw?.item_count !== 'undefined' ? { item_count: toNumber(raw.item_count, 0) } : {}),
+  } as TransferStock;
+};
+
+const mapTransferDetail = (payload: any): TransferStock => {
+  const transfer = payload?.transfer || {};
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  const mapped = mapTransferSummary(transfer);
+  return {
+    ...mapped,
+    items: items.map((row: any) => mapTransferItem(row)),
+  };
+};
 
 /**
- * Generate next transfer number
+ * Generate next transfer number (best-effort from latest transfer)
  */
 export async function generateTransferNo(): Promise<string> {
-  const { data, error } = await supabase.rpc('generate_transfer_no');
+  const query = new URLSearchParams({
+    main_id: String(API_MAIN_ID),
+    page: '1',
+    per_page: '1',
+    status: 'all',
+  });
 
-  if (error) {
-    console.error('Error generating transfer number:', error);
-    throw error;
-  }
-
-  return data as string;
+  const data = await requestApi(`${API_BASE_URL}/transfer-stocks?${query.toString()}`);
+  const latest = Array.isArray(data?.items) ? data.items[0] : null;
+  const currentNo = String(latest?.transfer_no || '').trim();
+  const match = currentNo.match(/TR-(\d+)/i);
+  const next = match ? Number(match[1]) + 1 : 1;
+  return `TR-${next}`;
 }
 
 /**
  * Create a new Transfer Stock Request
  */
 export async function createTransferStock(data: TransferStockDTO): Promise<TransferStock> {
-  // Get current user
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  const userContext = getUserContext();
+  const items = Array.isArray(data.items) ? data.items : [];
 
-  if (userError || !user) {
-    throw new Error('User not authenticated');
-  }
+  const payloadItems = items.map((item: any) => {
+    const maybeNumericId = String(item?.item_id || '').trim();
+    const isNumericId = /^\d+$/.test(maybeNumericId);
+    const mapped: Record<string, unknown> = {
+      from_warehouse_id: String(item?.from_warehouse_id || ''),
+      to_warehouse_id: String(item?.to_warehouse_id || ''),
+      transfer_qty: toNumber(item?.transfer_qty, 0),
+      notes: String(item?.notes || ''),
+    };
 
-  // Create the transfer request
-  const { data: transfer, error: transferError } = await supabase
-    .from('branch_inventory_transfers')
-    .insert({
-      transfer_no: data.transfer_no,
-      transfer_date: data.transfer_date,
-      notes: data.notes,
-      status: 'pending',
-      processed_by: user.id,
-      is_deleted: false,
-    })
-    .select()
-    .single();
+    if (isNumericId) {
+      mapped.item_id = maybeNumericId;
+      mapped.item_session = maybeNumericId;
+    }
 
-  if (transferError || !transfer) {
-    console.error('Error creating transfer stock:', transferError);
-    throw transferError || new Error('Failed to create transfer stock');
-  }
+    if (!isNumericId && item?.part_no) {
+      mapped.part_no = String(item.part_no);
+    }
 
-  // Create transfer items
-  const itemsToInsert = data.items.map(item => ({
-    transfer_id: transfer.id,
-    item_id: item.item_id,
-    from_warehouse_id: item.from_warehouse_id,
-    to_warehouse_id: item.to_warehouse_id,
-    transfer_qty: item.transfer_qty,
-    notes: item.notes,
-  }));
+    if (!isNumericId && item?.item_code) {
+      mapped.item_code = String(item.item_code);
+    }
 
-  const { error: itemsError } = await supabase
-    .from('branch_inventory_transfer_items')
-    .insert(itemsToInsert);
+    return mapped;
+  });
 
-  if (itemsError) {
-    console.error('Error creating transfer items:', itemsError);
-    // Rollback: delete the transfer
-    await supabase.from('branch_inventory_transfers').delete().eq('id', transfer.id);
-    throw itemsError;
-  }
+  const body = {
+    main_id: userContext.mainId,
+    user_id: userContext.userId,
+    transfer_no: data.transfer_no,
+    transfer_date: data.transfer_date,
+    status: 'Pending',
+    items: payloadItems,
+  };
 
-  try {
-    await logCreate(ENTITY_TYPES.TRANSFER_STOCK, transfer.id, {
-      transfer_no: transfer.transfer_no,
-      transfer_date: transfer.transfer_date,
-    });
-  } catch (error) {
-    console.error('Failed to log activity:', error);
-  }
+  const created = await requestApi(`${API_BASE_URL}/transfer-stocks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 
-  // Fetch the complete transfer with items
-  return await getTransferStock(transfer.id) as TransferStock;
+  return mapTransferDetail(created);
 }
 
 /**
  * Get a Transfer Stock by ID
  */
 export async function getTransferStock(id: string): Promise<TransferStock | null> {
-  const { data, error } = await supabase
-    .from('branch_inventory_transfers')
-    .select(`
-      *,
-      branch_inventory_transfer_items (*)
-    `)
-    .eq('id', id)
-    .eq('is_deleted', false)
-    .single();
-
-  if (error) {
-    console.error('Error fetching transfer stock:', error);
+  try {
+    const data = await requestApi(
+      `${API_BASE_URL}/transfer-stocks/${encodeURIComponent(id)}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`
+    );
+    return mapTransferDetail(data);
+  } catch {
     return null;
   }
-
-  // Map items to match TransferStockItem interface
-  const transfer = {
-    ...data,
-    items: data.branch_inventory_transfer_items as TransferStockItem[]
-  };
-
-  return transfer as TransferStock;
 }
 
 /**
@@ -116,40 +182,19 @@ export async function fetchTransferStocks(filters?: {
   startDate?: string;
   endDate?: string;
 }): Promise<TransferStock[]> {
-  let query = supabase
-    .from('branch_inventory_transfers')
-    .select(`
-      *,
-      branch_inventory_transfer_items (*)
-    `)
-    .eq('is_deleted', false)
-    .order('transfer_date', { ascending: false })
-    .order('created_at', { ascending: false });
+  const query = new URLSearchParams({
+    main_id: String(API_MAIN_ID),
+    status: String(filters?.status || 'all'),
+    page: '1',
+    per_page: '200',
+  });
 
-  if (filters?.status) {
-    query = query.eq('status', filters.status);
-  }
+  if (filters?.startDate) query.set('date_from', filters.startDate);
+  if (filters?.endDate) query.set('date_to', filters.endDate);
 
-  if (filters?.startDate) {
-    query = query.gte('transfer_date', filters.startDate);
-  }
-
-  if (filters?.endDate) {
-    query = query.lte('transfer_date', filters.endDate);
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    console.error('Error fetching transfer stocks:', error);
-    throw error;
-  }
-
-  // Map items to match TransferStockItem interface
-  return (data || []).map(transfer => ({
-    ...transfer,
-    items: transfer.branch_inventory_transfer_items as TransferStockItem[]
-  })) as TransferStock[];
+  const list = await requestApi(`${API_BASE_URL}/transfer-stocks?${query.toString()}`);
+  const rows = Array.isArray(list?.items) ? list.items : [];
+  return rows.map(mapTransferSummary);
 }
 
 /**
@@ -159,163 +204,65 @@ export async function updateTransferStock(
   id: string,
   updates: Partial<Pick<TransferStock, 'transfer_date' | 'notes' | 'status'>>
 ): Promise<TransferStock | null> {
-  // Check if transfer exists
-  const existingTransfer = await getTransferStock(id);
-  if (!existingTransfer) {
-    throw new Error('Transfer Stock not found');
-  }
+  const payload: Record<string, unknown> = {
+    main_id: API_MAIN_ID,
+  };
 
-  // Only allow updating if status is 'pending'
-  if (existingTransfer.status !== 'pending' && updates.status !== 'deleted') {
-    throw new Error('Only pending transfer stocks can be updated');
-  }
+  if (typeof updates.transfer_date === 'string') payload.transfer_date = updates.transfer_date;
+  if (typeof updates.notes === 'string') payload.notes = updates.notes;
+  if (typeof updates.status === 'string') payload.status = updates.status;
 
-  const { data, error } = await supabase
-    .from('branch_inventory_transfers')
-    .update(updates)
-    .eq('id', id)
-    .select()
-    .single();
+  const data = await requestApi(`${API_BASE_URL}/transfer-stocks/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
 
-  if (error) {
-    console.error('Error updating transfer stock:', error);
-    throw error;
-  }
-
-  try {
-    await logUpdate(ENTITY_TYPES.TRANSFER_STOCK, id, {
-      updated_fields: Object.keys(updates),
-    });
-  } catch (error) {
-    console.error('Failed to log activity:', error);
-  }
-
-  return await getTransferStock(id);
+  return mapTransferDetail(data);
 }
 
 /**
  * Submit a Transfer Stock for approval
  */
 export async function submitTransferStock(id: string): Promise<TransferStock | null> {
-  // Check if transfer exists
-  const existingTransfer = await getTransferStock(id);
-  if (!existingTransfer) {
-    throw new Error('Transfer Stock not found');
-  }
+  const userContext = getUserContext();
+  const data = await requestApi(`${API_BASE_URL}/transfer-stocks/${encodeURIComponent(id)}/actions/submit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      main_id: userContext.mainId,
+      user_id: userContext.userId,
+    }),
+  });
 
-  // Only allow submitting if status is 'pending'
-  if (existingTransfer.status !== 'pending') {
-    throw new Error('Only pending transfer stocks can be submitted');
-  }
-
-  // Validate that transfer has items
-  if (!existingTransfer.items || existingTransfer.items.length === 0) {
-    throw new Error('Transfer must have at least one item');
-  }
-
-  const { data, error } = await supabase
-    .from('branch_inventory_transfers')
-    .update({ status: 'submitted' })
-    .eq('id', id)
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Error submitting transfer stock:', error);
-    throw error;
-  }
-
-  try {
-    await logStatusChange(ENTITY_TYPES.TRANSFER_STOCK, id, 'pending', 'submitted');
-  } catch (error) {
-    console.error('Failed to log activity:', error);
-  }
-
-  return await getTransferStock(id);
+  return mapTransferDetail(data);
 }
 
 /**
  * Approve a Transfer Stock
- * This triggers inventory log creation and stock updates
  */
 export async function approveTransferStock(id: string): Promise<TransferStock | null> {
-  // Check if transfer exists
-  const existingTransfer = await getTransferStock(id);
-  if (!existingTransfer) {
-    throw new Error('Transfer Stock not found');
-  }
+  const userContext = getUserContext();
+  const data = await requestApi(`${API_BASE_URL}/transfer-stocks/${encodeURIComponent(id)}/actions/approve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      main_id: userContext.mainId,
+      user_id: userContext.userId,
+    }),
+  });
 
-  // Only allow approving if status is 'submitted'
-  if (existingTransfer.status !== 'submitted') {
-    throw new Error('Only submitted transfer stocks can be approved');
-  }
-
-  // Get current user
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    throw new Error('User not authenticated');
-  }
-
-  // Update status to 'approved'
-  // The database trigger will handle stock validation and inventory log creation
-  const { data, error } = await supabase
-    .from('branch_inventory_transfers')
-    .update({ status: 'approved' })
-    .eq('id', id)
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Error approving transfer stock:', error);
-    throw error;
-  }
-
-  try {
-    await logStatusChange(ENTITY_TYPES.TRANSFER_STOCK, id, 'submitted', 'approved');
-  } catch (error) {
-    console.error('Failed to log activity:', error);
-  }
-
-  return await getTransferStock(id);
+  return mapTransferDetail(data);
 }
 
 /**
- * Delete (soft delete) a Transfer Stock
+ * Delete a Transfer Stock
  */
 export async function deleteTransferStock(id: string): Promise<void> {
-  // Check if transfer exists
-  const existingTransfer = await getTransferStock(id);
-  if (!existingTransfer) {
-    throw new Error('Transfer Stock not found');
-  }
-
-  // Only allow deleting if status is 'pending' or 'submitted'
-  if (existingTransfer.status === 'approved') {
-    throw new Error('Approved transfer stocks cannot be deleted');
-  }
-
-  const { error } = await supabase
-    .from('branch_inventory_transfers')
-    .update({
-      status: 'deleted',
-      is_deleted: true,
-      deleted_at: new Date().toISOString(),
-    })
-    .eq('id', id);
-
-  if (error) {
-    console.error('Error deleting transfer stock:', error);
-    throw error;
-  }
-
-  try {
-    await logDelete(ENTITY_TYPES.TRANSFER_STOCK, id, {
-      transfer_no: existingTransfer.transfer_no,
-    });
-  } catch (error) {
-    console.error('Failed to log activity:', error);
-  }
+  await requestApi(
+    `${API_BASE_URL}/transfer-stocks/${encodeURIComponent(id)}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`,
+    { method: 'DELETE' }
+  );
 }
 
 /**
@@ -325,35 +272,29 @@ export async function addTransferStockItem(
   transferId: string,
   item: Omit<TransferStockItem, 'id' | 'transfer_id' | 'created_at'>
 ): Promise<TransferStockItem> {
-  // Check if transfer exists and is in pending status
-  const existingTransfer = await getTransferStock(transferId);
-  if (!existingTransfer) {
-    throw new Error('Transfer Stock not found');
+  const maybeNumericId = String(item?.item_id || '').trim();
+  const isNumericId = /^\d+$/.test(maybeNumericId);
+
+  const payload: Record<string, unknown> = {
+    main_id: API_MAIN_ID,
+    from_warehouse_id: String(item?.from_warehouse_id || ''),
+    to_warehouse_id: String(item?.to_warehouse_id || ''),
+    transfer_qty: toNumber(item?.transfer_qty, 0),
+    notes: String(item?.notes || ''),
+  };
+
+  if (isNumericId) {
+    payload.item_id = maybeNumericId;
+    payload.item_session = maybeNumericId;
   }
 
-  if (existingTransfer.status !== 'pending') {
-    throw new Error('Can only add items to pending transfer stocks');
-  }
+  const data = await requestApi(`${API_BASE_URL}/transfer-stocks/${encodeURIComponent(transferId)}/items`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
 
-  const { data, error } = await supabase
-    .from('branch_inventory_transfer_items')
-    .insert({
-      transfer_id: transferId,
-      item_id: item.item_id,
-      from_warehouse_id: item.from_warehouse_id,
-      to_warehouse_id: item.to_warehouse_id,
-      transfer_qty: item.transfer_qty,
-      notes: item.notes,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Error adding transfer item:', error);
-    throw error;
-  }
-
-  return data as TransferStockItem;
+  return mapTransferItem(data);
 }
 
 /**
@@ -363,52 +304,52 @@ export async function updateTransferStockItem(
   itemId: string,
   updates: Partial<Pick<TransferStockItem, 'from_warehouse_id' | 'to_warehouse_id' | 'transfer_qty' | 'notes'>>
 ): Promise<TransferStockItem> {
-  const { data, error } = await supabase
-    .from('branch_inventory_transfer_items')
-    .update(updates)
-    .eq('id', itemId)
-    .select()
-    .single();
+  const payload: Record<string, unknown> = {
+    main_id: API_MAIN_ID,
+  };
 
-  if (error) {
-    console.error('Error updating transfer item:', error);
-    throw error;
-  }
+  if (typeof updates.from_warehouse_id === 'string') payload.from_warehouse_id = updates.from_warehouse_id;
+  if (typeof updates.to_warehouse_id === 'string') payload.to_warehouse_id = updates.to_warehouse_id;
+  if (typeof updates.transfer_qty !== 'undefined') payload.transfer_qty = toNumber(updates.transfer_qty, 0);
+  if (typeof updates.notes === 'string') payload.notes = updates.notes;
 
-  return data as TransferStockItem;
+  const data = await requestApi(`${API_BASE_URL}/transfer-stock-items/${encodeURIComponent(itemId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  return mapTransferItem(data);
 }
 
 /**
  * Delete a Transfer Stock Item
  */
 export async function deleteTransferStockItem(itemId: string): Promise<void> {
-  const { error } = await supabase
-    .from('branch_inventory_transfer_items')
-    .delete()
-    .eq('id', itemId);
-
-  if (error) {
-    console.error('Error deleting transfer item:', error);
-    throw error;
-  }
+  await requestApi(
+    `${API_BASE_URL}/transfer-stock-items/${encodeURIComponent(itemId)}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`,
+    { method: 'DELETE' }
+  );
 }
 
 /**
  * Get available stock for an item in a warehouse
  */
 export async function getAvailableStock(itemId: string, warehouseId: string): Promise<number> {
-  const warehouseColumn = `stock_wh${warehouseId}`;
+  const response = await fetch(
+    `${API_BASE_URL}/products/${encodeURIComponent(String(itemId))}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`
+  );
 
-  const { data, error } = await supabase
-    .from('products')
-    .select(warehouseColumn)
-    .eq('id', itemId)
-    .single();
-
-  if (error) {
-    console.error('Error fetching available stock:', error);
+  if (!response.ok) {
     return 0;
   }
 
-  return data?.[warehouseColumn] || 0;
+  const payload = await response.json();
+  if (!payload?.ok) {
+    return 0;
+  }
+
+  const product = payload?.data || {};
+  const stockKey = `stock_wh${String(warehouseId)}`;
+  return toNumber((product as any)?.[stockKey], 0);
 }

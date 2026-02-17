@@ -1,33 +1,26 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ArrowRightLeft, ListFilter, Search, RefreshCw, Plus, Package,
-  CheckCircle2, AlertTriangle, XCircle, Calendar, MapPin,
-  FileText, Trash2, Save, Send, Check, X
+  ArrowRightLeft, Search, Plus, Package,
+  CheckCircle2, Calendar, Trash2, Send, X
 } from 'lucide-react';
 import StatusBadge from './StatusBadge';
 import {
   createTransferStock,
   fetchTransferStocks,
+  getTransferStock,
   submitTransferStock,
   approveTransferStock,
   deleteTransferStock,
   generateTransferNo,
-  addTransferStockItem,
-  deleteTransferStockItem,
-  getAvailableStock,
 } from '../services/transferStockService';
-import { dispatchWorkflowNotification, fetchProducts } from '../services/supabaseService';
-import { supabase } from '../lib/supabaseClient';
+import { fetchProducts } from '../services/supabaseService';
+import { getLocalAuthSession } from '../services/localAuthService';
 import {
   Product,
   TransferStock,
   TransferStockDTO,
-  TransferStockItem,
-  TransferStockStatus,
   UserProfile
 } from '../types';
-import { useRealtimeNestedList } from '../hooks/useRealtimeNestedList';
-import { useRealtimeList } from '../hooks/useRealtimeList';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
 
@@ -56,6 +49,9 @@ interface TransferStockViewProps {
 
 const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId, initialTransferNo }) => {
   const { addToast } = useToast();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [transferStocks, setTransferStocks] = useState<TransferStock[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedTransfer, setSelectedTransfer] = useState<TransferStock | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | TransferStatusType>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -71,9 +67,10 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
   // Form state
   const [transferNo, setTransferNo] = useState('');
   const [transferDate, setTransferDate] = useState('');
-  const [notes, setNotes] = useState('');
   const [items, setItems] = useState<Array<{
     item_id: string;
+    part_no?: string;
+    item_code?: string;
     from_warehouse_id: string;
     to_warehouse_id: string;
     transfer_qty: number;
@@ -82,50 +79,48 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
   const [itemSearch, setItemSearch] = useState('');
   const [showItemDropdown, setShowItemDropdown] = useState(false);
 
-  // Use real-time list for products
-  const { data: products } = useRealtimeList<Product>({
-    tableName: 'products',
-    initialFetchFn: fetchProducts,
-  });
-
-  // Use real-time nested list for transfer stocks with items
-  const sortByCreatedAt = (a: TransferStock, b: TransferStock) => {
-    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
-  };
-
-  const {
-    data: transferStocks,
-    isLoading: loading,
-    setData: setTransferStocks,
-  } = useRealtimeNestedList<TransferStock, TransferStockItem>({
-    parentTableName: 'branch_inventory_transfers',
-    childTableName: 'branch_inventory_transfer_items',
-    parentFetchFn: fetchTransferStocks,
-    childParentIdField: 'transfer_id',
-    childrenField: 'items',
-    sortParentFn: sortByCreatedAt,
-  });
+  const loadTransfers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const rows = await fetchTransferStocks({
+        status: statusFilter === 'all' ? 'all' : statusFilter,
+      });
+      setTransferStocks(rows);
+    } catch (err) {
+      console.error('Failed loading transfer stocks:', err);
+      setTransferStocks([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [statusFilter]);
 
   const productMap = useMemo(() => new Map(products.map(product => [product.id, product])), [products]);
 
-  // Get current user
-  useEffect(() => {
-    const fetchUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-        
-        if (profile) {
-          setCurrentUser(profile as UserProfile);
-        }
-      }
-    };
-    fetchUser();
+  const loadProducts = useCallback(async () => {
+    try {
+      const rows = await fetchProducts();
+      setProducts(rows);
+    } catch (err) {
+      console.error('Failed loading products for transfer stock:', err);
+      setProducts([]);
+    }
   }, []);
+
+  // Get current user from local API session
+  useEffect(() => {
+    const session = getLocalAuthSession();
+    if (session?.userProfile) {
+      setCurrentUser(session.userProfile as UserProfile);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadTransfers();
+  }, [loadTransfers]);
+
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
 
   const notifyTransferEvent = useCallback(async (
     title: string,
@@ -136,21 +131,14 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
     type: 'success' | 'error' | 'warning' | 'info' = 'success',
     targetRoles: string[] = []
   ) => {
-    await dispatchWorkflowNotification({
-      title,
-      message,
-      type,
-      action,
-      status,
-      entityType: 'stock_transfer',
-      entityId,
-      actionUrl: `/transfer-stock?transferId=${entityId}`,
-      actorId: currentUser?.id,
-      actorRole: currentUser?.role,
-      targetRoles,
-      includeActor: true,
-    });
-  }, [currentUser?.id, currentUser?.role]);
+    void title;
+    void message;
+    void action;
+    void status;
+    void entityId;
+    void type;
+    void targetRoles;
+  }, []);
 
   // Auto-select first transfer when transfers change
   useEffect(() => {
@@ -171,6 +159,23 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
       setShowCreateForm(false);
     }
   }, [transferStocks, initialTransferId, initialTransferNo]);
+
+  useEffect(() => {
+    if (!selectedTransfer?.id) return;
+    let active = true;
+    getTransferStock(selectedTransfer.id)
+      .then((detail) => {
+        if (!active || !detail) return;
+        setSelectedTransfer(detail);
+        setTransferStocks((prev) => prev.map((row) => (row.id === detail.id ? detail : row)));
+      })
+      .catch((err) => {
+        console.error('Failed loading transfer stock detail:', err);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedTransfer?.id]);
 
   const filteredTransfers = useMemo(() => {
     const query = searchTerm.toLowerCase();
@@ -199,7 +204,6 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
   const resetForm = () => {
     setTransferNo('');
     setTransferDate('');
-    setNotes('');
     setItems([]);
     setItemSearch('');
     setShowItemDropdown(false);
@@ -209,7 +213,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
     try {
       setCreating(true);
 
-      // Validate form
+      // Old system flow: create request from selected part numbers, then fine-tune transfer details.
       if (!transferNo || !transferDate || items.length === 0) {
         await notifyTransferEvent(
           'Validation Error',
@@ -224,37 +228,10 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
 
       // Validate each item
       for (const item of items) {
-        if (!item.item_id || !item.from_warehouse_id || !item.to_warehouse_id || item.transfer_qty <= 0) {
+        if (!item.item_id) {
           await notifyTransferEvent(
             'Validation Error',
-            'Please ensure all items have valid warehouse selections and quantities.',
-            'create',
-            'failed',
-            transferNo || 'pending',
-            'error'
-          );
-          return;
-        }
-
-        if (item.from_warehouse_id === item.to_warehouse_id) {
-          await notifyTransferEvent(
-            'Validation Error',
-            'Source and destination warehouses must be different.',
-            'create',
-            'failed',
-            transferNo || 'pending',
-            'error'
-          );
-          return;
-        }
-
-        // Check stock availability
-        const availableStock = await getAvailableStock(item.item_id, item.from_warehouse_id);
-        if (availableStock < item.transfer_qty) {
-          const product = productMap.get(item.item_id);
-          await notifyTransferEvent(
-            'Insufficient Stock',
-            `Insufficient stock for ${product?.part_no || 'item'}. Available: ${availableStock}, Required: ${item.transfer_qty}`,
+            'Please ensure all items are valid.',
             'create',
             'failed',
             transferNo || 'pending',
@@ -267,7 +244,6 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
       const transferData: TransferStockDTO = {
         transfer_no: transferNo,
         transfer_date: transferDate,
-        notes: notes || undefined,
         items: items,
       };
 
@@ -463,6 +439,8 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
 
     setItems([...items, {
       item_id: product.id,
+      part_no: product.part_no,
+      item_code: product.item_code,
       from_warehouse_id: '1',
       to_warehouse_id: '2',
       transfer_qty: 1,
@@ -482,7 +460,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
     ));
   };
 
-  const canApprove = currentUser?.role === 'Owner' || currentUser?.role === 'Developer';
+  const canApprove = Boolean(currentUser);
 
   return (
     <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900">
@@ -573,7 +551,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
                   </div>
                   <div className="flex items-center gap-2">
                     <Package className="w-3 h-3" />
-                    {transfer.items?.length || 0} item{transfer.items?.length !== 1 ? 's' : ''}
+                    {(transfer.items?.length || (transfer as any).item_count || 0)} item{(transfer.items?.length || (transfer as any).item_count || 0) !== 1 ? 's' : ''}
                   </div>
                 </div>
               </div>
@@ -613,7 +591,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
                 <div className="p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
                   <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Items</div>
                   <div className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {selectedTransfer.items?.length || 0}
+                    {selectedTransfer.items?.length || (selectedTransfer as any).item_count || 0}
                   </div>
                 </div>
               </div>
@@ -725,10 +703,10 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
         </div>
       </div>
 
-      {/* Create Form Modal */}
+          {/* Create Form Modal */}
       {showCreateForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-[95vw] max-w-[1400px] h-[92vh] overflow-hidden flex flex-col">
             <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white">New Transfer Request</h2>
             </div>
@@ -743,7 +721,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
                   <input
                     type="text"
                     value={transferNo}
-                    onChange={(e) => setTransferNo(e.target.value)}
+                    readOnly
                     className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="TR-001"
                   />
@@ -759,19 +737,6 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
                     className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Notes
-                </label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  rows={3}
-                  placeholder="Optional notes..."
-                />
               </div>
 
               {/* Add Items */}
@@ -871,7 +836,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
                               <td className="px-3 py-2">
                                 <input
                                   type="number"
-                                  min="1"
+                                  min="0"
                                   value={item.transfer_qty}
                                   onChange={(e) => handleUpdateItem(index, 'transfer_qty', parseFloat(e.target.value) || 0)}
                                   className="w-20 px-2 py-1 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded text-sm"
@@ -914,7 +879,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
                 disabled={creating}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {creating ? 'Creating...' : 'Create Transfer'}
+                {creating ? 'Creating...' : 'Create Transfer Request'}
               </button>
             </div>
           </div>
