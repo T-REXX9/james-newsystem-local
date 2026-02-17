@@ -6,6 +6,7 @@ import PurchaseRequestList from './PurchaseRequestList';
 import PurchaseRequestForm from './PurchaseRequestForm';
 import PurchaseRequestDetail from './PurchaseRequestView'; // Filename is PurchaseRequestView.tsx, Component is PurchaseRequestView
 import PurchaseRequestPrint from './PurchaseRequestPrint';
+import { Filter } from 'lucide-react';
 
 const PurchaseRequestModule: React.FC = () => {
     // Mode State
@@ -162,45 +163,59 @@ const PurchaseRequestModule: React.FC = () => {
 
 
     return (
-        <div className="h-full">
-            {viewMode === 'list' && (
-                <PurchaseRequestList
-                    requests={filteredRequests}
-                    loading={loading}
-                    onSelect={handleSelectRequest}
-                    onCreate={handleCreateStart}
-                    filterStatus={filterStatus}
-                    setFilterStatus={setFilterStatus}
-                    searchTerm={searchTerm}
-                    setSearchTerm={setSearchTerm}
-                />
+        <div className="h-full bg-slate-100 dark:bg-slate-950">
+            {(viewMode === 'list' || viewMode === 'detail') && (
+                <div className="h-full flex overflow-hidden">
+                    <aside className="w-80 shrink-0">
+                        <PurchaseRequestList
+                            requests={filteredRequests}
+                            loading={loading}
+                            onSelect={handleSelectRequest}
+                            onCreate={handleCreateStart}
+                            filterStatus={filterStatus}
+                            setFilterStatus={setFilterStatus}
+                            searchTerm={searchTerm}
+                            setSearchTerm={setSearchTerm}
+                        />
+                    </aside>
+
+                    <main className="flex-1 overflow-hidden">
+                        {viewMode === 'detail' && selectedRequest ? (
+                            <PurchaseRequestDetail
+                                request={selectedRequest}
+                                onBack={() => {
+                                    setSelectedRequest(null);
+                                    setViewMode('list');
+                                }}
+                                onUpdate={handleUpdate}
+                                onUpdateItem={handleUpdateItem}
+                                onDeleteItem={handleDeleteItem}
+                                onAddItem={handleAddItem}
+                                onConvert={handleConvertPO}
+                                onPrint={() => setViewMode('print')}
+                                products={products}
+                                suppliers={suppliers}
+                            />
+                        ) : (
+                            <div className="h-full flex flex-col items-center justify-center text-slate-400 bg-slate-50 dark:bg-slate-950">
+                                <Filter size={48} className="mb-4 opacity-20" />
+                                <p>Select a Purchase Request to view details</p>
+                            </div>
+                        )}
+                    </main>
+                </div>
             )}
 
             {viewMode === 'create' && (
                 <PurchaseRequestForm
-                    onCancel={() => setViewMode('list')}
+                    onCancel={() => {
+                        setViewMode('list');
+                        setSelectedRequest(null);
+                    }}
                     onSubmit={handleCreateSubmit}
                     products={products}
                     suppliers={suppliers}
                     initialPRNumber={nextPRNumber}
-                />
-            )}
-
-            {viewMode === 'detail' && selectedRequest && (
-                <PurchaseRequestDetail
-                    request={selectedRequest}
-                    onBack={() => {
-                        setSelectedRequest(null);
-                        setViewMode('list');
-                    }}
-                    onUpdate={handleUpdate}
-                    onUpdateItem={handleUpdateItem}
-                    onDeleteItem={handleDeleteItem}
-                    onAddItem={handleAddItem}
-                    onConvert={handleConvertPO}
-                    onPrint={() => setViewMode('print')}
-                    products={products}
-                    suppliers={suppliers}
                 />
             )}
 

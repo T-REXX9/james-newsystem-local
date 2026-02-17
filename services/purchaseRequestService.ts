@@ -1,284 +1,287 @@
 // @ts-nocheck
-import { supabase } from '../lib/supabaseClient';
 import {
-    PurchaseRequest,
-    PurchaseRequestWithItems,
-    CreatePRPayload,
-    CreatePRItemPayload
+  PurchaseRequest,
+  PurchaseRequestWithItems,
+  CreatePRPayload,
+  CreatePRItemPayload,
 } from '../purchaseRequest.types';
-import { sanitizeObject, SanitizationConfig } from '../utils/dataSanitization';
-import { parseSupabaseError } from '../utils/errorHandler';
-import { ENTITY_TYPES, logCreate, logDelete, logUpdate } from './activityLogService';
+import { getLocalAuthSession } from './localAuthService';
 
-const purchaseRequestSanitizationConfig: SanitizationConfig<CreatePRPayload> = {
-    pr_number: { type: 'string', placeholder: 'n/a', required: true },
-    request_date: { type: 'string', placeholder: 'n/a', required: true },
-    notes: { type: 'string', placeholder: 'n/a' },
-    reference_no: { type: 'string', placeholder: 'n/a' },
+const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || 'http://127.0.0.1:8081/api/v1';
+const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
+
+const getUserContext = () => {
+  const session = getLocalAuthSession();
+  const userId = Number(session?.context?.user?.id || 1);
+  return {
+    mainId: API_MAIN_ID,
+    userId: Number.isFinite(userId) && userId > 0 ? userId : 1,
+  };
 };
 
-const purchaseRequestItemSanitizationConfig: SanitizationConfig<CreatePRItemPayload> = {
-    item_id: { type: 'string', placeholder: 'n/a', required: true },
-    item_code: { type: 'string', placeholder: 'n/a' },
-    part_number: { type: 'string', placeholder: 'n/a' },
-    description: { type: 'string', placeholder: 'n/a' },
-    quantity: { type: 'number', placeholder: 0 },
-    unit_cost: { type: 'number', placeholder: 0 },
-    supplier_id: { type: 'string', placeholder: 'n/a' },
-    supplier_name: { type: 'string', placeholder: 'n/a' },
-    eta_date: { type: 'string', placeholder: 'n/a' },
+const parseApiErrorMessage = async (response: Response): Promise<string> => {
+  try {
+    const payload = await response.json();
+    if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error.trim();
+    if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message.trim();
+  } catch {
+    // no-op
+  }
+  return `API request failed (${response.status})`;
 };
+
+const requestApi = async (url: string, init?: RequestInit): Promise<any> => {
+  const response = await fetch(url, init);
+  if (!response.ok) throw new Error(await parseApiErrorMessage(response));
+  const payload = await response.json();
+  if (!payload?.ok) throw new Error(payload?.error || 'API request failed');
+  return payload.data;
+};
+
+const toNumber = (value: unknown, fallback = 0): number => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const normalizeStatus = (value: unknown): string => {
+  const text = String(value || '').trim().toLowerCase();
+  if (text === 'submitted') return 'Submitted';
+  if (text === 'approved') return 'Approved';
+  if (text === 'cancelled' || text === 'canceled') return 'Cancelled';
+  if (text === 'draft') return 'Draft';
+  return 'Pending';
+};
+
+const mapSummaryRow = (row: any): PurchaseRequestWithItems => {
+  const itemCount = toNumber(row?.item_count, 0);
+  return {
+    id: String(row?.refno || row?.id || ''),
+    pr_number: String(row?.pr_number || ''),
+    request_date: String(row?.request_date || ''),
+    notes: String(row?.notes || ''),
+    reference_no: '',
+    status: normalizeStatus(row?.status),
+    created_by: String(row?.created_by || ''),
+    created_at: String(row?.request_datetime || ''),
+    updated_at: null,
+    items: Array.from({ length: Math.max(0, itemCount) }).map(() => ({} as any)),
+    item_count: itemCount,
+    total_qty: toNumber(row?.total_qty, 0),
+    total_cost: toNumber(row?.total_cost, 0),
+  } as PurchaseRequestWithItems;
+};
+
+const mapDetail = (data: any): PurchaseRequestWithItems => {
+  const request = data?.request || {};
+  const items = Array.isArray(data?.items) ? data.items : [];
+  return {
+    id: String(request?.refno || request?.id || ''),
+    pr_number: String(request?.pr_number || ''),
+    request_date: String(request?.request_date || ''),
+    notes: String(request?.notes || ''),
+    reference_no: '',
+    status: normalizeStatus(request?.status),
+    created_by: String(request?.created_by || ''),
+    created_at: String(request?.request_datetime || ''),
+    updated_at: null,
+    items: items.map((item: any) => ({
+      id: String(item?.id || ''),
+      pr_id: String(request?.refno || ''),
+      item_id: String(item?.item_id || ''),
+      item_code: String(item?.item_code || ''),
+      part_number: String(item?.part_number || ''),
+      description: String(item?.description || ''),
+      quantity: toNumber(item?.quantity, 0),
+      unit_cost: toNumber(item?.unit_cost, 0),
+      supplier_id: String(item?.supplier_id || ''),
+      supplier_name: String(item?.supplier_name || ''),
+      eta_date: String(item?.eta_date || ''),
+      created_at: null,
+      updated_at: null,
+    })),
+  } as PurchaseRequestWithItems;
+};
+
+const mapCreateItemPayload = (item: CreatePRItemPayload) => ({
+  item_id: item.item_id,
+  item_code: item.item_code,
+  part_number: item.part_number,
+  description: item.description,
+  quantity: toNumber(item.quantity, 0),
+  unit_cost: toNumber(item.unit_cost ?? 0, 0),
+  supplier_id: item.supplier_id || '',
+  supplier_name: item.supplier_name || '',
+  eta_date: item.eta_date || '',
+});
 
 export const purchaseRequestService = {
-    // --- Purchase Requests ---
+  async getPurchaseRequests(filters?: { month?: number; year?: number; status?: string }): Promise<PurchaseRequestWithItems[]> {
+    const query = new URLSearchParams({
+      main_id: String(API_MAIN_ID),
+      page: '1',
+      per_page: '200',
+    });
+    if (filters?.month) query.set('month', String(filters.month));
+    if (filters?.year) query.set('year', String(filters.year));
+    if (filters?.status && filters.status !== 'All') query.set('status', filters.status);
 
-    async getPurchaseRequests(filters?: { month?: number; year?: number; status?: string }): Promise<PurchaseRequestWithItems[]> {
-        let query = supabase
-            .from('purchase_requests')
-            .select(`
-                *,
-                items:purchase_request_items(*)
-            `);
+    const data = await requestApi(`${API_BASE_URL}/purchase-requests?${query.toString()}`);
+    const rows = Array.isArray(data?.items) ? data.items : [];
+    return rows.map(mapSummaryRow);
+  },
 
-        if (filters?.year) {
-            const startDate = `${filters.year}-${String(filters.month || 1).padStart(2, '0')}-01`;
-            const endDate = filters.month
-                ? new Date(filters.year, filters.month, 0).toISOString().split('T')[0]
-                : `${filters.year}-12-31`;
+  async getPurchaseRequestById(id: string): Promise<PurchaseRequestWithItems> {
+    const data = await requestApi(
+      `${API_BASE_URL}/purchase-requests/${encodeURIComponent(id)}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`
+    );
+    return mapDetail(data);
+  },
 
-            query = query.gte('request_date', startDate).lte('request_date', endDate);
-        }
+  async createPurchaseRequest(payload: CreatePRPayload): Promise<PurchaseRequestWithItems> {
+    const ctx = getUserContext();
+    const data = await requestApi(`${API_BASE_URL}/purchase-requests`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        main_id: ctx.mainId,
+        user_id: ctx.userId,
+        pr_number: payload.pr_number,
+        request_date: payload.request_date,
+        notes: payload.notes || '',
+        reference_no: payload.reference_no || '',
+        items: (payload.items || []).map(mapCreateItemPayload),
+      }),
+    });
+    return mapDetail(data);
+  },
 
-        if (filters?.status && filters.status !== 'All') {
-            query = query.eq('status', filters.status);
-        }
+  async updatePurchaseRequest(id: string, updates: Partial<PurchaseRequest>): Promise<void> {
+    await requestApi(`${API_BASE_URL}/purchase-requests/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        main_id: API_MAIN_ID,
+        status: updates.status,
+        request_date: updates.request_date,
+        notes: updates.notes,
+        reference_no: updates.reference_no,
+        pr_number: updates.pr_number,
+      }),
+    });
+  },
 
-        const { data, error } = await query.order('created_at', { ascending: false });
-        if (error) throw error;
-        return data as unknown as PurchaseRequestWithItems[];
-    },
+  async deletePurchaseRequest(id: string): Promise<void> {
+    await requestApi(
+      `${API_BASE_URL}/purchase-requests/${encodeURIComponent(id)}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`,
+      { method: 'DELETE' }
+    );
+  },
 
-    async getPurchaseRequestById(id: string): Promise<PurchaseRequestWithItems> {
-        const { data, error } = await supabase
-            .from('purchase_requests')
-            .select(`
-                *,
-                items:purchase_request_items(*)
-            `)
-            .eq('id', id)
-            .single();
+  async addPRItem(prId: string, item: CreatePRItemPayload): Promise<void> {
+    const ctx = getUserContext();
+    await requestApi(`${API_BASE_URL}/purchase-requests/${encodeURIComponent(prId)}/items`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        main_id: ctx.mainId,
+        user_id: ctx.userId,
+        ...mapCreateItemPayload(item),
+      }),
+    });
+  },
 
-        if (error) throw error;
-        return data as unknown as PurchaseRequestWithItems;
-    },
+  async updatePRItem(itemId: string, updates: any): Promise<void> {
+    await requestApi(`${API_BASE_URL}/purchase-request-items/${encodeURIComponent(itemId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        main_id: API_MAIN_ID,
+        quantity: updates.quantity,
+        unit_cost: updates.unit_cost,
+        supplier_id: updates.supplier_id,
+        eta_date: updates.eta_date,
+        notes: updates.notes,
+      }),
+    });
+  },
 
-    async createPurchaseRequest(payload: CreatePRPayload): Promise<PurchaseRequestWithItems> {
-        try {
-            const sanitizedPayload = sanitizeObject(payload, purchaseRequestSanitizationConfig);
-            // 1. Create Header
-            const { data: prData, error: prError } = await supabase
-                .from('purchase_requests')
-                .insert({
-                    pr_number: sanitizedPayload.pr_number,
-                    request_date: sanitizedPayload.request_date,
-                    notes: sanitizedPayload.notes,
-                    reference_no: sanitizedPayload.reference_no,
-                    status: 'Draft'
-                })
-                .select()
-                .single();
+  async deletePRItem(itemId: string): Promise<void> {
+    await requestApi(
+      `${API_BASE_URL}/purchase-request-items/${encodeURIComponent(itemId)}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`,
+      { method: 'DELETE' }
+    );
+  },
 
-            if (prError) throw prError;
-            if (!prData) throw new Error('Failed to create purchase request');
+  async generatePRNumber(): Promise<string> {
+    const data = await requestApi(
+      `${API_BASE_URL}/purchase-requests/next-number?main_id=${encodeURIComponent(String(API_MAIN_ID))}`
+    );
+    return String(data?.pr_number || '');
+  },
 
-            // 2. Create Items
-            if (payload.items.length > 0) {
-                const itemsToInsert = payload.items.map(item => {
-                    const sanitizedItem = sanitizeObject(item, purchaseRequestItemSanitizationConfig);
-                    return {
-                        pr_id: prData.id,
-                        item_id: sanitizedItem.item_id,
-                        item_code: sanitizedItem.item_code,
-                        part_number: sanitizedItem.part_number,
-                        description: sanitizedItem.description,
-                        quantity: sanitizedItem.quantity,
-                        unit_cost: sanitizedItem.unit_cost,
-                        supplier_id: sanitizedItem.supplier_id,
-                        supplier_name: sanitizedItem.supplier_name,
-                        eta_date: sanitizedItem.eta_date
-                    };
-                });
+  async getSuppliers() {
+    const data = await requestApi(
+      `${API_BASE_URL}/purchase-orders/suppliers?main_id=${encodeURIComponent(String(API_MAIN_ID))}`
+    );
+    const rows = Array.isArray(data) ? data : [];
+    return rows.map((row: any) => ({
+      id: String(row?.id || ''),
+      company: String(row?.name || ''),
+      payment_terms: '',
+    }));
+  },
 
-                const { error: itemsError } = await supabase
-                    .from('purchase_request_items')
-                    .insert(itemsToInsert);
+  async getProducts() {
+    const all: any[] = [];
+    let page = 1;
+    let totalPages = 1;
+    do {
+      const data = await requestApi(
+        `${API_BASE_URL}/products?main_id=${encodeURIComponent(String(API_MAIN_ID))}&status=active&page=${page}&per_page=500`
+      );
+      const rows = Array.isArray(data?.items) ? data.items : [];
+      all.push(...rows);
+      totalPages = toNumber(data?.meta?.total_pages, 1);
+      page += 1;
+    } while (page <= totalPages && page <= 20);
 
-            if (itemsError) {
-                await supabase.from('purchase_requests').delete().eq('id', prData.id);
-                throw itemsError;
-            }
-        }
+    return all.map((row: any) => ({
+      id: String(row?.id || ''),
+      item_code: String(row?.item_code || ''),
+      part_number: String(row?.part_no || ''),
+      name: String(row?.description || ''),
+      description: String(row?.description || ''),
+      cost: toNumber(row?.cost, 0),
+      quantity: toNumber(row?.stock_wh1, 0),
+    }));
+  },
 
-        try {
-            await logCreate(ENTITY_TYPES.PURCHASE_REQUEST, prData.id, {
-                pr_number: prData.pr_number,
-                reference_no: prData.reference_no,
-            });
-        } catch (logError) {
-            console.error('Failed to log activity:', logError);
-        }
-
-        return await this.getPurchaseRequestById(prData.id);
-    } catch (err) {
-        console.error('Error creating purchase request:', err);
-        throw new Error(parseSupabaseError(err, 'purchase request'));
+  async getSupplierItemCost(supplierId: string, itemId: string) {
+    const request = await this.getPurchaseRequests({ status: 'all' });
+    for (const pr of request) {
+      const match = (pr.items || []).find((item: any) => item.item_id === itemId && item.supplier_id === supplierId);
+      if (match && Number(match.unit_cost) > 0) return Number(match.unit_cost);
     }
-    },
+    return 0;
+  },
 
-    async updatePurchaseRequest(id: string, updates: Partial<PurchaseRequest>): Promise<void> {
-        try {
-            const sanitizedUpdates = sanitizeObject(
-                updates as CreatePRPayload,
-                purchaseRequestSanitizationConfig,
-                { enforceRequired: false, onlyProvided: true }
-            );
-            const { error } = await supabase
-                .from('purchase_requests')
-                .update(sanitizedUpdates)
-                .eq('id', id);
-            if (error) throw error;
-            try {
-                await logUpdate(ENTITY_TYPES.PURCHASE_REQUEST, id, {
-                    updated_fields: Object.keys(sanitizedUpdates),
-                });
-            } catch (logError) {
-                console.error('Failed to log activity:', logError);
-            }
-        } catch (err) {
-            console.error('Error updating purchase request:', err);
-            throw new Error(parseSupabaseError(err, 'purchase request'));
-        }
-    },
-
-    async deletePurchaseRequest(id: string): Promise<void> {
-        const { data: existing } = await supabase
-            .from('purchase_requests')
-            .select('pr_number')
-            .eq('id', id)
-            .single();
-        const { error } = await supabase
-            .from('purchase_requests')
-            .delete()
-            .eq('id', id);
-        if (error) throw error;
-        try {
-            await logDelete(ENTITY_TYPES.PURCHASE_REQUEST, id, {
-                pr_number: existing?.pr_number ?? null,
-            });
-        } catch (logError) {
-            console.error('Failed to log activity:', logError);
-        }
-    },
-
-    // --- PR Items (Individual Management) ---
-    async addPRItem(prId: string, item: CreatePRItemPayload): Promise<void> {
-        try {
-            const sanitizedItem = sanitizeObject(item, purchaseRequestItemSanitizationConfig);
-            const { error } = await supabase
-                .from('purchase_request_items')
-                .insert({
-                    pr_id: prId,
-                    ...sanitizedItem
-                });
-            if (error) throw error;
-        } catch (err) {
-            console.error('Error adding purchase request item:', err);
-            throw new Error(parseSupabaseError(err, 'purchase request item'));
-        }
-    },
-
-    async updatePRItem(itemId: string, updates: any): Promise<void> {
-        try {
-            const sanitizedUpdates = sanitizeObject(
-                updates as CreatePRItemPayload,
-                purchaseRequestItemSanitizationConfig,
-                { enforceRequired: false, onlyProvided: true }
-            );
-            const { error } = await supabase
-                .from('purchase_request_items')
-                .update(sanitizedUpdates)
-                .eq('id', itemId);
-            if (error) throw error;
-        } catch (err) {
-            console.error('Error updating purchase request item:', err);
-            throw new Error(parseSupabaseError(err, 'purchase request item'));
-        }
-    },
-
-    async deletePRItem(itemId: string): Promise<void> {
-        const { error } = await supabase
-            .from('purchase_request_items')
-            .delete()
-            .eq('id', itemId);
-        if (error) throw error;
-    },
-
-    // --- Helpers ---
-
-    async generatePRNumber(): Promise<string> {
-        const year = new Date().getFullYear().toString().slice(-2);
-        // Using RPC function as discovered in backend types
-        const { data: count, error } = await supabase
-            .rpc('get_year_pr_count', { year_suffix: year });
-
-        if (error) throw error;
-
-        const sequence = String((count || 0) + 1).padStart(2, '0');
-        // Check uniqueness loop? skipping for now as per instructions
-        return `PR-${year}${sequence}`;
-    },
-
-    async getSuppliers() {
-        // Reuse logic from PurchaseOrderService
-        const { data, error } = await supabase
-            .from('contacts')
-            .select('id, company, payment_terms') // Fetching terms for cost/payment info
-            .ilike('transactionType', '%PO%')
-            .order('company', { ascending: true });
-        if (error) throw error;
-        return data;
-    },
-
-    async getProducts() {
-        const { data, error } = await supabase
-            .from('products')
-            .select('id, item_code, part_number, name, description, cost, quantity') // Added quantity for inventory check
-            .order('part_number', { ascending: true });
-        if (error) throw error;
-        return data;
-    },
-
-    async getSupplierItemCost(supplierId: string, itemId: string) {
-        const { data, error } = await supabase
-            .from('supplier_item_costs')
-            .select('unit_cost')
-            .eq('supplier_id', supplierId)
-            .eq('item_id', itemId)
-            .maybeSingle(); // Use maybeSingle to avoid 406 not found error
-
-        if (error) return 0;
-        return data?.unit_cost || 0;
-    },
-
-    // Convert to PO
-    async convertToPO(prIds: string[], approverId: string): Promise<string> {
-        // This is complex. The guide implies "User converts to PO".
-        // It says "Selected items are added to a new Purchase Order".
-        // For simplicity, let's assume 1 PR -> 1 PO or selected items from 1 PR.
-        // Implementation: Create PO header, copy items.
-        // Returning generated PO ID.
-        return 'TODO_PO_ID';
-        // Note: The UI for conversion might need selection. 
-        // I will implement basic "Convert All" for now in UI.
-    }
+  async convertToPO(prIds: string[], approverId: string): Promise<string> {
+    const prId = String(prIds?.[0] || '');
+    if (!prId) throw new Error('No purchase request selected for conversion');
+    const ctx = getUserContext();
+    const data = await requestApi(
+      `${API_BASE_URL}/purchase-requests/${encodeURIComponent(prId)}/actions/convert-po`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          main_id: ctx.mainId,
+          user_id: ctx.userId,
+          approver_id: approverId || String(ctx.userId),
+        }),
+      }
+    );
+    return String(data?.conversion?.po_refno || data?.conversion?.po_number || '');
+  },
 };
+

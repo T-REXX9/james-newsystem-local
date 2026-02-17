@@ -91,10 +91,6 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                             <div className="flex gap-2">
                                 <button onClick={onPrint} className="flex items-center gap-2 px-3 py-1.5 border border-slate-300 rounded hover:bg-slate-50 text-slate-600"><Printer size={16} /> Print</button>
 
-                                {request.status === 'Draft' && (
-                                    <button onClick={() => handleStatusChange('Pending')} className="flex items-center gap-2 px-3 py-1.5 bg-yellow-500 text-white rounded hover:bg-yellow-600 shadow-sm">Submit</button>
-                                )}
-
                                 {request.status === 'Pending' && isApprover && (
                                     <button onClick={() => handleStatusChange('Approved')} className="flex items-center gap-2 px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 shadow-sm"><CheckCircle size={16} /> Approve</button>
                                 )}
@@ -103,7 +99,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                                     <button onClick={onConvert} className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 shadow-sm"><FileOutput size={16} /> Convert to PO</button>
                                 )}
 
-                                {['Draft', 'Pending'].includes(request.status || '') && (
+                                {['Pending', 'Approved'].includes(request.status || '') && (
                                     <button onClick={() => handleStatusChange('Cancelled')} className="flex items-center gap-2 px-3 py-1.5 text-red-600 hover:bg-red-50 rounded"><XCircle size={16} /> Cancel</button>
                                 )}
                             </div>
@@ -115,7 +111,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                 <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
                     <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
                         <h3 className="font-bold text-slate-800 dark:text-white">Items</h3>
-                        {request.status === 'Draft' && (
+                        {request.status === 'Pending' && (
                             <button onClick={() => setShowAddItem(true)} className="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 flex items-center gap-1"><Plus size={14} /> Add Item</button>
                         )}
                     </div>
@@ -165,7 +161,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                                         <td className="px-6 py-3 font-medium">{item.part_number}</td>
                                         <td className="px-6 py-3 text-slate-500">{item.description}</td>
                                         <td className="px-6 py-3 text-center">
-                                            {request.status === 'Draft' ? (
+                                            {request.status === 'Pending' ? (
                                                 <input
                                                     type="number"
                                                     className="w-16 text-center border rounded p-1"
@@ -175,7 +171,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                                             ) : item.quantity}
                                         </td>
                                         <td className="px-6 py-3">
-                                            {request.status === 'Draft' ? (
+                                            {request.status === 'Pending' ? (
                                                 <select
                                                     className="w-full border rounded p-1 text-xs"
                                                     value={item.supplier_id || ''}
@@ -192,7 +188,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                                         </td>
                                         <td className="px-6 py-3 text-xs">{item.eta_date || '-'}</td>
                                         <td className="px-6 py-3 text-center">
-                                            {request.status === 'Draft' && (
+                                            {request.status === 'Pending' && (
                                                 <button onClick={() => onDeleteItem(item.id)} className="text-slate-400 hover:text-red-500"><Trash2 size={16} /></button>
                                             )}
                                         </td>
