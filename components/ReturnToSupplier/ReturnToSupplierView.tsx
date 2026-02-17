@@ -3,7 +3,6 @@ import { SupplierReturn, SupplierReturnItem } from '../../returnToSupplier.types
 import { returnToSupplierService } from '../../services/returnToSupplierService';
 import StatusBadge from '../StatusBadge';
 import { Send, Printer } from 'lucide-react';
-import { dispatchWorkflowNotification } from '../../services/supabaseService';
 
 interface ReturnToSupplierViewProps {
     returnRecord: SupplierReturn;
@@ -36,33 +35,9 @@ const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecor
         setProcessing(true);
         try {
             await returnToSupplierService.finalizeReturn(returnRecord.id);
-            await dispatchWorkflowNotification({
-                title: 'Supplier Return Finalized',
-                message: `Return ${returnRecord.return_no} has been posted.`,
-                type: 'success',
-                action: 'finalize',
-                status: 'success',
-                entityType: 'supplier_return',
-                entityId: returnRecord.id,
-                actionUrl: `/return-to-supplier?returnId=${returnRecord.id}`,
-                targetRoles: ['Owner', 'Manager', 'Support'],
-                includeActor: true,
-            });
             onUpdate();
         } catch (err: any) {
             console.error(err);
-            await dispatchWorkflowNotification({
-                title: 'Supplier Return Finalization Failed',
-                message: `Failed to finalize return ${returnRecord.return_no}.`,
-                type: 'error',
-                action: 'finalize',
-                status: 'failed',
-                entityType: 'supplier_return',
-                entityId: returnRecord.id,
-                actionUrl: `/return-to-supplier?returnId=${returnRecord.id}`,
-                targetRoles: ['Owner', 'Manager', 'Support'],
-                includeActor: true,
-            });
             alert('Error finalizing: ' + err.message);
         } finally {
             setProcessing(false);
