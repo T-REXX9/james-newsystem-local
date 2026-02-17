@@ -172,6 +172,29 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     return `INQ${year}${month}${day}-${random}`;
   }, []);
 
+  const formatInquiryDisplayNo = useCallback((value: string | undefined | null): string => {
+    const raw = String(value || '').trim().toUpperCase();
+    if (!raw) return '';
+
+    if (!raw.startsWith('INQ')) {
+      return raw;
+    }
+
+    const suffix = raw.slice(3).trim();
+    if (!suffix) return 'INQ';
+
+    if (suffix.includes('-')) {
+      return `INQ${suffix}`;
+    }
+
+    const compact = suffix.replace(/[^A-Z0-9]/g, '');
+    if (compact.length <= 2) {
+      return `INQ${compact}`;
+    }
+
+    return `INQ${compact.slice(0, 2)}-${compact.slice(2)}`;
+  }, []);
+
   const handleOpenProductModal = (rowTempId: string) => {
     setActiveRowId(rowTempId);
     setShowProductModal(true);
@@ -654,6 +677,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     setSubmitCount(0);
   };
   const activeInquiryNumber = !isCreatingNew && selectedInquiry?.inquiry_no ? selectedInquiry.inquiry_no : inquiryNo;
+  const activeInquiryNumberDisplay = formatInquiryDisplayNo(activeInquiryNumber);
   const customerOutstanding = selectedCustomer?.balance || 0;
   const isReadOnly = selectedInquiry?.status === SalesInquiryStatus.CANCELLED;
   const canFinalizeInquiry = Boolean(selectedInquiry && !isCreatingNew && selectedInquiry.status === SalesInquiryStatus.DRAFT);
@@ -673,7 +697,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
           </div>
           <div className="ml-2 inline-flex items-center gap-2 px-2 py-1 rounded-md bg-white/10 border border-white/10">
             <span className="text-[10px] uppercase tracking-wide text-slate-300">Active:</span>
-            <span className="text-[11px] font-mono text-white">{activeInquiryNumber || '—'}</span>
+            <span className="text-[11px] font-mono text-white">{activeInquiryNumberDisplay || '—'}</span>
             {!isCreatingNew && selectedInquiry?.status && (
               <StatusBadge status={selectedInquiry.status} className="text-[10px] px-2 py-0.5" />
             )}
@@ -789,7 +813,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <div className="text-sm font-semibold text-brand-blue truncate">{inquiry.inquiry_no}</div>
+                        <div className="text-sm font-semibold text-brand-blue truncate">{formatInquiryDisplayNo(inquiry.inquiry_no)}</div>
                         <div className="text-sm font-semibold text-slate-900 dark:text-white truncate">{customer?.company || '—'}</div>
                         <div className="text-[12px] text-slate-500 dark:text-slate-400">
                           {new Date(inquiry.sales_date).toLocaleDateString()} • {formatCurrency(total)}
