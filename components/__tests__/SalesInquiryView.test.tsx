@@ -49,12 +49,14 @@ vi.mock('../../hooks/useRealtimeNestedList', () => ({
   })
 }));
 
-vi.mock('../../services/salesInquiryService', () => ({
+vi.mock('../../services/salesInquiryLocalApiService', () => ({
   createSalesInquiry: (...args: any[]) => createSalesInquiryMock(...args),
   getAllSalesInquiries: vi.fn(),
   approveInquiry: vi.fn(),
   convertToOrder: vi.fn(),
-  updateInquiryStatus: vi.fn()
+  updateSalesInquiry: vi.fn(),
+  getSalesInquiry: vi.fn(),
+  deleteSalesInquiry: vi.fn(),
 }));
 
 vi.mock('../../services/productService', () => ({
