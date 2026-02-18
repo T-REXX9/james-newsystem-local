@@ -48,6 +48,7 @@ import PromotionManagementView from './components/PromotionManagementView';
 import PromotionListView from './components/PromotionListView';
 import DailyCollectionEntryView from './components/DailyCollectionEntryView';
 import CustomerLedgerView from './components/CustomerLedgerView';
+import AdjustmentEntryView from './components/AdjustmentEntryView';
 
 // Maintenance Modules
 import Suppliers from './components/Maintenance/Product/Suppliers';
@@ -544,11 +545,7 @@ const App: React.FC = () => {
       case 'accounting-transactions-adjustment-entry':
         return (
           <div className="h-full overflow-y-auto">
-            <StockAdjustmentView
-              initialAdjustmentId={
-                moduleContext['accounting-transactions-adjustment-entry']?.adjustmentId ||
-                moduleContext.adjustmententry?.adjustmentId
-              }
+            <AdjustmentEntryView
               initialAdjustmentNo={
                 moduleContext['accounting-transactions-adjustment-entry']?.adjustmentNo ||
                 moduleContext.adjustmententry?.adjustmentNo
