@@ -47,6 +47,7 @@ import SalesMap from './components/SalesMap';
 import PromotionManagementView from './components/PromotionManagementView';
 import PromotionListView from './components/PromotionListView';
 import DailyCollectionEntryView from './components/DailyCollectionEntryView';
+import CustomerLedgerView from './components/CustomerLedgerView';
 
 // Maintenance Modules
 import Suppliers from './components/Maintenance/Product/Suppliers';
@@ -562,7 +563,11 @@ const App: React.FC = () => {
           </div>
         );
       case 'accounting-accounting-customer-ledger':
-        return renderComingSoon('Customer Ledger');
+        return (
+          <div className="h-full overflow-y-auto">
+            <CustomerLedgerView />
+          </div>
+        );
       case 'accounting-accounting-collection-summary':
         return renderComingSoon('Collection Summary');
       case 'accounting-accounting-statement-of-account':
