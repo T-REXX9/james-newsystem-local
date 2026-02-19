@@ -405,8 +405,6 @@ const DailyCollectionEntryView: React.FC = () => {
                       >
                         <option>Cash</option>
                         <option>Check</option>
-                        <option>Online Transfer</option>
-                        <option>Credit Card</option>
                       </select>
                     </div>
                     <div>
