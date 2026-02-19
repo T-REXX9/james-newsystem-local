@@ -18,6 +18,29 @@ const getAnyCustomerId = async (): Promise<string> => {
 
 describe('dailyCollectionService integration', () => {
   it(
+    'loads collection summary report rows and totals',
+    async () => {
+      const payload = await dailyCollectionService.getSummary({
+        dateType: 'custom',
+        dateFrom: '2025-11-01',
+        dateTo: '2026-02-19',
+        collectionType: 'All',
+      });
+
+      expect(payload.date_from).toBeTruthy();
+      expect(payload.date_to).toBeTruthy();
+      expect(Array.isArray(payload.collection_items)).toBe(true);
+      expect(Array.isArray(payload.debit_items)).toBe(true);
+      expect(typeof payload.collection_totals.cash).toBe('number');
+      expect(typeof payload.collection_totals.check).toBe('number');
+      expect(typeof payload.collection_totals.tt).toBe('number');
+      expect(typeof payload.collection_totals.less).toBe('number');
+      expect(typeof payload.debit_totals.amount).toBe('number');
+    },
+    60000
+  );
+
+  it(
     'communicates with collections endpoints for create/list/show/payment/action flow',
     async () => {
       const customerId = await getAnyCustomerId();
@@ -71,4 +94,3 @@ describe('dailyCollectionService integration', () => {
     120000
   );
 });
-
