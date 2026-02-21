@@ -1,10 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
-import { fetchContacts } from '../services/supabaseService';
-import { Contact, InquiryReportFilters } from '../types';
+import { InquiryReportFilters } from '../types';
 import { FileText, Calendar, Users, ArrowRight, Search } from 'lucide-react';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
 import InquiryReportView from './InquiryReportView';
+import {
+    InquiryReportCustomer,
+    inquiryReportLocalApiService,
+} from '../services/inquiryReportLocalApiService';
 
 const InquiryReportFilter: React.FC = () => {
     // Default to 'month' view to show recent data
@@ -19,7 +22,7 @@ const InquiryReportFilter: React.FC = () => {
 
     const [dateTo, setDateTo] = useState<string>(new Date().toISOString().split('T')[0]);
     const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
-    const [customers, setCustomers] = useState<Contact[]>([]);
+    const [customers, setCustomers] = useState<InquiryReportCustomer[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showView, setShowView] = useState(false);
 
@@ -27,7 +30,7 @@ const InquiryReportFilter: React.FC = () => {
         const loadCustomers = async () => {
             setIsLoading(true);
             try {
-                const data = await fetchContacts();
+                const data = await inquiryReportLocalApiService.getCustomers();
                 setCustomers(data);
             } finally {
                 setIsLoading(false);

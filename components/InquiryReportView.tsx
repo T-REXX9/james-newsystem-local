@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { getInquiryReportData, getInquiryReportSummary } from '../services/salesInquiryService';
-import { SalesInquiry, InquiryReportFilters } from '../types';
+import { InquiryReportFilters } from '../types';
 import {
     Printer,
     ChevronLeft,
@@ -19,6 +18,7 @@ import {
     Sparkles
 } from 'lucide-react';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
+import { inquiryReportLocalApiService } from '../services/inquiryReportLocalApiService';
 
 interface InquiryReportViewProps {
     filters: InquiryReportFilters;
@@ -44,13 +44,14 @@ const InquiryReportView: React.FC<InquiryReportViewProps> = ({ filters, onBack }
     const loadReportData = async () => {
         setIsLoading(true);
         try {
-            let data;
-            if (viewMode === 'detailed') {
-                data = await getInquiryReportData(filters.dateFrom, filters.dateTo, filters.customerId);
-            } else {
-                data = await getInquiryReportSummary(filters.dateFrom, filters.dateTo, filters.customerId);
-            }
-            setInquiries(data);
+            const data = await inquiryReportLocalApiService.getReport({
+                mode: viewMode,
+                dateType: filters.reportType,
+                dateFrom: filters.dateFrom,
+                dateTo: filters.dateTo,
+                customerId: filters.customerId,
+            });
+            setInquiries(data.items || []);
         } finally {
             setIsLoading(false);
         }
