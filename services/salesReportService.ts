@@ -1,4 +1,3 @@
-import { supabase } from '../lib/supabaseClient';
 import {
   SalesReportFilters,
   SalesReportData,
@@ -9,282 +8,133 @@ import {
   GrandTotal,
   CustomerOption,
 } from '../types';
+import { getLocalAuthSession } from './localAuthService';
+
+const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || 'http://127.0.0.1:8081/api/v1';
+const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
+
+const getMainId = (): number => {
+  const session = getLocalAuthSession();
+  const mainId = Number(session?.context?.user?.main_id || API_MAIN_ID || 1);
+  return Number.isFinite(mainId) && mainId > 0 ? mainId : 1;
+};
+
+const parseApiError = async (response: Response): Promise<string> => {
+  try {
+    const payload = await response.json();
+    if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error.trim();
+    if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message.trim();
+  } catch {
+    // no-op
+  }
+  return `API request failed (${response.status})`;
+};
+
+const requestApi = async (url: string): Promise<any> => {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(await parseApiError(response));
+  const payload = await response.json();
+  if (!payload?.ok) throw new Error(payload?.error || 'API request failed');
+  return payload.data;
+};
+
+const toNumber = (value: unknown, fallback = 0): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const mapCategoryTotals = (value: any): CategoryTotal[] => {
+  const rows = Array.isArray(value) ? value : [];
+  return rows.map((entry: any) => ({
+    category: String(entry?.category || 'Uncategorized'),
+    soAmount: toNumber(entry?.soAmount),
+    drAmount: toNumber(entry?.drAmount),
+    invoiceAmount: toNumber(entry?.invoiceAmount),
+  }));
+};
+
+const mapSalespersonTotals = (value: any): SalespersonTotal[] => {
+  const rows = Array.isArray(value) ? value : [];
+  return rows.map((entry: any) => ({
+    salesperson: String(entry?.salesperson || 'Unassigned'),
+    categories: mapCategoryTotals(entry?.categories),
+    total: toNumber(entry?.total),
+  }));
+};
+
+const mapGrandTotal = (value: any): GrandTotal => ({
+  soAmount: toNumber(value?.soAmount),
+  drAmount: toNumber(value?.drAmount),
+  invoiceAmount: toNumber(value?.invoiceAmount),
+  total: toNumber(value?.total),
+});
 
 export const getCustomerList = async (): Promise<CustomerOption[]> => {
   try {
-    const { data, error } = await supabase
-      .from('contacts')
-      .select('id, company')
-      .eq('is_deleted', false)
-      .order('company', { ascending: true });
+    const query = new URLSearchParams({
+      main_id: String(getMainId()),
+      limit: '1000',
+    });
 
-    if (error) {
-      console.error('Error fetching customers:', error);
-      return [];
-    }
+    const data = await requestApi(`${API_BASE_URL}/sales-reports/customers?${query.toString()}`);
+    const items = Array.isArray(data?.items) ? data.items : [];
 
-    return (data || []).map((c) => ({
-      id: c.id,
-      company: c.company || 'Unknown',
-    }));
+    return items
+      .map((c: any) => ({
+        id: String(c?.id || ''),
+        company: String(c?.company || 'Unknown'),
+      }))
+      .filter((c: CustomerOption) => c.id !== '');
   } catch (err) {
-    console.error('Error in getCustomerList:', err);
+    console.error('Error fetching customers:', err);
     return [];
   }
 };
 
-const applyTaxMultiplier = (amount: number, vatType: string | null): number => {
-  if (vatType?.toLowerCase() === 'exclusive') {
-    return amount * 1.12;
+const resolveDateType = (dateFrom: string, dateTo: string): 'all' | 'custom' => {
+  if (dateFrom === '2013-06-01') {
+    return 'all';
   }
-  return amount;
-};
-
-const getCategoryFromItems = async (
-  itemIds: string[]
-): Promise<Record<string, string>> => {
-  if (itemIds.length === 0) return {};
-
-  try {
-    const { data, error } = await supabase
-      .from('products')
-      .select('id, category')
-      .in('id', itemIds);
-
-    if (error) {
-      console.error('Error fetching product categories:', error);
-      return {};
-    }
-
-    const categoryMap: Record<string, string> = {};
-    (data || []).forEach((p) => {
-      categoryMap[p.id] = p.category || 'Uncategorized';
-    });
-    return categoryMap;
-  } catch (err) {
-    console.error('Error in getCategoryFromItems:', err);
-    return {};
-  }
+  return 'custom';
 };
 
 export const getSalesReportData = async (
   filters: SalesReportFilters
 ): Promise<SalesReportData> => {
   try {
-    const transactions: SalesReportTransaction[] = [];
+    const query = new URLSearchParams({
+      main_id: String(getMainId()),
+      date_type: resolveDateType(filters.dateFrom, filters.dateTo),
+      date_from: filters.dateFrom,
+      date_to: filters.dateTo,
+      customer_id: filters.customerId,
+      limit: '2500',
+    });
 
-    let invoiceQuery = supabase
-      .from('invoices')
-      .select(`
-        id,
-        invoice_no,
-        order_id,
-        contact_id,
-        sales_date,
-        sales_person,
-        terms,
-        grand_total,
-        status,
-        contacts!invoices_contact_id_fkey(company, vatType),
-        sales_orders!invoices_order_id_fkey(order_no, grand_total)
-      `)
-      .eq('is_deleted', false)
-      .gte('sales_date', filters.dateFrom)
-      .lte('sales_date', filters.dateTo);
+    const data = await requestApi(`${API_BASE_URL}/sales-reports?${query.toString()}`);
 
-    if (filters.customerId !== 'all') {
-      invoiceQuery = invoiceQuery.eq('contact_id', filters.customerId);
-    }
+    const transactions: SalesReportTransaction[] = (Array.isArray(data?.transactions) ? data.transactions : []).map((tx: any) => ({
+      id: String(tx?.id || ''),
+      date: String(tx?.date || ''),
+      customer: String(tx?.customer || 'Unknown'),
+      customerId: String(tx?.customer_id || ''),
+      terms: String(tx?.terms || ''),
+      refNo: String(tx?.ref_no || ''),
+      soNo: String(tx?.so_no || ''),
+      soAmount: toNumber(tx?.so_amount),
+      drAmount: toNumber(tx?.dr_amount),
+      invoiceAmount: toNumber(tx?.invoice_amount),
+      salesperson: String(tx?.salesperson || 'Unassigned'),
+      category: String(tx?.category || 'Uncategorized'),
+      vatType: tx?.vat_type === 'exclusive' || tx?.vat_type === 'inclusive' ? tx.vat_type : null,
+      type: tx?.type === 'dr' ? 'dr' : 'invoice',
+    }));
 
-    const { data: invoices, error: invoiceError } = await invoiceQuery;
-
-    if (invoiceError) {
-      console.error('Error fetching invoices:', invoiceError);
-    }
-
-    // Use raw query approach for new tables not yet in types
-    const drQueryBase = `
-      id,
-      dr_no,
-      order_id,
-      contact_id,
-      sales_date,
-      sales_person,
-      terms,
-      grand_total,
-      status,
-      contacts(company, vatType),
-      sales_orders(order_no, grand_total)
-    `;
-
-    let drData: any[] = [];
-    try {
-      const { data, error } = await (supabase as any)
-        .from('delivery_receipts')
-        .select(drQueryBase)
-        .eq('is_deleted', false)
-        .gte('sales_date', filters.dateFrom)
-        .lte('sales_date', filters.dateTo)
-        .then((res: any) => {
-          if (filters.customerId !== 'all') {
-            return (supabase as any)
-              .from('delivery_receipts')
-              .select(drQueryBase)
-              .eq('is_deleted', false)
-              .gte('sales_date', filters.dateFrom)
-              .lte('sales_date', filters.dateTo)
-              .eq('contact_id', filters.customerId);
-          }
-          return res;
-        });
-      
-      if (!error) {
-        drData = data || [];
-      }
-    } catch (e) {
-      // Table might not exist yet, continue with empty array
-      console.log('Delivery receipts table not available:', e);
-    }
-
-    // Fetch delivery receipts separately to handle new table
-    let deliveryReceipts: any[] = [];
-    try {
-      let query = (supabase as any)
-        .from('delivery_receipts')
-        .select(drQueryBase)
-        .eq('is_deleted', false)
-        .gte('sales_date', filters.dateFrom)
-        .lte('sales_date', filters.dateTo);
-
-      if (filters.customerId !== 'all') {
-        query = query.eq('contact_id', filters.customerId);
-      }
-
-      const { data, error } = await query;
-      if (!error && data) {
-        deliveryReceipts = data;
-      }
-    } catch (e) {
-      console.log('Delivery receipts query failed:', e);
-    }
-
-    const allInvoiceIds = (invoices || []).map((inv: any) => inv.id);
-    const allDrIds = deliveryReceipts.map((dr: any) => dr.id);
-
-    let invoiceItemIds: string[] = [];
-    let drItemIds: string[] = [];
-
-    if (allInvoiceIds.length > 0) {
-      const { data: invoiceItems } = await supabase
-        .from('invoice_items')
-        .select('invoice_id, item_id')
-        .in('invoice_id', allInvoiceIds);
-
-      invoiceItemIds = (invoiceItems || [])
-        .map((item: any) => item.item_id)
-        .filter(Boolean);
-    }
-
-    if (allDrIds.length > 0) {
-      try {
-        const { data: drItems } = await (supabase as any)
-          .from('delivery_receipt_items')
-          .select('dr_id, item_id')
-          .in('dr_id', allDrIds);
-
-        drItemIds = (drItems || [])
-          .map((item: any) => item.item_id)
-          .filter(Boolean);
-      } catch (e) {
-        console.log('DR items query failed:', e);
-      }
-    }
-
-    const allItemIds = [...new Set([...invoiceItemIds, ...drItemIds])];
-    const categoryMap = await getCategoryFromItems(allItemIds);
-
-    const getPrimaryCategory = (itemIds: string[]): string => {
-      for (const id of itemIds) {
-        if (categoryMap[id]) {
-          return categoryMap[id];
-        }
-      }
-      return 'Uncategorized';
+    const summary: SalesReportSummary = {
+      categoryTotals: mapCategoryTotals(data?.summary?.categoryTotals),
+      salespersonTotals: mapSalespersonTotals(data?.summary?.salespersonTotals),
+      grandTotal: mapGrandTotal(data?.summary?.grandTotal),
     };
-
-    for (const invoice of invoices || []) {
-      const inv = invoice as any;
-      const contact = inv.contacts;
-      const salesOrder = inv.sales_orders;
-      const vatType = contact?.vatType?.toLowerCase() || null;
-
-      const invoiceAmount = applyTaxMultiplier(inv.grand_total || 0, vatType);
-      const soAmount = salesOrder?.grand_total
-        ? applyTaxMultiplier(salesOrder.grand_total, vatType)
-        : 0;
-
-      const relevantItemIds = invoiceItemIds.filter((id) =>
-        allInvoiceIds.includes(inv.id)
-      );
-      const category = getPrimaryCategory(relevantItemIds);
-
-      transactions.push({
-        id: inv.id,
-        date: inv.sales_date,
-        customer: contact?.company || 'Unknown',
-        customerId: inv.contact_id,
-        terms: inv.terms || '',
-        refNo: inv.invoice_no,
-        soNo: salesOrder?.order_no || '',
-        soAmount,
-        drAmount: 0,
-        invoiceAmount,
-        salesperson: inv.sales_person || 'Unknown',
-        category,
-        vatType,
-        type: 'invoice',
-      });
-    }
-
-    for (const dr of deliveryReceipts) {
-      const drRecord = dr as any;
-      const contact = drRecord.contacts;
-      const salesOrder = drRecord.sales_orders;
-      const vatType = contact?.vatType?.toLowerCase() || null;
-
-      const drAmount = applyTaxMultiplier(drRecord.grand_total || 0, vatType);
-      const soAmount = salesOrder?.grand_total
-        ? applyTaxMultiplier(salesOrder.grand_total, vatType)
-        : 0;
-
-      const relevantItemIds = drItemIds.filter((id) =>
-        allDrIds.includes(drRecord.id)
-      );
-      const category = getPrimaryCategory(relevantItemIds);
-
-      transactions.push({
-        id: drRecord.id,
-        date: drRecord.sales_date,
-        customer: contact?.company || 'Unknown',
-        customerId: drRecord.contact_id,
-        terms: drRecord.terms || '',
-        refNo: drRecord.dr_no,
-        soNo: salesOrder?.order_no || '',
-        soAmount,
-        drAmount,
-        invoiceAmount: 0,
-        salesperson: drRecord.sales_person || 'Unknown',
-        category,
-        vatType,
-        type: 'dr',
-      });
-    }
-
-    transactions.sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-    );
-
-    const summary = calculateSummary(transactions);
 
     return { transactions, summary };
   } catch (err) {
@@ -300,145 +150,33 @@ export const getSalesReportData = async (
   }
 };
 
-const calculateSummary = (
-  transactions: SalesReportTransaction[]
-): SalesReportSummary => {
-  const categoryMap = new Map<string, CategoryTotal>();
-  const salespersonMap = new Map<string, Map<string, CategoryTotal>>();
-
-  let grandSoAmount = 0;
-  let grandDrAmount = 0;
-  let grandInvoiceAmount = 0;
-
-  for (const tx of transactions) {
-    grandSoAmount += tx.soAmount;
-    grandDrAmount += tx.drAmount;
-    grandInvoiceAmount += tx.invoiceAmount;
-
-    const existing = categoryMap.get(tx.category) || {
-      category: tx.category,
-      soAmount: 0,
-      drAmount: 0,
-      invoiceAmount: 0,
-    };
-    existing.soAmount += tx.soAmount;
-    existing.drAmount += tx.drAmount;
-    existing.invoiceAmount += tx.invoiceAmount;
-    categoryMap.set(tx.category, existing);
-
-    if (!salespersonMap.has(tx.salesperson)) {
-      salespersonMap.set(tx.salesperson, new Map<string, CategoryTotal>());
-    }
-    const spCategoryMap = salespersonMap.get(tx.salesperson)!;
-    const spExisting = spCategoryMap.get(tx.category) || {
-      category: tx.category,
-      soAmount: 0,
-      drAmount: 0,
-      invoiceAmount: 0,
-    };
-    spExisting.soAmount += tx.soAmount;
-    spExisting.drAmount += tx.drAmount;
-    spExisting.invoiceAmount += tx.invoiceAmount;
-    spCategoryMap.set(tx.category, spExisting);
-  }
-
-  const categoryTotals: CategoryTotal[] = Array.from(categoryMap.values());
-
-  const salespersonTotals: SalespersonTotal[] = [];
-  salespersonMap.forEach((catMap, salesperson) => {
-    const categories = Array.from(catMap.values());
-    const total = categories.reduce(
-      (sum, c) => sum + c.soAmount + c.drAmount + c.invoiceAmount,
-      0
-    );
-    salespersonTotals.push({ salesperson, categories, total });
-  });
-
-  salespersonTotals.sort((a, b) => b.total - a.total);
-
-  const grandTotal: GrandTotal = {
-    soAmount: grandSoAmount,
-    drAmount: grandDrAmount,
-    invoiceAmount: grandInvoiceAmount,
-    total: grandSoAmount + grandDrAmount + grandInvoiceAmount,
-  };
-
-  return { categoryTotals, salespersonTotals, grandTotal };
-};
-
 export const getTransactionDetails = async (
   transactionId: string,
   type: 'invoice' | 'dr'
 ): Promise<any[]> => {
   try {
-    if (type === 'invoice') {
-      const { data, error } = await supabase
-        .from('invoice_items')
-        .select(`
-          id,
-          qty,
-          part_no,
-          item_code,
-          description,
-          unit_price,
-          amount,
-          products!invoice_items_item_id_fkey(brand, category)
-        `)
-        .eq('invoice_id', transactionId);
+    const query = new URLSearchParams({
+      main_id: String(getMainId()),
+      type,
+    });
 
-      if (error) {
-        console.error('Error fetching invoice items:', error);
-        return [];
-      }
+    const data = await requestApi(
+      `${API_BASE_URL}/sales-reports/transactions/${encodeURIComponent(transactionId)}/items?${query.toString()}`
+    );
 
-      return (data || []).map((item: any) => ({
-        id: item.id,
-        qty: item.qty,
-        partNo: item.part_no,
-        itemCode: item.item_code,
-        description: item.description,
-        unitPrice: item.unit_price,
-        amount: item.amount,
-        brand: item.products?.brand || '',
-        category: item.products?.category || 'Uncategorized',
-      }));
-    } else {
-      try {
-        const { data, error } = await (supabase as any)
-          .from('delivery_receipt_items')
-          .select(`
-            id,
-            qty,
-            part_no,
-            item_code,
-            description,
-            unit_price,
-            amount,
-            products(brand, category)
-          `)
-          .eq('dr_id', transactionId);
+    const items = Array.isArray(data?.items) ? data.items : [];
 
-        if (error) {
-          console.error('Error fetching DR items:', error);
-          return [];
-        }
-
-        return (data || []).map((item: any) => ({
-          id: item.id,
-          qty: item.qty,
-          partNo: item.part_no,
-          itemCode: item.item_code,
-          description: item.description,
-          unitPrice: item.unit_price,
-          amount: item.amount,
-          brand: item.products?.brand || '',
-          category: item.products?.category || 'Uncategorized',
-        }));
-      } catch (e) {
-        console.error('Error fetching DR items:', e);
-        return [];
-      }
-    }
+    return items.map((item: any) => ({
+      id: String(item?.id || ''),
+      qty: toNumber(item?.qty),
+      partNo: String(item?.part_no || ''),
+      itemCode: String(item?.item_code || ''),
+      description: String(item?.description || ''),
+      unitPrice: toNumber(item?.unit_price),
+      amount: toNumber(item?.amount),
+      brand: String(item?.brand || ''),
+      category: String(item?.category || 'Uncategorized'),
+    }));
   } catch (err) {
     console.error('Error in getTransactionDetails:', err);
     return [];
