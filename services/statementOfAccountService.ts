@@ -1,6 +1,6 @@
 import { getLocalAuthSession } from './localAuthService';
 
-const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || 'http://127.0.0.1:8081/api/v1';
+const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
 
 export type SoaDateType = 'all' | 'today' | 'week' | 'month' | 'year' | 'custom';

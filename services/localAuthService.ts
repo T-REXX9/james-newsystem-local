@@ -1,7 +1,7 @@
 import { UserProfile } from '../types';
 import { DEFAULT_STAFF_ACCESS_RIGHTS } from '../constants';
 
-const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || 'http://127.0.0.1:8081/api/v1';
+const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const AUTH_STORAGE_KEY = 'local_api_auth_session';
 const AUTH_CHANGED_EVENT = 'local-auth-changed';
 

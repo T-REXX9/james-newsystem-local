@@ -95,7 +95,7 @@ const productSanitizationConfig: SanitizationConfig<Omit<Product, 'id'>> = {
   price_vip2: { type: 'number', placeholder: 0 },
 };
 
-const LOCAL_API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || 'http://127.0.0.1:8081/api/v1';
+const LOCAL_API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const LOCAL_API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
 
 const toNumber = (value: unknown): number => {
