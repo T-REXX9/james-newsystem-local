@@ -22,7 +22,7 @@ const DailyCallMonitoringMiniSidebar: React.FC<DailyCallMonitoringMiniSidebarPro
   onChangeView,
 }) => {
   return (
-    <aside className="w-full rounded-xl border border-slate-200 bg-white p-2 shadow-sm dark:border-slate-700 dark:bg-slate-900 lg:w-52 lg:p-3">
+    <aside className="w-full rounded-xl border border-slate-200 bg-white p-2 shadow-sm dark:border-slate-700 dark:bg-slate-900 lg:sticky lg:top-4 lg:self-start lg:w-52 lg:p-3">
       <div className="flex gap-2 overflow-x-auto lg:flex-col">
         {navItems.map((item) => {
           const Icon = item.icon;
