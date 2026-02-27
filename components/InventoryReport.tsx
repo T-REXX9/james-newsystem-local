@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   fetchInventoryReport,
-  fetchCategories,
-  fetchPartNumbers,
-  fetchItemCodes,
+  fetchInventoryReportOptions,
   WAREHOUSES,
   InventoryReportRow,
   InventoryReportFilters,
+  WarehouseOption,
 } from '../services/inventoryReportService';
 import {
   Package,
@@ -30,11 +29,14 @@ const InventoryReport: React.FC = () => {
   const [categories, setCategories] = useState<string[]>([]);
   const [partNumbers, setPartNumbers] = useState<{ id: string; partNo: string }[]>([]);
   const [itemCodes, setItemCodes] = useState<{ id: string; itemCode: string }[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseOption[]>(WAREHOUSES);
 
   const [filters, setFilters] = useState<InventoryReportFilters>({
     category: '',
     partNumber: '',
     itemCode: '',
+    dateFrom: '',
+    dateTo: '',
     stockStatus: 'all',
     reportType: 'inventory',
   });
@@ -48,14 +50,13 @@ const InventoryReport: React.FC = () => {
     const loadInitialData = async () => {
       setIsInitializing(true);
       try {
-        const [cats, parts, codes] = await Promise.all([
-          fetchCategories(),
-          fetchPartNumbers(),
-          fetchItemCodes(),
-        ]);
-        setCategories(cats);
-        setPartNumbers(parts);
-        setItemCodes(codes);
+        const options = await fetchInventoryReportOptions();
+        setCategories(options.categories);
+        setPartNumbers(options.partNumbers);
+        setItemCodes(options.itemCodes);
+        if (options.warehouses.length > 0) {
+          setWarehouses(options.warehouses);
+        }
       } finally {
         setIsInitializing(false);
       }
@@ -67,7 +68,10 @@ const InventoryReport: React.FC = () => {
     setIsLoading(true);
     try {
       const data = await fetchInventoryReport(filters);
-      setReportData(data);
+      setReportData(data.rows);
+      if (data.warehouses.length > 0) {
+        setWarehouses(data.warehouses);
+      }
       setGeneratedAt(new Date());
     } finally {
       setIsLoading(false);
@@ -79,6 +83,8 @@ const InventoryReport: React.FC = () => {
       category: '',
       partNumber: '',
       itemCode: '',
+      dateFrom: '',
+      dateTo: '',
       stockStatus: 'all',
       reportType: 'inventory',
     });
@@ -93,7 +99,7 @@ const InventoryReport: React.FC = () => {
   const handleExportExcel = () => {
     if (reportData.length === 0) return;
 
-    const headers = ['Part No', 'Item Code', 'Description', 'Category', ...WAREHOUSES.map((wh) => wh.name), 'Total Stock'];
+    const headers = ['Part No', 'Item Code', 'Description', 'Category', ...warehouses.map((wh) => wh.name), 'Total Stock'];
     
     const escapeCSV = (value: string | number) => {
       const str = String(value);
@@ -111,7 +117,7 @@ const InventoryReport: React.FC = () => {
           row.itemCode,
           row.description,
           row.category,
-          ...WAREHOUSES.map((wh) => row.warehouseStock[wh.id] || 0),
+          ...warehouses.map((wh) => row.warehouseStock[wh.name] || row.warehouseStock[wh.id] || 0),
           row.totalStock,
         ];
         return values.map(escapeCSV).join(',');
@@ -150,7 +156,7 @@ const InventoryReport: React.FC = () => {
     const withoutStock = reportData.filter((r) => r.totalStock === 0).length;
     const totalQuantity = reportData.reduce((sum, r) => sum + r.totalStock, 0);
     return { totalItems, withStock, withoutStock, totalQuantity };
-  }, [reportData]);
+  }, [reportData, warehouses]);
 
   if (isInitializing) {
     return (
@@ -198,7 +204,7 @@ const InventoryReport: React.FC = () => {
           <h2 className="font-semibold text-slate-700 dark:text-slate-200">Filter Options</h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">
               Category
@@ -309,6 +315,30 @@ const InventoryReport: React.FC = () => {
               <option value="without_stock">Without Stock</option>
             </select>
           </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">
+              Date From
+            </label>
+            <input
+              type="date"
+              value={filters.dateFrom || ''}
+              onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">
+              Date To
+            </label>
+            <input
+              type="date"
+              value={filters.dateTo || ''}
+              onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none"
+            />
+          </div>
         </div>
 
         <div className="flex items-center gap-4 mb-4">
@@ -398,6 +428,12 @@ const InventoryReport: React.FC = () => {
               <span className="font-semibold">Stock Status:</span>{' '}
               {filters.stockStatus === 'all' ? 'All' : filters.stockStatus === 'with_stock' ? 'With Stock' : 'Without Stock'}
             </div>
+            <div>
+              <span className="font-semibold">Date From:</span> {filters.dateFrom || 'All'}
+            </div>
+            <div>
+              <span className="font-semibold">Date To:</span> {filters.dateTo || 'All'}
+            </div>
           </div>
         </div>
       )}
@@ -436,7 +472,7 @@ const InventoryReport: React.FC = () => {
                   <th className="p-3 print:p-1">Item Code</th>
                   <th className="p-3 print:p-1">Description</th>
                   <th className="p-3 print:p-1">Category</th>
-                  {WAREHOUSES.map((wh) => (
+                  {warehouses.map((wh) => (
                     <th key={wh.id} className="p-3 text-center print:p-1">
                       {wh.name}
                     </th>
@@ -466,8 +502,8 @@ const InventoryReport: React.FC = () => {
                         {row.category || '—'}
                       </span>
                     </td>
-                    {WAREHOUSES.map((wh) => {
-                      const qty = row.warehouseStock[wh.id] || 0;
+                    {warehouses.map((wh) => {
+                      const qty = row.warehouseStock[wh.name] || row.warehouseStock[wh.id] || 0;
                       return (
                         <td
                           key={wh.id}
@@ -496,8 +532,11 @@ const InventoryReport: React.FC = () => {
                   <td colSpan={4} className="p-3 text-slate-700 dark:text-slate-300 print:p-1 print:text-black">
                     Total ({reportData.length} items)
                   </td>
-                  {WAREHOUSES.map((wh) => {
-                    const whTotal = reportData.reduce((sum, row) => sum + (row.warehouseStock[wh.id] || 0), 0);
+                  {warehouses.map((wh) => {
+                    const whTotal = reportData.reduce(
+                      (sum, row) => sum + (row.warehouseStock[wh.name] || row.warehouseStock[wh.id] || 0),
+                      0
+                    );
                     return (
                       <td key={wh.id} className="p-3 text-center font-mono print:p-1 print:text-black">
                         {whTotal.toLocaleString()}

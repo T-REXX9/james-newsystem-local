@@ -51,6 +51,7 @@ import CustomerLedgerView from './components/CustomerLedgerView';
 import AdjustmentEntryView from './components/AdjustmentEntryView';
 import CollectionSummaryView from './components/CollectionSummaryView';
 import StatementOfAccountView from './components/StatementOfAccountView';
+import FreightChargesDebitView from './components/FreightChargesDebitView';
 
 // Maintenance Modules
 import Suppliers from './components/Maintenance/Product/Suppliers';
@@ -548,7 +549,11 @@ const App: React.FC = () => {
         );
       }
       case 'accounting-transactions-freight-charges-debit':
-        return renderComingSoon('Freight Charges (Debit)');
+        return (
+          <div className="h-full overflow-y-auto">
+            <FreightChargesDebitView />
+          </div>
+        );
       case 'accounting-transactions-sales-return-credit':
         return renderComingSoon('Sales Return (Credit)');
       case 'accounting-transactions-adjustment-entry':

@@ -542,7 +542,12 @@ const ReorderReport: React.FC = () => {
                     {row.po_refno ? (
                       <button
                         className="text-blue-600 hover:underline"
-                        onClick={() => navigateToModule('purchaseorder', { poId: row.po_refno, poRefNo: row.po_no })}
+                        onClick={() =>
+                          navigateToModule('warehouse-purchasing-purchase-order', {
+                            poId: row.po_refno,
+                            poRefNo: row.po_no,
+                          })
+                        }
                       >
                         {row.po_no || row.po_refno}
                       </button>
@@ -554,7 +559,12 @@ const ReorderReport: React.FC = () => {
                     {row.rr_refno ? (
                       <button
                         className="text-blue-600 hover:underline"
-                        onClick={() => navigateToModule('receivingstock', { rrId: row.rr_refno, rrRefNo: row.rr_no })}
+                        onClick={() =>
+                          navigateToModule('warehouse-purchasing-receiving-stock', {
+                            rrId: row.rr_refno,
+                            rrRefNo: row.rr_no,
+                          })
+                        }
                       >
                         {row.rr_no || row.rr_refno}
                       </button>

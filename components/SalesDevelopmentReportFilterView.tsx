@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, FileText, Printer, TrendingDown, Package, Users } from 'lucide-react';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
-import { getSalesDevelopmentReportData, getSalesDevelopmentDemandSummary } from '../services/salesInquiryService';
+import {
+  getSalesDevelopmentDemandSummaryLocal,
+  getSalesDevelopmentReportDataLocal,
+} from '../services/salesDevelopmentReportLocalApiService';
 import InquiryDetailsModal from './InquiryDetailsModal';
 import DemandSummaryModal from './DemandSummaryModal';
 
@@ -32,8 +35,8 @@ const SalesDevelopmentReportDataView: React.FC<SalesDevelopmentReportDataViewPro
     setIsLoading(true);
     try {
       const [inquiryData, summaryData] = await Promise.all([
-        getSalesDevelopmentReportData(dateFrom, dateTo, reportCategory),
-        getSalesDevelopmentDemandSummary(dateFrom, dateTo, reportCategory),
+        getSalesDevelopmentReportDataLocal(dateFrom, dateTo, reportCategory),
+        getSalesDevelopmentDemandSummaryLocal(dateFrom, dateTo, reportCategory),
       ]);
       setInquiries(inquiryData);
       setDemandSummary(summaryData);
