@@ -52,6 +52,10 @@ import AdjustmentEntryView from './components/AdjustmentEntryView';
 import CollectionSummaryView from './components/CollectionSummaryView';
 import StatementOfAccountView from './components/StatementOfAccountView';
 import FreightChargesDebitView from './components/FreightChargesDebitView';
+import SalesReturnReport from './components/SalesReturnReport';
+import SalesReturnPage from './components/SalesReturnPage';
+import PurchaseHistoryReportView from './components/PurchaseHistoryReportView';
+import InactiveActiveCustomersReport from './components/InactiveActiveCustomersReport';
 
 // Maintenance Modules
 import Suppliers from './components/Maintenance/Product/Suppliers';
@@ -528,15 +532,31 @@ const App: React.FC = () => {
       case 'accounting-reports-collection-report':
         return renderComingSoon('Collection Report');
       case 'accounting-reports-sales-return-report':
-        return renderComingSoon('Sales Return Report');
+        return (
+          <div className="h-full overflow-y-auto">
+            <SalesReturnReport />
+          </div>
+        );
       case 'accounting-reports-freight-charges-report':
-        return renderComingSoon('Freight Charges Report');
+        return (
+          <div className="h-full overflow-y-auto">
+            <FreightChargesDebitView />
+          </div>
+        );
       case 'accounting-reports-accounts-receivable-report':
         return renderComingSoon('Accounts Receivable Report');
       case 'accounting-reports-purchase-history':
-        return renderComingSoon('Purchase History');
+        return (
+          <div className="h-full overflow-y-auto">
+            <PurchaseHistoryReportView />
+          </div>
+        );
       case 'accounting-reports-inactive-active-customers':
-        return renderComingSoon('Inactive/Active Customers');
+        return (
+          <div className="h-full overflow-y-auto">
+            <InactiveActiveCustomersReport />
+          </div>
+        );
       case 'accounting-reports-old-new-customers':
         return renderComingSoon('Old/New Customers');
 
@@ -555,7 +575,11 @@ const App: React.FC = () => {
           </div>
         );
       case 'accounting-transactions-sales-return-credit':
-        return renderComingSoon('Sales Return (Credit)');
+        return (
+          <div className="h-full overflow-y-auto">
+            <SalesReturnPage />
+          </div>
+        );
       case 'accounting-transactions-adjustment-entry':
         return (
           <div className="h-full overflow-y-auto">
