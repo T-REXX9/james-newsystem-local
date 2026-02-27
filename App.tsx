@@ -344,7 +344,14 @@ const App: React.FC = () => {
           </div>
         );
       case 'warehouse-purchasing-purchase-request':
-        return <PurchaseRequestModule />;
+        return (
+          <PurchaseRequestModule
+            initialPRId={
+              moduleContext['warehouse-purchasing-purchase-request']?.prId ||
+              moduleContext.purchaserequest?.prId
+            }
+          />
+        );
       case 'warehouse-purchasing-purchase-order':
         return (
           <div className="h-full overflow-y-auto">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { purchaseRequestService } from '../../services/purchaseRequestService';
 import { PurchaseRequestWithItems, CreatePRPayload, Product, Contact, PRStatus } from '../../purchaseRequest.types';
 
@@ -8,7 +8,11 @@ import PurchaseRequestDetail from './PurchaseRequestView'; // Filename is Purcha
 import PurchaseRequestPrint from './PurchaseRequestPrint';
 import { Filter } from 'lucide-react';
 
-const PurchaseRequestModule: React.FC = () => {
+interface PurchaseRequestModuleProps {
+    initialPRId?: string;
+}
+
+const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPRId }) => {
     // Mode State
     const [viewMode, setViewMode] = useState<'list' | 'create' | 'detail' | 'print'>('list');
 
@@ -25,6 +29,7 @@ const PurchaseRequestModule: React.FC = () => {
     // Filter State
     const [filterStatus, setFilterStatus] = useState<string>('');
     const [searchTerm, setSearchTerm] = useState('');
+    const consumedDeepLinkRef = useRef('');
 
     // Initial Data Fetch
     useEffect(() => {
@@ -48,6 +53,20 @@ const PurchaseRequestModule: React.FC = () => {
     useEffect(() => {
         fetchRequests();
     }, [filterStatus]);
+
+    useEffect(() => {
+        const target = String(initialPRId || '').trim();
+        if (!target || loading) return;
+        if (consumedDeepLinkRef.current === target) return;
+
+        const match = requests.find((pr) => String(pr.id) === target || String(pr.pr_number) === target);
+        if (!match) return;
+
+        consumedDeepLinkRef.current = target;
+        handleSelectRequest(match).catch((err) => {
+            console.error('Failed to open purchase request from deep link', err);
+        });
+    }, [initialPRId, requests, loading]);
 
     const fetchMetadata = async () => {
         try {

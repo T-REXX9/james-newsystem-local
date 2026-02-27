@@ -1,9 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ChevronLeft, ChevronRight, Loader2, RefreshCw, Search, Sheet, Users } from 'lucide-react';
+import { AlertTriangle, Loader2, RefreshCw, Search, Sheet, Users } from 'lucide-react';
 import { useDebounce } from '../hooks/useDebounce';
 import {
   fetchCustomersForDailyCall,
-  getWeeklyRangeBuckets,
   subscribeToDailyCallMonitoringUpdates,
 } from '../services/dailyCallMonitoringService';
 import { DailyCallCustomerFilterStatus, DailyCallCustomerRow, UserProfile } from '../types';
@@ -21,9 +20,8 @@ const statusFilters: Array<{ id: DailyCallCustomerFilterStatus; label: string }>
   { id: 'prospective', label: 'Prospective+' },
 ];
 
-const rowHeightPx = 52;
+const rowHeightPx = 42;
 const viewportHeightPx = 530;
-const dayColumnPageSize = 10;
 
 const toCurrency = (value: number) =>
   new Intl.NumberFormat('en-PH', {
@@ -32,10 +30,26 @@ const toCurrency = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value || 0);
 
-const getMonthDays = () => {
-  const now = new Date();
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  return Array.from({ length: daysInMonth }, (_, index) => index + 1);
+const toShortK = (value: number) => `${Math.round((value || 0) / 1000)}k`;
+
+const resolveDealerPriceTier = (row: DailyCallCustomerRow) => {
+  const raw = String(row.dealerPriceGroup || '').trim().toLowerCase();
+  if (raw.includes('gold') || raw === 'vip3') return 'gold';
+  if (raw.includes('silver') || raw === 'vip2') return 'silver';
+  if (raw.includes('regular') || raw === 'vip1') return 'regular';
+  if (row.monthlyOrder >= 30000) return 'gold';
+  if (row.monthlyOrder >= 10000) return 'silver';
+  return 'regular';
+};
+
+const vipTargetLabel = (monthlySales: number) => {
+  if (monthlySales >= 30000) {
+    return 'gold';
+  }
+  if (monthlySales >= 10000) {
+    return `-${toShortK(30000 - monthlySales)}/gold`;
+  }
+  return `-${toShortK(10000 - monthlySales)}/silver`;
 };
 
 const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ currentUser }) => {
@@ -47,17 +61,8 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
   const [search, setSearch] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
-  const [dayPage, setDayPage] = useState(0);
 
   const debouncedSearch = useDebounce(search, 300);
-  const monthDays = useMemo(() => getMonthDays(), []);
-  const weeklyRangeBuckets = useMemo(() => getWeeklyRangeBuckets(), []);
-
-  const totalDayPages = Math.max(1, Math.ceil(monthDays.length / dayColumnPageSize));
-  const pagedDays = useMemo(() => {
-    const start = dayPage * dayColumnPageSize;
-    return monthDays.slice(start, start + dayColumnPageSize);
-  }, [dayPage, monthDays]);
 
   const loadRows = useCallback(
     async (withLoading = true) => {
@@ -95,10 +100,6 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
   }, [loadRows]);
 
   useEffect(() => {
-    setDayPage(0);
-  }, [statusFilter]);
-
-  useEffect(() => {
     const selectedExists = customers.some((row) => row.id === selectedCustomerId);
     if (!selectedExists) {
       setSelectedCustomerId(null);
@@ -110,16 +111,6 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
     () => customers.find((row) => row.id === selectedCustomerId) || null,
     [customers, selectedCustomerId]
   );
-
-  const getActivityLabel = (row: DailyCallCustomerRow, day: number) => {
-    const entry = row.dailyActivity.find((activity) => {
-      const parsed = new Date(activity.activity_date);
-      return parsed.getDate() === day;
-    });
-
-    if (!entry) return '-';
-    return entry.activity_count > 1 ? `${entry.activity_count}` : entry.activity_type === 'call' ? 'C' : 'T';
-  };
 
   const runRetry = async () => {
     setError(null);
@@ -135,8 +126,6 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
     setIsDetailModalOpen(false);
     setSelectedCustomerId(null);
   }, []);
-
-  const columnCount = 16 + weeklyRangeBuckets.length + pagedDays.length;
 
   if (loading) {
     return (
@@ -223,74 +212,57 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               {customers.length} customer{customers.length > 1 ? 's' : ''}
             </p>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setDayPage((prev) => Math.max(0, prev - 1))}
-                disabled={dayPage === 0}
-                className="rounded-md border border-slate-300 p-1 text-slate-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <span className="text-xs text-slate-500">
-                Days {dayPage * dayColumnPageSize + 1}-{Math.min(monthDays.length, (dayPage + 1) * dayColumnPageSize)}
-              </span>
-              <button
-                type="button"
-                onClick={() => setDayPage((prev) => Math.min(totalDayPages - 1, prev + 1))}
-                disabled={dayPage >= totalDayPages - 1}
-                className="rounded-md border border-slate-300 p-1 text-slate-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
           </div>
 
           <div
-            className="overflow-x-auto overflow-y-hidden [scrollbar-gutter:stable_both-edges]"
+            className="overflow-x-hidden overflow-y-hidden"
             style={{ overscrollBehaviorX: 'contain', overflowAnchor: 'none' }}
           >
             <div
-              className="w-max min-w-full overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]"
+              className="w-full overflow-y-auto overflow-x-hidden"
               style={{ height: `${viewportHeightPx}px`, overscrollBehaviorY: 'contain', overflowAnchor: 'none' }}
             >
-            <table className="min-w-[1600px] table-fixed divide-y divide-slate-200 text-xs dark:divide-slate-700">
+            <table className="w-full table-fixed divide-y divide-slate-200 text-[10px] dark:divide-slate-700">
+              <colgroup>
+                <col style={{ width: '3%' }} />
+                <col style={{ width: '21%' }} />
+                <col style={{ width: '9%' }} />
+                <col style={{ width: '11%' }} />
+                <col style={{ width: '11%' }} />
+                <col style={{ width: '8%' }} />
+                <col style={{ width: '8%' }} />
+                <col style={{ width: '8%' }} />
+                <col style={{ width: '8%' }} />
+                <col style={{ width: '6%' }} />
+                <col style={{ width: '7%' }} />
+              </colgroup>
               <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-900">
                 <tr>
-                  <th className="sticky left-0 z-20 border-r border-slate-200 bg-slate-100 px-3 py-2 text-left font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900">
-                    SHOP NAME
+                  <th className="px-1 py-1.5 text-center font-semibold text-slate-600">
+                    #
                   </th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">SOURCE</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">ASSIGNED TO/DATE</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">CLIENT SINCE</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">CITY</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">CONTACT NUMBER</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">CODE/DATE</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">ISHINOMOTO DEALER SINCE</th>
-                  <th className="px-3 py-2 text-right font-semibold text-slate-600">QUOTA</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">ISHINOMOTO SIGNAGE SINCE</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">MODE OF PAYMENT</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">COURIER</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">STATUS</th>
-                  <th className="px-3 py-2 text-right font-semibold text-slate-600">OUTSTANDING BALANCE</th>
-                  <th className="px-3 py-2 text-right font-semibold text-slate-600">AVERAGE MONTHLY ORDER</th>
-                  <th className="px-3 py-2 text-right font-semibold text-slate-600">MONTHLY ORDER</th>
-                  {weeklyRangeBuckets.map((bucket) => (
-                    <th key={bucket.label} className="px-2 py-2 text-center font-semibold text-slate-600">
-                      {bucket.label}
-                    </th>
-                  ))}
-                  {pagedDays.map((day) => (
-                    <th key={day} className="px-2 py-2 text-center font-semibold text-slate-600">
-                      {day}
-                    </th>
-                  ))}
+                  <th className="sticky left-0 z-20 border-r border-slate-200 bg-slate-100 px-1.5 py-1.5 text-left font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900">
+                    CUSTOMER
+                  </th>
+                  <th className="px-1.5 py-1.5 text-left font-semibold text-slate-600">LOCATION</th>
+                  <th className="px-1.5 py-1.5 text-left font-semibold text-slate-600">ASSIGNED</th>
+                  <th className="px-1.5 py-1.5 text-left font-semibold text-slate-600">DEALER</th>
+                  <th className="px-1.5 py-1.5 text-left font-semibold text-slate-600">STATUS</th>
+                  <th className="px-1.5 py-1.5 text-right font-semibold text-slate-600">AVG</th>
+                  <th className="px-1.5 py-1.5 text-right font-semibold text-slate-600">CURRENT</th>
+                  <th className="px-1.5 py-1.5 text-left font-semibold text-slate-600">VIP</th>
+                  <th className="px-1.5 py-1.5 text-left font-semibold text-slate-600">TERMS</th>
+                  <th className="px-1.5 py-1.5 text-right font-semibold text-slate-600">BAL</th>
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {customers.map((row) => {
+                {customers.map((row, index) => {
                   const isSelected = selectedCustomerId === row.id;
+                  const dealerPriceTier = resolveDealerPriceTier(row);
+                  const location = row.province || row.city || '—';
+                  const statusDate = row.statusDate || row.clientSince || '—';
+                  const terms = row.terms || row.modeOfPayment || '—';
                   return (
                     <tr
                       key={row.id}
@@ -309,41 +281,28 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
                       className={`cursor-pointer ${isSelected ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-white hover:bg-slate-50 dark:bg-slate-900/40 dark:hover:bg-slate-800/50'}`}
                       style={{ height: `${rowHeightPx}px` }}
                     >
-                      <td className="sticky left-0 z-[1] border-r border-slate-100 bg-inherit px-3 py-2 font-semibold text-slate-800 dark:border-slate-700 dark:text-slate-100">
+                      <td className="px-1 py-1.5 text-center text-slate-600">{index + 1}</td>
+                      <td className="sticky left-0 z-[1] border-r border-slate-100 bg-inherit px-1.5 py-1.5 font-semibold text-slate-800 dark:border-slate-700 dark:text-slate-100 truncate" title={row.shopName}>
                         {row.shopName}
                       </td>
-                      <td className="px-3 py-2 text-slate-600">{row.source}</td>
-                      <td className="px-3 py-2 text-slate-600">
-                        <div className="font-medium text-slate-700 dark:text-slate-200">{row.assignedTo}</div>
-                        <div className="text-[11px] text-slate-500">{row.assignedDate || '—'}</div>
+                      <td className="px-1.5 py-1.5 text-slate-600 truncate" title={location}>{location}</td>
+                      <td className="px-1.5 py-1.5 text-slate-600">
+                        <div className="font-medium text-slate-700 dark:text-slate-200 truncate" title={row.assignedTo}>{row.assignedTo}</div>
+                        <div className="text-[9px] text-slate-500 truncate" title={row.assignedDate || '—'}>{row.assignedDate || '—'}</div>
                       </td>
-                      <td className="px-3 py-2 text-slate-600">{row.clientSince}</td>
-                      <td className="px-3 py-2 text-slate-600">{row.city}</td>
-                      <td className="px-3 py-2 text-slate-600">{row.contactNumber}</td>
-                      <td className="px-3 py-2 text-slate-600">{row.codeDate}</td>
-                      <td className="px-3 py-2 text-slate-600">{row.ishinomotoDealerSince}</td>
-                      <td className="px-3 py-2 text-right text-slate-700">{row.quota.toLocaleString()}</td>
-                      <td className="px-3 py-2 text-slate-600">{row.ishinomotoSignageSince}</td>
-                      <td className="px-3 py-2 text-slate-600">{row.modeOfPayment}</td>
-                      <td className="px-3 py-2 text-slate-600">{row.courier}</td>
-                      <td className="px-3 py-2">
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                          {row.status}
-                        </span>
+                      <td className="px-1.5 py-1.5 text-slate-600">
+                        <div className="font-medium text-slate-700 dark:text-slate-200 capitalize truncate">{dealerPriceTier}</div>
+                        <div className="text-[9px] text-slate-500 truncate" title={row.dealerPriceDate || row.ishinomotoDealerSince || '—'}>{row.dealerPriceDate || row.ishinomotoDealerSince || '—'}</div>
                       </td>
-                      <td className="px-3 py-2 text-right text-slate-700">{toCurrency(row.outstandingBalance)}</td>
-                      <td className="px-3 py-2 text-right text-slate-700">{toCurrency(row.averageMonthlyOrder)}</td>
-                      <td className="px-3 py-2 text-right font-semibold text-slate-900 dark:text-white">{toCurrency(row.monthlyOrder)}</td>
-                      {weeklyRangeBuckets.map((bucket, index) => (
-                        <td key={`${row.id}-${bucket.label}`} className="px-2 py-2 text-center text-[11px] font-semibold text-slate-600">
-                          {(row.weeklyRangeTotals[index] ?? 0).toLocaleString()}
-                        </td>
-                      ))}
-                      {pagedDays.map((day) => (
-                        <td key={`${row.id}-${day}`} className="px-2 py-2 text-center text-[11px] font-semibold text-slate-600">
-                          {getActivityLabel(row, day)}
-                        </td>
-                      ))}
+                      <td className="px-1.5 py-1.5 text-slate-600">
+                        <div className="font-medium text-slate-700 dark:text-slate-200 capitalize truncate">{row.status}</div>
+                        <div className="text-[9px] text-slate-500 truncate" title={statusDate}>{statusDate}</div>
+                      </td>
+                      <td className="px-1.5 py-1.5 text-right text-slate-700 truncate" title={toCurrency(row.averageMonthlyOrder)}>{toCurrency(row.averageMonthlyOrder)}</td>
+                      <td className="px-1.5 py-1.5 text-right font-semibold text-slate-900 dark:text-white truncate" title={toCurrency(row.monthlyOrder)}>{toCurrency(row.monthlyOrder)}</td>
+                      <td className="px-1.5 py-1.5 text-slate-700 font-semibold lowercase truncate" title={vipTargetLabel(row.monthlyOrder)}>{vipTargetLabel(row.monthlyOrder)}</td>
+                      <td className="px-1.5 py-1.5 text-slate-600 truncate" title={terms}>{terms}</td>
+                      <td className="px-1.5 py-1.5 text-right text-slate-700 truncate" title={toCurrency(row.outstandingBalance)}>{toCurrency(row.outstandingBalance)}</td>
                     </tr>
                   );
                 })}
