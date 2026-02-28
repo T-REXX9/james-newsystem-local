@@ -11,6 +11,15 @@ import { parseSupabaseError } from '../utils/errorHandler';
 import { ENTITY_TYPES, logCreate, logDelete, logUpdate } from './activityLogService';
 import { getLocalAuthSession } from './localAuthService';
 
+const isThreePartJwt = (token: string): boolean => token.split('.').length === 3;
+
+// In local API auth mode, tokens are not Supabase JWTs. Avoid Supabase-only reads to prevent noisy 401 errors.
+const shouldBypassSupabaseAuthReads = (): boolean => {
+  const localSession = getLocalAuthSession();
+  if (!localSession?.token) return false;
+  return !isThreePartJwt(localSession.token);
+};
+
 // Helper to generate restore token and expiry for recycle bin items
 const generateRecycleBinMeta = () => ({
   restore_token: crypto.randomUUID(),
@@ -187,6 +196,7 @@ export interface FetchProductsPageResult {
 // The Mock DB handles the seeding from constants, so we trust it returns data.
 
 export const fetchContacts = async (): Promise<Contact[]> => {
+  if (shouldBypassSupabaseAuthReads()) return [];
   try {
     const { data, error } = await supabase
       .from('contacts')
@@ -1273,6 +1283,7 @@ export const restoreTask = async (id: string): Promise<void> => {
 // --- TEAM MESSAGES SERVICE ---
 
 export const fetchTeamMessages = async (): Promise<TeamMessage[]> => {
+  if (shouldBypassSupabaseAuthReads()) return [];
   try {
     const { data, error } = await (supabase
       .from('team_messages') as any)
@@ -1400,6 +1411,7 @@ export const restoreTeamMessage = async (id: string): Promise<void> => {
 // --- CALL MONITORING SERVICE ---
 
 export const fetchCallLogs = async (): Promise<CallLogEntry[]> => {
+  if (shouldBypassSupabaseAuthReads()) return [];
   try {
     const { data, error } = await supabase.from('call_logs').select('*').order('occurred_at', { ascending: false });
     if (error) throw error;
@@ -1411,6 +1423,7 @@ export const fetchCallLogs = async (): Promise<CallLogEntry[]> => {
 };
 
 export const fetchInquiries = async (): Promise<Inquiry[]> => {
+  if (shouldBypassSupabaseAuthReads()) return [];
   try {
     const { data, error } = await supabase.from('inquiries').select('*').order('occurred_at', { ascending: false });
     if (error) throw error;
@@ -1422,6 +1435,7 @@ export const fetchInquiries = async (): Promise<Inquiry[]> => {
 };
 
 export const fetchPurchases = async (): Promise<Purchase[]> => {
+  if (shouldBypassSupabaseAuthReads()) return [];
   try {
     const { data, error } = await supabase.from('purchases').select('*').order('purchased_at', { ascending: false });
     if (error) throw error;
@@ -1443,6 +1457,9 @@ export const createInquiry = async (payload: Omit<Inquiry, 'id'>): Promise<void>
 };
 
 export const subscribeToCallMonitoringUpdates = (onChange: () => void) => {
+  if (shouldBypassSupabaseAuthReads()) {
+    return () => {};
+  }
   const channel = supabase.channel('call-monitoring-realtime');
   const tables = ['call_logs', 'inquiries', 'purchases', 'contacts'];
   tables.forEach((table) => {

@@ -12,6 +12,7 @@ import { formatDateFull } from '../utils/formatUtils';
 export interface DailyCallFilterParams {
   status?: DailyCallCustomerFilterStatus;
   search?: string;
+  viewerUserId?: string | number;
 }
 
 export interface DailyActivityDateRange {
@@ -292,6 +293,7 @@ export const fetchCustomersForDailyCall = async (
 ): Promise<DailyCallCustomerRow[]> => {
   const statusFilter = filters.status || 'all';
   const search = filters.search || '';
+  const viewerUserId = filters.viewerUserId;
 
   try {
     const params = new URLSearchParams({
@@ -299,6 +301,9 @@ export const fetchCustomersForDailyCall = async (
       status: statusFilter,
       search,
     });
+    if (viewerUserId !== undefined && viewerUserId !== null && String(viewerUserId).trim() !== '') {
+      params.set('viewer_user_id', String(viewerUserId));
+    }
     const response = await fetch(`${API_BASE_URL}/daily-call-monitoring/excel?${params.toString()}`);
     if (!response.ok) throw new Error(`API request failed (${response.status})`);
     const payload = await response.json();

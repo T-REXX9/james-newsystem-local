@@ -47,17 +47,18 @@ import {
 } from './callMetricsUtils';
 import {
   fetchCallLogs,
-  fetchContacts,
   fetchInquiries,
   fetchPurchases,
   fetchTeamMessages,
   subscribeToCallMonitoringUpdates
 } from '../services/supabaseService';
+import { fetchCustomersForDailyCall } from '../services/dailyCallMonitoringService';
 import { supabase } from '../lib/supabaseClient';
 import {
   CallLogEntry,
   Contact,
   CustomerStatus,
+  DealStage,
   Inquiry,
   Purchase,
   TeamMessage,
@@ -132,6 +133,64 @@ const clientsNoPurchaseThisMonth = (contacts: Contact[], purchases: Purchase[]) 
 const calculatePriority = (contact: Contact, daysSinceContact: number, totalSales: number) => {
   return (daysSinceContact * 2) + totalSales / 10000 + (contact.status === CustomerStatus.ACTIVE ? 50 : 0);
 };
+
+const mapApiStatusToCustomerStatus = (status: string): CustomerStatus => {
+  const normalized = (status || '').trim().toLowerCase();
+  if (normalized === 'inactive') return CustomerStatus.INACTIVE;
+  if (normalized === 'prospective') return CustomerStatus.PROSPECTIVE;
+  if (normalized === 'blacklisted') return CustomerStatus.BLACKLISTED;
+  return CustomerStatus.ACTIVE;
+};
+
+const toContactModel = (row: any): Contact => ({
+  id: String(row?.id || ''),
+  company: String(row?.shopName || 'Unnamed Shop'),
+  customerSince: String(row?.clientSince || ''),
+  team: '',
+  salesman: String(row?.assignedTo || 'Unassigned'),
+  referBy: String(row?.source || ''),
+  address: String(row?.courier || ''),
+  province: String(row?.province || ''),
+  city: String(row?.city || ''),
+  area: '',
+  deliveryAddress: String(row?.courier || ''),
+  tin: '',
+  priceGroup: String(row?.dealerPriceGroup || ''),
+  businessLine: '',
+  terms: String(row?.terms || row?.modeOfPayment || ''),
+  transactionType: '',
+  vatType: '',
+  vatPercentage: '',
+  dealershipTerms: String(row?.terms || ''),
+  dealershipSince: String(row?.ishinomotoDealerSince || ''),
+  dealershipQuota: Number(row?.quota || 0),
+  creditLimit: 0,
+  ishinomotoDealerSince: String(row?.ishinomotoDealerSince || ''),
+  ishinomotoSignageSince: String(row?.ishinomotoSignageSince || ''),
+  codeText: String(row?.dealerPriceGroup || ''),
+  codeDate: String(row?.dealerPriceDate || ''),
+  status: mapApiStatusToCustomerStatus(String(row?.status || 'active')),
+  isHidden: false,
+  debtType: Number(row?.outstandingBalance || 0) > 0 ? 'Bad' : 'Good',
+  comment: '',
+  contactPersons: [],
+  name: String(row?.shopName || 'Unnamed Shop'),
+  title: '',
+  email: '',
+  phone: String(row?.contactNumber || ''),
+  mobile: String(row?.contactNumber || ''),
+  avatar: '',
+  dealValue: Number(row?.monthlyOrder || 0),
+  stage: DealStage.NEW,
+  lastContactDate: String(row?.statusDate || ''),
+  interactions: [],
+  comments: [],
+  salesHistory: [],
+  topProducts: [],
+  assignedAgent: String(row?.assignedTo || 'Unassigned'),
+  totalSales: Number(row?.monthlyOrder || 0),
+  balance: Number(row?.outstandingBalance || 0),
+});
 
 type DensityMode = 'comfortable' | 'compact' | 'ultra-compact';
 
@@ -393,18 +452,18 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     if (!agentDataName || !isSalesAgent) return;
     setLoading(true);
     try {
-      const [contactData, callLogData, inquiryData, purchaseData, messageData] = await Promise.all([
-        fetchContacts(),
+      const [customerRows, callLogData, inquiryData, purchaseData, messageData] = await Promise.all([
+        fetchCustomersForDailyCall({ status: 'all', search: '', viewerUserId: currentUser?.id }),
         fetchCallLogs(),
         fetchInquiries(),
         fetchPurchases(),
         fetchTeamMessages()
       ]);
 
-      const assignedContacts = contactData.filter((contact) => contact.salesman === agentDataName);
-      const contactIds = new Set(assignedContacts.map((contact) => contact.id));
+      const teamScopedContacts = customerRows.map(toContactModel);
+      const contactIds = new Set(teamScopedContacts.map((contact) => contact.id));
 
-      setContacts(assignedContacts);
+      setContacts(teamScopedContacts);
       setCallLogs(callLogData.filter((log) => log.agent_name === agentDataName));
       setInquiries(inquiryData.filter((inquiry) => contactIds.has(inquiry.contact_id)));
       setPurchases(purchaseData.filter((purchase) => contactIds.has(purchase.contact_id)));
@@ -417,7 +476,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     } finally {
       setLoading(false);
     }
-  }, [agentDataName, isSalesAgent]);
+  }, [agentDataName, currentUser?.id, isSalesAgent]);
 
   useEffect(() => {
     if (!agentDataName || !isSalesAgent) {
@@ -837,16 +896,23 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   useEffect(() => {
     const wrapper = masterViewportWrapperRef.current;
     if (!wrapper) return;
+
     const updateHeight = () => {
-      if (wrapper.clientHeight > 0) {
-        setMasterViewportHeight(wrapper.clientHeight);
-      }
+      const rect = wrapper.getBoundingClientRect();
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+      const bottomPadding = 16; // keep breathing room above viewport bottom
+      const availableHeight = Math.max(320, Math.floor(viewportHeight - rect.top - bottomPadding));
+      setMasterViewportHeight(availableHeight);
     };
 
     updateHeight();
+    window.addEventListener('resize', updateHeight);
     const observer = new ResizeObserver(updateHeight);
     observer.observe(wrapper);
-    return () => observer.disconnect();
+    return () => {
+      window.removeEventListener('resize', updateHeight);
+      observer.disconnect();
+    };
   }, []);
 
   const selectedTimeline = useMemo(() => {

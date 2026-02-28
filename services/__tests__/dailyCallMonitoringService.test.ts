@@ -21,7 +21,7 @@ describe('dailyCallMonitoringService', () => {
       json: async () => ({ data: mockRows }),
     } as Response);
 
-    const result = await fetchCustomersForDailyCall({ status: 'active', search: 'james' });
+    const result = await fetchCustomersForDailyCall({ status: 'active', search: 'james', viewerUserId: '63' });
 
     expect(result).toEqual(mockRows);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
@@ -30,6 +30,7 @@ describe('dailyCallMonitoringService', () => {
     expect(requestUrl).toContain('main_id=1');
     expect(requestUrl).toContain('status=active');
     expect(requestUrl).toContain('search=james');
+    expect(requestUrl).toContain('viewer_user_id=63');
   });
 
   it('fetchCustomersForDailyCall returns empty list when API fails', async () => {
