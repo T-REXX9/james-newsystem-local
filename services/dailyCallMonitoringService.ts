@@ -8,6 +8,7 @@ import {
   LBCRTORecord,
 } from '../types';
 import { formatDateFull } from '../utils/formatUtils';
+import { getLocalAuthSession } from './localAuthService';
 
 export interface DailyCallFilterParams {
   status?: DailyCallCustomerFilterStatus;
@@ -58,6 +59,15 @@ export interface WeeklyRangeBucket {
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
+
+const resolveMainId = (): number => {
+  const session = getLocalAuthSession();
+  const dynamicMainId = Number(
+    session?.context?.main_userid || session?.context?.user?.main_userid || session?.userProfile?.main_userid || 0
+  );
+  if (Number.isFinite(dynamicMainId) && dynamicMainId > 0) return dynamicMainId;
+  return API_MAIN_ID || 1;
+};
 
 const formatCodeDate = (codeText?: string | null, codeDate?: string | null) => {
   const trimmedText = (codeText || '').trim();
@@ -296,8 +306,9 @@ export const fetchCustomersForDailyCall = async (
   const viewerUserId = filters.viewerUserId;
 
   try {
+    const mainId = resolveMainId();
     const params = new URLSearchParams({
-      main_id: String(API_MAIN_ID),
+      main_id: String(mainId),
       status: statusFilter,
       search,
     });

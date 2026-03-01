@@ -90,6 +90,8 @@ export interface CreateNotificationInput {
 export interface UserProfile {
   id: string;
   email: string;
+  main_id?: number;
+  main_userid?: number;
   full_name?: string;
   avatar_url?: string;
   role?: string;

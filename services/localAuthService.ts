@@ -104,6 +104,8 @@ const mapUserProfile = (context: ApiAuthPayload): UserProfile => {
   return {
     id: String(user.id),
     email: user.email || '',
+    main_id: Number(context.main_userid || user.main_userid || 0) || undefined,
+    main_userid: Number(context.main_userid || user.main_userid || 0) || undefined,
     full_name: fullName || user.email || `User ${user.id}`,
     role,
     access_rights: mapAccessRights(context.user_type || user.type),

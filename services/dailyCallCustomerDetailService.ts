@@ -1,8 +1,19 @@
+import { getLocalAuthSession } from './localAuthService';
+
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
 
+const resolveMainId = (): number => {
+  const session = getLocalAuthSession();
+  const dynamicMainId = Number(
+    session?.context?.main_userid || session?.context?.user?.main_userid || session?.userProfile?.main_userid || 0
+  );
+  if (Number.isFinite(dynamicMainId) && dynamicMainId > 0) return dynamicMainId;
+  return API_MAIN_ID || 1;
+};
+
 const buildUrl = (path: string) => {
-  const params = new URLSearchParams({ main_id: String(API_MAIN_ID) });
+  const params = new URLSearchParams({ main_id: String(resolveMainId()) });
   return `${API_BASE_URL}${path}?${params.toString()}`;
 };
 
