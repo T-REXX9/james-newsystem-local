@@ -7,6 +7,7 @@ set -euo pipefail
 
 API_REPO_URL="${API_REPO_URL:-https://github.com/T-REXX9/james-newsystem-api.git}"
 WEB_REPO_URL="${WEB_REPO_URL:-https://github.com/T-REXX9/james-newsystem-local.git}"
+GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/james-system}"
 API_DIR="$INSTALL_DIR/api"
 WEB_DIR="$INSTALL_DIR/james-newsystem"
@@ -41,8 +42,28 @@ API_LOG="$LOG_DIR/api.log"
 WEB_LOG="$LOG_DIR/web.log"
 DB_DUMP_TMP="/tmp/topnotch_setup_dump.sql"
 DB_IMPORT_USER="${DB_IMPORT_USER:-root}"
+DB_COMPAT_TRANSFORM="${DB_COMPAT_TRANSFORM:-1}"
+
+MODE="${1:-install}"
+if [[ "$MODE" == "--help" || "$MODE" == "-h" || "$MODE" == "help" ]]; then
+  cat <<'EOF'
+Usage:
+  ./setup.sh            # full fresh install (default)
+  ./setup.sh install    # same as default
+  ./setup.sh update     # update api + web repos, rebuild, restart services
+EOF
+  exit 0
+fi
+
+if [[ "$MODE" != "install" && "$MODE" != "update" ]]; then
+  echo "ERROR: unknown mode '$MODE'. Use: install | update"
+  exit 1
+fi
 
 TOTAL_STEPS=16
+if [[ "$MODE" == "update" ]]; then
+  TOTAL_STEPS=9
+fi
 CURRENT_STEP=0
 
 progress_bar() {
@@ -69,6 +90,161 @@ need_cmd() {
     echo "ERROR: required command not found: $1"
     exit 1
   }
+}
+
+db_query_scalar() {
+  local query="$1"
+  local result=""
+  if result=$(mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" "-p$DB_PASS" -Nse "$query" 2>/dev/null); then
+    echo "$result"
+    return 0
+  fi
+  if result=$(sudo mysql -Nse "$query" 2>/dev/null); then
+    echo "$result"
+    return 0
+  fi
+  return 1
+}
+
+validate_stack() {
+  local api_health_url="$1"
+  local benchmark_url="$2"
+  local health_code=""
+  local table_count=""
+  local account_count=""
+  local patient_count=""
+  local benchmark_samples=8
+  local times=""
+
+  echo
+  echo "Post-setup validation:"
+
+  health_code="$(curl -sS -o /tmp/james_api_health.json -w "%{http_code}" "$api_health_url" || true)"
+  if [[ "$health_code" != "200" ]]; then
+    echo "  [FAIL] API health check failed (${health_code:-no-response})"
+    return 1
+  fi
+  echo "  [OK] API health returned 200"
+
+  table_count="$(db_query_scalar "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${DB_NAME}';" || echo "")"
+  account_count="$(db_query_scalar "SELECT COUNT(*) FROM \`${DB_NAME}\`.tblaccount;" || echo "")"
+  patient_count="$(db_query_scalar "SELECT COUNT(*) FROM \`${DB_NAME}\`.tblpatient;" || echo "")"
+
+  if [[ -z "$table_count" || "$table_count" -eq 0 ]]; then
+    echo "  [FAIL] Database '${DB_NAME}' has no tables."
+    return 1
+  fi
+  if [[ -z "$account_count" || "$account_count" -eq 0 ]]; then
+    echo "  [FAIL] tblaccount is empty."
+    return 1
+  fi
+  if [[ -z "$patient_count" || "$patient_count" -eq 0 ]]; then
+    echo "  [FAIL] tblpatient is empty."
+    return 1
+  fi
+  echo "  [OK] Database rows: tblaccount=${account_count}, tblpatient=${patient_count}"
+
+  for _ in $(seq 1 "$benchmark_samples"); do
+    local t=""
+    t="$(curl -sS -o /dev/null -w "%{time_total}" "$benchmark_url" || echo "99")"
+    times="${times} ${t}"
+  done
+
+  local stats=""
+  stats="$(echo "$times" | awk '{
+    min=$1; max=$1; sum=0;
+    for (i=1;i<=NF;i++) {
+      v=$i+0;
+      sum+=v;
+      if (v<min) min=v;
+      if (v>max) max=v;
+    }
+    avg=sum/NF;
+    printf "%.4f %.4f %.4f", avg, min, max;
+  }')"
+
+  local avg min max
+  read -r avg min max <<<"$stats"
+  echo "  [OK] API benchmark (${benchmark_samples} runs): avg=${avg}s min=${min}s max=${max}s"
+
+  if awk -v a="$avg" 'BEGIN { exit (a > 2.50) ? 0 : 1 }'; then
+    echo "  [FAIL] API benchmark is too slow (avg > 2.50s)."
+    return 1
+  fi
+  if awk -v a="$avg" 'BEGIN { exit (a > 1.20) ? 0 : 1 }'; then
+    echo "  [WARN] API is usable but slower than target (avg > 1.20s)."
+  else
+    echo "  [OK] API speed is within target."
+  fi
+
+  return 0
+}
+
+write_api_env() {
+  cat > "$API_DIR/.env" <<EOF
+APP_ENV=local
+APP_DEBUG=true
+APP_URL=http://127.0.0.1:${API_PORT}
+
+DB_HOST=${DB_HOST}
+DB_PORT=${DB_PORT}
+DB_NAME=${DB_NAME}
+DB_USER=${DB_USER}
+DB_PASS=${DB_PASS}
+EOF
+}
+
+write_web_env() {
+  cat > "$WEB_DIR/.env.local" <<EOF
+VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+VITE_API_BASE_URL=http://127.0.0.1:${API_PORT}/api/v1
+VITE_MAIN_ID=${VITE_MAIN_ID}
+EOF
+}
+
+build_auth_repo_url() {
+  local url="$1"
+  if [[ -z "$GITHUB_TOKEN" ]]; then
+    echo "$url"
+    return 0
+  fi
+
+  if [[ "$url" == https://github.com/* ]]; then
+    echo "${url/https:\/\/github.com\//https:\/\/x-access-token:${GITHUB_TOKEN}@github.com\/}"
+    return 0
+  fi
+
+  echo "$url"
+}
+
+git_safe_clone_or_pull() {
+  local repo_url="$1"
+  local target_dir="$2"
+  local repo_label="$3"
+  local auth_url
+  auth_url="$(build_auth_repo_url "$repo_url")"
+
+  if [[ -d "$target_dir/.git" ]]; then
+    GIT_TERMINAL_PROMPT=0 git -C "$target_dir" fetch --all --prune || {
+      echo "ERROR: Unable to fetch $repo_label."
+      echo "If repo is private, export GITHUB_TOKEN=<token-with-repo-scope> and re-run."
+      exit 1
+    }
+    git -C "$target_dir" checkout main
+    GIT_TERMINAL_PROMPT=0 git -C "$target_dir" pull --ff-only || {
+      echo "ERROR: Unable to pull latest changes for $repo_label."
+      echo "If repo is private, export GITHUB_TOKEN=<token-with-repo-scope> and re-run."
+      exit 1
+    }
+  else
+    GIT_TERMINAL_PROMPT=0 git clone "$auth_url" "$target_dir" || {
+      echo "ERROR: Unable to clone $repo_label."
+      echo "If repo is private, export GITHUB_TOKEN=<token-with-repo-scope> and re-run."
+      echo "Example: GITHUB_TOKEN=ghp_xxx ./setup.sh"
+      exit 1
+    }
+  fi
 }
 
 sudo_keepalive() {
@@ -122,21 +298,54 @@ step "Creating installation directories"
 mkdir -p "$INSTALL_DIR" "$LOG_DIR"
 
 step "Cloning or updating API repository"
-if [[ -d "$API_DIR/.git" ]]; then
-  git -C "$API_DIR" fetch --all --prune
-  git -C "$API_DIR" checkout main
-  git -C "$API_DIR" pull --ff-only
-else
-  git clone "$API_REPO_URL" "$API_DIR"
-fi
+git_safe_clone_or_pull "$API_REPO_URL" "$API_DIR" "API repository"
 
 step "Cloning or updating web repository"
-if [[ -d "$WEB_DIR/.git" ]]; then
-  git -C "$WEB_DIR" fetch --all --prune
-  git -C "$WEB_DIR" checkout main
-  git -C "$WEB_DIR" pull --ff-only
-else
-  git clone "$WEB_REPO_URL" "$WEB_DIR"
+git_safe_clone_or_pull "$WEB_REPO_URL" "$WEB_DIR" "web repository"
+
+if [[ "$MODE" == "update" ]]; then
+  step "Writing API and web environment files"
+  write_api_env
+  write_web_env
+
+  step "Installing/updating frontend npm dependencies"
+  (cd "$WEB_DIR" && npm install)
+
+  step "Building frontend for preview"
+  (cd "$WEB_DIR" && npm run build)
+
+  step "Restarting API server and web preview"
+  pkill -f "php -S ${API_HOST}:${API_PORT} -t public" >/dev/null 2>&1 || true
+  pkill -f "vite preview --host ${WEB_HOST} --port ${WEB_PORT}" >/dev/null 2>&1 || true
+
+  nohup bash -lc "cd '$API_DIR' && php -S ${API_HOST}:${API_PORT} -t public" >"$API_LOG" 2>&1 &
+  sleep 2
+  nohup bash -lc "cd '$WEB_DIR' && npm run preview -- --host ${WEB_HOST} --port ${WEB_PORT}" >"$WEB_LOG" 2>&1 &
+  sleep 4
+
+  step "Verifying services and printing access URLs"
+  HOST_IP="$(hostname -I | awk '{print $1}')"
+  API_HEALTH_URL="http://127.0.0.1:${API_PORT}/api/v1/health"
+  WEB_URL_LOCAL="http://127.0.0.1:${WEB_PORT}"
+  WEB_URL_LAN="http://${HOST_IP}:${WEB_PORT}"
+  BENCHMARK_MAIN_ID="$(db_query_scalar "SELECT CAST(lmain_id AS UNSIGNED) FROM \`${DB_NAME}\`.tblpatient WHERE lmain_id IS NOT NULL AND lmain_id <> '' ORDER BY lid ASC LIMIT 1;" || true)"
+  if [[ -z "$BENCHMARK_MAIN_ID" ]]; then
+    BENCHMARK_MAIN_ID="$VITE_MAIN_ID"
+  fi
+  BENCHMARK_URL="http://127.0.0.1:${API_PORT}/api/v1/daily-call-monitoring/excel?main_id=${BENCHMARK_MAIN_ID}&status=all&search="
+
+  validate_stack "$API_HEALTH_URL" "$BENCHMARK_URL"
+
+  echo
+  echo "Update complete."
+  echo "API health endpoint: ${API_HEALTH_URL}"
+  echo "Web app (local):     ${WEB_URL_LOCAL}"
+  echo "Web app (LAN):       ${WEB_URL_LAN}"
+  echo
+  echo "Logs:"
+  echo "  API log: ${API_LOG}"
+  echo "  Web log: ${WEB_LOG}"
+  exit 0
 fi
 
 step "Starting MySQL service"
@@ -227,10 +436,30 @@ if [[ -n "$FOUND_DUMP" ]]; then
     )
   fi
 
+  transform_sql_stream() {
+    # Compatibility transforms for older MySQL/MariaDB engines.
+    # 1) MySQL8-style date defaults may fail in MariaDB.
+    # 2) MySQL8 collation may not exist in older engines.
+    # 3) DEFINER clauses can fail when accounts don't exist.
+    sed -E \
+      -e 's/DEFAULT[[:space:]]+CURRENT_DATE(\(\))?/DEFAULT NULL/gI' \
+      -e 's/ON[[:space:]]+UPDATE[[:space:]]+CURRENT_DATE(\(\))?//gI' \
+      -e 's/utf8mb4_0900_ai_ci/utf8mb4_unicode_ci/g' \
+      -e 's/DEFINER=`[^`]+`@`[^`]+`//g'
+  }
+
   if [[ "$FOUND_DUMP" == *.gz ]]; then
-    pv "$FOUND_DUMP" | gzip -dc | "${MYSQL_IMPORT_CMD[@]}"
+    if [[ "$DB_COMPAT_TRANSFORM" == "1" ]]; then
+      pv "$FOUND_DUMP" | gzip -dc | transform_sql_stream | "${MYSQL_IMPORT_CMD[@]}"
+    else
+      pv "$FOUND_DUMP" | gzip -dc | "${MYSQL_IMPORT_CMD[@]}"
+    fi
   else
-    pv "$FOUND_DUMP" | "${MYSQL_IMPORT_CMD[@]}"
+    if [[ "$DB_COMPAT_TRANSFORM" == "1" ]]; then
+      pv "$FOUND_DUMP" | transform_sql_stream | "${MYSQL_IMPORT_CMD[@]}"
+    else
+      pv "$FOUND_DUMP" | "${MYSQL_IMPORT_CMD[@]}"
+    fi
   fi
 else
   echo "WARNING: No DB dump provided."
@@ -239,25 +468,10 @@ else
 fi
 
 step "Writing API environment file"
-cat > "$API_DIR/.env" <<EOF
-APP_ENV=local
-APP_DEBUG=true
-APP_URL=http://127.0.0.1:${API_PORT}
-
-DB_HOST=${DB_HOST}
-DB_PORT=${DB_PORT}
-DB_NAME=${DB_NAME}
-DB_USER=${DB_USER}
-DB_PASS=${DB_PASS}
-EOF
+write_api_env
 
 step "Writing web environment file"
-cat > "$WEB_DIR/.env.local" <<EOF
-VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
-VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
-VITE_API_BASE_URL=http://127.0.0.1:${API_PORT}/api/v1
-VITE_MAIN_ID=${VITE_MAIN_ID}
-EOF
+write_web_env
 
 step "Installing frontend npm dependencies"
 (cd "$WEB_DIR" && npm install)
@@ -280,6 +494,13 @@ HOST_IP="$(hostname -I | awk '{print $1}')"
 API_HEALTH_URL="http://127.0.0.1:${API_PORT}/api/v1/health"
 WEB_URL_LOCAL="http://127.0.0.1:${WEB_PORT}"
 WEB_URL_LAN="http://${HOST_IP}:${WEB_PORT}"
+BENCHMARK_MAIN_ID="$(db_query_scalar "SELECT CAST(lmain_id AS UNSIGNED) FROM \`${DB_NAME}\`.tblpatient WHERE lmain_id IS NOT NULL AND lmain_id <> '' ORDER BY lid ASC LIMIT 1;" || true)"
+if [[ -z "$BENCHMARK_MAIN_ID" ]]; then
+  BENCHMARK_MAIN_ID="$VITE_MAIN_ID"
+fi
+BENCHMARK_URL="http://127.0.0.1:${API_PORT}/api/v1/daily-call-monitoring/excel?main_id=${BENCHMARK_MAIN_ID}&status=all&search="
+
+validate_stack "$API_HEALTH_URL" "$BENCHMARK_URL"
 
 echo
 echo "Setup complete."
