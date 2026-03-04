@@ -43,13 +43,6 @@ export interface RemarkTemplate {
     created_at?: string;
 }
 
-export interface Team {
-    id: string;
-    name: string;
-    description: string | null;
-    created_at?: string;
-}
-
 export interface Approver {
     id: string;
     user_id: string;
