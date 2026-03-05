@@ -198,12 +198,20 @@ export interface FetchProductsPageResult {
 export const fetchContacts = async (): Promise<Contact[]> => {
   if (shouldBypassSupabaseAuthReads()) return [];
   try {
-    const { data, error } = await supabase
-      .from('contacts')
-      .select('*')
-      .eq('is_deleted', false);
-    if (error) throw error;
-    return (data as unknown as Contact[]) || [];
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+    const session = getLocalAuthSession();
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+    if (session?.token) {
+      headers['Authorization'] = `Bearer ${session.token}`;
+    }
+
+    const response = await fetch(`${baseUrl}/api/v1/contacts`, { headers });
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
+
+    const result = await response.json();
+    return (result.data as Contact[]) || [];
   } catch (err) {
     console.error("Error fetching contacts:", err);
     return [];
@@ -213,12 +221,25 @@ export const fetchContacts = async (): Promise<Contact[]> => {
 export const createContact = async (contact: Omit<Contact, 'id'>): Promise<Contact> => {
   try {
     const sanitizedContact = sanitizeObject(contact as Omit<Contact, 'id'>, contactSanitizationConfig);
-    const { data, error } = await supabase
-      .from('contacts')
-      .insert(sanitizedContact as any)
-      .select('*')
-      .single();
-    if (error) throw error;
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+    const session = getLocalAuthSession();
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+    if (session?.token) {
+      headers['Authorization'] = `Bearer ${session.token}`;
+    }
+
+    const response = await fetch(`${baseUrl}/api/v1/contacts`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(sanitizedContact),
+    });
+
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
+
+    const data = await response.json();
+
     try {
       await logCreate(ENTITY_TYPES.CONTACT, data.id, {
         company: data.company,
@@ -227,10 +248,11 @@ export const createContact = async (contact: Omit<Contact, 'id'>): Promise<Conta
     } catch (logError) {
       console.error('Failed to log activity:', logError);
     }
+
     return data as unknown as Contact;
   } catch (err) {
     console.error('Error creating contact:', err);
-    throw new Error(parseSupabaseError(err, 'contact'));
+    throw new Error(err instanceof Error ? err.message : 'Failed to create contact');
   }
 };
 
@@ -241,8 +263,23 @@ export const updateContact = async (id: string, updates: Partial<Contact>): Prom
       contactSanitizationConfig,
       { enforceRequired: false, onlyProvided: true }
     );
-    const { error } = await supabase.from('contacts').update(sanitizedUpdates as any).eq('id', id);
-    if (error) throw error;
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+    const session = getLocalAuthSession();
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+    if (session?.token) {
+      headers['Authorization'] = `Bearer ${session.token}`;
+    }
+
+    const response = await fetch(`${baseUrl}/api/v1/contacts/${id}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify(sanitizedUpdates),
+    });
+
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
+
     try {
       await logUpdate(ENTITY_TYPES.CONTACT, id, {
         updated_fields: Object.keys(sanitizedUpdates),
@@ -252,7 +289,7 @@ export const updateContact = async (id: string, updates: Partial<Contact>): Prom
     }
   } catch (err) {
     console.error("Error updating contact:", err);
-    throw new Error(parseSupabaseError(err, 'contact'));
+    throw new Error(err instanceof Error ? err.message : 'Failed to update contact');
   }
 };
 
@@ -263,16 +300,26 @@ export const bulkUpdateContacts = async (ids: string[], updates: Partial<Contact
       contactSanitizationConfig,
       { enforceRequired: false, onlyProvided: true }
     );
-    // Use Supabase's .in() method for efficient bulk updates
-    const { error } = await supabase
-      .from('contacts')
-      .update(sanitizedUpdates as any)
-      .in('id', ids);
 
-    if (error) throw error;
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+    const session = getLocalAuthSession();
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+    if (session?.token) {
+      headers['Authorization'] = `Bearer ${session.token}`;
+    }
+
+    const response = await fetch(`${baseUrl}/api/v1/contacts/bulk-update`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ ids, updates: sanitizedUpdates }),
+    });
+
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
   } catch (err) {
     console.error("Error bulk updating contacts:", err);
-    throw new Error(parseSupabaseError(err, 'contact'));
+    throw new Error(err instanceof Error ? err.message : 'Failed to bulk update contacts');
   }
 }
 
