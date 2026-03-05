@@ -64,7 +64,8 @@ export async function getTemplate(id: string): Promise<AIMessageTemplate | null>
             return null;
         }
 
-        return await response.json() as AIMessageTemplate;
+        const result = await response.json();
+        return (result.data || null) as AIMessageTemplate | null;
     } catch (error) {
         console.error('Error fetching template:', error);
         return null;
@@ -107,7 +108,8 @@ export async function createTemplate(
             return null;
         }
 
-        return await response.json() as AIMessageTemplate;
+        const result = await response.json();
+        return (result.data || null) as AIMessageTemplate | null;
     } catch (error) {
         console.error('Error creating template:', error);
         return null;
@@ -137,7 +139,8 @@ export async function updateTemplate(
             return null;
         }
 
-        return await response.json() as AIMessageTemplate;
+        const result = await response.json();
+        return (result.data || null) as AIMessageTemplate | null;
     } catch (error) {
         console.error('Error updating template:', error);
         return null;
@@ -360,7 +363,8 @@ export async function logCampaignFeedback(
             return null;
         }
 
-        return await response.json() as AICampaignFeedback;
+        const result = await response.json();
+        return (result.data || null) as AICampaignFeedback | null;
     } catch (error) {
         console.error('Error logging campaign feedback:', error);
         return null;
