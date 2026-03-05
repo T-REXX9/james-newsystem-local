@@ -1,4 +1,3 @@
-import { supabase } from '../lib/supabaseClient';
 import {
   Contact,
   CustomerStatus,
@@ -236,16 +235,20 @@ export const fetchCustomerDailyActivity = async (
   dateRange: DailyActivityDateRange
 ): Promise<DailyActivityRecord[]> => {
   try {
-    const { data, error } = await supabase
-      .from('call_logs')
-      .select('id, contact_id, occurred_at, channel, notes')
-      .eq('contact_id', contactId)
-      .gte('occurred_at', dateRange.from)
-      .lte('occurred_at', dateRange.to)
-      .order('occurred_at', { ascending: false });
+    const session = await getLocalAuthSession();
+    const mainId = session?.user?.main_id || 1;
+    const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 
-    if (error) throw error;
-    return buildActivityByDay((data as CallLogRow[]) || []);
+    const url = new URL(`${API_BASE_URL}/daily-call-monitoring/customers/${contactId}/call-logs`, window.location.origin);
+    url.searchParams.set('main_id', String(mainId));
+    url.searchParams.set('from_date', dateRange.from);
+    url.searchParams.set('to_date', dateRange.to);
+
+    const response = await fetch(url.toString());
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const { data } = (await response.json()) as { data: CallLogRow[] };
+    return buildActivityByDay((data || []) as CallLogRow[]);
   } catch (error) {
     console.error('Error fetching customer daily activity:', error);
     return [];
@@ -254,46 +257,20 @@ export const fetchCustomerDailyActivity = async (
 
 export const fetchLBCRTOData = async (contactId: string): Promise<LBCRTORecord[]> => {
   try {
-    const { data, error } = await supabase
-      .from('lbc_rto_records')
-      .select('id, contact_id, date, tracking_number, reason, status, notes')
-      .eq('contact_id', contactId)
-      .order('date', { ascending: false });
+    const session = await getLocalAuthSession();
+    const mainId = session?.user?.main_id || 1;
+    const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 
-    if (!error && data) {
-      return (data as LBCRTORecord[]) || [];
-    }
+    const url = new URL(`${API_BASE_URL}/daily-call-monitoring/customers/${contactId}/returns`, window.location.origin);
+    url.searchParams.set('main_id', String(mainId));
+
+    const response = await fetch(url.toString());
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const { data } = (await response.json()) as { data: LBCRTORecord[] };
+    return (data || []) as LBCRTORecord[];
   } catch (error) {
-    console.warn('LBC RTO table unavailable, falling back to sales returns:', error);
-  }
-
-  try {
-    const { data, error } = await supabase
-      .from('sales_returns')
-      .select('id, contact_id, return_date, reason, status, notes')
-      .eq('contact_id', contactId)
-      .order('return_date', { ascending: false });
-
-    if (error) throw error;
-
-    return ((data as Array<{ id: string; contact_id: string; return_date: string; reason?: string; status?: string; notes?: string }>) || []).map(
-      (row) => ({
-        id: row.id,
-        contact_id: row.contact_id,
-        date: row.return_date,
-        tracking_number: `RTO-${row.id.slice(0, 8).toUpperCase()}`,
-        reason: row.reason || 'Return to origin',
-        status:
-          row.status === 'processed'
-            ? 'resolved'
-            : row.status === 'cancelled'
-              ? 'cancelled'
-              : 'pending',
-        notes: row.notes,
-      })
-    );
-  } catch (error) {
-    console.error('Error fetching fallback LBC RTO data:', error);
+    console.error('Error fetching LBC RTO data:', error);
     return [];
   }
 };
