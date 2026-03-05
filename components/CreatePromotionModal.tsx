@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { X, Plus, Search, Trash2, MapPin, Users } from 'lucide-react';
 import { UserProfile, Product } from '../types';
-import * as promotionService from '../services/promotionService';
-import { supabase } from '../lib/supabaseClient';
-import { parseSupabaseError } from '../utils/errorHandler';
+import * as promotionService from '../services/promotionLocalApiService';
+import { fetchProducts } from '../services/productLocalApiService';
+import { fetchContacts } from '../services/customerDatabaseLocalApiService';
+
+const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 import { useToast } from './ToastProvider';
 
 interface Props {
@@ -21,6 +23,24 @@ interface SelectedProduct {
     promo_price_vip1?: number;
     promo_price_vip2?: number;
 }
+
+const extractArrayPayload = <T,>(payload: any): T[] => {
+    const candidates = [
+        payload?.data?.items,
+        payload?.data?.data,
+        payload?.data,
+        payload?.items,
+        payload,
+    ];
+
+    for (const candidate of candidates) {
+        if (Array.isArray(candidate)) {
+            return candidate as T[];
+        }
+    }
+
+    return [];
+};
 
 const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated }) => {
     const { addToast } = useToast();
@@ -51,34 +71,29 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
     const [clientSearch, setClientSearch] = useState('');
     const [citySearch, setCitySearch] = useState('');
 
-    // Fetch products and staff
+    // Fetch products, staff, and clients via local API
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
             try {
-                // Fetch products
-                const { data: productsData } = await supabase
-                    .from('products')
-                    .select('*')
-                    .eq('status', 'Active')
-                    .order('description');
-                setProducts(productsData || []);
+                const [productRows, contactRows, staffRes] = await Promise.all([
+                    fetchProducts(),
+                    fetchContacts(),
+                    fetch(`${API_BASE_URL}/profiles/sales-agents`),
+                ]);
+
+                setProducts(productRows.filter((product) => product.status === 'Active'));
+                setClientList(contactRows.map((contact) => ({
+                    id: String(contact.id ?? ''),
+                    company: contact.company ?? '',
+                    city: contact.city ?? '',
+                })));
 
                 // Fetch staff (sales agents)
-                const { data: staffData } = await supabase
-                    .from('profiles')
-                    .select('id, full_name, email, role')
-                    .in('role', ['Sales Agent', 'sales_agent', 'Senior Agent'])
-                    .order('full_name');
-                setStaffList(staffData || []);
-
-                // Fetch clients (contacts) for targeting
-                const { data: contactsData } = await supabase
-                    .from('contacts')
-                    .select('id, company, city')
-                    .eq('is_deleted', false)
-                    .order('company');
-                setClientList(contactsData || []);
+                if (staffRes.ok) {
+                    const staffResult = await staffRes.json();
+                    setStaffList(extractArrayPayload<UserProfile>(staffResult));
+                }
             } catch (error) {
                 console.error('Error fetching data:', error);
             } finally {
@@ -211,7 +226,7 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
             addToast({
                 type: 'error',
                 title: 'Unable to create promotion',
-                description: parseSupabaseError(error, 'promotion'),
+                description: error instanceof Error ? error.message : 'An unexpected error occurred',
                 durationMs: 6000,
             });
         } finally {
