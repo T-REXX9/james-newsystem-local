@@ -21,8 +21,7 @@ import {
     UserProfile,
     PromotionStatus,
 } from '../types';
-import * as promotionService from '../services/promotionService';
-import { subscribeToPromotions } from '../services/promotionRealtimeService';
+import * as promotionService from '../services/promotionLocalApiService';
 import CreatePromotionModal from './CreatePromotionModal';
 import PromotionDetailsModal from './PromotionDetailsModal';
 import ExtendPromotionModal from './ExtendPromotionModal';
@@ -70,25 +69,9 @@ const PromotionManagementView: React.FC<Props> = ({ currentUser }) => {
     useEffect(() => {
         fetchData();
 
-        // Real-time subscription
-        const unsubscribe = subscribeToPromotions({
-            onInsert: (promotion) => {
-                setPromotions((prev) => [promotion, ...prev]);
-                fetchData(); // Refresh stats
-            },
-            onUpdate: (promotion) => {
-                setPromotions((prev) =>
-                    prev.map((p) => (p.id === promotion.id ? { ...p, ...promotion } : p))
-                );
-                fetchData(); // Refresh stats
-            },
-            onDelete: ({ id }) => {
-                setPromotions((prev) => prev.filter((p) => p.id !== id));
-                fetchData(); // Refresh stats
-            },
-        });
-
-        return () => unsubscribe();
+        // Poll for updates every 30 seconds (replaces Supabase realtime)
+        const interval = setInterval(fetchData, 30000);
+        return () => clearInterval(interval);
     }, [fetchData]);
 
     // Filter promotions based on tab and search

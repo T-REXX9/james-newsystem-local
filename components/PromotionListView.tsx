@@ -18,8 +18,7 @@ import {
     UserProfile,
     PostingStatus,
 } from '../types';
-import * as promotionService from '../services/promotionService';
-import { subscribeToPromotions, subscribeToPromotionPostings } from '../services/promotionRealtimeService';
+import * as promotionService from '../services/promotionLocalApiService';
 import UploadProofModal from './UploadProofModal';
 
 interface Props {
@@ -57,20 +56,9 @@ const PromotionListView: React.FC<Props> = ({ currentUser }) => {
     useEffect(() => {
         fetchData();
 
-        // Real-time subscriptions
-        const unsubPromo = subscribeToPromotions({
-            onUpdate: () => fetchData(),
-            onInsert: () => fetchData(),
-        });
-
-        const unsubPosting = subscribeToPromotionPostings(null, {
-            onUpdate: () => fetchData(),
-        });
-
-        return () => {
-            unsubPromo();
-            unsubPosting();
-        };
+        // Poll for updates every 30 seconds (replaces Supabase realtime)
+        const interval = setInterval(fetchData, 30000);
+        return () => clearInterval(interval);
     }, [fetchData]);
 
     // Filter promotions

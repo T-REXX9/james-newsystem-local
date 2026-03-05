@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Tag, ArrowRight, Clock, CheckCircle2 } from 'lucide-react';
 import { Promotion, UserProfile } from '../types';
-import * as promotionService from '../services/promotionService';
+import * as promotionService from '../services/promotionLocalApiService';
 
 interface Props {
     currentUser: UserProfile | null;

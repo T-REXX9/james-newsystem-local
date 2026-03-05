@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { X, Upload, Image as ImageIcon, Link as LinkIcon, AlertTriangle } from 'lucide-react';
 import { PromotionPosting, UserProfile } from '../types';
-import * as promotionService from '../services/promotionService';
+import * as promotionService from '../services/promotionLocalApiService';
 
 interface Props {
     posting: PromotionPosting;

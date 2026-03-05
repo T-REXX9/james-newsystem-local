@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { X, Calendar } from 'lucide-react';
 import { Promotion } from '../types';
-import * as promotionService from '../services/promotionService';
-import { parseSupabaseError } from '../utils/errorHandler';
+import * as promotionService from '../services/promotionLocalApiService';
 import { useToast } from './ToastProvider';
 
 interface Props {
@@ -48,7 +47,7 @@ const ExtendPromotionModal: React.FC<Props> = ({ promotion, onClose, onExtended 
             addToast({
                 type: 'error',
                 title: 'Unable to extend promotion',
-                description: parseSupabaseError(error, 'promotion'),
+                description: error instanceof Error ? error.message : 'An unexpected error occurred',
                 durationMs: 6000,
             });
         } finally {

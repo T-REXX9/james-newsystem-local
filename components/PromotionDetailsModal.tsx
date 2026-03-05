@@ -18,8 +18,7 @@ import {
     UserProfile,
     PostingStatus,
 } from '../types';
-import * as promotionService from '../services/promotionService';
-import { subscribeToPromotionPostings } from '../services/promotionRealtimeService';
+import * as promotionService from '../services/promotionLocalApiService';
 
 interface Props {
     promotion: Promotion;
@@ -43,23 +42,22 @@ const PromotionDetailsModal: React.FC<Props> = ({
     const [rejectReason, setRejectReason] = useState('');
     const [processing, setProcessing] = useState<string | null>(null);
 
-    // Real-time subscription for postings
+    // Poll for posting updates (replaces Supabase realtime)
     useEffect(() => {
-        const unsubscribe = subscribeToPromotionPostings(promotion.id, {
-            onUpdate: (posting) => {
-                setPostings((prev) =>
-                    prev.map((p) => (p.id === posting.id ? { ...p, ...posting } : p))
-                );
-                onProofUpdated();
-            },
-            onInsert: (posting) => {
-                setPostings((prev) => [...prev, posting]);
-                onProofUpdated();
-            },
-        });
+        const pollPostings = async () => {
+            try {
+                const result = await promotionService.getPromotionPostings(promotion.id, '', 1, 500);
+                if (result.data) {
+                    setPostings(result.data as any);
+                }
+            } catch (error) {
+                console.error('Error polling postings:', error);
+            }
+        };
 
-        return () => unsubscribe();
-    }, [promotion.id, onProofUpdated]);
+        const interval = setInterval(pollPostings, 15000);
+        return () => clearInterval(interval);
+    }, [promotion.id]);
 
     const handleApprove = async (postingId: string) => {
         if (!currentUser) return;
