@@ -8,7 +8,6 @@ import {
   getOrderSlipsPage,
   printOrderSlip,
 } from '../services/orderSlipLocalApiService';
-import { dispatchWorkflowNotification } from '../services/supabaseService';
 import { fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { isOrderSlipAllowedForTransactionType, syncDocumentPolicyState } from '../services/salesOrderLocalApiService';
 import { Contact, OrderSlip, OrderSlipStatus } from '../types';
@@ -84,18 +83,12 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
     entityId: string,
     type: 'success' | 'error' | 'warning' | 'info' = 'success'
   ) => {
-    await dispatchWorkflowNotification({
-      title,
-      message,
-      type,
-      action,
-      status,
-      entityType: 'order_slip',
-      entityId,
-      actionUrl: `/orderslip?orderSlipId=${entityId}`,
-      targetRoles: ['Owner', 'Manager', 'Support'],
-      includeActor: true,
-    });
+    void title;
+    void message;
+    void action;
+    void status;
+    void entityId;
+    void type;
   }, []);
 
   const navigateToModule = useCallback((tab: string, payload?: Record<string, string>) => {

@@ -1,5 +1,5 @@
 import type { InventoryLogWithProduct } from '../types';
-import { fetchProductsPage } from './supabaseService';
+import { fetchProductsPage } from './productLocalApiService';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
@@ -143,4 +143,3 @@ export const deleteStockMovementLog = async (id: string | number) => {
   if (!response.ok) throw new Error(await parseApiErrorMessage(response));
   return true;
 };
-

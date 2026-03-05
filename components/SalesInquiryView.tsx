@@ -27,14 +27,12 @@ import {
   getAllSalesInquiries,
   updateSalesInquiry,
 } from '../services/salesInquiryLocalApiService';
-import { getProductPrice } from '../services/productService';
-import { getSalesOrderByInquiry } from '../services/salesOrderService';
+import { getProductPrice } from '../services/productLocalApiService';
+import { getSalesOrderByInquiry } from '../services/salesOrderLocalApiService';
 
 import ProductSearchModal from './ProductSearchModal';
 import StatusBadge from './StatusBadge';
 import { useToast } from './ToastProvider';
-import { useRealtimeNestedList } from '../hooks/useRealtimeNestedList';
-import { useRealtimeList } from '../hooks/useRealtimeList';
 import ValidationSummary from './ValidationSummary';
 import { validateNumeric, validateRequired } from '../utils/formValidation';
 import { parseSupabaseError } from '../utils/errorHandler';
@@ -105,31 +103,44 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
 
   const toggleTheme = () => setIsDarkMode((prev) => !prev);
 
-  // Use real-time list for contacts
-  const { data: customers } = useRealtimeList<Contact>({
-    tableName: 'contacts',
-    initialFetchFn: fetchContacts,
-    realtimeEnabled: false,
-  });
+  const [customers, setCustomers] = useState<Contact[]>([]);
+  const [inquiries, setInquiries] = useState<SalesInquiry[]>([]);
+  const [listLoading, setListLoading] = useState(false);
 
-  // Use real-time nested list for inquiries with items
   const sortByCreatedAt = (a: SalesInquiry, b: SalesInquiry) => {
     return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
   };
 
-  const {
-    data: inquiries,
-    isLoading: listLoading,
-    refetch: refetchInquiries
-  } = useRealtimeNestedList<SalesInquiry, SalesInquiryItem>({
-    parentTableName: 'sales_inquiries',
-    childTableName: 'sales_inquiry_items',
-    parentFetchFn: getAllSalesInquiries,
-    childParentIdField: 'inquiry_id',
-    childrenField: 'items',
-    sortParentFn: sortByCreatedAt,
-    enabled: true,
-  });
+  const loadCustomers = useCallback(async () => {
+    try {
+      const rows = await fetchContacts();
+      setCustomers(rows);
+    } catch (error) {
+      console.error('Failed loading customers:', error);
+      setCustomers([]);
+    }
+  }, []);
+
+  const refetchInquiries = useCallback(async () => {
+    setListLoading(true);
+    try {
+      const rows = await getAllSalesInquiries();
+      setInquiries((rows || []).slice().sort(sortByCreatedAt));
+    } catch (error) {
+      console.error('Failed loading inquiries:', error);
+      setInquiries([]);
+    } finally {
+      setListLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCustomers();
+  }, [loadCustomers]);
+
+  useEffect(() => {
+    void refetchInquiries();
+  }, [refetchInquiries]);
 
   // Form State
   const [selectedCustomer, setSelectedCustomer] = useState<Contact | null>(null);

@@ -10,7 +10,6 @@ import {
   markOverdue,
   printInvoice,
 } from '../services/invoiceLocalApiService';
-import { dispatchWorkflowNotification } from '../services/supabaseService';
 import { fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { isInvoiceAllowedForTransactionType, syncDocumentPolicyState } from '../services/salesOrderLocalApiService';
 import { Contact, Invoice, InvoiceStatus } from '../types';
@@ -102,18 +101,12 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
     entityId: string,
     type: 'success' | 'error' | 'warning' | 'info' = 'success'
   ) => {
-    await dispatchWorkflowNotification({
-      title,
-      message,
-      type,
-      action,
-      status,
-      entityType: 'invoice',
-      entityId,
-      actionUrl: `/invoice?invoiceId=${entityId}`,
-      targetRoles: ['Owner', 'Manager', 'Support'],
-      includeActor: true,
-    });
+    void title;
+    void message;
+    void action;
+    void status;
+    void entityId;
+    void type;
   }, []);
 
   useEffect(() => {

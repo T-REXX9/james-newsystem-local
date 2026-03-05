@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Lock, User, Eye, EyeOff, AlertCircle, CheckCircle, Loader2, Sun, Moon } from 'lucide-react';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
-import { logAuth } from '../services/activityLogService';
-import { dispatchWorkflowNotification } from '../services/supabaseService';
 import { loginWithLocalApi } from '../services/localAuthService';
 
 export default function Login() {
@@ -81,25 +79,9 @@ export default function Login() {
     status: 'failed' | 'error',
     reason: string
   ) => {
-    await dispatchWorkflowNotification({
-      title: 'Suspicious Login Signal',
-      message: `A suspicious login signal was detected for ${attemptedEmail || 'unknown account'}.`,
-      type: 'warning',
-      action: 'suspicious_login_signal',
-      status,
-      entityType: 'auth_event',
-      entityId: attemptedEmail || 'unknown',
-      actionUrl: '/security/audit',
-      targetRoles: ['Owner', 'Manager', 'Security'],
-      includeActor: false,
-      metadata: {
-        actor_id: null,
-        actor_email: attemptedEmail || null,
-        auth_provider: 'password',
-        reason,
-        ...getAuthDeviceMetadata(),
-      },
-    });
+    void attemptedEmail;
+    void status;
+    void reason;
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -127,11 +109,6 @@ export default function Login() {
       await loginWithLocalApi(attemptedEmail, formData.password);
 
       // Success: localAuthService dispatches auth-changed event for App.tsx to swap views.
-      try {
-        await logAuth('LOGIN', { email: attemptedEmail });
-      } catch (logError) {
-        console.error('Failed to log activity:', logError);
-      }
       addToast({
         type: 'success',
         title: 'Welcome back!',

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Edit2, Trash2, X } from 'lucide-react';
 import { useToast } from '../../ToastProvider';
 import { useDebounce } from '../../../hooks/useDebounce';
-import { ENTITY_TYPES, logActivity } from '../../../services/activityLogService';
 import {
     fetchStaff,
     updateStaff,
@@ -56,35 +55,6 @@ const StaffForm: React.FC<StaffFormProps> = ({ initialData, onClose, onSuccess }
         setLoading(true);
         try {
             await updateStaff(initialData.id, formData);
-
-            // Log activity
-            const updatedFields = Object.entries(formData).reduce<string[]>((acc, [key, value]) => {
-                const originalValue = initialData[key as keyof StaffRecord];
-                if (value !== undefined && value !== originalValue) {
-                    acc.push(key);
-                }
-                return acc;
-            }, []);
-
-            try {
-                await logActivity('UPDATE_STAFF', ENTITY_TYPES.USER_PROFILE, initialData.id, {
-                    updated_fields: updatedFields,
-                    role: formData.role || initialData.role,
-                });
-            } catch (logError) {
-                console.error('Failed to log activity:', logError);
-            }
-
-            if (initialData.role && formData.role && initialData.role !== formData.role) {
-                try {
-                    await logActivity('CHANGE_ROLE', ENTITY_TYPES.USER_PROFILE, initialData.id, {
-                        old_role: initialData.role,
-                        new_role: formData.role,
-                    });
-                } catch (logError) {
-                    console.error('Failed to log activity:', logError);
-                }
-            }
 
             addToast({
                 type: 'success',

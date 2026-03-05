@@ -10,7 +10,7 @@ import {
     Product,
     Supplier,
 } from '../receiving.types';
-import { fetchProductsPage } from './supabaseService';
+import { fetchProductsPage } from './productLocalApiService';
 import { getLocalAuthSession } from './localAuthService';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';

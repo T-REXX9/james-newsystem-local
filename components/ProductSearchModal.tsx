@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { Search, Loader2, Package, AlertCircle, X, Check } from 'lucide-react';
 import { Product } from '../types';
-import { searchProducts } from '../services/productService';
+import { searchProducts } from '../services/productLocalApiService';
 import { useDebounce } from '../hooks/useDebounce';
 
 interface ProductSearchModalProps {

@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { X, Search, Plus, Trash2 } from 'lucide-react';
 import { CreateReturnDTO, CreateReturnItemDTO, RRItemForReturn } from '../../returnToSupplier.types';
 import { returnToSupplierService } from '../../services/returnToSupplierService';
-import { supabase } from '../../lib/supabaseClient'; // For direct queries if needed or user info
 import { parseSupabaseError } from '../../utils/errorHandler';
 import { useToast } from '../ToastProvider';
 

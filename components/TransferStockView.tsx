@@ -13,7 +13,7 @@ import {
   deleteTransferStock,
   generateTransferNo,
 } from '../services/transferStockService';
-import { fetchProducts } from '../services/supabaseService';
+import { fetchProducts } from '../services/productLocalApiService';
 import { getLocalAuthSession } from '../services/localAuthService';
 import {
   Product,

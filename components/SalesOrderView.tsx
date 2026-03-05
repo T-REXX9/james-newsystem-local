@@ -22,7 +22,6 @@ import {
   syncDocumentPolicyState,
 } from '../services/salesOrderLocalApiService';
 import { fetchContacts } from '../services/customerDatabaseLocalApiService';
-import { dispatchWorkflowNotification } from '../services/supabaseService';
 import StatusBadge from './StatusBadge';
 import WorkflowStepper from './WorkflowStepper';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
@@ -122,18 +121,13 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
     actionUrl: string,
     type: 'success' | 'error' | 'warning' | 'info' = 'success'
   ) => {
-    await dispatchWorkflowNotification({
-      title,
-      message,
-      type,
-      action,
-      status,
-      entityType: 'sales_order',
-      entityId,
-      actionUrl,
-      targetRoles: ['Owner', 'Manager'],
-      includeActor: true,
-    });
+    void title;
+    void message;
+    void action;
+    void status;
+    void entityId;
+    void actionUrl;
+    void type;
   }, []);
 
   const navigateToModule = useCallback((tab: string, payload?: Record<string, string>) => {

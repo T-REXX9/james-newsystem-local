@@ -10,7 +10,7 @@ import {
   createProduct,
   updateProduct,
   deleteProduct,
-} from '../services/supabaseService';
+} from '../services/productLocalApiService';
 import { fetchProductMovementClassifications } from '../services/inventoryMovementService';
 import { applyOptimisticUpdate, applyOptimisticDelete } from '../utils/optimisticUpdates';
 import ConfirmModal from './ConfirmModal';
