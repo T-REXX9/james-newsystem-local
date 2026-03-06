@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { CreateStaffAccountInput, StaffAccountValidationError, UserProfile } from '../types';
-import { createStaffAccount, fetchProfiles, getCurrentNotificationActor, notifyAccessRightsChange, notifyStaffAccountCreated, updateProfile } from '../services/supabaseService';
+import { createStaffAccountLocal, fetchProfilesLocal, updateProfileLocal } from '../services/accessLocalApiService';
 import { parseSupabaseError } from '../utils/errorHandler';
 import {
   AVAILABLE_APP_MODULES,
@@ -12,10 +12,11 @@ import {
   STAFF_ROLES,
   MODULE_ID_ALIASES,
 } from '../constants';
-import { Loader2, Shield, Save, CheckCircle, AlertTriangle, User, UserPlus, X } from 'lucide-react';
+import { Loader2, Shield, Save, CheckCircle, AlertTriangle, User, UserPlus, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
 import { useToast } from './ToastProvider';
-import { ENTITY_TYPES, logActivity } from '../services/activityLogService';
+
+const STAFF_PER_PAGE = 50;
 
 const AccessControlSettings: React.FC = () => {
   const { addToast } = useToast();
@@ -23,6 +24,9 @@ const AccessControlSettings: React.FC = () => {
   const [originalProfiles, setOriginalProfiles] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalProfiles, setTotalProfiles] = useState(0);
 
   // Add Account Modal State
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
@@ -70,14 +74,32 @@ const AccessControlSettings: React.FC = () => {
 
   useEffect(() => {
     loadProfiles();
-  }, []);
+  }, [page]);
 
-  const loadProfiles = async () => {
+  const loadProfiles = async (targetPage = page) => {
     setIsLoading(true);
-    const data = await fetchProfiles();
-    setProfiles(data);
-    setOriginalProfiles(data);
-    setIsLoading(false);
+    try {
+      const data = await fetchProfilesLocal({ page: targetPage, perPage: STAFF_PER_PAGE });
+      setProfiles(data.items);
+      setOriginalProfiles(data.items);
+      setPage(data.meta.page);
+      setTotalPages(Math.max(1, data.meta.total_pages || 1));
+      setTotalProfiles(Math.max(0, data.meta.total || 0));
+    } catch (e) {
+      console.error('Unable to load staff profiles:', e);
+      setProfiles([]);
+      setOriginalProfiles([]);
+      setTotalPages(1);
+      setTotalProfiles(0);
+      addToast({
+        type: 'error',
+        title: 'Unable to load staff profiles',
+        description: parseSupabaseError(e, 'staff profiles'),
+        durationMs: 6000,
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const togglePermission = (userId: string, moduleId: string) => {
@@ -113,27 +135,8 @@ const AccessControlSettings: React.FC = () => {
 
   const savePermissions = async (user: UserProfile) => {
     setSavingId(user.id);
-    const original = originalProfiles.find(profile => profile.id === user.id);
     try {
-        await updateProfile(user.id, { access_rights: user.access_rights });
-        const actorContext = await getCurrentNotificationActor();
-        await notifyAccessRightsChange({
-          actorId: actorContext?.actorId,
-          actorRole: actorContext?.actorRole,
-          targetUserId: user.id,
-          targetUserRole: user.role,
-          beforeRights: original?.access_rights || [],
-          afterRights: user.access_rights || [],
-        });
-        try {
-          await logActivity('UPDATE_ACCESS_RIGHTS', ENTITY_TYPES.USER_PROFILE, user.id, {
-            old_rights: original?.access_rights || [],
-            new_rights: user.access_rights || [],
-            role: user.role,
-          });
-        } catch (logError) {
-          console.error('Failed to log activity:', logError);
-        }
+        await updateProfileLocal(user.id, { access_rights: user.access_rights });
         setOriginalProfiles(prev =>
           prev.map(profile =>
             profile.id === user.id ? { ...profile, access_rights: user.access_rights } : profile
@@ -211,7 +214,7 @@ const AccessControlSettings: React.FC = () => {
 
     setIsCreatingUser(true);
     try {
-      const result = await createStaffAccount(payload);
+      const result = await createStaffAccountLocal(payload);
 
       if (!result.success) {
         setFormErrors(result.validationErrors || {});
@@ -225,18 +228,8 @@ const AccessControlSettings: React.FC = () => {
         return;
       }
 
-      const actorContext = await getCurrentNotificationActor();
-      if (result.userId) {
-        await notifyStaffAccountCreated({
-          actorId: actorContext?.actorId,
-          actorRole: actorContext?.actorRole,
-          targetUserId: result.userId,
-          targetUserRole: payload.role,
-          email: payload.email,
-        });
-      }
-
-      await loadProfiles();
+      setPage(1);
+      await loadProfiles(1);
       setIsAddUserModalOpen(false);
       setNewUserForm({ fullName: '', email: '', role: DEFAULT_STAFF_ROLE, password: '', birthday: '', mobile: '' });
       setFormErrors({});
@@ -268,6 +261,9 @@ const AccessControlSettings: React.FC = () => {
       </div>
     );
   }
+
+  const rangeStart = totalProfiles === 0 ? 0 : (page - 1) * STAFF_PER_PAGE + 1;
+  const rangeEnd = totalProfiles === 0 ? 0 : Math.min(totalProfiles, page * STAFF_PER_PAGE);
 
   return (
     <div className="p-8 h-full overflow-y-auto animate-fadeIn relative">
@@ -301,6 +297,34 @@ const AccessControlSettings: React.FC = () => {
        )}
 
        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden">
+          <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400 md:flex-row md:items-center md:justify-between">
+            <p>
+              Showing {rangeStart}-{rangeEnd} of {totalProfiles} staff members
+            </p>
+            <div className="flex items-center gap-2 self-end md:self-auto">
+              <button
+                type="button"
+                onClick={() => setPage(current => Math.max(1, current - 1))}
+                disabled={page <= 1}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </button>
+              <span className="min-w-[92px] text-center font-medium text-slate-600 dark:text-slate-300">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage(current => Math.min(totalPages, current + 1))}
+                disabled={page >= totalPages}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
