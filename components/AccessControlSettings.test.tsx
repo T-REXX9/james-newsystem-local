@@ -4,20 +4,17 @@ import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import AccessControlSettings from './AccessControlSettings';
 import { DEFAULT_STAFF_ACCESS_RIGHTS } from '../constants';
-import { createStaffAccount, fetchProfiles } from '../services/supabaseService';
+import { createStaffAccountLocal, fetchProfilesLocal } from '../services/accessLocalApiService';
 import { ToastProvider } from './ToastProvider';
 
-vi.mock('../services/supabaseService', () => ({
-  fetchProfiles: vi.fn(),
-  updateProfile: vi.fn(),
-  createStaffAccount: vi.fn(),
-  getCurrentNotificationActor: vi.fn().mockResolvedValue({ actorId: 'owner-1', actorRole: 'Owner' }),
-  notifyAccessRightsChange: vi.fn().mockResolvedValue(undefined),
-  notifyStaffAccountCreated: vi.fn().mockResolvedValue(undefined),
+vi.mock('../services/accessLocalApiService', () => ({
+  fetchProfilesLocal: vi.fn(),
+  updateProfileLocal: vi.fn(),
+  createStaffAccountLocal: vi.fn(),
 }));
 
-const fetchProfilesMock = fetchProfiles as unknown as ReturnType<typeof vi.fn>;
-const createStaffAccountMock = createStaffAccount as unknown as ReturnType<typeof vi.fn>;
+const fetchProfilesMock = fetchProfilesLocal as unknown as ReturnType<typeof vi.fn>;
+const createStaffAccountMock = createStaffAccountLocal as unknown as ReturnType<typeof vi.fn>;
 
 const renderWithProviders = (ui: React.ReactElement) =>
   render(<ToastProvider>{ui}</ToastProvider>);

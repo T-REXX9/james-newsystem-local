@@ -1,10 +1,14 @@
 import {
+  CallLogEntry,
   Contact,
   CustomerStatus,
   DailyActivityRecord,
   DailyCallCustomerFilterStatus,
   DailyCallCustomerRow,
+  Inquiry,
   LBCRTORecord,
+  Purchase,
+  TeamMessage,
 } from '../types';
 import { formatDateFull } from '../utils/formatUtils';
 import { getLocalAuthSession } from './localAuthService';
@@ -27,6 +31,14 @@ export interface DailyCallRealtimeCallbacks {
   onError?: (error: Error) => void;
 }
 
+export interface DailyCallAgentSnapshot {
+  contacts: DailyCallCustomerRow[];
+  callLogs: CallLogEntry[];
+  inquiries: Inquiry[];
+  purchases: Purchase[];
+  teamMessages: TeamMessage[];
+}
+
 interface PurchaseHistoryRow {
   id: string;
   contact_id: string;
@@ -45,7 +57,13 @@ interface CallLogRow {
   contact_id: string;
   occurred_at: string;
   channel: 'call' | 'text';
+  agent_name?: string;
+  direction?: 'inbound' | 'outbound';
+  duration_seconds?: number;
   notes?: string;
+  outcome?: string;
+  next_action?: string | null;
+  next_action_due?: string | null;
 }
 
 export interface WeeklyRangeBucket {
@@ -66,6 +84,14 @@ const resolveMainId = (): number => {
   );
   if (Number.isFinite(dynamicMainId) && dynamicMainId > 0) return dynamicMainId;
   return API_MAIN_ID || 1;
+};
+
+const requestJson = async (url: string, init?: RequestInit): Promise<any> => {
+  const response = await fetch(url, init);
+  if (!response.ok) {
+    throw new Error(`API request failed (${response.status})`);
+  }
+  return response.json();
 };
 
 const formatCodeDate = (codeText?: string | null, codeDate?: string | null) => {
@@ -210,6 +236,48 @@ const buildActivityByDay = (logs: CallLogRow[]): DailyActivityRecord[] => {
   return Array.from(map.values()).sort((a, b) => b.activity_date.localeCompare(a.activity_date));
 };
 
+const mapCallLog = (row: any): CallLogEntry => ({
+  id: String(row?.id || ''),
+  contact_id: String(row?.contact_id || ''),
+  agent_name: String(row?.agent_name || ''),
+  channel: row?.channel === 'text' ? 'text' : 'call',
+  direction: row?.direction === 'inbound' ? 'inbound' : 'outbound',
+  duration_seconds: Number(row?.duration_seconds || 0),
+  notes: row?.notes || undefined,
+  outcome: (row?.outcome || 'logged') as any,
+  occurred_at: String(row?.occurred_at || ''),
+  next_action: row?.next_action ?? null,
+  next_action_due: row?.next_action_due ?? null,
+});
+
+const mapInquiry = (row: any): Inquiry => ({
+  id: String(row?.id || ''),
+  contact_id: String(row?.contact_id || ''),
+  title: String(row?.title || row?.status || 'Inquiry'),
+  channel: 'call',
+  occurred_at: String(row?.occurred_at || row?.sales_date || ''),
+  notes: row?.notes || undefined,
+});
+
+const mapPurchase = (row: any): Purchase => ({
+  id: String(row?.id || ''),
+  contact_id: String(row?.contact_id || ''),
+  amount: Number(row?.amount ?? row?.total_amount ?? 0),
+  status: (row?.status || 'paid') as Purchase['status'],
+  purchased_at: String(row?.purchased_at || row?.purchase_date || row?.date || ''),
+  notes: row?.notes || undefined,
+});
+
+const mapTeamMessage = (row: any): TeamMessage => ({
+  id: String(row?.id || ''),
+  sender_id: String(row?.sender_id || row?.senderId || ''),
+  sender_name: String(row?.sender_name || row?.senderName || ''),
+  sender_avatar: row?.sender_avatar || row?.senderAvatar || undefined,
+  message: String(row?.message || ''),
+  created_at: String(row?.created_at || row?.createdAt || ''),
+  is_from_owner: Boolean(row?.is_from_owner),
+});
+
 const matchesSearch = (contact: Contact, query: string) => {
   if (!query) return true;
   const normalizedQuery = normalizeText(query);
@@ -302,6 +370,78 @@ export const fetchCustomersForDailyCall = async (
     console.error('Error fetching daily call customers via local API:', error);
     return [];
   }
+};
+
+export const fetchAgentSnapshotForDailyCall = async (
+  viewerUserId: string | number
+): Promise<DailyCallAgentSnapshot> => {
+  const mainId = resolveMainId();
+  const params = new URLSearchParams({
+    main_id: String(mainId),
+    viewer_user_id: String(viewerUserId),
+  });
+  const payload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/agent-snapshot?${params.toString()}`);
+  const data = payload?.data || {};
+
+  return {
+    contacts: Array.isArray(data?.contacts) ? data.contacts as DailyCallCustomerRow[] : [],
+    callLogs: Array.isArray(data?.call_logs) ? data.call_logs.map(mapCallLog) : [],
+    inquiries: Array.isArray(data?.inquiries) ? data.inquiries.map(mapInquiry) : [],
+    purchases: Array.isArray(data?.purchases) ? data.purchases.map(mapPurchase) : [],
+    teamMessages: Array.isArray(data?.team_messages) ? data.team_messages.map(mapTeamMessage) : [],
+  };
+};
+
+export const fetchContactCallLogsForDailyCall = async (
+  contactId: string,
+  dateRange?: DailyActivityDateRange
+): Promise<CallLogEntry[]> => {
+  const mainId = resolveMainId();
+  const params = new URLSearchParams({ main_id: String(mainId) });
+  if (dateRange?.from) params.set('from_date', dateRange.from);
+  if (dateRange?.to) params.set('to_date', dateRange.to);
+  const payload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/customers/${contactId}/call-logs?${params.toString()}`);
+  const data = Array.isArray(payload?.data) ? payload.data : [];
+  return data.map(mapCallLog);
+};
+
+export const fetchContactPurchasesForDailyCall = async (contactId: string): Promise<Purchase[]> => {
+  const mainId = resolveMainId();
+  const params = new URLSearchParams({ main_id: String(mainId) });
+  const payload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/customers/${contactId}/purchase-history?${params.toString()}`);
+  const data = Array.isArray(payload?.data) ? payload.data : [];
+  return data.map((row: any) => mapPurchase({ ...row, status: row?.payment_status || 'paid', purchased_at: row?.purchase_date }));
+};
+
+export const fetchContactSalesReportsForDailyCall = async (contactId: string): Promise<Inquiry[]> => {
+  const mainId = resolveMainId();
+  const params = new URLSearchParams({ main_id: String(mainId) });
+  const payload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/customers/${contactId}/sales-reports?${params.toString()}`);
+  const data = Array.isArray(payload?.data) ? payload.data : [];
+  return data.map((row: any) => mapInquiry({ ...row, title: row?.id || 'Sales Report', occurred_at: row?.date, notes: row?.notes }));
+};
+
+export const createCallLogForDailyCall = async (
+  input: Omit<CallLogEntry, 'id'>
+): Promise<CallLogEntry> => {
+  const mainId = resolveMainId();
+  const session = getLocalAuthSession();
+  const payload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/call-logs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      main_id: mainId,
+      user_id: session?.userProfile?.id || null,
+      contact_id: input.contact_id,
+      agent_name: input.agent_name,
+      channel: input.channel,
+      outcome: input.outcome,
+      notes: input.notes || '',
+      occurred_at: input.occurred_at,
+    }),
+  });
+
+  return mapCallLog(payload?.data || {});
 };
 
 export const subscribeToDailyCallMonitoringUpdates = (

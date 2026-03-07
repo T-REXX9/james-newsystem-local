@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  createCallLogForDailyCall,
+  fetchAgentSnapshotForDailyCall,
   fetchCustomersForDailyCall,
   subscribeToDailyCallMonitoringUpdates,
 } from '../dailyCallMonitoringService';
@@ -55,6 +57,69 @@ describe('dailyCallMonitoringService', () => {
     const result = await fetchCustomersForDailyCall({ status: 'inactive' });
 
     expect(result).toEqual([]);
+  });
+
+  it('fetchAgentSnapshotForDailyCall maps aggregate payload into frontend shapes', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: {
+          contacts: [{ id: '1', shopName: 'Test Shop' }],
+          call_logs: [{ id: 'log-1', contact_id: '1', agent_name: 'Jane Doe', channel: 'text', outcome: 'logged', occurred_at: '2026-03-07T00:00:00Z' }],
+          inquiries: [{ id: 'inq-1', contact_id: '1', sales_date: '2026-03-07T00:00:00Z', status: 'Submitted' }],
+          purchases: [{ id: 'pur-1', contact_id: '1', total_amount: 1200, purchase_date: '2026-03-07T00:00:00Z' }],
+          team_messages: [{ id: 'msg-1', sender_id: '1', sender_name: 'Owner', message: 'Follow up today', created_at: '2026-03-07T00:00:00Z', is_from_owner: true }],
+        },
+      }),
+    } as Response);
+
+    const result = await fetchAgentSnapshotForDailyCall('63');
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(result.contacts).toHaveLength(1);
+    expect(result.callLogs[0]).toMatchObject({ id: 'log-1', agent_name: 'Jane Doe', channel: 'text' });
+    expect(result.inquiries[0]).toMatchObject({ id: 'inq-1', title: 'Submitted' });
+    expect(result.purchases[0]).toMatchObject({ id: 'pur-1', amount: 1200 });
+    expect(result.teamMessages[0]).toMatchObject({ id: 'msg-1', is_from_owner: true });
+  });
+
+  it('createCallLogForDailyCall posts to the local API and returns the created log', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: {
+          id: 'log-9',
+          contact_id: '1',
+          agent_name: 'Jane Doe',
+          channel: 'text',
+          direction: 'outbound',
+          duration_seconds: 0,
+          notes: 'hello',
+          outcome: 'logged',
+          occurred_at: '2026-03-07T00:00:00Z',
+          next_action: null,
+          next_action_due: null,
+        },
+      }),
+    } as Response);
+
+    const result = await createCallLogForDailyCall({
+      contact_id: '1',
+      agent_name: 'Jane Doe',
+      channel: 'text',
+      direction: 'outbound',
+      duration_seconds: 0,
+      notes: 'hello',
+      outcome: 'logged' as any,
+      occurred_at: '2026-03-07T00:00:00Z',
+      next_action: null,
+      next_action_due: null,
+    });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy.mock.calls[0][0]).toContain('/daily-call-monitoring/call-logs');
+    expect(fetchSpy.mock.calls[0][1]).toMatchObject({ method: 'POST' });
+    expect(result).toMatchObject({ id: 'log-9', contact_id: '1', notes: 'hello' });
   });
 
   it('subscribeToDailyCallMonitoringUpdates triggers onUpdate on interval and supports unsubscribe', () => {

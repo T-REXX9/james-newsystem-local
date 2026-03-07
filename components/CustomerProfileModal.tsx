@@ -15,13 +15,12 @@ import {
 } from 'lucide-react';
 import { CallLogEntry, Contact, Inquiry, Purchase, UserProfile } from '../types';
 import {
-  createCallLog,
-  fetchCallLogs,
-  fetchCustomerMetrics,
-  fetchInquiries,
-  fetchPurchases,
-  fetchSalesReturns
-} from '../services/supabaseService';
+  createCallLogForDailyCall,
+  fetchContactCallLogsForDailyCall,
+  fetchContactPurchasesForDailyCall,
+  fetchContactSalesReportsForDailyCall,
+  fetchLBCRTOData
+} from '../services/dailyCallMonitoringService';
 import SalesReturnTab from './SalesReturnTab';
 import ValidationSummary from './ValidationSummary';
 import { validateMinLength, validateRequired } from '../utils/formValidation';
@@ -72,23 +71,22 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({ contact, cu
     setLoading(true);
     setLoadError(null);
     try {
-      const [allCalls, allInquiries, allPurchases, returnsData, metricData] = await Promise.all([
-        fetchCallLogs(),
-        fetchInquiries(),
-        fetchPurchases(),
-        fetchSalesReturns(contact.id),
-        fetchCustomerMetrics(contact.id)
+      const [contactCalls, contactInquiries, contactPurchases, returnsData] = await Promise.all([
+        fetchContactCallLogsForDailyCall(contact.id),
+        fetchContactSalesReportsForDailyCall(contact.id),
+        fetchContactPurchasesForDailyCall(contact.id),
+        fetchLBCRTOData(contact.id),
       ]);
-
-      const contactCalls = allCalls.filter((item) => item.contact_id === contact.id);
-      const contactInquiries = allInquiries.filter((item) => item.contact_id === contact.id);
-      const contactPurchases = allPurchases.filter((item) => item.contact_id === contact.id);
 
       setCallLogs(contactCalls);
       setInquiries(contactInquiries);
       setPurchases(contactPurchases);
       setSalesReturns(returnsData || []);
-      setMetrics((metricData as CustomerMetrics | null) ?? null);
+      setMetrics({
+        outstanding_balance: contact.balance || 0,
+        credit_limit: contact.creditLimit || 0,
+        currency: 'PHP',
+      });
 
       const callEvents: TimelineItem[] = contactCalls.map((item) => ({
         id: `call-${item.id}`,
@@ -214,7 +212,7 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({ contact, cu
     setSubmitting(true);
     setValidationErrors({});
     try {
-      await createCallLog({
+      await createCallLogForDailyCall({
         contact_id: contact.id,
         agent_name: currentUser?.full_name || 'System',
         channel: 'text',

@@ -1373,6 +1373,7 @@ export interface StockAdjustmentItem {
   physical_qty: number;
   difference: number;
   reason?: string;
+  location?: string;
 }
 
 export interface StockAdjustment {

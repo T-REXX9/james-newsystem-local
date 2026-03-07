@@ -1,180 +1,120 @@
-import { supabase } from '../lib/supabaseClient';
-import type { StockAdjustment, StockAdjustmentDTO } from '../types';
-import { createInventoryLogFromStockAdjustment } from './inventoryLogService';
-import { ENTITY_TYPES, logCreate, logStatusChange } from './activityLogService';
+import type { StockAdjustment, StockAdjustmentDTO, StockAdjustmentItem } from '../types';
+import { getLocalAuthSession } from './localAuthService';
 
-/**
- * Create a new Stock Adjustment
- */
-export async function createStockAdjustment(data: StockAdjustmentDTO): Promise<StockAdjustment> {
-  // Get current user
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
+const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
+const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
 
-  if (userError || !user) {
+const resolveMainId = (): number => {
+  const session = getLocalAuthSession();
+  const dynamicMainId = Number(
+    session?.context?.main_userid || session?.context?.user?.main_userid || session?.userProfile?.main_userid || 0
+  );
+  if (Number.isFinite(dynamicMainId) && dynamicMainId > 0) return dynamicMainId;
+  return API_MAIN_ID || 1;
+};
+
+const resolveUserId = (): string => {
+  const session = getLocalAuthSession();
+  const userId = session?.userProfile?.id || session?.context?.user?.id;
+  if (!userId) {
     throw new Error('User not authenticated');
   }
+  return String(userId);
+};
 
-  // Create the stock adjustment
-  const { data: adjustment, error: adjustmentError } = await supabase
-    .from('stock_adjustments')
-    .insert({
-      adjustment_no: data.adjustment_no,
-      adjustment_date: data.adjustment_date,
-      warehouse_id: data.warehouse_id,
-      adjustment_type: data.adjustment_type,
-      notes: data.notes,
-      status: 'draft',
-      processed_by: null,
-      is_deleted: false,
-    })
-    .select()
-    .single();
-
-  if (adjustmentError || !adjustment) {
-    console.error('Error creating stock adjustment:', adjustmentError);
-    throw adjustmentError || new Error('Failed to create stock adjustment');
-  }
-
-  // Create stock adjustment items with calculated differences
-  const itemsToInsert = data.items.map(item => ({
-    adjustment_id: adjustment.id,
-    item_id: item.item_id,
-    system_qty: item.system_qty,
-    physical_qty: item.physical_qty,
-    difference: item.physical_qty - item.system_qty,
-    reason: item.reason,
-  }));
-
-  const { error: itemsError } = await supabase
-    .from('stock_adjustment_items')
-    .insert(itemsToInsert);
-
-  if (itemsError) {
-    console.error('Error creating stock adjustment items:', itemsError);
-    // Rollback: delete the adjustment
-    await supabase.from('stock_adjustments').delete().eq('id', adjustment.id);
-    throw itemsError;
-  }
-
+const parseApiErrorMessage = async (response: Response): Promise<string> => {
   try {
-    await logCreate(ENTITY_TYPES.STOCK_ADJUSTMENT, adjustment.id, {
-      adjustment_no: adjustment.adjustment_no,
-      adjustment_type: adjustment.adjustment_type,
-    });
-  } catch (error) {
-    console.error('Failed to log activity:', error);
+    const payload = await response.json();
+    if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error.trim();
+    if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message.trim();
+  } catch {
+    // ignore parse errors
   }
+  return `API request failed (${response.status})`;
+};
 
-  // Fetch the complete adjustment with items
-  return await getStockAdjustment(adjustment.id) as StockAdjustment;
+const requestJson = async (url: string, init?: RequestInit): Promise<any> => {
+  const response = await fetch(url, init);
+  if (!response.ok) {
+    throw new Error(await parseApiErrorMessage(response));
+  }
+  return response.json();
+};
+
+const mapItem = (item: any): StockAdjustmentItem => ({
+  id: String(item?.id || ''),
+  adjustment_id: String(item?.adjustment_id || ''),
+  item_id: String(item?.item_id || ''),
+  system_qty: Number(item?.system_qty || 0),
+  physical_qty: Number(item?.physical_qty || 0),
+  difference: Number(item?.difference || 0),
+  reason: item?.reason || undefined,
+  location: item?.location || undefined,
+});
+
+const mapAdjustment = (row: any): StockAdjustment => ({
+  id: String(row?.id || ''),
+  adjustment_no: String(row?.adjustment_no || ''),
+  adjustment_date: String(row?.adjustment_date || ''),
+  warehouse_id: String(row?.warehouse_id || 'WH1'),
+  adjustment_type: row?.adjustment_type || 'physical_count',
+  notes: row?.notes || undefined,
+  status: row?.status || 'draft',
+  processed_by: row?.processed_by || undefined,
+  created_at: String(row?.created_at || ''),
+  updated_at: String(row?.updated_at || ''),
+  items: Array.isArray(row?.items) ? row.items.map(mapItem) : [],
+});
+
+export async function createStockAdjustment(data: StockAdjustmentDTO): Promise<StockAdjustment> {
+  const payload = await requestJson(`${API_BASE_URL}/stock-adjustments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      main_id: resolveMainId(),
+      user_id: resolveUserId(),
+      ...data,
+    }),
+  });
+
+  return mapAdjustment(payload?.data || {});
 }
 
-/**
- * Get a Stock Adjustment by ID
- */
 export async function getStockAdjustment(id: string): Promise<StockAdjustment | null> {
-  const { data, error } = await supabase
-    .from('stock_adjustments')
-    .select(`
-      *,
-      stock_adjustment_items (*)
-    `)
-    .eq('id', id)
-    .eq('is_deleted', false)
-    .single();
-
-  if (error) {
+  try {
+    const query = new URLSearchParams({ main_id: String(resolveMainId()) });
+    const payload = await requestJson(`${API_BASE_URL}/stock-adjustments/${id}?${query.toString()}`);
+    return mapAdjustment(payload?.data || {});
+  } catch (error) {
     console.error('Error fetching stock adjustment:', error);
     return null;
   }
-
-  return data as StockAdjustment;
 }
 
-/**
- * Finalize a Stock Adjustment
- * This triggers inventory log creation
- */
 export async function finalizeAdjustment(id: string): Promise<StockAdjustment | null> {
-  // Check if adjustment exists
-  const existingAdjustment = await getStockAdjustment(id);
-  if (!existingAdjustment) {
-    throw new Error('Stock Adjustment not found');
-  }
+  const payload = await requestJson(`${API_BASE_URL}/stock-adjustments/${id}/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      main_id: resolveMainId(),
+      user_id: resolveUserId(),
+    }),
+  });
 
-  // Only allow finalizing if status is 'draft'
-  if (existingAdjustment.status !== 'draft') {
-    throw new Error('Only draft stock adjustments can be finalized');
-  }
-
-  // Get current user
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    throw new Error('User not authenticated');
-  }
-
-  // Update status to 'finalized'
-  const { data: adjustment, error: adjustmentError } = await supabase
-    .from('stock_adjustments')
-    .update({
-      status: 'finalized',
-      processed_by: user.id,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', id)
-    .select()
-    .single();
-
-  if (adjustmentError || !adjustment) {
-    console.error('Error finalizing stock adjustment:', adjustmentError);
-    throw adjustmentError || new Error('Failed to finalize stock adjustment');
-  }
-
-  try {
-    await logStatusChange(ENTITY_TYPES.STOCK_ADJUSTMENT, id, 'draft', 'finalized');
-  } catch (error) {
-    console.error('Failed to log activity:', error);
-  }
-
-  // Create inventory logs
-  try {
-    await createInventoryLogFromStockAdjustment(id, user.id);
-  } catch (error) {
-    console.error('Error creating inventory logs:', error);
-    // Note: We don't rollback the adjustment status update here
-    // In production, you might want to handle this differently
-  }
-
-  // Fetch the complete updated adjustment
-  return await getStockAdjustment(id) as StockAdjustment;
+  return mapAdjustment(payload?.data || {});
 }
 
-/**
- * Get all Stock Adjustments with optional filters
- */
 export async function getAllStockAdjustments(
   filters?: { warehouseId?: string }
 ): Promise<StockAdjustment[]> {
-  let query = supabase
-    .from('stock_adjustments')
-    .select(`
-      *,
-      stock_adjustment_items (*)
-    `)
-    .eq('is_deleted', false)
-    .order('created_at', { ascending: false });
+  const query = new URLSearchParams({ main_id: String(resolveMainId()) });
+  const payload = await requestJson(`${API_BASE_URL}/stock-adjustments?${query.toString()}`);
+  const rows = Array.isArray(payload?.data?.items) ? payload.data.items : [];
+  const mapped = rows.map(mapAdjustment);
 
-  if (filters?.warehouseId) {
-    query = query.eq('warehouse_id', filters.warehouseId);
+  if (!filters?.warehouseId) {
+    return mapped;
   }
 
-  const { data, error } = await query;
-
-  if (error) {
-    console.error('Error fetching stock adjustments:', error);
-    throw error;
-  }
-
-  return data || [];
+  return mapped.filter((item) => item.warehouse_id === filters.warehouseId);
 }

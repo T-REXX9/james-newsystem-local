@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Scale, ListFilter, Search, RefreshCw, Plus, Package,
+  Scale, ListFilter, Search, RefreshCw, Plus,
   CheckCircle2, AlertTriangle, XCircle, Calendar, MapPin,
-  FileText, Trash2, Save, ArrowUp, ArrowDown, AlertCircle
+  FileText, Trash2, Save, ArrowUp, ArrowDown
 } from 'lucide-react';
 import StatusBadge from './StatusBadge';
 import WorkflowStepper from './WorkflowStepper';
@@ -10,18 +10,15 @@ import {
   createStockAdjustment,
   getAllStockAdjustments,
   finalizeAdjustment,
+  getStockAdjustment,
 } from '../services/stockAdjustmentService';
-import { dispatchWorkflowNotification, fetchProducts } from '../services/supabaseService';
+import { fetchProducts } from '../services/productLocalApiService';
 import {
   Product,
   StockAdjustment,
   StockAdjustmentDTO,
-  StockAdjustmentItem,
   StockAdjustmentType
 } from '../types';
-import { useRealtimeNestedList } from '../hooks/useRealtimeNestedList';
-import { useRealtimeList } from '../hooks/useRealtimeList';
-import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 
 interface StockAdjustmentViewProps {
   initialAdjustmentId?: string;
@@ -42,6 +39,10 @@ const documentStatusMeta: Record<StockAdjustmentStatus, { label: string; tone: '
 };
 
 const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjustmentId, initialAdjustmentNo }) => {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [stockAdjustments, setStockAdjustments] = useState<StockAdjustment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [selectedAdjustment, setSelectedAdjustment] = useState<StockAdjustment | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | StockAdjustmentStatus>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -60,58 +61,40 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
     item_id: string;
     system_qty: number;
     physical_qty: number;
+    location?: string;
     reason?: string;
   }>>([]);
   const [itemSearch, setItemSearch] = useState('');
   const [showItemDropdown, setShowItemDropdown] = useState(false);
 
-  // Use real-time list for products
-  const { data: products } = useRealtimeList<Product>({
-    tableName: 'products',
-    initialFetchFn: fetchProducts,
-  });
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [nextProducts, nextAdjustments] = await Promise.all([
+        fetchProducts(),
+        getAllStockAdjustments(),
+      ]);
+      setProducts(nextProducts);
+      setStockAdjustments(nextAdjustments);
+      setSelectedAdjustment((prev) => {
+        if (prev) {
+          return nextAdjustments.find((entry) => entry.id === prev.id) || prev;
+        }
+        return nextAdjustments[0] || null;
+      });
+    } catch (err) {
+      console.error('Error loading stock adjustment data:', err);
+      alert('Failed to load stock adjustment data');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  // Use real-time nested list for stock adjustments with items
-  const sortByCreatedAt = (a: StockAdjustment, b: StockAdjustment) => {
-    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
-  };
-
-  const {
-    data: stockAdjustments,
-    isLoading: loading,
-    setData: setStockAdjustments,
-  } = useRealtimeNestedList<StockAdjustment, StockAdjustmentItem>({
-    parentTableName: 'stock_adjustments',
-    childTableName: 'stock_adjustment_items',
-    parentFetchFn: getAllStockAdjustments,
-    childParentIdField: 'adjustment_id',
-    childrenField: 'items',
-    sortParentFn: sortByCreatedAt,
-  });
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const productMap = useMemo(() => new Map(products.map(product => [product.id, product])), [products]);
-
-  const notifyStockAdjustmentEvent = useCallback(async (
-    title: string,
-    message: string,
-    action: string,
-    status: 'success' | 'failed',
-    entityId: string,
-    type: 'success' | 'error' | 'warning' | 'info' = 'success'
-  ) => {
-    await dispatchWorkflowNotification({
-      title,
-      message,
-      type,
-      action,
-      status,
-      entityType: 'stock_adjustment',
-      entityId,
-      actionUrl: `/stock-adjustment?adjustmentId=${entityId}`,
-      targetRoles: ['Owner', 'Manager', 'Support'],
-      includeActor: true,
-    });
-  }, []);
 
   // Auto-select first adjustment when adjustments change
   useEffect(() => {
@@ -133,6 +116,34 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
     );
     if (adjustment) setSelectedAdjustment(adjustment);
   }, [initialAdjustmentNo, stockAdjustments]);
+
+  useEffect(() => {
+    if (!selectedAdjustment?.id) return;
+
+    let cancelled = false;
+    setDetailLoading(true);
+
+    getStockAdjustment(selectedAdjustment.id)
+      .then((detail) => {
+        if (!detail || cancelled) return;
+        setSelectedAdjustment((prev) => prev?.id === detail.id ? detail : prev);
+        setStockAdjustments((prev) => prev.map((entry) => entry.id === detail.id ? { ...entry, ...detail } : entry));
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error('Error loading stock adjustment details:', err);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setDetailLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAdjustment?.id]);
 
   const filteredAdjustments = useMemo(() => {
     const query = searchTerm.toLowerCase();
@@ -185,34 +196,17 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
     if (!selectedAdjustment) return;
     setFinalizing(true);
 
-    // Optimistic update
-    setStockAdjustments(prev => applyOptimisticUpdate(prev, selectedAdjustment.id, {
-      status: 'finalized'
-    } as Partial<StockAdjustment>));
-    setSelectedAdjustment(prev => prev ? { ...prev, status: 'finalized' } : null);
-
     try {
-      await finalizeAdjustment(selectedAdjustment.id);
-      await notifyStockAdjustmentEvent(
-        'Stock Adjustment Finalized',
-        `Adjustment ${selectedAdjustment.adjustment_no} has been finalized. Inventory updated.`,
-        'finalize',
-        'success',
-        selectedAdjustment.id
-      );
+      const finalized = await finalizeAdjustment(selectedAdjustment.id);
+      if (finalized) {
+        setSelectedAdjustment(finalized);
+        setStockAdjustments(prev => prev.map(item => item.id === finalized.id ? { ...item, ...finalized } : item));
+      }
+      await loadData();
       setShowFinalizeConfirm(false);
     } catch (err) {
       console.error('Error finalizing adjustment:', err);
-      await notifyStockAdjustmentEvent(
-        'Stock Adjustment Finalization Failed',
-        `Failed to finalize adjustment ${selectedAdjustment.adjustment_no}.`,
-        'finalize',
-        'failed',
-        selectedAdjustment.id,
-        'error'
-      );
       alert('Failed to finalize adjustment');
-      // Real-time subscription will correct state
     } finally {
       setFinalizing(false);
     }
@@ -236,13 +230,8 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
 
     try {
       const newAdjustment = await createStockAdjustment(adjustmentData);
-      await notifyStockAdjustmentEvent(
-        'Stock Adjustment Created',
-        `Adjustment ${adjustmentNo} has been created successfully.`,
-        'create',
-        'success',
-        newAdjustment.id
-      );
+      await loadData();
+      setSelectedAdjustment(newAdjustment);
       setShowCreateForm(false);
       // Reset form
       setAdjustmentNo('');
@@ -254,14 +243,6 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
       setItemSearch('');
     } catch (err) {
       console.error('Error creating adjustment:', err);
-      await notifyStockAdjustmentEvent(
-        'Stock Adjustment Creation Failed',
-        `Failed to create adjustment ${adjustmentNo || 'n/a'}.`,
-        'create',
-        'failed',
-        adjustmentNo || 'pending',
-        'error'
-      );
       alert('Failed to create stock adjustment');
     } finally {
       setCreating(false);
@@ -414,6 +395,11 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
         <section className="flex-1 overflow-y-auto p-4">
           {selectedAdjustment ? (
             <div className="space-y-4">
+              {detailLoading && (
+                <div className="flex items-center justify-center py-2 text-xs text-slate-500">
+                  <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading adjustment details...
+                </div>
+              )}
               {/* Adjustment Header Card */}
               <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-4 space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">

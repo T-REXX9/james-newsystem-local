@@ -46,14 +46,10 @@ import {
   isWithinCurrentMonth
 } from './callMetricsUtils';
 import {
-  fetchCallLogs,
-  fetchInquiries,
-  fetchPurchases,
-  fetchTeamMessages,
-  subscribeToCallMonitoringUpdates
-} from '../services/supabaseService';
-import { fetchCustomersForDailyCall } from '../services/dailyCallMonitoringService';
-import { supabase } from '../lib/supabaseClient';
+  createCallLogForDailyCall,
+  fetchAgentSnapshotForDailyCall,
+  subscribeToDailyCallMonitoringUpdates
+} from '../services/dailyCallMonitoringService';
 import {
   CallLogEntry,
   Contact,
@@ -452,22 +448,14 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     if (!agentDataName || !isSalesAgent) return;
     setLoading(true);
     try {
-      const [customerRows, callLogData, inquiryData, purchaseData, messageData] = await Promise.all([
-        fetchCustomersForDailyCall({ status: 'all', search: '', viewerUserId: currentUser?.id }),
-        fetchCallLogs(),
-        fetchInquiries(),
-        fetchPurchases(),
-        fetchTeamMessages()
-      ]);
-
-      const teamScopedContacts = customerRows.map(toContactModel);
-      const contactIds = new Set(teamScopedContacts.map((contact) => contact.id));
+      const snapshot = await fetchAgentSnapshotForDailyCall(currentUser?.id || '');
+      const teamScopedContacts = snapshot.contacts.map(toContactModel);
 
       setContacts(teamScopedContacts);
-      setCallLogs(callLogData.filter((log) => log.agent_name === agentDataName));
-      setInquiries(inquiryData.filter((inquiry) => contactIds.has(inquiry.contact_id)));
-      setPurchases(purchaseData.filter((purchase) => contactIds.has(purchase.contact_id)));
-      setTeamMessages(messageData.filter((message) => message.is_from_owner));
+      setCallLogs(snapshot.callLogs.filter((log) => log.agent_name === agentDataName));
+      setInquiries(snapshot.inquiries);
+      setPurchases(snapshot.purchases);
+      setTeamMessages(snapshot.teamMessages.filter((message) => message.is_from_owner));
       setLoadError(null);
       setHasLoadedData(true);
     } catch (error) {
@@ -547,23 +535,18 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
     setSendingSMS(true);
     try {
-      const { error } = await supabase
-        .from('call_logs')
-        .insert({
-          contact_id: smsRecipient.id,
-          agent_name: agentDataName || 'Unknown',
-          channel: 'text',
-          direction: 'outbound',
-          outcome: 'logged',
-          notes: smsMessage.trim(),
-          occurred_at: new Date().toISOString()
-        });
-
-      if (error) {
-        console.error('Error logging SMS:', error);
-        addToast({ type: 'error', message: 'Failed to log SMS' });
-        return;
-      }
+      await createCallLogForDailyCall({
+        contact_id: smsRecipient.id,
+        agent_name: agentDataName || 'Unknown',
+        channel: 'text',
+        direction: 'outbound',
+        duration_seconds: 0,
+        notes: smsMessage.trim(),
+        outcome: 'logged' as any,
+        occurred_at: new Date().toISOString(),
+        next_action: null,
+        next_action_due: null,
+      });
 
       addToast({ type: 'success', message: 'SMS logged successfully' });
       setShowSMSModal(false);
