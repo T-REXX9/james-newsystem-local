@@ -1,12 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   FileCheck,
-  ListFilter,
-  Search,
   RefreshCw,
-  Calendar,
   ChevronLeft,
   ChevronRight,
+  Search,
 } from 'lucide-react';
 import {
   Contact,
@@ -30,9 +28,36 @@ interface SalesOrderViewProps {
   initialOrderId?: string;
 }
 
-const OLD_SYSTEM_STATUSES = ['Pending', 'Submitted', 'Approved', 'Posted', 'Cancelled'];
+const MONTH_OPTIONS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
+const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
 
 const normalizeStatus = (status: unknown): string => String(status || '').trim().toLowerCase();
+
+const formatDate = (value?: string | null): string => {
+  if (!value) return '-';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString();
+};
+
+const formatCurrency = (value?: number | string | null): string => {
+  const amount = Number(value || 0);
+  return `₱${amount.toLocaleString()}`;
+};
 
 const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
   const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null);
@@ -50,6 +75,11 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const [customerFilter, setCustomerFilter] = useState('');
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelLoading, setCancelLoading] = useState(false);
 
   const targetMonthYear = useMemo(() => {
     if (!dateRange.from) {
@@ -102,11 +132,6 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
   }, [loadContacts]);
 
   useEffect(() => {
-    const t = window.setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300);
-    return () => window.clearTimeout(t);
-  }, [searchTerm]);
-
-  useEffect(() => {
     loadOrders();
   }, [loadOrders]);
 
@@ -143,7 +168,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
   const applyOptimisticStatusUpdate = useCallback((orderId: string, status: string) => {
     setOrders(prev => applyOptimisticUpdate(prev, orderId, { status } as Partial<SalesOrder>));
     setSelectedOrder(prev => prev ? { ...prev, status } : null);
-  }, [setOrders]);
+  }, []);
 
   const openDocumentFromLink = useCallback((link: { type: 'orderslip' | 'invoice'; id: string }) => {
     if (link.type === 'orderslip') {
@@ -153,7 +178,6 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
     navigateToModule('invoice', { invoiceId: link.id });
   }, [navigateToModule]);
 
-  // Auto-select first order when list page changes.
   useEffect(() => {
     if (orders.length > 0 && !selectedOrder) {
       setSelectedOrder(orders[0]);
@@ -170,7 +194,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
 
   useEffect(() => {
     setPage(1);
-  }, [statusFilter, searchTerm, dateRange.from, dateRange.to]);
+  }, [statusFilter, dateRange.from, dateRange.to]);
 
   useEffect(() => {
     if (!selectedOrder?.id) return;
@@ -189,6 +213,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
   }, [selectedOrder?.id]);
 
   const selectedCustomer = selectedOrder ? customerMap.get(selectedOrder.contact_id) : null;
+  const selectedCustomerLabel = selectedOrder ? getCustomerLabel(selectedOrder, selectedCustomer) : '-';
   const documentSuggestion = selectedCustomer?.transactionType || 'Invoice';
 
   useEffect(() => {
@@ -208,7 +233,6 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
     }
     const optimisticNextStatus = currentStatus === 'pending' ? 'Submitted' : 'Approved';
 
-    // Optimistic update
     applyOptimisticStatusUpdate(selectedOrder.id, optimisticNextStatus);
 
     try {
@@ -241,7 +265,6 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
         'error'
       );
       alert('Failed to confirm order');
-      // Real-time subscription will correct the state
     } finally {
       setConfirming(false);
       await loadOrders();
@@ -281,7 +304,6 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
         );
       }
       setConversionModalOpen(false);
-      // Real-time subscription will update the state
     } catch (err) {
       console.error('Error converting sales order:', err);
       await notifySalesOrderEvent(
@@ -294,18 +316,129 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
         'error'
       );
       alert('Failed to convert order to document');
-      // Real-time subscription will correct the state
     } finally {
       setConversionLoading(false);
       await loadOrders();
     }
   };
 
+  const handleSearchSubmit = () => {
+    setPage(1);
+    setDebouncedSearch(searchTerm.trim());
+    setSearchModalOpen(false);
+  };
+
+  const handleRefresh = () => {
+    setSearchTerm('');
+    setDebouncedSearch('');
+    setCustomerFilter('');
+    setStatusFilter('all');
+    setDateRange({ from: '', to: '' });
+    setPage(1);
+    setSelectedOrder(null);
+    setDocumentMessage('');
+    setDocumentLink(null);
+  };
+
+  const handleMonthChange = (monthValue: string) => {
+    if (!monthValue) {
+      setDateRange({ from: '', to: '' });
+      return;
+    }
+    const year = targetMonthYear.year || new Date().getFullYear();
+    const month = monthValue.padStart(2, '0');
+    setDateRange({ from: `${year}-${month}-01`, to: '' });
+  };
+
+  const handleYearChange = (yearValue: string) => {
+    if (!yearValue) {
+      setDateRange({ from: '', to: '' });
+      return;
+    }
+    const month = String(targetMonthYear.month || new Date().getMonth() + 1).padStart(2, '0');
+    setDateRange({ from: `${yearValue}-${month}-01`, to: '' });
+  };
+
+  const handleFilterApply = async () => {
+    setPage(1);
+    await loadOrders();
+  };
+
+  const handleCancelOrder = async () => {
+    if (!selectedOrder || !cancelReason.trim()) {
+      return;
+    }
+
+    setCancelLoading(true);
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/sales-orders/${encodeURIComponent(selectedOrder.id)}/actions/cancel`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            main_id: API_MAIN_ID,
+            reason: cancelReason.trim(),
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Cancel failed (${response.status})`);
+      }
+
+      const refreshed = await getSalesOrder(selectedOrder.id);
+      if (refreshed) {
+        setSelectedOrder(refreshed);
+        setOrders(prev => prev.map(row => row.id === refreshed.id ? refreshed : row));
+      }
+      setCancelModalOpen(false);
+      setCancelReason('');
+      await loadOrders();
+    } catch (err) {
+      console.error('Failed to cancel sales order:', err);
+      alert('Failed to cancel sales order');
+    } finally {
+      setCancelLoading(false);
+    }
+  };
+
+  const handleUnpost = () => {
+    alert('Unpost action is not available in the current sales order API.');
+  };
+
   const workflowStage = normalizeStatus(selectedOrder?.status) === 'posted' ? 'document' : 'order';
   const selectedOrderStatus = normalizeStatus(selectedOrder?.status);
   const canConfirm = selectedOrderStatus === 'pending' || (selectedOrderStatus === 'submitted' && Boolean(selectedOrder?.can_approve));
-  const confirmLabel = selectedOrderStatus === 'pending' ? 'Submit SO' : 'Approve SO';
-  const canConvert = selectedOrderStatus === 'approved' || selectedOrderStatus === 'posted';
+  const confirmLabel = selectedOrderStatus === 'pending' ? 'Approve SO' : 'Approve SO';
+  const canGenerate = selectedOrderStatus === 'approved';
+
+  const filteredOrders = useMemo(() => {
+    if (!customerFilter) return orders;
+    return orders.filter(order => order.contact_id === customerFilter);
+  }, [customerFilter, orders]);
+
+  const activeFilterLabel = useMemo(() => {
+    if (!targetMonthYear.month || !targetMonthYear.year) return 'All Records';
+    return `${MONTH_OPTIONS[targetMonthYear.month - 1]} ${targetMonthYear.year}`;
+  }, [targetMonthYear.month, targetMonthYear.year]);
+
+  const summaryRows = [
+    { label: 'Since', value: selectedCustomer?.customerSince || '-' },
+    { label: 'Class Code', value: selectedCustomer?.codeText || selectedCustomer?.priceGroup || '-' },
+    { label: 'Quota', value: selectedCustomer?.dealershipQuota?.toLocaleString() || '-' },
+    { label: 'Terms', value: selectedCustomer?.terms || selectedOrder?.terms || '-' },
+    { label: 'Balance', value: formatCurrency(selectedCustomer?.balance || 0) },
+  ];
+
+  const infoRows: Array<[string, string, string, string]> = [
+    ['CUSTOMER', selectedCustomerLabel, 'ORDERED BY', selectedOrder?.created_by || '-'],
+    ['DATE', formatDate(selectedOrder?.sales_date), 'ADDRESS', selectedCustomer?.address || '-'],
+    ['Remarks', selectedOrder?.remarks || '-', '', ''],
+    ['TERMS', selectedOrder?.terms || '-', 'TIN', selectedCustomer?.tin || '-'],
+    ['DELIVERY ADDRESS', selectedOrder?.delivery_address || selectedCustomer?.deliveryAddress || '-', 'SEND BY', selectedOrder?.send_by || '-'],
+    ['REFERRED BY', selectedCustomer?.referBy || selectedOrder?.sales_person || '-', '', ''],
+  ];
 
   return (
     <div className="h-full flex flex-col bg-slate-100 dark:bg-slate-950">
@@ -319,192 +452,454 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
             <p className="text-xs text-slate-300">Track conversions from inquiries through document generation</p>
           </div>
         </div>
-
       </div>
-      <div className="flex-1 flex overflow-hidden">
-        <aside className="w-80 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col">
-          <div className="p-4 space-y-3">
-            <div className="flex items-center gap-2 px-2 py-1 rounded border border-slate-200 dark:border-slate-800">
-              <Search className="w-4 h-4 text-slate-400" />
-              <input
-                className="flex-1 text-xs bg-transparent outline-none"
-                placeholder="Search order or customer"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-xs text-slate-500 flex items-center gap-1 mb-1">
-                <ListFilter className="w-3 h-3" /> Status
-              </label>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as 'all' | string)}
-                className="w-full text-xs border border-slate-200 dark:border-slate-800 rounded px-2 py-1 bg-slate-50 dark:bg-slate-800"
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="border border-slate-200 rounded bg-white shadow-sm dark:bg-slate-900 dark:border-slate-800">
+          <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <button
+                type="button"
+                onClick={() => setSearchModalOpen(true)}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
               >
-                <option value="all">All</option>
-                {OLD_SYSTEM_STATUSES.map(status => (
-                  <option key={status} value={status}>{status}</option>
+                <Search className="w-4 h-4" />
+                Search
+              </button>
+              <button
+                type="button"
+                onClick={handleRefresh}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Refresh
+              </button>
+              <span className="font-medium text-slate-700 dark:text-slate-200">Filter by Month:</span>
+              <select
+                value={targetMonthYear.month ? String(targetMonthYear.month) : ''}
+                onChange={(e) => handleMonthChange(e.target.value)}
+                className="px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+              >
+                <option value="">All</option>
+                {MONTH_OPTIONS.map((month, index) => (
+                  <option key={month} value={index + 1}>
+                    {month}
+                  </option>
                 ))}
               </select>
+              <input
+                type="number"
+                value={targetMonthYear.year || ''}
+                onChange={(e) => handleYearChange(e.target.value)}
+                className="w-28 px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+                placeholder="Year"
+              />
+              <button
+                type="button"
+                onClick={handleFilterApply}
+                className="px-4 py-2 rounded bg-slate-700 text-white dark:bg-slate-700"
+              >
+                Filter
+              </button>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <label className="flex flex-col gap-1">
-                <span className="flex items-center gap-1 text-slate-500"><Calendar className="w-3 h-3" /> From</span>
-                <input type="date" value={dateRange.from} onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))} className="border border-slate-200 dark:border-slate-800 rounded px-2 py-1 bg-white dark:bg-slate-800" />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="flex items-center gap-1 text-slate-500"><Calendar className="w-3 h-3" /> To</span>
-                <input type="date" value={dateRange.to} onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))} className="border border-slate-200 dark:border-slate-800 rounded px-2 py-1 bg-white dark:bg-slate-800" />
-              </label>
+          </div>
+
+          <div className="px-4 pt-3 text-sm text-slate-700 dark:text-slate-300">
+            <span className="font-semibold">Filtered By:</span> {activeFilterLabel}
+          </div>
+
+          <div className="p-4">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border border-slate-300 divide-y divide-slate-200 dark:border-slate-700 dark:divide-slate-700">
+                <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Date</th>
+                    <th className="px-3 py-2 text-left">Customer</th>
+                    <th className="px-3 py-2 text-left">SI No.</th>
+                    <th className="px-3 py-2 text-left">SO No.</th>
+                    <th className="px-3 py-2 text-left">Transaction No.</th>
+                    <th className="px-3 py-2 text-left">Sales Person</th>
+                    <th className="px-3 py-2 text-left">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                  {loading && (
+                    <tr>
+                      <td colSpan={7} className="px-3 py-6 text-center text-slate-500">
+                        <span className="inline-flex items-center gap-2">
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          Loading orders...
+                        </span>
+                      </td>
+                    </tr>
+                  )}
+                  {!loading && filteredOrders.map((order, index) => {
+                    const customer = customerMap.get(order.contact_id);
+                    const isSelected = selectedOrder?.id === order.id;
+                    const isCancelled = normalizeStatus(order.status) === 'cancelled';
+                    const rowTone = isCancelled
+                      ? 'text-red-600'
+                      : isSelected
+                        ? 'text-blue-600'
+                        : 'text-slate-700 dark:text-slate-200';
+                    return (
+                      <tr
+                        key={order.id}
+                        onClick={() => setSelectedOrder(order)}
+                        className={`cursor-pointer ${index % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50 dark:bg-slate-900/60'} hover:bg-slate-100 dark:hover:bg-slate-800 ${rowTone}`}
+                      >
+                        <td className="px-3 py-2">{formatDate(order.sales_date)}</td>
+                        <td className="px-3 py-2">{getCustomerLabel(order, customer)}</td>
+                        <td className="px-3 py-2">{order.inquiry_id || '-'}</td>
+                        <td className="px-3 py-2 font-semibold">{order.order_no}</td>
+                        <td className="px-3 py-2">{order.reference_no || order.customer_reference || '-'}</td>
+                        <td className="px-3 py-2">{order.sales_person || '-'}</td>
+                        <td className="px-3 py-2">
+                          <StatusBadge status={order.status} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {!loading && filteredOrders.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-3 py-6 text-center text-slate-500">
+                        No orders match the current filters.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-3 flex items-center justify-between text-sm text-slate-500">
+              <button
+                disabled={page <= 1}
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                className="inline-flex items-center gap-1 px-3 py-2 rounded border border-slate-300 disabled:opacity-40 dark:border-slate-700"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Prev
+              </button>
+              <span>Page {page} / {totalPages}</span>
+              <button
+                disabled={page >= totalPages}
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                className="inline-flex items-center gap-1 px-3 py-2 rounded border border-slate-300 disabled:opacity-40 dark:border-slate-700"
+              >
+                Next
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
-            {loading && (
-              <div className="flex items-center justify-center py-6 text-xs text-slate-500">
-                <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading orders...
-              </div>
-            )}
-            {!loading && orders.map(order => {
-              const customer = customerMap.get(order.contact_id);
-              const isActive = selectedOrder?.id === order.id;
-              return (
-                <button
-                  key={order.id}
-                  onClick={() => setSelectedOrder(order)}
-                  className={`w-full text-left p-3 space-y-1 ${isActive ? 'bg-brand-blue/10' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-sm text-slate-800 dark:text-slate-100">{order.order_no}</span>
-                    <StatusBadge status={order.status} />
+        </div>
+
+        {selectedOrder ? (
+          <>
+            <div className="border border-slate-200 rounded bg-white shadow-sm dark:bg-slate-900 dark:border-slate-800">
+              <div className="border-b border-slate-200 px-4 py-2 flex flex-col gap-3 bg-slate-50 dark:bg-slate-900/60 dark:border-slate-800 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h4 className="text-lg font-semibold text-slate-800 dark:text-white">SALES ORDER</h4>
+                </div>
+                <div className="flex flex-col items-start gap-2 lg:items-end">
+                  <div className="text-sm text-slate-700 dark:text-slate-200">
+                    <span className="font-semibold">SO No.:</span> {selectedOrder.order_no}
+                    {selectedOrderStatus === 'cancelled' && <span className="ml-2 text-red-600 font-semibold">(CANCELLED)</span>}
+                    {selectedOrder.inquiry_id && <span className="ml-2">From: {selectedOrder.inquiry_id}</span>}
                   </div>
-                  <p className="text-xs text-slate-500">{getCustomerLabel(order, customer)}</p>
-                  <p className="text-[11px] text-slate-400">{new Date(order.sales_date).toLocaleDateString()}</p>
-                </button>
-              );
-            })}
-            {!loading && orders.length === 0 && (
-              <div className="p-4 text-xs text-slate-500">No orders match the current filters.</div>
-            )}
-          </div>
-          <div className="p-3 flex items-center justify-between text-xs text-slate-500 border-t border-slate-200 dark:border-slate-800">
-            <button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))} className="p-1 rounded border border-slate-200 dark:border-slate-800 disabled:opacity-40">
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span>Page {page} / {totalPages}</span>
-            <button disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))} className="p-1 rounded border border-slate-200 dark:border-slate-800 disabled:opacity-40">
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        </aside>
-        <section className="flex-1 overflow-y-auto p-4 space-y-4">
-          {selectedOrder ? (
-            <>
-              <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-4 space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div>
-                    <p className="text-xs text-slate-500">Sales Order</p>
-                    <h2 className="text-2xl font-semibold text-slate-800 dark:text-white">{selectedOrder.order_no}</h2>
-                    <p className="text-xs text-slate-500">{new Date(selectedOrder.sales_date).toLocaleDateString()} · {getCustomerLabel(selectedOrder, selectedCustomer)}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <StatusBadge status={selectedOrder.status} />
-                    <button
-                      type="button"
-                      onClick={handleConfirmOrder}
-                      disabled={!canConfirm || confirming}
-                      className="px-4 py-2 rounded bg-slate-900 text-white text-xs disabled:opacity-40"
-                    >
-                      {confirming ? 'Processing...' : confirmLabel}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConversionModalOpen(true)}
-                      disabled={!canConvert}
-                      className="px-4 py-2 rounded bg-brand-blue text-white text-xs disabled:opacity-40"
-                    >
-                      Convert to {documentSuggestion}
-                    </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {canConfirm && (
+                      <button
+                        type="button"
+                        onClick={handleConfirmOrder}
+                        disabled={confirming}
+                        className="px-3 py-2 rounded bg-green-600 text-white text-sm disabled:opacity-50"
+                      >
+                        {confirming ? 'Processing...' : confirmLabel}
+                      </button>
+                    )}
+                    {canGenerate && selectedOrderStatus !== 'cancelled' && (
+                      <button
+                        type="button"
+                        onClick={() => setConversionModalOpen(true)}
+                        className="px-3 py-2 rounded bg-green-600 text-white text-sm"
+                      >
+                        Generate Sales Transaction
+                      </button>
+                    )}
+                    {canGenerate && selectedOrderStatus !== 'cancelled' && (
+                      <button
+                        type="button"
+                        onClick={() => window.print()}
+                        className="px-3 py-2 rounded bg-slate-500 text-white text-sm"
+                      >
+                        Print SO
+                      </button>
+                    )}
+                    {canGenerate && selectedOrderStatus !== 'cancelled' && (
+                      <button
+                        type="button"
+                        onClick={() => setCancelModalOpen(true)}
+                        className="px-3 py-2 rounded bg-slate-500 text-white text-sm"
+                      >
+                        Cancel SO
+                      </button>
+                    )}
+                    {selectedOrderStatus === 'posted' && (
+                      <button
+                        type="button"
+                        onClick={handleUnpost}
+                        className="px-3 py-2 rounded bg-red-600 text-white text-sm"
+                      >
+                        Unpost
+                      </button>
+                    )}
                   </div>
                 </div>
-                <WorkflowStepper currentStage={workflowStage} documentLabel="Order Slip / Invoice" />
+              </div>
+
+              <div className="p-4 text-sm space-y-4">
+                <div className="overflow-x-auto">
+                  <table className="w-full border border-slate-300 divide-y divide-slate-200 dark:border-slate-700 dark:divide-slate-700">
+                    <thead className="bg-slate-100 dark:bg-slate-800">
+                      <tr className="text-left text-slate-700 dark:text-slate-200">
+                        {summaryRows.map(row => (
+                          <th key={row.label} className="px-3 py-2 font-semibold">{row.label}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="text-slate-700 dark:text-slate-200">
+                        {summaryRows.map(row => (
+                          <td key={row.label} className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">
+                            {row.value}
+                          </td>
+                        ))}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
                 {selectedOrderStatus === 'submitted' && !selectedOrder?.can_approve && (
                   <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded p-2">
                     This sales order is waiting for an assigned approver account.
                   </div>
                 )}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-slate-600">
-                  <div>
-                    <p className="font-semibold text-slate-500">Sales Person</p>
-                    <p>{selectedOrder.sales_person || 'Unassigned'}</p>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-slate-500">Transaction Type</p>
-                    <p>{selectedCustomer?.transactionType || 'Invoice'}</p>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-slate-500">Approved By</p>
-                    <p>{selectedOrder.approved_by || 'Pending'}</p>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-slate-500">Approved At</p>
-                    <p>{selectedOrder.approved_at ? new Date(selectedOrder.approved_at).toLocaleString() : 'Pending'}</p>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-4">
-                <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Items</h3>
+
                 <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="text-left text-slate-500">
-                        <th className="py-2">Item</th>
-                        <th className="py-2">Qty</th>
-                        <th className="py-2">Unit Price</th>
-                        <th className="py-2">Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedOrder.items?.map(item => (
-                        <tr key={item.id} className="border-t border-slate-100 dark:border-slate-800">
-                          <td className="py-2">
-                            <div className="font-semibold text-slate-700 dark:text-slate-200">{item.description}</div>
-                            <div className="text-[10px] text-slate-500">{item.item_code}</div>
-                          </td>
-                          <td className="py-2">{item.qty}</td>
-                          <td className="py-2">₱{Number(item.unit_price || 0).toLocaleString()}</td>
-                          <td className="py-2 font-semibold">₱{Number(item.amount || 0).toLocaleString()}</td>
+                  <table className="w-full border border-slate-300 divide-y divide-slate-200 dark:border-slate-700 dark:divide-slate-700">
+                    <tbody className="text-slate-700 dark:text-slate-200">
+                      {infoRows.map(([leftLabel, leftValue, rightLabel, rightValue], index) => (
+                        <tr key={`${leftLabel}-${index}`}>
+                          <td className="w-1/6 px-3 py-2 font-semibold bg-slate-50 dark:bg-slate-800/60">{leftLabel}</td>
+                          <td className="w-2/6 px-3 py-2">{leftValue}</td>
+                          <td className="w-1/6 px-3 py-2 font-semibold bg-slate-50 dark:bg-slate-800/60">{rightLabel || ''}</td>
+                          <td className="w-2/6 px-3 py-2">{rightValue || ''}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-                <div className="flex justify-end text-sm font-semibold text-slate-700 dark:text-slate-200 mt-3">
-                  Total: ₱{Number(selectedOrder.grand_total || 0).toLocaleString()}
+
+                <WorkflowStepper currentStage={workflowStage} documentLabel="Order Slip / Invoice" />
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border border-slate-300 divide-y divide-slate-200 dark:border-slate-700 dark:divide-slate-700">
+                    <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                      <tr>
+                        <th className="px-3 py-2 text-left w-[1%]">NO.</th>
+                        <th className="px-3 py-2 text-left w-[15%]">PARTNO</th>
+                        <th className="px-3 py-2 text-left w-[10%]">CODE</th>
+                        <th className="px-3 py-2 text-left w-[10%]">LOC</th>
+                        <th className="px-3 py-2 text-left w-[30%]">DESCRIPTION</th>
+                        <th className="px-3 py-2 text-left w-[10%]">QTY</th>
+                        <th className="px-3 py-2 text-left w-[15%]">UNIT PRICE</th>
+                        <th className="px-3 py-2 text-left w-[15%]">AMOUNT</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-700 text-slate-700 dark:text-slate-200">
+                      {selectedOrder.items?.map((item, index) => (
+                        <tr key={item.id || `${item.item_code}-${index}`}>
+                          <td className="px-3 py-2">{index + 1}</td>
+                          <td className="px-3 py-2">{item.part_no || '-'}</td>
+                          <td className="px-3 py-2">{item.item_code || '-'}</td>
+                          <td className="px-3 py-2">{item.location || '-'}</td>
+                          <td className="px-3 py-2">{item.description || '-'}</td>
+                          <td className="px-3 py-2">{item.qty}</td>
+                          <td className="px-3 py-2">{formatCurrency(item.unit_price)}</td>
+                          <td className="px-3 py-2">{formatCurrency(item.amount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-slate-50 dark:bg-slate-800/60 text-slate-800 dark:text-slate-100">
+                      <tr>
+                        <td colSpan={7} className="px-3 py-2 text-right font-semibold">
+                          Total =&gt;
+                        </td>
+                        <td className="px-3 py-2 font-semibold">{formatCurrency(selectedOrder.grand_total)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border border-slate-300 divide-y divide-slate-200 dark:border-slate-700 dark:divide-slate-700">
+                    <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                      <tr>
+                        <th className="px-3 py-2 text-left">Balance</th>
+                        <th className="px-3 py-2 text-left">Last Payment</th>
+                        <th className="px-3 py-2 text-left">Promise to Pay</th>
+                        <th className="px-3 py-2 text-left">Note</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="text-slate-700 dark:text-slate-200">
+                        <td className="px-3 py-2">{formatCurrency(selectedCustomer?.balance || 0)}</td>
+                        <td className="px-3 py-2">{selectedOrder.approved_at ? formatDate(selectedOrder.approved_at) : '-'}</td>
+                        <td className="px-3 py-2">{selectedOrder.promise_to_pay || '-'}</td>
+                        <td className="px-3 py-2">{selectedOrder.remarks || selectedOrder.reference_no || '-'}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border border-slate-300 divide-y divide-slate-200 dark:border-slate-700 dark:divide-slate-700">
+                    <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                      <tr>
+                        <th className="px-3 py-2 text-left">BD ISSUED BY/DATE</th>
+                        <th className="px-3 py-2 text-left">REF. BILL NO.</th>
+                        <th className="px-3 py-2 text-left">Security Checked</th>
+                        <th className="px-3 py-2 text-left">WH S.O Received</th>
+                        <th className="px-3 py-2 text-left">WH GOODS Issue</th>
+                        <th className="px-3 py-2 text-left">APPROVED BY</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="text-slate-700 dark:text-slate-200">
+                        <td className="px-3 py-2">{selectedOrder.created_by || '-'} / {formatDate(selectedOrder.created_at)}</td>
+                        <td className="px-3 py-2">{selectedOrder.po_number || '-'}</td>
+                        <td className="px-3 py-2">{selectedOrder.send_by || '-'}</td>
+                        <td className="px-3 py-2">{selectedOrder.reference_no || '-'}</td>
+                        <td className="px-3 py-2">{selectedOrder.sales_person || '-'}</td>
+                        <td className="px-3 py-2">{selectedOrder.approved_by || '-'}</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </div>
-              {documentMessage && (
-                <div className="bg-emerald-50 border border-emerald-100 text-emerald-700 rounded-lg p-3 text-xs flex items-center justify-between">
-                  <span>{documentMessage}</span>
-                  {documentLink && (
-                    <button
-                      type="button"
-                      onClick={() => openDocumentFromLink(documentLink)}
-                      className="px-3 py-1 rounded bg-emerald-600 text-white"
-                    >
-                      View {documentLink.type === 'orderslip' ? 'Order Slip' : 'Invoice'}
-                    </button>
-                  )}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="h-full flex items-center justify-center text-slate-500 text-sm">
-              Select an order from the left to view workflow details.
             </div>
-          )}
-        </section>
+
+            {documentMessage && (
+              <div className="bg-emerald-50 border border-emerald-100 text-emerald-700 rounded-lg p-3 text-sm flex items-center justify-between">
+                <span>{documentMessage}</span>
+                {documentLink && (
+                  <button
+                    type="button"
+                    onClick={() => openDocumentFromLink(documentLink)}
+                    className="px-3 py-1 rounded bg-emerald-600 text-white"
+                  >
+                    View {documentLink.type === 'orderslip' ? 'Order Slip' : 'Invoice'}
+                  </button>
+                )}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="border border-slate-200 rounded bg-white shadow-sm dark:bg-slate-900 dark:border-slate-800 px-6 py-16 text-center text-slate-500">
+            Select a sales order from the table above to view its full details.
+          </div>
+        )}
       </div>
+
+      {searchModalOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-40 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-lg w-full p-5 border border-slate-200 dark:border-slate-800 space-y-4">
+            <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Search Sales Orders</h3>
+            <div className="space-y-3">
+              <label className="block text-sm text-slate-700 dark:text-slate-200">
+                <span className="block mb-1">Ref No.</span>
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+                />
+              </label>
+              <label className="block text-sm text-slate-700 dark:text-slate-200">
+                <span className="block mb-1">Customer</span>
+                <select
+                  value={customerFilter}
+                  onChange={(e) => setCustomerFilter(e.target.value)}
+                  className="w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+                >
+                  <option value="">All Customers</option>
+                  {contacts.map(contact => (
+                    <option key={contact.id} value={contact.id}>
+                      {contact.company}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setSearchModalOpen(false)}
+                className="px-3 py-2 text-sm rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={handleSearchSubmit}
+                className="px-4 py-2 text-sm rounded bg-slate-700 text-white"
+              >
+                Submit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cancelModalOpen && selectedOrder && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-40 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-lg w-full p-5 border border-slate-200 dark:border-slate-800 space-y-4">
+            <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Cancel Sales Order</h3>
+            <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              Are you sure you want to cancel Sales Order? This cannot be undone.
+            </div>
+            <label className="block text-sm text-slate-700 dark:text-slate-200">
+              <span className="block mb-1">Reason to Cancel:</span>
+              <input
+                type="text"
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                className="w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+              />
+            </label>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setCancelModalOpen(false);
+                  setCancelReason('');
+                }}
+                className="px-3 py-2 text-sm rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelOrder}
+                disabled={!cancelReason.trim() || cancelLoading}
+                className="px-4 py-2 text-sm rounded bg-red-600 text-white disabled:opacity-50"
+              >
+                {cancelLoading ? 'Processing...' : 'Proceed'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {conversionModalOpen && selectedOrder && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-40 p-4">
