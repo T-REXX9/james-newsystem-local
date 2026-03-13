@@ -17,6 +17,8 @@ interface StaffRecord {
     role: string;
     avatar_url?: string;
     access_rights?: string[] | string | null;
+    access_override?: boolean | number;
+    group_id?: string | number | null;
     birthday?: string;
     mobile?: string;
     monthly_quota?: number;
@@ -77,6 +79,8 @@ const mapStaffToProfile = (staff: StaffRecord): UserProfile => ({
     role: staff.role,
     avatar_url: staff.avatar_url || undefined,
     access_rights: parseAccessRights(staff.access_rights),
+    access_override: Boolean(staff.access_override),
+    group_id: staff.group_id === null || staff.group_id === undefined || staff.group_id === '' ? null : String(staff.group_id),
     birthday: staff.birthday || undefined,
     mobile: staff.mobile || undefined,
     monthly_quota: staff.monthly_quota,
@@ -170,7 +174,7 @@ export const fetchProfilesLocal = async (
 
 export const updateProfileLocal = async (
     staffId: string | number,
-    data: { access_rights?: string[] }
+    data: { access_rights?: string[]; access_override?: boolean; group_id?: string | null }
 ): Promise<UserProfile> => {
     const payload = await requestJson(`${API_BASE_URL}/staff/${staffId}`, {
         method: 'PATCH',
@@ -178,6 +182,8 @@ export const updateProfileLocal = async (
         body: JSON.stringify({
             main_id: API_MAIN_ID,
             access_rights: data.access_rights ?? [],
+            access_override: data.access_override ?? false,
+            group_id: data.group_id ?? null,
         }),
     });
 

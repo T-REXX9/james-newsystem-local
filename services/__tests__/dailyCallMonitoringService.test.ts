@@ -25,7 +25,8 @@ describe('dailyCallMonitoringService', () => {
 
     const result = await fetchCustomersForDailyCall({ status: 'active', search: 'james', viewerUserId: '63' });
 
-    expect(result).toEqual(mockRows);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ id: '1', shopName: 'Test Shop' });
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const requestUrl = String(fetchSpy.mock.calls[0][0]);
     expect(requestUrl).toContain('/daily-call-monitoring/excel?');
@@ -81,6 +82,46 @@ describe('dailyCallMonitoringService', () => {
     expect(result.inquiries[0]).toMatchObject({ id: 'inq-1', title: 'Submitted' });
     expect(result.purchases[0]).toMatchObject({ id: 'pur-1', amount: 1200 });
     expect(result.teamMessages[0]).toMatchObject({ id: 'msg-1', is_from_owner: true });
+  });
+
+  it('fetchAgentSnapshotForDailyCall normalizes snake_case contact rows from the API', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: {
+          contacts: [
+            {
+              id: '1',
+              shop_name: 'A&M Injection Pump',
+              assigned_to: 'Sales Agent Demo',
+              city: 'null',
+              province: 'Davao del Norte',
+              contact_number: '',
+              mode_of_payment: '30DAYS PDC',
+              dealer_price_group: 'VIP2',
+              status_label: 'active',
+            },
+          ],
+          call_logs: [],
+          inquiries: [],
+          purchases: [],
+          team_messages: [],
+        },
+      }),
+    } as Response);
+
+    const result = await fetchAgentSnapshotForDailyCall('63');
+
+    expect(result.contacts).toHaveLength(1);
+    expect(result.contacts[0]).toMatchObject({
+      id: '1',
+      shopName: 'A&M Injection Pump',
+      assignedTo: 'Sales Agent Demo',
+      city: '',
+      province: 'Davao del Norte',
+      modeOfPayment: '30DAYS PDC',
+      dealerPriceGroup: 'VIP2',
+    });
   });
 
   it('createCallLogForDailyCall posts to the local API and returns the created log', async () => {

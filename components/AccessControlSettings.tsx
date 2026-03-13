@@ -1,34 +1,85 @@
-
-
-
-import React, { useState, useEffect, useMemo } from 'react';
-import { CreateStaffAccountInput, StaffAccountValidationError, UserProfile } from '../types';
-import { createStaffAccountLocal, fetchProfilesLocal, updateProfileLocal } from '../services/accessLocalApiService';
-import { parseSupabaseError } from '../utils/errorHandler';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  AlertTriangle,
+  CheckCircle,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Lock,
+  Save,
+  Shield,
+  User,
+  UserPlus,
+  X,
+} from 'lucide-react';
 import {
   AVAILABLE_APP_MODULES,
   DEFAULT_STAFF_ACCESS_RIGHTS,
   DEFAULT_STAFF_ROLE,
-  STAFF_ROLES,
   MODULE_ID_ALIASES,
+  STAFF_ROLES,
 } from '../constants';
-import { Loader2, Shield, Save, CheckCircle, AlertTriangle, User, UserPlus, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  createStaffAccountLocal,
+  fetchProfilesLocal,
+  updateProfileLocal,
+} from '../services/accessLocalApiService';
+import {
+  createAccessGroup,
+  deleteAccessGroup,
+  fetchAccessGroups,
+  updateAccessGroup,
+} from '../services/accessGroupApiService';
+import { parseSupabaseError } from '../utils/errorHandler';
+import {
+  AccessGroup,
+  CreateStaffAccountInput,
+  StaffAccountValidationError,
+  UserProfile,
+} from '../types';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
+import AccessGroupManager from './AccessGroupManager';
 import { useToast } from './ToastProvider';
 
 const STAFF_PER_PAGE = 50;
+
+const CANONICAL_TO_ALIASES: Record<string, string[]> = Object.entries(MODULE_ID_ALIASES).reduce(
+  (acc, [alias, canonical]) => {
+    if (!acc[canonical]) acc[canonical] = [];
+    acc[canonical].push(alias);
+    return acc;
+  },
+  {} as Record<string, string[]>
+);
+
+const getEffectiveCanonicalRights = (rights: string[] | null | undefined): Set<string> => {
+  const result = new Set<string>();
+
+  (rights || []).forEach((id) => {
+    if (id === '*' || id === 'settings') {
+      result.add(id);
+      return;
+    }
+
+    result.add(MODULE_ID_ALIASES[id] || id);
+  });
+
+  return result;
+};
 
 const AccessControlSettings: React.FC = () => {
   const { addToast } = useToast();
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [originalProfiles, setOriginalProfiles] = useState<UserProfile[]>([]);
+  const [groups, setGroups] = useState<AccessGroup[]>([]);
+  const [activeTab, setActiveTab] = useState<'groups' | 'staff'>('staff');
   const [isLoading, setIsLoading] = useState(true);
+  const [isGroupsLoading, setIsGroupsLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalProfiles, setTotalProfiles] = useState(0);
 
-  // Add Account Modal State
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [newUserForm, setNewUserForm] = useState({
@@ -37,44 +88,40 @@ const AccessControlSettings: React.FC = () => {
     role: DEFAULT_STAFF_ROLE,
     password: '',
     birthday: '',
-    mobile: ''
+    mobile: '',
   });
   const [formErrors, setFormErrors] = useState<StaffAccountValidationError>({});
-  const [formMessage, setFormMessage] = useState<{ type: 'success' | 'error' | null; text: string }>({ type: null, text: '' });
+  const [formMessage, setFormMessage] = useState<{ type: 'success' | 'error' | null; text: string }>({
+    type: null,
+    text: '',
+  });
 
-  const CANONICAL_TO_ALIASES: Record<string, string[]> = useMemo(
-    () =>
-      Object.entries(MODULE_ID_ALIASES).reduce(
-        (acc, [alias, canonical]) => {
-          if (!acc[canonical]) acc[canonical] = [];
-          acc[canonical].push(alias);
-          return acc;
-        },
-        {} as Record<string, string[]>
-      ),
-    []
+  const groupMap = useMemo(
+    () => Object.fromEntries(groups.map((group) => [group.id, group])),
+    [groups]
   );
 
-  const getEffectiveCanonicalRights = (rights: string[] | null | undefined): Set<string> => {
-    const result = new Set<string>();
-    if (!rights) return result;
+  const passwordStrength = useMemo(() => {
+    const value = newUserForm.password;
+    if (!value) return { label: '', level: 0 };
 
-    rights.forEach((id) => {
-      if (id === '*' || id === 'settings') {
-        result.add(id);
-        return;
-      }
+    let score = 0;
+    if (value.length >= 8) score += 1;
+    if (/[A-Z]/.test(value)) score += 1;
+    if (/\d/.test(value)) score += 1;
+    if (/[^A-Za-z0-9]/.test(value)) score += 1;
 
-      const canonical = MODULE_ID_ALIASES[id] || id;
-      result.add(canonical);
-    });
-
-    return result;
-  };
+    const levels = ['Weak', 'Fair', 'Good', 'Strong'];
+    return { label: levels[Math.min(score - 1, levels.length - 1)] || 'Weak', level: score };
+  }, [newUserForm.password]);
 
   useEffect(() => {
     loadProfiles();
   }, [page]);
+
+  useEffect(() => {
+    loadGroups();
+  }, []);
 
   const loadProfiles = async (targetPage = page) => {
     setIsLoading(true);
@@ -85,8 +132,8 @@ const AccessControlSettings: React.FC = () => {
       setPage(data.meta.page);
       setTotalPages(Math.max(1, data.meta.total_pages || 1));
       setTotalProfiles(Math.max(0, data.meta.total || 0));
-    } catch (e) {
-      console.error('Unable to load staff profiles:', e);
+    } catch (error) {
+      console.error('Unable to load staff profiles:', error);
       setProfiles([]);
       setOriginalProfiles([]);
       setTotalPages(1);
@@ -94,7 +141,7 @@ const AccessControlSettings: React.FC = () => {
       addToast({
         type: 'error',
         title: 'Unable to load staff profiles',
-        description: parseSupabaseError(e, 'staff profiles'),
+        description: parseSupabaseError(error, 'staff profiles'),
         durationMs: 6000,
       });
     } finally {
@@ -102,69 +149,180 @@ const AccessControlSettings: React.FC = () => {
     }
   };
 
+  const loadGroups = async () => {
+    setIsGroupsLoading(true);
+    try {
+      const data = await fetchAccessGroups();
+      setGroups(data);
+    } catch (error) {
+      console.error('Unable to load access groups:', error);
+      setGroups([]);
+      addToast({
+        type: 'error',
+        title: 'Unable to load access groups',
+        description: parseSupabaseError(error, 'access groups'),
+        durationMs: 6000,
+      });
+    } finally {
+      setIsGroupsLoading(false);
+    }
+  };
+
   const togglePermission = (userId: string, moduleId: string) => {
-    setProfiles(prevProfiles => prevProfiles.map(profile => {
-      if (profile.id !== userId) return profile;
+    setProfiles((prevProfiles) =>
+      prevProfiles.map((profile) => {
+        if (profile.id !== userId) return profile;
 
-      // Ensure access_rights array exists
-      const currentRights = profile.access_rights || [];
-      const canonical = MODULE_ID_ALIASES[moduleId] || moduleId;
-      let newRights: string[];
+        const currentRights = profile.access_rights || [];
+        const canonical = MODULE_ID_ALIASES[moduleId] || moduleId;
+        let newRights: string[];
 
-      if (currentRights.includes('*')) {
-        // If they had full access, converting to granular means giving all modules except the one being toggled off.
-        const allIds = AVAILABLE_APP_MODULES.map(m => m.id);
-        newRights = allIds.filter(id => id !== canonical);
-      } else {
-        const aliases = CANONICAL_TO_ALIASES[canonical] || [];
-        const idsForModule = [canonical, ...aliases];
-        const hasModule = currentRights.some(id => idsForModule.includes(id));
-
-        if (hasModule) {
-          // Remove all representations (canonical + any legacy aliases) for this module
-          newRights = currentRights.filter(id => !idsForModule.includes(id));
+        if (currentRights.includes('*')) {
+          const allIds = AVAILABLE_APP_MODULES.map((module) => module.id);
+          newRights = allIds.filter((id) => id !== canonical);
         } else {
-          // Add canonical ID and let alias layer handle backwards compatibility
-          newRights = [...currentRights, canonical];
-        }
-      }
+          const aliases = CANONICAL_TO_ALIASES[canonical] || [];
+          const idsForModule = [canonical, ...aliases];
+          const hasModule = currentRights.some((id) => idsForModule.includes(id));
 
-      return { ...profile, access_rights: newRights };
-    }));
+          newRights = hasModule
+            ? currentRights.filter((id) => !idsForModule.includes(id))
+            : [...currentRights, canonical];
+        }
+
+        return { ...profile, access_rights: newRights, access_override: true };
+      })
+    );
+  };
+
+  const handleGroupAssignmentChange = (userId: string, nextGroupId: string | null) => {
+    setProfiles((prevProfiles) =>
+      prevProfiles.map((profile) => {
+        if (profile.id !== userId) return profile;
+
+        const groupRights = nextGroupId ? groupMap[nextGroupId]?.access_rights || [] : profile.access_rights || [];
+        return {
+          ...profile,
+          group_id: nextGroupId,
+          access_rights: [...groupRights],
+          access_override: false,
+        };
+      })
+    );
   };
 
   const savePermissions = async (user: UserProfile) => {
     setSavingId(user.id);
     try {
-        await updateProfileLocal(user.id, { access_rights: user.access_rights });
-        setOriginalProfiles(prev =>
-          prev.map(profile =>
-            profile.id === user.id ? { ...profile, access_rights: user.access_rights } : profile
-          )
-        );
-        // Simulating delay for UX
-        await new Promise(resolve => setTimeout(resolve, 500)); 
-        addToast({ 
-          type: 'success', 
-          title: 'Permissions updated',
-          description: 'Access permissions have been updated successfully.',
-          durationMs: 4000,
-        });
-    } catch (e) {
-        console.error(e);
-        addToast({ 
-          type: 'error', 
-          title: 'Unable to update permissions',
-          description: parseSupabaseError(e, 'permissions'),
-          durationMs: 6000,
-        });
+      await updateProfileLocal(user.id, {
+        access_rights: user.access_rights,
+        access_override: user.access_override ?? false,
+        group_id: user.group_id ?? null,
+      });
+      setOriginalProfiles((prev) =>
+        prev.map((profile) =>
+          profile.id === user.id
+            ? { ...profile, access_rights: user.access_rights, access_override: user.access_override ?? false, group_id: user.group_id ?? null }
+            : profile
+        )
+      );
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await loadGroups();
+      addToast({
+        type: 'success',
+        title: 'Permissions updated',
+        description: 'Staff access and group assignment were saved successfully.',
+        durationMs: 4000,
+      });
+    } catch (error) {
+      console.error(error);
+      addToast({
+        type: 'error',
+        title: 'Unable to update permissions',
+        description: parseSupabaseError(error, 'permissions'),
+        durationMs: 6000,
+      });
     } finally {
-        setSavingId(null);
+      setSavingId(null);
+    }
+  };
+
+  const handleCreateGroup = async (data: { name: string; description: string; access_rights: string[] }) => {
+    try {
+      const created = await createAccessGroup(data.name, data.description, data.access_rights);
+      setGroups((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      addToast({
+        type: 'success',
+        title: 'Group created',
+        description: `${data.name} is ready for permission setup.`,
+        durationMs: 4000,
+      });
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: 'Unable to create group',
+        description: parseSupabaseError(error, 'access group'),
+        durationMs: 6000,
+      });
+      throw error;
+    }
+  };
+
+  const handleUpdateGroup = async (
+    id: string,
+    data: { name: string; description: string; access_rights: string[] }
+  ) => {
+    try {
+      const updated = await updateAccessGroup(id, data);
+      setGroups((prev) => prev.map((group) => (group.id === id ? updated : group)));
+      await loadProfiles();
+      addToast({
+        type: 'success',
+        title: 'Group saved',
+        description: 'Group permissions were updated and synced to inheriting staff.',
+        durationMs: 4000,
+      });
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: 'Unable to save group',
+        description: parseSupabaseError(error, 'access group'),
+        durationMs: 6000,
+      });
+      throw error;
+    }
+  };
+
+  const handleDeleteGroup = async (id: string) => {
+    try {
+      await deleteAccessGroup(id);
+      setGroups((prev) => prev.filter((group) => group.id !== id));
+      setProfiles((prev) =>
+        prev.map((profile) => (profile.group_id === id ? { ...profile, group_id: null } : profile))
+      );
+      setOriginalProfiles((prev) =>
+        prev.map((profile) => (profile.group_id === id ? { ...profile, group_id: null } : profile))
+      );
+      addToast({
+        type: 'success',
+        title: 'Group deleted',
+        description: 'The access group was removed successfully.',
+        durationMs: 4000,
+      });
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: 'Unable to delete group',
+        description: parseSupabaseError(error, 'access group'),
+        durationMs: 6000,
+      });
+      throw error;
     }
   };
 
   const validateForm = () => {
     const errors: StaffAccountValidationError = {};
+
     if (!newUserForm.fullName.trim()) {
       errors.fullName = 'Full name is required';
     }
@@ -181,24 +339,13 @@ const AccessControlSettings: React.FC = () => {
     if (newUserForm.role && !STAFF_ROLES.includes(newUserForm.role)) {
       errors.role = 'Please select a valid role';
     }
+
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
-  const passwordStrength = useMemo(() => {
-    const value = newUserForm.password;
-    if (!value) return { label: '', level: 0 };
-    let score = 0;
-    if (value.length >= 8) score += 1;
-    if (/[A-Z]/.test(value)) score += 1;
-    if (/\d/.test(value)) score += 1;
-    if (/[^A-Za-z0-9]/.test(value)) score += 1;
-    const levels = ['Weak', 'Fair', 'Good', 'Strong'];
-    return { label: levels[Math.min(score - 1, levels.length - 1)] || 'Weak', level: score };
-  }, [newUserForm.password]);
-
-  const handleCreateUser = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreateUser = async (event: React.FormEvent) => {
+    event.preventDefault();
     setFormMessage({ type: null, text: '' });
     if (!validateForm()) return;
 
@@ -209,7 +356,7 @@ const AccessControlSettings: React.FC = () => {
       role: newUserForm.role,
       birthday: newUserForm.birthday || undefined,
       mobile: newUserForm.mobile || undefined,
-      accessRights: DEFAULT_STAFF_ACCESS_RIGHTS
+      accessRights: DEFAULT_STAFF_ACCESS_RIGHTS,
     };
 
     setIsCreatingUser(true);
@@ -230,8 +377,16 @@ const AccessControlSettings: React.FC = () => {
 
       setPage(1);
       await loadProfiles(1);
+      await loadGroups();
       setIsAddUserModalOpen(false);
-      setNewUserForm({ fullName: '', email: '', role: DEFAULT_STAFF_ROLE, password: '', birthday: '', mobile: '' });
+      setNewUserForm({
+        fullName: '',
+        email: '',
+        role: DEFAULT_STAFF_ROLE,
+        password: '',
+        birthday: '',
+        mobile: '',
+      });
       setFormErrors({});
       setFormMessage({ type: 'success', text: `Account created for ${payload.fullName}` });
       addToast({
@@ -240,13 +395,13 @@ const AccessControlSettings: React.FC = () => {
         description: 'Account has been created successfully.',
         durationMs: 4000,
       });
-    } catch (err: any) {
-      console.error('Unexpected error creating staff account:', err);
-      setFormMessage({ type: 'error', text: err?.message || 'Something went wrong while creating the account.' });
+    } catch (error: any) {
+      console.error('Unexpected error creating staff account:', error);
+      setFormMessage({ type: 'error', text: error?.message || 'Something went wrong while creating the account.' });
       addToast({
         type: 'error',
         title: 'Unable to create user',
-        description: parseSupabaseError(err, 'user'),
+        description: parseSupabaseError(error, 'user'),
         durationMs: 6000,
       });
     } finally {
@@ -254,9 +409,9 @@ const AccessControlSettings: React.FC = () => {
     }
   };
 
-  if (isLoading) {
+  if (isLoading && isGroupsLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex h-full items-center justify-center">
         <CustomLoadingSpinner label="Loading" />
       </div>
     );
@@ -266,309 +421,399 @@ const AccessControlSettings: React.FC = () => {
   const rangeEnd = totalProfiles === 0 ? 0 : Math.min(totalProfiles, page * STAFF_PER_PAGE);
 
   return (
-    <div className="p-8 h-full overflow-y-auto animate-fadeIn relative">
-       <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                <Shield className="w-6 h-6 text-brand-blue" />
-                Access Control & Permissions
-            </h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                Manage page visibility and access rights for staff members.
-            </p>
-          </div>
-          <button 
+    <div className="relative h-full overflow-y-auto p-8 animate-fadeIn">
+      <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-center">
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-800 dark:text-white">
+            <Shield className="h-6 w-6 text-brand-blue" />
+            Access Control & Permissions
+          </h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Manage shared access groups and per-staff module overrides.
+          </p>
+        </div>
+
+        {activeTab === 'staff' && (
+          <button
             onClick={() => {
               setIsAddUserModalOpen(true);
               setFormErrors({});
               setFormMessage({ type: null, text: '' });
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-brand-blue hover:bg-blue-700 text-white rounded-lg shadow-sm font-medium transition-colors"
+            className="flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
           >
-            <UserPlus className="w-4 h-4" /> Add New Account
+            <UserPlus className="h-4 w-4" /> Add New Account
           </button>
-       </div>
+        )}
+      </div>
 
-       {!isAddUserModalOpen && formMessage.type && (
-          <div className={`mb-4 flex items-center gap-2 rounded-lg border px-4 py-3 text-sm ${formMessage.type === 'success' ? 'bg-green-50 text-green-800 border-green-100 dark:bg-green-900/20 dark:text-green-200 dark:border-green-800' : 'bg-red-50 text-red-800 border-red-100 dark:bg-red-900/20 dark:text-red-200 dark:border-red-800'}`}>
-            {formMessage.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
-            <span>{formMessage.text}</span>
-          </div>
-       )}
+      {!isAddUserModalOpen && formMessage.type && (
+        <div
+          className={`mb-4 flex items-center gap-2 rounded-lg border px-4 py-3 text-sm ${
+            formMessage.type === 'success'
+              ? 'border-green-100 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-900/20 dark:text-green-200'
+              : 'border-red-100 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200'
+          }`}
+        >
+          {formMessage.type === 'success' ? <CheckCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+          <span>{formMessage.text}</span>
+        </div>
+      )}
 
-       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden">
-          <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400 md:flex-row md:items-center md:justify-between">
-            <p>
-              Showing {rangeStart}-{rangeEnd} of {totalProfiles} staff members
-            </p>
-            <div className="flex items-center gap-2 self-end md:self-auto">
-              <button
-                type="button"
-                onClick={() => setPage(current => Math.max(1, current - 1))}
-                disabled={page <= 1}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Previous
-              </button>
-              <span className="min-w-[92px] text-center font-medium text-slate-600 dark:text-slate-300">
-                Page {page} of {totalPages}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPage(current => Math.min(totalPages, current + 1))}
-                disabled={page >= totalPages}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-              >
-                Next
-                <ChevronRight className="h-4 w-4" />
-              </button>
+      <div className="mb-6 inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        {[
+          { id: 'groups', label: 'Groups' },
+          { id: 'staff', label: 'Staff' },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveTab(tab.id as 'groups' | 'staff')}
+            className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+              activeTab === tab.id
+                ? 'bg-brand-blue text-white'
+                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'groups' ? (
+        <AccessGroupManager
+          groups={groups}
+          onCreateGroup={handleCreateGroup}
+          onUpdateGroup={handleUpdateGroup}
+          onDeleteGroup={handleDeleteGroup}
+        />
+      ) : (
+        <>
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400 md:flex-row md:items-center md:justify-between">
+              <p>
+                Showing {rangeStart}-{rangeEnd} of {totalProfiles} staff members
+              </p>
+              <div className="flex items-center gap-2 self-end md:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  disabled={page <= 1}
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Previous
+                </button>
+                <span className="min-w-[92px] text-center font-medium text-slate-600 dark:text-slate-300">
+                  Page {page} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                  disabled={page >= totalPages}
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
             </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">
-                  <th className="p-4 w-64 sticky left-0 bg-slate-50 dark:bg-slate-800 z-10 border-r border-slate-200 dark:border-slate-700">Staff Member</th>
-                  {AVAILABLE_APP_MODULES.filter(m => m.id !== 'settings').map(module => (
-                      <th key={module.id} className="p-4 text-center min-w-[100px] border-l border-slate-100 dark:border-slate-800">
-                          {module.label}
+
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-left">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                    <th className="sticky left-0 z-20 w-64 border-r border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
+                      Staff Member
+                    </th>
+                    <th className="sticky left-[16rem] z-20 min-w-[180px] border-r border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
+                      Group
+                    </th>
+                    {AVAILABLE_APP_MODULES.filter((module) => module.id !== 'settings').map((module) => (
+                      <th
+                        key={module.id}
+                        className="min-w-[100px] border-l border-slate-100 p-4 text-center dark:border-slate-800"
+                      >
+                        {module.label}
                       </th>
-                  ))}
-                  <th className="p-4 text-center w-32 sticky right-0 bg-slate-50 dark:bg-slate-800 z-10 border-l border-slate-200 dark:border-slate-700">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {profiles.map(user => {
-	                    const isOwner = user.role === 'Owner';
-	                    const userRights = user.access_rights || [];
-	                    const hasFullAccess = userRights.includes('*');
-	                    const effectiveCanonicalRights = getEffectiveCanonicalRights(userRights);
+                    ))}
+                    <th className="sticky right-0 z-20 w-32 border-l border-slate-200 bg-slate-50 p-4 text-center dark:border-slate-700 dark:bg-slate-800">
+                      Action
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {profiles.map((user) => {
+                    const isOwner = user.role === 'Owner';
+                    const userRights = user.access_rights || [];
+                    const hasFullAccess = userRights.includes('*');
+                    const effectiveCanonicalRights = getEffectiveCanonicalRights(userRights);
+                    const assignedGroup = user.group_id ? groupMap[user.group_id] : undefined;
+                    const groupRights = getEffectiveCanonicalRights(assignedGroup?.access_rights);
+                    const hasChanges =
+                      JSON.stringify(user.access_rights || []) !== JSON.stringify(originalProfiles.find((profile) => profile.id === user.id)?.access_rights || []) ||
+                      (user.group_id || null) !== (originalProfiles.find((profile) => profile.id === user.id)?.group_id || null);
 
                     return (
-                        <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                            <td className="p-4 sticky left-0 bg-white dark:bg-slate-900 z-10 border-r border-slate-200 dark:border-slate-800">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center overflow-hidden">
-                                        {user.avatar_url ? (
-                                            <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
-                                        ) : (
-                                            <User className="w-4 h-4 text-slate-400" />
-                                        )}
-                                    </div>
-                                    <div>
-                                        <p className="font-bold text-sm text-slate-800 dark:text-white">{user.full_name || 'Unknown'}</p>
-                                        <div className="flex items-center gap-1.5 mt-0.5">
-                                            <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase font-bold ${
-                                                isOwner 
-                                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' 
-                                                : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
-                                            }`}>
-                                                {user.role}
-                                            </span>
-                                            <span className="text-[10px] text-slate-400">{user.email}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </td>
-                            
-	                            {AVAILABLE_APP_MODULES.filter(m => m.id !== 'settings').map(module => {
-	                                const isAllowed = isOwner || hasFullAccess || effectiveCanonicalRights.has(module.id);
-                                return (
-                                    <td key={module.id} className="p-4 text-center border-l border-slate-100 dark:border-slate-800">
-                                        <div className="flex justify-center">
-                                            <input 
-                                                type="checkbox" 
-                                                checked={isAllowed}
-                                                disabled={isOwner}
-                                                onChange={() => togglePermission(user.id, module.id)}
-                                                className={`w-4 h-4 rounded border-gray-300 text-brand-blue focus:ring-brand-blue ${
-                                                    isOwner ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                                                }`}
-                                            />
-                                        </div>
-                                    </td>
-                                );
-                            })}
-
-                            <td className="p-4 text-center sticky right-0 bg-white dark:bg-slate-900 z-10 border-l border-slate-200 dark:border-slate-800">
-                                {isOwner ? (
-                                    <span className="text-xs text-slate-400 italic">Full Access</span>
-                                ) : (
-                                    <button 
-                                        onClick={() => savePermissions(user)}
-                                        disabled={savingId === user.id}
-                                        className="inline-flex items-center gap-2 px-3 py-1.5 bg-brand-blue text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors disabled:opacity-70"
-                                    >
-                                        {savingId === user.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-                                        Save
-                                    </button>
+                      <tr key={user.id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <td className="sticky left-0 z-10 border-r border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+                              {user.avatar_url ? (
+                                <img src={user.avatar_url} alt="" className="h-full w-full object-cover" />
+                              ) : (
+                                <User className="h-4 w-4 text-slate-400" />
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-slate-800 dark:text-white">
+                                {user.full_name || 'Unknown'}
+                              </p>
+                              <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                                <span
+                                  className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${
+                                    isOwner
+                                      ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                                  }`}
+                                >
+                                  {user.role}
+                                </span>
+                                {assignedGroup && (
+                                  <span className="rounded px-1.5 py-0.5 text-[10px] font-bold text-brand-blue bg-blue-50 dark:bg-blue-950/40">
+                                    {assignedGroup.name}
+                                  </span>
                                 )}
-                            </td>
-                        </tr>
-                    );
-                })}
-              </tbody>
-            </table>
-          </div>
-       </div>
-       
-       <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex gap-3 text-sm text-blue-800 dark:text-blue-300">
-           <AlertTriangle className="w-5 h-5 shrink-0" />
-           <p>
-               <strong>Note:</strong> The "Owner" role automatically has full access to all modules and cannot be modified here. 
-               Changes to other staff members take effect immediately upon saving, but they may need to refresh their page to see menu changes.
-           </p>
-       </div>
+                                <span className="text-[10px] text-slate-400">{user.email}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
 
-       {/* Add User Modal */}
-       {isAddUserModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
-            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-800 flex flex-col">
-                <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-800">
-                    <h2 className="text-lg font-bold text-slate-800 dark:text-white">Create Staff Account</h2>
-                    <button onClick={() => setIsAddUserModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                        <X className="w-5 h-5" />
-                    </button>
-                </div>
-                
-                <form onSubmit={handleCreateUser} noValidate className="p-6 space-y-4">
-                    {formMessage.type === 'error' && (
-                      <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 text-red-800 px-3 py-2 text-sm">
-                        <AlertTriangle className="w-4 h-4" />
-                        <span className="flex-1">{formMessage.text}</span>
-                        <button
-                          type="button"
-                          onClick={() => setFormMessage({ type: null, text: '' })}
-                          className="text-xs font-bold underline decoration-red-400 hover:text-red-600"
-                        >
-                          Retry
-                        </button>
-                      </div>
-                    )}
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Full Name</label>
-                        <input 
-                            required 
-                            className="input-field" 
-                            value={newUserForm.fullName}
-                            onChange={e => setNewUserForm({...newUserForm, fullName: e.target.value})}
-                            placeholder="e.g. John Doe"
-                        />
-                        {formErrors.fullName && <p className="mt-1 text-xs text-red-500">{formErrors.fullName}</p>}
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Role</label>
-                        <select 
-                            className="input-field"
-                            value={newUserForm.role}
-                            onChange={e => setNewUserForm({...newUserForm, role: e.target.value})}
-                        >
-                            {STAFF_ROLES.map(role => (
-                              <option key={role} value={role}>{role}</option>
+                        <td className="sticky left-[16rem] z-10 border-r border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+                          <select
+                            value={user.group_id || ''}
+                            disabled={isOwner}
+                            onChange={(event) => handleGroupAssignmentChange(user.id, event.target.value || null)}
+                            className="input-field min-w-[160px] text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <option value="">- No Group -</option>
+                            {groups.map((group) => (
+                              <option key={group.id} value={group.id}>
+                                {group.name}
+                              </option>
                             ))}
-                        </select>
-                        {formErrors.role && <p className="mt-1 text-xs text-red-500">{formErrors.role}</p>}
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Email</label>
-                        <input 
-                            required 
-                            type="email"
-                            className="input-field" 
-                            value={newUserForm.email}
-                            onChange={e => setNewUserForm({...newUserForm, email: e.target.value})}
-                            placeholder="staff@company.com"
-                        />
-                        {formErrors.email && <p className="mt-1 text-xs text-red-500">{formErrors.email}</p>}
-                    </div>
+                          </select>
+                        </td>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Birthday</label>
-                            <input 
-                                type="date"
-                                className="input-field" 
-                                value={newUserForm.birthday}
-                                onChange={e => setNewUserForm({...newUserForm, birthday: e.target.value})}
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mobile Number</label>
-                            <input 
-                                className="input-field" 
-                                value={newUserForm.mobile}
-                                onChange={e => setNewUserForm({...newUserForm, mobile: e.target.value})}
-                                placeholder="0917..."
-                            />
-                        </div>
-                    </div>
+                        {AVAILABLE_APP_MODULES.filter((module) => module.id !== 'settings').map((module) => {
+                          const isAllowed = isOwner || hasFullAccess || effectiveCanonicalRights.has(module.id);
+                          const inherited = !!assignedGroup && groupRights.has(module.id) === isAllowed;
+                          return (
+                            <td
+                              key={module.id}
+                              className={`border-l border-slate-100 p-4 text-center dark:border-slate-800 ${
+                                inherited ? 'bg-slate-50/70 dark:bg-slate-800/30' : ''
+                              }`}
+                              title={inherited ? 'Inherited from group' : undefined}
+                            >
+                              <div className="flex items-center justify-center gap-1.5">
+                                <input
+                                  type="checkbox"
+                                  checked={isAllowed}
+                                  disabled={isOwner}
+                                  onChange={() => togglePermission(user.id, module.id)}
+                                  className={`h-4 w-4 rounded border-gray-300 text-brand-blue focus:ring-brand-blue ${
+                                    inherited ? 'opacity-70' : ''
+                                  } ${isOwner ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                                />
+                                {inherited && <Lock className="h-3 w-3 text-slate-400" />}
+                              </div>
+                            </td>
+                          );
+                        })}
 
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Password</label>
-                        <input 
-                            required 
-                            type="password"
-                            className="input-field" 
-                            value={newUserForm.password}
-                            onChange={e => setNewUserForm({...newUserForm, password: e.target.value})}
-                            placeholder="Set initial password"
-                            minLength={8}
-                        />
-                        {passwordStrength.label && (
-                          <p className="mt-1 text-xs text-slate-500 flex items-center gap-2">
-                            <span>Password strength:</span>
-                            <span className={`font-bold ${passwordStrength.level >= 3 ? 'text-green-600' : passwordStrength.level === 2 ? 'text-amber-500' : 'text-red-500'}`}>
-                              {passwordStrength.label}
-                            </span>
-                          </p>
-                        )}
-                        {formErrors.password && <p className="mt-1 text-xs text-red-500">{formErrors.password}</p>}
-                    </div>
-
-                    <div className="pt-4 flex gap-3">
-                        <button 
-                            type="button" 
-                            onClick={() => setIsAddUserModalOpen(false)}
-                            className="flex-1 px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-bold text-sm"
-                        >
-                            Cancel
-                        </button>
-                        <button 
-                            type="submit" 
-                            disabled={isCreatingUser}
-                            className="flex-1 px-4 py-2 bg-brand-blue text-white rounded-lg font-bold text-sm flex items-center justify-center gap-2"
-                        >
-                            {isCreatingUser && <Loader2 className="w-4 h-4 animate-spin" />}
-                            Create Account
-                        </button>
-                    </div>
-                </form>
-                <style>{`
-                .input-field {
-                  width: 100%;
-                  background-color: rgb(248 250 252);
-                  border: 1px solid rgb(226 232 240);
-                  border-radius: 0.5rem;
-                  padding: 0.5rem 0.75rem;
-                  font-size: 0.875rem;
-                  color: rgb(30 41 59);
-                  outline: none;
-                  transition: all 0.2s;
-                }
-                .dark .input-field {
-                  background-color: rgb(30 41 59);
-                  border-color: rgb(51 65 85);
-                  color: white;
-                }
-                .input-field:focus {
-                  border-color: #0F5298;
-                  box-shadow: 0 0 0 1px #0F5298;
-                }
-                `}</style>
+                        <td className="sticky right-0 z-10 border-l border-slate-200 bg-white p-4 text-center dark:border-slate-800 dark:bg-slate-900">
+                          {isOwner ? (
+                            <span className="text-xs italic text-slate-400">Full Access</span>
+                          ) : (
+                            <button
+                              onClick={() => savePermissions(user)}
+                              disabled={savingId === user.id || !hasChanges}
+                              className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                            >
+                              {savingId === user.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Save className="h-3 w-3" />
+                              )}
+                              Save
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
-       )}
+
+          <div className="mt-4 flex gap-3 rounded-lg bg-blue-50 p-4 text-sm text-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
+            <AlertTriangle className="h-5 w-5 shrink-0" />
+            <p>
+              <strong>Note:</strong> Owners always have full access. When a group is selected, its permissions are
+              copied into the staff member&apos;s access list as a starting point, and individual checkboxes can still
+              be adjusted before saving.
+            </p>
+          </div>
+        </>
+      )}
+
+      {isAddUserModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm animate-fadeIn">
+          <div className="flex w-full max-w-md flex-col rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center justify-between border-b border-slate-100 p-6 dark:border-slate-800">
+              <h2 className="text-lg font-bold text-slate-800 dark:text-white">Create Staff Account</h2>
+              <button
+                onClick={() => setIsAddUserModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateUser} noValidate className="space-y-4 p-6">
+              {formMessage.type === 'error' && (
+                <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+                  <AlertTriangle className="h-4 w-4" />
+                  <span className="flex-1">{formMessage.text}</span>
+                  <button
+                    type="button"
+                    onClick={() => setFormMessage({ type: null, text: '' })}
+                    className="text-xs font-bold underline decoration-red-400 hover:text-red-600"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Full Name</label>
+                <input
+                  required
+                  className="input-field"
+                  value={newUserForm.fullName}
+                  onChange={(event) => setNewUserForm({ ...newUserForm, fullName: event.target.value })}
+                  placeholder="e.g. John Doe"
+                />
+                {formErrors.fullName && <p className="mt-1 text-xs text-red-500">{formErrors.fullName}</p>}
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Role</label>
+                <select
+                  className="input-field"
+                  value={newUserForm.role}
+                  onChange={(event) => setNewUserForm({ ...newUserForm, role: event.target.value })}
+                >
+                  {STAFF_ROLES.map((role) => (
+                    <option key={role} value={role}>
+                      {role}
+                    </option>
+                  ))}
+                </select>
+                {formErrors.role && <p className="mt-1 text-xs text-red-500">{formErrors.role}</p>}
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Email</label>
+                <input
+                  required
+                  type="email"
+                  className="input-field"
+                  value={newUserForm.email}
+                  onChange={(event) => setNewUserForm({ ...newUserForm, email: event.target.value })}
+                  placeholder="staff@company.com"
+                />
+                {formErrors.email && <p className="mt-1 text-xs text-red-500">{formErrors.email}</p>}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Birthday</label>
+                  <input
+                    type="date"
+                    className="input-field"
+                    value={newUserForm.birthday}
+                    onChange={(event) => setNewUserForm({ ...newUserForm, birthday: event.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Mobile Number</label>
+                  <input
+                    className="input-field"
+                    value={newUserForm.mobile}
+                    onChange={(event) => setNewUserForm({ ...newUserForm, mobile: event.target.value })}
+                    placeholder="0917..."
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Password</label>
+                <input
+                  required
+                  type="password"
+                  className="input-field"
+                  value={newUserForm.password}
+                  onChange={(event) => setNewUserForm({ ...newUserForm, password: event.target.value })}
+                  placeholder="Set initial password"
+                  minLength={8}
+                />
+                {passwordStrength.label && (
+                  <p className="mt-1 flex items-center gap-2 text-xs text-slate-500">
+                    <span>Password strength:</span>
+                    <span
+                      className={
+                        passwordStrength.level >= 4
+                          ? 'font-semibold text-green-600'
+                          : passwordStrength.level >= 3
+                            ? 'font-semibold text-blue-600'
+                            : passwordStrength.level >= 2
+                              ? 'font-semibold text-amber-600'
+                              : 'font-semibold text-red-600'
+                      }
+                    >
+                      {passwordStrength.label}
+                    </span>
+                  </p>
+                )}
+                {formErrors.password && <p className="mt-1 text-xs text-red-500">{formErrors.password}</p>}
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddUserModalOpen(false)}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingUser}
+                  className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
+                >
+                  {isCreatingUser ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                  Create Account
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

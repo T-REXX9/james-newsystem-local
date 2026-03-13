@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  FileCheck,
   RefreshCw,
   ChevronLeft,
   ChevronRight,
@@ -185,11 +184,39 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
   }, [orders, selectedOrder]);
 
   useEffect(() => {
-    if (!initialOrderId || !orders.length) return;
+    if (!initialOrderId) return;
+
     const initial = orders.find(order => order.id === initialOrderId);
     if (initial) {
       setSelectedOrder(initial);
+      return;
     }
+
+    let active = true;
+    getSalesOrder(initialOrderId)
+      .then((detail) => {
+        if (!active || !detail) return;
+
+        setSelectedOrder(detail);
+        setOrders((prev) => (prev.some((order) => order.id === detail.id) ? prev : [detail, ...prev]));
+
+        const salesDate = new Date(detail.sales_date);
+        if (!Number.isNaN(salesDate.getTime())) {
+          const month = String(salesDate.getMonth() + 1).padStart(2, '0');
+          const year = salesDate.getFullYear();
+          setDateRange((prev) => {
+            const nextFrom = `${year}-${month}-01`;
+            return prev.from === nextFrom ? prev : { from: nextFrom, to: '' };
+          });
+        }
+      })
+      .catch((err) => {
+        console.error('Failed loading initial sales order detail:', err);
+      });
+
+    return () => {
+      active = false;
+    };
   }, [initialOrderId, orders]);
 
   useEffect(() => {
@@ -423,41 +450,32 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
     return `${MONTH_OPTIONS[targetMonthYear.month - 1]} ${targetMonthYear.year}`;
   }, [targetMonthYear.month, targetMonthYear.year]);
 
-  const summaryRows = [
-    { label: 'Since', value: selectedCustomer?.customerSince || '-' },
-    { label: 'Class Code', value: selectedCustomer?.codeText || selectedCustomer?.priceGroup || '-' },
-    { label: 'Quota', value: selectedCustomer?.dealershipQuota?.toLocaleString() || '-' },
-    { label: 'Terms', value: selectedCustomer?.terms || selectedOrder?.terms || '-' },
-    { label: 'Balance', value: formatCurrency(selectedCustomer?.balance || 0) },
-  ];
-
-  const infoRows: Array<[string, string, string, string]> = [
-    ['CUSTOMER', selectedCustomerLabel, 'ORDERED BY', selectedOrder?.created_by || '-'],
-    ['DATE', formatDate(selectedOrder?.sales_date), 'ADDRESS', selectedCustomer?.address || '-'],
-    ['Remarks', selectedOrder?.remarks || '-', '', ''],
-    ['TERMS', selectedOrder?.terms || '-', 'TIN', selectedCustomer?.tin || '-'],
-    ['DELIVERY ADDRESS', selectedOrder?.delivery_address || selectedCustomer?.deliveryAddress || '-', 'SEND BY', selectedOrder?.send_by || '-'],
-    ['REFERRED BY', selectedCustomer?.referBy || selectedOrder?.sales_person || '-', '', ''],
-  ];
+  const currentMonthLabel = new Date(selectedOrder?.sales_date || Date.now()).toLocaleDateString('en-PH', { month: 'long' });
+  const summaryCustomer = selectedCustomer as (Contact & {
+    dealershipSales?: number;
+    monthlySales?: number;
+    since?: string;
+  }) | null;
+  const displayMetricValue = (value: number | string | undefined | null, isCurrency = false) => {
+    if (value === '' || value === null || value === undefined) return '—';
+    if (typeof value === 'number') return isCurrency ? formatCurrency(value) : String(value);
+    const numericValue = Number(value);
+    if (isCurrency && Number.isFinite(numericValue)) return formatCurrency(numericValue);
+    return String(value).trim() || '—';
+  };
+  const orderRowTone = (order: SalesOrder) => {
+    const normalizedStatus = normalizeStatus(order.status);
+    if (normalizedStatus === 'cancelled') return 'text-red-600';
+    if (selectedOrder?.id === order.id) return 'text-brand-blue';
+    return 'text-slate-700 dark:text-slate-200';
+  };
 
   return (
-    <div className="h-full flex flex-col bg-slate-100 dark:bg-slate-950">
-      <div className="bg-gradient-to-r from-slate-800 to-slate-900 text-white px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="p-2 rounded bg-white/10">
-            <FileCheck className="w-5 h-5" />
-          </span>
-          <div>
-            <h1 className="text-lg font-semibold">Sales Orders</h1>
-            <p className="text-xs text-slate-300">Track conversions from inquiries through document generation</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        <div className="border border-slate-200 rounded bg-white shadow-sm dark:bg-slate-900 dark:border-slate-800">
-          <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
-            <div className="flex flex-wrap items-center gap-2 text-sm">
+    <div className="w-full flex flex-col bg-white dark:bg-slate-900 p-3 gap-4">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <div className="flex flex-col gap-3 px-4 py-3 border-b border-slate-200 dark:border-slate-800">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between text-sm">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => setSearchModalOpen(true)}
@@ -474,6 +492,20 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
                 <RefreshCw className="w-4 h-4" />
                 Refresh
               </button>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+              >
+                <option value="all">All Statuses</option>
+                <option value="pending">Pending</option>
+                <option value="submitted">Submitted</option>
+                <option value="approved">Approved</option>
+                <option value="posted">Posted</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
               <span className="font-medium text-slate-700 dark:text-slate-200">Filter by Month:</span>
               <select
                 value={targetMonthYear.month ? String(targetMonthYear.month) : ''}
@@ -503,25 +535,28 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
               </button>
             </div>
           </div>
-
-          <div className="px-4 pt-3 text-sm text-slate-700 dark:text-slate-300">
+          <div className="text-sm text-slate-700 dark:text-slate-300">
             <span className="font-semibold">Filtered By:</span> {activeFilterLabel}
           </div>
+        </div>
 
-          <div className="p-4">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm border border-slate-300 divide-y divide-slate-200 dark:border-slate-700 dark:divide-slate-700">
-                <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
-                  <tr>
-                    <th className="px-3 py-2 text-left">Date</th>
-                    <th className="px-3 py-2 text-left">Customer</th>
-                    <th className="px-3 py-2 text-left">SI No.</th>
-                    <th className="px-3 py-2 text-left">SO No.</th>
-                    <th className="px-3 py-2 text-left">Transaction No.</th>
-                    <th className="px-3 py-2 text-left">Sales Person</th>
-                    <th className="px-3 py-2 text-left">Status</th>
-                  </tr>
-                </thead>
+        <div className="p-4">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                <tr>
+                  <th className="px-3 py-2 text-left">Date</th>
+                  <th className="px-3 py-2 text-left">Customer</th>
+                  <th className="px-3 py-2 text-left">SI No.</th>
+                  <th className="px-3 py-2 text-left">SO No.</th>
+                  <th className="px-3 py-2 text-left">Transaction No.</th>
+                  <th className="px-3 py-2 text-left">Sales Person</th>
+                  <th className="px-3 py-2 text-left">Status</th>
+                </tr>
+              </thead>
+            </table>
+            <div className="max-h-[220px] overflow-y-auto border border-t-0 border-slate-300 dark:border-slate-700">
+              <table className="w-full text-sm">
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                   {loading && (
                     <tr>
@@ -535,18 +570,11 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
                   )}
                   {!loading && filteredOrders.map((order, index) => {
                     const customer = customerMap.get(order.contact_id);
-                    const isSelected = selectedOrder?.id === order.id;
-                    const isCancelled = normalizeStatus(order.status) === 'cancelled';
-                    const rowTone = isCancelled
-                      ? 'text-red-600'
-                      : isSelected
-                        ? 'text-blue-600'
-                        : 'text-slate-700 dark:text-slate-200';
                     return (
                       <tr
                         key={order.id}
                         onClick={() => setSelectedOrder(order)}
-                        className={`cursor-pointer ${index % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50 dark:bg-slate-900/60'} hover:bg-slate-100 dark:hover:bg-slate-800 ${rowTone}`}
+                        className={`cursor-pointer ${index % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50 dark:bg-slate-900/60'} hover:bg-slate-100 dark:hover:bg-slate-800 ${orderRowTone(order)}`}
                       >
                         <td className="px-3 py-2">{formatDate(order.sales_date)}</td>
                         <td className="px-3 py-2">{getCustomerLabel(order, customer)}</td>
@@ -570,246 +598,298 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
                 </tbody>
               </table>
             </div>
+          </div>
 
-            <div className="mt-3 flex items-center justify-between text-sm text-slate-500">
-              <button
-                disabled={page <= 1}
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                className="inline-flex items-center gap-1 px-3 py-2 rounded border border-slate-300 disabled:opacity-40 dark:border-slate-700"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                Prev
-              </button>
-              <span>Page {page} / {totalPages}</span>
-              <button
-                disabled={page >= totalPages}
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                className="inline-flex items-center gap-1 px-3 py-2 rounded border border-slate-300 disabled:opacity-40 dark:border-slate-700"
-              >
-                Next
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
+          <div className="mt-3 flex items-center justify-between text-sm text-slate-500">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              className="inline-flex items-center gap-1 px-3 py-2 rounded border border-slate-300 disabled:opacity-40 dark:border-slate-700"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Prev
+            </button>
+            <span>Page {page} / {totalPages}</span>
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              className="inline-flex items-center gap-1 px-3 py-2 rounded border border-slate-300 disabled:opacity-40 dark:border-slate-700"
+            >
+              Next
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
         </div>
+      </div>
 
-        {selectedOrder ? (
-          <>
-            <div className="border border-slate-200 rounded bg-white shadow-sm dark:bg-slate-900 dark:border-slate-800">
-              <div className="border-b border-slate-200 px-4 py-2 flex flex-col gap-3 bg-slate-50 dark:bg-slate-900/60 dark:border-slate-800 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <h4 className="text-lg font-semibold text-slate-800 dark:text-white">SALES ORDER</h4>
-                </div>
-                <div className="flex flex-col items-start gap-2 lg:items-end">
-                  <div className="text-sm text-slate-700 dark:text-slate-200">
-                    <span className="font-semibold">SO No.:</span> {selectedOrder.order_no}
-                    {selectedOrderStatus === 'cancelled' && <span className="ml-2 text-red-600 font-semibold">(CANCELLED)</span>}
-                    {selectedOrder.inquiry_id && <span className="ml-2">From: {selectedOrder.inquiry_id}</span>}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {canConfirm && (
-                      <button
-                        type="button"
-                        onClick={handleConfirmOrder}
-                        disabled={confirming}
-                        className="px-3 py-2 rounded bg-green-600 text-white text-sm disabled:opacity-50"
-                      >
-                        {confirming ? 'Processing...' : confirmLabel}
-                      </button>
-                    )}
-                    {canGenerate && selectedOrderStatus !== 'cancelled' && (
-                      <button
-                        type="button"
-                        onClick={() => setConversionModalOpen(true)}
-                        className="px-3 py-2 rounded bg-green-600 text-white text-sm"
-                      >
-                        Generate Sales Transaction
-                      </button>
-                    )}
-                    {canGenerate && selectedOrderStatus !== 'cancelled' && (
-                      <button
-                        type="button"
-                        onClick={() => window.print()}
-                        className="px-3 py-2 rounded bg-slate-500 text-white text-sm"
-                      >
-                        Print SO
-                      </button>
-                    )}
-                    {canGenerate && selectedOrderStatus !== 'cancelled' && (
-                      <button
-                        type="button"
-                        onClick={() => setCancelModalOpen(true)}
-                        className="px-3 py-2 rounded bg-slate-500 text-white text-sm"
-                      >
-                        Cancel SO
-                      </button>
-                    )}
-                    {selectedOrderStatus === 'posted' && (
-                      <button
-                        type="button"
-                        onClick={handleUnpost}
-                        className="px-3 py-2 rounded bg-red-600 text-white text-sm"
-                      >
-                        Unpost
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-4 text-sm space-y-4">
-                <div className="overflow-x-auto">
-                  <table className="w-full border border-slate-300 divide-y divide-slate-200 dark:border-slate-700 dark:divide-slate-700">
-                    <thead className="bg-slate-100 dark:bg-slate-800">
-                      <tr className="text-left text-slate-700 dark:text-slate-200">
-                        {summaryRows.map(row => (
-                          <th key={row.label} className="px-3 py-2 font-semibold">{row.label}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="text-slate-700 dark:text-slate-200">
-                        {summaryRows.map(row => (
-                          <td key={row.label} className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">
-                            {row.value}
-                          </td>
-                        ))}
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-
-                {selectedOrderStatus === 'submitted' && !selectedOrder?.can_approve && (
-                  <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded p-2">
-                    This sales order is waiting for an assigned approver account.
-                  </div>
-                )}
-
-                <div className="overflow-x-auto">
-                  <table className="w-full border border-slate-300 divide-y divide-slate-200 dark:border-slate-700 dark:divide-slate-700">
-                    <tbody className="text-slate-700 dark:text-slate-200">
-                      {infoRows.map(([leftLabel, leftValue, rightLabel, rightValue], index) => (
-                        <tr key={`${leftLabel}-${index}`}>
-                          <td className="w-1/6 px-3 py-2 font-semibold bg-slate-50 dark:bg-slate-800/60">{leftLabel}</td>
-                          <td className="w-2/6 px-3 py-2">{leftValue}</td>
-                          <td className="w-1/6 px-3 py-2 font-semibold bg-slate-50 dark:bg-slate-800/60">{rightLabel || ''}</td>
-                          <td className="w-2/6 px-3 py-2">{rightValue || ''}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <WorkflowStepper currentStage={workflowStage} documentLabel="Order Slip / Invoice" />
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm border border-slate-300 divide-y divide-slate-200 dark:border-slate-700 dark:divide-slate-700">
-                    <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
-                      <tr>
-                        <th className="px-3 py-2 text-left w-[1%]">NO.</th>
-                        <th className="px-3 py-2 text-left w-[15%]">PARTNO</th>
-                        <th className="px-3 py-2 text-left w-[10%]">CODE</th>
-                        <th className="px-3 py-2 text-left w-[10%]">LOC</th>
-                        <th className="px-3 py-2 text-left w-[30%]">DESCRIPTION</th>
-                        <th className="px-3 py-2 text-left w-[10%]">QTY</th>
-                        <th className="px-3 py-2 text-left w-[15%]">UNIT PRICE</th>
-                        <th className="px-3 py-2 text-left w-[15%]">AMOUNT</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-700 text-slate-700 dark:text-slate-200">
-                      {selectedOrder.items?.map((item, index) => (
-                        <tr key={item.id || `${item.item_code}-${index}`}>
-                          <td className="px-3 py-2">{index + 1}</td>
-                          <td className="px-3 py-2">{item.part_no || '-'}</td>
-                          <td className="px-3 py-2">{item.item_code || '-'}</td>
-                          <td className="px-3 py-2">{item.location || '-'}</td>
-                          <td className="px-3 py-2">{item.description || '-'}</td>
-                          <td className="px-3 py-2">{item.qty}</td>
-                          <td className="px-3 py-2">{formatCurrency(item.unit_price)}</td>
-                          <td className="px-3 py-2">{formatCurrency(item.amount)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot className="bg-slate-50 dark:bg-slate-800/60 text-slate-800 dark:text-slate-100">
-                      <tr>
-                        <td colSpan={7} className="px-3 py-2 text-right font-semibold">
-                          Total =&gt;
-                        </td>
-                        <td className="px-3 py-2 font-semibold">{formatCurrency(selectedOrder.grand_total)}</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm border border-slate-300 divide-y divide-slate-200 dark:border-slate-700 dark:divide-slate-700">
-                    <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
-                      <tr>
-                        <th className="px-3 py-2 text-left">Balance</th>
-                        <th className="px-3 py-2 text-left">Last Payment</th>
-                        <th className="px-3 py-2 text-left">Promise to Pay</th>
-                        <th className="px-3 py-2 text-left">Note</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="text-slate-700 dark:text-slate-200">
-                        <td className="px-3 py-2">{formatCurrency(selectedCustomer?.balance || 0)}</td>
-                        <td className="px-3 py-2">{selectedOrder.approved_at ? formatDate(selectedOrder.approved_at) : '-'}</td>
-                        <td className="px-3 py-2">{selectedOrder.promise_to_pay || '-'}</td>
-                        <td className="px-3 py-2">{selectedOrder.remarks || selectedOrder.reference_no || '-'}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm border border-slate-300 divide-y divide-slate-200 dark:border-slate-700 dark:divide-slate-700">
-                    <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
-                      <tr>
-                        <th className="px-3 py-2 text-left">BD ISSUED BY/DATE</th>
-                        <th className="px-3 py-2 text-left">REF. BILL NO.</th>
-                        <th className="px-3 py-2 text-left">Security Checked</th>
-                        <th className="px-3 py-2 text-left">WH S.O Received</th>
-                        <th className="px-3 py-2 text-left">WH GOODS Issue</th>
-                        <th className="px-3 py-2 text-left">APPROVED BY</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="text-slate-700 dark:text-slate-200">
-                        <td className="px-3 py-2">{selectedOrder.created_by || '-'} / {formatDate(selectedOrder.created_at)}</td>
-                        <td className="px-3 py-2">{selectedOrder.po_number || '-'}</td>
-                        <td className="px-3 py-2">{selectedOrder.send_by || '-'}</td>
-                        <td className="px-3 py-2">{selectedOrder.reference_no || '-'}</td>
-                        <td className="px-3 py-2">{selectedOrder.sales_person || '-'}</td>
-                        <td className="px-3 py-2">{selectedOrder.approved_by || '-'}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+      {selectedOrder ? (
+        <>
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800">
+              <h4 className="font-bold text-base uppercase text-slate-900 dark:text-slate-100">SALES ORDER</h4>
+              <div className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                <span className="font-semibold">SO No.:</span>
+                <input readOnly value={selectedOrder.order_no} className="w-40 inline-block px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm text-slate-700 dark:text-slate-200" />
+                <StatusBadge status={selectedOrder.status} className="text-[10px] px-2 py-0.5" />
               </div>
             </div>
 
-            {documentMessage && (
-              <div className="bg-emerald-50 border border-emerald-100 text-emerald-700 rounded-lg p-3 text-sm flex items-center justify-between">
-                <span>{documentMessage}</span>
-                {documentLink && (
+            <div className="p-4 text-sm space-y-4">
+              <div className="overflow-x-auto">
+                <table className="w-full table-fixed border border-slate-200 dark:border-slate-800 text-sm text-center">
+                  <thead>
+                    <tr>
+                      <th className="bg-slate-50 dark:bg-slate-800 font-semibold py-2 px-2 border border-slate-200 dark:border-slate-800">Dealership Since</th>
+                      <th className="bg-slate-50 dark:bg-slate-800 font-semibold py-2 px-2 border border-slate-200 dark:border-slate-800">Dealership Sales</th>
+                      <th className="bg-slate-50 dark:bg-slate-800 font-semibold py-2 px-2 border border-slate-200 dark:border-slate-800">Dealership Quota</th>
+                      <th className="bg-slate-50 dark:bg-slate-800 font-semibold py-2 px-2 border border-slate-200 dark:border-slate-800">Total Sales for {currentMonthLabel}</th>
+                      <th className="bg-slate-50 dark:bg-slate-800 font-semibold py-2 px-2 border border-slate-200 dark:border-slate-800">Customer Since</th>
+                      <th className="bg-slate-50 dark:bg-slate-800 font-semibold py-2 px-2 border border-slate-200 dark:border-slate-800">Credit Limit</th>
+                      <th className="bg-slate-50 dark:bg-slate-800 font-semibold py-2 px-2 border border-slate-200 dark:border-slate-800">Terms</th>
+                      <th className="bg-slate-50 dark:bg-slate-800 font-semibold py-2 px-2 border border-slate-200 dark:border-slate-800">Balance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="text-slate-700 dark:text-slate-200">
+                      <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(summaryCustomer?.dealershipSince)}</td>
+                      <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(summaryCustomer?.dealershipSales, true)}</td>
+                      <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(summaryCustomer?.dealershipQuota, true)}</td>
+                      <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(summaryCustomer?.monthlySales, true)}</td>
+                      <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(summaryCustomer?.since || summaryCustomer?.customerSince)}</td>
+                      <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(selectedOrder.credit_limit || selectedCustomer?.creditLimit, true)}</td>
+                      <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(selectedOrder.terms || selectedCustomer?.terms)}</td>
+                      <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(summaryCustomer?.balance, true)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {selectedOrderStatus === 'submitted' && !selectedOrder?.can_approve && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded p-2">
+                  This sales order is waiting for an assigned approver account.
+                </div>
+              )}
+
+              <div className="overflow-x-auto">
+                <table width="100%" cellPadding="8" className="tlbcustom text-sm text-slate-700 dark:text-slate-200">
+                  <colgroup>
+                    <col style={{ width: '12%' }} />
+                    <col style={{ width: '21%' }} />
+                    <col style={{ width: '12%' }} />
+                    <col style={{ width: '21%' }} />
+                    <col style={{ width: '12%' }} />
+                    <col style={{ width: '22%' }} />
+                  </colgroup>
+                  <tbody>
+                    <tr>
+                      <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Sold to:</td>
+                      <td><input readOnly value={selectedCustomerLabel} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                      <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Date:</td>
+                      <td><input readOnly value={selectedOrder.sales_date || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                      <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Sales Person:</td>
+                      <td><input readOnly value={selectedOrder.sales_person || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                    </tr>
+                    <tr>
+                      <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Delivery Address:</td>
+                      <td><input readOnly value={selectedOrder.delivery_address || selectedCustomer?.deliveryAddress || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                      <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Our Reference:</td>
+                      <td><input readOnly value={selectedOrder.reference_no || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                      <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Your Reference:</td>
+                      <td><input readOnly value={selectedOrder.customer_reference || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                    </tr>
+                    <tr>
+                      <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Price Group:</td>
+                      <td><input readOnly value={selectedOrder.price_group || selectedCustomer?.priceGroup || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                      <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Credit Limit:</td>
+                      <td><input readOnly value={formatCurrency(selectedOrder.credit_limit || selectedCustomer?.creditLimit || 0)} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                      <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Terms Strictly:</td>
+                      <td><input readOnly value={selectedOrder.terms || selectedCustomer?.terms || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                    </tr>
+                    <tr>
+                      <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Promise to Pay:</td>
+                      <td colSpan={3}><input readOnly value={selectedOrder.promise_to_pay || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                      <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">PO No.:</td>
+                      <td><input readOnly value={selectedOrder.po_number || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                    </tr>
+                    <tr>
+                      <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Remarks:</td>
+                      <td colSpan={3}><input readOnly value={selectedOrder.remarks || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                      <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Inquiry Type:</td>
+                      <td><input readOnly value={selectedOrder.inquiry_type || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                    </tr>
+                    <tr>
+                      <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Send By:</td>
+                      <td><input readOnly value={selectedOrder.send_by || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                      <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap text-red-600">Urgency/Type:</td>
+                      <td><input readOnly value={selectedOrder.urgency || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                      <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap text-red-600">Urgency/Date:</td>
+                      <td><input readOnly value={selectedOrder.urgency_date || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <WorkflowStepper currentStage={workflowStage} documentLabel="Order Slip / Invoice" />
+
+              <div className="overflow-x-auto">
+                <table className="w-full table-auto border-collapse text-sm border border-slate-300 dark:border-slate-700">
+                  <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                    <tr>
+                      <th className="px-3 py-2 text-left">#</th>
+                      <th className="px-3 py-2 text-left">Part No.</th>
+                      <th className="px-3 py-2 text-left">Item Code</th>
+                      <th className="px-3 py-2 text-left">Location</th>
+                      <th className="px-3 py-2 text-left">Description</th>
+                      <th className="px-3 py-2 text-left">Qty</th>
+                      <th className="px-3 py-2 text-left">Unit Price</th>
+                      <th className="px-3 py-2 text-left">Amount</th>
+                      <th className="px-3 py-2 text-left">Remark</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-slate-700 dark:text-slate-200">
+                    {selectedOrder.items?.map((item, index) => (
+                      <tr key={item.id || `${item.item_code}-${index}`} className="odd:bg-white even:bg-slate-50 dark:odd:bg-slate-900 dark:even:bg-slate-800/30">
+                        <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{index + 1}</td>
+                        <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{item.part_no || '-'}</td>
+                        <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{item.item_code || '-'}</td>
+                        <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{item.location || '-'}</td>
+                        <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{item.description || '-'}</td>
+                        <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{item.qty}</td>
+                        <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{formatCurrency(item.unit_price)}</td>
+                        <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{formatCurrency(item.amount)}</td>
+                        <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{item.remark || item.approval_status || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colSpan={7} className="px-3 py-3 text-right font-bold border-t border-slate-200 dark:border-slate-700">Grand Total</td>
+                      <td className="px-3 py-3 border-t border-slate-200 dark:border-slate-700">
+                        <span className="inline-flex rounded-full bg-brand-blue/10 px-3 py-1 font-bold text-brand-blue">{formatCurrency(selectedOrder.grand_total)}</span>
+                      </td>
+                      <td className="border-t border-slate-200 dark:border-slate-700"></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm border border-slate-300 divide-y divide-slate-200 dark:border-slate-700 dark:divide-slate-700">
+                  <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Balance</th>
+                      <th className="px-3 py-2 text-left">Last Payment</th>
+                      <th className="px-3 py-2 text-left">Promise to Pay</th>
+                      <th className="px-3 py-2 text-left">Note</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="text-slate-700 dark:text-slate-200">
+                      <td className="px-3 py-2">{formatCurrency(selectedCustomer?.balance || 0)}</td>
+                      <td className="px-3 py-2">{selectedOrder.approved_at ? formatDate(selectedOrder.approved_at) : '-'}</td>
+                      <td className="px-3 py-2">{selectedOrder.promise_to_pay || '-'}</td>
+                      <td className="px-3 py-2">{selectedOrder.remarks || selectedOrder.reference_no || '-'}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm border border-slate-300 divide-y divide-slate-200 dark:border-slate-700 dark:divide-slate-700">
+                  <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                    <tr>
+                      <th className="px-3 py-2 text-left">BD ISSUED BY/DATE</th>
+                      <th className="px-3 py-2 text-left">REF. BILL NO.</th>
+                      <th className="px-3 py-2 text-left">Security Checked</th>
+                      <th className="px-3 py-2 text-left">WH S.O Received</th>
+                      <th className="px-3 py-2 text-left">WH GOODS Issue</th>
+                      <th className="px-3 py-2 text-left">APPROVED BY</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="text-slate-700 dark:text-slate-200">
+                      <td className="px-3 py-2">{selectedOrder.created_by || '-'} / {formatDate(selectedOrder.created_at)}</td>
+                      <td className="px-3 py-2">{selectedOrder.po_number || '-'}</td>
+                      <td className="px-3 py-2">{selectedOrder.send_by || '-'}</td>
+                      <td className="px-3 py-2">{selectedOrder.reference_no || '-'}</td>
+                      <td className="px-3 py-2">{selectedOrder.sales_person || '-'}</td>
+                      <td className="px-3 py-2">{selectedOrder.approved_by || '-'}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 dark:border-slate-800 pt-4">
+                {canConfirm && (
                   <button
                     type="button"
-                    onClick={() => openDocumentFromLink(documentLink)}
-                    className="px-3 py-1 rounded bg-emerald-600 text-white"
+                    onClick={handleConfirmOrder}
+                    disabled={confirming}
+                    className="px-3 py-2 rounded bg-green-600 text-white text-sm disabled:opacity-50"
                   >
-                    View {documentLink.type === 'orderslip' ? 'Order Slip' : 'Invoice'}
+                    {confirming ? 'Processing...' : confirmLabel}
+                  </button>
+                )}
+                {canGenerate && (
+                  <button
+                    type="button"
+                    onClick={() => setConversionModalOpen(true)}
+                    className="px-3 py-2 rounded bg-green-600 text-white text-sm"
+                  >
+                    Generate Sales Transaction
+                  </button>
+                )}
+                {canGenerate && (
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="px-3 py-2 rounded bg-slate-500 text-white text-sm"
+                  >
+                    Print SO
+                  </button>
+                )}
+                {canGenerate && (
+                  <button
+                    type="button"
+                    onClick={() => setCancelModalOpen(true)}
+                    className="px-3 py-2 rounded bg-slate-500 text-white text-sm"
+                  >
+                    Cancel SO
+                  </button>
+                )}
+                {selectedOrderStatus === 'posted' && (
+                  <button
+                    type="button"
+                    onClick={handleUnpost}
+                    className="px-3 py-2 rounded bg-red-600 text-white text-sm"
+                  >
+                    Unpost
                   </button>
                 )}
               </div>
-            )}
-          </>
-        ) : (
-          <div className="border border-slate-200 rounded bg-white shadow-sm dark:bg-slate-900 dark:border-slate-800 px-6 py-16 text-center text-slate-500">
-            Select a sales order from the table above to view its full details.
+            </div>
           </div>
-        )}
-      </div>
+
+          {documentMessage && (
+            <div className="bg-emerald-50 border border-emerald-100 text-emerald-700 rounded-lg p-3 text-sm flex items-center justify-between">
+              <span>{documentMessage}</span>
+              {documentLink && (
+                <button
+                  type="button"
+                  onClick={() => openDocumentFromLink(documentLink)}
+                  className="px-3 py-1 rounded bg-emerald-600 text-white"
+                >
+                  View {documentLink.type === 'orderslip' ? 'Order Slip' : 'Invoice'}
+                </button>
+              )}
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 py-16 text-center text-slate-500">
+          Select a sales order from the table above to view its full details.
+        </div>
+      )}
 
       {searchModalOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-40 p-4">

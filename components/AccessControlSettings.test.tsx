@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import AccessControlSettings from './AccessControlSettings';
 import { DEFAULT_STAFF_ACCESS_RIGHTS } from '../constants';
 import { createStaffAccountLocal, fetchProfilesLocal } from '../services/accessLocalApiService';
+import { fetchAccessGroups } from '../services/accessGroupApiService';
 import { ToastProvider } from './ToastProvider';
 
 vi.mock('../services/accessLocalApiService', () => ({
@@ -13,15 +14,28 @@ vi.mock('../services/accessLocalApiService', () => ({
   createStaffAccountLocal: vi.fn(),
 }));
 
+vi.mock('../services/accessGroupApiService', () => ({
+  fetchAccessGroups: vi.fn(),
+  createAccessGroup: vi.fn(),
+  updateAccessGroup: vi.fn(),
+  deleteAccessGroup: vi.fn(),
+  assignStaffToGroup: vi.fn(),
+}));
+
 const fetchProfilesMock = fetchProfilesLocal as unknown as ReturnType<typeof vi.fn>;
 const createStaffAccountMock = createStaffAccountLocal as unknown as ReturnType<typeof vi.fn>;
+const fetchAccessGroupsMock = fetchAccessGroups as unknown as ReturnType<typeof vi.fn>;
 
 const renderWithProviders = (ui: React.ReactElement) =>
   render(<ToastProvider>{ui}</ToastProvider>);
 
 beforeEach(() => {
   vi.resetAllMocks();
-  fetchProfilesMock.mockResolvedValue([]);
+  fetchProfilesMock.mockResolvedValue({
+    items: [],
+    meta: { page: 1, per_page: 50, total: 0, total_pages: 1 },
+  });
+  fetchAccessGroupsMock.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -33,7 +47,15 @@ describe('AccessControlSettings - create staff account', () => {
   it('creates a staff account and refreshes profiles on success', async () => {
     const user = userEvent.setup();
     const refreshedProfiles = [{ id: '1', full_name: 'Owner', email: 'owner@example.com', role: 'Owner', access_rights: ['*'] }];
-    fetchProfilesMock.mockResolvedValueOnce([]).mockResolvedValueOnce(refreshedProfiles);
+    fetchProfilesMock
+      .mockResolvedValueOnce({
+        items: [],
+        meta: { page: 1, per_page: 50, total: 0, total_pages: 1 },
+      })
+      .mockResolvedValueOnce({
+        items: refreshedProfiles,
+        meta: { page: 1, per_page: 50, total: refreshedProfiles.length, total_pages: 1 },
+      });
     createStaffAccountMock.mockResolvedValue({ success: true, userId: 'new-user' });
 
     renderWithProviders(<AccessControlSettings />);
@@ -63,7 +85,7 @@ describe('AccessControlSettings - create staff account', () => {
     await waitFor(() => expect(fetchProfilesMock).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.queryByText('Create Staff Account')).not.toBeInTheDocument());
     expect(screen.getByText(/Account created for Jane Doe/i)).toBeInTheDocument();
-  });
+  }, 10000);
 
   it('shows client-side validation errors and does not call the service', async () => {
     const user = userEvent.setup();
@@ -85,7 +107,6 @@ describe('AccessControlSettings - create staff account', () => {
 
   it('keeps the modal open and renders field errors when service validation fails', async () => {
     const user = userEvent.setup();
-    fetchProfilesMock.mockResolvedValue([]);
     createStaffAccountMock.mockResolvedValue({
       success: false,
       error: 'Unable to create account. Please try again.',

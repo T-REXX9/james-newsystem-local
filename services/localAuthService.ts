@@ -1,5 +1,5 @@
 import { UserProfile } from '../types';
-import { DEFAULT_STAFF_ACCESS_RIGHTS } from '../constants';
+import { DEFAULT_STAFF_ACCESS_RIGHTS, MODULE_ID_ALIASES } from '../constants';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const AUTH_STORAGE_KEY = 'local_api_auth_session';
@@ -31,6 +31,8 @@ type ApiAuthUser = {
   industry?: string;
   service_package?: string;
   sales_quota?: number;
+  access_rights?: string[] | null;
+  group_id?: string | null;
 };
 
 type ApiAuthPayload = {
@@ -90,8 +92,13 @@ const mapRoleFromUserType = (userType?: string): string => {
   return 'Staff';
 };
 
-const mapAccessRights = (userType?: string): string[] => {
+const normalizeModuleId = (id: string): string => MODULE_ID_ALIASES[id] ?? id;
+
+const mapAccessRights = (userType?: string, persisted?: string[] | null): string[] => {
   if (userType === '1') return ['*'];
+  if (Array.isArray(persisted) && persisted.length > 0) {
+    return persisted.map(normalizeModuleId);
+  }
   return [...DEFAULT_STAFF_ACCESS_RIGHTS];
 };
 
@@ -108,7 +115,8 @@ const mapUserProfile = (context: ApiAuthPayload): UserProfile => {
     main_userid: Number(context.main_userid || user.main_userid || 0) || undefined,
     full_name: fullName || user.email || `User ${user.id}`,
     role,
-    access_rights: mapAccessRights(context.user_type || user.type),
+    access_rights: mapAccessRights(context.user_type || user.type, user.access_rights),
+    group_id: user.group_id || null,
     monthly_quota: Number.isFinite(quota) ? quota : 0,
   };
 };

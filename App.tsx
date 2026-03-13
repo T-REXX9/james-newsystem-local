@@ -244,8 +244,9 @@ const App: React.FC = () => {
     if (userProfile.role === 'Owner') return true;
 
     const rights = userProfile.access_rights || [];
+    const hasExplicitRights = rights.length > 0;
 
-    if (rights.includes('*')) return true;
+    if (hasExplicitRights && rights.includes('*')) return true;
 
     // Sales Agents should always reach their home/dashboard even if access_rights is misconfigured.
     if (
@@ -253,6 +254,10 @@ const App: React.FC = () => {
       (userProfile.role === 'Sales Agent' || userProfile.role === 'sales_agent')
     ) {
       return true;
+    }
+
+    if (!hasExplicitRights) {
+      return false;
     }
 
     const idsToCheck = expandModuleIds(canonical);

@@ -96,10 +96,22 @@ export interface UserProfile {
   avatar_url?: string;
   role?: string;
   access_rights?: string[]; // List of module IDs allowed
+  access_override?: boolean;
+  group_id?: string | null;
   team?: string;
   birthday?: string;
   mobile?: string;
   monthly_quota?: number;
+}
+
+export interface AccessGroup {
+  id: string;
+  main_id?: number;
+  name: string;
+  description?: string | null;
+  access_rights: string[];
+  created_at?: string;
+  assigned_staff_count?: number;
 }
 
 export interface ProfileRow extends UserProfile {

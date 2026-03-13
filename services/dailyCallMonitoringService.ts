@@ -94,6 +94,14 @@ const requestJson = async (url: string, init?: RequestInit): Promise<any> => {
   return response.json();
 };
 
+const cleanNullableText = (value: unknown, fallback = ''): string => {
+  const normalized = String(value ?? '').trim();
+  if (!normalized || normalized.toLowerCase() === 'null' || normalized.toLowerCase() === 'undefined') {
+    return fallback;
+  }
+  return normalized;
+};
+
 const formatCodeDate = (codeText?: string | null, codeDate?: string | null) => {
   const trimmedText = (codeText || '').trim();
   const formattedDate = formatDateFull(codeDate);
@@ -278,6 +286,46 @@ const mapTeamMessage = (row: any): TeamMessage => ({
   is_from_owner: Boolean(row?.is_from_owner),
 });
 
+const mapApiStatusToCustomerStatus = (status: string): CustomerStatus => {
+  const normalized = (status || '').trim().toLowerCase();
+  if (normalized === 'inactive') return CustomerStatus.INACTIVE;
+  if (normalized === 'prospective') return CustomerStatus.PROSPECTIVE;
+  if (normalized === 'blacklisted') return CustomerStatus.BLACKLISTED;
+  return CustomerStatus.ACTIVE;
+};
+
+const mapDailyCallCustomerRow = (row: any): DailyCallCustomerRow => ({
+  id: String(row?.id || ''),
+  source: cleanNullableText(row?.source, 'Manual'),
+  assignedTo: cleanNullableText(row?.assignedTo ?? row?.assigned_to, 'Unassigned'),
+  assignedDate: cleanNullableText(row?.assignedDate ?? row?.assigned_date),
+  clientSince: cleanNullableText(row?.clientSince ?? row?.client_since),
+  province: cleanNullableText(row?.province, ''),
+  city: cleanNullableText(row?.city, ''),
+  shopName: cleanNullableText(row?.shopName ?? row?.shop_name, 'Unnamed Shop'),
+  contactNumber: cleanNullableText(row?.contactNumber ?? row?.contact_number, ''),
+  codeDate: cleanNullableText(row?.codeDate ?? row?.code_date, '—'),
+  dealerPriceGroup: cleanNullableText(row?.dealerPriceGroup ?? row?.dealer_price_group),
+  dealerPriceDate: cleanNullableText(row?.dealerPriceDate ?? row?.dealer_price_date),
+  ishinomotoDealerSince: cleanNullableText(row?.ishinomotoDealerSince ?? row?.dealerSince ?? row?.dealer_since),
+  ishinomotoSignageSince: cleanNullableText(row?.ishinomotoSignageSince ?? row?.signageSince ?? row?.signage_since),
+  quota: Number(row?.quota || 0),
+  terms: cleanNullableText(row?.terms),
+  modeOfPayment: cleanNullableText(row?.modeOfPayment ?? row?.mode_of_payment, '—'),
+  courier: cleanNullableText(row?.courier, '—'),
+  status: mapApiStatusToCustomerStatus(String(row?.status || row?.statusLabel || row?.status_label || 'active')),
+  statusDate: cleanNullableText(row?.statusDate ?? row?.status_date),
+  outstandingBalance: Number(row?.outstandingBalance ?? row?.outstanding_balance ?? 0),
+  averageMonthlyOrder: Number(row?.averageMonthlyOrder ?? row?.average_monthly_purchase ?? 0),
+  monthlyOrder: Number(row?.monthlyOrder ?? row?.monthly_order ?? 0),
+  weeklyRangeTotals: Array.isArray(row?.weeklyRangeTotals ?? row?.weekly_range_totals)
+    ? (row?.weeklyRangeTotals ?? row?.weekly_range_totals).map((value: unknown) => Number(value || 0))
+    : [],
+  dailyActivity: Array.isArray(row?.dailyActivity ?? row?.daily_activity)
+    ? (row?.dailyActivity ?? row?.daily_activity)
+    : [],
+});
+
 const matchesSearch = (contact: Contact, query: string) => {
   if (!query) return true;
   const normalizedQuery = normalizeText(query);
@@ -365,7 +413,7 @@ export const fetchCustomersForDailyCall = async (
     const payload = await response.json();
     const data = payload?.data;
     if (!Array.isArray(data)) return [];
-    return data as DailyCallCustomerRow[];
+    return data.map(mapDailyCallCustomerRow);
   } catch (error) {
     console.error('Error fetching daily call customers via local API:', error);
     return [];
@@ -384,7 +432,7 @@ export const fetchAgentSnapshotForDailyCall = async (
   const data = payload?.data || {};
 
   return {
-    contacts: Array.isArray(data?.contacts) ? data.contacts as DailyCallCustomerRow[] : [],
+    contacts: Array.isArray(data?.contacts) ? data.contacts.map(mapDailyCallCustomerRow) : [],
     callLogs: Array.isArray(data?.call_logs) ? data.call_logs.map(mapCallLog) : [],
     inquiries: Array.isArray(data?.inquiries) ? data.inquiries.map(mapInquiry) : [],
     purchases: Array.isArray(data?.purchases) ? data.purchases.map(mapPurchase) : [],

@@ -53,7 +53,8 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
     if (user.role === 'Owner') return true;
 
     const rights = user.access_rights || [];
-    if (rights.length === 0) return false;
+    const hasExplicitRights = rights.length > 0;
+    if (!hasExplicitRights) return false;
     if (rights.includes('*')) return true;
     if (rights.includes(canonical)) return true;
 

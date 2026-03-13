@@ -246,6 +246,17 @@ interface MasterTableRowProps {
   onOpenPatientChart: (contactId: string) => void;
 }
 
+const getContactLocationLabel = (contact: Contact): string => {
+  const candidates = [contact.province, contact.city, contact.deliveryAddress, contact.address];
+  for (const candidate of candidates) {
+    const value = String(candidate || '').trim();
+    if (value !== '' && value.toLowerCase() !== 'null' && value.toLowerCase() !== 'undefined') {
+      return value;
+    }
+  }
+  return 'No location';
+};
+
 const MasterTableRow = React.memo(({
   row,
   densityConfig,
@@ -257,6 +268,7 @@ const MasterTableRow = React.memo(({
   onOpenPatientChart
 }: MasterTableRowProps) => {
   const isSelected = selectedClientId === row.contact.id;
+  const locationLabel = getContactLocationLabel(row.contact);
   return (
     <tr
       className={`hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors cursor-pointer ${densityConfig.rowPadding} ${isSelected ? 'bg-brand-blue/5 dark:bg-brand-blue/10' : ''}`}
@@ -269,8 +281,8 @@ const MasterTableRow = React.memo(({
             {row.contact.company}
           </p>
         </div>
-        <p className={`text-slate-500 dark:text-slate-400 truncate ${densityConfig.fontSize}`} title={row.contact.province || 'No location'}>
-          {row.contact.province || 'No location'}
+        <p className={`text-slate-500 dark:text-slate-400 truncate ${densityConfig.fontSize}`} title={locationLabel}>
+          {locationLabel}
         </p>
       </td>
       <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding}`}>
@@ -476,8 +488,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
   useEffect(() => {
     if (!agentDataName || !isSalesAgent) return;
-    const unsubscribe = subscribeToCallMonitoringUpdates(() => {
-      loadAgentData();
+    const unsubscribe = subscribeToDailyCallMonitoringUpdates({
+      onUpdate: loadAgentData,
     });
     return () => {
       unsubscribe();
