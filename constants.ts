@@ -88,6 +88,7 @@ export const AVAILABLE_APP_MODULES = [
   { id: 'warehouse-inventory-product-database', label: 'Product Database' },
   { id: 'warehouse-inventory-stock-movement', label: 'Stock Movement' },
   { id: 'warehouse-inventory-transfer-stock', label: 'Transfer Stock' },
+  { id: 'warehouse-inventory-stock-adjustment', label: 'Stock Adjustment' },
   { id: 'warehouse-inventory-inventory-audit', label: 'Inventory Audit' },
   { id: 'warehouse-purchasing-purchase-request', label: 'Purchase Request' },
   { id: 'warehouse-purchasing-purchase-order', label: 'Purchase Order' },

@@ -41,6 +41,15 @@ const getUserContext = () => {
   };
 };
 
+const mapUiStatusToApi = (status: string): string => {
+  switch (status) {
+    case OrderSlipStatus.DRAFT: return 'pending';
+    case OrderSlipStatus.FINALIZED: return 'posted';
+    case OrderSlipStatus.CANCELLED: return 'cancelled';
+    default: return status;
+  }
+};
+
 const mapApiStatusToUi = (status: unknown): OrderSlipStatus => {
   const normalized = String(status || '').trim().toLowerCase();
   if (normalized === 'cancelled' || normalized === 'canceled') return OrderSlipStatus.CANCELLED;
@@ -68,6 +77,7 @@ const mapOrderSlipSummary = (raw: any): OrderSlip => {
     id: orderSlipId,
     slip_no: String(raw?.slip_no || ''),
     order_id: String(raw?.order_id || ''),
+    sales_no: String(raw?.sales_no || ''),
     contact_id: String(raw?.contact_id || ''),
     sales_date: String(raw?.sales_date || new Date().toISOString().slice(0, 10)),
     sales_person: String(raw?.sales_person || ''),
@@ -141,7 +151,8 @@ export const getOrderSlipsPage = async (filters: OrderSlipsPageFilters): Promise
     : undefined;
   const page = Math.max(1, Number(filters.page || 1));
   const perPage = Math.max(1, Math.min(500, Number(filters.perPage || 50)));
-  const status = String(filters.status || 'all');
+  const rawStatus = String(filters.status || 'all');
+  const status = rawStatus === 'all' ? 'all' : mapUiStatusToApi(rawStatus);
   const search = String(filters.search || '').trim();
   const dateFrom = String(filters.dateFrom || '').trim();
   const dateTo = String(filters.dateTo || '').trim();
@@ -210,6 +221,31 @@ export const printOrderSlip = async (id: string): Promise<OrderSlip | null> => {
     user_id: getUserContext().userId,
   };
   const data = await requestApi(`${API_BASE_URL}/order-slips/${encodeURIComponent(id)}/actions/print`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return mapOrderSlipDetail(data);
+};
+
+export const cancelOrderSlip = async (id: string, reason: string): Promise<{ deleted: boolean }> => {
+  const response = await fetch(
+    `${API_BASE_URL}/order-slips/${encodeURIComponent(id)}?main_id=${encodeURIComponent(String(API_MAIN_ID))}&reason=${encodeURIComponent(reason)}`,
+    { method: 'DELETE' }
+  );
+  if (!response.ok) {
+    throw new Error(await parseApiErrorMessage(response));
+  }
+  const payload = await response.json();
+  return { deleted: Boolean(payload?.ok || payload?.deleted) };
+};
+
+export const unpostOrderSlip = async (id: string): Promise<OrderSlip | null> => {
+  const payload = {
+    main_id: API_MAIN_ID,
+    user_id: getUserContext().userId,
+  };
+  const data = await requestApi(`${API_BASE_URL}/order-slips/${encodeURIComponent(id)}/actions/unpost`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

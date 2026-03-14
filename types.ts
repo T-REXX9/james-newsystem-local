@@ -1093,6 +1093,7 @@ export interface OrderSlip {
   id: string;
   slip_no: string;
   order_id: string;
+  sales_no?: string;
   contact_id: string;
   sales_date: string;
   sales_person: string;

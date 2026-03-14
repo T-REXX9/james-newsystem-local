@@ -1,34 +1,87 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FileOutput, ListFilter, Search, RefreshCw, Printer, CheckCircle2, Calendar } from 'lucide-react';
+import {
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  Printer,
+  CheckCircle2,
+} from 'lucide-react';
 import StatusBadge from './StatusBadge';
 import WorkflowStepper from './WorkflowStepper';
 import {
+  cancelOrderSlip,
   finalizeOrderSlip,
   getOrderSlip,
   getOrderSlipsPage,
   printOrderSlip,
+  unpostOrderSlip,
 } from '../services/orderSlipLocalApiService';
 import { fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { isOrderSlipAllowedForTransactionType, syncDocumentPolicyState } from '../services/salesOrderLocalApiService';
 import { Contact, OrderSlip, OrderSlipStatus } from '../types';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
+import { getLocalAuthSession } from '../services/localAuthService';
 
 interface OrderSlipViewProps {
   initialSlipId?: string;
   initialSlipRefNo?: string;
 }
 
+const MONTH_OPTIONS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+const formatDate = (value?: string | null): string => {
+  if (!value) return '-';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString();
+};
+
+const formatCurrency = (value?: number | string | null): string => {
+  const amount = Number(value || 0);
+  return `₱${amount.toLocaleString()}`;
+};
+
 const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSlipRefNo }) => {
   const [selectedSlip, setSelectedSlip] = useState<OrderSlip | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | OrderSlipStatus>('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [dateRange, setDateRange] = useState<{ from: string; to: string }>({ from: '', to: '' });
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [month, setMonth] = useState<number | undefined>(undefined);
+  const [year, setYear] = useState<number | undefined>(undefined);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [finalizing, setFinalizing] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [orderSlips, setOrderSlips] = useState<OrderSlip[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const [customerFilter, setCustomerFilter] = useState('');
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [unpostModalOpen, setUnpostModalOpen] = useState(false);
+  const [unpostLoading, setUnpostLoading] = useState(false);
+
+  const isAdmin = useMemo(() => {
+    const session = getLocalAuthSession();
+    const userType = String(session?.context?.user?.type || session?.context?.user_type || '').toLowerCase();
+    return userType === 'admin' || userType === 'administrator';
+  }, []);
 
   const loadContacts = useCallback(async () => {
     try {
@@ -44,21 +97,23 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
     setLoading(true);
     try {
       const result = await getOrderSlipsPage({
+        month,
+        year,
         status: statusFilter === 'all' ? 'all' : statusFilter,
         search: debouncedSearch,
-        dateFrom: dateRange.from || undefined,
-        dateTo: dateRange.to || undefined,
-        page: 1,
-        perPage: 100,
+        page,
+        perPage: 50,
       });
       setOrderSlips(result.items);
+      setTotalPages(Math.max(1, result.meta.total_pages || 1));
     } catch (err) {
       console.error('Failed loading order slips:', err);
       setOrderSlips([]);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
-  }, [dateRange.from, dateRange.to, debouncedSearch, statusFilter]);
+  }, [month, year, debouncedSearch, statusFilter, page]);
 
   useEffect(() => {
     loadContacts();
@@ -127,12 +182,73 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
     };
   }, [selectedSlip?.id]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, month, year]);
+
   const selectedCustomer = selectedSlip ? customerMap.get(selectedSlip.contact_id) : null;
+  const selectedCustomerLabel = selectedCustomer?.company || selectedSlip?.contact_id || '-';
   const canProcessOrderSlip = isOrderSlipAllowedForTransactionType(selectedCustomer?.transactionType);
 
   useEffect(() => {
     syncDocumentPolicyState(selectedCustomer?.transactionType || null);
   }, [selectedCustomer?.transactionType]);
+
+  const activeFilterLabel = useMemo(() => {
+    if (!month || !year) return 'All Records';
+    return `${MONTH_OPTIONS[month - 1]} ${year}`;
+  }, [month, year]);
+
+  const filteredSlips = useMemo(() => {
+    if (!customerFilter) return orderSlips;
+    return orderSlips.filter(slip => slip.contact_id === customerFilter);
+  }, [customerFilter, orderSlips]);
+
+  const orderRowTone = (slip: OrderSlip) => {
+    if (slip.status === OrderSlipStatus.CANCELLED) return 'text-red-600';
+    if (selectedSlip?.id === slip.id) return 'text-brand-blue';
+    return 'text-slate-700 dark:text-slate-200';
+  };
+
+  const handleMonthChange = (monthValue: string) => {
+    if (!monthValue) {
+      setMonth(undefined);
+      return;
+    }
+    setMonth(Number(monthValue));
+    if (!year) setYear(new Date().getFullYear());
+  };
+
+  const handleYearChange = (yearValue: string) => {
+    if (!yearValue) {
+      setYear(undefined);
+      return;
+    }
+    setYear(Number(yearValue));
+    if (!month) setMonth(new Date().getMonth() + 1);
+  };
+
+  const handleFilterApply = async () => {
+    setPage(1);
+    await loadOrderSlips();
+  };
+
+  const handleRefresh = () => {
+    setSearchTerm('');
+    setDebouncedSearch('');
+    setCustomerFilter('');
+    setStatusFilter('all');
+    setMonth(undefined);
+    setYear(undefined);
+    setPage(1);
+    setSelectedSlip(null);
+  };
+
+  const handleSearchSubmit = () => {
+    setPage(1);
+    setDebouncedSearch(searchTerm.trim());
+    setSearchModalOpen(false);
+  };
 
   const handleFinalize = async () => {
     if (!selectedSlip || !canProcessOrderSlip) return;
@@ -184,192 +300,496 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
     }
   };
 
+  const handleCancelOrderSlip = async () => {
+    if (!selectedSlip || !cancelReason.trim()) return;
+    setCancelLoading(true);
+
+    const previousStatus = selectedSlip.status;
+    setOrderSlips(prev => applyOptimisticUpdate(prev, selectedSlip.id, { status: OrderSlipStatus.CANCELLED } as Partial<OrderSlip>));
+    setSelectedSlip(prev => prev ? { ...prev, status: OrderSlipStatus.CANCELLED } : null);
+
+    try {
+      await cancelOrderSlip(selectedSlip.id, cancelReason.trim());
+      setCancelModalOpen(false);
+      setCancelReason('');
+      await loadOrderSlips();
+    } catch (err) {
+      console.error('Failed to cancel order slip:', err);
+      setOrderSlips(prev => applyOptimisticUpdate(prev, selectedSlip.id, { status: previousStatus } as Partial<OrderSlip>));
+      setSelectedSlip(prev => prev ? { ...prev, status: previousStatus } : null);
+      alert('Failed to cancel order slip');
+    } finally {
+      setCancelLoading(false);
+    }
+  };
+
+  const handleUnpostOrderSlip = async () => {
+    if (!selectedSlip) return;
+    setUnpostLoading(true);
+
+    try {
+      const updated = await unpostOrderSlip(selectedSlip.id);
+      if (updated) {
+        setOrderSlips(prev => prev.map(row => row.id === updated.id ? updated : row));
+        setSelectedSlip(updated);
+      }
+      setUnpostModalOpen(false);
+      await loadOrderSlips();
+    } catch (err) {
+      console.error('Failed to unpost order slip:', err);
+      alert('Failed to unpost order slip');
+    } finally {
+      setUnpostLoading(false);
+    }
+  };
+
   return (
-    <div className="h-full flex flex-col bg-slate-100 dark:bg-slate-950">
-      <div className="bg-gradient-to-r from-slate-800 to-slate-900 text-white px-4 py-3 flex items-center gap-3">
-        <span className="p-2 rounded bg-white/10"><FileOutput className="w-5 h-5" /></span>
-        <div>
-          <h1 className="text-lg font-semibold">Order Slips</h1>
-          <p className="text-xs text-slate-300">Track document issuance and print status</p>
-        </div>
-      </div>
-      <div className="flex-1 flex overflow-hidden">
-        <aside className="w-72 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col">
-          <div className="p-3 space-y-3">
-            <div className="flex items-center gap-2 px-2 py-1 rounded border border-slate-200 dark:border-slate-800">
-              <Search className="w-4 h-4 text-slate-400" />
-              <input
-                className="flex-1 text-xs bg-transparent outline-none"
-                placeholder="Search slip or customer"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-xs text-slate-500 flex items-center gap-1 mb-1">
-                <ListFilter className="w-3 h-3" /> Status
-              </label>
+    <div className="w-full flex flex-col bg-white dark:bg-slate-900 p-3 gap-4">
+      {/* Filter bar + List table card */}
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <div className="flex flex-col gap-3 px-4 py-3 border-b border-slate-200 dark:border-slate-800">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSearchModalOpen(true)}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+              >
+                <Search className="w-4 h-4" />
+                Search
+              </button>
+              <button
+                type="button"
+                onClick={handleRefresh}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Refresh
+              </button>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value as 'all' | OrderSlipStatus)}
-                className="w-full text-xs border border-slate-200 dark:border-slate-800 rounded px-2 py-1 bg-slate-50 dark:bg-slate-800"
+                className="px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
               >
-                <option value="all">All</option>
+                <option value="all">All Statuses</option>
                 {Object.values(OrderSlipStatus).map(status => (
                   <option key={status} value={status}>{status}</option>
                 ))}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <label className="flex flex-col gap-1">
-                <span className="flex items-center gap-1 text-slate-500"><Calendar className="w-3 h-3" /> From</span>
-                <input
-                  type="date"
-                  value={dateRange.from}
-                  onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
-                  className="border border-slate-200 dark:border-slate-800 rounded px-2 py-1 bg-white dark:bg-slate-800"
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="flex items-center gap-1 text-slate-500"><Calendar className="w-3 h-3" /> To</span>
-                <input
-                  type="date"
-                  value={dateRange.to}
-                  onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
-                  className="border border-slate-200 dark:border-slate-800 rounded px-2 py-1 bg-white dark:bg-slate-800"
-                />
-              </label>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <span className="font-medium text-slate-700 dark:text-slate-200">Filter by Month:</span>
+              <select
+                value={month !== undefined ? String(month) : ''}
+                onChange={(e) => handleMonthChange(e.target.value)}
+                className="px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+              >
+                <option value="">All</option>
+                {MONTH_OPTIONS.map((m, index) => (
+                  <option key={m} value={index + 1}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="number"
+                value={year || ''}
+                onChange={(e) => handleYearChange(e.target.value)}
+                className="w-28 px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+                placeholder="Year"
+              />
+              <button
+                type="button"
+                onClick={handleFilterApply}
+                className="px-4 py-2 rounded bg-slate-700 text-white dark:bg-slate-700"
+              >
+                Filter
+              </button>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
-            {loading && (
-              <div className="flex items-center justify-center py-6 text-xs text-slate-500">
-                <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading slips...
-              </div>
-            )}
-            {!loading && orderSlips.map(slip => {
-              const customer = customerMap.get(slip.contact_id);
-              const isActive = selectedSlip?.id === slip.id;
-              return (
-                <button
-                  key={slip.id}
-                  onClick={() => setSelectedSlip(slip)}
-                  className={`w-full text-left p-3 space-y-1 ${isActive ? 'bg-brand-blue/10' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-sm text-slate-800 dark:text-slate-100">{slip.slip_no}</span>
-                    <StatusBadge status={slip.status} />
-                  </div>
-                  <p className="text-xs text-slate-500">{customer?.company || slip.contact_id}</p>
-                  <p className="text-[11px] text-slate-400">{new Date(slip.sales_date).toLocaleDateString()}</p>
-                </button>
-              );
-            })}
-            {!loading && orderSlips.length === 0 && (
-              <div className="p-4 text-xs text-slate-500">No order slips found.</div>
-            )}
+          <div className="text-sm text-slate-700 dark:text-slate-300">
+            <span className="font-semibold">Filtered By:</span> {activeFilterLabel}
           </div>
-        </aside>
-        <section className="flex-1 overflow-y-auto p-4">
-          {selectedSlip ? (
-            <div className="space-y-4">
-              <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-slate-500">Order Slip</p>
-                    <h2 className="text-2xl font-semibold text-slate-800 dark:text-white">{selectedSlip.slip_no}</h2>
-                    <p className="text-xs text-slate-500">{new Date(selectedSlip.sales_date).toLocaleDateString()} · {selectedCustomer?.company || selectedSlip.contact_id}</p>
-                  </div>
-                  <StatusBadge status={selectedSlip.status} />
-                </div>
-                <WorkflowStepper currentStage="document" documentLabel="Order Slip" />
-                {!canProcessOrderSlip && selectedCustomer && (
-                  <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded p-2">
-                    {selectedCustomer.company} is configured for invoice issuance. Order slip actions are disabled for this customer.
-                  </div>
-                )}
-                <div className="flex items-center gap-2 text-xs">
-                  <button
-                    type="button"
-                    onClick={handleFinalize}
-                    disabled={selectedSlip.status !== OrderSlipStatus.DRAFT || finalizing || !canProcessOrderSlip}
-                    title={!canProcessOrderSlip ? 'Customer is not permitted to finalize order slips.' : undefined}
-                    className="px-4 py-2 rounded bg-slate-900 text-white disabled:opacity-40"
-                  >
-                    {finalizing ? 'Finalizing...' : 'Finalize'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handlePrint}
-                    disabled={printing || !canProcessOrderSlip}
-                    title={!canProcessOrderSlip ? 'Customer is not permitted to print order slips.' : undefined}
-                    className="px-4 py-2 rounded bg-brand-blue text-white disabled:opacity-40 flex items-center gap-2"
-                  >
-                    <Printer className="w-4 h-4" /> {printing ? 'Printing...' : 'Print Slip'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => navigateToModule('salesorder', { orderId: selectedSlip.order_id })}
-                    className="px-4 py-2 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200"
-                  >
-                    View Sales Order
-                  </button>
-                </div>
-                {selectedSlip.printed_at && (
-                  <div className="text-xs text-slate-500 flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                    Printed {new Date(selectedSlip.printed_at).toLocaleString()}
-                  </div>
-                )}
-              </div>
-              <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-4 print:p-6 print:border-0">
-                <div className="flex justify-between items-center mb-4 print:flex-col print:items-start print:gap-2">
-                  <div>
-                    <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Delivery Details</h3>
-                    <p className="text-xs text-slate-500">{selectedSlip.delivery_address || 'No delivery address specified'}</p>
-                  </div>
-                  <div className="text-right text-xs text-slate-500">
-                    <p>Reference: {selectedSlip.reference_no || 'N/A'}</p>
-                    <p>PO Number: {selectedSlip.po_number || 'N/A'}</p>
-                  </div>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="text-left text-slate-500">
-                        <th className="py-2">Item</th>
-                        <th className="py-2">Qty</th>
-                        <th className="py-2">Unit Price</th>
-                        <th className="py-2">Amount</th>
+        </div>
+
+        <div className="p-4">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                <tr>
+                  <th className="px-3 py-2 text-left">Date</th>
+                  <th className="px-3 py-2 text-left">Customer</th>
+                  <th className="px-3 py-2 text-left">SO No.</th>
+                  <th className="px-3 py-2 text-left">OS No.</th>
+                  <th className="px-3 py-2 text-left">DM No.</th>
+                  <th className="px-3 py-2 text-left">Tracking No.</th>
+                  <th className="px-3 py-2 text-left">Sales Person</th>
+                  <th className="px-3 py-2 text-left">Status</th>
+                </tr>
+              </thead>
+            </table>
+            <div className="max-h-[220px] overflow-y-auto border border-t-0 border-slate-300 dark:border-slate-700">
+              <table className="w-full text-sm">
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                  {loading && (
+                    <tr>
+                      <td colSpan={8} className="px-3 py-6 text-center text-slate-500">
+                        <span className="inline-flex items-center gap-2">
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          Loading slips...
+                        </span>
+                      </td>
+                    </tr>
+                  )}
+                  {!loading && filteredSlips.map((slip, index) => {
+                    const customer = customerMap.get(slip.contact_id);
+                    return (
+                      <tr
+                        key={slip.id}
+                        onClick={() => setSelectedSlip(slip)}
+                        className={`cursor-pointer ${index % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50 dark:bg-slate-900/60'} hover:bg-slate-100 dark:hover:bg-slate-800 ${orderRowTone(slip)}`}
+                      >
+                        <td className="px-3 py-2">{formatDate(slip.sales_date)}</td>
+                        <td className="px-3 py-2">{customer?.company || slip.contact_id}</td>
+                        <td className="px-3 py-2">{slip.sales_no || slip.order_id || '-'}</td>
+                        <td className="px-3 py-2 font-semibold">{slip.slip_no}</td>
+                        <td className="px-3 py-2">-</td>
+                        <td className="px-3 py-2">-</td>
+                        <td className="px-3 py-2">{slip.sales_person || '-'}</td>
+                        <td className="px-3 py-2">
+                          <StatusBadge status={slip.status} />
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {selectedSlip.items?.map(item => (
-                        <tr key={item.id} className="border-t border-slate-100 dark:border-slate-800">
-                          <td className="py-2">
-                            <div className="font-semibold text-slate-700 dark:text-slate-200">{item.description}</div>
-                            <div className="text-[10px] text-slate-500">{item.item_code}</div>
-                          </td>
-                          <td className="py-2">{item.qty}</td>
-                          <td className="py-2">₱{Number(item.unit_price || 0).toLocaleString()}</td>
-                          <td className="py-2 font-semibold">₱{Number(item.amount || 0).toLocaleString()}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="flex justify-end text-sm font-semibold text-slate-700 dark:text-slate-200 mt-3">
-                  Total: ₱{Number(selectedSlip.grand_total || 0).toLocaleString()}
-                </div>
-              </div>
+                    );
+                  })}
+                  {!loading && filteredSlips.length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="px-3 py-6 text-center text-slate-500">
+                        No order slips match the current filters.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
-          ) : (
-            <div className="h-full flex items-center justify-center text-slate-500 text-sm">
-              Select an order slip to view details.
-            </div>
-          )}
-        </section>
+          </div>
+
+          <div className="mt-3 flex items-center justify-between text-sm text-slate-500">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              className="inline-flex items-center gap-1 px-3 py-2 rounded border border-slate-300 disabled:opacity-40 dark:border-slate-700"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Prev
+            </button>
+            <span>Page {page} / {totalPages}</span>
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              className="inline-flex items-center gap-1 px-3 py-2 rounded border border-slate-300 disabled:opacity-40 dark:border-slate-700"
+            >
+              Next
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
       </div>
+
+      {/* Detail section */}
+      {selectedSlip ? (
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800">
+            <h4 className="font-bold text-base uppercase text-slate-900 dark:text-slate-100">ORDER SLIP</h4>
+            <div className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+              <span className="font-semibold">OS No.:</span>
+              <input readOnly value={selectedSlip.slip_no} className="w-40 inline-block px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm text-slate-700 dark:text-slate-200" />
+              <StatusBadge status={selectedSlip.status} className="text-[10px] px-2 py-0.5" />
+            </div>
+          </div>
+
+          <div className="p-4 text-sm space-y-4">
+            {/* Header info table */}
+            <div className="overflow-x-auto">
+              <table width="100%" cellPadding="8" className="tlbcustom text-sm text-slate-700 dark:text-slate-200">
+                <colgroup>
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '21%' }} />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '21%' }} />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '22%' }} />
+                </colgroup>
+                <tbody>
+                  <tr>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Sold to:</td>
+                    <td><input readOnly value={selectedCustomerLabel} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Date:</td>
+                    <td><input readOnly value={selectedSlip.sales_date || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Sales Person:</td>
+                    <td><input readOnly value={selectedSlip.sales_person || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                  </tr>
+                  <tr>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Delivery Address:</td>
+                    <td><input readOnly value={selectedSlip.delivery_address || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Our Reference:</td>
+                    <td><input readOnly value={selectedSlip.reference_no || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Your Reference:</td>
+                    <td><input readOnly value={selectedSlip.customer_reference || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                  </tr>
+                  <tr>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Price Group:</td>
+                    <td><input readOnly value={selectedSlip.price_group || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Credit Limit:</td>
+                    <td><input readOnly value={formatCurrency(selectedSlip.credit_limit || 0)} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Terms Strictly:</td>
+                    <td><input readOnly value={selectedSlip.terms || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                  </tr>
+                  <tr>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Promise to Pay:</td>
+                    <td colSpan={3}><input readOnly value={selectedSlip.promise_to_pay || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">PO No.:</td>
+                    <td><input readOnly value={selectedSlip.po_number || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                  </tr>
+                  <tr>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Remarks:</td>
+                    <td colSpan={5}><input readOnly value={selectedSlip.remarks || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <WorkflowStepper currentStage="document" documentLabel="Order Slip" />
+
+            {!canProcessOrderSlip && selectedCustomer && (
+              <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded p-2">
+                {selectedCustomer.company} is configured for invoice issuance. Order slip actions are disabled for this customer.
+              </div>
+            )}
+
+            {/* Items table */}
+            <div className="overflow-x-auto">
+              <table className="w-full table-auto border-collapse text-sm border border-slate-300 dark:border-slate-700">
+                <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                  <tr>
+                    <th className="px-3 py-2 text-left">#</th>
+                    <th className="px-3 py-2 text-left">Part No.</th>
+                    <th className="px-3 py-2 text-left">Item Code</th>
+                    <th className="px-3 py-2 text-left">Location</th>
+                    <th className="px-3 py-2 text-left">Description</th>
+                    <th className="px-3 py-2 text-left">Qty</th>
+                    <th className="px-3 py-2 text-left">Unit Price</th>
+                    <th className="px-3 py-2 text-left">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="text-slate-700 dark:text-slate-200">
+                  {selectedSlip.items?.map((item, index) => (
+                    <tr key={item.id || `${item.item_code}-${index}`} className="odd:bg-white even:bg-slate-50 dark:odd:bg-slate-900 dark:even:bg-slate-800/30">
+                      <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{index + 1}</td>
+                      <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{item.part_no || '-'}</td>
+                      <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{item.item_code || '-'}</td>
+                      <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{item.location || '-'}</td>
+                      <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{item.description || '-'}</td>
+                      <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{item.qty}</td>
+                      <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{formatCurrency(item.unit_price)}</td>
+                      <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{formatCurrency(item.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan={7} className="px-3 py-3 text-right font-bold border-t border-slate-200 dark:border-slate-700">Grand Total</td>
+                    <td className="px-3 py-3 border-t border-slate-200 dark:border-slate-700">
+                      <span className="inline-flex rounded-full bg-brand-blue/10 px-3 py-1 font-bold text-brand-blue">{formatCurrency(selectedSlip.grand_total)}</span>
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {selectedSlip.printed_at && (
+              <div className="text-xs text-slate-500 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                Printed {new Date(selectedSlip.printed_at).toLocaleString()}
+              </div>
+            )}
+
+            {/* Action buttons bar (footbar) */}
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 dark:border-slate-800 pt-4">
+              {selectedSlip.status === OrderSlipStatus.DRAFT && canProcessOrderSlip && (
+                <button
+                  type="button"
+                  onClick={handleFinalize}
+                  disabled={finalizing}
+                  className="px-3 py-2 rounded bg-green-600 text-white text-sm disabled:opacity-50"
+                >
+                  {finalizing ? 'Finalizing...' : 'Finalize'}
+                </button>
+              )}
+              {(!selectedSlip.printed_at || isAdmin) && canProcessOrderSlip && (
+                <button
+                  type="button"
+                  onClick={handlePrint}
+                  disabled={printing}
+                  className="px-3 py-2 rounded bg-slate-500 text-white text-sm disabled:opacity-50 inline-flex items-center gap-2"
+                >
+                  <Printer className="w-4 h-4" /> {printing ? 'Printing...' : 'Print'}
+                </button>
+              )}
+              {selectedSlip.status !== OrderSlipStatus.CANCELLED && canProcessOrderSlip && (
+                <button
+                  type="button"
+                  onClick={() => setCancelModalOpen(true)}
+                  className="px-3 py-2 rounded bg-slate-500 text-white text-sm"
+                >
+                  Cancel
+                </button>
+              )}
+              {selectedSlip.status === OrderSlipStatus.FINALIZED && (
+                <button
+                  type="button"
+                  onClick={() => setUnpostModalOpen(true)}
+                  className="px-3 py-2 rounded bg-red-600 text-white text-sm"
+                >
+                  UNPOST
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => navigateToModule('salesorder', { orderId: selectedSlip.order_id })}
+                className="px-3 py-2 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm"
+              >
+                View Sales Order
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 py-16 text-center text-slate-500">
+          Select an order slip from the table above to view its full details.
+        </div>
+      )}
+
+      {/* Search modal */}
+      {searchModalOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-40 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-lg w-full p-5 border border-slate-200 dark:border-slate-800 space-y-4">
+            <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Search Order Slips</h3>
+            <div className="space-y-3">
+              <label className="block text-sm text-slate-700 dark:text-slate-200">
+                <span className="block mb-1">Ref No.</span>
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+                />
+              </label>
+              <label className="block text-sm text-slate-700 dark:text-slate-200">
+                <span className="block mb-1">Customer</span>
+                <select
+                  value={customerFilter}
+                  onChange={(e) => setCustomerFilter(e.target.value)}
+                  className="w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+                >
+                  <option value="">All Customers</option>
+                  {contacts.map(contact => (
+                    <option key={contact.id} value={contact.id}>
+                      {contact.company}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setSearchModalOpen(false)}
+                className="px-3 py-2 text-sm rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={handleSearchSubmit}
+                className="px-4 py-2 text-sm rounded bg-slate-700 text-white"
+              >
+                Submit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel modal */}
+      {cancelModalOpen && selectedSlip && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-40 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-lg w-full p-5 border border-slate-200 dark:border-slate-800 space-y-4">
+            <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Cancel Order Slip</h3>
+            <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              Are you sure you want to cancel this Order Slip? This cannot be undone.
+            </div>
+            <label className="block text-sm text-slate-700 dark:text-slate-200">
+              <span className="block mb-1">Reason to Cancel:</span>
+              <input
+                type="text"
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                className="w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+              />
+            </label>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setCancelModalOpen(false);
+                  setCancelReason('');
+                }}
+                className="px-3 py-2 text-sm rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelOrderSlip}
+                disabled={!cancelReason.trim() || cancelLoading}
+                className="px-4 py-2 text-sm rounded bg-red-600 text-white disabled:opacity-50"
+              >
+                {cancelLoading ? 'Processing...' : 'Proceed'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Unpost modal */}
+      {unpostModalOpen && selectedSlip && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-40 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-lg w-full p-5 border border-slate-200 dark:border-slate-800 space-y-4">
+            <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Unposting</h3>
+            <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              NOTE: Unposting will withdraw the Ledger entry, delete the DR/Invoice attached and open the sales inquiry.
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setUnpostModalOpen(false)}
+                className="px-3 py-2 text-sm rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={handleUnpostOrderSlip}
+                disabled={unpostLoading}
+                className="px-4 py-2 text-sm rounded bg-red-600 text-white disabled:opacity-50"
+              >
+                {unpostLoading ? 'Processing...' : 'Submit'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
