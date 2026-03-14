@@ -29,6 +29,11 @@ const statusTone = (status: string): string => {
   return 'bg-amber-100 text-amber-700';
 };
 
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
 const DailyCollectionEntryView: React.FC = () => {
   const [headers, setHeaders] = useState<DailyCollectionHeader[]>([]);
   const [selectedRefno, setSelectedRefno] = useState<string>('');
@@ -43,13 +48,14 @@ const DailyCollectionEntryView: React.FC = () => {
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [filterMonth, setFilterMonth] = useState(String(new Date().getMonth() + 1).padStart(2, '0'));
+  const [filterYear, setFilterYear] = useState(String(new Date().getFullYear()));
   const [listLoading, setListLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [savingPayment, setSavingPayment] = useState(false);
   const [workingAction, setWorkingAction] = useState('');
   const [error, setError] = useState('');
+  const [showApproverLogsModal, setShowApproverLogsModal] = useState(false);
 
   const [form, setForm] = useState({
     customerId: '',
@@ -58,7 +64,7 @@ const DailyCollectionEntryView: React.FC = () => {
     checkNo: '',
     checkDate: toDateInput(new Date().toISOString()),
     amount: '',
-    status: 'Cleared',
+    status: 'Received',
     collectDate: toDateInput(new Date().toISOString()),
     remarks: '',
   });
@@ -69,10 +75,26 @@ const DailyCollectionEntryView: React.FC = () => {
       .reduce((sum, row) => sum + Number(row.totalAmount || 0), 0);
   }, [unpaidRows, selectedTransactions]);
 
+  const totalCheck = useMemo(() => items.filter((i) => i.ltype === 'Check').reduce((s, i) => s + Number(i.lamt || 0), 0), [items]);
+  const totalTT = useMemo(() => items.filter((i) => i.ltype === 'TT').reduce((s, i) => s + Number(i.lamt || 0), 0), [items]);
+  const totalCash = useMemo(() => items.filter((i) => i.ltype === 'Cash').reduce((s, i) => s + Number(i.lamt || 0), 0), [items]);
+  const grandTotal = useMemo(() => items.reduce((s, i) => s + Number(i.lamt || 0), 0), [items]);
+
   const fetchList = async () => {
     setListLoading(true);
     setError('');
     try {
+      let dateFrom = '';
+      let dateTo = '';
+      if (filterMonth !== 'All') {
+        const year = parseInt(filterYear, 10);
+        const month = parseInt(filterMonth, 10);
+        if (!Number.isNaN(year) && year >= 2000 && year <= 2099) {
+          dateFrom = `${year}-${filterMonth}-01`;
+          const lastDay = new Date(year, month, 0).getDate();
+          dateTo = `${year}-${filterMonth}-${String(lastDay).padStart(2, '0')}`;
+        }
+      }
       const rows = await dailyCollectionService.listCollections({
         search,
         status: statusFilter,
@@ -121,7 +143,7 @@ const DailyCollectionEntryView: React.FC = () => {
 
   useEffect(() => {
     fetchList();
-  }, [statusFilter]);
+  }, [statusFilter, filterMonth, filterYear]);
 
   useEffect(() => {
     if (!selectedRefno) {
@@ -210,6 +232,31 @@ const DailyCollectionEntryView: React.FC = () => {
     }
   };
 
+  const handleDeleteSelectedItems = async () => {
+    if (!selectedRefno || selectedItemIds.length === 0) return;
+    if (!window.confirm(`Delete ${selectedItemIds.length} selected payment line(s)?`)) return;
+    setWorkingAction('delete-selected');
+    setError('');
+    try {
+      for (const itemId of selectedItemIds) {
+        await dailyCollectionService.deleteItem(itemId);
+      }
+      await fetchDetail(selectedRefno);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to delete selected lines');
+    } finally {
+      setWorkingAction('');
+    }
+  };
+
+  const handleTypeChange = (newType: string) => {
+    let autoStatus = 'Received';
+    if (newType === 'Check') autoStatus = 'Pending';
+    else if (newType === 'TT') autoStatus = 'Deposited';
+    else if (newType === 'Cash') autoStatus = 'Received';
+    setForm((prev) => ({ ...prev, type: newType, status: autoStatus }));
+  };
+
   const handleSavePayment = async () => {
     if (!selectedRefno) return;
     if (!form.customerId) {
@@ -266,6 +313,38 @@ const DailyCollectionEntryView: React.FC = () => {
     }
   };
 
+  const canAddPayment = selectedHeader?.lstatus === 'Pending' || selectedHeader?.lstatus === 'Submitted' || selectedHeader?.lstatus === 'Posted';
+
+  const renderStatusButtons = () => {
+    const status = selectedHeader?.lstatus;
+    const buttons: React.ReactNode[] = [];
+
+    if (status === 'Pending') {
+      buttons.push(
+        <button key="submit" onClick={() => handleAction('submitrecord')} disabled={!!workingAction} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60">For Approval</button>,
+      );
+    }
+    if (status === 'Submitted') {
+      buttons.push(
+        <button key="approve" onClick={() => handleAction('approverecord')} disabled={!!workingAction} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60">Approve</button>,
+        <button key="disapprove" onClick={() => handleAction('disapproverecord')} disabled={!!workingAction} className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60">Disapprove</button>,
+      );
+    }
+    if (status === 'Approved') {
+      buttons.push(
+        <button key="post" onClick={() => handleAction('postrecord')} disabled={!!workingAction} className="rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-700 disabled:opacity-60">Post</button>,
+        <button key="postledger" onClick={() => handleAction('posttoledger')} disabled={!!workingAction} className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-900 disabled:opacity-60 dark:bg-slate-700">Post to Ledger</button>,
+      );
+    }
+    if (status === 'Posted') {
+      buttons.push(
+        <button key="print" onClick={() => window.print()} className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-900 disabled:opacity-60 dark:bg-slate-700">Print</button>,
+      );
+    }
+
+    return buttons;
+  };
+
   return (
     <div className="h-full bg-slate-100 dark:bg-slate-950 p-4">
       <div className="h-full grid grid-cols-12 gap-4 overflow-hidden">
@@ -314,17 +393,24 @@ const DailyCollectionEntryView: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
+              <select
+                value={filterMonth}
+                onChange={(e) => setFilterMonth(e.target.value)}
                 className="rounded-lg border border-slate-200 px-2 py-2 text-xs dark:border-slate-700 dark:bg-slate-900"
-              />
+              >
+                <option value="All">All Months</option>
+                {MONTH_NAMES.map((name, idx) => {
+                  const val = String(idx + 1).padStart(2, '0');
+                  return <option key={val} value={val}>{name}</option>;
+                })}
+              </select>
               <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
+                type="number"
+                value={filterYear}
+                onChange={(e) => setFilterYear(e.target.value)}
                 className="rounded-lg border border-slate-200 px-2 py-2 text-xs dark:border-slate-700 dark:bg-slate-900"
+                min="2000"
+                max="2099"
               />
             </div>
           </div>
@@ -366,167 +452,42 @@ const DailyCollectionEntryView: React.FC = () => {
                     <p className="text-sm text-slate-500">Refno: {selectedRefno}</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <button onClick={() => handleAction('submitrecord')} disabled={!!workingAction} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60">Submit</button>
-                    <button onClick={() => handleAction('approverecord')} disabled={!!workingAction} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60">Approve</button>
-                    <button onClick={() => handleAction('disapproverecord')} disabled={!!workingAction} className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60">Disapprove</button>
-                    <button onClick={() => handleAction('cancelrecord')} disabled={!!workingAction} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Cancel</button>
-                    <button onClick={() => handleAction('postrecord')} disabled={!!workingAction} className="rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-700 disabled:opacity-60">Post</button>
-                    <button onClick={() => handleAction('posttoledger')} disabled={!!workingAction} className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-900 disabled:opacity-60 dark:bg-slate-700">Post to Ledger</button>
+                    {renderStatusButtons()}
                   </div>
                 </div>
                 {error && <p className="mt-2 text-sm text-rose-600">{error}</p>}
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-                  <h4 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">Add Payment Line</h4>
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                    <div className="md:col-span-2">
-                      <label className="mb-1 block text-xs font-medium text-slate-500">Customer</label>
-                      <select
-                        value={form.customerId}
-                        onChange={(e) => setForm((prev) => ({ ...prev, customerId: e.target.value }))}
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                      >
-                        <option value="">Select customer</option>
-                        {customers.map((customer) => (
-                          <option key={customer.id} value={customer.id}>
-                            {customer.code ? `${customer.code} - ` : ''}{customer.company}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-500">Type</label>
-                      <select
-                        value={form.type}
-                        onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value }))}
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                      >
-                        <option>Cash</option>
-                        <option>Check</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-500">Bank</label>
-                      <input value={form.bank} onChange={(e) => setForm((prev) => ({ ...prev, bank: e.target.value }))} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900" />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-500">Check No.</label>
-                      <input value={form.checkNo} onChange={(e) => setForm((prev) => ({ ...prev, checkNo: e.target.value }))} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900" />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-500">Check Date</label>
-                      <input type="date" value={form.checkDate} onChange={(e) => setForm((prev) => ({ ...prev, checkDate: e.target.value }))} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900" />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-500">Collection Date</label>
-                      <input type="date" value={form.collectDate} onChange={(e) => setForm((prev) => ({ ...prev, collectDate: e.target.value }))} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900" />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-500">Status</label>
-                      <select value={form.status} onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900">
-                        <option>Cleared</option>
-                        <option>Pending</option>
-                        <option>Bounced</option>
-                        <option>Cancelled</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-500">Amount</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={form.amount}
-                        onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                      />
-                    </div>
-                    <div className="md:col-span-3">
-                      <label className="mb-1 block text-xs font-medium text-slate-500">Remarks</label>
-                      <input value={form.remarks} onChange={(e) => setForm((prev) => ({ ...prev, remarks: e.target.value }))} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900" />
-                    </div>
-                  </div>
-
-                  <div className="mt-3 rounded-lg border border-slate-200 dark:border-slate-800">
-                    <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2 text-xs font-semibold text-slate-500 dark:border-slate-800">
-                      <span>Unpaid Invoice / Order Slip</span>
-                      <span>{peso.format(selectedAmount)}</span>
-                    </div>
-                    <div className="max-h-44 overflow-y-auto">
-                      {form.customerId && unpaidRows.length === 0 && <div className="px-3 py-2 text-xs text-slate-500">No unpaid invoices/order slips.</div>}
-                      {!form.customerId && <div className="px-3 py-2 text-xs text-slate-500">Pick a customer to load unpaid transactions.</div>}
-                      {unpaidRows.map((row) => {
-                        const key = `${row.transactionType}:${row.lrefno}`;
-                        const checked = !!selectedTransactions[key];
-                        return (
-                          <label key={key} className="flex cursor-pointer items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0 dark:border-slate-800">
-                            <div className="flex items-center gap-2">
-                              {checked ? <CheckCircle2 size={15} className="text-blue-600" /> : <Circle size={15} className="text-slate-400" />}
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={(e) => setSelectedTransactions((prev) => ({ ...prev, [key]: e.target.checked }))}
-                                className="hidden"
-                              />
-                              <div>
-                                <p className="font-medium text-slate-700 dark:text-slate-200">{row.linvoice_no}</p>
-                                <p className="text-xs text-slate-500">{row.transactionType}</p>
-                              </div>
-                            </div>
-                            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">{peso.format(row.totalAmount || 0)}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={handleSavePayment}
-                      disabled={savingPayment}
-                      className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-                    >
-                      {savingPayment ? 'Saving...' : 'Add Payment'}
-                    </button>
-                  </div>
-                </section>
-
                 <section className="rounded-xl border border-slate-200 dark:border-slate-800">
                   <div className="flex items-center justify-between border-b border-slate-200 p-3 dark:border-slate-800">
                     <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Payment Lines</h4>
-                    <button
-                      type="button"
-                      onClick={handlePostSelectedItems}
-                      disabled={selectedItemIds.length === 0 || !!workingAction}
-                      className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                    >
-                      Post Selected
-                    </button>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead className="bg-slate-50 dark:bg-slate-800/70">
                         <tr className="text-left text-xs uppercase text-slate-500">
-                          <th className="px-3 py-2">#</th>
-                          <th className="px-3 py-2">Customer</th>
-                          <th className="px-3 py-2">Type</th>
-                          <th className="px-3 py-2">Transactions</th>
-                          <th className="px-3 py-2">Amount</th>
-                          <th className="px-3 py-2">Status</th>
-                          <th className="px-3 py-2 text-right">Action</th>
+                          <th className="px-2 py-2">#</th>
+                          <th className="px-2 py-2">Customer</th>
+                          <th className="px-2 py-2">Type</th>
+                          <th className="px-2 py-2">Transactions</th>
+                          <th className="px-2 py-2">Bank</th>
+                          <th className="px-2 py-2">Check No.</th>
+                          <th className="px-2 py-2">Check Date</th>
+                          <th className="px-2 py-2">Amount</th>
+                          <th className="px-2 py-2">Remarks</th>
+                          <th className="px-2 py-2 text-right">Action</th>
                         </tr>
                       </thead>
                       <tbody>
                         {detailLoading && (
                           <tr>
-                            <td colSpan={7} className="px-3 py-4 text-center text-slate-500">Loading payment lines...</td>
+                            <td colSpan={10} className="px-3 py-4 text-center text-slate-500">Loading payment lines...</td>
                           </tr>
                         )}
-                        {!detailLoading && items.length === 0 && (
+                        {!detailLoading && items.length === 0 && !canAddPayment && (
                           <tr>
-                            <td colSpan={7} className="px-3 py-4 text-center text-slate-500">No payment lines yet.</td>
+                            <td colSpan={10} className="px-3 py-4 text-center text-slate-500">No payment lines yet.</td>
                           </tr>
                         )}
                         {!detailLoading && items.map((item, index) => {
@@ -543,15 +504,14 @@ const DailyCollectionEntryView: React.FC = () => {
                                 )}
                                 {posted && <Calendar size={14} className="text-emerald-600" />}
                               </td>
-                              <td className="px-3 py-2">{item.lcustomer_fname || item.lcustomer}</td>
-                              <td className="px-3 py-2">{item.ltype}</td>
-                              <td className="px-3 py-2 text-xs text-slate-500">{item.ltransaction_no || '-'}</td>
-                              <td className="px-3 py-2 font-medium">{peso.format(item.lamt || 0)}</td>
-                              <td className="px-3 py-2">
-                                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusTone(item.lcollection_status || item.lstatus || 'Pending')}`}>
-                                  {item.lcollection_status || item.lstatus || 'Pending'}
-                                </span>
-                              </td>
+                              <td className="px-2 py-2">{item.lcustomer_fname || item.lcustomer}</td>
+                              <td className="px-2 py-2">{item.ltype}</td>
+                              <td className="px-2 py-2 text-xs text-slate-500">{item.ltransaction_no || '-'}</td>
+                              <td className="px-2 py-2 text-xs text-slate-500">{(item as any).lbank || '-'}</td>
+                              <td className="px-2 py-2 text-xs text-slate-500">{(item as any).lcheck_no || '-'}</td>
+                              <td className="px-2 py-2 text-xs text-slate-500">{(item as any).lcheck_date ? toDateInput((item as any).lcheck_date) : '-'}</td>
+                              <td className="px-2 py-2 font-medium">{peso.format(item.lamt || 0)}</td>
+                              <td className="px-2 py-2 text-xs text-slate-500">{item.lremarks || '-'}</td>
                               <td className="px-3 py-2 text-right">
                                 <button
                                   type="button"
@@ -566,33 +526,235 @@ const DailyCollectionEntryView: React.FC = () => {
                             </tr>
                           );
                         })}
+                        {/* Inline Add Payment Row */}
+                        {!detailLoading && canAddPayment && (
+                          <>
+                            <tr className="border-t-2 border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-900/10">
+                              <td className="px-2 py-2">
+                                <input
+                                  type="checkbox"
+                                  checked={items.length > 0 && selectedItemIds.length === items.filter((i) => i.lpost !== 1 && i.lcollection_status !== 'Posted').length}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedItemIds(items.filter((i) => i.lpost !== 1 && i.lcollection_status !== 'Posted').map((i) => i.lid));
+                                    } else {
+                                      setSelectedItemIds([]);
+                                    }
+                                  }}
+                                  title="Select all"
+                                />
+                              </td>
+                              <td className="px-2 py-2">
+                                <select
+                                  value={form.customerId}
+                                  onChange={(e) => setForm((prev) => ({ ...prev, customerId: e.target.value }))}
+                                  className="w-full min-w-[120px] rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+                                >
+                                  <option value="">Customer</option>
+                                  {customers.map((customer) => (
+                                    <option key={customer.id} value={customer.id}>
+                                      {customer.code ? `${customer.code} - ` : ''}{customer.company}
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="px-2 py-2">
+                                <select
+                                  value={form.type}
+                                  onChange={(e) => handleTypeChange(e.target.value)}
+                                  className="w-full rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+                                >
+                                  <option>Cash</option>
+                                  <option>Check</option>
+                                  <option>TT</option>
+                                </select>
+                              </td>
+                              <td className="px-2 py-2">
+                                <select
+                                  multiple
+                                  value={Object.entries(selectedTransactions).filter(([, v]) => v).map(([k]) => k)}
+                                  onChange={(e) => {
+                                    const selected = Array.from(e.target.selectedOptions, (opt) => opt.value);
+                                    const newSelections: Record<string, boolean> = {};
+                                    unpaidRows.forEach((row) => {
+                                      const key = `${row.transactionType}:${row.lrefno}`;
+                                      newSelections[key] = selected.includes(key);
+                                    });
+                                    setSelectedTransactions(newSelections);
+                                  }}
+                                  className="w-full min-w-[120px] rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+                                  style={{ minHeight: '28px', maxHeight: '60px' }}
+                                >
+                                  {!form.customerId && <option disabled>Pick a customer</option>}
+                                  {form.customerId && unpaidRows.length === 0 && <option disabled>No unpaid items</option>}
+                                  {unpaidRows.map((row) => {
+                                    const key = `${row.transactionType}:${row.lrefno}`;
+                                    return (
+                                      <option key={key} value={key}>
+                                        {row.linvoice_no} — {peso.format(row.totalAmount || 0)}
+                                      </option>
+                                    );
+                                  })}
+                                </select>
+                              </td>
+                              <td className="px-2 py-2">
+                                <input value={form.bank} onChange={(e) => setForm((prev) => ({ ...prev, bank: e.target.value }))} className="w-full min-w-[60px] rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" placeholder="Bank" />
+                              </td>
+                              <td className="px-2 py-2">
+                                <input value={form.checkNo} onChange={(e) => setForm((prev) => ({ ...prev, checkNo: e.target.value }))} className="w-full min-w-[60px] rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" placeholder="Check No." />
+                              </td>
+                              <td className="px-2 py-2">
+                                <input type="date" value={form.checkDate} onChange={(e) => setForm((prev) => ({ ...prev, checkDate: e.target.value }))} className="w-full rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" title="Check Date" />
+                              </td>
+                              <td className="px-2 py-2">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={form.amount}
+                                  onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
+                                  className="w-full min-w-[70px] rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+                                  placeholder="0.00"
+                                />
+                              </td>
+                              <td className="px-2 py-2">
+                                <input
+                                  value={form.remarks}
+                                  onChange={(e) => setForm((prev) => ({ ...prev, remarks: e.target.value }))}
+                                  className="w-full min-w-[80px] rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+                                  placeholder="Remarks"
+                                />
+                              </td>
+                              <td className="px-2 py-2 text-right">
+                                <button
+                                  type="button"
+                                  onClick={handleSavePayment}
+                                  disabled={savingPayment}
+                                  className="rounded bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                                >
+                                  {savingPayment ? 'Saving...' : 'Add'}
+                                </button>
+                              </td>
+                            </tr>
+                            <tr className="bg-blue-50/30 dark:bg-blue-900/5">
+                              <td colSpan={5} className="px-3 py-2">
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={handleDeleteSelectedItems}
+                                    disabled={selectedItemIds.length === 0 || !!workingAction}
+                                    className="rounded border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-40"
+                                  >
+                                    Delete Selected
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handlePostSelectedItems}
+                                    disabled={selectedItemIds.length === 0 || !!workingAction}
+                                    className="rounded bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                                  >
+                                    Post Selected
+                                  </button>
+                                </div>
+                              </td>
+                              <td colSpan={6} className="px-3 py-2">
+                                <div className="flex items-center gap-2 text-xs text-slate-500">
+                                  <input type="date" value={form.collectDate} onChange={(e) => setForm((prev) => ({ ...prev, collectDate: e.target.value }))} className="rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" title="Collection Date" />
+                                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusTone(form.status)}`}>
+                                    {form.status}
+                                  </span>
+                                </div>
+                              </td>
+                            </tr>
+                          </>
+                        )}
                       </tbody>
+                      <tfoot className="bg-slate-50 dark:bg-slate-800/70">
+                        <tr className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                          <td className="px-2 py-2" />
+                          <td className="px-2 py-2" />
+                          <td className="px-2 py-2 text-right">Total Check:</td>
+                          <td className="px-2 py-2">{peso.format(totalCheck)}</td>
+                          <td className="px-2 py-2 text-right">Total T/T:</td>
+                          <td className="px-2 py-2">{peso.format(totalTT)}</td>
+                          <td className="px-2 py-2 text-right">Total Cash:</td>
+                          <td className="px-2 py-2">{peso.format(totalCash)}</td>
+                          <td className="px-2 py-2" />
+                          <td className="px-2 py-2 text-right font-bold">Grand Total: {peso.format(grandTotal)}</td>
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
                 </section>
-
-                <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-                  <h4 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">Approver Logs</h4>
-                  {approverLogs.length === 0 && <p className="text-xs text-slate-500">No approver logs yet.</p>}
-                  {approverLogs.length > 0 && (
-                    <div className="space-y-2">
-                      {approverLogs.map((log) => (
-                        <div key={log.lid} className="rounded-lg border border-slate-200 px-3 py-2 text-xs dark:border-slate-800">
-                          <div className="flex items-center justify-between">
-                            <p className="font-semibold text-slate-700 dark:text-slate-300">
-                              {(log.staff_fName || '') + ' ' + (log.staff_lName || '') || log.lstaff_id}
-                            </p>
-                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusTone(log.lstatus || 'Pending')}`}>
-                              {log.lstatus || 'Pending'}
-                            </span>
-                          </div>
-                          <p className="mt-1 text-slate-500">{log.lremarks || '-'}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </section>
               </div>
+
+              {/* Footer Action Bar */}
+              <div className="border-t border-slate-200 dark:border-slate-800 px-4 py-3 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowApproverLogsModal(true)}
+                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  Approver Logs
+                </button>
+              </div>
+
+              {/* Approver Logs Modal */}
+              {showApproverLogsModal && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowApproverLogsModal(false)}>
+                  <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-6 py-4">
+                      <h3 className="text-lg font-bold text-slate-900 dark:text-white">Approver Logs</h3>
+                      <button
+                        type="button"
+                        onClick={() => setShowApproverLogsModal(false)}
+                        className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xl leading-none"
+                      >
+                        &times;
+                      </button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-6">
+                      {approverLogs.length === 0 && <p className="text-sm text-slate-500">No approver logs yet.</p>}
+                      {approverLogs.length > 0 && (
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-50 dark:bg-slate-800/70">
+                            <tr className="text-left text-xs uppercase text-slate-500">
+                              <th className="px-3 py-2">ID</th>
+                              <th className="px-3 py-2">Approver Name</th>
+                              <th className="px-3 py-2">Date & Time</th>
+                              <th className="px-3 py-2">Remark</th>
+                              <th className="px-3 py-2">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {approverLogs.map((log) => (
+                              <tr key={log.lid} className="border-t border-slate-100 dark:border-slate-800">
+                                <td className="px-3 py-2">{log.lid}</td>
+                                <td className="px-3 py-2">{((log.staff_fName || '') + ' ' + (log.staff_lName || '')).trim() || log.lstaff_id}</td>
+                                <td className="px-3 py-2 text-xs">{log.ldatetime || '-'}</td>
+                                <td className="px-3 py-2 text-xs">{log.lremarks || '-'}</td>
+                                <td className="px-3 py-2">
+                                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusTone(log.lstatus || 'Pending')}`}>
+                                    {log.lstatus || 'Pending'}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                    <div className="border-t border-slate-200 dark:border-slate-800 px-6 py-4 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setShowApproverLogsModal(false)}
+                        className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </main>
