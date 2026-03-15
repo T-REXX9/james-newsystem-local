@@ -1156,6 +1156,8 @@ export interface InvoiceItem {
   description: string;
   unit_price: number;
   amount: number;
+  location?: string;
+  remark?: string;
   // Optional per-line VAT rate; manual invoices may populate this
   // but it is not derived when converting sales orders, which use a global VAT rule.
   vat_rate?: number;

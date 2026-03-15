@@ -346,155 +346,167 @@ const DailyCollectionEntryView: React.FC = () => {
   };
 
   return (
-    <div className="h-full bg-slate-100 dark:bg-slate-950 p-4">
-      <div className="h-full grid grid-cols-12 gap-4 overflow-hidden">
-        <aside className="col-span-12 lg:col-span-4 xl:col-span-3 h-full overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col">
-          <div className="p-4 border-b border-slate-200 dark:border-slate-800 space-y-3">
+    <div className="h-full bg-slate-100 dark:bg-slate-950 p-2">
+      <div className="h-full grid grid-cols-12 gap-0 overflow-hidden">
+        {/* Left Sidebar - Narrow DCR List */}
+        <aside className="col-span-12 lg:col-span-3 xl:col-span-2 h-full overflow-hidden border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col">
+          <div className="p-3 border-b border-slate-200 dark:border-slate-800 space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Daily Collection</h2>
-              <button
-                type="button"
-                onClick={handleCreate}
-                disabled={workingAction === 'create'}
-                className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-              >
-                <Plus size={14} /> New DCR
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={handleCreate}
+                  disabled={workingAction === 'create'}
+                  className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                >
+                  <Plus size={14} /> Create New
+                </button>
+              </div>
+              <div className="flex items-center gap-1">
+                <select
+                  value={filterMonth}
+                  onChange={(e) => setFilterMonth(e.target.value)}
+                  className="rounded border border-slate-200 px-1 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+                >
+                  <option value="All">All</option>
+                  {MONTH_NAMES.map((name, idx) => {
+                    const val = String(idx + 1).padStart(2, '0');
+                    return <option key={val} value={val}>{name.substring(0, 3)}</option>;
+                  })}
+                </select>
+                <input
+                  type="number"
+                  value={filterYear}
+                  onChange={(e) => setFilterYear(e.target.value)}
+                  className="w-16 rounded border border-slate-200 px-1 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+                  min="2000"
+                  max="2099"
+                />
+              </div>
             </div>
 
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search DCR no / refno"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200 dark:border-slate-700 dark:bg-slate-900"
+              className="w-full rounded border border-slate-200 px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-200 dark:border-slate-700 dark:bg-slate-900"
             />
-
-            <div className="grid grid-cols-2 gap-2">
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="rounded-lg border border-slate-200 px-2 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-              >
-                <option>All</option>
-                <option>Pending</option>
-                <option>Submitted</option>
-                <option>Approved</option>
-                <option>Rejected</option>
-                <option>Posted</option>
-                <option>Cancelled</option>
-              </select>
-              <button
-                type="button"
-                onClick={fetchList}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-2 py-2 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
-              >
-                <RefreshCcw size={14} /> Refresh
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <select
-                value={filterMonth}
-                onChange={(e) => setFilterMonth(e.target.value)}
-                className="rounded-lg border border-slate-200 px-2 py-2 text-xs dark:border-slate-700 dark:bg-slate-900"
-              >
-                <option value="All">All Months</option>
-                {MONTH_NAMES.map((name, idx) => {
-                  const val = String(idx + 1).padStart(2, '0');
-                  return <option key={val} value={val}>{name}</option>;
-                })}
-              </select>
-              <input
-                type="number"
-                value={filterYear}
-                onChange={(e) => setFilterYear(e.target.value)}
-                className="rounded-lg border border-slate-200 px-2 py-2 text-xs dark:border-slate-700 dark:bg-slate-900"
-                min="2000"
-                max="2099"
-              />
-            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto">
-            {listLoading && <div className="p-4 text-sm text-slate-500">Loading collections...</div>}
-            {!listLoading && headers.length === 0 && <div className="p-4 text-sm text-slate-500">No collection record found.</div>}
+            {listLoading && <div className="p-3 text-xs text-slate-500">Loading collections...</div>}
+            {!listLoading && headers.length === 0 && <div className="p-3 text-xs text-slate-500">No collection record found.</div>}
             {headers.map((row) => (
               <button
                 key={row.lrefno}
                 type="button"
                 onClick={() => setSelectedRefno(row.lrefno)}
-                className={`w-full border-b border-slate-100 px-4 py-3 text-left hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/70 ${
+                className={`w-full border-b border-slate-100 px-3 py-2 text-left hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/70 ${
                   selectedRefno === row.lrefno ? 'bg-blue-50 dark:bg-blue-900/20' : ''
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <p className="font-semibold text-slate-900 dark:text-white">{row.lcolection_no || row.lrefno}</p>
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusTone(row.lstatus)}`}>
-                    {row.lstatus || 'Pending'}
-                  </span>
+                  <span className="text-xs text-slate-500">{toDateInput(row.ldatetime) || '-'}</span>
+                  <span className="text-xs font-semibold text-slate-900 dark:text-white">{row.lcolection_no || row.lrefno}</span>
                 </div>
-                <p className="mt-1 text-xs text-slate-500">{toDateInput(row.ldatetime) || '-'}</p>
-                <p className="text-xs text-slate-500">{peso.format(Number(row.total_amt || 0))}</p>
               </button>
             ))}
           </div>
         </aside>
 
-        <main className="col-span-12 lg:col-span-8 xl:col-span-9 h-full overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col">
+        {/* Main Panel */}
+        <main className="col-span-12 lg:col-span-9 xl:col-span-10 h-full overflow-hidden border border-l-0 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col">
           {!selectedRefno && <div className="h-full grid place-items-center text-slate-400">Select or create a DCR record</div>}
 
           {selectedRefno && (
             <>
-              <div className="border-b border-slate-200 p-4 dark:border-slate-800">
+              {/* Top Action Bar with workflow buttons + Approver Logs */}
+              <div className="border-b border-slate-200 px-4 py-2 dark:border-slate-800">
+                <div className="flex flex-wrap items-center gap-2">
+                  {renderStatusButtons()}
+                  <button
+                    type="button"
+                    onClick={() => setShowApproverLogsModal(true)}
+                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    Approver Logs
+                  </button>
+                </div>
+              </div>
+
+              {/* Header info */}
+              <div className="border-b border-slate-200 px-4 py-2 dark:border-slate-800">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h3 className="text-xl font-bold text-slate-900 dark:text-white">{selectedHeader?.lcolection_no || selectedRefno}</h3>
                     <p className="text-sm text-slate-500">Refno: {selectedRefno}</p>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {renderStatusButtons()}
-                  </div>
                 </div>
                 {error && <p className="mt-2 text-sm text-rose-600">{error}</p>}
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                <section className="rounded-xl border border-slate-200 dark:border-slate-800">
-                  <div className="flex items-center justify-between border-b border-slate-200 p-3 dark:border-slate-800">
-                    <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Payment Lines</h4>
+              <div className="flex-1 overflow-y-auto p-2">
+                {/* Bulk action toolbar above table */}
+                {!detailLoading && canAddPayment && (
+                  <div className="flex items-center gap-2 px-2 py-1.5 mb-1 border-b border-slate-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={handleDeleteSelectedItems}
+                      disabled={selectedItemIds.length === 0 || !!workingAction}
+                      className="rounded border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-40"
+                    >
+                      Delete Selected
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handlePostSelectedItems}
+                      disabled={selectedItemIds.length === 0 || !!workingAction}
+                      className="rounded bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      Post Selected
+                    </button>
+                    <div className="ml-auto flex items-center gap-2 text-xs text-slate-500">
+                      <input type="date" value={form.collectDate} onChange={(e) => setForm((prev) => ({ ...prev, collectDate: e.target.value }))} className="rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" title="Collection Date" />
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusTone(form.status)}`}>
+                        {form.status}
+                      </span>
+                    </div>
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-slate-50 dark:bg-slate-800/70">
-                        <tr className="text-left text-xs uppercase text-slate-500">
-                          <th className="px-2 py-2">#</th>
-                          <th className="px-2 py-2">Customer</th>
-                          <th className="px-2 py-2">Type</th>
-                          <th className="px-2 py-2">Transactions</th>
-                          <th className="px-2 py-2">Bank</th>
-                          <th className="px-2 py-2">Check No.</th>
-                          <th className="px-2 py-2">Check Date</th>
-                          <th className="px-2 py-2">Amount</th>
-                          <th className="px-2 py-2">Remarks</th>
-                          <th className="px-2 py-2 text-right">Action</th>
+                )}
+
+                {/* Payment Lines Table - no card wrapper */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b-2 border-slate-300 dark:border-slate-600 text-left text-xs uppercase text-slate-500">
+                        <th className="px-2 py-2">Customer</th>
+                        <th className="px-2 py-2">Transaction No.</th>
+                        <th className="px-2 py-2">Check/Cash</th>
+                        <th className="px-2 py-2">Bank</th>
+                        <th className="px-2 py-2">Check No.</th>
+                        <th className="px-2 py-2">Check Date</th>
+                        <th className="px-2 py-2">Check Amount</th>
+                        <th className="px-2 py-2">Remarks</th>
+                        <th className="px-2 py-2 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detailLoading && (
+                        <tr>
+                          <td colSpan={9} className="px-3 py-4 text-center text-slate-500">Loading payment lines...</td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {detailLoading && (
-                          <tr>
-                            <td colSpan={10} className="px-3 py-4 text-center text-slate-500">Loading payment lines...</td>
-                          </tr>
-                        )}
-                        {!detailLoading && items.length === 0 && !canAddPayment && (
-                          <tr>
-                            <td colSpan={10} className="px-3 py-4 text-center text-slate-500">No payment lines yet.</td>
-                          </tr>
-                        )}
-                        {!detailLoading && items.map((item, index) => {
-                          const posted = item.lpost === 1 || item.lcollection_status === 'Posted';
-                          return (
-                            <tr key={item.lid} className="border-t border-slate-100 dark:border-slate-800">
-                              <td className="px-3 py-2">
+                      )}
+                      {!detailLoading && items.length === 0 && !canAddPayment && (
+                        <tr>
+                          <td colSpan={9} className="px-3 py-4 text-center text-slate-500">No payment lines yet.</td>
+                        </tr>
+                      )}
+                      {!detailLoading && items.map((item, index) => {
+                        const posted = item.lpost === 1 || item.lcollection_status === 'Posted';
+                        return (
+                          <tr key={item.lid} className={`border-t border-slate-100 dark:border-slate-800 ${index % 2 === 1 ? 'bg-slate-50 dark:bg-slate-800/30' : ''}`}>
+                            <td className="px-2 py-2">
+                              <span className="inline-flex items-center gap-1.5">
                                 {!posted && (
                                   <input
                                     type="checkbox"
@@ -503,199 +515,155 @@ const DailyCollectionEntryView: React.FC = () => {
                                   />
                                 )}
                                 {posted && <Calendar size={14} className="text-emerald-600" />}
-                              </td>
-                              <td className="px-2 py-2">{item.lcustomer_fname || item.lcustomer}</td>
-                              <td className="px-2 py-2">{item.ltype}</td>
-                              <td className="px-2 py-2 text-xs text-slate-500">{item.ltransaction_no || '-'}</td>
-                              <td className="px-2 py-2 text-xs text-slate-500">{(item as any).lbank || '-'}</td>
-                              <td className="px-2 py-2 text-xs text-slate-500">{(item as any).lcheck_no || '-'}</td>
-                              <td className="px-2 py-2 text-xs text-slate-500">{(item as any).lcheck_date ? toDateInput((item as any).lcheck_date) : '-'}</td>
-                              <td className="px-2 py-2 font-medium">{peso.format(item.lamt || 0)}</td>
-                              <td className="px-2 py-2 text-xs text-slate-500">{item.lremarks || '-'}</td>
-                              <td className="px-3 py-2 text-right">
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteItem(item.lid)}
-                                  disabled={!!workingAction || posted}
-                                  className="inline-flex items-center gap-1 rounded border border-rose-200 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 disabled:opacity-40"
-                                  title={posted ? 'Posted lines cannot be deleted' : 'Delete line'}
-                                >
-                                  <Trash2 size={13} /> Delete
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                        {/* Inline Add Payment Row */}
-                        {!detailLoading && canAddPayment && (
-                          <>
-                            <tr className="border-t-2 border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-900/10">
-                              <td className="px-2 py-2">
-                                <input
-                                  type="checkbox"
-                                  checked={items.length > 0 && selectedItemIds.length === items.filter((i) => i.lpost !== 1 && i.lcollection_status !== 'Posted').length}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      setSelectedItemIds(items.filter((i) => i.lpost !== 1 && i.lcollection_status !== 'Posted').map((i) => i.lid));
-                                    } else {
-                                      setSelectedItemIds([]);
-                                    }
-                                  }}
-                                  title="Select all"
-                                />
-                              </td>
-                              <td className="px-2 py-2">
-                                <select
-                                  value={form.customerId}
-                                  onChange={(e) => setForm((prev) => ({ ...prev, customerId: e.target.value }))}
-                                  className="w-full min-w-[120px] rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
-                                >
-                                  <option value="">Customer</option>
-                                  {customers.map((customer) => (
-                                    <option key={customer.id} value={customer.id}>
-                                      {customer.code ? `${customer.code} - ` : ''}{customer.company}
-                                    </option>
-                                  ))}
-                                </select>
-                              </td>
-                              <td className="px-2 py-2">
-                                <select
-                                  value={form.type}
-                                  onChange={(e) => handleTypeChange(e.target.value)}
-                                  className="w-full rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
-                                >
-                                  <option>Cash</option>
-                                  <option>Check</option>
-                                  <option>TT</option>
-                                </select>
-                              </td>
-                              <td className="px-2 py-2">
-                                <select
-                                  multiple
-                                  value={Object.entries(selectedTransactions).filter(([, v]) => v).map(([k]) => k)}
-                                  onChange={(e) => {
-                                    const selected = Array.from(e.target.selectedOptions, (opt) => opt.value);
-                                    const newSelections: Record<string, boolean> = {};
-                                    unpaidRows.forEach((row) => {
-                                      const key = `${row.transactionType}:${row.lrefno}`;
-                                      newSelections[key] = selected.includes(key);
-                                    });
-                                    setSelectedTransactions(newSelections);
-                                  }}
-                                  className="w-full min-w-[120px] rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
-                                  style={{ minHeight: '28px', maxHeight: '60px' }}
-                                >
-                                  {!form.customerId && <option disabled>Pick a customer</option>}
-                                  {form.customerId && unpaidRows.length === 0 && <option disabled>No unpaid items</option>}
-                                  {unpaidRows.map((row) => {
-                                    const key = `${row.transactionType}:${row.lrefno}`;
-                                    return (
-                                      <option key={key} value={key}>
-                                        {row.linvoice_no} — {peso.format(row.totalAmount || 0)}
-                                      </option>
-                                    );
-                                  })}
-                                </select>
-                              </td>
-                              <td className="px-2 py-2">
-                                <input value={form.bank} onChange={(e) => setForm((prev) => ({ ...prev, bank: e.target.value }))} className="w-full min-w-[60px] rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" placeholder="Bank" />
-                              </td>
-                              <td className="px-2 py-2">
-                                <input value={form.checkNo} onChange={(e) => setForm((prev) => ({ ...prev, checkNo: e.target.value }))} className="w-full min-w-[60px] rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" placeholder="Check No." />
-                              </td>
-                              <td className="px-2 py-2">
-                                <input type="date" value={form.checkDate} onChange={(e) => setForm((prev) => ({ ...prev, checkDate: e.target.value }))} className="w-full rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" title="Check Date" />
-                              </td>
-                              <td className="px-2 py-2">
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  value={form.amount}
-                                  onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
-                                  className="w-full min-w-[70px] rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
-                                  placeholder="0.00"
-                                />
-                              </td>
-                              <td className="px-2 py-2">
-                                <input
-                                  value={form.remarks}
-                                  onChange={(e) => setForm((prev) => ({ ...prev, remarks: e.target.value }))}
-                                  className="w-full min-w-[80px] rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
-                                  placeholder="Remarks"
-                                />
-                              </td>
-                              <td className="px-2 py-2 text-right">
-                                <button
-                                  type="button"
-                                  onClick={handleSavePayment}
-                                  disabled={savingPayment}
-                                  className="rounded bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-                                >
-                                  {savingPayment ? 'Saving...' : 'Add'}
-                                </button>
-                              </td>
-                            </tr>
-                            <tr className="bg-blue-50/30 dark:bg-blue-900/5">
-                              <td colSpan={5} className="px-3 py-2">
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={handleDeleteSelectedItems}
-                                    disabled={selectedItemIds.length === 0 || !!workingAction}
-                                    className="rounded border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-40"
-                                  >
-                                    Delete Selected
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={handlePostSelectedItems}
-                                    disabled={selectedItemIds.length === 0 || !!workingAction}
-                                    className="rounded bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                                  >
-                                    Post Selected
-                                  </button>
-                                </div>
-                              </td>
-                              <td colSpan={6} className="px-3 py-2">
-                                <div className="flex items-center gap-2 text-xs text-slate-500">
-                                  <input type="date" value={form.collectDate} onChange={(e) => setForm((prev) => ({ ...prev, collectDate: e.target.value }))} className="rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" title="Collection Date" />
-                                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusTone(form.status)}`}>
-                                    {form.status}
-                                  </span>
-                                </div>
-                              </td>
-                            </tr>
-                          </>
-                        )}
-                      </tbody>
-                      <tfoot className="bg-slate-50 dark:bg-slate-800/70">
-                        <tr className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                          <td className="px-2 py-2" />
-                          <td className="px-2 py-2" />
-                          <td className="px-2 py-2 text-right">Total Check:</td>
-                          <td className="px-2 py-2">{peso.format(totalCheck)}</td>
-                          <td className="px-2 py-2 text-right">Total T/T:</td>
-                          <td className="px-2 py-2">{peso.format(totalTT)}</td>
-                          <td className="px-2 py-2 text-right">Total Cash:</td>
-                          <td className="px-2 py-2">{peso.format(totalCash)}</td>
-                          <td className="px-2 py-2" />
-                          <td className="px-2 py-2 text-right font-bold">Grand Total: {peso.format(grandTotal)}</td>
+                                {item.lcustomer_fname || item.lcustomer}
+                              </span>
+                            </td>
+                            <td className="px-2 py-2 text-xs text-slate-500">{item.ltransaction_no || '-'}</td>
+                            <td className="px-2 py-2">{item.ltype}</td>
+                            <td className="px-2 py-2 text-xs text-slate-500">{(item as any).lbank || '-'}</td>
+                            <td className="px-2 py-2 text-xs text-slate-500">{(item as any).lcheck_no || '-'}</td>
+                            <td className="px-2 py-2 text-xs text-slate-500">{(item as any).lcheck_date ? toDateInput((item as any).lcheck_date) : '-'}</td>
+                            <td className="px-2 py-2 font-medium">{peso.format(item.lamt || 0)}</td>
+                            <td className="px-2 py-2 text-xs text-slate-500">{item.lremarks || '-'}</td>
+                            <td className="px-3 py-2 text-right">
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteItem(item.lid)}
+                                disabled={!!workingAction || posted}
+                                className="inline-flex items-center gap-1 rounded border border-rose-200 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 disabled:opacity-40"
+                                title={posted ? 'Posted lines cannot be deleted' : 'Delete line'}
+                              >
+                                <Trash2 size={13} /> Delete
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {/* Inline Add Payment Row */}
+                      {!detailLoading && canAddPayment && (
+                        <tr className="border-t-2 border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-900/10">
+                          <td className="px-2 py-2">
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="checkbox"
+                                checked={items.length > 0 && selectedItemIds.length === items.filter((i) => i.lpost !== 1 && i.lcollection_status !== 'Posted').length}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedItemIds(items.filter((i) => i.lpost !== 1 && i.lcollection_status !== 'Posted').map((i) => i.lid));
+                                  } else {
+                                    setSelectedItemIds([]);
+                                  }
+                                }}
+                                title="Select all"
+                              />
+                              <select
+                                value={form.customerId}
+                                onChange={(e) => setForm((prev) => ({ ...prev, customerId: e.target.value }))}
+                                className="w-full min-w-[120px] rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+                              >
+                                <option value="">Customer</option>
+                                {customers.map((customer) => (
+                                  <option key={customer.id} value={customer.id}>
+                                    {customer.code ? `${customer.code} - ` : ''}{customer.company}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </td>
+                          <td className="px-2 py-2">
+                            <select
+                              multiple
+                              value={Object.entries(selectedTransactions).filter(([, v]) => v).map(([k]) => k)}
+                              onChange={(e) => {
+                                const selected = Array.from(e.target.selectedOptions, (opt) => opt.value);
+                                const newSelections: Record<string, boolean> = {};
+                                unpaidRows.forEach((row) => {
+                                  const key = `${row.transactionType}:${row.lrefno}`;
+                                  newSelections[key] = selected.includes(key);
+                                });
+                                setSelectedTransactions(newSelections);
+                              }}
+                              className="w-full min-w-[120px] rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+                              style={{ minHeight: '28px', maxHeight: '60px' }}
+                            >
+                              {!form.customerId && <option disabled>Pick a customer</option>}
+                              {form.customerId && unpaidRows.length === 0 && <option disabled>No unpaid items</option>}
+                              {unpaidRows.map((row) => {
+                                const key = `${row.transactionType}:${row.lrefno}`;
+                                return (
+                                  <option key={key} value={key}>
+                                    {row.linvoice_no} — {peso.format(row.totalAmount || 0)}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          </td>
+                          <td className="px-2 py-2">
+                            <select
+                              value={form.type}
+                              onChange={(e) => handleTypeChange(e.target.value)}
+                              className="w-full rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+                            >
+                              <option>Cash</option>
+                              <option>Check</option>
+                              <option>TT</option>
+                            </select>
+                          </td>
+                          <td className="px-2 py-2">
+                            <input value={form.bank} onChange={(e) => setForm((prev) => ({ ...prev, bank: e.target.value }))} className="w-full min-w-[60px] rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" placeholder="Bank" />
+                          </td>
+                          <td className="px-2 py-2">
+                            <input value={form.checkNo} onChange={(e) => setForm((prev) => ({ ...prev, checkNo: e.target.value }))} className="w-full min-w-[60px] rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" placeholder="Check No." />
+                          </td>
+                          <td className="px-2 py-2">
+                            <input type="date" value={form.checkDate} onChange={(e) => setForm((prev) => ({ ...prev, checkDate: e.target.value }))} className="w-full rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" title="Check Date" />
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={form.amount}
+                              onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
+                              className="w-full min-w-[70px] rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+                              placeholder="0.00"
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              value={form.remarks}
+                              onChange={(e) => setForm((prev) => ({ ...prev, remarks: e.target.value }))}
+                              className="w-full min-w-[80px] rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+                              placeholder="Remarks"
+                            />
+                          </td>
+                          <td className="px-2 py-2 text-right">
+                            <button
+                              type="button"
+                              onClick={handleSavePayment}
+                              disabled={savingPayment}
+                              className="rounded bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                            >
+                              {savingPayment ? 'Saving...' : 'Add'}
+                            </button>
+                          </td>
                         </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                </section>
-              </div>
-
-              {/* Footer Action Bar */}
-              <div className="border-t border-slate-200 dark:border-slate-800 px-4 py-3 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowApproverLogsModal(true)}
-                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                >
-                  Approver Logs
-                </button>
+                      )}
+                    </tbody>
+                    <tfoot className="bg-slate-50 dark:bg-slate-800/70">
+                      <tr className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        <td className="px-2 py-2" />
+                        <td className="px-2 py-2 text-right">Total Check:</td>
+                        <td className="px-2 py-2">{peso.format(totalCheck)}</td>
+                        <td className="px-2 py-2 text-right">Total T/T:</td>
+                        <td className="px-2 py-2">{peso.format(totalTT)}</td>
+                        <td className="px-2 py-2 text-right">Total Cash:</td>
+                        <td className="px-2 py-2">{peso.format(totalCash)}</td>
+                        <td className="px-2 py-2" />
+                        <td className="px-2 py-2 text-right font-bold">Grand Total: {peso.format(grandTotal)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
               </div>
 
               {/* Approver Logs Modal */}

@@ -58,6 +58,8 @@ const mapApiItem = (item: any, invoiceId: string): InvoiceItem => ({
   description: String(item?.description || ''),
   unit_price: toNumber(item?.unit_price, 0),
   amount: toNumber(item?.amount, toNumber(item?.qty, 0) * toNumber(item?.unit_price, 0)),
+  location: item?.location != null ? String(item.location) : undefined,
+  remark: item?.remark != null ? String(item.remark) : undefined,
   vat_rate: 0,
 });
 
@@ -216,3 +218,36 @@ export const recordPayment = async (
 ): Promise<Invoice | null> => runInvoiceAction(id, 'record_payment');
 
 export const printInvoice = async (id: string): Promise<Invoice | null> => runInvoiceAction(id, 'print');
+
+export const cancelInvoice = async (id: string, reason: string): Promise<Invoice | null> => {
+  const payload = {
+    main_id: API_MAIN_ID,
+    user_id: getUserContext().userId,
+    reason,
+  };
+  const data = await requestApi(`${API_BASE_URL}/invoices/${encodeURIComponent(id)}/actions/cancel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return mapInvoiceDetail(data);
+};
+
+export const unpostInvoice = async (id: string): Promise<Invoice | null> => runInvoiceAction(id, 'unpost');
+
+export const updateInvoiceNumber = async (
+  id: string,
+  data: { invoice_no: string; sales_date: string; reason: string; tracking_no: string }
+): Promise<Invoice | null> => {
+  const payload = {
+    main_id: API_MAIN_ID,
+    user_id: getUserContext().userId,
+    ...data,
+  };
+  const result = await requestApi(`${API_BASE_URL}/invoices/${encodeURIComponent(id)}/actions/update_number`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return mapInvoiceDetail(result);
+};
