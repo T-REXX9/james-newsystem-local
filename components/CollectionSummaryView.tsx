@@ -1,21 +1,40 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Calendar, RefreshCcw, Search } from 'lucide-react';
+import {
+  Box,
+  Button,
+  Chip,
+  Divider,
+  FormControl,
+  InputAdornment,
+  MenuItem,
+  Paper,
+  Select,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableFooter,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography,
+} from '@mui/material';
+import { CreditCard, FileText } from 'lucide-react';
 import {
   CollectionSummaryDateType,
   CollectionSummaryResponse,
-  CollectionCustomer,
   dailyCollectionService,
 } from '../services/dailyCollectionService';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
 const dateTypeOptions: Array<{ value: CollectionSummaryDateType; label: string }> = [
-  { value: 'all', label: 'All' },
   { value: 'today', label: 'Today' },
-  { value: 'week', label: 'Week' },
-  { value: 'month', label: 'Month' },
-  { value: 'year', label: 'Year' },
-  { value: 'custom', label: 'Custom' },
+  { value: 'week', label: 'This Week' },
+  { value: 'month', label: 'This Month' },
+  { value: 'year', label: 'This Year' },
+  { value: 'custom', label: 'Custom Date' },
 ];
 
 const formatDate = (value?: string): string => {
@@ -25,55 +44,24 @@ const formatDate = (value?: string): string => {
   return d.toLocaleDateString('en-US');
 };
 
+const formatTimestamp = (value?: Date | null): string => {
+  if (!value) return '-';
+  return value.toLocaleString('en-US');
+};
+
 const CollectionSummaryView: React.FC = () => {
-  const [dateType, setDateType] = useState<CollectionSummaryDateType>('all');
+  const [dateType, setDateType] = useState<CollectionSummaryDateType>('today');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [bank, setBank] = useState('');
-  const [checkStatus, setCheckStatus] = useState('');
-  const [collectionType, setCollectionType] = useState<'All' | 'Cash' | 'Cheque'>('All');
-
-  const [customers, setCustomers] = useState<CollectionCustomer[]>([]);
-  const [customerSearch, setCustomerSearch] = useState('');
-  const [debouncedCustomerSearch, setDebouncedCustomerSearch] = useState('');
-  const [selectedCustomerId, setSelectedCustomerId] = useState('');
-
-  const [loadingCustomers, setLoadingCustomers] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [report, setReport] = useState<CollectionSummaryResponse | null>(null);
+  const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedCustomerSearch(customerSearch.trim()), 200);
-    return () => window.clearTimeout(timer);
-  }, [customerSearch]);
-
-  useEffect(() => {
-    let active = true;
-    setLoadingCustomers(true);
-    dailyCollectionService
-      .getCustomers(debouncedCustomerSearch)
-      .then((rows) => {
-        if (!active) return;
-        setCustomers(rows);
-      })
-      .catch(() => {
-        if (!active) return;
-        setCustomers([]);
-      })
-      .finally(() => {
-        if (active) setLoadingCustomers(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [debouncedCustomerSearch]);
-
-  const selectedCustomerLabel = useMemo(() => {
-    const row = customers.find((item) => item.id === selectedCustomerId);
-    return row?.company || '';
-  }, [customers, selectedCustomerId]);
+  const reportRangeLabel = useMemo(() => {
+    if (!report) return '';
+    return `FROM ${formatDate(report.date_from)} TO ${formatDate(report.date_to)}`;
+  }, [report]);
 
   const generate = async () => {
     if (dateType === 'custom' && (!dateFrom || !dateTo)) {
@@ -88,13 +76,10 @@ const CollectionSummaryView: React.FC = () => {
         dateType,
         dateFrom: dateType === 'custom' ? dateFrom : undefined,
         dateTo: dateType === 'custom' ? dateTo : undefined,
-        bank: bank.trim() || undefined,
-        checkStatus: checkStatus.trim() || undefined,
-        customerId: selectedCustomerId || undefined,
-        collectionType,
         limit: 200,
       });
       setReport(payload);
+      setGeneratedAt(new Date());
     } catch (err: any) {
       setReport(null);
       setError(err?.message || 'Failed to load collection summary');
@@ -107,271 +92,275 @@ const CollectionSummaryView: React.FC = () => {
     generate();
   }, []);
 
-  useEffect(() => {
-    if (report === null) return;
-    const timer = window.setTimeout(() => {
-      generate();
-    }, 120);
-    return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCustomerId]);
+  const handleBackToOption = () => {
+    setReport(null);
+  };
 
   return (
-    <div className="h-full bg-slate-100 dark:bg-slate-950 p-4">
-      <div className="h-full grid grid-cols-12 gap-4 overflow-hidden">
-        <aside className="col-span-12 lg:col-span-3 h-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden flex flex-col">
-          <div className="p-4 border-b border-slate-200 dark:border-slate-800 space-y-3">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Customers</h2>
-            <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                value={customerSearch}
-                onChange={(e) => setCustomerSearch(e.target.value)}
-                placeholder="Search customer..."
-                className="w-full rounded-lg border border-slate-300 pl-9 pr-3 py-2 text-sm bg-white dark:bg-slate-900 dark:border-slate-700"
-              />
-            </div>
-            {selectedCustomerLabel && <p className="text-xs text-slate-500">Selected: {selectedCustomerLabel}</p>}
-          </div>
+    <Box sx={{ minHeight: '100%', bgcolor: '#f3f4f6', p: 2 }}>
+      <Stack spacing={2}>
+        <Paper
+          elevation={3}
+          sx={{ borderRadius: 3, p: 3, borderTop: '4px solid', borderTopColor: 'primary.main' }}
+        >
+          <Stack spacing={3}>
+            <Box>
+              <Typography variant="overline" color="primary.main" sx={{ letterSpacing: 2 }}>
+                Collection Report
+              </Typography>
+              <Typography variant="h6" fontWeight={700}>
+                Collection Summary
+              </Typography>
+            </Box>
 
-          <div className="flex-1 overflow-auto">
-            {loadingCustomers ? (
-              <p className="p-4 text-sm text-slate-500">Loading customers...</p>
-            ) : customers.length === 0 ? (
-              <p className="p-4 text-sm text-slate-500">No customers found.</p>
-            ) : (
-              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                <li>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedCustomerId('')}
-                    className={`w-full text-left px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800/50 ${
-                      selectedCustomerId === '' ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 pl-3' : ''
-                    }`}
-                  >
-                    All Customers
-                  </button>
-                </li>
-                {customers.map((customer) => {
-                  const active = customer.id === selectedCustomerId;
-                  return (
-                    <li key={customer.id}>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedCustomerId(customer.id)}
-                        className={`w-full text-left px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 ${
-                          active ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 pl-3' : ''
-                        }`}
-                      >
-                        <p className="font-semibold text-sm text-slate-900 dark:text-white line-clamp-1">{customer.company || 'Unnamed Customer'}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">{customer.code || customer.id}</p>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-        </aside>
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ xs: 'stretch', md: 'flex-end' }} flexWrap="wrap" useFlexGap>
+              <FormControl size="small" sx={{ minWidth: 220 }}>
+                <Typography variant="body2" sx={{ mb: 1 }}>Date Type</Typography>
+                <Select value={dateType} onChange={(e) => setDateType(e.target.value as CollectionSummaryDateType)}>
+                  {dateTypeOptions.map((opt) => (
+                    <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
 
-        <section className="col-span-12 lg:col-span-9 h-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden flex flex-col">
-          <div className="p-4 border-b border-slate-200 dark:border-slate-800 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">Collection Summary</h2>
-                <p className="text-sm text-slate-500">
-                  {report ? `${formatDate(report.date_from)} to ${formatDate(report.date_to)}` : 'Generate report'}
-                </p>
-              </div>
-              <button
-                type="button"
+              <Box
+                sx={{
+                  display: dateType === 'custom' ? 'flex' : 'none',
+                  gap: 2,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <TextField
+                  size="small"
+                  type="date"
+                  label="Date From"
+                  InputLabelProps={{ shrink: true }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <FileText size={16} />
+                      </InputAdornment>
+                    ),
+                  }}
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  disabled={dateType !== 'custom'}
+                />
+                <TextField
+                  size="small"
+                  type="date"
+                  label="Date To"
+                  InputLabelProps={{ shrink: true }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <FileText size={16} />
+                      </InputAdornment>
+                    ),
+                  }}
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  disabled={dateType !== 'custom'}
+                />
+              </Box>
+
+              <Button
+                variant="contained"
+                color="primary"
                 onClick={generate}
                 disabled={loading}
-                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                size="large"
+                sx={{ px: 4 }}
               >
-                <RefreshCcw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                Generate
-              </button>
-            </div>
+                Generate Report
+              </Button>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-              <label className="text-sm text-slate-600 dark:text-slate-300">
-                Date Type
-                <select
-                  value={dateType}
-                  onChange={(e) => setDateType(e.target.value as CollectionSummaryDateType)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:bg-slate-900 dark:border-slate-700"
-                >
-                  {dateTypeOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-              </label>
+              {report ? (
+                <Stack direction="row" spacing={1}>
+                  <Button variant="outlined" color="success" onClick={handleBackToOption}>
+                    Back to Option
+                  </Button>
+                  <Button variant="outlined" onClick={() => window.print()}>
+                    Print Preview
+                  </Button>
+                </Stack>
+              ) : null}
+            </Stack>
+          </Stack>
+        </Paper>
 
-              <label className="text-sm text-slate-600 dark:text-slate-300">
-                Collection Type
-                <select
-                  value={collectionType}
-                  onChange={(e) => setCollectionType(e.target.value as 'All' | 'Cash' | 'Cheque')}
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:bg-slate-900 dark:border-slate-700"
-                >
-                  <option value="All">All</option>
-                  <option value="Cash">Cash</option>
-                  <option value="Cheque">Cheque</option>
-                </select>
-              </label>
+        <Paper elevation={3} sx={{ borderRadius: 3, p: 3 }}>
+          <Stack spacing={3}>
+            {error && (
+              <Typography variant="body2" color="error">
+                {error}
+              </Typography>
+            )}
 
-              <label className="text-sm text-slate-600 dark:text-slate-300">
-                Bank
-                <input
-                  value={bank}
-                  onChange={(e) => setBank(e.target.value)}
-                  placeholder="Optional"
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:bg-slate-900 dark:border-slate-700"
-                />
-              </label>
-
-              <label className="text-sm text-slate-600 dark:text-slate-300">
-                Check Status
-                <input
-                  value={checkStatus}
-                  onChange={(e) => setCheckStatus(e.target.value)}
-                  placeholder="Optional"
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:bg-slate-900 dark:border-slate-700"
-                />
-              </label>
-
-              <label className="text-sm text-slate-600 dark:text-slate-300">
-                Date From
-                <div className="relative mt-1">
-                  <Calendar className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                    disabled={dateType !== 'custom'}
-                    className="w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-400 dark:bg-slate-900 dark:border-slate-700"
-                  />
-                </div>
-              </label>
-
-              <label className="text-sm text-slate-600 dark:text-slate-300">
-                Date To
-                <div className="relative mt-1">
-                  <Calendar className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="date"
-                    value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
-                    disabled={dateType !== 'custom'}
-                    className="w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-400 dark:bg-slate-900 dark:border-slate-700"
-                  />
-                </div>
-              </label>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-auto p-4 space-y-6">
-            {error && <p className="text-sm text-rose-600">{error}</p>}
-            {loading ? <p className="text-sm text-slate-500">Generating report...</p> : null}
+            {loading && (
+              <Typography variant="body2" color="text.secondary">
+                Generating report...
+              </Typography>
+            )}
 
             {!report || loading ? null : (
               <>
-                <div>
-                  <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-2">Collection Summary</h3>
-                  <div className="overflow-auto rounded-xl border border-slate-200 dark:border-slate-800">
-                    <table className="min-w-full text-sm">
-                      <thead className="bg-slate-50 dark:bg-slate-900/60 text-slate-600 dark:text-slate-300">
-                        <tr>
-                          <th className="px-3 py-2 text-left">Date</th>
-                          <th className="px-3 py-2 text-left">Customer</th>
-                          <th className="px-3 py-2 text-left">DCR No.</th>
-                          <th className="px-3 py-2 text-right">Cash</th>
-                          <th className="px-3 py-2 text-right">Check</th>
-                          <th className="px-3 py-2 text-right">T/T</th>
-                          <th className="px-3 py-2 text-right">Less</th>
-                          <th className="px-3 py-2 text-left">Remarks</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                <Box
+                  sx={{
+                    bgcolor: 'grey.50',
+                    border: 1,
+                    borderColor: 'divider',
+                    borderRadius: 2,
+                    py: 2,
+                    px: 3,
+                    textAlign: 'center',
+                  }}
+                >
+                  <Typography variant="h5" align="center" fontWeight={700}>
+                    COLLECTION SUMMARY
+                  </Typography>
+                  <Divider sx={{ my: 1, borderColor: 'primary.main', borderBottomWidth: 2 }} />
+                  <Typography variant="subtitle2" align="center">
+                    {reportRangeLabel}
+                  </Typography>
+                  <Typography variant="caption" align="center" sx={{ display: 'block' }}>
+                    System generated {formatTimestamp(generatedAt)}
+                  </Typography>
+                </Box>
+
+                <Box>
+                  <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 480 }}>
+                    <Table stickyHeader size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Date</TableCell>
+                          <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Customer</TableCell>
+                          <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>DCR No.</TableCell>
+                          <TableCell align="right" sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Cash</TableCell>
+                          <TableCell align="right" sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Check</TableCell>
+                          <TableCell align="right" sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>T/T</TableCell>
+                          <TableCell align="right" sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Less</TableCell>
+                          <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Remarks</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
                         {report.collection_items.length === 0 ? (
-                          <tr>
-                            <td className="px-3 py-5 text-center text-slate-500" colSpan={8}>No collection rows found.</td>
-                          </tr>
+                          <TableRow>
+                            <TableCell colSpan={8} align="center">
+                              No collection rows found.
+                            </TableCell>
+                          </TableRow>
                         ) : (
                           report.collection_items.map((row, index) => (
-                            <tr key={`${row.dcr_no}-${index}`}>
-                              <td className="px-3 py-2">{formatDate(row.date)}</td>
-                              <td className="px-3 py-2">{row.customer || '-'}</td>
-                              <td className="px-3 py-2">{row.dcr_no || '-'}</td>
-                              <td className="px-3 py-2 text-right">{peso.format(row.cash || 0)}</td>
-                              <td className="px-3 py-2 text-right">{peso.format(row.check || 0)}</td>
-                              <td className="px-3 py-2 text-right">{peso.format(row.tt || 0)}</td>
-                              <td className="px-3 py-2 text-right">{peso.format(row.less || 0)}</td>
-                              <td className="px-3 py-2">{row.remarks || '-'}</td>
-                            </tr>
+                            <TableRow
+                              key={`${row.dcr_no}-${index}`}
+                              sx={{
+                                bgcolor: index % 2 === 0 ? 'background.paper' : 'grey.50',
+                                '&:hover': { bgcolor: 'action.hover' },
+                              }}
+                            >
+                              <TableCell>{formatDate(row.date)}</TableCell>
+                              <TableCell>{row.customer || '-'}</TableCell>
+                              <TableCell>{row.dcr_no || '-'}</TableCell>
+                              <TableCell align="right">{peso.format(row.cash || 0)}</TableCell>
+                              <TableCell align="right">{peso.format(row.check || 0)}</TableCell>
+                              <TableCell align="right">{peso.format(row.tt || 0)}</TableCell>
+                              <TableCell align="right">{peso.format(row.less || 0)}</TableCell>
+                              <TableCell>{row.remarks || '-'}</TableCell>
+                            </TableRow>
                           ))
                         )}
-                      </tbody>
-                      <tfoot className="bg-slate-50 dark:bg-slate-900/60 font-semibold">
-                        <tr>
-                          <td className="px-3 py-2" colSpan={3}>Totals</td>
-                          <td className="px-3 py-2 text-right">{peso.format(report.collection_totals.cash || 0)}</td>
-                          <td className="px-3 py-2 text-right">{peso.format(report.collection_totals.check || 0)}</td>
-                          <td className="px-3 py-2 text-right">{peso.format(report.collection_totals.tt || 0)}</td>
-                          <td className="px-3 py-2 text-right">{peso.format(report.collection_totals.less || 0)}</td>
-                          <td className="px-3 py-2" />
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                </div>
+                      </TableBody>
+                      <TableFooter>
+                        <TableRow sx={{ bgcolor: 'grey.100', borderTop: 2, borderColor: 'divider' }}>
+                          <TableCell colSpan={3} sx={{ fontWeight: 700, color: 'error.main', py: 1.5 }}>
+                            GRAND TOTAL
+                          </TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 700, color: 'error.main', py: 1.5 }}>
+                            {peso.format(report.collection_totals.cash || 0)}
+                          </TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 700, color: 'error.main', py: 1.5 }}>
+                            {peso.format(report.collection_totals.check || 0)}
+                          </TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 700, color: 'error.main', py: 1.5 }}>
+                            {peso.format(report.collection_totals.tt || 0)}
+                          </TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 700, color: 'error.main', py: 1.5 }}>
+                            {peso.format(report.collection_totals.less || 0)}
+                          </TableCell>
+                          <TableCell />
+                        </TableRow>
+                      </TableFooter>
+                    </Table>
+                  </TableContainer>
+                </Box>
 
-                <div>
-                  <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-2">Debit Memo (DM) Summary</h3>
-                  <div className="overflow-auto rounded-xl border border-slate-200 dark:border-slate-800">
-                    <table className="min-w-full text-sm">
-                      <thead className="bg-slate-50 dark:bg-slate-900/60 text-slate-600 dark:text-slate-300">
-                        <tr>
-                          <th className="px-3 py-2 text-left">DM No.</th>
-                          <th className="px-3 py-2 text-left">Code</th>
-                          <th className="px-3 py-2 text-left">Name</th>
-                          <th className="px-3 py-2 text-left">Date</th>
-                          <th className="px-3 py-2 text-right">Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                <Box>
+                  <Divider sx={{ my: 2 }} />
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
+                    <CreditCard size={18} />
+                    <Chip
+                      label="DEBIT MEMO (DM) SUMMARY"
+                      variant="outlined"
+                      color="primary"
+                      sx={{ fontWeight: 700, letterSpacing: 1 }}
+                    />
+                  </Stack>
+                  <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 480 }}>
+                    <Table stickyHeader size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>DM No.</TableCell>
+                          <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Code</TableCell>
+                          <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Name</TableCell>
+                          <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Date</TableCell>
+                          <TableCell align="right" sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Amount</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
                         {report.debit_items.length === 0 ? (
-                          <tr>
-                            <td className="px-3 py-5 text-center text-slate-500" colSpan={5}>No debit memo rows found.</td>
-                          </tr>
+                          <TableRow>
+                            <TableCell colSpan={5} align="center">
+                              No debit memo rows found.
+                            </TableCell>
+                          </TableRow>
                         ) : (
-                          report.debit_items.map((row) => (
-                            <tr key={row.lrefno || row.ldm_no}>
-                              <td className="px-3 py-2">{row.ldm_no || '-'}</td>
-                              <td className="px-3 py-2">{row.lcustomer_code || '-'}</td>
-                              <td className="px-3 py-2">{row.lcustomer_name || '-'}</td>
-                              <td className="px-3 py-2">{formatDate(row.ldatetime)}</td>
-                              <td className="px-3 py-2 text-right">{peso.format(row.lamount || 0)}</td>
-                            </tr>
+                          report.debit_items.map((row, index) => (
+                            <TableRow
+                              key={row.lrefno || row.ldm_no}
+                              sx={{
+                                bgcolor: index % 2 === 0 ? 'background.paper' : 'grey.50',
+                                '&:hover': { bgcolor: 'action.hover' },
+                              }}
+                            >
+                              <TableCell>{row.ldm_no || '-'}</TableCell>
+                              <TableCell>{row.lcustomer_code || '-'}</TableCell>
+                              <TableCell>{row.lcustomer_name || '-'}</TableCell>
+                              <TableCell>{formatDate(row.ldatetime)}</TableCell>
+                              <TableCell align="right">{peso.format(row.lamount || 0)}</TableCell>
+                            </TableRow>
                           ))
                         )}
-                      </tbody>
-                      <tfoot className="bg-slate-50 dark:bg-slate-900/60 font-semibold">
-                        <tr>
-                          <td className="px-3 py-2" colSpan={4}>Total</td>
-                          <td className="px-3 py-2 text-right">{peso.format(report.debit_totals.amount || 0)}</td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                </div>
+                      </TableBody>
+                      <TableFooter>
+                        <TableRow sx={{ bgcolor: 'grey.100', borderTop: 2, borderColor: 'divider' }}>
+                          <TableCell colSpan={4} sx={{ fontWeight: 700, py: 1.5 }}>
+                            TOTAL
+                          </TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 700, py: 1.5 }}>
+                            {peso.format(report.debit_totals.amount || 0)}
+                          </TableCell>
+                        </TableRow>
+                      </TableFooter>
+                    </Table>
+                  </TableContainer>
+                </Box>
               </>
             )}
-          </div>
-        </section>
-      </div>
-    </div>
+          </Stack>
+        </Paper>
+      </Stack>
+    </Box>
   );
 };
 

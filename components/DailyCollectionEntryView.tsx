@@ -1,5 +1,32 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Calendar, CheckCircle2, Circle, Plus, RefreshCcw, Trash2 } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Box,
+  Button,
+  Checkbox,
+  Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  FormControl,
+  InputAdornment,
+  MenuItem,
+  Paper,
+  Select,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableFooter,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography,
+} from '@mui/material';
+import { alpha } from '@mui/material/styles';
+import { Calendar, Search } from 'lucide-react';
 import {
   dailyCollectionService,
   DailyCollectionApproverLog,
@@ -8,6 +35,20 @@ import {
   CollectionCustomer,
   CollectionUnpaidRow,
 } from '../services/dailyCollectionService';
+import { getLocalAuthSession } from '../services/localAuthService';
+import DeleteCollectionReportModal from './DeleteCollectionReportModal';
+
+const COLLECTION_PAGE_NO = '21';
+
+const hasDeletePermission = (): boolean => {
+  const session = getLocalAuthSession();
+  const webPerms = session?.context?.permissions?.web;
+  if (!Array.isArray(webPerms)) return false;
+  const perm = webPerms.find(
+    (p) => String(p.lpageno) === COLLECTION_PAGE_NO,
+  );
+  return String(perm?.ldelete_action) === '1';
+};
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
@@ -21,18 +62,40 @@ const toDateInput = (value?: string): string => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
-const statusTone = (status: string): string => {
-  const normalized = status.toLowerCase();
-  if (normalized === 'approved' || normalized === 'posted') return 'bg-emerald-100 text-emerald-700';
-  if (normalized === 'rejected' || normalized === 'cancelled') return 'bg-rose-100 text-rose-700';
-  if (normalized === 'submitted') return 'bg-blue-100 text-blue-700';
-  return 'bg-amber-100 text-amber-700';
+const toDisplayDate = (value?: string): string => {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return `${mm}/${dd}/${yyyy}`;
 };
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
+
+const getStatusChipColor = (
+  status?: string,
+): 'default' | 'success' | 'error' | 'info' | 'warning' => {
+  switch ((status || '').toLowerCase()) {
+    case 'approved':
+    case 'posted':
+    case 'received':
+    case 'deposited':
+      return 'success';
+    case 'rejected':
+    case 'cancelled':
+    case 'disapproved':
+      return 'error';
+    case 'submitted':
+      return 'info';
+    default:
+      return 'warning';
+  }
+};
 
 const DailyCollectionEntryView: React.FC = () => {
   const [headers, setHeaders] = useState<DailyCollectionHeader[]>([]);
@@ -47,13 +110,14 @@ const DailyCollectionEntryView: React.FC = () => {
   const [selectedTransactions, setSelectedTransactions] = useState<Record<string, boolean>>({});
 
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All');
+  const [statusFilter] = useState('All');
   const [filterMonth, setFilterMonth] = useState(String(new Date().getMonth() + 1).padStart(2, '0'));
   const [filterYear, setFilterYear] = useState(String(new Date().getFullYear()));
   const [listLoading, setListLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [savingPayment, setSavingPayment] = useState(false);
   const [workingAction, setWorkingAction] = useState('');
+  const [showDeleteReportModal, setShowDeleteReportModal] = useState(false);
   const [error, setError] = useState('');
   const [showApproverLogsModal, setShowApproverLogsModal] = useState(false);
 
@@ -79,6 +143,12 @@ const DailyCollectionEntryView: React.FC = () => {
   const totalTT = useMemo(() => items.filter((i) => i.ltype === 'TT').reduce((s, i) => s + Number(i.lamt || 0), 0), [items]);
   const totalCash = useMemo(() => items.filter((i) => i.ltype === 'Cash').reduce((s, i) => s + Number(i.lamt || 0), 0), [items]);
   const grandTotal = useMemo(() => items.reduce((s, i) => s + Number(i.lamt || 0), 0), [items]);
+
+  const postableItems = useMemo(
+    () => items.filter((item) => item.lpost !== 1 && item.lcollection_status !== 'Posted'),
+    [items],
+  );
+  const allSelectableChecked = postableItems.length > 0 && selectedItemIds.length === postableItems.length;
 
   const fetchList = async () => {
     setListLoading(true);
@@ -145,6 +215,21 @@ const DailyCollectionEntryView: React.FC = () => {
     fetchList();
   }, [statusFilter, filterMonth, filterYear]);
 
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+    searchDebounceRef.current = setTimeout(() => {
+      fetchList();
+    }, 400);
+    return () => {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+      }
+    };
+  }, [search]);
+
   useEffect(() => {
     if (!selectedRefno) {
       setSelectedHeader(null);
@@ -186,7 +271,9 @@ const DailyCollectionEntryView: React.FC = () => {
     }
   };
 
-  const handleAction = async (action: 'submitrecord' | 'approverecord' | 'disapproverecord' | 'cancelrecord' | 'postrecord' | 'posttoledger') => {
+  const handleAction = async (
+    action: 'submitrecord' | 'approverecord' | 'disapproverecord' | 'cancelrecord' | 'postrecord' | 'posttoledger',
+  ) => {
     if (!selectedRefno) return;
     let remarks = '';
     if (action === 'disapproverecord') {
@@ -199,6 +286,25 @@ const DailyCollectionEntryView: React.FC = () => {
       await Promise.all([fetchList(), fetchDetail(selectedRefno)]);
     } catch (err: any) {
       setError(err?.message || `Failed to run ${action}`);
+    } finally {
+      setWorkingAction('');
+    }
+  };
+
+  const handleDeleteCollectionReport = async () => {
+    if (!selectedRefno) return;
+    setWorkingAction('delete-report');
+    setError('');
+    try {
+      await dailyCollectionService.deleteCollection(selectedRefno);
+      setSelectedRefno('');
+      setSelectedHeader(null);
+      setItems([]);
+      setApproverLogs([]);
+      await fetchList();
+    } catch (err: any) {
+      setError(err?.message || 'Failed to delete collection report');
+      throw err;
     } finally {
       setWorkingAction('');
     }
@@ -317,417 +423,680 @@ const DailyCollectionEntryView: React.FC = () => {
 
   const renderStatusButtons = () => {
     const status = selectedHeader?.lstatus;
-    const buttons: React.ReactNode[] = [];
+    const primary: React.ReactNode[] = [];
+    const secondary: React.ReactNode[] = [];
 
     if (status === 'Pending') {
-      buttons.push(
-        <button key="submit" onClick={() => handleAction('submitrecord')} disabled={!!workingAction} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60">For Approval</button>,
+      primary.push(
+        <Button
+          key="submit"
+          variant="contained"
+          color="primary"
+          size="small"
+          sx={{ minWidth: 110 }}
+          onClick={() => handleAction('submitrecord')}
+          disabled={!!workingAction}
+        >
+          For Approval
+        </Button>,
       );
     }
     if (status === 'Submitted') {
-      buttons.push(
-        <button key="approve" onClick={() => handleAction('approverecord')} disabled={!!workingAction} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60">Approve</button>,
-        <button key="disapprove" onClick={() => handleAction('disapproverecord')} disabled={!!workingAction} className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60">Disapprove</button>,
+      primary.push(
+        <Button
+          key="approve"
+          variant="contained"
+          color="success"
+          size="small"
+          sx={{ minWidth: 110 }}
+          onClick={() => handleAction('approverecord')}
+          disabled={!!workingAction}
+        >
+          Approve
+        </Button>,
+        <Button
+          key="disapprove"
+          variant="contained"
+          color="error"
+          size="small"
+          sx={{ minWidth: 110 }}
+          onClick={() => handleAction('disapproverecord')}
+          disabled={!!workingAction}
+        >
+          Disapprove
+        </Button>,
       );
     }
     if (status === 'Approved') {
-      buttons.push(
-        <button key="post" onClick={() => handleAction('postrecord')} disabled={!!workingAction} className="rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-700 disabled:opacity-60">Post</button>,
-        <button key="postledger" onClick={() => handleAction('posttoledger')} disabled={!!workingAction} className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-900 disabled:opacity-60 dark:bg-slate-700">Post to Ledger</button>,
+      primary.push(
+        <Button
+          key="post"
+          variant="contained"
+          color="secondary"
+          size="small"
+          sx={{ minWidth: 110 }}
+          onClick={() => handleAction('postrecord')}
+          disabled={!!workingAction}
+        >
+          Post
+        </Button>,
       );
     }
-    if (status === 'Posted') {
-      buttons.push(
-        <button key="print" onClick={() => window.print()} className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-900 disabled:opacity-60 dark:bg-slate-700">Print</button>,
+    if (selectedRefno) {
+      secondary.push(
+        <Button key="print" variant="outlined" size="small" onClick={() => window.print()}>
+          Print
+        </Button>,
+        <Button
+          key="logs"
+          variant="outlined"
+          size="small"
+          onClick={() => setShowApproverLogsModal(true)}
+        >
+          Approver Logs
+        </Button>,
       );
+      if (status === 'Pending' && hasDeletePermission()) {
+        secondary.push(
+          <Button
+            key="delete-report"
+            variant="contained"
+            color="error"
+            size="small"
+            onClick={() => setShowDeleteReportModal(true)}
+            disabled={!!workingAction}
+          >
+            Delete Collection Report
+          </Button>,
+        );
+      }
     }
 
-    return buttons;
+    return { primary, secondary };
   };
 
+  const statusButtons = renderStatusButtons();
+
   return (
-    <div className="h-full bg-slate-100 dark:bg-slate-950 p-2">
-      <div className="h-full grid grid-cols-12 gap-0 overflow-hidden">
-        {/* Left Sidebar - Narrow DCR List */}
-        <aside className="col-span-12 lg:col-span-3 xl:col-span-2 h-full overflow-hidden border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col">
-          <div className="p-3 border-b border-slate-200 dark:border-slate-800 space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={handleCreate}
-                  disabled={workingAction === 'create'}
-                  className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-                >
-                  <Plus size={14} /> Create New
-                </button>
-              </div>
-              <div className="flex items-center gap-1">
-                <select
-                  value={filterMonth}
-                  onChange={(e) => setFilterMonth(e.target.value)}
-                  className="rounded border border-slate-200 px-1 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
-                >
-                  <option value="All">All</option>
-                  {MONTH_NAMES.map((name, idx) => {
-                    const val = String(idx + 1).padStart(2, '0');
-                    return <option key={val} value={val}>{name.substring(0, 3)}</option>;
-                  })}
-                </select>
-                <input
+    <Box sx={{ height: '100%', bgcolor: '#f3f4f6', p: 2 }}>
+      <Box
+        sx={{
+          height: '100%',
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', lg: '280px minmax(0, 1fr)' },
+          gap: 2,
+        }}
+      >
+        <Paper elevation={2} sx={{ borderRadius: 3, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0, border: '1px solid', borderColor: 'divider' }}>
+          <Box sx={{ p: 2 }}>
+            <Stack spacing={1.5} sx={{ mb: 2 }}>
+              <Button
+                variant="contained"
+                color="primary"
+                size="medium"
+                fullWidth
+                onClick={handleCreate}
+                disabled={workingAction === 'create'}
+              >
+                Create New
+              </Button>
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{ bgcolor: 'grey.50', p: 1, borderRadius: 1, border: 1, borderColor: 'divider' }}
+              >
+                <FormControl size="small" sx={{ minWidth: 88 }}>
+                  <Select value={filterMonth} onChange={(e) => setFilterMonth(String(e.target.value))}>
+                    <MenuItem value="All">All</MenuItem>
+                    {MONTH_NAMES.map((name, idx) => {
+                      const value = String(idx + 1).padStart(2, '0');
+                      return (
+                        <MenuItem key={value} value={value}>
+                          {name.substring(0, 3)}
+                        </MenuItem>
+                      );
+                    })}
+                  </Select>
+                </FormControl>
+                <TextField
+                  size="small"
                   type="number"
                   value={filterYear}
                   onChange={(e) => setFilterYear(e.target.value)}
-                  className="w-16 rounded border border-slate-200 px-1 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
-                  min="2000"
-                  max="2099"
+                  inputProps={{ min: 2000, max: 2099 }}
+                  sx={{ width: 88 }}
                 />
-              </div>
-            </div>
+              </Stack>
+            </Stack>
 
-            <input
+            <TextField
+              fullWidth
+              size="small"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search DCR no / refno"
-              className="w-full rounded border border-slate-200 px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-200 dark:border-slate-700 dark:bg-slate-900"
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Search size={16} />
+                  </InputAdornment>
+                ),
+              }}
             />
-          </div>
+          </Box>
 
-          <div className="flex-1 overflow-y-auto">
-            {listLoading && <div className="p-3 text-xs text-slate-500">Loading collections...</div>}
-            {!listLoading && headers.length === 0 && <div className="p-3 text-xs text-slate-500">No collection record found.</div>}
-            {headers.map((row) => (
-              <button
-                key={row.lrefno}
-                type="button"
-                onClick={() => setSelectedRefno(row.lrefno)}
-                className={`w-full border-b border-slate-100 px-3 py-2 text-left hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/70 ${
-                  selectedRefno === row.lrefno ? 'bg-blue-50 dark:bg-blue-900/20' : ''
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-slate-500">{toDateInput(row.ldatetime) || '-'}</span>
-                  <span className="text-xs font-semibold text-slate-900 dark:text-white">{row.lcolection_no || row.lrefno}</span>
-                </div>
-              </button>
-            ))}
-          </div>
-        </aside>
+          <Divider />
 
-        {/* Main Panel */}
-        <main className="col-span-12 lg:col-span-9 xl:col-span-10 h-full overflow-hidden border border-l-0 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col">
-          {!selectedRefno && <div className="h-full grid place-items-center text-slate-400">Select or create a DCR record</div>}
+          <Box sx={{ flex: 1, overflowY: 'auto' }}>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: '110px minmax(0, 1fr)',
+                px: 2,
+                py: 1.25,
+                bgcolor: 'grey.200',
+                borderBottom: 2,
+                borderColor: 'primary.main',
+              }}
+            >
+              <Typography variant="caption" fontWeight={700}>Date</Typography>
+              <Typography variant="caption" fontWeight={700}>DCR No.</Typography>
+            </Box>
+
+            {listLoading && <Typography sx={{ p: 2 }} variant="body2" color="text.secondary">Loading collections...</Typography>}
+            {!listLoading && headers.length === 0 && (
+              <Typography sx={{ p: 2 }} variant="body2" color="text.secondary">
+                No collection record found.
+              </Typography>
+            )}
+
+            {headers.map((row) => {
+              const active = selectedRefno === row.lrefno;
+              return (
+                <Box
+                  key={row.lrefno}
+                  onClick={() => setSelectedRefno(row.lrefno)}
+                  sx={(theme) => ({
+                    display: 'grid',
+                    gridTemplateColumns: '110px minmax(0, 1fr)',
+                    px: 2,
+                    py: 1.5,
+                    mx: 1,
+                    my: 0.5,
+                    borderRadius: 2,
+                    border: 1,
+                    borderColor: active ? 'primary.main' : 'divider',
+                    borderLeft: 4,
+                    borderLeftColor: active ? 'primary.main' : 'transparent',
+                    boxShadow: active ? 2 : 0,
+                    transition: 'box-shadow 0.15s, border-color 0.15s',
+                    cursor: 'pointer',
+                    bgcolor: active ? alpha(theme.palette.primary.main, 0.08) : 'background.paper',
+                    '&:hover': {
+                      bgcolor: active ? alpha(theme.palette.primary.main, 0.14) : 'grey.50',
+                      boxShadow: 2,
+                      borderColor: 'primary.light',
+                    },
+                  })}
+                >
+                  <Stack direction="row" spacing={0.5} alignItems="center">
+                    <Calendar size={12} />
+                    <Typography variant="body2" color="text.secondary">
+                      {toDisplayDate(row.ldatetime) || '-'}
+                    </Typography>
+                  </Stack>
+                  <Typography variant="body2" fontWeight={700} color={active ? 'primary.main' : 'text.primary'}>
+                    {row.lcolection_no || row.lrefno}
+                  </Typography>
+                </Box>
+              );
+            })}
+          </Box>
+        </Paper>
+
+        <Paper elevation={3} sx={{ borderRadius: 3, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0, borderTop: '4px solid', borderTopColor: 'primary.main' }}>
+          {!selectedRefno && (
+            <Box sx={{ height: '100%', display: 'grid', placeItems: 'center', color: 'text.secondary' }}>
+              <Typography>Select or create a DCR record</Typography>
+            </Box>
+          )}
 
           {selectedRefno && (
             <>
-              {/* Top Action Bar with workflow buttons + Approver Logs */}
-              <div className="border-b border-slate-200 px-4 py-2 dark:border-slate-800">
-                <div className="flex flex-wrap items-center gap-2">
-                  {renderStatusButtons()}
-                  <button
-                    type="button"
-                    onClick={() => setShowApproverLogsModal(true)}
-                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                  >
-                    Approver Logs
-                  </button>
-                </div>
-              </div>
+              <Paper elevation={1} square sx={{ p: 2, borderBottom: '2px solid', borderBottomColor: 'primary.main', bgcolor: 'grey.50' }}>
+                <Stack
+                  direction="row"
+                  justifyContent="space-between"
+                  alignItems="center"
+                  flexWrap="wrap"
+                  useFlexGap
+                  spacing={1}
+                >
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                    {statusButtons.primary}
+                  </Stack>
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                    {statusButtons.secondary}
+                  </Stack>
+                </Stack>
+              </Paper>
 
-              {/* Header info */}
-              <div className="border-b border-slate-200 px-4 py-2 dark:border-slate-800">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-xl font-bold text-slate-900 dark:text-white">{selectedHeader?.lcolection_no || selectedRefno}</h3>
-                    <p className="text-sm text-slate-500">Refno: {selectedRefno}</p>
-                  </div>
-                </div>
-                {error && <p className="mt-2 text-sm text-rose-600">{error}</p>}
-              </div>
+              <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+                <Stack
+                  direction={{ xs: 'column', md: 'row' }}
+                  spacing={2}
+                  alignItems={{ xs: 'flex-start', md: 'center' }}
+                  justifyContent="space-between"
+                >
+                  <Box sx={{ borderLeft: 4, borderLeftColor: 'primary.main', pl: 2 }}>
+                    <Typography variant="overline" color="primary.main" sx={{ letterSpacing: 2 }}>
+                      Daily Collection Report
+                    </Typography>
+                    <Typography variant="h6" fontWeight={700}>
+                      DAILY COLLECTION REPORT
+                    </Typography>
+                    <Typography variant="h6" sx={{ mt: 0.5 }}>
+                      {selectedHeader?.lcolection_no || selectedRefno}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Date: {toDisplayDate(selectedHeader?.ldatetime) || '-'}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Ref No.: {selectedRefno}
+                    </Typography>
+                  </Box>
+                  <Chip
+                    label={selectedHeader?.lstatus || 'Pending'}
+                    color={getStatusChipColor(selectedHeader?.lstatus)}
+                  />
+                </Stack>
+                {error && (
+                  <Paper variant="outlined" sx={(theme) => ({ mt: 2, p: 1, bgcolor: alpha(theme.palette.error.main, 0.08), borderColor: 'error.light', borderRadius: 1 })}>
+                    <Typography variant="body2" color="error">
+                      {error}
+                    </Typography>
+                  </Paper>
+                )}
+              </Box>
 
-              <div className="flex-1 overflow-y-auto p-2">
-                {/* Bulk action toolbar above table */}
+              <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2, minHeight: 0, overflow: 'auto' }}>
                 {!detailLoading && canAddPayment && (
-                  <div className="flex items-center gap-2 px-2 py-1.5 mb-1 border-b border-slate-100 dark:border-slate-800">
-                    <button
-                      type="button"
-                      onClick={handleDeleteSelectedItems}
-                      disabled={selectedItemIds.length === 0 || !!workingAction}
-                      className="rounded border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-40"
-                    >
-                      Delete Selected
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handlePostSelectedItems}
-                      disabled={selectedItemIds.length === 0 || !!workingAction}
-                      className="rounded bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                    >
-                      Post Selected
-                    </button>
-                    <div className="ml-auto flex items-center gap-2 text-xs text-slate-500">
-                      <input type="date" value={form.collectDate} onChange={(e) => setForm((prev) => ({ ...prev, collectDate: e.target.value }))} className="rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" title="Collection Date" />
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusTone(form.status)}`}>
-                        {form.status}
-                      </span>
-                    </div>
-                  </div>
+                  <Stack
+                    direction={{ xs: 'column', md: 'row' }}
+                    spacing={1}
+                    alignItems={{ xs: 'stretch', md: 'center' }}
+                    justifyContent="space-between"
+                  >
+                    <Stack direction="row" spacing={1}>
+                      <Button
+                        variant="outlined"
+                        color="error"
+                        size="small"
+                        onClick={handleDeleteSelectedItems}
+                        disabled={selectedItemIds.length === 0 || !!workingAction}
+                      >
+                        Delete Selected
+                      </Button>
+                      <Button
+                        variant="contained"
+                        color="success"
+                        size="small"
+                        onClick={handlePostSelectedItems}
+                        disabled={selectedItemIds.length === 0 || !!workingAction}
+                      >
+                        Post Selected
+                      </Button>
+                    </Stack>
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ xs: 'stretch', sm: 'center' }}>
+                      <TextField
+                        size="small"
+                        type="date"
+                        label="Collection Date"
+                        InputLabelProps={{ shrink: true }}
+                        value={form.collectDate}
+                        onChange={(e) => setForm((prev) => ({ ...prev, collectDate: e.target.value }))}
+                      />
+                      <Chip label={form.status} color={getStatusChipColor(form.status)} />
+                    </Stack>
+                  </Stack>
                 )}
 
-                {/* Payment Lines Table - no card wrapper */}
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b-2 border-slate-300 dark:border-slate-600 text-left text-xs uppercase text-slate-500">
-                        <th className="px-2 py-2">Customer</th>
-                        <th className="px-2 py-2">Transaction No.</th>
-                        <th className="px-2 py-2">Check/Cash</th>
-                        <th className="px-2 py-2">Bank</th>
-                        <th className="px-2 py-2">Check No.</th>
-                        <th className="px-2 py-2">Check Date</th>
-                        <th className="px-2 py-2">Check Amount</th>
-                        <th className="px-2 py-2">Remarks</th>
-                        <th className="px-2 py-2 text-right">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2, maxHeight: 480 }}>
+                  <Table stickyHeader size="small" sx={{ minWidth: 1400 }}>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell padding="checkbox" sx={{ bgcolor: 'grey.800' }}>
+                          <Checkbox
+                            checked={allSelectableChecked}
+                            indeterminate={selectedItemIds.length > 0 && !allSelectableChecked}
+                            sx={{ color: 'grey.400', '&.Mui-checked': { color: 'primary.light' } }}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedItemIds(postableItems.map((item) => item.lid));
+                              } else {
+                                setSelectedItemIds([]);
+                              }
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Customer</TableCell>
+                        <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Transaction No.</TableCell>
+                        <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Check/Cash</TableCell>
+                        <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Bank</TableCell>
+                        <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Check Number</TableCell>
+                        <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Check Date</TableCell>
+                        <TableCell align="right" sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Amount</TableCell>
+                        <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Status</TableCell>
+                        <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Remarks</TableCell>
+                        <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Approval</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
                       {detailLoading && (
-                        <tr>
-                          <td colSpan={9} className="px-3 py-4 text-center text-slate-500">Loading payment lines...</td>
-                        </tr>
+                        <TableRow>
+                          <TableCell colSpan={11} align="center">
+                            Loading payment lines...
+                          </TableCell>
+                        </TableRow>
                       )}
                       {!detailLoading && items.length === 0 && !canAddPayment && (
-                        <tr>
-                          <td colSpan={9} className="px-3 py-4 text-center text-slate-500">No payment lines yet.</td>
-                        </tr>
+                        <TableRow>
+                          <TableCell colSpan={11} align="center">
+                            No payment lines yet.
+                          </TableCell>
+                        </TableRow>
                       )}
                       {!detailLoading && items.map((item, index) => {
                         const posted = item.lpost === 1 || item.lcollection_status === 'Posted';
                         return (
-                          <tr key={item.lid} className={`border-t border-slate-100 dark:border-slate-800 ${index % 2 === 1 ? 'bg-slate-50 dark:bg-slate-800/30' : ''}`}>
-                            <td className="px-2 py-2">
-                              <span className="inline-flex items-center gap-1.5">
-                                {!posted && (
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedItemIds.includes(item.lid)}
-                                    onChange={(e) => setSelectedItemIds((prev) => (e.target.checked ? [...prev, item.lid] : prev.filter((id) => id !== item.lid)))}
-                                  />
-                                )}
-                                {posted && <Calendar size={14} className="text-emerald-600" />}
-                                {item.lcustomer_fname || item.lcustomer}
-                              </span>
-                            </td>
-                            <td className="px-2 py-2 text-xs text-slate-500">{item.ltransaction_no || '-'}</td>
-                            <td className="px-2 py-2">{item.ltype}</td>
-                            <td className="px-2 py-2 text-xs text-slate-500">{(item as any).lbank || '-'}</td>
-                            <td className="px-2 py-2 text-xs text-slate-500">{(item as any).lcheck_no || '-'}</td>
-                            <td className="px-2 py-2 text-xs text-slate-500">{(item as any).lcheck_date ? toDateInput((item as any).lcheck_date) : '-'}</td>
-                            <td className="px-2 py-2 font-medium">{peso.format(item.lamt || 0)}</td>
-                            <td className="px-2 py-2 text-xs text-slate-500">{item.lremarks || '-'}</td>
-                            <td className="px-3 py-2 text-right">
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteItem(item.lid)}
-                                disabled={!!workingAction || posted}
-                                className="inline-flex items-center gap-1 rounded border border-rose-200 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 disabled:opacity-40"
-                                title={posted ? 'Posted lines cannot be deleted' : 'Delete line'}
-                              >
-                                <Trash2 size={13} /> Delete
-                              </button>
-                            </td>
-                          </tr>
+                          <TableRow
+                            key={item.lid}
+                            sx={{
+                              bgcolor: index % 2 === 0 ? 'background.paper' : 'grey.50',
+                              '&:hover': { bgcolor: 'action.hover' },
+                            }}
+                          >
+                            <TableCell padding="checkbox" sx={{ py: 1 }}>
+                              <Checkbox
+                                checked={selectedItemIds.includes(item.lid)}
+                                disabled={posted}
+                                onChange={(e) => {
+                                  setSelectedItemIds((prev) => (
+                                    e.target.checked ? [...prev, item.lid] : prev.filter((id) => id !== item.lid)
+                                  ));
+                                }}
+                              />
+                            </TableCell>
+                            <TableCell sx={{ py: 1 }}>{item.lcustomer_fname || item.lcustomer || '-'}</TableCell>
+                            <TableCell sx={{ py: 1 }}>{item.ltransaction_no || '-'}</TableCell>
+                            <TableCell sx={{ py: 1 }}>{item.ltype || '-'}</TableCell>
+                            <TableCell sx={{ py: 1 }}>{item.lbank || '-'}</TableCell>
+                            <TableCell sx={{ py: 1 }}>{item.lchk_no || '-'}</TableCell>
+                            <TableCell sx={{ py: 1 }}>{item.lchk_date ? toDisplayDate(item.lchk_date) : '-'}</TableCell>
+                            <TableCell align="right" sx={{ py: 1 }}>{peso.format(item.lamt || 0)}</TableCell>
+                            <TableCell sx={{ py: 1 }}>
+                              <Chip
+                                size="small"
+                                label={item.lstatus || item.lcollection_status || 'Pending'}
+                                color={getStatusChipColor(item.lstatus || item.lcollection_status)}
+                              />
+                            </TableCell>
+                            <TableCell sx={{ py: 1 }}>{item.lremarks || '-'}</TableCell>
+                            <TableCell sx={{ py: 1 }}>
+                              {posted ? (
+                                <Chip size="small" label="Posted" color="success" />
+                              ) : (
+                                <Button
+                                  variant="outlined"
+                                  color="error"
+                                  size="small"
+                                  onClick={() => handleDeleteItem(item.lid)}
+                                  disabled={!!workingAction}
+                                >
+                                  Delete
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
                         );
                       })}
-                      {/* Inline Add Payment Row */}
                       {!detailLoading && canAddPayment && (
-                        <tr className="border-t-2 border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-900/10">
-                          <td className="px-2 py-2">
-                            <div className="flex items-center gap-1">
-                              <input
-                                type="checkbox"
-                                checked={items.length > 0 && selectedItemIds.length === items.filter((i) => i.lpost !== 1 && i.lcollection_status !== 'Posted').length}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedItemIds(items.filter((i) => i.lpost !== 1 && i.lcollection_status !== 'Posted').map((i) => i.lid));
-                                  } else {
-                                    setSelectedItemIds([]);
-                                  }
-                                }}
-                                title="Select all"
-                              />
-                              <select
-                                value={form.customerId}
-                                onChange={(e) => setForm((prev) => ({ ...prev, customerId: e.target.value }))}
-                                className="w-full min-w-[120px] rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
-                              >
-                                <option value="">Customer</option>
-                                {customers.map((customer) => (
-                                  <option key={customer.id} value={customer.id}>
-                                    {customer.code ? `${customer.code} - ` : ''}{customer.company}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          </td>
-                          <td className="px-2 py-2">
-                            <select
-                              multiple
-                              value={Object.entries(selectedTransactions).filter(([, v]) => v).map(([k]) => k)}
+                        <TableRow>
+                          <TableCell padding="checkbox">
+                            <Checkbox
+                              checked={allSelectableChecked}
+                              indeterminate={selectedItemIds.length > 0 && !allSelectableChecked}
                               onChange={(e) => {
-                                const selected = Array.from(e.target.selectedOptions, (opt) => opt.value);
-                                const newSelections: Record<string, boolean> = {};
-                                unpaidRows.forEach((row) => {
-                                  const key = `${row.transactionType}:${row.lrefno}`;
-                                  newSelections[key] = selected.includes(key);
-                                });
-                                setSelectedTransactions(newSelections);
+                                if (e.target.checked) {
+                                  setSelectedItemIds(postableItems.map((item) => item.lid));
+                                } else {
+                                  setSelectedItemIds([]);
+                                }
                               }}
-                              className="w-full min-w-[120px] rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
-                              style={{ minHeight: '28px', maxHeight: '60px' }}
-                            >
-                              {!form.customerId && <option disabled>Pick a customer</option>}
-                              {form.customerId && unpaidRows.length === 0 && <option disabled>No unpaid items</option>}
-                              {unpaidRows.map((row) => {
-                                const key = `${row.transactionType}:${row.lrefno}`;
-                                return (
-                                  <option key={key} value={key}>
-                                    {row.linvoice_no} — {peso.format(row.totalAmount || 0)}
-                                  </option>
-                                );
-                              })}
-                            </select>
-                          </td>
-                          <td className="px-2 py-2">
-                            <select
-                              value={form.type}
-                              onChange={(e) => handleTypeChange(e.target.value)}
-                              className="w-full rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
-                            >
-                              <option>Cash</option>
-                              <option>Check</option>
-                              <option>TT</option>
-                            </select>
-                          </td>
-                          <td className="px-2 py-2">
-                            <input value={form.bank} onChange={(e) => setForm((prev) => ({ ...prev, bank: e.target.value }))} className="w-full min-w-[60px] rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" placeholder="Bank" />
-                          </td>
-                          <td className="px-2 py-2">
-                            <input value={form.checkNo} onChange={(e) => setForm((prev) => ({ ...prev, checkNo: e.target.value }))} className="w-full min-w-[60px] rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" placeholder="Check No." />
-                          </td>
-                          <td className="px-2 py-2">
-                            <input type="date" value={form.checkDate} onChange={(e) => setForm((prev) => ({ ...prev, checkDate: e.target.value }))} className="w-full rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" title="Check Date" />
-                          </td>
-                          <td className="px-2 py-2">
-                            <input
+                            />
+                          </TableCell>
+                          <TableCell sx={{ minWidth: 220 }}>
+                            <FormControl fullWidth size="small">
+                              <Select
+                                displayEmpty
+                                value={form.customerId}
+                                onChange={(e) => setForm((prev) => ({ ...prev, customerId: String(e.target.value) }))}
+                              >
+                                <MenuItem value="">Customer</MenuItem>
+                                {customers.map((customer) => (
+                                  <MenuItem key={customer.id} value={customer.id}>
+                                    {customer.code ? `${customer.code} - ` : ''}{customer.company}
+                                  </MenuItem>
+                                ))}
+                              </Select>
+                            </FormControl>
+                          </TableCell>
+                          <TableCell sx={{ minWidth: 220 }}>
+                            <FormControl fullWidth size="small">
+                              <Select
+                                multiple
+                                displayEmpty
+                                value={Object.entries(selectedTransactions).filter(([, value]) => value).map(([key]) => key)}
+                                onChange={(e) => {
+                                  const selected = typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value;
+                                  const newSelections: Record<string, boolean> = {};
+                                  unpaidRows.forEach((row) => {
+                                    const key = `${row.transactionType}:${row.lrefno}`;
+                                    newSelections[key] = selected.includes(key);
+                                  });
+                                  setSelectedTransactions(newSelections);
+                                }}
+                                renderValue={(selected) => {
+                                  const values = selected as string[];
+                                  if (values.length === 0) return 'Transaction No.';
+                                  return values
+                                    .map((value) => unpaidRows.find((row) => `${row.transactionType}:${row.lrefno}` === value)?.linvoice_no || value)
+                                    .join(', ');
+                                }}
+                              >
+                                {!form.customerId && <MenuItem disabled value="">Pick a customer</MenuItem>}
+                                {form.customerId && unpaidRows.length === 0 && <MenuItem disabled value="">No unpaid items</MenuItem>}
+                                {unpaidRows.map((row) => {
+                                  const key = `${row.transactionType}:${row.lrefno}`;
+                                  return (
+                                    <MenuItem key={key} value={key}>
+                                      {row.linvoice_no} - {peso.format(row.totalAmount || 0)}
+                                    </MenuItem>
+                                  );
+                                })}
+                              </Select>
+                            </FormControl>
+                          </TableCell>
+                          <TableCell sx={{ minWidth: 130 }}>
+                            <FormControl fullWidth size="small">
+                              <Select value={form.type} onChange={(e) => handleTypeChange(String(e.target.value))}>
+                                <MenuItem value="Cash">Cash</MenuItem>
+                                <MenuItem value="Check">Check</MenuItem>
+                                <MenuItem value="TT">TT</MenuItem>
+                              </Select>
+                            </FormControl>
+                          </TableCell>
+                          <TableCell sx={{ minWidth: 140 }}>
+                            <TextField
+                              fullWidth
+                              size="small"
+                              value={form.bank}
+                              onChange={(e) => setForm((prev) => ({ ...prev, bank: e.target.value }))}
+                              placeholder="Bank"
+                            />
+                          </TableCell>
+                          <TableCell sx={{ minWidth: 140 }}>
+                            <TextField
+                              fullWidth
+                              size="small"
+                              value={form.checkNo}
+                              onChange={(e) => setForm((prev) => ({ ...prev, checkNo: e.target.value }))}
+                              placeholder="Check Number"
+                            />
+                          </TableCell>
+                          <TableCell sx={{ minWidth: 150 }}>
+                            <TextField
+                              fullWidth
+                              size="small"
+                              type="date"
+                              value={form.checkDate}
+                              onChange={(e) => setForm((prev) => ({ ...prev, checkDate: e.target.value }))}
+                              InputLabelProps={{ shrink: true }}
+                            />
+                          </TableCell>
+                          <TableCell sx={{ minWidth: 140 }}>
+                            <TextField
+                              fullWidth
+                              size="small"
                               type="number"
-                              step="0.01"
                               value={form.amount}
                               onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
-                              className="w-full min-w-[70px] rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+                              inputProps={{ step: '0.01' }}
                               placeholder="0.00"
                             />
-                          </td>
-                          <td className="px-2 py-2">
-                            <input
+                          </TableCell>
+                          <TableCell>
+                            <Chip size="small" label={form.status} color={getStatusChipColor(form.status)} />
+                          </TableCell>
+                          <TableCell sx={{ minWidth: 180 }}>
+                            <TextField
+                              fullWidth
+                              size="small"
                               value={form.remarks}
                               onChange={(e) => setForm((prev) => ({ ...prev, remarks: e.target.value }))}
-                              className="w-full min-w-[80px] rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
                               placeholder="Remarks"
                             />
-                          </td>
-                          <td className="px-2 py-2 text-right">
-                            <button
-                              type="button"
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="contained"
+                              size="small"
                               onClick={handleSavePayment}
                               disabled={savingPayment}
-                              className="rounded bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
                             >
-                              {savingPayment ? 'Saving...' : 'Add'}
-                            </button>
-                          </td>
-                        </tr>
+                              {savingPayment ? 'Saving...' : 'Add Payment'}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
                       )}
-                    </tbody>
-                    <tfoot className="bg-slate-50 dark:bg-slate-800/70">
-                      <tr className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                        <td className="px-2 py-2" />
-                        <td className="px-2 py-2 text-right">Total Check:</td>
-                        <td className="px-2 py-2">{peso.format(totalCheck)}</td>
-                        <td className="px-2 py-2 text-right">Total T/T:</td>
-                        <td className="px-2 py-2">{peso.format(totalTT)}</td>
-                        <td className="px-2 py-2 text-right">Total Cash:</td>
-                        <td className="px-2 py-2">{peso.format(totalCash)}</td>
-                        <td className="px-2 py-2" />
-                        <td className="px-2 py-2 text-right font-bold">Grand Total: {peso.format(grandTotal)}</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
+                    </TableBody>
+                    <TableFooter>
+                      <TableRow sx={{ bgcolor: 'grey.100', borderTop: 2, borderColor: 'divider' }}>
+                        <TableCell sx={{ py: 1.5, fontWeight: 700 }} />
+                        <TableCell colSpan={2} sx={{ py: 1.5, fontWeight: 700 }}>
+                          <Typography variant="subtitle2" fontWeight={700} color="text.primary">
+                            Total Check: {peso.format(totalCheck)}
+                          </Typography>
+                        </TableCell>
+                        <TableCell colSpan={2} sx={{ py: 1.5, fontWeight: 700 }}>
+                          <Typography variant="subtitle2" fontWeight={700} color="text.primary">
+                            Total T/T: {peso.format(totalTT)}
+                          </Typography>
+                        </TableCell>
+                        <TableCell colSpan={2} sx={{ py: 1.5, fontWeight: 700 }}>
+                          <Typography variant="subtitle2" fontWeight={700} color="text.primary">
+                            Total Cash: {peso.format(totalCash)}
+                          </Typography>
+                        </TableCell>
+                        <TableCell colSpan={3} sx={{ py: 1.5, fontWeight: 700 }}>
+                          <Typography variant="subtitle2" fontWeight={700} color="text.primary" align="right">
+                            Grand Total: {peso.format(grandTotal)}
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    </TableFooter>
+                  </Table>
+                </TableContainer>
+              </Box>
 
-              {/* Approver Logs Modal */}
-              {showApproverLogsModal && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowApproverLogsModal(false)}>
-                  <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-6 py-4">
-                      <h3 className="text-lg font-bold text-slate-900 dark:text-white">Approver Logs</h3>
-                      <button
-                        type="button"
-                        onClick={() => setShowApproverLogsModal(false)}
-                        className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xl leading-none"
-                      >
-                        &times;
-                      </button>
-                    </div>
-                    <div className="flex-1 overflow-y-auto p-6">
-                      {approverLogs.length === 0 && <p className="text-sm text-slate-500">No approver logs yet.</p>}
-                      {approverLogs.length > 0 && (
-                        <table className="w-full text-sm">
-                          <thead className="bg-slate-50 dark:bg-slate-800/70">
-                            <tr className="text-left text-xs uppercase text-slate-500">
-                              <th className="px-3 py-2">ID</th>
-                              <th className="px-3 py-2">Approver Name</th>
-                              <th className="px-3 py-2">Date & Time</th>
-                              <th className="px-3 py-2">Remark</th>
-                              <th className="px-3 py-2">Action</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {approverLogs.map((log) => (
-                              <tr key={log.lid} className="border-t border-slate-100 dark:border-slate-800">
-                                <td className="px-3 py-2">{log.lid}</td>
-                                <td className="px-3 py-2">{((log.staff_fName || '') + ' ' + (log.staff_lName || '')).trim() || log.lstaff_id}</td>
-                                <td className="px-3 py-2 text-xs">{log.ldatetime || '-'}</td>
-                                <td className="px-3 py-2 text-xs">{log.lremarks || '-'}</td>
-                                <td className="px-3 py-2">
-                                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusTone(log.lstatus || 'Pending')}`}>
-                                    {log.lstatus || 'Pending'}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      )}
-                    </div>
-                    <div className="border-t border-slate-200 dark:border-slate-800 px-6 py-4 flex justify-end">
-                      <button
-                        type="button"
-                        onClick={() => setShowApproverLogsModal(false)}
-                        className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                      >
-                        Close
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
+              <Dialog
+                open={showApproverLogsModal}
+                onClose={() => setShowApproverLogsModal(false)}
+                fullWidth
+                maxWidth="lg"
+              >
+                <DialogTitle>Approver Logs</DialogTitle>
+                <DialogContent dividers>
+                  <TableContainer component={Paper} variant="outlined">
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>ID</TableCell>
+                          <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Approver Name</TableCell>
+                          <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Date & Time</TableCell>
+                          <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Remark</TableCell>
+                          <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Action</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {approverLogs.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={5} align="center">
+                              No approver logs yet.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          approverLogs.map((log, index) => (
+                            <TableRow
+                              key={log.lid}
+                              sx={{ bgcolor: index % 2 === 0 ? 'background.paper' : 'grey.50' }}
+                            >
+                              <TableCell>{log.lid}</TableCell>
+                              <TableCell>
+                                {((log.staff_fName || '') + ' ' + (log.staff_lName || '')).trim() || log.lstaff_id}
+                              </TableCell>
+                              <TableCell>{log.ldatetime || '-'}</TableCell>
+                              <TableCell>{log.lremarks || '-'}</TableCell>
+                              <TableCell>
+                                <Chip
+                                  size="small"
+                                  label={log.lstatus || 'Pending'}
+                                  color={getStatusChipColor(log.lstatus)}
+                                />
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </DialogContent>
+                <DialogActions>
+                  <Button onClick={() => setShowApproverLogsModal(false)}>Close</Button>
+                </DialogActions>
+              </Dialog>
             </>
           )}
-        </main>
-      </div>
-    </div>
+        </Paper>
+      </Box>
+      <DeleteCollectionReportModal
+        isOpen={showDeleteReportModal}
+        onClose={() => setShowDeleteReportModal(false)}
+        onConfirm={handleDeleteCollectionReport}
+        refNo={selectedRefno}
+        itemCount={items.length}
+      />
+    </Box>
   );
 };
 

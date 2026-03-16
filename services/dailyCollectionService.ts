@@ -311,6 +311,12 @@ export const dailyCollectionService = {
     });
   },
 
+  async deleteCollection(refno: string): Promise<void> {
+    await requestApi(`${API_BASE_URL}/collections/${encodeURIComponent(refno)}`, {
+      method: 'DELETE',
+    });
+  },
+
   async deleteItem(itemId: number): Promise<void> {
     await requestApi(`${API_BASE_URL}/collection-items/${encodeURIComponent(String(itemId))}`, {
       method: 'DELETE',
