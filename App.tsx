@@ -598,7 +598,7 @@ const App: React.FC = () => {
         );
       case 'accounting-transactions-daily-collection-entry':
         return (
-          <div className="h-full overflow-y-auto">
+          <div className="h-full overflow-hidden">
             <DailyCollectionEntryView />
           </div>
         );

@@ -1,32 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Box,
-  Button,
-  Checkbox,
-  Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Divider,
-  FormControl,
-  InputAdornment,
-  MenuItem,
-  Paper,
-  Select,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableFooter,
-  TableHead,
-  TableRow,
-  TextField,
-  Typography,
-} from '@mui/material';
-import { alpha } from '@mui/material/styles';
-import { Calendar, Search } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Calendar, Search, X } from 'lucide-react';
 import {
   dailyCollectionService,
   DailyCollectionApproverLog,
@@ -37,6 +10,8 @@ import {
 } from '../services/dailyCollectionService';
 import { getLocalAuthSession } from '../services/localAuthService';
 import DeleteCollectionReportModal from './DeleteCollectionReportModal';
+import { BUTTON_BASE, BUTTON_PRIMARY, BUTTON_SUCCESS } from '../utils/uiConstants';
+import { useDialogAccessibility } from '../hooks/useDialogAccessibility';
 
 const COLLECTION_PAGE_NO = '21';
 
@@ -77,25 +52,26 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-const getStatusChipColor = (
-  status?: string,
-): 'default' | 'success' | 'error' | 'info' | 'warning' => {
+const getStatusBadgeClasses = (status?: string): string => {
   switch ((status || '').toLowerCase()) {
     case 'approved':
     case 'posted':
     case 'received':
     case 'deposited':
-      return 'success';
+      return 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300';
     case 'rejected':
     case 'cancelled':
     case 'disapproved':
-      return 'error';
+      return 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-300';
     case 'submitted':
-      return 'info';
+      return 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300';
     default:
-      return 'warning';
+      return 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300';
   }
 };
+
+const INPUT_CLASS = 'w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 text-sm';
+const SELECT_CLASS = 'px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 text-sm';
 
 const DailyCollectionEntryView: React.FC = () => {
   const [headers, setHeaders] = useState<DailyCollectionHeader[]>([]);
@@ -120,6 +96,9 @@ const DailyCollectionEntryView: React.FC = () => {
   const [showDeleteReportModal, setShowDeleteReportModal] = useState(false);
   const [error, setError] = useState('');
   const [showApproverLogsModal, setShowApproverLogsModal] = useState(false);
+  const closeApproverLogsModal = useCallback(() => setShowApproverLogsModal(false), []);
+  const { dialogRef: approverLogsDialogRef, handleKeyDown: approverLogsKeyDown } =
+    useDialogAccessibility(showApproverLogsModal, closeApproverLogsModal);
 
   const [form, setForm] = useState({
     customerId: '',
@@ -428,86 +407,71 @@ const DailyCollectionEntryView: React.FC = () => {
 
     if (status === 'Pending') {
       primary.push(
-        <Button
+        <button
           key="submit"
-          variant="contained"
-          color="primary"
-          size="small"
-          sx={{ minWidth: 110 }}
+          className={`${BUTTON_PRIMARY} min-w-[110px] disabled:opacity-50 disabled:cursor-not-allowed`}
           onClick={() => handleAction('submitrecord')}
           disabled={!!workingAction}
         >
           For Approval
-        </Button>,
+        </button>,
       );
     }
     if (status === 'Submitted') {
       primary.push(
-        <Button
+        <button
           key="approve"
-          variant="contained"
-          color="success"
-          size="small"
-          sx={{ minWidth: 110 }}
+          className={`${BUTTON_SUCCESS} min-w-[110px]`}
           onClick={() => handleAction('approverecord')}
           disabled={!!workingAction}
         >
           Approve
-        </Button>,
-        <Button
+        </button>,
+        <button
           key="disapprove"
-          variant="contained"
-          color="error"
-          size="small"
-          sx={{ minWidth: 110 }}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500 text-white text-xs font-semibold min-w-[110px] hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           onClick={() => handleAction('disapproverecord')}
           disabled={!!workingAction}
         >
           Disapprove
-        </Button>,
+        </button>,
       );
     }
     if (status === 'Approved') {
       primary.push(
-        <Button
+        <button
           key="post"
-          variant="contained"
-          color="secondary"
-          size="small"
-          sx={{ minWidth: 110 }}
+          className={`${BUTTON_PRIMARY} min-w-[110px] disabled:opacity-50 disabled:cursor-not-allowed`}
           onClick={() => handleAction('postrecord')}
           disabled={!!workingAction}
         >
           Post
-        </Button>,
+        </button>,
       );
     }
     if (selectedRefno) {
       secondary.push(
-        <Button key="print" variant="outlined" size="small" onClick={() => window.print()}>
+        <button key="print" className={BUTTON_BASE} onClick={() => window.print()}>
           Print
-        </Button>,
-        <Button
+        </button>,
+        <button
           key="logs"
-          variant="outlined"
-          size="small"
+          className={BUTTON_BASE}
           onClick={() => setShowApproverLogsModal(true)}
         >
           Approver Logs
-        </Button>,
+        </button>,
       );
       if (status === 'Pending' && hasDeletePermission()) {
         secondary.push(
-          <Button
+          <button
             key="delete-report"
-            variant="contained"
-            color="error"
-            size="small"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500 text-white text-xs font-semibold hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             onClick={() => setShowDeleteReportModal(true)}
             disabled={!!workingAction}
           >
             Delete Collection Report
-          </Button>,
+          </button>,
         );
       }
     }
@@ -518,258 +482,192 @@ const DailyCollectionEntryView: React.FC = () => {
   const statusButtons = renderStatusButtons();
 
   return (
-    <Box sx={{ height: '100%', bgcolor: '#f3f4f6', p: 2 }}>
-      <Box
-        sx={{
-          height: '100%',
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr', lg: '280px minmax(0, 1fr)' },
-          gap: 2,
-        }}
-      >
-        <Paper elevation={2} sx={{ borderRadius: 3, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0, border: '1px solid', borderColor: 'divider' }}>
-          <Box sx={{ p: 2 }}>
-            <Stack spacing={1.5} sx={{ mb: 2 }}>
-              <Button
-                variant="contained"
-                color="primary"
-                size="medium"
-                fullWidth
+    <div className="h-full flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950">
+      <div className="flex-1 flex gap-3 overflow-hidden p-3">
+        {/* Left panel */}
+        <div className="w-[280px] shrink-0 flex flex-col rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+          <div className="p-3">
+            <div className="flex flex-col gap-3 mb-3">
+              <button
+                className={`w-full px-4 py-2 rounded-lg bg-brand-blue text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed`}
                 onClick={handleCreate}
                 disabled={workingAction === 'create'}
               >
                 Create New
-              </Button>
-              <Stack
-                direction="row"
-                spacing={1}
-                sx={{ bgcolor: 'grey.50', p: 1, borderRadius: 1, border: 1, borderColor: 'divider' }}
-              >
-                <FormControl size="small" sx={{ minWidth: 88 }}>
-                  <Select value={filterMonth} onChange={(e) => setFilterMonth(String(e.target.value))}>
-                    <MenuItem value="All">All</MenuItem>
-                    {MONTH_NAMES.map((name, idx) => {
-                      const value = String(idx + 1).padStart(2, '0');
-                      return (
-                        <MenuItem key={value} value={value}>
-                          {name.substring(0, 3)}
-                        </MenuItem>
-                      );
-                    })}
-                  </Select>
-                </FormControl>
-                <TextField
-                  size="small"
+              </button>
+              <div className="flex gap-2 bg-slate-50 dark:bg-slate-800/50 p-2 rounded border border-slate-200 dark:border-slate-800">
+                <select
+                  className={`${SELECT_CLASS} min-w-[88px]`}
+                  value={filterMonth}
+                  onChange={(e) => setFilterMonth(e.target.value)}
+                >
+                  <option value="All">All</option>
+                  {MONTH_NAMES.map((name, idx) => {
+                    const value = String(idx + 1).padStart(2, '0');
+                    return (
+                      <option key={value} value={value}>
+                        {name.substring(0, 3)}
+                      </option>
+                    );
+                  })}
+                </select>
+                <input
                   type="number"
+                  className={`${INPUT_CLASS} w-[88px]`}
                   value={filterYear}
                   onChange={(e) => setFilterYear(e.target.value)}
-                  inputProps={{ min: 2000, max: 2099 }}
-                  sx={{ width: 88 }}
+                  min={2000}
+                  max={2099}
                 />
-              </Stack>
-            </Stack>
+              </div>
+            </div>
 
-            <TextField
-              fullWidth
-              size="small"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search DCR no / refno"
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Search size={16} />
-                  </InputAdornment>
-                ),
-              }}
-            />
-          </Box>
+            <div className="relative">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                className={`${INPUT_CLASS} pl-9`}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search DCR no / refno"
+              />
+            </div>
+          </div>
 
-          <Divider />
+          <hr className="border-slate-200 dark:border-slate-800" />
 
-          <Box sx={{ flex: 1, overflowY: 'auto' }}>
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: '110px minmax(0, 1fr)',
-                px: 2,
-                py: 1.25,
-                bgcolor: 'grey.200',
-                borderBottom: 2,
-                borderColor: 'primary.main',
-              }}
-            >
-              <Typography variant="caption" fontWeight={700}>Date</Typography>
-              <Typography variant="caption" fontWeight={700}>DCR No.</Typography>
-            </Box>
+          <div className="flex-1 overflow-y-auto">
+            <div className="grid grid-cols-[110px_1fr] px-3 py-2 bg-slate-100 dark:bg-slate-800 border-b-2 border-brand-blue text-xs font-bold text-slate-700 dark:text-slate-200">
+              <span>Date</span>
+              <span>DCR No.</span>
+            </div>
 
-            {listLoading && <Typography sx={{ p: 2 }} variant="body2" color="text.secondary">Loading collections...</Typography>}
+            {listLoading && <p className="p-3 text-sm text-slate-500 dark:text-slate-400">Loading collections...</p>}
             {!listLoading && headers.length === 0 && (
-              <Typography sx={{ p: 2 }} variant="body2" color="text.secondary">
-                No collection record found.
-              </Typography>
+              <p className="p-3 text-sm text-slate-500 dark:text-slate-400">No collection record found.</p>
             )}
 
             {headers.map((row) => {
               const active = selectedRefno === row.lrefno;
               return (
-                <Box
+                <div
                   key={row.lrefno}
                   onClick={() => setSelectedRefno(row.lrefno)}
-                  sx={(theme) => ({
-                    display: 'grid',
-                    gridTemplateColumns: '110px minmax(0, 1fr)',
-                    px: 2,
-                    py: 1.5,
-                    mx: 1,
-                    my: 0.5,
-                    borderRadius: 2,
-                    border: 1,
-                    borderColor: active ? 'primary.main' : 'divider',
-                    borderLeft: 4,
-                    borderLeftColor: active ? 'primary.main' : 'transparent',
-                    boxShadow: active ? 2 : 0,
-                    transition: 'box-shadow 0.15s, border-color 0.15s',
-                    cursor: 'pointer',
-                    bgcolor: active ? alpha(theme.palette.primary.main, 0.08) : 'background.paper',
-                    '&:hover': {
-                      bgcolor: active ? alpha(theme.palette.primary.main, 0.14) : 'grey.50',
-                      boxShadow: 2,
-                      borderColor: 'primary.light',
-                    },
-                  })}
+                  className={`grid grid-cols-[110px_1fr] px-3 py-2 mx-1 my-0.5 rounded-lg border cursor-pointer transition-colors ${
+                    active
+                      ? 'border-l-4 border-brand-blue bg-brand-blue/10 shadow-sm'
+                      : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  }`}
                 >
-                  <Stack direction="row" spacing={0.5} alignItems="center">
+                  <span className="flex items-center gap-1 text-sm text-slate-500 dark:text-slate-400">
                     <Calendar size={12} />
-                    <Typography variant="body2" color="text.secondary">
-                      {toDisplayDate(row.ldatetime) || '-'}
-                    </Typography>
-                  </Stack>
-                  <Typography variant="body2" fontWeight={700} color={active ? 'primary.main' : 'text.primary'}>
+                    {toDisplayDate(row.ldatetime) || '-'}
+                  </span>
+                  <span className={`text-sm font-bold ${active ? 'text-brand-blue' : 'text-slate-900 dark:text-slate-100'}`}>
                     {row.lcolection_no || row.lrefno}
-                  </Typography>
-                </Box>
+                  </span>
+                </div>
               );
             })}
-          </Box>
-        </Paper>
+          </div>
+        </div>
 
-        <Paper elevation={3} sx={{ borderRadius: 3, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0, borderTop: '4px solid', borderTopColor: 'primary.main' }}>
+        {/* Right panel */}
+        <div className="flex-1 min-w-0 flex flex-col rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden border-t-4 border-t-brand-blue">
           {!selectedRefno && (
-            <Box sx={{ height: '100%', display: 'grid', placeItems: 'center', color: 'text.secondary' }}>
-              <Typography>Select or create a DCR record</Typography>
-            </Box>
+            <div className="h-full grid place-items-center text-slate-500 dark:text-slate-400">
+              <p>Select or create a DCR record</p>
+            </div>
           )}
 
           {selectedRefno && (
             <>
-              <Paper elevation={1} square sx={{ p: 2, borderBottom: '2px solid', borderBottomColor: 'primary.main', bgcolor: 'grey.50' }}>
-                <Stack
-                  direction="row"
-                  justifyContent="space-between"
-                  alignItems="center"
-                  flexWrap="wrap"
-                  useFlexGap
-                  spacing={1}
-                >
-                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                    {statusButtons.primary}
-                  </Stack>
-                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                    {statusButtons.secondary}
-                  </Stack>
-                </Stack>
-              </Paper>
+              {/* Action bar */}
+              <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b-2 border-brand-blue bg-slate-50 dark:bg-slate-800/50">
+                <div className="flex flex-wrap gap-2">
+                  {statusButtons.primary}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {statusButtons.secondary}
+                </div>
+              </div>
 
-              <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
-                <Stack
-                  direction={{ xs: 'column', md: 'row' }}
-                  spacing={2}
-                  alignItems={{ xs: 'flex-start', md: 'center' }}
-                  justifyContent="space-between"
-                >
-                  <Box sx={{ borderLeft: 4, borderLeftColor: 'primary.main', pl: 2 }}>
-                    <Typography variant="overline" color="primary.main" sx={{ letterSpacing: 2 }}>
-                      Daily Collection Report
-                    </Typography>
-                    <Typography variant="h6" fontWeight={700}>
-                      DAILY COLLECTION REPORT
-                    </Typography>
-                    <Typography variant="h6" sx={{ mt: 0.5 }}>
+              {/* DCR header info */}
+              <div className="p-4 border-b border-slate-200 dark:border-slate-800">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div className="border-l-4 border-brand-blue pl-3">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-brand-blue">Daily Collection Report</p>
+                    <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">DAILY COLLECTION REPORT</h2>
+                    <p className="text-base text-slate-900 dark:text-slate-100 mt-0.5">
                       {selectedHeader?.lcolection_no || selectedRefno}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
+                    </p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
                       Date: {toDisplayDate(selectedHeader?.ldatetime) || '-'}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
+                    </p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
                       Ref No.: {selectedRefno}
-                    </Typography>
-                  </Box>
-                  <Chip
-                    label={selectedHeader?.lstatus || 'Pending'}
-                    color={getStatusChipColor(selectedHeader?.lstatus)}
-                  />
-                </Stack>
+                    </p>
+                  </div>
+                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${getStatusBadgeClasses(selectedHeader?.lstatus)}`}>
+                    {selectedHeader?.lstatus || 'Pending'}
+                  </span>
+                </div>
                 {error && (
-                  <Paper variant="outlined" sx={(theme) => ({ mt: 2, p: 1, bgcolor: alpha(theme.palette.error.main, 0.08), borderColor: 'error.light', borderRadius: 1 })}>
-                    <Typography variant="body2" color="error">
-                      {error}
-                    </Typography>
-                  </Paper>
+                  <div className="mt-2 p-2 rounded bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm">
+                    {error}
+                  </div>
                 )}
-              </Box>
+              </div>
 
-              <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2, minHeight: 0, overflow: 'auto' }}>
+              {/* Content area */}
+              <div className="p-4 flex flex-col gap-4 min-h-0 overflow-auto">
                 {!detailLoading && canAddPayment && (
-                  <Stack
-                    direction={{ xs: 'column', md: 'row' }}
-                    spacing={1}
-                    alignItems={{ xs: 'stretch', md: 'center' }}
-                    justifyContent="space-between"
-                  >
-                    <Stack direction="row" spacing={1}>
-                      <Button
-                        variant="outlined"
-                        color="error"
-                        size="small"
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+                    <div className="flex gap-2">
+                      <button
+                        className={`${BUTTON_BASE} text-red-600 border-red-300 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed`}
                         onClick={handleDeleteSelectedItems}
                         disabled={selectedItemIds.length === 0 || !!workingAction}
                       >
                         Delete Selected
-                      </Button>
-                      <Button
-                        variant="contained"
-                        color="success"
-                        size="small"
+                      </button>
+                      <button
+                        className={`${BUTTON_SUCCESS} disabled:opacity-50 disabled:cursor-not-allowed`}
                         onClick={handlePostSelectedItems}
                         disabled={selectedItemIds.length === 0 || !!workingAction}
                       >
                         Post Selected
-                      </Button>
-                    </Stack>
-                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ xs: 'stretch', sm: 'center' }}>
-                      <TextField
-                        size="small"
-                        type="date"
-                        label="Collection Date"
-                        InputLabelProps={{ shrink: true }}
-                        value={form.collectDate}
-                        onChange={(e) => setForm((prev) => ({ ...prev, collectDate: e.target.value }))}
-                      />
-                      <Chip label={form.status} color={getStatusChipColor(form.status)} />
-                    </Stack>
-                  </Stack>
+                      </button>
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                      <div className="flex flex-col">
+                        <label className="text-xs text-slate-500 dark:text-slate-400 mb-0.5">Collection Date</label>
+                        <input
+                          type="date"
+                          className={INPUT_CLASS}
+                          value={form.collectDate}
+                          onChange={(e) => setForm((prev) => ({ ...prev, collectDate: e.target.value }))}
+                        />
+                      </div>
+                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${getStatusBadgeClasses(form.status)}`}>
+                        {form.status}
+                      </span>
+                    </div>
+                  </div>
                 )}
 
-                <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2, maxHeight: 480 }}>
-                  <Table stickyHeader size="small" sx={{ minWidth: 1400 }}>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell padding="checkbox" sx={{ bgcolor: 'grey.800' }}>
-                          <Checkbox
+                {/* Payment lines table */}
+                <div className="overflow-x-auto border border-slate-300 dark:border-slate-700 rounded-lg max-h-[480px] overflow-y-auto">
+                  <table className="w-full text-sm min-w-[1400px]">
+                    <thead className="bg-slate-800 text-white sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-bold whitespace-nowrap w-10">
+                          <input
+                            type="checkbox"
+                            className="accent-brand-blue"
                             checked={allSelectableChecked}
-                            indeterminate={selectedItemIds.length > 0 && !allSelectableChecked}
-                            sx={{ color: 'grey.400', '&.Mui-checked': { color: 'primary.light' } }}
+                            ref={(el) => {
+                              if (el) el.indeterminate = selectedItemIds.length > 0 && !allSelectableChecked;
+                            }}
                             onChange={(e) => {
                               if (e.target.checked) {
                                 setSelectedItemIds(postableItems.map((item) => item.lid));
@@ -778,46 +676,45 @@ const DailyCollectionEntryView: React.FC = () => {
                               }
                             }}
                           />
-                        </TableCell>
-                        <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Customer</TableCell>
-                        <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Transaction No.</TableCell>
-                        <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Check/Cash</TableCell>
-                        <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Bank</TableCell>
-                        <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Check Number</TableCell>
-                        <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Check Date</TableCell>
-                        <TableCell align="right" sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Amount</TableCell>
-                        <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Status</TableCell>
-                        <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Remarks</TableCell>
-                        <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Approval</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
+                        </th>
+                        <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Customer</th>
+                        <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Transaction No.</th>
+                        <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Check/Cash</th>
+                        <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Bank</th>
+                        <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Check Number</th>
+                        <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Check Date</th>
+                        <th className="px-3 py-2 text-right font-bold whitespace-nowrap">Amount</th>
+                        <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Status</th>
+                        <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Remarks</th>
+                        <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Approval</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                       {detailLoading && (
-                        <TableRow>
-                          <TableCell colSpan={11} align="center">
+                        <tr>
+                          <td colSpan={11} className="px-3 py-4 text-center text-slate-500 dark:text-slate-400">
                             Loading payment lines...
-                          </TableCell>
-                        </TableRow>
+                          </td>
+                        </tr>
                       )}
                       {!detailLoading && items.length === 0 && !canAddPayment && (
-                        <TableRow>
-                          <TableCell colSpan={11} align="center">
+                        <tr>
+                          <td colSpan={11} className="px-3 py-4 text-center text-slate-500 dark:text-slate-400">
                             No payment lines yet.
-                          </TableCell>
-                        </TableRow>
+                          </td>
+                        </tr>
                       )}
                       {!detailLoading && items.map((item, index) => {
                         const posted = item.lpost === 1 || item.lcollection_status === 'Posted';
                         return (
-                          <TableRow
+                          <tr
                             key={item.lid}
-                            sx={{
-                              bgcolor: index % 2 === 0 ? 'background.paper' : 'grey.50',
-                              '&:hover': { bgcolor: 'action.hover' },
-                            }}
+                            className={`${index % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50 dark:bg-slate-800/30'} hover:bg-slate-100 dark:hover:bg-slate-800`}
                           >
-                            <TableCell padding="checkbox" sx={{ py: 1 }}>
-                              <Checkbox
+                            <td className="px-3 py-2">
+                              <input
+                                type="checkbox"
+                                className="accent-brand-blue"
                                 checked={selectedItemIds.includes(item.lid)}
                                 disabled={posted}
                                 onChange={(e) => {
@@ -826,46 +723,48 @@ const DailyCollectionEntryView: React.FC = () => {
                                   ));
                                 }}
                               />
-                            </TableCell>
-                            <TableCell sx={{ py: 1 }}>{item.lcustomer_fname || item.lcustomer || '-'}</TableCell>
-                            <TableCell sx={{ py: 1 }}>{item.ltransaction_no || '-'}</TableCell>
-                            <TableCell sx={{ py: 1 }}>{item.ltype || '-'}</TableCell>
-                            <TableCell sx={{ py: 1 }}>{item.lbank || '-'}</TableCell>
-                            <TableCell sx={{ py: 1 }}>{item.lchk_no || '-'}</TableCell>
-                            <TableCell sx={{ py: 1 }}>{item.lchk_date ? toDisplayDate(item.lchk_date) : '-'}</TableCell>
-                            <TableCell align="right" sx={{ py: 1 }}>{peso.format(item.lamt || 0)}</TableCell>
-                            <TableCell sx={{ py: 1 }}>
-                              <Chip
-                                size="small"
-                                label={item.lstatus || item.lcollection_status || 'Pending'}
-                                color={getStatusChipColor(item.lstatus || item.lcollection_status)}
-                              />
-                            </TableCell>
-                            <TableCell sx={{ py: 1 }}>{item.lremarks || '-'}</TableCell>
-                            <TableCell sx={{ py: 1 }}>
+                            </td>
+                            <td className="px-3 py-2">{item.lcustomer_fname || item.lcustomer || '-'}</td>
+                            <td className="px-3 py-2">{item.ltransaction_no || '-'}</td>
+                            <td className="px-3 py-2">{item.ltype || '-'}</td>
+                            <td className="px-3 py-2">{item.lbank || '-'}</td>
+                            <td className="px-3 py-2">{item.lchk_no || '-'}</td>
+                            <td className="px-3 py-2">{item.lchk_date ? toDisplayDate(item.lchk_date) : '-'}</td>
+                            <td className="px-3 py-2 text-right">{peso.format(item.lamt || 0)}</td>
+                            <td className="px-3 py-2">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusBadgeClasses(item.lstatus || item.lcollection_status)}`}>
+                                {item.lstatus || item.lcollection_status || 'Pending'}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2">{item.lremarks || '-'}</td>
+                            <td className="px-3 py-2">
                               {posted ? (
-                                <Chip size="small" label="Posted" color="success" />
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300">
+                                  Posted
+                                </span>
                               ) : (
-                                <Button
-                                  variant="outlined"
-                                  color="error"
-                                  size="small"
+                                <button
+                                  className={`${BUTTON_BASE} text-red-600 border-red-300 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed`}
                                   onClick={() => handleDeleteItem(item.lid)}
                                   disabled={!!workingAction}
                                 >
                                   Delete
-                                </Button>
+                                </button>
                               )}
-                            </TableCell>
-                          </TableRow>
+                            </td>
+                          </tr>
                         );
                       })}
                       {!detailLoading && canAddPayment && (
-                        <TableRow>
-                          <TableCell padding="checkbox">
-                            <Checkbox
+                        <tr className="bg-slate-50 dark:bg-slate-800/30">
+                          <td className="px-3 py-2">
+                            <input
+                              type="checkbox"
+                              className="accent-brand-blue"
                               checked={allSelectableChecked}
-                              indeterminate={selectedItemIds.length > 0 && !allSelectableChecked}
+                              ref={(el) => {
+                                if (el) el.indeterminate = selectedItemIds.length > 0 && !allSelectableChecked;
+                              }}
                               onChange={(e) => {
                                 if (e.target.checked) {
                                   setSelectedItemIds(postableItems.map((item) => item.lid));
@@ -874,221 +773,218 @@ const DailyCollectionEntryView: React.FC = () => {
                                 }
                               }}
                             />
-                          </TableCell>
-                          <TableCell sx={{ minWidth: 220 }}>
-                            <FormControl fullWidth size="small">
-                              <Select
-                                displayEmpty
-                                value={form.customerId}
-                                onChange={(e) => setForm((prev) => ({ ...prev, customerId: String(e.target.value) }))}
-                              >
-                                <MenuItem value="">Customer</MenuItem>
-                                {customers.map((customer) => (
-                                  <MenuItem key={customer.id} value={customer.id}>
-                                    {customer.code ? `${customer.code} - ` : ''}{customer.company}
-                                  </MenuItem>
-                                ))}
-                              </Select>
-                            </FormControl>
-                          </TableCell>
-                          <TableCell sx={{ minWidth: 220 }}>
-                            <FormControl fullWidth size="small">
-                              <Select
-                                multiple
-                                displayEmpty
-                                value={Object.entries(selectedTransactions).filter(([, value]) => value).map(([key]) => key)}
-                                onChange={(e) => {
-                                  const selected = typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value;
-                                  const newSelections: Record<string, boolean> = {};
-                                  unpaidRows.forEach((row) => {
-                                    const key = `${row.transactionType}:${row.lrefno}`;
-                                    newSelections[key] = selected.includes(key);
-                                  });
-                                  setSelectedTransactions(newSelections);
-                                }}
-                                renderValue={(selected) => {
-                                  const values = selected as string[];
-                                  if (values.length === 0) return 'Transaction No.';
-                                  return values
-                                    .map((value) => unpaidRows.find((row) => `${row.transactionType}:${row.lrefno}` === value)?.linvoice_no || value)
-                                    .join(', ');
-                                }}
-                              >
-                                {!form.customerId && <MenuItem disabled value="">Pick a customer</MenuItem>}
-                                {form.customerId && unpaidRows.length === 0 && <MenuItem disabled value="">No unpaid items</MenuItem>}
-                                {unpaidRows.map((row) => {
+                          </td>
+                          <td className="px-3 py-2 min-w-[220px]">
+                            <select
+                              className={`${SELECT_CLASS} w-full`}
+                              value={form.customerId}
+                              onChange={(e) => setForm((prev) => ({ ...prev, customerId: e.target.value }))}
+                            >
+                              <option value="">Customer</option>
+                              {customers.map((customer) => (
+                                <option key={customer.id} value={customer.id}>
+                                  {customer.code ? `${customer.code} - ` : ''}{customer.company}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="px-3 py-2 min-w-[220px]">
+                            <select
+                              className={`${SELECT_CLASS} w-full`}
+                              multiple
+                              value={Object.entries(selectedTransactions).filter(([, value]) => value).map(([key]) => key)}
+                              onChange={(e) => {
+                                const selected = Array.from(e.target.selectedOptions, (opt) => opt.value);
+                                const newSelections: Record<string, boolean> = {};
+                                unpaidRows.forEach((row) => {
                                   const key = `${row.transactionType}:${row.lrefno}`;
-                                  return (
-                                    <MenuItem key={key} value={key}>
-                                      {row.linvoice_no} - {peso.format(row.totalAmount || 0)}
-                                    </MenuItem>
-                                  );
-                                })}
-                              </Select>
-                            </FormControl>
-                          </TableCell>
-                          <TableCell sx={{ minWidth: 130 }}>
-                            <FormControl fullWidth size="small">
-                              <Select value={form.type} onChange={(e) => handleTypeChange(String(e.target.value))}>
-                                <MenuItem value="Cash">Cash</MenuItem>
-                                <MenuItem value="Check">Check</MenuItem>
-                                <MenuItem value="TT">TT</MenuItem>
-                              </Select>
-                            </FormControl>
-                          </TableCell>
-                          <TableCell sx={{ minWidth: 140 }}>
-                            <TextField
-                              fullWidth
-                              size="small"
+                                  newSelections[key] = selected.includes(key);
+                                });
+                                setSelectedTransactions(newSelections);
+                              }}
+                            >
+                              {!form.customerId && <option disabled value="">Pick a customer</option>}
+                              {form.customerId && unpaidRows.length === 0 && <option disabled value="">No unpaid items</option>}
+                              {unpaidRows.map((row) => {
+                                const key = `${row.transactionType}:${row.lrefno}`;
+                                return (
+                                  <option key={key} value={key}>
+                                    {row.linvoice_no} - {peso.format(row.totalAmount || 0)}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          </td>
+                          <td className="px-3 py-2 min-w-[130px]">
+                            <select
+                              className={`${SELECT_CLASS} w-full`}
+                              value={form.type}
+                              onChange={(e) => handleTypeChange(e.target.value)}
+                            >
+                              <option value="Cash">Cash</option>
+                              <option value="Check">Check</option>
+                              <option value="TT">TT</option>
+                            </select>
+                          </td>
+                          <td className="px-3 py-2 min-w-[140px]">
+                            <input
+                              className={INPUT_CLASS}
                               value={form.bank}
                               onChange={(e) => setForm((prev) => ({ ...prev, bank: e.target.value }))}
                               placeholder="Bank"
                             />
-                          </TableCell>
-                          <TableCell sx={{ minWidth: 140 }}>
-                            <TextField
-                              fullWidth
-                              size="small"
+                          </td>
+                          <td className="px-3 py-2 min-w-[140px]">
+                            <input
+                              className={INPUT_CLASS}
                               value={form.checkNo}
                               onChange={(e) => setForm((prev) => ({ ...prev, checkNo: e.target.value }))}
                               placeholder="Check Number"
                             />
-                          </TableCell>
-                          <TableCell sx={{ minWidth: 150 }}>
-                            <TextField
-                              fullWidth
-                              size="small"
+                          </td>
+                          <td className="px-3 py-2 min-w-[150px]">
+                            <input
                               type="date"
+                              className={INPUT_CLASS}
                               value={form.checkDate}
                               onChange={(e) => setForm((prev) => ({ ...prev, checkDate: e.target.value }))}
-                              InputLabelProps={{ shrink: true }}
                             />
-                          </TableCell>
-                          <TableCell sx={{ minWidth: 140 }}>
-                            <TextField
-                              fullWidth
-                              size="small"
+                          </td>
+                          <td className="px-3 py-2 min-w-[140px]">
+                            <input
                               type="number"
+                              className={INPUT_CLASS}
                               value={form.amount}
                               onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
-                              inputProps={{ step: '0.01' }}
+                              step="0.01"
                               placeholder="0.00"
                             />
-                          </TableCell>
-                          <TableCell>
-                            <Chip size="small" label={form.status} color={getStatusChipColor(form.status)} />
-                          </TableCell>
-                          <TableCell sx={{ minWidth: 180 }}>
-                            <TextField
-                              fullWidth
-                              size="small"
+                          </td>
+                          <td className="px-3 py-2">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusBadgeClasses(form.status)}`}>
+                              {form.status}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 min-w-[180px]">
+                            <input
+                              className={INPUT_CLASS}
                               value={form.remarks}
                               onChange={(e) => setForm((prev) => ({ ...prev, remarks: e.target.value }))}
                               placeholder="Remarks"
                             />
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              variant="contained"
-                              size="small"
+                          </td>
+                          <td className="px-3 py-2">
+                            <button
+                              className={`${BUTTON_PRIMARY} disabled:opacity-50 disabled:cursor-not-allowed`}
                               onClick={handleSavePayment}
                               disabled={savingPayment}
                             >
                               {savingPayment ? 'Saving...' : 'Add Payment'}
-                            </Button>
-                          </TableCell>
-                        </TableRow>
+                            </button>
+                          </td>
+                        </tr>
                       )}
-                    </TableBody>
-                    <TableFooter>
-                      <TableRow sx={{ bgcolor: 'grey.100', borderTop: 2, borderColor: 'divider' }}>
-                        <TableCell sx={{ py: 1.5, fontWeight: 700 }} />
-                        <TableCell colSpan={2} sx={{ py: 1.5, fontWeight: 700 }}>
-                          <Typography variant="subtitle2" fontWeight={700} color="text.primary">
-                            Total Check: {peso.format(totalCheck)}
-                          </Typography>
-                        </TableCell>
-                        <TableCell colSpan={2} sx={{ py: 1.5, fontWeight: 700 }}>
-                          <Typography variant="subtitle2" fontWeight={700} color="text.primary">
-                            Total T/T: {peso.format(totalTT)}
-                          </Typography>
-                        </TableCell>
-                        <TableCell colSpan={2} sx={{ py: 1.5, fontWeight: 700 }}>
-                          <Typography variant="subtitle2" fontWeight={700} color="text.primary">
-                            Total Cash: {peso.format(totalCash)}
-                          </Typography>
-                        </TableCell>
-                        <TableCell colSpan={3} sx={{ py: 1.5, fontWeight: 700 }}>
-                          <Typography variant="subtitle2" fontWeight={700} color="text.primary" align="right">
-                            Grand Total: {peso.format(grandTotal)}
-                          </Typography>
-                        </TableCell>
-                      </TableRow>
-                    </TableFooter>
-                  </Table>
-                </TableContainer>
-              </Box>
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-slate-100 dark:bg-slate-800 border-t-2 border-slate-300 dark:border-slate-700 font-bold text-sm">
+                        <td className="px-3 py-3" />
+                        <td colSpan={2} className="px-3 py-3 text-slate-900 dark:text-slate-100">
+                          Total Check: {peso.format(totalCheck)}
+                        </td>
+                        <td colSpan={2} className="px-3 py-3 text-slate-900 dark:text-slate-100">
+                          Total T/T: {peso.format(totalTT)}
+                        </td>
+                        <td colSpan={2} className="px-3 py-3 text-slate-900 dark:text-slate-100">
+                          Total Cash: {peso.format(totalCash)}
+                        </td>
+                        <td colSpan={3} className="px-3 py-3 text-right text-slate-900 dark:text-slate-100">
+                          Grand Total: {peso.format(grandTotal)}
+                        </td>
+                        <td className="px-3 py-3" />
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
 
-              <Dialog
-                open={showApproverLogsModal}
-                onClose={() => setShowApproverLogsModal(false)}
-                fullWidth
-                maxWidth="lg"
-              >
-                <DialogTitle>Approver Logs</DialogTitle>
-                <DialogContent dividers>
-                  <TableContainer component={Paper} variant="outlined">
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>ID</TableCell>
-                          <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Approver Name</TableCell>
-                          <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Date & Time</TableCell>
-                          <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Remark</TableCell>
-                          <TableCell sx={{ bgcolor: 'grey.800', color: 'common.white', fontWeight: 700, whiteSpace: 'nowrap', py: 1.25 }}>Action</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {approverLogs.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={5} align="center">
-                              No approver logs yet.
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          approverLogs.map((log, index) => (
-                            <TableRow
-                              key={log.lid}
-                              sx={{ bgcolor: index % 2 === 0 ? 'background.paper' : 'grey.50' }}
-                            >
-                              <TableCell>{log.lid}</TableCell>
-                              <TableCell>
-                                {((log.staff_fName || '') + ' ' + (log.staff_lName || '')).trim() || log.lstaff_id}
-                              </TableCell>
-                              <TableCell>{log.ldatetime || '-'}</TableCell>
-                              <TableCell>{log.lremarks || '-'}</TableCell>
-                              <TableCell>
-                                <Chip
-                                  size="small"
-                                  label={log.lstatus || 'Pending'}
-                                  color={getStatusChipColor(log.lstatus)}
-                                />
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </DialogContent>
-                <DialogActions>
-                  <Button onClick={() => setShowApproverLogsModal(false)}>Close</Button>
-                </DialogActions>
-              </Dialog>
+              {/* Approver Logs Modal */}
+              {showApproverLogsModal && (
+                <div
+                  className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+                  aria-hidden="true"
+                  onClick={closeApproverLogsModal}
+                >
+                  <div
+                    ref={approverLogsDialogRef}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="approver-logs-title"
+                    tabIndex={-1}
+                    onKeyDown={approverLogsKeyDown}
+                    onClick={(e) => e.stopPropagation()}
+                    className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden border border-slate-200 dark:border-slate-800"
+                  >
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800">
+                      <h2 id="approver-logs-title" className="text-base font-bold text-slate-900 dark:text-slate-100">Approver Logs</h2>
+                      <button onClick={closeApproverLogsModal} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                    <div className="p-4 overflow-auto max-h-[70vh]">
+                      <div className="overflow-x-auto border border-slate-300 dark:border-slate-700 rounded-lg">
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-800 text-white sticky top-0">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-bold whitespace-nowrap">ID</th>
+                              <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Approver Name</th>
+                              <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Date &amp; Time</th>
+                              <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Remark</th>
+                              <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                            {approverLogs.length === 0 ? (
+                              <tr>
+                                <td colSpan={5} className="px-3 py-4 text-center text-slate-500 dark:text-slate-400">
+                                  No approver logs yet.
+                                </td>
+                              </tr>
+                            ) : (
+                              approverLogs.map((log, index) => (
+                                <tr
+                                  key={log.lid}
+                                  className={`${index % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50 dark:bg-slate-800/30'} hover:bg-slate-100 dark:hover:bg-slate-800`}
+                                >
+                                  <td className="px-3 py-2">{log.lid}</td>
+                                  <td className="px-3 py-2">
+                                    {((log.staff_fName || '') + ' ' + (log.staff_lName || '')).trim() || log.lstaff_id}
+                                  </td>
+                                  <td className="px-3 py-2">{log.ldatetime || '-'}</td>
+                                  <td className="px-3 py-2">{log.lremarks || '-'}</td>
+                                  <td className="px-3 py-2">
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusBadgeClasses(log.lstatus)}`}>
+                                      {log.lstatus || 'Pending'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                    <div className="flex justify-end px-6 py-4 border-t border-slate-200 dark:border-slate-800">
+                      <button onClick={closeApproverLogsModal} className={BUTTON_BASE}>
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
-        </Paper>
-      </Box>
+        </div>
+      </div>
       <DeleteCollectionReportModal
         isOpen={showDeleteReportModal}
         onClose={() => setShowDeleteReportModal(false)}
@@ -1096,7 +992,7 @@ const DailyCollectionEntryView: React.FC = () => {
         refNo={selectedRefno}
         itemCount={items.length}
       />
-    </Box>
+    </div>
   );
 };
 
