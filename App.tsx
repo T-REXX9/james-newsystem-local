@@ -57,6 +57,7 @@ import SalesReturnReport from './components/SalesReturnReport';
 import SalesReturnPage from './components/SalesReturnPage';
 import PurchaseHistoryReportView from './components/PurchaseHistoryReportView';
 import InactiveActiveCustomersReport from './components/InactiveActiveCustomersReport';
+import OldNewCustomersReport from './components/OldNewCustomersReport';
 
 // Maintenance Modules
 import Suppliers from './components/Maintenance/Product/Suppliers';
@@ -564,7 +565,11 @@ const App: React.FC = () => {
           </div>
         );
       case 'accounting-reports-old-new-customers':
-        return renderComingSoon('Old/New Customers');
+        return (
+          <div className="h-full overflow-y-auto">
+            <OldNewCustomersReport />
+          </div>
+        );
 
       case 'sales-transaction-daily-call-monitoring': {
         const isSalesAgent = userProfile?.role === 'Sales Agent' || userProfile?.role === 'sales_agent';

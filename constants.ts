@@ -1435,14 +1435,18 @@ export const generateCallMonitoringSeed = (days = 30): { callLogs: CallLogEntry[
   return { callLogs, inquiries, purchases };
 };
 
-export const MOCK_NOTIFICATIONS: Notification[] = [
+const SHOULD_EXPORT_MOCK_NOTIFICATIONS =
+  import.meta.env.DEV === true || String(import.meta.env.VITE_SEED_MOCK_DATA || '').toLowerCase() === 'true';
+const DEV_NOTIFICATION_RECIPIENT_ID = '00000000-0000-0000-0000-000000000001';
+
+export const MOCK_NOTIFICATIONS: Notification[] = SHOULD_EXPORT_MOCK_NOTIFICATIONS ? [
   {
     id: 'notif-1',
-    recipient_id: 'user_admin_001',
+    recipient_id: DEV_NOTIFICATION_RECIPIENT_ID,
     title: 'New Task Assigned',
     message: 'Follow up with Jiffy Lube regarding Q4 restock proposal has been assigned to you.',
     type: 'info',
-    action_url: '/tasks',
+    action_url: 'communication-productivity-tasks',
     metadata: { taskId: 't1', priority: 'High' },
     is_read: false,
     created_at: new Date(Date.now() - 5 * 60000).toISOString(), // 5 minutes ago
@@ -1450,11 +1454,11 @@ export const MOCK_NOTIFICATIONS: Notification[] = [
   },
   {
     id: 'notif-2',
-    recipient_id: 'user_admin_001',
+    recipient_id: DEV_NOTIFICATION_RECIPIENT_ID,
     title: 'Sales Report Approved',
     message: 'Your monthly sales report for November has been approved and published.',
     type: 'success',
-    action_url: '/dashboard',
+    action_url: 'home',
     metadata: { reportId: 'report-nov-2024' },
     is_read: false,
     created_at: new Date(Date.now() - 45 * 60000).toISOString(), // 45 minutes ago
@@ -1462,11 +1466,11 @@ export const MOCK_NOTIFICATIONS: Notification[] = [
   },
   {
     id: 'notif-3',
-    recipient_id: 'user_admin_001',
+    recipient_id: DEV_NOTIFICATION_RECIPIENT_ID,
     title: 'Low Stock Alert',
     message: 'Motul 300V SAE 0W40 inventory is below minimum threshold. Please reorder soon.',
     type: 'warning',
-    action_url: '/products',
+    action_url: 'warehouse-inventory-product-database',
     metadata: { productId: 'prod-motul-300v', currentStock: 12, minThreshold: 50 },
     is_read: false,
     created_at: new Date(Date.now() - 2 * 3600000).toISOString(), // 2 hours ago
@@ -1474,11 +1478,11 @@ export const MOCK_NOTIFICATIONS: Notification[] = [
   },
   {
     id: 'notif-4',
-    recipient_id: 'user_admin_001',
+    recipient_id: DEV_NOTIFICATION_RECIPIENT_ID,
     title: 'Contact Update Request',
     message: 'Your request to update contact information for Banawe Auto has been rejected.',
     type: 'error',
-    action_url: '/customers',
+    action_url: 'sales-database-customer-database',
     metadata: { contactId: 'contact-banawe', reason: 'Missing verification documents' },
     is_read: true,
     created_at: new Date(Date.now() - 24 * 3600000).toISOString(), // 1 day ago
@@ -1486,11 +1490,11 @@ export const MOCK_NOTIFICATIONS: Notification[] = [
   },
   {
     id: 'notif-5',
-    recipient_id: 'user_admin_001',
+    recipient_id: DEV_NOTIFICATION_RECIPIENT_ID,
     title: 'Discount Request Approved',
     message: 'Customer request for 10% volume discount on Castrol products has been approved.',
     type: 'success',
-    action_url: '/dashboard',
+    action_url: 'home',
     metadata: { discountId: 'disc-001', percentage: 10 },
     is_read: true,
     created_at: new Date(Date.now() - 48 * 3600000).toISOString(), // 2 days ago
@@ -1498,7 +1502,7 @@ export const MOCK_NOTIFICATIONS: Notification[] = [
   },
   {
     id: 'notif-6',
-    recipient_id: 'user_admin_001',
+    recipient_id: DEV_NOTIFICATION_RECIPIENT_ID,
     title: 'System Maintenance Scheduled',
     message: 'System maintenance will occur on December 15 from 11 PM to 1 AM. Plan accordingly.',
     type: 'info',
@@ -1508,4 +1512,4 @@ export const MOCK_NOTIFICATIONS: Notification[] = [
     created_at: new Date(Date.now() - 3 * 24 * 3600000).toISOString(), // 3 days ago
     read_at: new Date(Date.now() - 2.9 * 24 * 3600000).toISOString()
   }
-];
+] : [];

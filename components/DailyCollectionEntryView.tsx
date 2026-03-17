@@ -9,11 +9,13 @@ import {
   CollectionUnpaidRow,
 } from '../services/dailyCollectionService';
 import { getLocalAuthSession } from '../services/localAuthService';
+import { dispatchWorkflowNotification } from '../services/supabaseService';
 import DeleteCollectionReportModal from './DeleteCollectionReportModal';
 import { BUTTON_BASE, BUTTON_PRIMARY, BUTTON_SUCCESS } from '../utils/uiConstants';
 import { useDialogAccessibility } from '../hooks/useDialogAccessibility';
 
 const COLLECTION_PAGE_NO = '21';
+const COLLECTION_TAB_ID = 'accounting-transactions-daily-collection-entry';
 
 const hasDeletePermission = (): boolean => {
   const session = getLocalAuthSession();
@@ -111,12 +113,48 @@ const DailyCollectionEntryView: React.FC = () => {
     collectDate: toDateInput(new Date().toISOString()),
     remarks: '',
   });
+  const session = getLocalAuthSession();
+  const actorId = session?.userProfile?.id;
+  const actorRole = session?.userProfile?.role || 'Unknown';
 
   const selectedAmount = useMemo(() => {
     return unpaidRows
       .filter((row) => selectedTransactions[`${row.transactionType}:${row.lrefno}`])
       .reduce((sum, row) => sum + Number(row.totalAmount || 0), 0);
   }, [unpaidRows, selectedTransactions]);
+
+  const notifyCollectionEvent = useCallback(async (input: {
+    title: string;
+    message: string;
+    type: 'success' | 'error' | 'warning' | 'info';
+    action: string;
+    status: string;
+    entityId: string;
+    targetRoles?: string[];
+    targetUserIds?: string[];
+    metadata?: Record<string, unknown>;
+  }) => {
+    await dispatchWorkflowNotification({
+      title: input.title,
+      message: input.message,
+      type: input.type,
+      action: input.action,
+      status: input.status,
+      entityType: 'daily_collection',
+      entityId: input.entityId,
+      actionUrl: COLLECTION_TAB_ID,
+      actorId,
+      actorRole,
+      targetRoles: input.targetRoles,
+      targetUserIds: input.targetUserIds,
+      includeActor: false,
+      metadata: {
+        collection_refno: input.entityId,
+        action_url: COLLECTION_TAB_ID,
+        ...input.metadata,
+      },
+    });
+  }, [actorId, actorRole]);
 
   const totalCheck = useMemo(() => items.filter((i) => i.ltype === 'Check').reduce((s, i) => s + Number(i.lamt || 0), 0), [items]);
   const totalTT = useMemo(() => items.filter((i) => i.ltype === 'TT').reduce((s, i) => s + Number(i.lamt || 0), 0), [items]);
@@ -263,6 +301,43 @@ const DailyCollectionEntryView: React.FC = () => {
     try {
       await dailyCollectionService.runAction(selectedRefno, action, remarks);
       await Promise.all([fetchList(), fetchDetail(selectedRefno)]);
+
+      const referenceNo = selectedHeader?.lcolection_no || selectedRefno;
+      const submitterUserIds = selectedHeader?.created_by ? [selectedHeader.created_by] : [];
+      if (action === 'submitrecord') {
+        await notifyCollectionEvent({
+          title: 'Collection Submitted',
+          message: `Collection ${referenceNo} is submitted and waiting for your approval.`,
+          type: 'info',
+          action: 'submit_collection',
+          status: 'submitted',
+          entityId: selectedRefno,
+          targetRoles: ['Owner'],
+        });
+      }
+      if (action === 'approverecord') {
+        await notifyCollectionEvent({
+          title: 'Collection Approved',
+          message: `Collection ${referenceNo} has been approved.`,
+          type: 'success',
+          action: 'approve_collection',
+          status: 'approved',
+          entityId: selectedRefno,
+          targetUserIds: submitterUserIds,
+        });
+      }
+      if (action === 'disapproverecord') {
+        await notifyCollectionEvent({
+          title: 'Collection Disapproved',
+          message: `Collection ${referenceNo} was disapproved.${remarks ? ` Reason: ${remarks}` : ''}`,
+          type: 'error',
+          action: 'disapprove_collection',
+          status: 'disapproved',
+          entityId: selectedRefno,
+          targetUserIds: submitterUserIds,
+          metadata: remarks ? { disapproval_reason: remarks } : undefined,
+        });
+      }
     } catch (err: any) {
       setError(err?.message || `Failed to run ${action}`);
     } finally {

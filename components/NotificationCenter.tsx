@@ -78,20 +78,11 @@ const NotificationCenter: React.FC = () => {
       await markAsRead(notification.id);
     }
     if (notification.action_url) {
-      const currentOrigin = window.location.origin;
-      let targetUrl = notification.action_url;
-      try {
-        const parsed = new URL(notification.action_url, currentOrigin);
-        // Keep navigation on the currently running host/port for internal app links.
-        if (parsed.origin !== currentOrigin) {
-          targetUrl = `${currentOrigin}${parsed.pathname}${parsed.search}${parsed.hash}`;
-        } else {
-          targetUrl = parsed.toString();
-        }
-      } catch {
-        targetUrl = notification.action_url;
+      const tabId = notification.action_url.replace(/^\/+/, '').split(/[?#]/)[0].trim();
+      if (tabId) {
+        window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab: tabId } }));
+        setIsOpen(false);
       }
-      window.location.href = targetUrl;
     }
   };
 

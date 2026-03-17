@@ -106,6 +106,9 @@ const productSanitizationConfig: SanitizationConfig<Omit<Product, 'id'>> = {
 
 const LOCAL_API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const LOCAL_API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
+const PROFILES_CACHE_TTL_MS = 60 * 1000;
+let _profilesCache: UserProfile[] | null = null;
+let _profilesCachedAt = 0;
 
 const toNumber = (value: unknown): number => {
   const parsed = Number(value ?? 0);
@@ -810,11 +813,23 @@ export const restoreProduct = async (id: string): Promise<void> => {
 
 // --- USER PROFILE SERVICE ---
 
+export const clearProfilesCache = (): void => {
+  _profilesCache = null;
+  _profilesCachedAt = 0;
+};
+
 export const fetchProfiles = async (): Promise<UserProfile[]> => {
   try {
+    if (_profilesCache && Date.now() - _profilesCachedAt < PROFILES_CACHE_TTL_MS) {
+      return _profilesCache;
+    }
+
     const { data, error } = await supabase.from('profiles').select('*');
     if (error) throw error;
-    return (data as UserProfile[]) || [];
+    const profiles = (data as UserProfile[]) || [];
+    _profilesCache = profiles;
+    _profilesCachedAt = Date.now();
+    return profiles;
   } catch (err) {
     console.error("Error fetching profiles:", err);
     return [];
@@ -840,6 +855,7 @@ export const updateProfile = async (id: string, updates: Partial<UserProfile>): 
   try {
     const { error } = await supabase.from('profiles').update(updates).eq('id', id);
     if (error) throw error;
+    clearProfilesCache();
   } catch (err) {
     console.error("Error updating profile:", err);
     throw err;
@@ -856,7 +872,7 @@ export interface AccessRightsChangeNotificationInput {
 }
 
 export const notifyAccessRightsChange = async (input: AccessRightsChangeNotificationInput): Promise<void> => {
-  const actionUrl = `/settings?section=access-control&userId=${input.targetUserId}`;
+  const actionUrl = 'maintenance-profile-system-access';
   const sharedMetadata = {
     before_rights: input.beforeRights,
     after_rights: input.afterRights,
@@ -876,7 +892,7 @@ export const notifyAccessRightsChange = async (input: AccessRightsChangeNotifica
     actorId: input.actorId,
     actorRole: input.actorRole,
     targetRoles: ['Owner', 'Manager'],
-    includeActor: true,
+    includeActor: false,
     metadata: sharedMetadata,
   });
 
@@ -906,7 +922,7 @@ export interface StaffCreationNotificationInput {
 }
 
 export const notifyStaffAccountCreated = async (input: StaffCreationNotificationInput): Promise<void> => {
-  const actionUrl = `/settings?section=access-control&userId=${input.targetUserId}`;
+  const actionUrl = 'maintenance-profile-system-access';
   await dispatchWorkflowNotification({
     title: 'Staff Account Created',
     message: `A new staff account (${input.email || input.targetUserId}) was created with role ${input.targetUserRole || 'Unknown'}.`,
@@ -919,7 +935,7 @@ export const notifyStaffAccountCreated = async (input: StaffCreationNotification
     actorId: input.actorId,
     actorRole: input.actorRole,
     targetRoles: ['Owner', 'Manager'],
-    includeActor: true,
+    includeActor: false,
     metadata: {
       target_user_id: input.targetUserId,
       target_user_role: input.targetUserRole || 'Unknown',
@@ -1015,6 +1031,7 @@ export const createProfileManually = async (profile: UserProfile): Promise<UserP
     };
     const { data, error } = await supabase.from('profiles').insert(payload).select().maybeSingle();
     if (error) throw error;
+    clearProfilesCache();
     return (data as UserProfile) || null;
   } catch (err) {
     console.error('Error creating profile manually:', err);
@@ -1140,11 +1157,11 @@ export const resetStaffPassword = async (userId: string, newPassword: string) =>
       status: 'initiated',
       entityType: 'auth_event',
       entityId: userId,
-      actionUrl: '/security/audit',
+      actionUrl: 'maintenance-profile-activity-logs',
       actorId: actorUser?.id,
       actorRole,
       targetRoles: ['Owner', 'Manager', 'Security'],
-      includeActor: true,
+      includeActor: false,
       metadata: notificationMetadata,
     });
 
@@ -1156,11 +1173,11 @@ export const resetStaffPassword = async (userId: string, newPassword: string) =>
       status: 'success',
       entityType: 'auth_event',
       entityId: userId,
-      actionUrl: '/security/audit',
+      actionUrl: 'maintenance-profile-activity-logs',
       actorId: actorUser?.id,
       actorRole,
       targetRoles: ['Owner', 'Manager', 'Security'],
-      includeActor: true,
+      includeActor: false,
       metadata: notificationMetadata,
     });
 
@@ -1176,6 +1193,7 @@ export const deactivateStaffAccount = async (userId: string) => {
   try {
     const { error } = await supabase.from('profiles').update({ access_rights: [] }).eq('id', userId);
     if (error) throw error;
+    clearProfilesCache();
     console.info('Staff account deactivated', { userId });
     return true;
   } catch (err) {
@@ -1192,6 +1210,7 @@ export const updateStaffRole = async (userId: string, role: string) => {
   try {
     const { error } = await supabase.from('profiles').update({ role }).eq('id', userId);
     if (error) throw error;
+    clearProfilesCache();
     console.info('Staff role updated', { userId, role });
     return true;
   } catch (err) {
@@ -2497,14 +2516,14 @@ export const getUnreadCount = async (userId: string): Promise<number> => {
   }
 
   try {
-    const { data, error } = await supabase
+    const { count, error } = await supabase
       .from('notifications')
-      .select('id', { count: 'exact' })
+      .select('id', { count: 'exact', head: true })
       .eq('recipient_id', userId)
       .eq('is_deleted', false)
       .eq('is_read', false);
     if (error) throw error;
-    return data?.length || 0;
+    return count || 0;
   } catch (err) {
     console.error('Error getting unread count:', err);
     return 0;
@@ -2664,44 +2683,11 @@ export const markAllAsRead = async (userId: string): Promise<boolean> => {
   }
 };
 
-export const deleteNotification = async (notificationId: string): Promise<boolean> => {
+export const deleteNotification = async (notificationId: string, _userId: string): Promise<boolean> => {
   try {
-    // Fetch the current user
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
-
-    // Get the notification data before deletion
-    const { data: notification } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('id', notificationId)
-      .single();
-
-    if (!notification) throw new Error('Notification not found');
-
-    // Insert into recycle bin
-    const { error: recycleError } = await supabase
-      .from('recycle_bin_items')
-      .insert({
-        item_type: RecycleBinItemType.NOTIFICATION,
-        item_id: notificationId,
-        original_data: notification,
-        deleted_by: user.id,
-        deleted_at: new Date().toISOString(),
-        ...generateRecycleBinMeta(),
-      });
-
-    if (recycleError) throw recycleError;
-
-    // Soft delete the notification
-    const { error } = await supabase
-      .from('notifications')
-      .update({
-        is_deleted: true,
-        deleted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', notificationId);
+    const { error } = await supabase.rpc('soft_delete_notification', {
+      p_notification_id: notificationId,
+    });
 
     if (error) throw error;
     return true;
@@ -2711,43 +2697,11 @@ export const deleteNotification = async (notificationId: string): Promise<boolea
   }
 };
 
-export const restoreNotification = async (id: string): Promise<boolean> => {
+export const restoreNotification = async (id: string, _userId: string): Promise<boolean> => {
   try {
-    // Fetch the current user
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
-
-    // Check user role (Owner/Developer only)
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-
-    if (!profile || !['Owner', 'Developer'].includes(profile.role)) {
-      throw new Error('Only Owner or Developer can restore items');
-    }
-
-    // Update recycle bin item as restored
-    await supabase
-      .from('recycle_bin_items')
-      .update({
-        is_restored: true,
-        restored_at: new Date().toISOString(),
-        restored_by: user.id,
-      })
-      .eq('item_id', id)
-      .eq('item_type', RecycleBinItemType.NOTIFICATION);
-
-    // Restore the notification
-    const { error } = await supabase
-      .from('notifications')
-      .update({
-        is_deleted: false,
-        deleted_at: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', id);
+    const { error } = await supabase.rpc('restore_notification_from_recycle_bin', {
+      p_notification_id: id,
+    });
 
     if (error) throw error;
     return true;
@@ -2759,6 +2713,8 @@ export const restoreNotification = async (id: string): Promise<boolean> => {
 
 export interface NotificationSubscriptionCallbacks {
   onInsert: (notification: Notification) => void;
+  onUpdate?: (notification: Notification, previousNotification?: Notification) => void;
+  onDelete?: (notificationId: string) => void;
   onStatusChange?: (status: RealtimeChannelStatus) => void;
   onError?: (error: Error) => void;
 }
@@ -2780,6 +2736,29 @@ export const subscribeToNotifications = (
       (payload) => {
         try {
           callbacks.onInsert(payload.new as Notification);
+        } catch (error) {
+          callbacks.onError?.(error as Error);
+        }
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'notifications',
+        filter: `recipient_id=eq.${userId}`
+      },
+      (payload) => {
+        try {
+          const updatedNotification = payload.new as Notification;
+
+          if (updatedNotification.is_deleted === true) {
+            callbacks.onDelete?.(updatedNotification.id);
+            return;
+          }
+
+          callbacks.onUpdate?.(updatedNotification);
         } catch (error) {
           callbacks.onError?.(error as Error);
         }
@@ -2823,6 +2802,10 @@ export interface NotifyWorkflowEventInput {
   correlationId?: string;
   metadata?: Record<string, unknown>;
 }
+
+const NOTIFICATION_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const isNotificationUuid = (value: string): boolean => NOTIFICATION_UUID_PATTERN.test(value.trim());
 
 const fetchRoleRecipientIds = async (roles: string[]): Promise<string[]> => {
   if (!roles.length) return [];
@@ -2868,8 +2851,18 @@ export const dispatchWorkflowNotification = async (input: NotifyWorkflowEventInp
     const actorId = actorContext?.actorId || 'system';
     const actorRole = actorContext?.actorRole || 'system';
     const roleRecipients = await fetchRoleRecipientIds(input.targetRoles || []);
-    const recipients = new Set<string>([...(input.targetUserIds || []), ...roleRecipients]);
-    if (input.includeActor !== false) recipients.add(actorId);
+    const invalidTargetUserIds = (input.targetUserIds || []).filter((id) => !isNotificationUuid(id));
+    if (invalidTargetUserIds.length > 0) {
+      console.error('dispatchWorkflowNotification received non-UUID targetUserIds', {
+        entityType: input.entityType,
+        entityId: input.entityId,
+        invalidTargetUserIds,
+      });
+    }
+
+    const validTargetUserIds = (input.targetUserIds || []).filter(isNotificationUuid);
+    const recipients = new Set<string>([...validTargetUserIds, ...roleRecipients]);
+    if (input.includeActor === true) recipients.add(actorId);
 
     const notificationInputs: CreateNotificationInput[] = Array.from(recipients).map((recipientId) => ({
       recipient_id: recipientId,

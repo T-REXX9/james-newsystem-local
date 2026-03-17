@@ -30,7 +30,7 @@ await notifyUser(
   'Task Assigned',
   'You have a new task: Follow up with client',
   'info',
-  '/tasks'  // action_url - optional
+  'communication-productivity-tasks'  // action_url - optional
 );
 ```
 
@@ -66,7 +66,7 @@ await createNotification({
   title: 'Discount Request Approved',
   message: '10% volume discount on Castrol products has been approved',
   type: 'success',
-  action_url: '/customers',  // optional
+  action_url: 'sales-database-customer-database',  // optional
   metadata: {                // optional
     customerId: 'cust-123',
     discountPercentage: 10
@@ -101,7 +101,7 @@ async function createTask(task: Omit<Task, 'id'>) {
     'New Task Assigned',
     `"${task.title}" has been assigned to you`,
     'info',
-    '/tasks'
+    'communication-productivity-tasks'
   );
 }
 ```
@@ -114,7 +114,7 @@ await notifyUser(
   'Report Approved',
   'Your sales report has been approved and published',
   'success',
-  '/dashboard'
+  'home'
 );
 
 // After report rejection
@@ -123,7 +123,7 @@ await notifyUser(
   'Report Rejected',
   'Your report needs revisions. Please see comments.',
   'error',
-  '/dashboard'
+  'home'
 );
 ```
 
@@ -135,7 +135,7 @@ await notifyUser(
   'Discount Request Approved',
   '10% volume discount on Castrol has been approved',
   'success',
-  '/customers'
+  'sales-database-customer-database'
 );
 
 // Rejected
@@ -144,7 +144,7 @@ await notifyUser(
   'Discount Request Denied',
   'Your discount request could not be approved at this time',
   'error',
-  '/customers'
+  'sales-database-customer-database'
 );
 ```
 
@@ -156,7 +156,7 @@ await notifyUser(
   'Contact Information Updated',
   'Changes to contact have been saved successfully',
   'success',
-  '/customers'
+  'sales-database-customer-database'
 );
 
 // Rejected
@@ -165,7 +165,7 @@ await notifyUser(
   'Contact Update Rejected',
   'Missing verification documents. Please resubmit.',
   'error',
-  '/customers'
+  'sales-database-customer-database'
 );
 ```
 
@@ -176,7 +176,7 @@ await notifyRole(
   'Low Stock Alert',
   'Motul 300V inventory below minimum threshold',
   'warning',
-  '/products'
+  'warehouse-inventory-product-database'
 );
 ```
 

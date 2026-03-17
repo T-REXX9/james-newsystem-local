@@ -9,6 +9,8 @@ import {
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+export const shouldSeedMockData =
+  import.meta.env.DEV === true || String(import.meta.env.VITE_SEED_MOCK_DATA || '').toLowerCase() === 'true';
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(

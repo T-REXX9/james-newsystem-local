@@ -19,6 +19,8 @@ import {
   syncDocumentPolicyState,
 } from '../services/salesOrderLocalApiService';
 import { fetchContacts } from '../services/customerDatabaseLocalApiService';
+import { getLocalAuthSession } from '../services/localAuthService';
+import { dispatchWorkflowNotification, fetchProfiles } from '../services/supabaseService';
 import StatusBadge from './StatusBadge';
 import WorkflowStepper from './WorkflowStepper';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
@@ -43,8 +45,11 @@ const MONTH_OPTIONS = [
 ];
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
+const SALES_ORDER_TAB_ID = 'sales-transaction-sales-order';
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const normalizeStatus = (status: unknown): string => String(status || '').trim().toLowerCase();
+const isUuid = (value?: string | null): value is string => UUID_PATTERN.test(String(value || '').trim());
 
 const formatDate = (value?: string | null): string => {
   if (!value) return '-';
@@ -140,18 +145,34 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
     title: string,
     message: string,
     action: string,
-    status: 'success' | 'failed',
+    status: string,
     entityId: string,
-    actionUrl: string,
+    recipientConfig: { targetRoles?: string[]; targetUserIds?: string[] },
     type: 'success' | 'error' | 'warning' | 'info' = 'success'
   ) => {
-    void title;
-    void message;
-    void action;
-    void status;
-    void entityId;
-    void actionUrl;
-    void type;
+    const session = getLocalAuthSession();
+    const actorId = session?.userProfile?.id;
+    const actorRole = session?.userProfile?.role || 'Unknown';
+
+    await dispatchWorkflowNotification({
+      title,
+      message,
+      type,
+      action,
+      status,
+      entityType: 'sales_order',
+      entityId,
+      actionUrl: SALES_ORDER_TAB_ID,
+      actorId,
+      actorRole,
+      targetRoles: recipientConfig.targetRoles,
+      targetUserIds: recipientConfig.targetUserIds,
+      includeActor: false,
+      metadata: {
+        sales_order_id: entityId,
+        action_url: SALES_ORDER_TAB_ID,
+      },
+    });
   }, []);
 
   const navigateToModule = useCallback((tab: string, payload?: Record<string, string>) => {
@@ -167,6 +188,32 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
   const applyOptimisticStatusUpdate = useCallback((orderId: string, status: string) => {
     setOrders(prev => applyOptimisticUpdate(prev, orderId, { status } as Partial<SalesOrder>));
     setSelectedOrder(prev => prev ? { ...prev, status } : null);
+  }, []);
+
+  const resolveSubmitterProfileId = useCallback(async (order: SalesOrder): Promise<string | null> => {
+    if (isUuid(order.submitter_profile_id)) {
+      return order.submitter_profile_id;
+    }
+
+    const legacyUserId = String(order.submitter_legacy_user_id || order.created_by || '').trim();
+    const createdByLabel = String(order.created_by || '').trim().toLowerCase();
+    const profiles = await fetchProfiles();
+    const matched = profiles.find((profile) => {
+      if (legacyUserId && String(profile.main_userid || '').trim() === legacyUserId) {
+        return true;
+      }
+
+      if (!createdByLabel) {
+        return false;
+      }
+
+      return [
+        profile.full_name,
+        profile.email,
+      ].some((value) => String(value || '').trim().toLowerCase() === createdByLabel);
+    });
+
+    return isUuid(matched?.id) ? matched!.id : null;
   }, []);
 
   const openDocumentFromLink = useCallback((link: { type: 'orderslip' | 'invoice'; id: string }) => {
@@ -266,6 +313,9 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
       const refreshed = await confirmSalesOrder(selectedOrder.id);
       const successStatus = refreshed?.status || optimisticNextStatus;
       const successLabel = normalizeStatus(successStatus) === 'submitted' ? 'submitted' : 'approved';
+      const notificationTargetUserId = successLabel === 'approved'
+        ? await resolveSubmitterProfileId(refreshed || selectedOrder)
+        : null;
       if (refreshed) {
         setOrders(prev => prev.map(row => row.id === refreshed.id ? refreshed : row));
         setSelectedOrder(refreshed);
@@ -273,12 +323,14 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
       await notifySalesOrderEvent(
         successLabel === 'submitted' ? 'Sales Order Submitted' : 'Sales Order Approved',
         successLabel === 'submitted'
-          ? `Order ${selectedOrder.order_no} was submitted for approval.`
-          : `Order ${selectedOrder.order_no} has been approved.`,
+          ? `SO ${selectedOrder.reference_no || selectedOrder.order_no} is submitted and waiting for your approval.`
+          : `SO ${selectedOrder.reference_no || selectedOrder.order_no} has been approved.`,
         'confirm',
-        'success',
+        successLabel === 'submitted' ? 'submitted' : 'approved',
         selectedOrder.id,
-        `/salesorder?orderId=${selectedOrder.id}`
+        successLabel === 'submitted'
+          ? { targetRoles: ['Owner'] }
+          : { targetUserIds: notificationTargetUserId ? [notificationTargetUserId] : [] }
       );
     } catch (err) {
       console.error('Error confirming sales order:', err);
@@ -288,7 +340,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
         'confirm',
         'failed',
         selectedOrder.id,
-        `/salesorder?orderId=${selectedOrder.id}`,
+        { targetRoles: ['Owner'] },
         'error'
       );
       alert('Failed to confirm order');
@@ -304,6 +356,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
 
     try {
       const document = await convertToDocument(selectedOrder.id);
+      const submitterProfileId = await resolveSubmitterProfileId(selectedOrder);
       const isOrderSlip = (document as OrderSlip).slip_no !== undefined;
       if (isOrderSlip) {
         const slip = document as OrderSlip;
@@ -315,7 +368,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
           'convert_to_order_slip',
           'success',
           slip.id,
-          `/orderslip?orderSlipId=${slip.id}`
+          { targetUserIds: submitterProfileId ? [submitterProfileId] : [] }
         );
       } else {
         const invoice = document as Invoice;
@@ -327,19 +380,20 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
           'convert_to_invoice',
           'success',
           invoice.id,
-          `/invoice?invoiceId=${invoice.id}`
+          { targetUserIds: submitterProfileId ? [submitterProfileId] : [] }
         );
       }
       setConversionModalOpen(false);
     } catch (err) {
       console.error('Error converting sales order:', err);
+      const submitterProfileId = await resolveSubmitterProfileId(selectedOrder);
       await notifySalesOrderEvent(
         'Sales Order Conversion Failed',
         `Failed to convert order ${selectedOrder.order_no} to a document.`,
         'convert_to_document',
         'failed',
         selectedOrder.id,
-        `/salesorder?orderId=${selectedOrder.id}`,
+        { targetUserIds: submitterProfileId ? [submitterProfileId] : [] },
         'error'
       );
       alert('Failed to convert order to document');

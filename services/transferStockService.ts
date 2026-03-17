@@ -69,6 +69,8 @@ const mapTransferSummary = (raw: any): TransferStock => {
     status: normalizeStatus(raw?.status || raw?.status_key),
     notes: typeof raw?.notes === 'string' ? raw.notes : undefined,
     processed_by: String(raw?.processed_by || raw?.user_id || ''),
+    processed_by_profile_id: String(raw?.processed_by_profile_id || '') || undefined,
+    processed_by_legacy_user_id: String(raw?.processed_by_id || raw?.user_id || '') || undefined,
     approved_by: String(raw?.approved_by || ''),
     approved_at: String(raw?.approved_at || ''),
     created_at: String(raw?.transfer_datetime || raw?.created_at || ''),

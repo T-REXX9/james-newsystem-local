@@ -15,6 +15,7 @@ import {
 } from '../services/transferStockService';
 import { fetchProducts } from '../services/productLocalApiService';
 import { getLocalAuthSession } from '../services/localAuthService';
+import { dispatchWorkflowNotification, fetchProfiles } from '../services/supabaseService';
 import {
   Product,
   TransferStock,
@@ -23,6 +24,10 @@ import {
 } from '../types';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
+
+const TRANSFER_STOCK_TAB_ID = 'warehouse-inventory-transfer-stock';
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const isUuid = (value?: string | null): value is string => UUID_PATTERN.test(String(value || '').trim());
 
 const WAREHOUSES = [
   { id: '1', name: 'WH1' },
@@ -126,19 +131,32 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
     title: string,
     message: string,
     action: string,
-    status: 'success' | 'failed',
+    status: string,
     entityId: string,
     type: 'success' | 'error' | 'warning' | 'info' = 'success',
-    targetRoles: string[] = []
+    targetRoles: string[] = [],
+    targetUserIds: string[] = []
   ) => {
-    void title;
-    void message;
-    void action;
-    void status;
-    void entityId;
-    void type;
-    void targetRoles;
-  }, []);
+    await dispatchWorkflowNotification({
+      title,
+      message,
+      type,
+      action,
+      status,
+      entityType: 'transfer_stock',
+      entityId,
+      actionUrl: TRANSFER_STOCK_TAB_ID,
+      actorId: currentUser?.id,
+      actorRole: currentUser?.role || 'Unknown',
+      targetRoles,
+      targetUserIds,
+      includeActor: false,
+      metadata: {
+        transfer_stock_id: entityId,
+        action_url: TRANSFER_STOCK_TAB_ID,
+      },
+    });
+  }, [currentUser?.id, currentUser?.role]);
 
   // Auto-select first transfer when transfers change
   useEffect(() => {
@@ -189,6 +207,32 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
     });
   }, [transferStocks, searchTerm, statusFilter]);
 
+  const resolveProcessedByProfileId = useCallback(async (transfer: TransferStock): Promise<string | null> => {
+    if (isUuid(transfer.processed_by_profile_id)) {
+      return transfer.processed_by_profile_id;
+    }
+
+    const legacyUserId = String(transfer.processed_by_legacy_user_id || transfer.processed_by || '').trim();
+    const processedByLabel = String(transfer.processed_by || '').trim().toLowerCase();
+    const profiles = await fetchProfiles();
+    const matched = profiles.find((profile) => {
+      if (legacyUserId && String(profile.main_userid || '').trim() === legacyUserId) {
+        return true;
+      }
+
+      if (!processedByLabel) {
+        return false;
+      }
+
+      return [
+        profile.full_name,
+        profile.email,
+      ].some((value) => String(value || '').trim().toLowerCase() === processedByLabel);
+    });
+
+    return isUuid(matched?.id) ? matched!.id : null;
+  }, []);
+
   // Filter products for autocomplete
   const filteredProducts = useMemo(() => {
     if (!itemSearch) return products.slice(0, 50);
@@ -215,28 +259,24 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
 
       // Old system flow: create request from selected part numbers, then fine-tune transfer details.
       if (!transferNo || !transferDate || items.length === 0) {
-        await notifyTransferEvent(
-          'Validation Error',
-          'Please fill in all required fields and add at least one item.',
-          'create',
-          'failed',
-          transferNo || 'pending',
-          'error'
-        );
+        addToast({
+          type: 'error',
+          title: 'Missing required fields',
+          description: 'Please fill in all required fields and add at least one item.',
+          durationMs: 5000,
+        });
         return;
       }
 
       // Validate each item
       for (const item of items) {
         if (!item.item_id) {
-          await notifyTransferEvent(
-            'Validation Error',
-            'Please ensure all items are valid.',
-            'create',
-            'failed',
-            transferNo || 'pending',
-            'error'
-          );
+          addToast({
+            type: 'error',
+            title: 'Invalid transfer item',
+            description: 'Please ensure all items are valid before creating the transfer.',
+            durationMs: 5000,
+          });
           return;
         }
       }
@@ -250,16 +290,12 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
       const newTransfer = await createTransferStock(transferData);
       setTransferStocks(prev => [newTransfer, ...prev]);
       setSelectedTransfer(newTransfer);
-      
-      await notifyTransferEvent(
-        'Transfer Created',
-        `Transfer ${transferNo} has been created successfully.`,
-        'create',
-        'success',
-        newTransfer.id,
-        'success',
-        ['Owner', 'Manager', 'Support']
-      );
+      addToast({
+        type: 'success',
+        title: 'Transfer created',
+        description: `Transfer ${transferNo} has been created successfully.`,
+        durationMs: 4000,
+      });
 
       resetForm();
       setShowCreateForm(false);
@@ -294,12 +330,12 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
         
         await notifyTransferEvent(
           'Transfer Submitted',
-          `Transfer ${selectedTransfer.transfer_no} has been submitted for approval.`,
-          'submit',
-          'success',
+          `Transfer ${selectedTransfer.transfer_no} is submitted and waiting for your approval.`,
+          'submit_transfer_stock',
+          'submitted',
           selectedTransfer.id,
           'success',
-          ['Owner', 'Manager', 'Support']
+          ['Owner']
         );
         addToast({ 
           type: 'success', 
@@ -315,11 +351,11 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
       await notifyTransferEvent(
         'Error Submitting Transfer',
         error.message || 'An unexpected error occurred.',
-        'submit',
+        'submit_transfer_stock',
         'failed',
         selectedTransfer.id,
         'error',
-        ['Owner', 'Manager', 'Support']
+        ['Owner']
       );
       addToast({ 
         type: 'error', 
@@ -338,6 +374,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
     try {
       setApproving(true);
       const updatedTransfer = await approveTransferStock(selectedTransfer.id);
+      const processorProfileId = await resolveProcessedByProfileId(updatedTransfer || selectedTransfer);
       
       if (updatedTransfer) {
         setTransferStocks(prev =>
@@ -347,26 +384,29 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
         
         await notifyTransferEvent(
           'Transfer Approved',
-          `Transfer ${selectedTransfer.transfer_no} has been approved and inventory updated.`,
-          'approve',
-          'success',
+          `Transfer ${selectedTransfer.transfer_no} has been approved.`,
+          'approve_transfer_stock',
+          'approved',
           selectedTransfer.id,
           'success',
-          ['Owner', 'Manager', 'Support']
+          [],
+          processorProfileId ? [processorProfileId] : []
         );
       }
       
       setShowApproveConfirm(false);
     } catch (error: any) {
       console.error('Error approving transfer:', error);
+      const processorProfileId = await resolveProcessedByProfileId(selectedTransfer);
       await notifyTransferEvent(
         'Error Approving Transfer',
         error.message || 'An unexpected error occurred. Check stock availability.',
-        'approve',
+        'approve_transfer_stock',
         'failed',
         selectedTransfer.id,
         'error',
-        ['Owner', 'Manager', 'Support']
+        [],
+        processorProfileId ? [processorProfileId] : []
       );
     } finally {
       setApproving(false);
@@ -412,28 +452,24 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
       setTransferNo(generatedNo);
     } catch (error) {
       console.error('Error generating transfer number:', error);
-      await notifyTransferEvent(
-        'Error',
-        'Failed to generate transfer number.',
-        'generate_transfer_no',
-        'failed',
-        transferNo || 'pending',
-        'error'
-      );
+      addToast({
+        type: 'error',
+        title: 'Unable to generate transfer number',
+        description: 'Failed to generate transfer number.',
+        durationMs: 5000,
+      });
     }
   };
 
   const handleAddItem = (product: Product) => {
     // Check if product already in list
     if (items.some(item => item.item_id === product.id)) {
-      notifyTransferEvent(
-        'Item Already Added',
-        'This item is already in the transfer list.',
-        'add_item',
-        'failed',
-        transferNo || 'pending',
-        'warning'
-      );
+      addToast({
+        type: 'warning',
+        title: 'Item already added',
+        description: 'This item is already in the transfer list.',
+        durationMs: 4000,
+      });
       return;
     }
 

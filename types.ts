@@ -1044,6 +1044,8 @@ export interface SalesOrder {
   approved_by?: string;
   approved_at?: string;
   created_by: string;
+  submitter_profile_id?: string;
+  submitter_legacy_user_id?: string;
   created_at: string;
   updated_at?: string;
   items: SalesOrderItem[];
@@ -1438,6 +1440,8 @@ export interface TransferStock {
   status: 'pending' | 'submitted' | 'approved' | 'deleted';
   notes?: string;
   processed_by?: string;
+  processed_by_profile_id?: string;
+  processed_by_legacy_user_id?: string;
   approved_by?: string;
   approved_at?: string;
   created_at: string;

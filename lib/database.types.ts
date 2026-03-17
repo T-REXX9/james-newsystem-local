@@ -2533,29 +2533,7 @@ export type Database = {
       calculate_expiration_time: { Args: never; Returns: string }
       calculate_permanent_delete_time: { Args: never; Returns: string }
       generate_restore_token: { Args: never; Returns: string }
-      get_unread_count: { Args: { user_id: string }; Returns: number }
       jsonb_to_text_array: { Args: { p_input: Json }; Returns: string[] }
-      mark_notification_as_read: {
-        Args: { notification_id: string }
-        Returns: {
-          action_url: string | null
-          created_at: string
-          id: string
-          is_read: boolean
-          message: string
-          metadata: Json | null
-          read_at: string | null
-          recipient_id: string
-          title: string
-          type: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "notifications"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
     }
     Enums: {
       [_ in never]: never

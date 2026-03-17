@@ -9,6 +9,8 @@ import {
   subscribeToNotifications,
 } from '../services/supabaseService';
 
+const MAX_NOTIFICATIONS = 50;
+
 interface NotificationContextValue {
   notifications: Notification[];
   unreadCount: number;
@@ -102,10 +104,39 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
 
       unsubscribe = subscribeToNotifications(userId, {
         onInsert: (newNotification) => {
-          setNotifications((prev) => [newNotification, ...prev]);
+          setNotifications((prev) => [newNotification, ...prev].slice(0, MAX_NOTIFICATIONS));
           if (!newNotification.is_read) {
             setUnreadCount((prev) => prev + 1);
           }
+        },
+        onUpdate: (updatedNotification) => {
+          setNotifications((prev) => {
+            const existing = prev.find((notif) => notif.id === updatedNotification.id);
+            const mergedNotification = existing
+              ? { ...existing, ...updatedNotification }
+              : updatedNotification;
+
+            if (existing && !existing.is_read && mergedNotification.is_read) {
+              setUnreadCount((count) => Math.max(0, count - 1));
+            }
+
+            if (!existing && !mergedNotification.is_read) {
+              setUnreadCount((count) => count + 1);
+            }
+
+            return existing
+              ? prev.map((notif) => (notif.id === updatedNotification.id ? mergedNotification : notif))
+              : [mergedNotification, ...prev].slice(0, MAX_NOTIFICATIONS);
+          });
+        },
+        onDelete: (notificationId) => {
+          setNotifications((prev) => {
+            const removed = prev.find((notif) => notif.id === notificationId);
+            if (removed && !removed.is_read) {
+              setUnreadCount((count) => Math.max(0, count - 1));
+            }
+            return prev.filter((notif) => notif.id !== notificationId);
+          });
         },
         onStatusChange: (status) => {
           if (isCancelled) return;
@@ -181,7 +212,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
   // Handle delete notification
   const handleDeleteNotification = useCallback(async (id: string) => {
     try {
-      await deleteNotification(id);
+      await deleteNotification(id, userId);
       setNotifications((prev) => {
         const notification = prev.find((notif) => notif.id === id);
         if (notification && !notification.is_read) {
@@ -192,7 +223,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
     } catch (err) {
       console.error('Error deleting notification:', err);
     }
-  }, []);
+  }, [userId]);
 
   const value: NotificationContextValue = {
     notifications,

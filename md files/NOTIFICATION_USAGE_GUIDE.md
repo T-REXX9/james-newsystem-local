@@ -27,7 +27,7 @@ await notifyUser(
   'Task Assigned',
   'You have been assigned a new task: Follow up with client',
   'info',
-  '/tasks'  // Optional: navigation URL
+  'communication-productivity-tasks'  // Optional: internal tab ID
 );
 ```
 
@@ -36,7 +36,7 @@ await notifyUser(
 - `title` (string) - Notification title
 - `message` (string) - Notification message
 - `type` (NotificationType) - One of: 'info', 'success', 'warning', 'error'
-- `actionUrl` (string, optional) - URL to navigate to when clicked
+- `actionUrl` (string, optional) - internal tab ID to navigate to when clicked
 
 ---
 
@@ -56,7 +56,7 @@ await notifyRole(
 - `title` (string) - Notification title
 - `message` (string) - Notification message
 - `type` (NotificationType) - One of: 'info', 'success', 'warning', 'error'
-- `actionUrl` (string, optional) - URL to navigate to
+- `actionUrl` (string, optional) - internal tab ID to navigate to
 
 ---
 
@@ -74,7 +74,7 @@ await notifyAll(
 - `title` (string) - Notification title
 - `message` (string) - Notification message
 - `type` (NotificationType) - One of: 'info', 'success', 'warning', 'error'
-- `actionUrl` (string, optional) - URL to navigate to
+- `actionUrl` (string, optional) - internal tab ID to navigate to
 
 ---
 
@@ -86,7 +86,7 @@ await createNotification({
   title: 'Discount Request Approved',
   message: '10% volume discount on Castrol products has been approved',
   type: 'success',
-  action_url: '/customers',
+  action_url: 'sales-database-customer-database',
   metadata: {
     customerId: 'cust-123',
     discountPercentage: 10,
@@ -100,7 +100,7 @@ await createNotification({
 - `title` (string) - Notification title
 - `message` (string) - Notification message
 - `type` (NotificationType) - One of: 'info', 'success', 'warning', 'error'
-- `action_url` (string, optional) - URL to navigate to
+- `action_url` (string, optional) - internal tab ID to navigate to
 - `metadata` (object, optional) - Any custom JSON data
 
 ---
@@ -131,7 +131,7 @@ async function createTask(task: Task, assignedUserId: string) {
     'New Task Assigned',
     `"${task.title}" has been assigned to you. Due: ${task.dueDate}`,
     'info',
-    '/tasks'
+    'communication-productivity-tasks'
   );
 }
 ```
@@ -148,7 +148,7 @@ async function approveReport(reportId: string, submitterId: string) {
     'Report Approved',
     'Your November sales report has been approved and published',
     'success',
-    '/dashboard'
+    'home'
   );
 }
 ```
@@ -165,7 +165,7 @@ async function rejectReport(reportId: string, submitterId: string, reason: strin
     'Report Needs Revision',
     `Your report needs changes: ${reason}`,
     'error',
-    '/dashboard'
+    'home'
   );
 }
 ```
@@ -183,7 +183,7 @@ async function checkStockLevels() {
       'Low Stock Alert',
       `${lowStockProducts.length} products are below minimum stock levels`,
       'warning',
-      '/products'
+      'warehouse-inventory-product-database'
     );
   }
 }
@@ -201,7 +201,7 @@ async function approveDiscountRequest(requestId: string, requestUserId: string, 
     'Discount Request Approved',
     `Your ${percentage}% discount request has been approved`,
     'success',
-    '/customers'
+    'sales-database-customer-database'
   );
 }
 ```
@@ -229,7 +229,7 @@ async function approveContactUpdate(submitterId: string, contactName: string) {
     'Contact Updated',
     `Information for ${contactName} has been updated successfully`,
     'success',
-    '/customers'
+    'sales-database-customer-database'
   );
 }
 
@@ -240,7 +240,7 @@ async function rejectContactUpdate(submitterId: string, reason: string) {
     'Contact Update Rejected',
     `Update rejected: ${reason}. Please resubmit with corrections.`,
     'error',
-    '/customers'
+    'sales-database-customer-database'
   );
 }
 ```

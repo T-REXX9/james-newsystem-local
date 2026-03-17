@@ -12,8 +12,8 @@ import {
     NotificationType,
 } from '../types';
 
-const PROMOTION_ACTION_URL = (promotionId: string): string =>
-    `/sales-transaction-product-promotions?promotionId=${promotionId}`;
+const PROMOTION_ACTION_URL = (_promotionId: string): string =>
+    'sales-transaction-product-promotions';
 
 type PromotionNotificationContext = Pick<
     Promotion,
@@ -113,7 +113,7 @@ async function notifyPromotionLifecycleEvent(input: {
         actorRole: input.actorRole,
         targetRoles: ['Owner'],
         targetUserIds: assignedSalesUserIds,
-        includeActor: true,
+        includeActor: false,
         metadata: {
             promotion_id: input.promotion.id,
             current_status: input.promotion.status,

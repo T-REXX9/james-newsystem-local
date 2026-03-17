@@ -92,6 +92,8 @@ const mapApiOrderSummary = (raw: any): SalesOrder => {
     approved_by: '',
     approved_at: '',
     created_by: String(raw?.created_by || ''),
+    submitter_profile_id: String(raw?.submitter_profile_id || raw?.created_by_profile_id || '') || undefined,
+    submitter_legacy_user_id: String(raw?.created_by_id || raw?.user_id || '') || undefined,
     created_at: String(raw?.sales_date || ''),
     updated_at: '',
     items: [],

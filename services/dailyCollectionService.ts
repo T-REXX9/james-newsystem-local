@@ -17,6 +17,8 @@ export type DailyCollectionHeader = {
   lstatus: string;
   ldatetime?: string;
   total_amt?: number;
+  created_by?: string;
+  approved_by?: string;
 };
 
 export type DailyCollectionItem = {
@@ -176,6 +178,8 @@ export const dailyCollectionService = {
       lstatus: String(row?.lstatus || 'Pending'),
       ldatetime: String(row?.ldatetime || ''),
       total_amt: toNumber(row?.total_amt, 0),
+      created_by: String(row?.created_by || row?.submitted_by || ''),
+      approved_by: String(row?.approved_by || ''),
     }));
   },
 
@@ -200,6 +204,8 @@ export const dailyCollectionService = {
         lstatus: String(data?.lstatus || 'Pending'),
         ldatetime: String(data?.ldatetime || ''),
         total_amt: toNumber(data?.total_amt, 0),
+        created_by: String(data?.created_by || data?.submitted_by || ''),
+        approved_by: String(data?.approved_by || ''),
       };
     } catch {
       return null;

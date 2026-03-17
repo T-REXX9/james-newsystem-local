@@ -120,7 +120,7 @@ export const restoreItem = async (itemType: RecycleBinItemType, itemId: string):
         break;
       case RecycleBinItemType.NOTIFICATION:
         const { restoreNotification } = await import('./supabaseService');
-        await restoreNotification(itemId);
+        await restoreNotification(itemId, user.id);
         break;
       case RecycleBinItemType.CONTACT:
         const { restoreContact } = await import('./supabaseService');
