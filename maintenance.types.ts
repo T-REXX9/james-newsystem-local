@@ -28,19 +28,13 @@ export interface ProductCategory {
 }
 
 export interface Courier {
-    id: string;
+    id: number;
     name: string;
-    contact_number: string | null;
-    details: string | null;
-    created_at?: string;
 }
 
 export interface RemarkTemplate {
-    id: string;
-    title: string;
-    content: string;
-    type: string | null; // e.g. 'invoice', 'purchase_order'
-    created_at?: string;
+    id: number;
+    name: string;
 }
 
 export interface Approver {

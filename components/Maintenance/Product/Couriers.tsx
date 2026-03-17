@@ -1,41 +1,44 @@
-import React, { useState } from 'react';
-import { GenericMaintenanceTable } from '../GenericMaintenanceTable';
-import { Courier } from '../../../maintenance.types';
-import { supabase } from '../../../lib/supabaseClient';
-import { parseSupabaseError } from '../../../utils/errorHandler';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Edit2, Plus, Search, Truck, Trash2, X } from 'lucide-react';
 import { useToast } from '../../ToastProvider';
+import { useDebounce } from '../../../hooks/useDebounce';
+import {
+    CourierRecord,
+    createCourier,
+    deleteCourier,
+    fetchCouriers,
+    updateCourier,
+} from '../../../services/courierLocalApiService';
 
 const CourierForm: React.FC<{
-    initialData?: Courier | null;
+    initialData?: CourierRecord | null;
     onClose: () => void;
     onSuccess: () => void;
 }> = ({ initialData, onClose, onSuccess }) => {
     const { addToast } = useToast();
-    const [formData, setFormData] = useState<Partial<Courier>>(
-        initialData || { name: '', contact_number: '', details: '' }
-    );
+    const [name, setName] = useState(initialData?.name || '');
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        const trimmed = name.trim();
+        if (!trimmed) {
+            return;
+        }
+
         setLoading(true);
         try {
             if (initialData?.id) {
-                const { error } = await supabase
-                    .from('couriers' as any)
-                    .update(formData)
-                    .eq('id', initialData.id);
-                if (error) throw error;
+                await updateCourier(initialData.id, trimmed);
             } else {
-                const { error } = await supabase.from('couriers' as any).insert([formData]);
-                if (error) throw error;
+                await createCourier(trimmed);
             }
             addToast({
                 type: 'success',
                 title: initialData?.id ? 'Courier updated' : 'Courier created',
                 description: initialData?.id
                     ? 'Courier has been updated successfully.'
-                    : 'New courier has been added to the database.',
+                    : 'New courier has been added successfully.',
                 durationMs: 4000,
             });
             onSuccess();
@@ -44,7 +47,7 @@ const CourierForm: React.FC<{
             addToast({
                 type: 'error',
                 title: initialData?.id ? 'Unable to update courier' : 'Unable to create courier',
-                description: parseSupabaseError(error, 'courier'),
+                description: error instanceof Error ? error.message : 'An unexpected error occurred.',
                 durationMs: 6000,
             });
         } finally {
@@ -59,41 +62,24 @@ const CourierForm: React.FC<{
                 <input
                     required
                     type="text"
-                    value={formData.name || ''}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 bg-white"
-                />
-            </div>
-            <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Contact Number</label>
-                <input
-                    type="text"
-                    value={formData.contact_number || ''}
-                    onChange={(e) => setFormData({ ...formData, contact_number: e.target.value })}
-                    className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 bg-white"
-                />
-            </div>
-            <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Details / Rates</label>
-                <textarea
-                    rows={3}
-                    value={formData.details || ''}
-                    onChange={(e) => setFormData({ ...formData, details: e.target.value })}
-                    className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 bg-white"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="mt-1 block w-full rounded-md border-gray-300 bg-white p-2 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+                    placeholder="Enter courier name"
                 />
             </div>
             <div className="flex justify-end gap-3 pt-4">
                 <button
                     type="button"
                     onClick={onClose}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600"
+                    className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
                 >
                     Cancel
                 </button>
                 <button
                     type="submit"
                     disabled={loading}
-                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                    className="rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
                 >
                     {loading ? 'Saving...' : 'Save'}
                 </button>
@@ -103,16 +89,182 @@ const CourierForm: React.FC<{
 };
 
 export default function Couriers() {
+    const { addToast } = useToast();
+    const [data, setData] = useState<CourierRecord[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [searchTerm, setSearchTerm] = useState('');
+    const debouncedSearch = useDebounce(searchTerm, 300);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingItem, setEditingItem] = useState<CourierRecord | null>(null);
+
+    const loadData = useCallback(async () => {
+        setLoading(true);
+        try {
+            const result = await fetchCouriers(debouncedSearch);
+            setData(result.items || []);
+        } catch (error) {
+            console.error('Error fetching couriers:', error);
+            addToast({
+                type: 'error',
+                title: 'Unable to load couriers',
+                description: error instanceof Error ? error.message : 'An unexpected error occurred.',
+                durationMs: 6000,
+            });
+        } finally {
+            setLoading(false);
+        }
+    }, [addToast, debouncedSearch]);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
+
+    const handleDelete = async (id: number) => {
+        if (!confirm('Are you sure you want to delete this courier?')) return;
+
+        try {
+            await deleteCourier(id);
+            addToast({
+                type: 'success',
+                title: 'Courier deleted',
+                description: 'Courier has been removed successfully.',
+                durationMs: 4000,
+            });
+            loadData();
+        } catch (error) {
+            console.error('Error deleting courier:', error);
+            addToast({
+                type: 'error',
+                title: 'Unable to delete courier',
+                description: error instanceof Error ? error.message : 'An unexpected error occurred.',
+                durationMs: 6000,
+            });
+        }
+    };
+
     return (
-        <GenericMaintenanceTable<Courier>
-            tableName="couriers"
-            title="Courier Management"
-            columns={[
-                { key: 'name', label: 'Name' },
-                { key: 'contact_number', label: 'Contact #' },
-                { key: 'details', label: 'Details' },
-            ]}
-            FormComponent={CourierForm}
-        />
+        <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900">
+            <div className="flex items-center justify-between border-b border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-800">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Courier Management</h1>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Manage the old-system courier master list used in delivery workflows.
+                    </p>
+                </div>
+                <button
+                    onClick={() => {
+                        setEditingItem(null);
+                        setIsModalOpen(true);
+                    }}
+                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700"
+                >
+                    <Plus size={18} />
+                    Add New
+                </button>
+            </div>
+
+            <div className="flex flex-1 flex-col overflow-hidden p-6">
+                <div className="relative mb-4">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                    <input
+                        type="text"
+                        placeholder="Search couriers..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-10 pr-4 outline-none transition-all focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800"
+                    />
+                </div>
+
+                <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+                    <div className="flex-1 overflow-x-auto overflow-y-auto">
+                        <table className="w-full">
+                            <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900/50">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                        Courier Name
+                                    </th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                        Actions
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                {loading ? (
+                                    <tr>
+                                        <td colSpan={2} className="px-6 py-8 text-center text-gray-500">
+                                            Loading...
+                                        </td>
+                                    </tr>
+                                ) : data.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={2} className="px-6 py-12 text-center text-gray-500">
+                                            <div className="flex flex-col items-center gap-2">
+                                                <Truck size={20} />
+                                                <span>No couriers found</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    data.map((courier) => (
+                                        <tr key={courier.id} className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                            <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                                                {courier.name}
+                                            </td>
+                                            <td className="px-6 py-4 text-right text-sm font-medium">
+                                                <div className="flex justify-end gap-2">
+                                                    <button
+                                                        onClick={() => {
+                                                            setEditingItem(courier);
+                                                            setIsModalOpen(true);
+                                                        }}
+                                                        className="p-1 text-blue-600 transition-colors hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                                                    >
+                                                        <Edit2 size={16} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDelete(courier.id)}
+                                                        className="p-1 text-red-600 transition-colors hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            {isModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+                    <div className="w-full max-w-lg overflow-hidden rounded-xl bg-white shadow-xl animate-in fade-in zoom-in duration-200 dark:bg-gray-800">
+                        <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-6 py-4 dark:border-gray-700 dark:bg-gray-900/50">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                {editingItem ? 'Edit Courier' : 'Add New Courier'}
+                            </h3>
+                            <button
+                                onClick={() => setIsModalOpen(false)}
+                                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="p-6">
+                            <CourierForm
+                                initialData={editingItem}
+                                onClose={() => setIsModalOpen(false)}
+                                onSuccess={() => {
+                                    setIsModalOpen(false);
+                                    loadData();
+                                }}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
     );
 }
