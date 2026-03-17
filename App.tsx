@@ -51,6 +51,7 @@ import CustomerLedgerView from './components/CustomerLedgerView';
 import AdjustmentEntryView from './components/AdjustmentEntryView';
 import CollectionSummaryView from './components/CollectionSummaryView';
 import StatementOfAccountView from './components/StatementOfAccountView';
+import AccountsReceivableView from './components/AccountsReceivableView';
 import FreightChargesDebitView from './components/FreightChargesDebitView';
 import SalesReturnReport from './components/SalesReturnReport';
 import SalesReturnPage from './components/SalesReturnPage';
@@ -549,7 +550,7 @@ const App: React.FC = () => {
           </div>
         );
       case 'accounting-reports-accounts-receivable-report':
-        return renderComingSoon('Accounts Receivable Report');
+        return <div className="h-full overflow-y-auto"><AccountsReceivableView /></div>;
       case 'accounting-reports-purchase-history':
         return (
           <div className="h-full overflow-y-auto">
@@ -621,7 +622,7 @@ const App: React.FC = () => {
           </div>
         );
       case 'accounting-accounting-accounts-receivable':
-        return renderComingSoon('Accounts Receivable');
+        return <div className="h-full overflow-y-auto"><AccountsReceivableView /></div>;
       case 'maintenance-customer-customer-data':
         return (
           <div className="h-full overflow-y-auto">

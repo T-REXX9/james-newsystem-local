@@ -91,3 +91,58 @@ export interface Customer {
     };
     contact_persons?: ContactPerson[];
 }
+
+export interface SpecialPriceRecord {
+    refno: string;
+    item_session: string;
+    item_code: string;
+    part_no: string;
+    description: string;
+    type: string;
+    amount: number;
+}
+
+export interface SpecialPriceCustomer {
+    patient_refno: string;
+    company: string;
+    patient_code: string;
+}
+
+export interface SpecialPriceArea {
+    area_code: string;
+    area_name: string;
+}
+
+export interface SpecialPriceCategory {
+    category_id: string;
+    name: string;
+}
+
+export interface SpecialPriceDetail extends SpecialPriceRecord {
+    customers: SpecialPriceCustomer[];
+    areas: SpecialPriceArea[];
+    categories: SpecialPriceCategory[];
+}
+
+export interface SpecialPriceProduct {
+    lsession: string;
+    litemcode: string;
+    lpartno: string;
+    ldescription: string;
+}
+
+export interface SpecialPriceCustomerPicker {
+    lsessionid: string;
+    lcompany: string;
+    lpatient_code: string;
+}
+
+export interface SpecialPriceAreaPicker {
+    code: string;
+    name: string;
+}
+
+export interface SpecialPriceCategoryPicker {
+    id: string;
+    name: string;
+}
