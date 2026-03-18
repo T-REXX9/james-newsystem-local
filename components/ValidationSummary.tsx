@@ -65,16 +65,18 @@ const ValidationSummary: React.FC<ValidationSummaryProps> = ({
             ))}
           </ul>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setDismissed(true);
-            onDismiss?.();
-          }}
-          className="text-xs font-semibold"
-        >
-          Dismiss
-        </button>
+        {onDismiss ? (
+          <button
+            type="button"
+            onClick={() => {
+              setDismissed(true);
+              onDismiss();
+            }}
+            className="text-xs font-semibold"
+          >
+            Dismiss
+          </button>
+        ) : null}
       </div>
     </div>
   );

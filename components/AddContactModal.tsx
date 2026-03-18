@@ -3,6 +3,7 @@ import { X, Loader2, Eye, EyeOff, Plus, Trash2 } from 'lucide-react';
 import { CustomerStatus, DealStage, Contact, ContactPerson } from '../types';
 import ValidationSummary from './ValidationSummary';
 import FieldHelp from './FieldHelp';
+import { CUSTOMER_VAT_TYPES, DEFAULT_CUSTOMER_VAT_TYPE } from '../constants/customerVat';
 import { validateOptionalEmail, validateOptionalPhone, validateRequired } from '../utils/formValidation';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
@@ -41,7 +42,6 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [submitCount, setSubmitCount] = useState(0);
-  const [allowPlaceholderSubmission, setAllowPlaceholderSubmission] = useState(false);
   const { addToast } = useToast();
   
   type ContactPersonDraft = Omit<ContactPerson, 'id'>;
@@ -76,7 +76,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     businessLine: '',
     terms: '',
     transactionType: '',
-    vatType: 'Exclusive',
+    vatType: DEFAULT_CUSTOMER_VAT_TYPE,
     vatPercentage: '12',
     dealershipTerms: '',
     dealershipSince: '',
@@ -114,7 +114,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     businessLine: contact?.businessLine || '',
     terms: contact?.terms || '',
     transactionType: contact?.transactionType || '',
-    vatType: contact?.vatType || 'Exclusive',
+    vatType: contact?.vatType || DEFAULT_CUSTOMER_VAT_TYPE,
     vatPercentage: contact?.vatPercentage || '12',
     dealershipTerms: contact?.dealershipTerms || '',
     dealershipSince: contact?.dealershipSince || '',
@@ -156,7 +156,6 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     if (!isOpen) return;
     setLoading(false);
     setSubmitError(null);
-    setAllowPlaceholderSubmission(false);
     if (isEditMode && initialData) {
       setFormData(buildFormDataFromContact(initialData));
       setContactPersons(buildContactPersonsFromContact(initialData));
@@ -193,28 +192,16 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!validateForm(allowPlaceholderSubmission)) {
+    if (!validateForm()) {
       setSubmitCount((prev) => prev + 1);
       return;
     }
     setLoading(true);
     setSubmitError(null);
     try {
-      const resolvedContactPersons = contactPersons.map((cp, idx) => {
-        if (idx !== 0 || !allowPlaceholderSubmission) {
-          return cp;
-        }
-        const emailValidation = validateOptionalEmail(cp.email);
-        const phoneValidation = validateOptionalPhone(cp.mobile);
-        return {
-          ...cp,
-          email: emailValidation.isValid ? cp.email : 'n/a',
-          mobile: phoneValidation.isValid ? cp.mobile : 'n/a',
-        };
-      });
       const isDeleted = isEditMode ? !!initialData?.is_deleted : false;
       // Construct final object
-      const fullContactPersons: ContactPerson[] = resolvedContactPersons.map((cp, idx) => ({
+      const fullContactPersons: ContactPerson[] = contactPersons.map((cp, idx) => ({
           ...cp,
           id: `cp-${Date.now()}-${idx}`,
           enabled: true
@@ -244,7 +231,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
         businessLine: formData.businessLine || '',
         terms: formData.terms || '',
         transactionType: formData.transactionType || '',
-        vatType: formData.vatType || 'Exclusive',
+        vatType: formData.vatType || DEFAULT_CUSTOMER_VAT_TYPE,
         vatPercentage: formData.vatPercentage || '12',
 
         // Dealership Specifics
@@ -313,7 +300,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     }
   };
 
-  const validateForm = (allowPlaceholders = false): boolean => {
+  const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
     const companyValidation = validateRequired(formData.company, 'a customer name');
     if (!companyValidation.isValid) errors.company = companyValidation.message;
@@ -321,10 +308,10 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     const primaryPerson = contactPersons[0];
     if (primaryPerson) {
       const emailValidation = validateOptionalEmail(primaryPerson.email);
-      if (!emailValidation.isValid && !allowPlaceholders) errors.primaryEmail = emailValidation.message;
+      if (!emailValidation.isValid) errors.primaryEmail = emailValidation.message;
 
       const phoneValidation = validateOptionalPhone(primaryPerson.mobile);
-      if (!phoneValidation.isValid && !allowPlaceholders) errors.primaryMobile = phoneValidation.message;
+      if (!phoneValidation.isValid) errors.primaryMobile = phoneValidation.message;
     }
 
     setValidationErrors(errors);
@@ -339,11 +326,11 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     }
     if (field === 'primaryEmail') {
       const result = validateOptionalEmail(value);
-      message = allowPlaceholderSubmission ? '' : (result.isValid ? '' : result.message);
+      message = result.isValid ? '' : result.message;
     }
     if (field === 'primaryMobile') {
       const result = validateOptionalPhone(value);
-      message = allowPlaceholderSubmission ? '' : (result.isValid ? '' : result.message);
+      message = result.isValid ? '' : result.message;
     }
     if (message || validationErrors[field]) {
       setValidationErrors((prev) => ({ ...prev, [field]: message }));
@@ -369,14 +356,6 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
           <ValidationSummary
             errors={validationErrors}
             summaryKey={submitCount}
-            onDismiss={() => {
-              setAllowPlaceholderSubmission(true);
-              setValidationErrors((prev) => ({
-                ...prev,
-                primaryEmail: '',
-                primaryMobile: '',
-              }));
-            }}
           />
           <div className="space-y-6">
               
@@ -478,8 +457,9 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                       <div>
                           <label className="label">VAT Type</label>
                           <select className="input" value={formData.vatType} onChange={e => setFormData({...formData, vatType: e.target.value})}>
-                              <option value="Exclusive">Exclusive</option>
-                              <option value="Inclusive">Inclusive</option>
+                              {CUSTOMER_VAT_TYPES.map((vatType) => (
+                                <option key={vatType} value={vatType}>{vatType}</option>
+                              ))}
                           </select>
                       </div>
                       <div>
@@ -499,7 +479,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                       </div>
                       <div>
                           <label className="label">Dealership Since</label>
-                          <input className="input" value={formData.dealershipSince} onChange={e => setFormData({...formData, dealershipSince: e.target.value})} />
+                          <input type="date" className="input" value={formData.dealershipSince} onChange={e => setFormData({...formData, dealershipSince: e.target.value})} />
                       </div>
                        <div>
                           <label className="label">Quota</label>

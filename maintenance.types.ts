@@ -19,12 +19,8 @@ export interface CustomerGroup {
 }
 
 export interface ProductCategory {
-    id: string;
+    id: number;
     name: string;
-    description: string | null;
-    parent_id: string | null;
-    created_at?: string;
-    children?: ProductCategory[]; // For tree view
 }
 
 export interface Courier {

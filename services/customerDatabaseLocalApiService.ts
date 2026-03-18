@@ -1,9 +1,115 @@
-// @ts-nocheck
-import { Contact, ContactPerson, CustomerStatus, UserProfile } from '../types';
+import { DEFAULT_CUSTOMER_VAT_TYPE } from '../constants/customerVat';
+import { Contact, ContactPerson, CustomerStatus, CustomerVatType, DealStage, UserProfile } from '../types';
 import { getLocalAuthSession } from './localAuthService';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
+
+type ApiCustomerStatus = 0 | 1 | 3 | number;
+
+interface ApiContactPersonRow {
+  id?: string | number | null;
+  lid?: string | number | null;
+  lfname?: string | null;
+  first_name?: string | null;
+  llname?: string | null;
+  last_name?: string | null;
+  lposition?: string | null;
+  position?: string | null;
+  lbday?: string | null;
+  birthday?: string | null;
+  lc_phone?: string | null;
+  phone?: string | null;
+  lc_mobile?: string | null;
+  mobile?: string | null;
+  lemail?: string | null;
+  email?: string | null;
+}
+
+interface ApiCustomerRow {
+  session_id?: string | number | null;
+  lsessionid?: string | number | null;
+  id?: string | number | null;
+  company?: string | null;
+  lcompany?: string | null;
+  dealer_since?: string | null;
+  date_registered?: string | null;
+  ldatereg?: string | null;
+  team?: string | null;
+  sales_person_name?: string | null;
+  salesman?: string | null;
+  assigned_to?: string | null;
+  sales_person_id?: string | number | null;
+  lsales_person?: string | number | null;
+  refer_by?: string | null;
+  address?: string | null;
+  province?: string | null;
+  city?: string | null;
+  area?: string | null;
+  delivery_address?: string | null;
+  tin?: string | null;
+  price_group?: string | null;
+  business_line?: string | null;
+  terms?: string | null;
+  transaction_type?: string | null;
+  vat_type?: string | null;
+  vat_percent?: string | number | null;
+  dealer_terms?: string | null;
+  dealer_quota?: string | number | null;
+  credit_limit?: string | number | null;
+  latest_balance?: string | number | null;
+  status?: ApiCustomerStatus | null;
+  debt_type?: string | null;
+  profile_type?: string | null;
+  notes?: string | null;
+  contacts?: ApiContactPersonRow[] | null;
+  contact_persons?: ApiContactPersonRow[] | null;
+}
+
+interface ApiCustomerDatabaseResponse {
+  data?: {
+    items?: ApiCustomerRow[];
+    meta?: {
+      total_pages?: number | string | null;
+    };
+    contacts?: ApiContactPersonRow[];
+  };
+}
+
+interface ApiTransactionRow {
+  source_type?: string | null;
+  lqty?: string | number | null;
+  lprice?: string | number | null;
+  source_refno?: string | null;
+  source_no?: string | null;
+  line_id?: string | number | null;
+  id?: string | number | null;
+  lid?: string | number | null;
+  ldate?: string | null;
+}
+
+interface ApiPurchaseHistoryResponse {
+  data?: {
+    items?: ApiTransactionRow[];
+  };
+}
+
+interface ApiCustomerMetricsRow {
+  latest_balance?: string | number | null;
+  lcredit?: string | number | null;
+}
+
+interface ApiCustomerMetricsResponse {
+  data?: ApiCustomerMetricsRow;
+}
+
+type ContactPayloadWithSalesPersonId = Partial<Contact> & {
+  __salesPersonId?: string;
+};
+
+type LocalContact = Contact & {
+  __salesPersonId?: string;
+};
 
 const toNumber = (value: unknown, fallback = 0): number => {
   const n = Number(value);
@@ -30,7 +136,7 @@ const getUserContext = () => {
   };
 };
 
-const mapApiStatusToUi = (row: any): CustomerStatus => {
+const mapApiStatusToUi = (row: ApiCustomerRow): CustomerStatus => {
   const debtType = String(row?.debt_type || '').trim().toLowerCase();
   const profileType = String(row?.profile_type || '').trim().toLowerCase();
   const status = toNumber(row?.status, 1);
@@ -59,7 +165,15 @@ const splitName = (fullName: string): { first_name: string; last_name: string } 
   };
 };
 
-const mapApiContactPerson = (row: any, index: number): ContactPerson => {
+const normalizeVatType = (value: unknown): CustomerVatType => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'exclusive') return 'Exclusive';
+  if (normalized === 'inclusive') return 'Inclusive';
+  if (normalized === 'zero-rated' || normalized === 'zero rated' || normalized === 'zerorated') return 'Zero-Rated';
+  return DEFAULT_CUSTOMER_VAT_TYPE;
+};
+
+const mapApiContactPerson = (row: ApiContactPersonRow, index: number): ContactPerson => {
   const firstName = String(row?.lfname || row?.first_name || '').trim();
   const lastName = String(row?.llname || row?.last_name || '').trim();
   const composedName = `${firstName} ${lastName}`.trim();
@@ -75,7 +189,7 @@ const mapApiContactPerson = (row: any, index: number): ContactPerson => {
   };
 };
 
-const mapApiCustomerToContact = (row: any): Contact => {
+const mapApiCustomerToContact = (row: ApiCustomerRow): LocalContact => {
   const contactPersonsRaw = Array.isArray(row?.contacts)
     ? row.contacts
     : Array.isArray(row?.contact_persons)
@@ -93,7 +207,7 @@ const mapApiCustomerToContact = (row: any): Contact => {
     id: String(row?.session_id ?? row?.lsessionid ?? row?.id ?? ''),
     company,
     customerSince: String(row?.dealer_since || row?.date_registered || row?.ldatereg || ''),
-    team: String((row as any)?.team || ''),
+    team: String(row?.team || ''),
     salesman: resolvedSalesName,
     referBy: String(row?.refer_by || ''),
     address: String(row?.address || ''),
@@ -106,7 +220,7 @@ const mapApiCustomerToContact = (row: any): Contact => {
     businessLine: String(row?.business_line || ''),
     terms: String(row?.terms || ''),
     transactionType: String(row?.transaction_type || ''),
-    vatType: String(row?.vat_type || ''),
+    vatType: normalizeVatType(row?.vat_type),
     vatPercentage: String(toNumber(row?.vat_percent, 0.12) * 100),
     dealershipTerms: String(row?.dealer_terms || ''),
     dealershipSince: String(row?.dealer_since || ''),
@@ -124,7 +238,7 @@ const mapApiCustomerToContact = (row: any): Contact => {
     mobile: primary?.mobile || '',
     avatar: `https://i.pravatar.cc/150?u=${encodeURIComponent(String(row?.session_id ?? row?.id ?? company ?? Date.now()))}`,
     dealValue: 0,
-    stage: 'New' as any,
+    stage: DealStage.NEW,
     lastContactDate: String(row?.date_registered || ''),
     interactions: [],
     comments: [],
@@ -137,13 +251,13 @@ const mapApiCustomerToContact = (row: any): Contact => {
     is_deleted: false,
     updated_at: '',
     __salesPersonId: salesPersonId,
-  } as Contact;
+  };
 };
 
-const mapContactPayloadToApi = (contact: Partial<Contact>) => {
+const mapContactPayloadToApi = (contact: ContactPayloadWithSalesPersonId) => {
   const status = mapUiStatusToApi(contact?.status as CustomerStatus | undefined);
   const debtType = String(contact?.debtType || 'Good');
-  const resolvedSalesPerson = String((contact as any)?.__salesPersonId || contact?.salesman || '').trim();
+  const resolvedSalesPerson = String(contact?.__salesPersonId || contact?.salesman || '').trim();
 
   return {
     company: String(contact?.company || ''),
@@ -159,9 +273,9 @@ const mapContactPayloadToApi = (contact: Partial<Contact>) => {
     business_line: String(contact?.businessLine || ''),
     terms: String(contact?.terms || ''),
     transaction_type: String(contact?.transactionType || 'Order Slip'),
-    vat_type: String(contact?.vatType || 'Zero-Rated'),
+    vat_type: String(contact?.vatType || DEFAULT_CUSTOMER_VAT_TYPE),
     vat_percent: toNumber(contact?.vatPercentage, 12) / 100,
-    dealer_since: String(contact?.dealershipSince || contact?.customerSince || ''),
+    dealer_since: String(contact?.dealershipSince || ''),
     dealer_quota: toNumber(contact?.dealershipQuota, 0),
     credit_limit: toNumber(contact?.creditLimit, 0),
     status,
@@ -169,6 +283,47 @@ const mapContactPayloadToApi = (contact: Partial<Contact>) => {
     debt_type: debtType,
     profile_type: status === 3 ? 'Prospect' : 'Old',
   };
+};
+
+const hasOwn = <K extends string>(value: object, key: K): boolean => Object.prototype.hasOwnProperty.call(value, key);
+
+const mapContactUpdatesToApi = (contact: Partial<ContactPayloadWithSalesPersonId>) => {
+  const payload: Record<string, unknown> = {};
+
+  if (hasOwn(contact, 'company')) payload.company = String(contact.company || '');
+
+  if (hasOwn(contact, '__salesPersonId') || hasOwn(contact, 'salesman') || hasOwn(contact, 'assignedAgent')) {
+    payload.sales_person_id = String(contact.__salesPersonId || contact.salesman || contact.assignedAgent || '').trim();
+  }
+
+  if (hasOwn(contact, 'referBy')) payload.refer_by = String(contact.referBy || '');
+  if (hasOwn(contact, 'address')) payload.address = String(contact.address || '');
+  if (hasOwn(contact, 'deliveryAddress')) payload.delivery_address = String(contact.deliveryAddress || '');
+  if (hasOwn(contact, 'area')) payload.area = String(contact.area || '');
+  if (hasOwn(contact, 'city')) payload.city = String(contact.city || '');
+  if (hasOwn(contact, 'province')) payload.province = String(contact.province || '');
+  if (hasOwn(contact, 'tin')) payload.tin = String(contact.tin || '');
+  if (hasOwn(contact, 'priceGroup')) payload.price_group = String(contact.priceGroup || '');
+  if (hasOwn(contact, 'businessLine')) payload.business_line = String(contact.businessLine || '');
+  if (hasOwn(contact, 'terms')) payload.terms = String(contact.terms || '');
+  if (hasOwn(contact, 'transactionType')) payload.transaction_type = String(contact.transactionType || '');
+  if (hasOwn(contact, 'vatType')) payload.vat_type = String(contact.vatType || '');
+  if (hasOwn(contact, 'vatPercentage')) payload.vat_percent = toNumber(contact.vatPercentage, 12) / 100;
+  if (hasOwn(contact, 'dealershipSince')) payload.dealer_since = String(contact.dealershipSince || '');
+  if (hasOwn(contact, 'dealershipQuota')) payload.dealer_quota = toNumber(contact.dealershipQuota, 0);
+  if (hasOwn(contact, 'creditLimit')) payload.credit_limit = toNumber(contact.creditLimit, 0);
+  if (hasOwn(contact, 'comment')) payload.notes = String(contact.comment || '');
+  if (hasOwn(contact, 'debtType')) payload.debt_type = String(contact.debtType || 'Good');
+
+  if (hasOwn(contact, 'status')) {
+    const status = mapUiStatusToApi(contact.status as CustomerStatus | undefined);
+    payload.status = status;
+    payload.profile_type = status === 3 ? 'Prospect' : 'Old';
+  } else if (hasOwn(contact, 'isHidden')) {
+    payload.status = contact.isHidden ? 0 : 1;
+  }
+
+  return payload;
 };
 
 const mapContactPersonPayloadToApi = (cp: ContactPerson) => {
@@ -201,7 +356,7 @@ const mergeContactPersons = (existing: ContactPerson[] = [], incoming: ContactPe
 };
 
 const mergeContactRecords = (base: Contact, next: Contact): Contact => {
-  const pick = (primary: any, fallback: any) => {
+  const pick = <T,>(primary: T, fallback: T): T => {
     const value = typeof primary === 'string' ? primary.trim() : primary;
     if (value === '' || value === null || value === undefined) return fallback;
     return primary;
@@ -223,12 +378,12 @@ const mergeContactRecords = (base: Contact, next: Contact): Contact => {
   };
 };
 
-const requestJson = async (url: string, init?: RequestInit): Promise<any> => {
+const requestJson = async <T>(url: string, init?: RequestInit): Promise<T> => {
   const response = await fetch(url, init);
   if (!response.ok) {
     throw new Error(await parseApiErrorMessage(response));
   }
-  return response.json();
+  return (await response.json()) as T;
 };
 
 export const fetchContacts = async (): Promise<Contact[]> => {
@@ -246,7 +401,7 @@ export const fetchContacts = async (): Promise<Contact[]> => {
         page: String(page),
         per_page: String(perPage),
       });
-      const payload = await requestJson(`${API_BASE_URL}/customer-database?${query.toString()}`);
+      const payload = await requestJson<ApiCustomerDatabaseResponse>(`${API_BASE_URL}/customer-database?${query.toString()}`);
       const rows = Array.isArray(payload?.data?.items) ? payload.data.items : [];
       merged.push(...rows.map(mapApiCustomerToContact));
       totalPages = toNumber(payload?.data?.meta?.total_pages, 1);
@@ -290,7 +445,7 @@ export const createContact = async (contact: Omit<Contact, 'id'>): Promise<Conta
       .map((cp) => mapContactPersonPayloadToApi(cp)),
   };
 
-  const created = await requestJson(`${API_BASE_URL}/customer-database`, {
+  const created = await requestJson<{ data?: ApiCustomerRow }>(`${API_BASE_URL}/customer-database`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -301,12 +456,12 @@ export const createContact = async (contact: Omit<Contact, 'id'>): Promise<Conta
 const syncContactPersons = async (sessionId: string, contactPersons: ContactPerson[] | undefined): Promise<void> => {
   if (!Array.isArray(contactPersons)) return;
 
-  const detailPayload = await requestJson(
+  const detailPayload = await requestJson<ApiCustomerDatabaseResponse>(
     `${API_BASE_URL}/customer-database/${encodeURIComponent(String(sessionId))}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`
   );
   const existingRows = Array.isArray(detailPayload?.data?.contacts) ? detailPayload.data.contacts : [];
-  const existingById = new Map<string, any>();
-  existingRows.forEach((row: any) => {
+  const existingById = new Map<string, ApiContactPersonRow>();
+  existingRows.forEach((row: ApiContactPersonRow) => {
     const id = String(row?.id ?? row?.lid ?? '');
     if (id) existingById.set(id, row);
   });
@@ -351,7 +506,7 @@ const syncContactPersons = async (sessionId: string, contactPersons: ContactPers
 export const updateContact = async (id: string, updates: Partial<Contact>): Promise<void> => {
   const payload = {
     main_id: API_MAIN_ID,
-    ...mapContactPayloadToApi(updates),
+    ...mapContactUpdatesToApi(updates),
   };
 
   await requestJson(`${API_BASE_URL}/customer-database/${encodeURIComponent(String(id))}`, {
@@ -367,9 +522,28 @@ export const updateContact = async (id: string, updates: Partial<Contact>): Prom
 
 export const bulkUpdateContacts = async (ids: string[], updates: Partial<Contact>): Promise<void> => {
   if (!Array.isArray(ids) || ids.length === 0) return;
-  for (const id of ids) {
-    await updateContact(id, updates);
+
+  if (updates?.contactPersons) {
+    const results = await Promise.allSettled(ids.map((id) => updateContact(id, updates)));
+    const failures = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+    if (failures.length > 0) {
+      const firstFailure = failures[0]?.reason;
+      throw new Error(firstFailure instanceof Error ? firstFailure.message : 'Bulk update failed');
+    }
+    return;
   }
+
+  const payload = {
+    main_id: API_MAIN_ID,
+    session_ids: ids.map((id) => String(id).trim()).filter(Boolean),
+    updates: mapContactUpdatesToApi(updates),
+  };
+
+  await requestJson(`${API_BASE_URL}/customer-database/bulk`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
 };
 
 export const fetchSalesAgents = async (): Promise<UserProfile[]> => {
@@ -390,17 +564,17 @@ export const fetchSalesAgents = async (): Promise<UserProfile[]> => {
     }));
 };
 
-export const fetchUpdatedContactDetails = async (_contactId: string): Promise<any[]> => {
+export const fetchUpdatedContactDetails = async (_contactId: string): Promise<never[]> => {
   return [];
 };
 
-export const fetchContactTransactions = async (contactId: string): Promise<any[]> => {
+export const fetchContactTransactions = async (contactId: string): Promise<Array<Record<string, unknown>>> => {
   try {
-    const payload = await requestJson(
+    const payload = await requestJson<ApiPurchaseHistoryResponse>(
       `${API_BASE_URL}/customers/${encodeURIComponent(String(contactId))}/purchase-history`
     );
     const rows = Array.isArray(payload?.data?.items) ? payload.data.items : [];
-    return rows.map((row: any, index: number) => {
+    return rows.map((row: ApiTransactionRow, index: number) => {
       const sourceType = String(row?.source_type || '').toUpperCase();
       const txType = sourceType === 'INVOICE' ? 'invoice' : 'order_slip';
       const amount = toNumber(row?.lqty, 0) * toNumber(row?.lprice, 0);
@@ -423,16 +597,16 @@ export const fetchContactTransactions = async (contactId: string): Promise<any[]
   }
 };
 
-export const fetchCustomerMetrics = async (contactId: string): Promise<any | null> => {
+export const fetchCustomerMetrics = async (contactId: string): Promise<Record<string, unknown> | null> => {
   try {
     const [customerPayload, purchasePayload] = await Promise.all([
-      requestJson(`${API_BASE_URL}/customers/${encodeURIComponent(String(contactId))}`),
-      requestJson(`${API_BASE_URL}/customers/${encodeURIComponent(String(contactId))}/purchase-history`),
+      requestJson<ApiCustomerMetricsResponse>(`${API_BASE_URL}/customers/${encodeURIComponent(String(contactId))}`),
+      requestJson<ApiPurchaseHistoryResponse>(`${API_BASE_URL}/customers/${encodeURIComponent(String(contactId))}/purchase-history`),
     ]);
 
     const customer = customerPayload?.data || {};
     const rows = Array.isArray(purchasePayload?.data?.items) ? purchasePayload.data.items : [];
-    const total = rows.reduce((sum: number, row: any) => {
+    const total = rows.reduce((sum: number, row: ApiTransactionRow) => {
       return sum + toNumber(row?.lqty, 0) * toNumber(row?.lprice, 0);
     }, 0);
     const avg = rows.length > 0 ? total / rows.length : 0;

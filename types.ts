@@ -272,6 +272,8 @@ export interface ContactPerson {
   email: string;
 }
 
+export type CustomerVatType = 'Exclusive' | 'Inclusive' | 'Zero-Rated';
+
 export interface Contact {
   id: string;
   // Core Identifiers
@@ -295,7 +297,7 @@ export interface Contact {
   businessLine: string; // "business_line"
   terms: string;
   transactionType: string;
-  vatType: string;
+  vatType: CustomerVatType;
   vatPercentage: string;
 
   // Dealership Specifics
