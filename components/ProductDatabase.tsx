@@ -401,7 +401,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
         <div>
           <h1 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
             <Package className="w-6 h-6 text-brand-blue" />
-            Product Database
+            PRODUCT DATABASE
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             Manage inventory catalog, pricing, and warehouse stocks.
@@ -421,7 +421,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
             onClick={handleOpenAdd}
             className="flex items-center gap-2 px-4 py-2 bg-brand-blue hover:bg-blue-700 text-white rounded-lg shadow-sm font-medium transition-colors"
           >
-            <Plus className="w-4 h-4" /> Add Product
+            <Plus className="w-4 h-4" /> Add
           </button>
         </div>
       </div>
@@ -450,8 +450,8 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
               className="bg-transparent text-sm text-slate-600 dark:text-slate-300 outline-none"
             >
               <option value="all">All</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
+              <option value="active">Unhide</option>
+              <option value="inactive">Hide</option>
             </select>
           </div>
           <div className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
@@ -467,10 +467,10 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
             <thead className="bg-slate-50 dark:bg-slate-800 sticky top-0 z-10 shadow-sm">
               <tr className="text-xs uppercase text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-700">
                 <th className="p-4 w-12 text-center">Status</th>
-                <th className="p-4">Product Info</th>
-                <th className="p-4 w-64">Pricing Structure</th>
-                <th className="p-4 w-64">Warehouse Inventory</th>
-                <th className="p-4 text-center w-24">Specs</th>
+                <th className="p-4">Details</th>
+                <th className="p-4 w-64">Price List</th>
+                <th className="p-4 w-64">Stock per Warehouse</th>
+                <th className="p-4 text-center w-24">Specification</th>
                 <th className="p-4 text-right w-24">Actions</th>
               </tr>
             </thead>
@@ -514,11 +514,11 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400 mt-1">
                         <span>Category: {product.category}</span>
                         <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-                        <span className="font-mono">Code: {product.item_code}</span>
+                        <span className="font-mono">Item Code: {product.item_code}</span>
                         {product.oem_no && (
                           <>
                             <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-                            <span className="font-mono">OEM: {product.oem_no}</span>
+                            <span className="font-mono">OEM No.: {product.oem_no}</span>
                           </>
                         )}
                       </div>
@@ -527,13 +527,17 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
 
                   <td className="p-4 align-top">
                     <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3 border border-slate-100 dark:border-slate-700/50">
+                      {/* Price group labels use abbreviated form (AA/BB/CC/DD) here for compact table display,
+                         while the edit modal uses the full database lname values (AAA/ABB/ACC/ADD).
+                         This matches the old system where inventory.php table used AA/BB/CC/DD
+                         and the form used full group names from the DB. */}
                       <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
                         <div className="flex justify-between items-center"><span className="text-slate-500">AA</span> <span className="font-mono font-medium text-slate-700 dark:text-slate-200">{formatPrice(product.price_aa)}</span></div>
                         <div className="flex justify-between items-center"><span className="text-slate-500">BB</span> <span className="font-mono font-medium text-slate-700 dark:text-slate-200">{formatPrice(product.price_bb)}</span></div>
                         <div className="flex justify-between items-center"><span className="text-slate-500">CC</span> <span className="font-mono font-medium text-slate-700 dark:text-slate-200">{formatPrice(product.price_cc)}</span></div>
                         <div className="flex justify-between items-center"><span className="text-slate-500">DD</span> <span className="font-mono font-medium text-slate-700 dark:text-slate-200">{formatPrice(product.price_dd)}</span></div>
                         <div className="flex justify-between items-center col-span-2 pt-1 border-t border-slate-200 dark:border-slate-700 mt-1">
-                          <span className="text-amber-600 dark:text-amber-500 font-bold">VIP1</span>
+                          <span className="text-amber-600 dark:text-amber-500 font-bold">VIP 1</span>
                           <span className="font-mono font-bold text-amber-700 dark:text-amber-400">{formatPrice(product.price_vip1)}</span>
                         </div>
                         <div className="flex justify-between items-center col-span-2">
@@ -703,7 +707,10 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
                   <div>
                     <label className="block text-xs font-medium text-slate-500 mb-2">Select Price Groups to Update</label>
                     <div className="grid grid-cols-3 gap-2">
-                      {['AA', 'BB', 'CC', 'DD', 'VIP1', 'VIP2'].map(group => (
+                      {['AA', 'BB', 'CC', 'DD', 'VIP1', 'VIP2'].map(group => {
+                        const displayLabels: Record<string, string> = { VIP1: 'VIP 1', VIP2: 'VIP 2' };
+                        const displayLabel = displayLabels[group] || group;
+                        return (
                         <label key={group} className="flex items-center gap-2 p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors">
                           <input
                             type="checkbox"
@@ -719,9 +726,10 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
                               }));
                             }}
                           />
-                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{group}</span>
+                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{displayLabel}</span>
                         </label>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -808,7 +816,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
 
             <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-800">
               <h2 className="text-xl font-bold text-slate-800 dark:text-white">
-                {editingProduct ? 'Edit Product' : 'Add New Product'}
+                {editingProduct ? 'Edit Item' : 'Add Item'}
               </h2>
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
                 <X className="w-5 h-5" />
@@ -831,7 +839,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Part No *</label>
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Part No. *</label>
                       <input
                         required
                         name="part_no"
@@ -839,7 +847,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
                         onChange={handleInputChange}
                         onBlur={(e) => handleBlur('part_no', e.target.value)}
                         className={`input-field ${validationErrors.part_no ? 'border-rose-400' : ''}`}
-                        placeholder="e.g. 123-ABC"
+                        placeholder="Input Part Number"
                       />
                       <FieldHelp text="Use the primary manufacturer part number for quick lookup." example="123-ABC" />
                       {validationErrors.part_no && (
@@ -847,11 +855,11 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
                       )}
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">OEM No</label>
+                      <label className="block text-xs font-medium text-slate-500 mb-1">OEM No.</label>
                       <input name="oem_no" value={formData.oem_no} onChange={handleInputChange} className="input-field" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Original PN</label>
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Original P/N No.</label>
                       <input name="original_pn_no" value={formData.original_pn_no} onChange={handleInputChange} className="input-field" />
                     </div>
                     <div>
@@ -865,7 +873,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
 
                     {/* Updated Status Toggle */}
                     <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Visibility Status</label>
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Status</label>
                       <div className="flex items-center gap-2 h-[42px]">
                         <button
                           type="button"
@@ -876,7 +884,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
                             }`}
                         >
                           {formData.status === 'Active' ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                          <span className="text-sm font-medium">{formData.status === 'Active' ? 'Unhidden (Active)' : 'Hidden (Inactive)'}</span>
+                          <span className="text-sm font-medium">{formData.status === 'Active' ? 'Unhide' : 'Hide'}</span>
                         </button>
                       </div>
                     </div>
@@ -887,12 +895,12 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
                 {/* Pricing Configuration */}
                 <div className="md:col-span-3 border-t border-slate-100 dark:border-slate-800 pt-4">
                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-blue-500"></span> Pricing Groups
+                    <span className="w-2 h-2 rounded-full bg-blue-500"></span> Price List
                   </h3>
                   <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
                     {isMasterAccess && (
                       <div className="col-span-2">
-                        <label className="block text-xs font-bold text-rose-600 dark:text-rose-400 mb-1">Cost (Internal Only)</label>
+                        <label className="block text-xs font-bold text-rose-600 dark:text-rose-400 mb-1">COG</label>
                         <input
                           type="number"
                           name="cost"
@@ -903,7 +911,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
                       </div>
                     )}
                     <div className={isMasterAccess ? 'md:col-span-1' : ''}>
-                      <label className="block text-xs font-bold text-blue-600 dark:text-blue-400 mb-1">Price AA</label>
+                      <label className="block text-xs font-bold text-blue-600 dark:text-blue-400 mb-1">AAA</label>
                       <input
                         type="number"
                         name="price_aa"
@@ -913,23 +921,23 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-blue-600 dark:text-blue-400 mb-1">Price BB</label>
+                      <label className="block text-xs font-bold text-blue-600 dark:text-blue-400 mb-1">ABB</label>
                       <input type="number" name="price_bb" value={formData.price_bb === 0 ? '' : formData.price_bb} onChange={handleInputChange} className="input-field bg-blue-50/50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-900" />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-blue-600 dark:text-blue-400 mb-1">Price CC</label>
+                      <label className="block text-xs font-bold text-blue-600 dark:text-blue-400 mb-1">ACC</label>
                       <input type="number" name="price_cc" value={formData.price_cc === 0 ? '' : formData.price_cc} onChange={handleInputChange} className="input-field bg-blue-50/50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-900" />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-blue-600 dark:text-blue-400 mb-1">Price DD</label>
+                      <label className="block text-xs font-bold text-blue-600 dark:text-blue-400 mb-1">ADD</label>
                       <input type="number" name="price_dd" value={formData.price_dd === 0 ? '' : formData.price_dd} onChange={handleInputChange} className="input-field bg-blue-50/50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-900" />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-amber-600 dark:text-amber-500 mb-1">Price VIP1</label>
+                      <label className="block text-xs font-bold text-amber-600 dark:text-amber-500 mb-1">VIP 1</label>
                       <input type="number" name="price_vip1" value={formData.price_vip1 === 0 ? '' : formData.price_vip1} onChange={handleInputChange} className="input-field bg-amber-50/50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-900" />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-amber-600 dark:text-amber-500 mb-1">Price VIP2</label>
+                      <label className="block text-xs font-bold text-amber-600 dark:text-amber-500 mb-1">VIP2</label>
                       <input type="number" name="price_vip2" value={formData.price_vip2 === 0 ? '' : formData.price_vip2} onChange={handleInputChange} className="input-field bg-amber-50/50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-900" />
                     </div>
                   </div>
@@ -938,7 +946,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
                 {/* Warehouse Inventory */}
                 <div className="md:col-span-3 border-t border-slate-100 dark:border-slate-800 pt-4">
                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Warehouse Inventory
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Stock per Warehouse
                   </h3>
                   <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
                     {[1, 2, 3, 4, 5, 6].map(num => (
@@ -970,6 +978,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
                         onChange={handleInputChange}
                         onBlur={(e) => handleBlur('description', e.target.value)}
                         className={`input-field ${validationErrors.description ? 'border-rose-400' : ''}`}
+                        placeholder="Input Description"
                       />
                       <FieldHelp text="Describe the product in plain language for easy scanning." example="Brake pad set for Honda Civic" />
                       {validationErrors.description && (
@@ -997,7 +1006,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
 
                 {/* Specs */}
                 <div className="md:col-span-3 border-t border-slate-100 dark:border-slate-800 pt-4">
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Specifications</h3>
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Specification</h3>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
                       <label className="block text-xs font-medium text-slate-500 mb-1">Size</label>
@@ -1012,15 +1021,15 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
                       <input name="no_of_cylinder" value={formData.no_of_cylinder} onChange={handleInputChange} className="input-field" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Pieces per Box</label>
+                      <label className="block text-xs font-medium text-slate-500 mb-1">No. of Pieces per Box</label>
                       <input type="number" name="no_of_pieces_per_box" value={formData.no_of_pieces_per_box} onChange={handleInputChange} className="input-field" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Reorder Qty</label>
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Reorder Quantity</label>
                       <input type="number" name="reorder_quantity" value={formData.reorder_quantity} onChange={handleInputChange} className="input-field" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Replenish Qty</label>
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Replenish Quantity</label>
                       <input type="number" name="replenish_quantity" value={formData.replenish_quantity} onChange={handleInputChange} className="input-field" />
                     </div>
                   </div>
@@ -1077,7 +1086,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
                 className="px-6 py-2 bg-brand-blue hover:bg-blue-700 text-white rounded-lg font-medium shadow-sm transition-colors flex items-center gap-2"
               >
                 {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
-                Save Product
+                Save
               </button>
             </div>
 
