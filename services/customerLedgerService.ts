@@ -122,7 +122,10 @@ export const customerLedgerService = {
 
     const data = await requestApi(`${API_BASE_URL}/customer-database?${query.toString()}`);
     const items = Array.isArray(data?.items) ? data.items : [];
-    return items.map(mapCustomer).filter((row) => row.sessionId !== '');
+    return items
+      .map(mapCustomer)
+      .filter((row) => row.sessionId !== '')
+      .sort((a, b) => a.company.localeCompare(b.company));
   },
 
   async getLedger(

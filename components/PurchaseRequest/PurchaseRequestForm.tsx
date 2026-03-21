@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
-import { CreatePRPayload, CreatePRItemPayload, Product, Contact } from '../../purchaseRequest.types';
+import { CreatePRPayload, CreatePRItemPayload, Contact } from '../../purchaseRequest.types';
 import { Save, Plus, Trash2, X } from 'lucide-react';
 import ValidationSummary from '../ValidationSummary';
 import FieldHelp from '../FieldHelp';
 import { validateNumeric, validateRequired } from '../../utils/formValidation';
 import { parseSupabaseError } from '../../utils/errorHandler';
 import { useToast } from '../ToastProvider';
+import ProductAutocomplete from '../ProductAutocomplete';
+import { Product as SearchProduct } from '../../types';
 
 interface PurchaseRequestFormProps {
     onCancel: () => void;
     onSubmit: (payload: CreatePRPayload) => Promise<void>;
-    products: Product[];
     suppliers: Contact[];
     initialPRNumber: string;
 }
@@ -18,7 +19,6 @@ interface PurchaseRequestFormProps {
 const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
     onCancel,
     onSubmit,
-    products,
     suppliers,
     initialPRNumber
 }) => {
@@ -34,6 +34,7 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
 
     // Item Entry State
     const [selectedProductId, setSelectedProductId] = useState('');
+    const [selectedProduct, setSelectedProduct] = useState<SearchProduct | null>(null);
     const [quantity, setQuantity] = useState(1);
     const [selectedSupplierId, setSelectedSupplierId] = useState('');
     const [etaDate, setEtaDate] = useState('');
@@ -49,14 +50,14 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
             return;
         }
 
-        const product = products.find(p => p.id === selectedProductId);
+        const product = selectedProduct;
         const supplier = suppliers.find(s => s.id === selectedSupplierId);
 
         const newItem: CreatePRItemPayload = {
             item_id: selectedProductId,
             item_code: product?.item_code,
-            part_number: product?.part_number,
-            description: product?.description || product?.name,
+            part_number: product?.part_no,
+            description: product?.description,
             quantity: quantity,
             unit_cost: product?.cost || 0, // Default to product cost
             supplier_id: selectedSupplierId || undefined,
@@ -68,6 +69,7 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
 
         // Reset entry fields
         setSelectedProductId('');
+        setSelectedProduct(null);
         setQuantity(1);
         // Keep supplier? maybe user adds multiple from same
         // setEtaDate(''); 
@@ -173,21 +175,31 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
                         <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
                             <div className="md:col-span-4">
                                 <label className="text-xs font-semibold block mb-1">Product</label>
-                                <select
-                                    value={selectedProductId}
-                                    onChange={e => setSelectedProductId(e.target.value)}
-                                    onBlur={(e) => handleBlur('selectedProductId', e.target.value)}
-                                    className={`w-full text-sm rounded border p-2 ${
-                                        validationErrors.selectedProductId ? 'border-rose-400' : 'border-gray-300'
-                                    }`}
-                                >
-                                    <option value="">Select Item...</option>
-                                    {products.map(p => (
-                                        <option key={p.id} value={p.id}>{p.part_number} - {p.name}</option>
-                                    ))}
-                                </select>
+                                <ProductAutocomplete
+                                    onSelect={(product) => {
+                                        setSelectedProduct(product);
+                                        setSelectedProductId(product.id);
+                                        setValidationErrors((prev) => ({ ...prev, selectedProductId: '' }));
+                                    }}
+                                    placeholder="Search item by part no, code, or description..."
+                                    className={validationErrors.selectedProductId ? 'rounded-md ring-1 ring-rose-400' : ''}
+                                />
+                                {validationErrors.selectedProductId && (
+                                    <p className="mt-1 text-xs text-rose-600">{validationErrors.selectedProductId}</p>
+                                )}
                             </div>
-                            <div className="md:col-span-2">
+                            <div className="md:col-span-3">
+                                <label className="text-xs font-semibold block mb-1">Selected Description</label>
+                                <input
+                                    type="text"
+                                    readOnly
+                                    value={selectedProduct?.description || ''}
+                                    onBlur={() => handleBlur('selectedProductId', selectedProductId)}
+                                    placeholder="No product selected yet"
+                                    className="w-full text-sm rounded border border-gray-300 bg-slate-100 p-2 text-slate-600"
+                                />
+                            </div>
+                            <div className="md:col-span-1">
                                 <label className="text-xs font-semibold block mb-1">Qty</label>
                                 <input
                                     type="number"
@@ -203,7 +215,7 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
                                     <p className="mt-1 text-xs text-rose-600">{validationErrors.quantity}</p>
                                 )}
                             </div>
-                            <div className="md:col-span-3">
+                            <div className="md:col-span-2">
                                 <label className="text-xs font-semibold block mb-1">Supplier (Optional)</label>
                                 <select
                                     value={selectedSupplierId}
@@ -216,7 +228,7 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
                                     ))}
                                 </select>
                             </div>
-                            <div className="md:col-span-2">
+                            <div className="md:col-span-1">
                                 <label className="text-xs font-semibold block mb-1">ETA (Optional)</label>
                                 <input type="date" value={etaDate} onChange={e => setEtaDate(e.target.value)} className="w-full text-sm rounded border-gray-300 p-2" />
                                 <FieldHelp text="Set an expected arrival date if the supplier provided one." example="2026-02-05" />

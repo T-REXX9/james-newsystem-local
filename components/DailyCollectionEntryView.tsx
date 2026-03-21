@@ -86,6 +86,8 @@ const DailyCollectionEntryView: React.FC = () => {
   const [customers, setCustomers] = useState<CollectionCustomer[]>([]);
   const [unpaidRows, setUnpaidRows] = useState<CollectionUnpaidRow[]>([]);
   const [selectedTransactions, setSelectedTransactions] = useState<Record<string, boolean>>({});
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
 
   const [search, setSearch] = useState('');
   const [statusFilter] = useState('All');
@@ -104,6 +106,7 @@ const DailyCollectionEntryView: React.FC = () => {
 
   const [form, setForm] = useState({
     customerId: '',
+    customerCompany: '',
     type: 'Cash',
     bank: '',
     checkNo: '',
@@ -122,6 +125,21 @@ const DailyCollectionEntryView: React.FC = () => {
       .filter((row) => selectedTransactions[`${row.transactionType}:${row.lrefno}`])
       .reduce((sum, row) => sum + Number(row.totalAmount || 0), 0);
   }, [unpaidRows, selectedTransactions]);
+
+  const customerOptions = useMemo(() => {
+    const selectedCustomer = customers.find((customer) => customer.id === form.customerId);
+    if (selectedCustomer) return customers;
+    if (!form.customerId) return customers;
+
+    return [
+      {
+        id: form.customerId,
+        code: '',
+        company: form.customerCompany || form.customerId,
+      },
+      ...customers,
+    ];
+  }, [customers, form.customerCompany, form.customerId]);
 
   const notifyCollectionEvent = useCallback(async (input: {
     title: string;
@@ -223,9 +241,20 @@ const DailyCollectionEntryView: React.FC = () => {
     }
   };
 
+  const fetchCustomers = useCallback(async (searchText = '') => {
+    setLoadingCustomers(true);
+    try {
+      const rows = await dailyCollectionService.getCustomers(searchText);
+      setCustomers(rows);
+    } catch {
+      setCustomers([]);
+    } finally {
+      setLoadingCustomers(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchList();
-    dailyCollectionService.getCustomers('').then(setCustomers).catch(() => setCustomers([]));
   }, []);
 
   useEffect(() => {
@@ -258,10 +287,19 @@ const DailyCollectionEntryView: React.FC = () => {
   }, [selectedRefno]);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      fetchCustomers(customerSearch.trim());
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [customerSearch, fetchCustomers]);
+
+  useEffect(() => {
     if (!form.customerId) {
       setUnpaidRows([]);
+      setSelectedTransactions({});
       return;
     }
+    setSelectedTransactions({});
     dailyCollectionService
       .getUnpaidTransactions(form.customerId)
       .then(setUnpaidRows)
@@ -850,18 +888,40 @@ const DailyCollectionEntryView: React.FC = () => {
                             />
                           </td>
                           <td className="px-3 py-2 min-w-[220px]">
-                            <select
-                              className={`${SELECT_CLASS} w-full`}
-                              value={form.customerId}
-                              onChange={(e) => setForm((prev) => ({ ...prev, customerId: e.target.value }))}
-                            >
-                              <option value="">Customer</option>
-                              {customers.map((customer) => (
-                                <option key={customer.id} value={customer.id}>
-                                  {customer.code ? `${customer.code} - ` : ''}{customer.company}
+                            <div className="space-y-2">
+                              <div className="relative">
+                                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <input
+                                  className={`${INPUT_CLASS} pl-9`}
+                                  value={customerSearch}
+                                  onChange={(e) => setCustomerSearch(e.target.value)}
+                                  placeholder="Search customer"
+                                />
+                              </div>
+                              <select
+                                className={`${SELECT_CLASS} w-full`}
+                                value={form.customerId}
+                                onChange={(e) => {
+                                  const nextCustomerId = e.target.value;
+                                  const selectedCustomer = customers.find((customer) => customer.id === nextCustomerId);
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    customerId: nextCustomerId,
+                                    customerCompany: selectedCustomer?.company || '',
+                                  }));
+                                }}
+                                disabled={loadingCustomers}
+                              >
+                                <option value="">
+                                  {loadingCustomers ? 'Loading customers...' : 'Customer'}
                                 </option>
-                              ))}
-                            </select>
+                                {customerOptions.map((customer) => (
+                                  <option key={customer.id} value={customer.id}>
+                                    {customer.code ? `${customer.code} - ` : ''}{customer.company}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
                           </td>
                           <td className="px-3 py-2 min-w-[220px]">
                             <select

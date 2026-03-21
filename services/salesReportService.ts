@@ -84,6 +84,7 @@ export const getCustomerList = async (): Promise<CustomerOption[]> => {
         id: String(c?.id || ''),
         company: String(c?.company || 'Unknown'),
       }))
+      .sort((a, b) => a.company.localeCompare(b.company))
       .filter((c: CustomerOption) => c.id !== '');
   } catch (err) {
     console.error('Error fetching customers:', err);

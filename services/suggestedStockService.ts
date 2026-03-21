@@ -130,6 +130,7 @@ export const fetchCustomersWithNotListedInquiries = async (
         company: String(row?.company || ''),
         inquiryCount: toNumber(row?.inquiry_count),
       }))
+      .sort((a, b) => a.company.localeCompare(b.company))
       .filter((row: CustomerWithInquiries) => row.id !== '' && row.company !== '');
   } catch (err) {
     console.error('Error fetching customers with not listed inquiries:', err);

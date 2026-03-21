@@ -98,7 +98,8 @@ export const inquiryReportLocalApiService = {
         company: String(row?.company || ''),
         customerCode: String(row?.customer_code || ''),
       }))
-      .filter((row: InquiryReportCustomer) => row.id !== '');
+      .filter((row: InquiryReportCustomer) => row.id !== '')
+      .sort((a, b) => a.company.localeCompare(b.company));
   },
 
   async getReport(params: {

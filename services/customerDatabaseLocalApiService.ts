@@ -450,7 +450,9 @@ export const fetchContacts = async (): Promise<Contact[]> => {
       dedupedById.set(id, mergeContactRecords(existing, contact));
     });
 
-    return [...dedupedById.values(), ...contactsWithoutId];
+    return [...dedupedById.values(), ...contactsWithoutId].sort((a, b) =>
+      (a.company || '').localeCompare(b.company || ''),
+    );
   } catch (err) {
     console.error('Error fetching contacts via local API:', err);
     return [];

@@ -101,7 +101,8 @@ export const statementOfAccountService = {
         customerCode: String(row?.customer_code || ''),
         company: String(row?.company || ''),
       }))
-      .filter((row: SoaCustomer) => row.sessionId !== '');
+      .filter((row: SoaCustomer) => row.sessionId !== '')
+      .sort((a, b) => a.company.localeCompare(b.company));
   },
 
   async getStatement(params: {

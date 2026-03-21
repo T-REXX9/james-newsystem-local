@@ -55,6 +55,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
   const [customerFilter, setCustomerFilter] = useState('');
   const [draftSearchTerm, setDraftSearchTerm] = useState('');
   const [draftCustomerFilter, setDraftCustomerFilter] = useState('');
+  const [draftCustomerSearchTerm, setDraftCustomerSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [dateRange, setDateRange] = useState<{ from: string; to: string }>({ from: '', to: '' });
   const [statusFilter, setStatusFilter] = useState<'all' | string>('all');
@@ -138,6 +139,15 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
   }, [loadInvoices]);
 
   const customerMap = useMemo(() => new Map(contacts.map(contact => [contact.id, contact])), [contacts]);
+  const sortedContacts = useMemo(
+    () => [...contacts].sort((a, b) => String(a.company || '').localeCompare(String(b.company || ''), undefined, { sensitivity: 'base' })),
+    [contacts]
+  );
+  const visibleCustomerOptions = useMemo(() => {
+    const query = draftCustomerSearchTerm.trim().toLowerCase();
+    if (!query) return sortedContacts;
+    return sortedContacts.filter(contact => String(contact.company || '').toLowerCase().includes(query));
+  }, [draftCustomerSearchTerm, sortedContacts]);
 
   const notifyInvoiceEvent = useCallback(async (
     title: string,
@@ -273,18 +283,21 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
     setSearchTerm(draftSearchTerm.trim());
     setDebouncedSearch(draftSearchTerm.trim());
     setCustomerFilter(draftCustomerFilter);
+    setDraftCustomerSearchTerm('');
     setSearchModalOpen(false);
   };
 
   const handleSearchModalClose = () => {
     setDraftSearchTerm(searchTerm);
     setDraftCustomerFilter(customerFilter);
+    setDraftCustomerSearchTerm('');
     setSearchModalOpen(false);
   };
 
   const handleSearchModalOpen = () => {
     setDraftSearchTerm(searchTerm);
     setDraftCustomerFilter(customerFilter);
+    setDraftCustomerSearchTerm('');
     setSearchModalOpen(true);
   };
 
@@ -294,6 +307,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
     setDebouncedSearch('');
     setCustomerFilter('');
     setDraftCustomerFilter('');
+    setDraftCustomerSearchTerm('');
     setStatusFilter('all');
     setDateRange({ from: '', to: '' });
     setPage(1);
@@ -767,13 +781,20 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
               </label>
               <label className="block text-sm text-slate-700 dark:text-slate-200">
                 <span className="block mb-1">Customer</span>
+                <input
+                  type="text"
+                  value={draftCustomerSearchTerm}
+                  onChange={(e) => setDraftCustomerSearchTerm(e.target.value)}
+                  placeholder="Search customers"
+                  className="mb-2 w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+                />
                 <select
                   value={draftCustomerFilter}
                   onChange={(e) => setDraftCustomerFilter(e.target.value)}
                   className="w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
                 >
                   <option value="">All Customers</option>
-                  {contacts.map(contact => (
+                  {visibleCustomerOptions.map(contact => (
                     <option key={contact.id} value={contact.id}>
                       {contact.company}
                     </option>

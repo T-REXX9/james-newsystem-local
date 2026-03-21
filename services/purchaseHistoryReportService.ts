@@ -135,7 +135,8 @@ export const purchaseHistoryReportService = {
         company: String(row?.company || ''),
         customerCode: String(row?.customer_code || ''),
       }))
-      .filter((row: PurchaseHistoryCustomer) => row.sessionId !== '');
+      .filter((row: PurchaseHistoryCustomer) => row.sessionId !== '')
+      .sort((a, b) => a.company.localeCompare(b.company));
   },
 
   async getReport(params: {

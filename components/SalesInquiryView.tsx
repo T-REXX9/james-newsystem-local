@@ -29,6 +29,7 @@ import { getProductPrice } from '../services/productLocalApiService';
 import { getSalesOrderByInquiry } from '../services/salesOrderLocalApiService';
 
 import ProductSearchModal from './ProductSearchModal';
+import CustomerAutocomplete from './CustomerAutocomplete';
 import StatusBadge from './StatusBadge';
 import { useToast } from './ToastProvider';
 import ValidationSummary from './ValidationSummary';
@@ -969,20 +970,13 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                   <tr>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Sold to:</td>
                     <td>
-                      <select
-                        required
+                      <CustomerAutocomplete
+                        contacts={customers}
+                        selectedCustomer={selectedCustomer}
                         disabled={isReadOnly}
-                        value={selectedCustomer?.id || ''}
-                        onChange={(e) => handleCustomerSelect(e.target.value)}
-                        className={`w-full px-2 py-1.5 border rounded bg-white dark:bg-slate-800 text-sm ${validationErrors.customer ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'} ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}`}
-                      >
-                        <option value="">Select customer…</option>
-                        {customers.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.company}
-                          </option>
-                        ))}
-                      </select>
+                        onSelect={(customer) => handleCustomerSelect(customer.id)}
+                        inputClassName={validationErrors.customer ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'}
+                      />
                       {validationErrors.customer && <p className="mt-1 text-[11px] text-rose-600">{validationErrors.customer}</p>}
                     </td>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Date:</td>

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { InquiryReportFilters } from '../types';
 import { FileText, Calendar, Users, ArrowRight, Search } from 'lucide-react';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
@@ -22,6 +22,7 @@ const InquiryReportFilter: React.FC = () => {
 
     const [dateTo, setDateTo] = useState<string>(new Date().toISOString().split('T')[0]);
     const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+    const [customerSearch, setCustomerSearch] = useState('');
     const [customers, setCustomers] = useState<InquiryReportCustomer[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showView, setShowView] = useState(false);
@@ -38,6 +39,20 @@ const InquiryReportFilter: React.FC = () => {
         };
         loadCustomers();
     }, []);
+
+    const filteredCustomers = useMemo(() => {
+        const query = customerSearch.trim().toLowerCase();
+
+        if (!query) {
+            return customers;
+        }
+
+        return customers.filter((customer) => {
+            const company = customer.company.toLowerCase();
+            const customerCode = customer.customerCode.toLowerCase();
+            return company.includes(query) || customerCode.includes(query);
+        });
+    }, [customerSearch, customers]);
 
     const handleReportTypeChange = (type: InquiryReportFilters['reportType']) => {
         setReportType(type);
@@ -171,24 +186,35 @@ const InquiryReportFilter: React.FC = () => {
                                 <Users className="w-4 h-4 text-brand-blue" />
                                 Filter Customer
                             </label>
-                            <div className="relative group">
-                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                    <Search className="h-5 w-5 text-slate-400 group-focus-within:text-brand-blue transition-colors" />
+                            <div className="space-y-3">
+                                <div className="relative group">
+                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                        <Search className="h-5 w-5 text-slate-400 group-focus-within:text-brand-blue transition-colors" />
+                                    </div>
+                                    <input
+                                        type="search"
+                                        value={customerSearch}
+                                        onChange={(e) => setCustomerSearch(e.target.value)}
+                                        placeholder="Search by customer name or code"
+                                        className="w-full pl-12 pr-4 py-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-800 dark:text-slate-100 font-medium focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none transition-all hover:bg-slate-100 dark:hover:bg-slate-800"
+                                    />
                                 </div>
-                                <select
-                                    value={selectedCustomerId || ''}
-                                    onChange={(e) => setSelectedCustomerId(e.target.value || null)}
-                                    className="w-full pl-12 pr-10 py-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-800 dark:text-slate-100 font-medium focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none appearance-none transition-all hover:bg-slate-100 dark:hover:bg-slate-800"
-                                >
-                                    <option value="">All Customers</option>
-                                    {customers.map((customer) => (
-                                        <option key={customer.id} value={customer.id}>
-                                            {customer.company}
-                                        </option>
-                                    ))}
-                                </select>
-                                <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-slate-400">
-                                    <ArrowRight className="h-5 w-5 rotate-90" />
+                                <div className="relative">
+                                    <select
+                                        value={selectedCustomerId || ''}
+                                        onChange={(e) => setSelectedCustomerId(e.target.value || null)}
+                                        className="w-full pl-4 pr-10 py-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-800 dark:text-slate-100 font-medium focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none appearance-none transition-all hover:bg-slate-100 dark:hover:bg-slate-800"
+                                    >
+                                        <option value="">All Customers</option>
+                                        {filteredCustomers.map((customer) => (
+                                            <option key={customer.id} value={customer.id}>
+                                                {customer.company}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-slate-400">
+                                        <ArrowRight className="h-5 w-5 rotate-90" />
+                                    </div>
                                 </div>
                             </div>
                         </div>

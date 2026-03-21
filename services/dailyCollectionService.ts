@@ -256,17 +256,20 @@ export const dailyCollectionService = {
       main_id: String(API_MAIN_ID),
       status: 'all',
       page: '1',
-      per_page: trimmedSearch === '' ? '500' : '100',
+      per_page: trimmedSearch === '' ? '100' : '50',
       mode: 'picker',
       search: trimmedSearch,
     });
     const data = await requestApi(`${API_BASE_URL}/customer-database?${query.toString()}`);
     const rows = Array.isArray(data?.items) ? data.items : [];
-    return rows.map((row: any) => ({
-      id: String(row?.session_id || ''),
-      code: String(row?.customer_code || ''),
-      company: String(row?.company || ''),
-    }));
+    return rows
+      .map((row: any) => ({
+        id: String(row?.session_id || ''),
+        code: String(row?.customer_code || ''),
+        company: String(row?.company || ''),
+      }))
+      .filter((row: CollectionCustomer) => row.id !== '')
+      .sort((a, b) => a.company.localeCompare(b.company, undefined, { sensitivity: 'base' }));
   },
 
   async getUnpaidTransactions(customerId: string): Promise<CollectionUnpaidRow[]> {

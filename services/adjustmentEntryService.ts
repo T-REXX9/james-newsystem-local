@@ -216,6 +216,7 @@ export const adjustmentEntryService = {
     return rows.map((row: any) => ({
       sessionId: String(row?.session_id || ''),
       company: String(row?.company || ''),
-    })).filter((row: LedgerCustomer) => row.sessionId !== '');
+    })).filter((row: LedgerCustomer) => row.sessionId !== '')
+      .sort((a, b) => a.company.localeCompare(b.company));
   },
 };

@@ -82,6 +82,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
   const [loading, setLoading] = useState(true);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [customerFilter, setCustomerFilter] = useState('');
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -141,6 +142,15 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
   }, [loadOrders]);
 
   const customerMap = useMemo(() => new Map(contacts.map(contact => [contact.id, contact])), [contacts]);
+  const sortedContacts = useMemo(
+    () => [...contacts].sort((a, b) => String(a.company || '').localeCompare(String(b.company || ''), undefined, { sensitivity: 'base' })),
+    [contacts]
+  );
+  const visibleCustomerOptions = useMemo(() => {
+    const query = customerSearchTerm.trim().toLowerCase();
+    if (!query) return sortedContacts;
+    return sortedContacts.filter(contact => String(contact.company || '').toLowerCase().includes(query));
+  }, [customerSearchTerm, sortedContacts]);
 
   const notifySalesOrderEvent = useCallback(async (
     title: string,
@@ -492,6 +502,16 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
     alert('Unpost action is not available in the current sales order API.');
   };
 
+  const handleSearchModalOpen = () => {
+    setCustomerSearchTerm('');
+    setSearchModalOpen(true);
+  };
+
+  const handleSearchModalClose = () => {
+    setCustomerSearchTerm('');
+    setSearchModalOpen(false);
+  };
+
   const workflowStage = normalizeStatus(selectedOrder?.status) === 'posted' ? 'document' : 'order';
   const selectedOrderStatus = normalizeStatus(selectedOrder?.status);
   const canConfirm = selectedOrderStatus === 'pending' || (selectedOrderStatus === 'submitted' && Boolean(selectedOrder?.can_approve));
@@ -536,7 +556,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={() => setSearchModalOpen(true)}
+                onClick={handleSearchModalOpen}
                 className="inline-flex items-center gap-2 px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
               >
                 <Search className="w-4 h-4" />
@@ -965,13 +985,20 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
               </label>
               <label className="block text-sm text-slate-700 dark:text-slate-200">
                 <span className="block mb-1">Customer</span>
+                <input
+                  type="text"
+                  value={customerSearchTerm}
+                  onChange={(e) => setCustomerSearchTerm(e.target.value)}
+                  placeholder="Search customers"
+                  className="mb-2 w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+                />
                 <select
                   value={customerFilter}
                   onChange={(e) => setCustomerFilter(e.target.value)}
                   className="w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
                 >
                   <option value="">All Customers</option>
-                  {contacts.map(contact => (
+                  {visibleCustomerOptions.map(contact => (
                     <option key={contact.id} value={contact.id}>
                       {contact.company}
                     </option>
@@ -982,7 +1009,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setSearchModalOpen(false)}
+                onClick={handleSearchModalClose}
                 className="px-3 py-2 text-sm rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200"
               >
                 Close

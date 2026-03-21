@@ -6,6 +6,7 @@ import StatusBadge from './StatusBadge'; // Assuming this exists or I'll inline 
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates'; // Assuming usage
 import ValidationSummary from './ValidationSummary';
 import FieldHelp from './FieldHelp';
+import ProductAutocomplete from './ProductAutocomplete';
 import { validateRequired } from '../utils/formValidation';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
@@ -55,9 +56,9 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
   // Item Add State
-  const [products, setProducts] = useState<Product[]>([]);
   const [showAddItem, setShowAddItem] = useState(false);
   const [newItemId, setNewItemId] = useState('');
+  const [selectedNewItemProduct, setSelectedNewItemProduct] = useState<Product | null>(null);
   const [newItemQty, setNewItemQty] = useState(1);
   const [newItemEta, setNewItemEta] = useState('');
 
@@ -66,7 +67,6 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   // Fetch initial data
   useEffect(() => {
     fetchSuppliers();
-    fetchProducts();
   }, []);
 
   useEffect(() => {
@@ -107,11 +107,6 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   const fetchSuppliers = async () => {
     const data = await purchaseOrderService.getSuppliers();
     setSuppliers(data || []);
-  };
-
-  const fetchProducts = async () => {
-    const data = await purchaseOrderService.getProducts();
-    setProducts(data || []);
   };
 
   // Data is already server-filtered by month/year/status/search.
@@ -254,7 +249,9 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
       setSelectedPO(updated as unknown as PurchaseOrderWithDetails);
       setShowAddItem(false);
       setNewItemId('');
+      setSelectedNewItemProduct(null);
       setNewItemQty(1);
+      setNewItemEta('');
     } catch (err: any) {
       alert('Error adding item: ' + err.message);
     }
@@ -504,17 +501,48 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
               <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
                 <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
                   <h3 className="font-bold text-slate-800 dark:text-white">Items</h3>
-                  {selectedPO.status === 'Draft' && <button onClick={() => setShowAddItem(true)} className="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 flex items-center gap-1"><Plus size={14} /> Add Item</button>}
+                  {selectedPO.status === 'Draft' && <button onClick={() => {
+                    setShowAddItem(true);
+                    setNewItemId('');
+                    setSelectedNewItemProduct(null);
+                    setNewItemQty(1);
+                    setNewItemEta('');
+                  }} className="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 flex items-center gap-1"><Plus size={14} /> Add Item</button>}
                 </div>
                 {showAddItem && (
                   <div className="p-4 bg-blue-50 border-b border-blue-100">
                     <div className="flex gap-2 items-end">
-                      <div className="flex-1"><label className="text-xs font-semibold">Product</label><select value={newItemId} onChange={e => setNewItemId(e.target.value)} className="w-full text-sm rounded border-gray-300"><option value="">Select...</option>{products.map(p => <option key={p.id} value={p.id}>{p.part_no} - {p.description}</option>)}</select></div>
+                      <div className="flex-1">
+                        <label className="text-xs font-semibold">Product</label>
+                        <ProductAutocomplete
+                          onSelect={(product) => {
+                            setNewItemId(product.id);
+                            setSelectedNewItemProduct(product as Product);
+                          }}
+                          className="mt-1"
+                          placeholder="Search by part no, item code, or description..."
+                        />
+                      </div>
                       <div className="w-20"><label className="text-xs font-semibold">Qty</label><input type="number" min="1" value={newItemQty} onChange={e => setNewItemQty(Number(e.target.value))} className="w-full text-sm rounded border-gray-300" /></div>
                       <div className="w-32"><label className="text-xs font-semibold">ETA</label><input type="date" value={newItemEta} onChange={e => setNewItemEta(e.target.value)} className="w-full text-sm rounded border-gray-300" /></div>
-                      <button onClick={addItem} className="px-3 py-2 bg-blue-600 text-white rounded text-sm font-medium">Add</button>
-                      <button onClick={() => setShowAddItem(false)} className="px-3 py-2 bg-white border rounded text-sm">Cancel</button>
+                      <button onClick={addItem} disabled={!newItemId} className="px-3 py-2 bg-blue-600 text-white rounded text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60">Add</button>
+                      <button onClick={() => {
+                        setShowAddItem(false);
+                        setNewItemId('');
+                        setSelectedNewItemProduct(null);
+                        setNewItemQty(1);
+                        setNewItemEta('');
+                      }} className="px-3 py-2 bg-white border rounded text-sm">Cancel</button>
                     </div>
+                    {selectedNewItemProduct && (
+                      <div className="mt-3 rounded border border-blue-200 bg-white/80 px-3 py-2 text-sm text-slate-700">
+                        <div className="font-semibold text-slate-900">{selectedNewItemProduct.part_no}</div>
+                        <div>{selectedNewItemProduct.description || 'No description available.'}</div>
+                        {selectedNewItemProduct.item_code && (
+                          <div className="text-xs text-slate-500">Item Code: {selectedNewItemProduct.item_code}</div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
                 <div className="overflow-x-auto">

@@ -70,14 +70,20 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
 
     const fetchMetadata = async () => {
         try {
-            const [fetchedProducts, fetchedSuppliers] = await Promise.all([
-                purchaseRequestService.getProducts(),
-                purchaseRequestService.getSuppliers()
-            ]);
-            setProducts(fetchedProducts as unknown as Product[]);
+            const fetchedSuppliers = await purchaseRequestService.getSuppliers();
             setSuppliers(fetchedSuppliers as unknown as Contact[]);
         } catch (err) {
             console.error('Failed to fetch metadata', err);
+        }
+    };
+
+    const ensureProductsLoaded = async () => {
+        if (products.length > 0) return;
+        try {
+            const fetchedProducts = await purchaseRequestService.getProducts();
+            setProducts(fetchedProducts as unknown as Product[]);
+        } catch (err) {
+            console.error('Failed to fetch products', err);
         }
     };
 
@@ -104,6 +110,7 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
         try {
             const newPR = await purchaseRequestService.createPurchaseRequest(payload);
             await fetchRequests();
+            await ensureProductsLoaded();
             setSelectedRequest(newPR);
             setViewMode('detail');
         } catch (err) {
@@ -113,7 +120,10 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
 
     const handleSelectRequest = async (pr: PurchaseRequestWithItems) => {
         // Fetch full details to ensure fresh items
-        const fullPR = await purchaseRequestService.getPurchaseRequestById(pr.id);
+        const [fullPR] = await Promise.all([
+            purchaseRequestService.getPurchaseRequestById(pr.id),
+            ensureProductsLoaded()
+        ]);
         setSelectedRequest(fullPR);
         setViewMode('detail');
     };
@@ -232,7 +242,6 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
                         setSelectedRequest(null);
                     }}
                     onSubmit={handleCreateSubmit}
-                    products={products}
                     suppliers={suppliers}
                     initialPRNumber={nextPRNumber}
                 />

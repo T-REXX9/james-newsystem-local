@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Plus, Search, Trash2, MapPin, Users } from 'lucide-react';
-import { UserProfile, Product } from '../types';
+import { X, Plus, Search, MapPin, Users } from 'lucide-react';
+import { UserProfile, Product, Contact } from '../types';
 import * as promotionService from '../services/promotionLocalApiService';
-import { fetchProducts } from '../services/productLocalApiService';
 import { fetchContacts } from '../services/customerDatabaseLocalApiService';
+import CustomerAutocomplete from './CustomerAutocomplete';
+import ProductAutocomplete from './ProductAutocomplete';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 import { useToast } from './ToastProvider';
@@ -58,37 +59,40 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
 
     // UI state
     const [showProductPicker, setShowProductPicker] = useState(false);
-    const [productSearch, setProductSearch] = useState('');
-    const [products, setProducts] = useState<Product[]>([]);
     const [staffList, setStaffList] = useState<UserProfile[]>([]);
-    const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
 
     // Client Targeting state
     const [targetAllClients, setTargetAllClients] = useState<'all' | 'specific'>('all');
     const [selectedClients, setSelectedClients] = useState<string[]>([]);
     const [selectedCities, setSelectedCities] = useState<string[]>([]);
-    const [clientList, setClientList] = useState<Array<{ id: string; company: string; city: string }>>([]);
+    const [contacts, setContacts] = useState<Contact[]>([]);
     const [clientSearch, setClientSearch] = useState('');
     const [citySearch, setCitySearch] = useState('');
 
-    // Fetch products, staff, and clients via local API
+    const clientList = useMemo(
+        () =>
+            contacts.map((contact) => ({
+                id: String(contact.id ?? ''),
+                company: contact.company ?? '',
+                city: contact.city ?? '',
+            })),
+        [contacts]
+    );
+
+    // Fetch staff and clients via local API
     useEffect(() => {
         const fetchData = async () => {
-            setLoading(true);
             try {
-                const [productRows, contactRows, staffRes] = await Promise.all([
-                    fetchProducts(),
+                const [contactRows, staffRes] = await Promise.all([
                     fetchContacts(),
                     fetch(`${API_BASE_URL}/profiles/sales-agents`),
                 ]);
+                const sortedContactRows = [...contactRows].sort((a, b) =>
+                    (a.company || '').localeCompare(b.company || '')
+                );
 
-                setProducts(productRows.filter((product) => product.status === 'Active'));
-                setClientList(contactRows.map((contact) => ({
-                    id: String(contact.id ?? ''),
-                    company: contact.company ?? '',
-                    city: contact.city ?? '',
-                })));
+                setContacts(sortedContactRows);
 
                 // Fetch staff (sales agents)
                 if (staffRes.ok) {
@@ -97,8 +101,6 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
                 }
             } catch (error) {
                 console.error('Error fetching data:', error);
-            } finally {
-                setLoading(false);
             }
         };
         fetchData();
@@ -110,13 +112,23 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
         return Array.from(cities).sort();
     }, [clientList]);
 
-    // Filter clients for search
-    const filteredClients = useMemo(() => {
-        return clientList.filter(c =>
-            c.company?.toLowerCase().includes(clientSearch.toLowerCase()) ||
-            c.city?.toLowerCase().includes(clientSearch.toLowerCase())
+    const selectedClientItems = useMemo(() => {
+        const selectedIds = new Set(selectedClients);
+        return clientList.filter((client) => selectedIds.has(client.id));
+    }, [clientList, selectedClients]);
+
+    const filteredSelectedClients = useMemo(() => {
+        const normalizedSearch = clientSearch.toLowerCase();
+
+        if (!normalizedSearch) {
+            return selectedClientItems;
+        }
+
+        return selectedClientItems.filter((client) =>
+            client.company?.toLowerCase().includes(normalizedSearch) ||
+            client.city?.toLowerCase().includes(normalizedSearch)
         );
-    }, [clientList, clientSearch]);
+    }, [clientSearch, selectedClientItems]);
 
     // Filter cities for search
     const filteredCities = useMemo(() => {
@@ -137,23 +149,24 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
     };
 
     const handleAddProduct = (product: Product) => {
-        if (!selectedProducts.find((sp) => sp.product.id === product.id)) {
-            setSelectedProducts([
-                ...selectedProducts,
-                {
-                    product,
-                    promo_price_aa: product.price_aa,
-                    promo_price_bb: product.price_bb,
-                    promo_price_cc: product.price_cc,
-                    promo_price_dd: product.price_dd,
-                    promo_price_vip1: product.price_vip1,
-                    promo_price_vip2: product.price_vip2,
-                    promo_price_platinum: undefined,
-                },
-            ]);
+        if (selectedProducts.find((sp) => sp.product.id === product.id)) {
+            return;
         }
+
+        setSelectedProducts([
+            ...selectedProducts,
+            {
+                product,
+                promo_price_aa: product.price_aa,
+                promo_price_bb: product.price_bb,
+                promo_price_cc: product.price_cc,
+                promo_price_dd: product.price_dd,
+                promo_price_vip1: product.price_vip1,
+                promo_price_vip2: product.price_vip2,
+                promo_price_platinum: undefined,
+            },
+        ]);
         setShowProductPicker(false);
-        setProductSearch('');
     };
 
     const handleRemoveProduct = (productId: string) => {
@@ -236,13 +249,6 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
             setSaving(false);
         }
     };
-
-    const filteredProducts = products.filter(
-        (p) =>
-            p.description?.toLowerCase().includes(productSearch.toLowerCase()) ||
-            p.item_code?.toLowerCase().includes(productSearch.toLowerCase()) ||
-            p.part_no?.toLowerCase().includes(productSearch.toLowerCase())
-    );
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -446,18 +452,30 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                                     Select Clients ({selectedClients.length} selected)
                                 </label>
+                                <CustomerAutocomplete
+                                    contacts={contacts}
+                                    onSelect={(customer) => {
+                                        setSelectedClients((prev) =>
+                                            prev.includes(customer.id) ? prev : [...prev, customer.id]
+                                        );
+                                        setClientSearch('');
+                                    }}
+                                    placeholder="Search and add clients..."
+                                    className="mb-2"
+                                    inputClassName="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border-0 rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-500"
+                                />
                                 <div className="relative mb-2">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                     <input
                                         type="text"
                                         value={clientSearch}
                                         onChange={(e) => setClientSearch(e.target.value)}
-                                        placeholder="Search clients..."
+                                        placeholder="Filter selected clients..."
                                         className="w-full pl-9 pr-4 py-2 bg-slate-100 dark:bg-slate-800 border-0 rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-500"
                                     />
                                 </div>
                                 <div className="max-h-40 overflow-y-auto space-y-1 border border-slate-200 dark:border-slate-700 rounded-lg p-2">
-                                    {filteredClients.slice(0, 50).map((client) => (
+                                    {filteredSelectedClients.slice(0, 50).map((client) => (
                                         <label key={client.id} className="flex items-center gap-2 py-1 px-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded cursor-pointer">
                                             <input
                                                 type="checkbox"
@@ -479,8 +497,11 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
                                             )}
                                         </label>
                                     ))}
-                                    {filteredClients.length === 0 && (
-                                        <p className="text-xs text-slate-400 text-center py-2">No clients found</p>
+                                    {selectedClientItems.length === 0 && (
+                                        <p className="text-xs text-slate-400 text-center py-2">Use the search above to add clients</p>
+                                    )}
+                                    {selectedClientItems.length > 0 && filteredSelectedClients.length === 0 && (
+                                        <p className="text-xs text-slate-400 text-center py-2">No selected clients match your filter</p>
                                     )}
                                 </div>
                             </div>
@@ -610,7 +631,6 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
                             <button
                                 onClick={() => {
                                     setShowProductPicker(false);
-                                    setProductSearch('');
                                 }}
                                 className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                             >
@@ -618,33 +638,14 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
                             </button>
                         </div>
                         <div className="p-4 border-b border-slate-200 dark:border-slate-800">
-                            <div className="relative">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                <input
-                                    type="text"
-                                    value={productSearch}
-                                    onChange={(e) => setProductSearch(e.target.value)}
-                                    placeholder="Search products..."
-                                    className="w-full pl-9 pr-4 py-2 bg-slate-100 dark:bg-slate-800 border-0 rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-500"
-                                />
-                            </div>
+                            <ProductAutocomplete
+                                onSelect={handleAddProduct}
+                                autoFocus
+                                className="w-full"
+                            />
                         </div>
-                        <div className="flex-1 overflow-y-auto p-2">
-                            {filteredProducts.slice(0, 50).map((product) => (
-                                <button
-                                    key={product.id}
-                                    onClick={() => handleAddProduct(product)}
-                                    disabled={!!selectedProducts.find((sp) => sp.product.id === product.id)}
-                                    className="w-full text-left px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <div className="text-sm font-medium text-slate-900 dark:text-white">
-                                        {product.description}
-                                    </div>
-                                    <div className="text-xs text-slate-500 dark:text-slate-400">
-                                        {product.item_code} • {product.brand}
-                                    </div>
-                                </button>
-                            ))}
+                        <div className="flex-1 overflow-y-auto p-4 text-xs text-slate-500 dark:text-slate-400">
+                            Search by part number, item code, or description to add a product.
                         </div>
                     </div>
                 </div>
