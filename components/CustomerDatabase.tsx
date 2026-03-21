@@ -5,9 +5,11 @@ import { Contact } from '../types';
 import CustomerListSidebar from './CustomerListSidebar';
 import CustomerDetailPanel from './CustomerDetailPanel';
 import BulkAssignAgentModal from './BulkAssignAgentModal';
+import BulkSetPriceGroupModal from './BulkSetPriceGroupModal';
 import { Users, UserPlus, EyeOff, Tag, CheckSquare, X } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import AddContactModal from './AddContactModal';
+import { ACTIVE_PRICING_GROUP_OPTIONS } from '../constants/pricingGroups';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
 
@@ -30,6 +32,7 @@ const CustomerDatabase: React.FC = () => {
   // Selection State (Multi-select)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showAssignAgentModal, setShowAssignAgentModal] = useState(false);
+  const [showSetPriceGroupModal, setShowSetPriceGroupModal] = useState(false);
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
   const [showEditCustomerModal, setShowEditCustomerModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Contact | null>(null);
@@ -89,14 +92,17 @@ const CustomerDatabase: React.FC = () => {
     }
   };
 
-  const handleBulkSetPriceGroup = async () => {
-    const group = prompt("Enter Price Group (e.g. Retail, Wholesale, Distributor):");
-    if (!group || selectedIds.size === 0) return;
+  const handleBulkSetPriceGroup = async (priceGroup: string) => {
+    if (!priceGroup || selectedIds.size === 0) return;
+
+    const selectedOption = ACTIVE_PRICING_GROUP_OPTIONS.find((option) => option.value === priceGroup);
+    if (!selectedOption) return;
 
     try {
-      await bulkUpdateContacts(Array.from(selectedIds), { priceGroup: group });
-      toast.success(`Set price group to ${group} for ${selectedIds.size} customers`);
+      await bulkUpdateContacts(Array.from(selectedIds), { priceGroup });
+      toast.success(`Set price group to ${selectedOption.label} for ${selectedIds.size} customers`);
       reload();
+      setShowSetPriceGroupModal(false);
       setSelectedIds(new Set());
     } catch (e) {
       toast.error('Failed to set price group');
@@ -239,7 +245,7 @@ const CustomerDatabase: React.FC = () => {
               <button onClick={() => setShowAssignAgentModal(true)} className="p-2 hover:bg-slate-800 rounded-lg tooltip" title="Assign Agent">
                 <UserPlus className="w-4 h-4" />
               </button>
-              <button onClick={() => handleBulkSetPriceGroup()} className="p-2 hover:bg-slate-800 rounded-lg tooltip" title="Set Price Group">
+              <button onClick={() => setShowSetPriceGroupModal(true)} className="p-2 hover:bg-slate-800 rounded-lg tooltip" title="Set Price Group">
                 <Tag className="w-4 h-4" />
               </button>
               <button onClick={() => handleBulkHide(true)} className="p-2 hover:bg-slate-800 rounded-lg tooltip" title="Hide Customers">
@@ -258,6 +264,13 @@ const CustomerDatabase: React.FC = () => {
           isOpen={showAssignAgentModal}
           onClose={() => setShowAssignAgentModal(false)}
           onAssign={handleBulkAssignAgent}
+          selectedCount={selectedIds.size}
+        />
+
+        <BulkSetPriceGroupModal
+          isOpen={showSetPriceGroupModal}
+          onClose={() => setShowSetPriceGroupModal(false)}
+          onSubmit={handleBulkSetPriceGroup}
           selectedCount={selectedIds.size}
         />
       </main>

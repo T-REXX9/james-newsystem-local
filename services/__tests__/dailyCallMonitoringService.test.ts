@@ -98,7 +98,7 @@ describe('dailyCallMonitoringService', () => {
               province: 'Davao del Norte',
               contact_number: '',
               mode_of_payment: '30DAYS PDC',
-              dealer_price_group: 'VIP2',
+      dealer_price_group: 'gold',
               status_label: 'active',
             },
           ],
@@ -120,7 +120,7 @@ describe('dailyCallMonitoringService', () => {
       city: '',
       province: 'Davao del Norte',
       modeOfPayment: '30DAYS PDC',
-      dealerPriceGroup: 'VIP2',
+      dealerPriceGroup: 'gold',
     });
   });
 

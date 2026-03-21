@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Search, Filter, Eye, EyeOff, CheckSquare, Square, ChevronRight } from 'lucide-react';
 import { Contact, CustomerStatus } from '../types';
 import CompanyName from './CompanyName';
+import { normalizePriceGroup } from '../constants/pricingGroups';
 
 interface CustomerListSidebarProps {
     customers: Contact[];
@@ -175,7 +176,7 @@ const CustomerListSidebar: React.FC<CustomerListSidebarProps> = ({
                                                 </span>
                                                 {customer.priceGroup && (
                                                     <span className="px-1.5 py-0.5 rounded-[4px] text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                                                        {customer.priceGroup}
+                                                        {normalizePriceGroup(customer.priceGroup)}
                                                     </span>
                                                 )}
                                             </div>

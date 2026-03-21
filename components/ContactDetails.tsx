@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { createUpdatedContactDetails, updateContact } from '../services/supabaseService';
+import { normalizePriceGroup } from '../constants/pricingGroups';
 
 interface ContactDetailsProps {
   contact: Contact;
@@ -166,6 +167,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
     }))
     .sort((a, b) => parseInt(a.name) - parseInt(b.name)) 
     : [];
+  const normalizedPriceGroup = contact.priceGroup ? normalizePriceGroup(contact.priceGroup) : '';
 
   const tabs = [
     { id: 'Overview', label: 'Overview', icon: Layout },
@@ -255,7 +257,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
                           <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600"></span>
                           <span className="flex items-center gap-1.5 font-mono">TIN: {contact.tin || 'N/A'}</span>
                           <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600"></span>
-                          <span className="flex items-center gap-1.5 font-bold">Price Group: <span className="text-brand-blue">{contact.priceGroup || 'N/A'}</span></span>
+                          <span className="flex items-center gap-1.5 font-bold">Price Group: <span className="text-brand-blue">{normalizedPriceGroup || 'N/A'}</span></span>
                       </div>
                   </div>
               </div>

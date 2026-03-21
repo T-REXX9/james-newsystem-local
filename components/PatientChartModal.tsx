@@ -37,6 +37,7 @@ import ValidationSummary from './ValidationSummary';
 import { validateMinLength, validateRequired } from '../utils/formValidation';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
+import { normalizePriceGroup } from '../constants/pricingGroups';
 
 interface PatientChartModalProps {
     contact: Contact;
@@ -62,6 +63,7 @@ const PatientChartModal: React.FC<PatientChartModalProps> = ({
     const [metrics, setMetrics] = useState<any>(null);
     const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
     const [submitCount, setSubmitCount] = useState(0);
+    const normalizedPriceGroup = contact.priceGroup ? normalizePriceGroup(contact.priceGroup) : '';
 
     const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -401,7 +403,7 @@ const PatientChartModal: React.FC<PatientChartModalProps> = ({
                                         <div className="grid grid-cols-2 gap-4">
                                             <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-lg">
                                                 <div className="text-xs text-slate-500">Price Group</div>
-                                                <div className="font-bold text-slate-700 dark:text-slate-200">{contact.priceGroup || 'Standard'}</div>
+                                                <div className="font-bold text-slate-700 dark:text-slate-200">{normalizedPriceGroup || '—'}</div>
                                             </div>
                                             <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-lg">
                                                 <div className="text-xs text-slate-500">VAT Type</div>

@@ -46,8 +46,8 @@ describe('Sales Order local API integration', () => {
         delivery_address: 'Integration Address',
         reference_no: refNo,
         customer_reference: refNo,
-        price_group: 'VIP2',
-        terms: 'VIP2',
+    price_group: 'gold',
+    terms: 'gold',
         terms_condition: 'LBC COD',
         status: 'Pending',
         items: [

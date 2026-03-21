@@ -1,4 +1,5 @@
 import { DEFAULT_CUSTOMER_VAT_TYPE } from '../constants/customerVat';
+import { normalizePriceGroup } from '../constants/pricingGroups';
 import { Contact, ContactPerson, CustomerStatus, CustomerVatType, DealStage, UserProfile } from '../types';
 import { getLocalAuthSession } from './localAuthService';
 
@@ -49,6 +50,7 @@ interface ApiCustomerRow {
   delivery_address?: string | null;
   tin?: string | null;
   price_group?: string | null;
+  pricing_tier?: string | null;
   business_line?: string | null;
   terms?: string | null;
   transaction_type?: string | null;
@@ -101,6 +103,27 @@ interface ApiCustomerMetricsRow {
 
 interface ApiCustomerMetricsResponse {
   data?: ApiCustomerMetricsRow;
+}
+
+interface ApiCustomerTermsRow {
+  id?: string | number | null;
+  lid?: string | number | null;
+  since?: string | null;
+  lsince?: string | null;
+  class_code?: string | null;
+  lclasscode?: string | null;
+  quota?: string | number | null;
+  lquota?: string | number | null;
+  terms?: string | number | null;
+  lterms?: string | number | null;
+  status?: string | null;
+  lstatus?: string | null;
+}
+
+interface ApiCustomerTermsResponse {
+  data?: {
+    items?: ApiCustomerTermsRow[];
+  };
 }
 
 type ContactPayloadWithSalesPersonId = Partial<Contact> & {
@@ -216,7 +239,7 @@ const mapApiCustomerToContact = (row: ApiCustomerRow): LocalContact => {
     area: String(row?.area || ''),
     deliveryAddress: String(row?.delivery_address || row?.address || ''),
     tin: String(row?.tin || ''),
-    priceGroup: String(row?.price_group || ''),
+    priceGroup: row?.pricing_tier ? String(row.pricing_tier) : normalizePriceGroup(row?.price_group || ''),
     businessLine: String(row?.business_line || ''),
     terms: String(row?.terms || ''),
     transactionType: String(row?.transaction_type || ''),
@@ -623,5 +646,29 @@ export const fetchCustomerMetrics = async (contactId: string): Promise<Record<st
   } catch (err) {
     console.error('Error fetching customer metrics via local API:', err);
     return null;
+  }
+};
+
+export const fetchCustomerTerms = async (sessionId: string): Promise<Array<Record<string, unknown>>> => {
+  try {
+    const query = new URLSearchParams({
+      main_id: String(API_MAIN_ID),
+    });
+    const payload = await requestJson<ApiCustomerTermsResponse>(
+      `${API_BASE_URL}/customer-database/${encodeURIComponent(String(sessionId))}/terms?${query.toString()}`
+    );
+    const rows = Array.isArray(payload?.data?.items) ? payload.data.items : [];
+
+    return rows.map((row: ApiCustomerTermsRow, index: number) => ({
+      id: String(row?.id ?? row?.lid ?? `term-${index}`),
+      since: String(row?.since || row?.lsince || ''),
+      classCode: String(row?.class_code || row?.lclasscode || ''),
+      quota: toNumber(row?.quota ?? row?.lquota, 0),
+      terms: String(row?.terms ?? row?.lterms ?? ''),
+      status: String(row?.status || row?.lstatus || ''),
+    }));
+  } catch (err) {
+    console.error('Error fetching customer terms via local API:', err);
+    return [];
   }
 };

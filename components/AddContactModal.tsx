@@ -4,6 +4,7 @@ import { CustomerStatus, DealStage, Contact, ContactPerson } from '../types';
 import ValidationSummary from './ValidationSummary';
 import FieldHelp from './FieldHelp';
 import { CUSTOMER_VAT_TYPES, DEFAULT_CUSTOMER_VAT_TYPE } from '../constants/customerVat';
+import { WRITABLE_PRICING_GROUP_OPTIONS, normalizePriceGroupToInternalKey } from '../constants/pricingGroups';
 import { validateOptionalEmail, validateOptionalPhone, validateRequired } from '../utils/formValidation';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
@@ -72,7 +73,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     deliveryAddress: '',
     area: '',
     tin: '',
-    priceGroup: 'AA',
+    priceGroup: 'regular',
     businessLine: '',
     terms: '',
     transactionType: '',
@@ -110,7 +111,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     deliveryAddress: contact?.deliveryAddress || '',
     area: contact?.area || '',
     tin: contact?.tin || '',
-    priceGroup: contact?.priceGroup || 'AA',
+    priceGroup: normalizePriceGroupToInternalKey(contact?.priceGroup),
     businessLine: contact?.businessLine || '',
     terms: contact?.terms || '',
     transactionType: contact?.transactionType || '',
@@ -227,7 +228,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
 
         // Financial / Legal
         tin: formData.tin || '',
-        priceGroup: formData.priceGroup || 'AA',
+        priceGroup: formData.priceGroup || 'regular',
         businessLine: formData.businessLine || '',
         terms: formData.terms || '',
         transactionType: formData.transactionType || '',
@@ -438,8 +439,11 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                       <div>
                           <label className="label">Price Group</label>
                           <select className="input" value={formData.priceGroup} onChange={e => setFormData({...formData, priceGroup: e.target.value})}>
-                              <option value="AA">AA</option><option value="BB">BB</option><option value="CC">CC</option>
-                              <option value="DD">DD</option><option value="VIP1">VIP1</option><option value="VIP2">VIP2</option>
+                              {WRITABLE_PRICING_GROUP_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
                           </select>
                       </div>
                       <div>

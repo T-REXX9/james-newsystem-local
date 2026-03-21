@@ -22,6 +22,7 @@ interface SelectedProduct {
     promo_price_dd?: number;
     promo_price_vip1?: number;
     promo_price_vip2?: number;
+    promo_price_platinum?: number;
 }
 
 const extractArrayPayload = <T,>(payload: any): T[] => {
@@ -147,6 +148,7 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
                     promo_price_dd: product.price_dd,
                     promo_price_vip1: product.price_vip1,
                     promo_price_vip2: product.price_vip2,
+                    promo_price_platinum: undefined,
                 },
             ]);
         }
@@ -210,6 +212,7 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
                         promo_price_dd: sp.promo_price_dd,
                         promo_price_vip1: sp.promo_price_vip1,
                         promo_price_vip2: sp.promo_price_vip2,
+                        promo_price_platinum: sp.promo_price_platinum,
                     })),
                 },
                 currentUser?.id || ''
@@ -345,8 +348,9 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
                                                 Remove
                                             </button>
                                         </div>
+                                        {/* bb/cc/dd: legacy-only fields; platinum: new top tier */}
                                         <div className="grid grid-cols-6 gap-2">
-                                            {(['promo_price_aa', 'promo_price_bb', 'promo_price_cc', 'promo_price_dd', 'promo_price_vip1', 'promo_price_vip2'] as const).map((tier) => (
+                                            {(['promo_price_aa', 'promo_price_bb', 'promo_price_cc', 'promo_price_dd', 'promo_price_vip1', 'promo_price_vip2', 'promo_price_platinum'] as const).map((tier) => (
                                                 <div key={tier}>
                                                     <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">
                                                         {tier.replace('promo_price_', '').toUpperCase()}

@@ -34,6 +34,10 @@ import { useToast } from './ToastProvider';
 import ValidationSummary from './ValidationSummary';
 import { validateNumeric, validateRequired } from '../utils/formValidation';
 import { parseSupabaseError } from '../utils/errorHandler';
+import {
+  normalizePriceGroup,
+  WRITABLE_PRICING_GROUP_OPTIONS,
+} from '../constants/pricingGroups';
 
 interface InquiryItemRow extends Omit<SalesInquiryItem, 'id' | 'inquiry_id'> {
   brand?: string;
@@ -310,6 +314,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   const loadInquiryIntoForm = useCallback((inquiry: SalesInquiry) => {
     const customer = customerMap.get(inquiry.contact_id) || null;
     const normalizedSalesDate = (inquiry.sales_date || '').split('T')[0];
+    const rawPriceGroup = inquiry.price_group || customer?.priceGroup || '';
     setInquiryNo((prev) => inquiry.inquiry_no || prev);
 
     const mappedItems: InquiryItemRow[] = (inquiry.items || []).map((item) => {
@@ -329,7 +334,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     setCustomerReference(inquiry.customer_reference || '');
     setSendBy(inquiry.send_by || '');
     setPoNumber(inquiry.po_number || '');
-    setPriceGroup(inquiry.price_group || customer?.priceGroup || '');
+    setPriceGroup(rawPriceGroup);
     setCreditLimit(Number.isFinite(inquiry.credit_limit) ? inquiry.credit_limit : (customer?.creditLimit || 0));
     setTerms(inquiry.terms || customer?.terms || '');
     setPromiseToPay(inquiry.promise_to_pay || customer?.dealershipTerms || '');
@@ -354,7 +359,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
       customerReference: inquiry.customer_reference || '',
       sendBy: inquiry.send_by || '',
       poNumber: inquiry.po_number || '',
-      priceGroup: inquiry.price_group || '',
+      priceGroup: rawPriceGroup,
       creditLimit: inquiry.credit_limit || 0,
       terms: inquiry.terms || '',
       promiseToPay: inquiry.promise_to_pay || '',
@@ -701,6 +706,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   const activeInquiryNumber = !isCreatingNew && selectedInquiry?.inquiry_no ? selectedInquiry.inquiry_no : inquiryNo;
   const activeInquiryNumberDisplay = formatInquiryDisplayNo(activeInquiryNumber);
   const isReadOnly = selectedInquiry?.status === SalesInquiryStatus.CANCELLED;
+  const priceGroupDisplay = normalizePriceGroup(priceGroup);
   const canFinalizeInquiry = Boolean(selectedInquiry && !isCreatingNew && selectedInquiry.status === SalesInquiryStatus.DRAFT);
   const canConvertInquiry = Boolean(selectedInquiry && !isCreatingNew && selectedInquiry.status === SalesInquiryStatus.APPROVED);
   const canOpenConvertedOrder = false;
@@ -1013,15 +1019,28 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                   <tr>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Price Group:</td>
                     <td>
-                      <select disabled={isReadOnly} value={priceGroup} onChange={(e) => setPriceGroup(e.target.value)} className={`w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}`}>
-                        <option value="">—</option>
-                        <option value="AA">AA</option>
-                        <option value="BB">BB</option>
-                        <option value="CC">CC</option>
-                        <option value="DD">DD</option>
-                        <option value="VIP1">VIP1</option>
-                        <option value="VIP2">VIP2</option>
-                      </select>
+                      {isReadOnly ? (
+                        <input
+                          type="text"
+                          readOnly
+                          value={priceGroupDisplay}
+                          className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm"
+                        />
+                      ) : (
+                        <select
+                          disabled={isReadOnly}
+                          value={priceGroup}
+                          onChange={(e) => setPriceGroup(e.target.value)}
+                          className={`w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}`}
+                        >
+                          <option value="">—</option>
+                          {WRITABLE_PRICING_GROUP_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </td>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Credit Limit:</td>
                     <td>

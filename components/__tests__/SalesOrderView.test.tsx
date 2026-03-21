@@ -72,7 +72,7 @@ describe('SalesOrderView', () => {
       reference_no: 'REF-1',
       customer_reference: 'REF-1',
       send_by: '',
-      price_group: 'VIP2',
+    price_group: 'gold',
       credit_limit: 0,
       terms: 'VIP2',
       promise_to_pay: '',

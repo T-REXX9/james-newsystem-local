@@ -26,6 +26,7 @@ import ValidationSummary from './ValidationSummary';
 import { validateMinLength, validateRequired } from '../utils/formValidation';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
+import { normalizePriceGroup } from '../constants/pricingGroups';
 
 interface CustomerProfileModalProps {
   contact: Contact;
@@ -170,13 +171,7 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({ contact, cu
   }, [visibleTimeline.length]);
 
   const rtoCount = salesReturns.length;
-  const vipTier = (contact.priceGroup || '').toUpperCase().includes('VIP')
-    ? contact.priceGroup
-    : (contact.totalSales || 0) >= 500000
-      ? 'VIP 2'
-      : (contact.totalSales || 0) >= 250000
-        ? 'VIP 1'
-        : 'STANDARD';
+  const normalizedPriceGroup = contact.priceGroup ? normalizePriceGroup(contact.priceGroup) : '';
   const currency = metrics?.currency || 'PHP';
   const outstandingBalance = metrics?.outstanding_balance || 0;
   const creditLimit = contact.creditLimit || metrics?.credit_limit || 0;
@@ -281,7 +276,7 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({ contact, cu
               </span>
             )}
             <span className="rounded-full bg-brand-blue/10 px-2 py-1 text-[11px] font-bold text-brand-blue">
-              {vipTier}
+              {normalizedPriceGroup || '—'}
             </span>
           </div>
 
@@ -496,7 +491,7 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({ contact, cu
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="rounded-lg bg-slate-50 p-2 dark:bg-slate-800">
                       <p className="text-slate-500">Price Group</p>
-                      <p className="font-semibold text-slate-800 dark:text-slate-100">{contact.priceGroup || 'Standard'}</p>
+                      <p className="font-semibold text-slate-800 dark:text-slate-100">{normalizedPriceGroup || '—'}</p>
                     </div>
                     <div className="rounded-lg bg-slate-50 p-2 dark:bg-slate-800">
                       <p className="text-slate-500">VAT Type</p>

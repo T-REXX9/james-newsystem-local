@@ -625,6 +625,7 @@ export async function extendPromotion(
         promo_price_dd?: number;
         promo_price_vip1?: number;
         promo_price_vip2?: number;
+        promo_price_platinum?: number;
     }>
 ): Promise<Promotion | null> {
     try {
@@ -633,6 +634,7 @@ export async function extendPromotion(
             {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                // Note: promo_price_bb/cc/dd retained for legacy compatibility only; prefer aa/vip1/vip2/platinum
                 body: JSON.stringify({
                     end_date: newEndDate,
                     price_updates: priceUpdates || [],
@@ -749,6 +751,7 @@ export async function addPromotionProducts(
         promo_price_dd?: number;
         promo_price_vip1?: number;
         promo_price_vip2?: number;
+        promo_price_platinum?: number;
     }>
 ): Promise<boolean> {
     try {
@@ -757,6 +760,7 @@ export async function addPromotionProducts(
             {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                // Note: promo_price_bb/cc/dd retained for legacy compatibility only; prefer aa/vip1/vip2/platinum
                 body: JSON.stringify({ products }),
             }
         );

@@ -30,7 +30,7 @@ vi.mock('../../hooks/useRealtimeList', () => ({
         company: 'Acme Corp',
         deliveryAddress: '123 Main St',
         salesman: 'Jane Doe',
-        priceGroup: 'AA',
+  priceGroup: 'regular',
         creditLimit: 10000,
         terms: '30 days',
         comment: 'Priority',

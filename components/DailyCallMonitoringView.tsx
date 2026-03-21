@@ -415,6 +415,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const masterScrollRef = useRef<HTMLDivElement | null>(null);
   const selectionInitializedRef = useRef(false);
   const pendingFilterSnapshotRef = useRef<{ scrollTop: number; selectedClientId: string | null } | null>(null);
+  const isFetchingSnapshotRef = useRef(false);
+  const snapshotAbortControllerRef = useRef<AbortController | null>(null);
 
   const handleOpenSalesInquiry = useCallback((contactId?: string) => {
     const targetContactId = contactId || selectedClientId || undefined;
@@ -458,9 +460,16 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
   const loadAgentData = useCallback(async () => {
     if (!agentDataName || !isSalesAgent) return;
+    if (isFetchingSnapshotRef.current) return;
+    isFetchingSnapshotRef.current = true;
+
+    snapshotAbortControllerRef.current?.abort();
+    const controller = new AbortController();
+    snapshotAbortControllerRef.current = controller;
+
     setLoading(true);
     try {
-      const snapshot = await fetchAgentSnapshotForDailyCall(currentUser?.id || '');
+      const snapshot = await fetchAgentSnapshotForDailyCall(currentUser?.id || '', { signal: controller.signal });
       const teamScopedContacts = snapshot.contacts.map(toContactModel);
 
       setContacts(teamScopedContacts);
@@ -471,9 +480,11 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       setLoadError(null);
       setHasLoadedData(true);
     } catch (error) {
+      if ((error as Error).name === 'AbortError') return;
       console.error('Error loading daily call monitoring data', error);
       setLoadError('Call activity could not be loaded. Please try again.');
     } finally {
+      isFetchingSnapshotRef.current = false;
       setLoading(false);
     }
   }, [agentDataName, currentUser?.id, isSalesAgent]);
@@ -487,9 +498,17 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   }, [agentDataName, isSalesAgent, loadAgentData]);
 
   useEffect(() => {
+    return () => {
+      snapshotAbortControllerRef.current?.abort();
+      snapshotAbortControllerRef.current = null;
+      isFetchingSnapshotRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!agentDataName || !isSalesAgent) return;
     const unsubscribe = subscribeToDailyCallMonitoringUpdates({
-      onUpdate: loadAgentData,
+      onUpdate: () => { /* polling disabled — snapshot is loaded once on mount */ },
     });
     return () => {
       unsubscribe();

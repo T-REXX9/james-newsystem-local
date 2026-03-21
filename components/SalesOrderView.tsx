@@ -24,6 +24,7 @@ import { dispatchWorkflowNotification, fetchProfiles } from '../services/supabas
 import StatusBadge from './StatusBadge';
 import WorkflowStepper from './WorkflowStepper';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
+import { normalizePriceGroup } from '../constants/pricingGroups';
 
 interface SalesOrderViewProps {
   initialOrderId?: string;
@@ -288,6 +289,9 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
 
   const selectedCustomer = selectedOrder ? customerMap.get(selectedOrder.contact_id) : null;
   const selectedCustomerLabel = selectedOrder ? getCustomerLabel(selectedOrder, selectedCustomer) : '-';
+  const selectedOrderPriceGroupDisplay = normalizePriceGroup(
+    selectedOrder?.price_group || selectedCustomer?.priceGroup || ''
+  );
   const documentSuggestion = selectedCustomer?.transactionType || 'Invoice';
 
   useEffect(() => {
@@ -753,7 +757,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
                     </tr>
                     <tr>
                       <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Price Group:</td>
-                      <td><input readOnly value={selectedOrder.price_group || selectedCustomer?.priceGroup || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                      <td><input readOnly value={selectedOrderPriceGroupDisplay} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
                       <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Credit Limit:</td>
                       <td><input readOnly value={formatCurrency(selectedOrder.credit_limit || selectedCustomer?.creditLimit || 0)} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
                       <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Terms Strictly:</td>

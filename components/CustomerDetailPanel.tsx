@@ -1,13 +1,14 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Building2, User, Phone, Mail, MapPin, Calendar, CreditCard,
     TrendingUp, AlertCircle, ShoppingBag, MessageSquare, RotateCcw,
     FileText, DollarSign, Activity, Clock, UserCog, Save, X as XIcon, Pencil
 } from 'lucide-react';
 import { Contact, CustomerStatus, UserProfile } from '../types';
-import { fetchContactTransactions, fetchCustomerMetrics, fetchSalesAgents, updateContact, fetchUpdatedContactDetails } from '../services/customerDatabaseLocalApiService';
+import { fetchContactTransactions, fetchCustomerMetrics, fetchCustomerTerms, fetchSalesAgents, updateContact, fetchUpdatedContactDetails } from '../services/customerDatabaseLocalApiService';
 import CompanyName from './CompanyName';
 import { toast } from 'sonner';
+import { normalizePriceGroup } from '../constants/pricingGroups';
 
 interface CustomerDetailPanelProps {
     contactId: string;
@@ -15,6 +16,15 @@ interface CustomerDetailPanelProps {
     onClose: () => void;
     onUpdate: (updated: Contact) => void;
     onEditContact?: (contact: Contact) => void;
+}
+
+interface CustomerTermsRow {
+    id: string;
+    since: string;
+    classCode: string;
+    quota: number;
+    terms: string;
+    status?: string;
 }
 
 // Transaction Icon Helper
@@ -36,9 +46,10 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     onUpdate,
     onEditContact
 }) => {
-    const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'inquiries' | 'financials' | 'profile'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'inquiries' | 'returns' | 'financials' | 'profile'>('overview');
     const [transactions, setTransactions] = useState<any[]>([]);
     const [metrics, setMetrics] = useState<any>(null);
+    const [terms, setTerms] = useState<CustomerTermsRow[]>([]);
     const [loading, setLoading] = useState(false);
     const [contact, setContact] = useState<Contact | undefined>(initialData);
     const [salesAgents, setSalesAgents] = useState<UserProfile[]>([]);
@@ -60,14 +71,16 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
         const loadData = async () => {
             setLoading(true);
             try {
-                const [txs, mets, agents, updates] = await Promise.all([
+                const [txs, mets, customerTerms, agents, updates] = await Promise.all([
                     fetchContactTransactions(contactId),
                     fetchCustomerMetrics(contactId),
+                    fetchCustomerTerms(contactId),
                     fetchSalesAgents(),
                     fetchUpdatedContactDetails(contactId)
                 ]);
                 setTransactions(txs);
                 setMetrics(mets);
+                setTerms(customerTerms as CustomerTermsRow[]);
                 setSalesAgents(agents);
                 const pending = (updates || []).filter((u: any) => u.approval_status === 'pending');
                 setPendingUpdates(pending);
@@ -112,6 +125,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     const Initials = contact.company
         ? contact.company.substring(0, 2).toUpperCase()
         : contact.name ? contact.name.substring(0, 2).toUpperCase() : '??';
+    const normalizedPriceGroup = contact.priceGroup ? normalizePriceGroup(contact.priceGroup) : '';
 
     return (
         <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950 overflow-hidden animate-fadeIn">
@@ -163,7 +177,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                 {contact.status}
                             </span>
                             <span className="px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">
-                                {contact.priceGroup || 'No Group'}
+                                {normalizedPriceGroup || 'No Group'}
                             </span>
                         </div>
                         {onEditContact && (
@@ -415,6 +429,32 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                         </div>
 
                         <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                            <h3 className="font-bold text-slate-800 dark:text-white mb-6 border-b pb-2">Address &amp; Location</h3>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-400 uppercase">Address</label>
+                                    <div className="mt-1">{contact.address || '-'}</div>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-400 uppercase">Delivery Address</label>
+                                    <div className="mt-1">{contact.deliveryAddress || '-'}</div>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-400 uppercase">Area</label>
+                                    <div className="mt-1">{contact.area || '-'}</div>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-400 uppercase">City</label>
+                                    <div className="mt-1">{contact.city || '-'}</div>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-400 uppercase">Province</label>
+                                    <div className="mt-1">{contact.province || '-'}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                             <h3 className="font-bold text-slate-800 dark:text-white mb-6 border-b pb-2">Business Details</h3>
                             <div className="space-y-4">
                                 <div>
@@ -426,10 +466,106 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                     <div className="mt-1">{contact.businessLine || '-'}</div>
                                 </div>
                                 <div>
+                                    <label className="text-xs font-bold text-slate-400 uppercase">Transaction Type</label>
+                                    <div className="mt-1">{contact.transactionType || '-'}</div>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-400 uppercase">VAT Type</label>
+                                    <div className="mt-1">{contact.vatType || '-'}</div>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-400 uppercase">Terms</label>
+                                    <div className="mt-1">{contact.terms || '-'}</div>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-400 uppercase">Debt Type</label>
+                                    <div className="mt-1">{contact.debtType || '-'}</div>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-400 uppercase">Price Group</label>
+                                    <div className="mt-1">{normalizedPriceGroup || '-'}</div>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-400 uppercase">Customer Since</label>
+                                    <div className="mt-1">{contact.customerSince || '-'}</div>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-400 uppercase">Refer By</label>
+                                    <div className="mt-1">{contact.referBy || '-'}</div>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-400 uppercase">Notes / Comment</label>
+                                    <div className="mt-1 whitespace-pre-wrap">{contact.comment || '-'}</div>
+                                </div>
+                                <div>
                                     <label className="text-xs font-bold text-slate-400 uppercase">Credit Limit</label>
                                     <div className="font-mono font-bold text-brand-blue mt-1">₱{(contact.creditLimit || 0).toLocaleString()}</div>
                                 </div>
                             </div>
+                        </div>
+
+                        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden md:col-span-2">
+                            <div className="p-6 border-b border-slate-200 dark:border-slate-800">
+                                <h3 className="font-bold text-slate-800 dark:text-white">Contact Persons</h3>
+                            </div>
+                            {contact.contactPersons?.length ? (
+                                <table className="w-full text-left border-collapse">
+                                    <thead className="bg-slate-50 dark:bg-slate-800 text-xs uppercase font-bold text-slate-500">
+                                        <tr>
+                                            <th className="p-4">Name</th>
+                                            <th className="p-4">Mobile</th>
+                                            <th className="p-4">Phone</th>
+                                            <th className="p-4">Email</th>
+                                            <th className="p-4">Position</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                        {contact.contactPersons.map((cp) => (
+                                            <tr key={cp.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                                <td className="p-4 text-sm font-medium text-slate-800 dark:text-slate-200">{cp.name || '-'}</td>
+                                                <td className="p-4 text-sm text-slate-600 dark:text-slate-400">{cp.mobile || '-'}</td>
+                                                <td className="p-4 text-sm text-slate-600 dark:text-slate-400">{cp.telephone || '-'}</td>
+                                                <td className="p-4 text-sm text-slate-600 dark:text-slate-400">{cp.email || '-'}</td>
+                                                <td className="p-4 text-sm text-slate-600 dark:text-slate-400">{cp.position || '-'}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            ) : (
+                                <div className="p-6 text-sm italic text-slate-400">No contact persons available.</div>
+                            )}
+                        </div>
+
+                        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden md:col-span-2">
+                            <div className="p-6 border-b border-slate-200 dark:border-slate-800">
+                                <h3 className="font-bold text-slate-800 dark:text-white">Terms Log</h3>
+                            </div>
+                            {terms.length ? (
+                                <table className="w-full text-left border-collapse">
+                                    <thead className="bg-slate-50 dark:bg-slate-800 text-xs uppercase font-bold text-slate-500">
+                                        <tr>
+                                            <th className="p-4">#</th>
+                                            <th className="p-4">Since</th>
+                                            <th className="p-4">Class Code</th>
+                                            <th className="p-4">Quota</th>
+                                            <th className="p-4">Terms</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                        {terms.map((term, index) => (
+                                            <tr key={term.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                                <td className="p-4 text-sm text-slate-600 dark:text-slate-400">{index + 1}</td>
+                                                <td className="p-4 text-sm text-slate-600 dark:text-slate-400">{term.since || '-'}</td>
+                                                <td className="p-4 text-sm text-slate-600 dark:text-slate-400">{term.classCode || '-'}</td>
+                                                <td className="p-4 text-sm text-slate-600 dark:text-slate-400">{term.quota ? `₱${term.quota.toLocaleString()}` : '-'}</td>
+                                                <td className="p-4 text-sm text-slate-600 dark:text-slate-400">{term.terms || '-'}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            ) : (
+                                <div className="p-6 text-sm italic text-slate-400">No terms history available.</div>
+                            )}
                         </div>
 
                         {/* Sales Agent Assignment Card */}
@@ -500,6 +636,14 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                 </div>
                             )}
                         </div>
+                    </div>
+                )}
+
+                {!loading && activeTab === 'returns' && (
+                    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-8 text-center">
+                        <RotateCcw className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+                        <h3 className="text-lg font-bold text-slate-700">Returns</h3>
+                        <p className="text-slate-400">Returns data is not available in this panel yet.</p>
                     </div>
                 )}
 

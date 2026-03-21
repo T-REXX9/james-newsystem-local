@@ -22,6 +22,7 @@ import { isOrderSlipAllowedForTransactionType, syncDocumentPolicyState } from '.
 import { Contact, OrderSlip, OrderSlipStatus } from '../types';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 import { getLocalAuthSession } from '../services/localAuthService';
+import { normalizePriceGroup } from '../constants/pricingGroups';
 
 interface OrderSlipViewProps {
   initialSlipId?: string;
@@ -188,6 +189,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
 
   const selectedCustomer = selectedSlip ? customerMap.get(selectedSlip.contact_id) : null;
   const selectedCustomerLabel = selectedCustomer?.company || selectedSlip?.contact_id || '-';
+  const selectedSlipPriceGroupDisplay = normalizePriceGroup(selectedSlip?.price_group || '');
   const canProcessOrderSlip = isOrderSlipAllowedForTransactionType(selectedCustomer?.transactionType);
 
   useEffect(() => {
@@ -539,7 +541,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                   </tr>
                   <tr>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Price Group:</td>
-                    <td><input readOnly value={selectedSlip.price_group || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                    <td><input readOnly value={selectedSlipPriceGroupDisplay} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Credit Limit:</td>
                     <td><input readOnly value={formatCurrency(selectedSlip.credit_limit || 0)} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Terms Strictly:</td>

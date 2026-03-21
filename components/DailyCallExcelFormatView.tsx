@@ -8,6 +8,7 @@ import {
 import { DailyCallCustomerFilterStatus, DailyCallCustomerRow, UserProfile } from '../types';
 import { useToast } from './ToastProvider';
 import DailyCallCustomerDetailModal from './DailyCallCustomerDetailModal';
+import { isKnownPriceGroup, normalizePriceGroup } from '../constants/pricingGroups';
 
 interface DailyCallExcelFormatViewProps {
   currentUser: UserProfile | null;
@@ -33,23 +34,21 @@ const toCurrency = (value: number) =>
 const toShortK = (value: number) => `${Math.round((value || 0) / 1000)}k`;
 
 const resolveDealerPriceTier = (row: DailyCallCustomerRow) => {
-  const raw = String(row.dealerPriceGroup || '').trim().toLowerCase();
-  if (raw.includes('gold') || raw === 'vip3') return 'gold';
-  if (raw.includes('silver') || raw === 'vip2') return 'silver';
-  if (raw.includes('regular') || raw === 'vip1') return 'regular';
-  if (row.monthlyOrder >= 30000) return 'gold';
-  if (row.monthlyOrder >= 10000) return 'silver';
-  return 'regular';
+  const raw = String(row.dealerPriceGroup || '');
+  if (isKnownPriceGroup(raw)) return normalizePriceGroup(raw);
+  if (row.monthlyOrder >= 30000) return 'Gold';
+  if (row.monthlyOrder >= 10000) return 'Silver';
+  return 'Regular';
 };
 
-const vipTargetLabel = (monthlySales: number) => {
+const pricingTargetLabel = (monthlySales: number) => {
   if (monthlySales >= 30000) {
-    return 'gold';
+    return 'Gold';
   }
   if (monthlySales >= 10000) {
-    return `-${toShortK(30000 - monthlySales)}/gold`;
+    return `-${toShortK(30000 - monthlySales)}/Gold`;
   }
-  return `-${toShortK(10000 - monthlySales)}/silver`;
+  return `-${toShortK(10000 - monthlySales)}/Silver`;
 };
 
 const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ currentUser }) => {
@@ -250,7 +249,7 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
                   <th className="px-1.5 py-1.5 text-left font-semibold text-slate-600">STATUS</th>
                   <th className="px-1.5 py-1.5 text-right font-semibold text-slate-600">AVG</th>
                   <th className="px-1.5 py-1.5 text-right font-semibold text-slate-600">CURRENT</th>
-                  <th className="px-1.5 py-1.5 text-left font-semibold text-slate-600">VIP</th>
+                  <th className="px-1.5 py-1.5 text-left font-semibold text-slate-600">PRICING</th>
                   <th className="px-1.5 py-1.5 text-left font-semibold text-slate-600">TERMS</th>
                   <th className="px-1.5 py-1.5 text-right font-semibold text-slate-600">BAL</th>
                 </tr>
@@ -291,7 +290,7 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
                         <div className="text-[9px] text-slate-500 truncate" title={row.assignedDate || '—'}>{row.assignedDate || '—'}</div>
                       </td>
                       <td className="px-1.5 py-1.5 text-slate-600">
-                        <div className="font-medium text-slate-700 dark:text-slate-200 capitalize truncate">{dealerPriceTier}</div>
+                        <div className="font-medium text-slate-700 dark:text-slate-200 truncate">{dealerPriceTier}</div>
                         <div className="text-[9px] text-slate-500 truncate" title={row.dealerPriceDate || row.ishinomotoDealerSince || '—'}>{row.dealerPriceDate || row.ishinomotoDealerSince || '—'}</div>
                       </td>
                       <td className="px-1.5 py-1.5 text-slate-600">
@@ -300,7 +299,7 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
                       </td>
                       <td className="px-1.5 py-1.5 text-right text-slate-700 truncate" title={toCurrency(row.averageMonthlyOrder)}>{toCurrency(row.averageMonthlyOrder)}</td>
                       <td className="px-1.5 py-1.5 text-right font-semibold text-slate-900 dark:text-white truncate" title={toCurrency(row.monthlyOrder)}>{toCurrency(row.monthlyOrder)}</td>
-                      <td className="px-1.5 py-1.5 text-slate-700 font-semibold lowercase truncate" title={vipTargetLabel(row.monthlyOrder)}>{vipTargetLabel(row.monthlyOrder)}</td>
+                      <td className="px-1.5 py-1.5 text-slate-700 font-semibold truncate" title={pricingTargetLabel(row.monthlyOrder)}>{pricingTargetLabel(row.monthlyOrder)}</td>
                       <td className="px-1.5 py-1.5 text-slate-600 truncate" title={terms}>{terms}</td>
                       <td className="px-1.5 py-1.5 text-right text-slate-700 truncate" title={toCurrency(row.outstandingBalance)}>{toCurrency(row.outstandingBalance)}</td>
                     </tr>

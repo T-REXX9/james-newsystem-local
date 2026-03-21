@@ -421,14 +421,15 @@ export const fetchCustomersForDailyCall = async (
 };
 
 export const fetchAgentSnapshotForDailyCall = async (
-  viewerUserId: string | number
+  viewerUserId: string | number,
+  options?: { signal?: AbortSignal }
 ): Promise<DailyCallAgentSnapshot> => {
   const mainId = resolveMainId();
   const params = new URLSearchParams({
     main_id: String(mainId),
     viewer_user_id: String(viewerUserId),
   });
-  const payload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/agent-snapshot?${params.toString()}`);
+  const payload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/agent-snapshot?${params.toString()}`, { signal: options?.signal });
   const data = payload?.data || {};
 
   return {
