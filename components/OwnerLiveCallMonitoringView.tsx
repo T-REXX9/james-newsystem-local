@@ -1931,6 +1931,7 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
                       className="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700"
                       onClick={() => {
                         setActiveReport(report);
+                        setShowQueueDialog(false);
                         setShowReportDialog(true);
                       }}
                     >

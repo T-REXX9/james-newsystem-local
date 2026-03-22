@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   Printer,
   Loader2,
@@ -10,6 +10,8 @@ import {
   Calendar,
   Search,
   Package,
+  ChevronDown,
+  Check,
 } from 'lucide-react';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
 import {
@@ -44,6 +46,116 @@ const WAREHOUSE_LABELS: Record<string, string> = {
   WH4: 'Warehouse 4',
   WH5: 'Warehouse 5',
   WH6: 'Warehouse 6',
+};
+
+interface SearchableFilterSelectProps {
+  label: string;
+  value?: string;
+  options: string[];
+  placeholder: string;
+  allLabel?: string;
+  onChange: (value: string | undefined) => void;
+}
+
+const SearchableFilterSelect: React.FC<SearchableFilterSelectProps> = ({
+  label,
+  value,
+  options,
+  placeholder,
+  allLabel = 'All',
+  onChange,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setQuery('');
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [isOpen]);
+
+  const filteredOptions = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return options;
+    return options.filter((option) => option.toLowerCase().includes(needle));
+  }, [options, query]);
+
+  return (
+    <div ref={containerRef} className="relative min-w-[220px]">
+      <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">{label}</label>
+      <button
+        type="button"
+        onClick={() => setIsOpen((open) => !open)}
+        className="flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-100 px-3 text-left text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-blue dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+      >
+        <span className="truncate">{value || allLabel}</span>
+        <ChevronDown className={`h-4 w-4 shrink-0 text-slate-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 top-[calc(100%+0.5rem)] z-20 w-full rounded-xl border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={placeholder}
+              className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-brand-blue dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              autoFocus
+            />
+          </div>
+
+          <div className="mt-2 max-h-56 overflow-y-auto rounded-lg border border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => {
+                onChange(undefined);
+                setIsOpen(false);
+              }}
+              className="flex w-full items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <span className="truncate">{allLabel}</span>
+              {!value && <Check className="h-4 w-4 shrink-0 text-brand-blue" />}
+            </button>
+
+            {filteredOptions.length === 0 ? (
+              <p className="px-3 py-4 text-sm text-slate-500 dark:text-slate-400">No matches found.</p>
+            ) : (
+              filteredOptions.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => {
+                    onChange(option);
+                    setIsOpen(false);
+                  }}
+                  className="flex w-full items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 text-left text-sm text-slate-700 last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  <span className="truncate">{option}</span>
+                  {value === option && <Check className="h-4 w-4 shrink-0 text-brand-blue" />}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 const InventoryAuditReport: React.FC = () => {
@@ -181,18 +293,19 @@ const InventoryAuditReport: React.FC = () => {
       </div>
 
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 mb-6 print:hidden">
-        <div className="flex flex-col lg:flex-row items-start lg:items-end gap-4">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-slate-500" />
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Time Period:
-            </label>
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end">
+          <div className="grid flex-1 gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,220px)_minmax(0,1fr)_minmax(220px,260px)_minmax(220px,260px)]">
+            <div>
+              <label className="mb-1 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
+                <Calendar className="h-4 w-4 text-slate-500" />
+                <span>Time Period</span>
+              </label>
             <select
               value={filters.timePeriod}
               onChange={(e) =>
                 setFilters((f) => ({ ...f, timePeriod: e.target.value as InventoryAuditTimePeriod }))
               }
-              className="px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue dark:border-slate-700 dark:bg-slate-800"
             >
               {TIME_PERIOD_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -203,61 +316,49 @@ const InventoryAuditReport: React.FC = () => {
           </div>
 
           {filters.timePeriod === 'custom' && (
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">From:</label>
-              <input
-                type="date"
-                value={filters.dateFrom || ''}
-                onChange={(e) => setFilters((f) => ({ ...f, dateFrom: e.target.value }))}
-                className="px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-              />
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">To:</label>
-              <input
-                type="date"
-                value={filters.dateTo || ''}
-                onChange={(e) => setFilters((f) => ({ ...f, dateTo: e.target.value }))}
-                className="px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-              />
+            <div className="grid gap-4 sm:grid-cols-2 md:col-span-2">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">From</label>
+                <input
+                  type="date"
+                  value={filters.dateFrom || ''}
+                  onChange={(e) => setFilters((f) => ({ ...f, dateFrom: e.target.value }))}
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue dark:border-slate-700 dark:bg-slate-800"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">To</label>
+                <input
+                  type="date"
+                  value={filters.dateTo || ''}
+                  onChange={(e) => setFilters((f) => ({ ...f, dateTo: e.target.value }))}
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue dark:border-slate-700 dark:bg-slate-800"
+                />
+              </div>
             </div>
           )}
 
-          <div className="flex items-center gap-2">
-            <Search className="w-4 h-4 text-slate-500" />
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Part No:</label>
-            <select
-              value={filters.partNo || ''}
-              onChange={(e) => setFilters((f) => ({ ...f, partNo: e.target.value || undefined }))}
-              className="px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue min-w-[150px]"
-            >
-              <option value="">All</option>
-              {partNumbers.map((pn) => (
-                <option key={pn} value={pn}>
-                  {pn}
-                </option>
-              ))}
-            </select>
-          </div>
+            <SearchableFilterSelect
+              label="Part No"
+              value={filters.partNo}
+              options={partNumbers}
+              placeholder="Search part no..."
+              onChange={(value) => setFilters((f) => ({ ...f, partNo: value }))}
+            />
 
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Item Code:</label>
-            <select
-              value={filters.itemCode || ''}
-              onChange={(e) => setFilters((f) => ({ ...f, itemCode: e.target.value || undefined }))}
-              className="px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue min-w-[150px]"
-            >
-              <option value="">All</option>
-              {itemCodes.map((ic) => (
-                <option key={ic} value={ic}>
-                  {ic}
-                </option>
-              ))}
-            </select>
+            <SearchableFilterSelect
+              label="Item Code"
+              value={filters.itemCode}
+              options={itemCodes}
+              placeholder="Search item code..."
+              onChange={(value) => setFilters((f) => ({ ...f, itemCode: value }))}
+            />
           </div>
 
           <button
             onClick={handleGenerateReport}
             disabled={isLoading}
-            className="flex items-center gap-2 px-4 py-2 bg-brand-blue hover:bg-blue-700 disabled:bg-slate-400 text-white rounded-lg shadow-sm font-medium transition-colors"
+            className="flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-brand-blue px-4 font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:bg-slate-400 xl:self-end"
           >
             {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
             Generate Report

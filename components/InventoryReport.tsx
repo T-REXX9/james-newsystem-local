@@ -25,6 +25,7 @@ const InventoryReport: React.FC = () => {
   const [isInitializing, setIsInitializing] = useState(true);
   const [reportData, setReportData] = useState<InventoryReportRow[]>([]);
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
+  const [dataWarning, setDataWarning] = useState<string | null>(null);
 
   const [categories, setCategories] = useState<string[]>([]);
   const [partNumbers, setPartNumbers] = useState<{ id: string; partNo: string }[]>([]);
@@ -66,17 +67,34 @@ const InventoryReport: React.FC = () => {
 
   const handleGenerateReport = useCallback(async () => {
     setIsLoading(true);
+    setDataWarning(null);
     try {
       const data = await fetchInventoryReport(filters);
       setReportData(data.rows);
       if (data.warehouses.length > 0) {
         setWarehouses(data.warehouses);
       }
+
+      // Validate that each row has warehouse stock entries for all warehouses
+      const activeWarehouses = data.warehouses.length > 0 ? data.warehouses : warehouses;
+      const missingEntries: string[] = [];
+      for (const row of data.rows) {
+        for (const wh of activeWarehouses) {
+          if (!(wh.name in row.warehouseStock) && !(wh.id in row.warehouseStock)) {
+            missingEntries.push(`Item "${row.partNo || row.id}" missing warehouse "${wh.name}"`);
+          }
+        }
+      }
+      if (missingEntries.length > 0) {
+        console.warn('Incomplete warehouse stock data detected:', missingEntries);
+        setDataWarning(`${missingEntries.length} warehouse stock entries are missing from the report data.`);
+      }
+
       setGeneratedAt(new Date());
     } finally {
       setIsLoading(false);
     }
-  }, [filters]);
+  }, [filters, warehouses]);
 
   const handleClearFilters = () => {
     setFilters({
@@ -409,6 +427,13 @@ const InventoryReport: React.FC = () => {
             <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Quantity</p>
             <h4 className="text-2xl font-bold text-brand-blue">{summaryStats.totalQuantity.toLocaleString()}</h4>
           </div>
+        </div>
+      )}
+
+      {dataWarning && (
+        <div className="flex items-center gap-2 mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-amber-700 dark:text-amber-400 text-sm print:hidden">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          <span>{dataWarning}</span>
         </div>
       )}
 
