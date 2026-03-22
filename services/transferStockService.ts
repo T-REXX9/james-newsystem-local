@@ -9,6 +9,27 @@ const toNumber = (value: unknown, fallback = 0): number => {
   return Number.isFinite(n) ? n : fallback;
 };
 
+/**
+ * Normalize warehouse ID to canonical label format (WH1, WH2, etc.)
+ * Handles both numeric IDs (1, 2, etc.) and canonical labels (WH1, WH2, etc.)
+ */
+const normalizeWarehouseId = (value: unknown): string => {
+  const str = String(value || '').trim().toUpperCase();
+  if (str === '') {
+    return '';
+  }
+  // If already in canonical format (WH1, WH2, etc.), return as-is
+  if (/^WH\d+$/.test(str)) {
+    return str;
+  }
+  // If numeric, convert to canonical format
+  if (/^\d+$/.test(str)) {
+    return `WH${str}`;
+  }
+  // Return as-is for any other format
+  return str;
+};
+
 const normalizeStatus = (value: unknown): TransferStock['status'] => {
   const normalized = String(value || '').trim().toLowerCase();
   if (normalized === 'submitted') return 'submitted';
@@ -122,8 +143,8 @@ export async function createTransferStock(data: TransferStockDTO): Promise<Trans
     const maybeNumericId = String(item?.item_id || '').trim();
     const isNumericId = /^\d+$/.test(maybeNumericId);
     const mapped: Record<string, unknown> = {
-      from_warehouse_id: String(item?.from_warehouse_id || ''),
-      to_warehouse_id: String(item?.to_warehouse_id || ''),
+      from_warehouse_id: normalizeWarehouseId(item?.from_warehouse_id),
+      to_warehouse_id: normalizeWarehouseId(item?.to_warehouse_id),
       transfer_qty: toNumber(item?.transfer_qty, 0),
       notes: String(item?.notes || ''),
     };
@@ -279,8 +300,8 @@ export async function addTransferStockItem(
 
   const payload: Record<string, unknown> = {
     main_id: API_MAIN_ID,
-    from_warehouse_id: String(item?.from_warehouse_id || ''),
-    to_warehouse_id: String(item?.to_warehouse_id || ''),
+    from_warehouse_id: normalizeWarehouseId(item?.from_warehouse_id),
+    to_warehouse_id: normalizeWarehouseId(item?.to_warehouse_id),
     transfer_qty: toNumber(item?.transfer_qty, 0),
     notes: String(item?.notes || ''),
   };
@@ -352,6 +373,8 @@ export async function getAvailableStock(itemId: string, warehouseId: string): Pr
   }
 
   const product = payload?.data || {};
-  const stockKey = `stock_wh${String(warehouseId)}`;
+  // Extract numeric warehouse ID from canonical label (WH1 -> 1, WH2 -> 2, etc.)
+  const warehouseNum = String(warehouseId).replace(/^WH/, '');
+  const stockKey = `stock_wh${warehouseNum}`;
   return toNumber((product as any)?.[stockKey], 0);
 }

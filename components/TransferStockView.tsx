@@ -30,12 +30,12 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 const isUuid = (value?: string | null): value is string => UUID_PATTERN.test(String(value || '').trim());
 
 const WAREHOUSES = [
-  { id: '1', name: 'WH1' },
-  { id: '2', name: 'WH2' },
-  { id: '3', name: 'WH3' },
-  { id: '4', name: 'WH4' },
-  { id: '5', name: 'WH5' },
-  { id: '6', name: 'WH6' },
+  { id: 'WH1', name: 'WH1' },
+  { id: 'WH2', name: 'WH2' },
+  { id: 'WH3', name: 'WH3' },
+  { id: 'WH4', name: 'WH4' },
+  { id: 'WH5', name: 'WH5' },
+  { id: 'WH6', name: 'WH6' },
 ];
 
 type TransferStatusType = 'pending' | 'submitted' | 'approved' | 'deleted';
@@ -279,6 +279,56 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
           });
           return;
         }
+
+        // Validate source and destination warehouses are not empty
+        if (!item.from_warehouse_id || !item.to_warehouse_id) {
+          addToast({
+            type: 'error',
+            title: 'Missing warehouse',
+            description: `Item ${item.part_no || item.item_code || item.item_id} is missing source or destination warehouse.`,
+            durationMs: 5000,
+          });
+          return;
+        }
+
+        // Validate source and destination are different
+        if (item.from_warehouse_id === item.to_warehouse_id) {
+          addToast({
+            type: 'error',
+            title: 'Invalid transfer',
+            description: `Item ${item.part_no || item.item_code || item.item_id} has the same source and destination warehouse.`,
+            durationMs: 5000,
+          });
+          return;
+        }
+
+        // Validate quantity is positive
+        if (!item.transfer_qty || item.transfer_qty <= 0) {
+          addToast({
+            type: 'error',
+            title: 'Invalid quantity',
+            description: `Item ${item.part_no || item.item_code || item.item_id} must have a positive transfer quantity.`,
+            durationMs: 5000,
+          });
+          return;
+        }
+
+        // Validate quantity does not exceed available stock
+        const product = productMap.get(item.item_id);
+        if (product) {
+          const warehouseNum = item.from_warehouse_id.replace(/^WH/, '');
+          const stockColumn = `stock_wh${warehouseNum}` as keyof Product;
+          const availableStock = product?.[stockColumn] || 0;
+          if (item.transfer_qty > availableStock) {
+            addToast({
+              type: 'error',
+              title: 'Insufficient stock',
+              description: `Item ${item.part_no || item.item_code || item.item_id} has only ${availableStock} units available in ${item.from_warehouse_id}.`,
+              durationMs: 5000,
+            });
+            return;
+          }
+        }
       }
 
       const transferData: TransferStockDTO = {
@@ -320,6 +370,76 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
 
     try {
       setSubmitting(true);
+
+      // Validate all items before submission
+      const items = selectedTransfer.items || [];
+      if (items.length === 0) {
+        addToast({
+          type: 'error',
+          title: 'No items to submit',
+          description: 'Please add at least one item to the transfer before submitting.',
+          durationMs: 5000,
+        });
+        setSubmitting(false);
+        return;
+      }
+
+      for (const item of items) {
+        // Validate source and destination warehouses are not empty
+        if (!item.from_warehouse_id || !item.to_warehouse_id) {
+          addToast({
+            type: 'error',
+            title: 'Missing warehouse',
+            description: `Item has missing source or destination warehouse.`,
+            durationMs: 5000,
+          });
+          setSubmitting(false);
+          return;
+        }
+
+        // Validate source and destination are different
+        if (item.from_warehouse_id === item.to_warehouse_id) {
+          addToast({
+            type: 'error',
+            title: 'Invalid transfer',
+            description: `Item has the same source and destination warehouse.`,
+            durationMs: 5000,
+          });
+          setSubmitting(false);
+          return;
+        }
+
+        // Validate quantity is positive
+        if (!item.transfer_qty || item.transfer_qty <= 0) {
+          addToast({
+            type: 'error',
+            title: 'Invalid quantity',
+            description: `Item must have a positive transfer quantity.`,
+            durationMs: 5000,
+          });
+          setSubmitting(false);
+          return;
+        }
+
+        // Validate quantity does not exceed available stock
+        const product = productMap.get(item.item_id);
+        if (product) {
+          const warehouseNum = item.from_warehouse_id.replace(/^WH/, '');
+          const stockColumn = `stock_wh${warehouseNum}` as keyof Product;
+          const availableStock = product?.[stockColumn] || 0;
+          if (item.transfer_qty > availableStock) {
+            addToast({
+              type: 'error',
+              title: 'Insufficient stock',
+              description: `Item has only ${availableStock} units available in ${item.from_warehouse_id}.`,
+              durationMs: 5000,
+            });
+            setSubmitting(false);
+            return;
+          }
+        }
+      }
+
       const updatedTransfer = await submitTransferStock(selectedTransfer.id);
       
       if (updatedTransfer) {
@@ -477,8 +597,8 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
       item_id: product.id,
       part_no: product.part_no,
       item_code: product.item_code,
-      from_warehouse_id: '1',
-      to_warehouse_id: '2',
+      from_warehouse_id: 'WH1',
+      to_warehouse_id: 'WH2',
       transfer_qty: 1,
       notes: '',
     }]);
@@ -834,7 +954,9 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
                       <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                         {items.map((item, index) => {
                           const product = productMap.get(item.item_id);
-                          const stockColumn = `stock_wh${item.from_warehouse_id}` as keyof Product;
+                          // Extract numeric warehouse ID from canonical label (WH1 -> 1, WH2 -> 2, etc.)
+                          const warehouseNum = item.from_warehouse_id.replace(/^WH/, '');
+                          const stockColumn = `stock_wh${warehouseNum}` as keyof Product;
                           const availableStock = product?.[stockColumn] || 0;
                           
                           return (
