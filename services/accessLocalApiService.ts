@@ -184,6 +184,14 @@ export const updateProfileLocal = async (
         body.group_id = data.group_id ?? null;
     }
 
+    if (data.access_rights !== undefined) {
+        body.access_rights = data.access_rights;
+    }
+
+    if (data.access_override !== undefined) {
+        body.access_override = data.access_override;
+    }
+
     const payload = await requestJson(`${API_BASE_URL}/staff/${staffId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },

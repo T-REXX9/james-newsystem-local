@@ -418,12 +418,12 @@ const StockMovementView: React.FC = () => {
                         <th className="p-3 w-32">Date</th>
                         <th className="p-3 w-32">Type</th>
                         <th className="p-3 w-32">Reference</th>
-                        <th className="p-3 w-40">Partner</th>
+                        <th className="p-3">Notes</th>
+                        <th className="p-3 w-40">Supplier</th>
                         <th className="p-3 w-20 text-right">Qty</th>
                         <th className="p-3 w-24 text-right">Price</th>
                         <th className="p-3 w-20 text-center">Warehouse</th>
                         <th className="p-3 w-24 text-right">Balance</th>
-                        <th className="p-3">Notes</th>
                       </tr>
                     </thead>
                     <tbody>

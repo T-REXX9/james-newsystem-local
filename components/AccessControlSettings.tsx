@@ -70,6 +70,8 @@ const AccessControlSettings: React.FC = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [totalProfiles, setTotalProfiles] = useState(0);
 
+  const [permissionChanges, setPermissionChanges] = useState<Record<string, boolean>>({}); // tracks per-user whether access_rights were manually edited
+
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [newUserForm, setNewUserForm] = useState({
@@ -172,21 +174,63 @@ const AccessControlSettings: React.FC = () => {
         };
       })
     );
+    setPermissionChanges((prev) => ({ ...prev, [userId]: false }));
+  };
+
+  const handlePermissionToggle = (userId: string, moduleId: string, currentlyAllowed: boolean) => {
+    setProfiles((prevProfiles) =>
+      prevProfiles.map((profile) => {
+        if (profile.id !== userId) return profile;
+
+        const currentRights = new Set(profile.access_rights || []);
+
+        if (currentlyAllowed) {
+          // If has wildcard, expand to all modules minus the toggled one
+          if (currentRights.has('*')) {
+            currentRights.delete('*');
+            AVAILABLE_APP_MODULES.forEach((mod) => {
+              if (mod.id !== 'settings' && mod.id !== moduleId) {
+                currentRights.add(mod.id);
+              }
+            });
+          } else {
+            currentRights.delete(moduleId);
+            // Also remove any aliases that map to this module
+            Object.entries(MODULE_ID_ALIASES).forEach(([alias, canonical]) => {
+              if (canonical === moduleId) currentRights.delete(alias);
+            });
+          }
+        } else {
+          currentRights.add(moduleId);
+        }
+
+        return {
+          ...profile,
+          access_rights: Array.from(currentRights),
+          access_override: true,
+        };
+      })
+    );
+    setPermissionChanges((prev) => ({ ...prev, [userId]: true }));
   };
 
   const savePermissions = async (user: UserProfile) => {
+    const hasPermOverride = permissionChanges[user.id] || false;
     setSavingId(user.id);
     try {
       await updateProfileLocal(user.id, {
         group_id: user.group_id ?? null,
+        access_rights: user.access_rights || [],
+        access_override: hasPermOverride,
       });
       setOriginalProfiles((prev) =>
         prev.map((profile) =>
           profile.id === user.id
-            ? { ...profile, access_rights: user.access_rights, access_override: false, group_id: user.group_id ?? null }
+            ? { ...profile, access_rights: user.access_rights, access_override: hasPermOverride, group_id: user.group_id ?? null }
             : profile
         )
       );
+      setPermissionChanges((prev) => ({ ...prev, [user.id]: false }));
       await new Promise((resolve) => setTimeout(resolve, 300));
       await loadGroups();
       addToast({
@@ -511,8 +555,10 @@ const AccessControlSettings: React.FC = () => {
                     const hasFullAccess = userRights.includes('*');
                     const effectiveCanonicalRights = getEffectiveCanonicalRights(userRights);
                     const assignedGroup = user.group_id ? groupMap[user.group_id] : undefined;
-                    const hasChanges =
-                      (user.group_id || null) !== (originalProfiles.find((profile) => profile.id === user.id)?.group_id || null);
+                    const originalProfile = originalProfiles.find((profile) => profile.id === user.id);
+                    const groupChanged = (user.group_id || null) !== (originalProfile?.group_id || null);
+                    const permissionsEdited = permissionChanges[user.id] || false;
+                    const hasChanges = groupChanged || permissionsEdited;
 
                     return (
                       <tr key={user.id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
@@ -567,19 +613,33 @@ const AccessControlSettings: React.FC = () => {
 
                         {AVAILABLE_APP_MODULES.filter((module) => module.id !== 'settings').map((module) => {
                           const isAllowed = isOwner || hasFullAccess || effectiveCanonicalRights.has(module.id);
+                          const assignedGroupRights = assignedGroup
+                            ? getEffectiveCanonicalRights(assignedGroup.access_rights)
+                            : null;
+                          const differsFromGroup = permissionsEdited && assignedGroupRights
+                            ? isAllowed !== (assignedGroupRights.has(module.id) || assignedGroupRights.has('*'))
+                            : false;
                           return (
                             <td
                               key={module.id}
-                              className="border-l border-slate-100 p-4 text-center dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/30"
-                              title="Role-based access from the legacy database"
+                              className={`border-l border-slate-100 p-4 text-center dark:border-slate-800 ${
+                                differsFromGroup
+                                  ? 'bg-amber-50/70 dark:bg-amber-900/20'
+                                  : 'bg-slate-50/70 dark:bg-slate-800/30'
+                              }`}
+                              title={isOwner ? 'Owner — full access' : differsFromGroup ? 'Modified from group permissions' : 'Click to toggle access'}
                             >
                               <div className="flex items-center justify-center">
                                 <input
                                   type="checkbox"
                                   checked={isAllowed}
-                                  disabled
-                                  readOnly
-                                  className="h-4 w-4 rounded border-gray-300 text-brand-blue opacity-70"
+                                  disabled={isOwner}
+                                  onChange={() => {
+                                    if (!isOwner) handlePermissionToggle(user.id, module.id, isAllowed);
+                                  }}
+                                  className={`h-4 w-4 rounded border-gray-300 text-brand-blue ${
+                                    isOwner ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer opacity-100'
+                                  }`}
                                 />
                               </div>
                             </td>
@@ -615,8 +675,9 @@ const AccessControlSettings: React.FC = () => {
           <div className="mt-4 flex gap-3 rounded-lg bg-blue-50 p-4 text-sm text-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
             <AlertTriangle className="h-5 w-5 shrink-0" />
             <p>
-              <strong>Note:</strong> Owners always have full access. Staff permissions are now derived from their
-              selected legacy role group, so the checkboxes are view-only and changing the group updates access.
+              <strong>Note:</strong> Owners always have full access. You can assign a group to set default permissions,
+              or edit individual checkboxes directly. Cells highlighted in amber indicate permissions that differ from
+              the assigned group. Click <strong>Save</strong> to apply changes.
             </p>
           </div>
         </>

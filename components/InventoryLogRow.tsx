@@ -10,8 +10,19 @@ interface InventoryLogRowProps {
 
 const InventoryLogRow: React.FC<InventoryLogRowProps> = ({ log, showWarehouse, onReferenceClick }) => {
   const isStockIn = log.status_indicator === '+';
-  const dateStr = new Date(log.date).toLocaleDateString();
-  const timeStr = new Date(log.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  // Parse date safely - handle both ISO strings and date-only strings
+  const parseDate = (dateString: string): Date => {
+    // If it's a date-only string (YYYY-MM-DD), append time to avoid timezone issues
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+      return new Date(`${dateString}T00:00:00Z`);
+    }
+    return new Date(dateString);
+  };
+
+  const date = parseDate(log.date);
+  const dateStr = date.toLocaleDateString();
+  const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return (
     <tr className={`border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors ${
@@ -43,7 +54,12 @@ const InventoryLogRow: React.FC<InventoryLogRowProps> = ({ log, showWarehouse, o
         </button>
       </td>
 
-      {/* Partner */}
+      {/* Notes */}
+      <td className="p-3 text-xs text-slate-500 dark:text-slate-400 max-w-xs truncate">
+        {log.notes || '-'}
+      </td>
+
+      {/* Supplier */}
       <td className="p-3 text-xs text-slate-600 dark:text-slate-300">
         {log.partner}
       </td>
@@ -80,11 +96,6 @@ const InventoryLogRow: React.FC<InventoryLogRowProps> = ({ log, showWarehouse, o
         <span className={`font-bold ${log.balance && log.balance >= 0 ? 'text-slate-700 dark:text-slate-200' : 'text-rose-600 dark:text-rose-400'}`}>
           {log.balance !== undefined ? log.balance.toLocaleString() : '-'}
         </span>
-      </td>
-
-      {/* Notes */}
-      <td className="p-3 text-xs text-slate-500 dark:text-slate-400 max-w-xs truncate">
-        {log.notes || '-'}
       </td>
     </tr>
   );
