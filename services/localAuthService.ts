@@ -24,6 +24,7 @@ type ApiAuthUser = {
   email: string;
   first_name?: string;
   last_name?: string;
+  role_name?: string | null;
   type?: string;
   status?: number;
   activation?: number;
@@ -105,7 +106,7 @@ const mapAccessRights = (userType?: string, persisted?: string[] | null): string
 const mapUserProfile = (context: ApiAuthPayload): UserProfile => {
   const user = context.user;
   const fullName = [user.first_name || '', user.last_name || ''].join(' ').trim();
-  const role = mapRoleFromUserType(context.user_type || user.type);
+  const role = user.role_name || mapRoleFromUserType(context.user_type || user.type);
   const quota = Number(user.sales_quota || 0);
 
   return {

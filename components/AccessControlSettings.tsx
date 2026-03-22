@@ -5,7 +5,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
-  Lock,
   Save,
   Shield,
   User,
@@ -42,15 +41,6 @@ import AccessGroupManager from './AccessGroupManager';
 import { useToast } from './ToastProvider';
 
 const STAFF_PER_PAGE = 50;
-
-const CANONICAL_TO_ALIASES: Record<string, string[]> = Object.entries(MODULE_ID_ALIASES).reduce(
-  (acc, [alias, canonical]) => {
-    if (!acc[canonical]) acc[canonical] = [];
-    acc[canonical].push(alias);
-    return acc;
-  },
-  {} as Record<string, string[]>
-);
 
 const getEffectiveCanonicalRights = (rights: string[] | null | undefined): Set<string> => {
   const result = new Set<string>();
@@ -168,33 +158,6 @@ const AccessControlSettings: React.FC = () => {
     }
   };
 
-  const togglePermission = (userId: string, moduleId: string) => {
-    setProfiles((prevProfiles) =>
-      prevProfiles.map((profile) => {
-        if (profile.id !== userId) return profile;
-
-        const currentRights = profile.access_rights || [];
-        const canonical = MODULE_ID_ALIASES[moduleId] || moduleId;
-        let newRights: string[];
-
-        if (currentRights.includes('*')) {
-          const allIds = AVAILABLE_APP_MODULES.map((module) => module.id);
-          newRights = allIds.filter((id) => id !== canonical);
-        } else {
-          const aliases = CANONICAL_TO_ALIASES[canonical] || [];
-          const idsForModule = [canonical, ...aliases];
-          const hasModule = currentRights.some((id) => idsForModule.includes(id));
-
-          newRights = hasModule
-            ? currentRights.filter((id) => !idsForModule.includes(id))
-            : [...currentRights, canonical];
-        }
-
-        return { ...profile, access_rights: newRights, access_override: true };
-      })
-    );
-  };
-
   const handleGroupAssignmentChange = (userId: string, nextGroupId: string | null) => {
     setProfiles((prevProfiles) =>
       prevProfiles.map((profile) => {
@@ -215,14 +178,12 @@ const AccessControlSettings: React.FC = () => {
     setSavingId(user.id);
     try {
       await updateProfileLocal(user.id, {
-        access_rights: user.access_rights,
-        access_override: user.access_override ?? false,
         group_id: user.group_id ?? null,
       });
       setOriginalProfiles((prev) =>
         prev.map((profile) =>
           profile.id === user.id
-            ? { ...profile, access_rights: user.access_rights, access_override: user.access_override ?? false, group_id: user.group_id ?? null }
+            ? { ...profile, access_rights: user.access_rights, access_override: false, group_id: user.group_id ?? null }
             : profile
         )
       );
@@ -429,7 +390,7 @@ const AccessControlSettings: React.FC = () => {
             Access Control & Permissions
           </h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Manage shared access groups and per-staff module overrides.
+            Manage legacy role groups and the module access they grant.
           </p>
         </div>
 
@@ -550,9 +511,7 @@ const AccessControlSettings: React.FC = () => {
                     const hasFullAccess = userRights.includes('*');
                     const effectiveCanonicalRights = getEffectiveCanonicalRights(userRights);
                     const assignedGroup = user.group_id ? groupMap[user.group_id] : undefined;
-                    const groupRights = getEffectiveCanonicalRights(assignedGroup?.access_rights);
                     const hasChanges =
-                      JSON.stringify(user.access_rights || []) !== JSON.stringify(originalProfiles.find((profile) => profile.id === user.id)?.access_rights || []) ||
                       (user.group_id || null) !== (originalProfiles.find((profile) => profile.id === user.id)?.group_id || null);
 
                     return (
@@ -598,7 +557,6 @@ const AccessControlSettings: React.FC = () => {
                             onChange={(event) => handleGroupAssignmentChange(user.id, event.target.value || null)}
                             className="input-field min-w-[160px] text-sm disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            <option value="">- No Group -</option>
                             {groups.map((group) => (
                               <option key={group.id} value={group.id}>
                                 {group.name}
@@ -609,26 +567,20 @@ const AccessControlSettings: React.FC = () => {
 
                         {AVAILABLE_APP_MODULES.filter((module) => module.id !== 'settings').map((module) => {
                           const isAllowed = isOwner || hasFullAccess || effectiveCanonicalRights.has(module.id);
-                          const inherited = !!assignedGroup && groupRights.has(module.id) === isAllowed;
                           return (
                             <td
                               key={module.id}
-                              className={`border-l border-slate-100 p-4 text-center dark:border-slate-800 ${
-                                inherited ? 'bg-slate-50/70 dark:bg-slate-800/30' : ''
-                              }`}
-                              title={inherited ? 'Inherited from group' : undefined}
+                              className="border-l border-slate-100 p-4 text-center dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/30"
+                              title="Role-based access from the legacy database"
                             >
-                              <div className="flex items-center justify-center gap-1.5">
+                              <div className="flex items-center justify-center">
                                 <input
                                   type="checkbox"
                                   checked={isAllowed}
-                                  disabled={isOwner}
-                                  onChange={() => togglePermission(user.id, module.id)}
-                                  className={`h-4 w-4 rounded border-gray-300 text-brand-blue focus:ring-brand-blue ${
-                                    inherited ? 'opacity-70' : ''
-                                  } ${isOwner ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                                  disabled
+                                  readOnly
+                                  className="h-4 w-4 rounded border-gray-300 text-brand-blue opacity-70"
                                 />
-                                {inherited && <Lock className="h-3 w-3 text-slate-400" />}
                               </div>
                             </td>
                           );
@@ -663,9 +615,8 @@ const AccessControlSettings: React.FC = () => {
           <div className="mt-4 flex gap-3 rounded-lg bg-blue-50 p-4 text-sm text-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
             <AlertTriangle className="h-5 w-5 shrink-0" />
             <p>
-              <strong>Note:</strong> Owners always have full access. When a group is selected, its permissions are
-              copied into the staff member&apos;s access list as a starting point, and individual checkboxes can still
-              be adjusted before saving.
+              <strong>Note:</strong> Owners always have full access. Staff permissions are now derived from their
+              selected legacy role group, so the checkboxes are view-only and changing the group updates access.
             </p>
           </div>
         </>

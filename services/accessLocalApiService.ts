@@ -173,18 +173,21 @@ export const fetchProfilesLocal = async (
 };
 
 export const updateProfileLocal = async (
-    staffId: string | number,
-    data: { access_rights?: string[]; access_override?: boolean; group_id?: string | null }
+  staffId: string | number,
+  data: { access_rights?: string[]; access_override?: boolean; group_id?: string | null }
 ): Promise<UserProfile> => {
+    const body: Record<string, unknown> = {
+        main_id: API_MAIN_ID,
+    };
+
+    if (data.group_id !== undefined) {
+        body.group_id = data.group_id ?? null;
+    }
+
     const payload = await requestJson(`${API_BASE_URL}/staff/${staffId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            main_id: API_MAIN_ID,
-            access_rights: data.access_rights ?? [],
-            access_override: data.access_override ?? false,
-            group_id: data.group_id ?? null,
-        }),
+        body: JSON.stringify(body),
     });
 
     return mapStaffToProfile(payload?.data || {});
