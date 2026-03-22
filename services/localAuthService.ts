@@ -1,5 +1,5 @@
 import { UserProfile } from '../types';
-import { DEFAULT_STAFF_ACCESS_RIGHTS, MODULE_ID_ALIASES } from '../constants';
+import { MODULE_ID_ALIASES, ROLE_DEFAULT_ACCESS_RIGHTS } from '../constants';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const AUTH_STORAGE_KEY = 'local_api_auth_session';
@@ -18,6 +18,8 @@ type ApiPermissionPackage = {
   lstatus?: string | number;
 };
 
+type ActionPermissions = Record<string, { can_add: boolean; can_edit: boolean; can_delete: boolean }>;
+
 type ApiAuthUser = {
   id: number;
   main_userid: number;
@@ -34,6 +36,7 @@ type ApiAuthUser = {
   sales_quota?: number;
   access_rights?: string[] | null;
   group_id?: string | null;
+  action_permissions?: ActionPermissions;
 };
 
 type ApiAuthPayload = {
@@ -95,12 +98,22 @@ const mapRoleFromUserType = (userType?: string): string => {
 
 const normalizeModuleId = (id: string): string => MODULE_ID_ALIASES[id] ?? id;
 
-const mapAccessRights = (userType?: string, persisted?: string[] | null): string[] => {
+const getRoleDefaultRights = (roleName: string): string[] => {
+  if (ROLE_DEFAULT_ACCESS_RIGHTS[roleName]) {
+    return [...ROLE_DEFAULT_ACCESS_RIGHTS[roleName]];
+  }
+  // Fallback to Staff (minimal access) for unknown roles
+  return [...(ROLE_DEFAULT_ACCESS_RIGHTS['Staff'] || ['home'])];
+};
+
+const mapAccessRights = (userType?: string, persisted?: string[] | null, roleName?: string): string[] => {
   if (userType === '1') return ['*'];
   if (Array.isArray(persisted) && persisted.length > 0) {
     return persisted.map(normalizeModuleId);
   }
-  return [...DEFAULT_STAFF_ACCESS_RIGHTS];
+  // Return role-specific defaults based on role_name
+  const role = roleName || mapRoleFromUserType(userType);
+  return getRoleDefaultRights(role);
 };
 
 const mapUserProfile = (context: ApiAuthPayload): UserProfile => {
@@ -116,9 +129,10 @@ const mapUserProfile = (context: ApiAuthPayload): UserProfile => {
     main_userid: Number(context.main_userid || user.main_userid || 0) || undefined,
     full_name: fullName || user.email || `User ${user.id}`,
     role,
-    access_rights: mapAccessRights(context.user_type || user.type, user.access_rights),
+    access_rights: mapAccessRights(context.user_type || user.type, user.access_rights, role),
     group_id: user.group_id || null,
     monthly_quota: Number.isFinite(quota) ? quota : 0,
+    action_permissions: user.action_permissions || {},
   };
 };
 

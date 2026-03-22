@@ -232,7 +232,7 @@ const App: React.FC = () => {
     </div>
   );
 
-  // Permission Check Logic (supports legacy and canonical IDs)
+  // Permission Check Logic: role-first, then explicit overrides (supports legacy and canonical IDs)
   const checkPermission = (moduleId: string) => {
     if (!userProfile) return false;
 
@@ -243,6 +243,7 @@ const App: React.FC = () => {
       return userProfile.role === 'Owner' || userProfile.role === 'Developer';
     }
 
+    // Step 1: Check if the user's role grants access
     if (userProfile.role === 'Owner') return true;
 
     const rights = userProfile.access_rights || [];
@@ -262,8 +263,28 @@ const App: React.FC = () => {
       return false;
     }
 
+    // Step 2: Check if the user has explicit access via access_rights (role-based or overridden)
     const idsToCheck = expandModuleIds(canonical);
     return idsToCheck.some((id) => rights.includes(id));
+  };
+
+  /**
+   * Check if the user can perform a specific action (add/edit/delete) on a module.
+   * Returns true if the action is allowed, false otherwise.
+   * Owner role always has full action permissions.
+   */
+  const checkActionPermission = (moduleId: string, action: 'can_add' | 'can_edit' | 'can_delete'): boolean => {
+    if (!userProfile) return false;
+    if (userProfile.role === 'Owner') return true;
+
+    const canonical = normalizeModuleId(moduleId);
+    const actionPerms = userProfile.action_permissions;
+    if (!actionPerms) return true; // If no action permissions defined, allow by default
+
+    const modulePerms = actionPerms[canonical];
+    if (!modulePerms) return true; // If no specific module action perms, allow by default
+
+    return modulePerms[action] ?? true;
   };
 
   const renderContent = () => {

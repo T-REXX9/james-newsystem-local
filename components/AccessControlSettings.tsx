@@ -16,6 +16,7 @@ import {
   DEFAULT_STAFF_ACCESS_RIGHTS,
   DEFAULT_STAFF_ROLE,
   MODULE_ID_ALIASES,
+  ROLE_DEFAULT_ACCESS_RIGHTS,
   STAFF_ROLES,
 } from '../constants';
 import {
@@ -361,7 +362,7 @@ const AccessControlSettings: React.FC = () => {
       role: newUserForm.role,
       birthday: newUserForm.birthday || undefined,
       mobile: newUserForm.mobile || undefined,
-      accessRights: DEFAULT_STAFF_ACCESS_RIGHTS,
+      accessRights: ROLE_DEFAULT_ACCESS_RIGHTS[newUserForm.role] || ROLE_DEFAULT_ACCESS_RIGHTS['Staff'] || ['home'],
     };
 
     setIsCreatingUser(true);

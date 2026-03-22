@@ -5,7 +5,7 @@ import {
     StaffAccountValidationError,
     UserProfile,
 } from '../types';
-import { DEFAULT_STAFF_ACCESS_RIGHTS, DEFAULT_STAFF_ROLE, STAFF_ROLES } from '../constants';
+import { DEFAULT_STAFF_ACCESS_RIGHTS, DEFAULT_STAFF_ROLE, ROLE_DEFAULT_ACCESS_RIGHTS, STAFF_ROLES } from '../constants';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
@@ -126,9 +126,11 @@ const validateStaffAccountInput = (input: CreateStaffAccountInput): StaffAccount
     return errors;
 };
 
-const normalizeAccessRights = (accessRights?: string[]) => {
+const normalizeAccessRights = (accessRights?: string[], roleName?: string) => {
     if (!accessRights || !accessRights.length) {
-        return DEFAULT_STAFF_ACCESS_RIGHTS;
+        // Use role-specific defaults if available, otherwise fall back to Staff defaults
+        const role = roleName || 'Staff';
+        return ROLE_DEFAULT_ACCESS_RIGHTS[role] || ROLE_DEFAULT_ACCESS_RIGHTS['Staff'] || ['home'];
     }
 
     return Array.from(new Set(accessRights));

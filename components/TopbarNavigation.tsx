@@ -46,16 +46,20 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
 
     const canonical = MODULE_ID_ALIASES[route] || route;
 
+    // Special case: server maintenance / recycle bin
     if (canonical === 'maintenance-profile-server-maintenance') {
       return user.role === 'Owner' || user.role === 'Developer';
     }
 
+    // Owner always has access
     if (user.role === 'Owner') return true;
 
     const rights = user.access_rights || [];
     const hasExplicitRights = rights.length > 0;
     if (!hasExplicitRights) return false;
     if (rights.includes('*')) return true;
+
+    // Check canonical ID and all aliases against the user's access_rights
     if (rights.includes(canonical)) return true;
 
     const aliases = CANONICAL_TO_ALIASES[canonical] || [];

@@ -72,6 +72,71 @@ export const DEFAULT_STAFF_ACCESS_RIGHTS = [
   'maintenance-profile-system-access',
   'maintenance-profile-server-maintenance',
 ];
+/**
+ * Role-specific default permissions mapping.
+ * Maps role names to their minimal, role-specific default module access.
+ * Owner gets all modules ('*'), other roles get only their relevant modules.
+ */
+export const ROLE_DEFAULT_ACCESS_RIGHTS: Record<string, string[]> = {
+  Owner: ['*'],
+  'Sales Agent': [
+    'home',
+    'sales-pipeline-board',
+    'sales-database-customer-database',
+    'sales-transaction-sales-inquiry',
+    'sales-transaction-sales-order',
+    'sales-transaction-order-slip',
+    'sales-transaction-invoice',
+    'sales-transaction-daily-call-monitoring',
+    'sales-transaction-product-promotions',
+    'sales-reports-inquiry-report',
+    'sales-reports-sales-report',
+    'sales-reports-sales-development-report',
+    'communication-productivity-tasks',
+    'communication-productivity-calendar',
+  ],
+  Accountant: [
+    'home',
+    'accounting-transactions-freight-charges-debit',
+    'accounting-transactions-sales-return-credit',
+    'accounting-transactions-adjustment-entry',
+    'accounting-transactions-daily-collection-entry',
+    'accounting-accounting-customer-ledger',
+    'accounting-accounting-collection-summary',
+    'accounting-accounting-statement-of-account',
+    'accounting-accounting-accounts-receivable',
+    'accounting-reports-accounting-overview',
+    'accounting-reports-aging-report',
+    'accounting-reports-collection-report',
+    'accounting-reports-sales-return-report',
+    'accounting-reports-accounts-receivable-report',
+    'accounting-reports-freight-charges-report',
+    'accounting-reports-purchase-history',
+    'accounting-reports-inactive-active-customers',
+    'accounting-reports-old-new-customers',
+    'sales-reports-sales-report',
+  ],
+  Warehouse: [
+    'home',
+    'warehouse-inventory-product-database',
+    'warehouse-inventory-stock-movement',
+    'warehouse-inventory-transfer-stock',
+    'warehouse-inventory-stock-adjustment',
+    'warehouse-inventory-inventory-audit',
+    'warehouse-purchasing-purchase-request',
+    'warehouse-purchasing-purchase-order',
+    'warehouse-purchasing-receiving-stock',
+    'warehouse-purchasing-return-to-supplier',
+    'warehouse-reports-inventory-report',
+    'warehouse-reports-reorder-report',
+    'warehouse-reports-item-suggested-for-stock-report',
+    'warehouse-reports-fast-slow-inventory-report',
+  ],
+  Staff: [
+    'home',
+  ],
+};
+
 export const DEFAULT_STAFF_ROLE = 'Sales Agent';
 export const STAFF_ROLES = ['Sales Agent', 'Senior Agent', 'Manager', 'Support', 'Owner'];
 

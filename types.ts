@@ -87,6 +87,12 @@ export interface CreateNotificationInput {
   metadata?: StandardNotificationPayload;
 }
 
+export type ActionPermissionEntry = {
+  can_add: boolean;
+  can_edit: boolean;
+  can_delete: boolean;
+};
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -102,6 +108,7 @@ export interface UserProfile {
   birthday?: string;
   mobile?: string;
   monthly_quota?: number;
+  action_permissions?: Record<string, ActionPermissionEntry>; // Module-level action permissions
 }
 
 export interface AccessGroup {
