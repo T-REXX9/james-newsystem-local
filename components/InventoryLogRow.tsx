@@ -17,6 +17,11 @@ const InventoryLogRow: React.FC<InventoryLogRowProps> = ({ log, showWarehouse, o
     if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
       return new Date(`${dateString}T00:00:00Z`);
     }
+    // For datetime strings, ensure they're parsed correctly
+    // If no 'Z' or timezone offset, treat as local time
+    if (/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}$/.test(dateString)) {
+      return new Date(dateString);
+    }
     return new Date(dateString);
   };
 

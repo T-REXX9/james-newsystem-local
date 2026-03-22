@@ -37,26 +37,35 @@ const parseApiErrorMessage = async (response: Response): Promise<string> => {
   return `Request failed (${response.status})`;
 };
 
-const normalizeLog = (row: any): InventoryLogWithProduct => ({
-  id: String(row.id ?? ''),
-  item_id: String(row.item_id ?? ''),
-  date: String(row.date ?? ''),
-  transaction_type: String(row.transaction_type ?? ''),
-  reference_no: String(row.reference_no ?? ''),
-  partner: String(row.partner ?? '—'),
-  warehouse_id: String(row.warehouse_id ?? ''),
-  qty_in: Number(row.qty_in ?? 0),
-  qty_out: Number(row.qty_out ?? 0),
-  status_indicator: row.status_indicator === '-' ? '-' : '+',
-  unit_price: Number(row.unit_price ?? 0),
-  processed_by: String(row.processed_by ?? ''),
-  notes: String(row.notes ?? ''),
-  created_at: String(row.date ?? ''),
-  updated_at: undefined,
-  is_deleted: false,
-  deleted_at: undefined,
-  balance: Number(row.balance ?? 0),
-});
+const normalizeLog = (row: any): InventoryLogWithProduct => {
+  // Normalize datetime: convert space-separated format to ISO format
+  let dateStr = String(row.date ?? '');
+  if (dateStr && /^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}$/.test(dateStr)) {
+    // Convert "YYYY-MM-DD HH:MM:SS" to "YYYY-MM-DDTHH:MM:SS"
+    dateStr = dateStr.replace(' ', 'T');
+  }
+
+  return {
+    id: String(row.id ?? ''),
+    item_id: String(row.item_id ?? ''),
+    date: dateStr,
+    transaction_type: String(row.transaction_type ?? ''),
+    reference_no: String(row.reference_no ?? ''),
+    partner: String(row.partner ?? '—'),
+    warehouse_id: String(row.warehouse_id ?? ''),
+    qty_in: Number(row.qty_in ?? 0),
+    qty_out: Number(row.qty_out ?? 0),
+    status_indicator: row.status_indicator === '-' ? '-' : '+',
+    unit_price: Number(row.unit_price ?? 0),
+    processed_by: String(row.processed_by ?? ''),
+    notes: String(row.notes ?? ''),
+    created_at: dateStr,
+    updated_at: undefined,
+    is_deleted: false,
+    deleted_at: undefined,
+    balance: Number(row.balance ?? 0),
+  };
+};
 
 export const searchStockMovementProducts = async (search = '', limit = 50) => {
   const page = await fetchProductsPage({
