@@ -4,7 +4,7 @@ import StatusBadge from './StatusBadge';
 import WorkflowStepper from './WorkflowStepper';
 import {
   getInvoice,
-  getInvoicesPage,
+  getAllInvoices,
   printInvoice,
   cancelInvoice,
   unpostInvoice,
@@ -63,10 +63,6 @@ const formatCurrency = (value?: number | string | null): string => {
 const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvoiceRefNo }) => {
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [customerFilter, setCustomerFilter] = useState('');
-  const [draftSearchTerm, setDraftSearchTerm] = useState('');
-  const [draftCustomerFilter, setDraftCustomerFilter] = useState('');
-  const [draftCustomerSearchTerm, setDraftCustomerSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [dateRange, setDateRange] = useState<{ from: string; to: string }>({ from: '', to: '' });
   const [statusFilter, setStatusFilter] = useState<'all' | string>('all');
@@ -76,7 +72,6 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -122,16 +117,63 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
   const loadInvoices = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await getInvoicesPage({
-        month: targetMonthYear.month,
-        year: targetMonthYear.year,
-        status: statusFilter === 'all' ? 'all' : statusFilter,
-        search: debouncedSearch,
-        page,
-        perPage: 100,
-      });
-      setInvoices(result.items);
-      setTotalPages(Math.max(1, result.meta.total_pages || 1));
+      const allInvoices = await getAllInvoices();
+
+      // Client-side filtering
+      let filtered = allInvoices;
+
+      // Filter by status
+      if (statusFilter !== 'all') {
+        filtered = filtered.filter((invoice) => invoice.status === statusFilter);
+      }
+
+      // Filter by month/year
+      if (targetMonthYear.month !== undefined && targetMonthYear.year !== undefined) {
+        filtered = filtered.filter((invoice) => {
+          const invoiceDate = new Date(invoice.created_at || '');
+          if (Number.isNaN(invoiceDate.getTime())) return false;
+          return (
+            invoiceDate.getMonth() + 1 === targetMonthYear.month &&
+            invoiceDate.getFullYear() === targetMonthYear.year
+          );
+        });
+      }
+
+      // Client-side smart search filtering
+      if (debouncedSearch) {
+        const query = debouncedSearch.toLowerCase();
+        const isRefNoLike = /[\d-]/g.test(query); // Contains numbers or dashes
+
+        filtered = filtered.filter((invoice) => {
+          // Always search invoice_no, reference_no, and remarks
+          const refMatch = (invoice.invoice_no || '').toLowerCase().includes(query) ||
+                          (invoice.reference_no || '').toLowerCase().includes(query) ||
+                          (invoice.remarks || '').toLowerCase().includes(query);
+
+          if (refMatch) return true;
+
+          // For text-based searches, also match customer names
+          if (!isRefNoLike) {
+            const customerMatch = contacts.some(
+              contact => contact.id === invoice.contact_id &&
+                         (contact.company || '').toLowerCase().includes(query)
+            );
+            if (customerMatch) return true;
+          }
+
+          return false;
+        });
+      }
+
+      // Client-side pagination
+      const perPage = 100;
+      const totalFiltered = filtered.length;
+      const computedTotalPages = Math.max(1, Math.ceil(totalFiltered / perPage));
+      const start = (page - 1) * perPage;
+      const paged = filtered.slice(start, start + perPage);
+
+      setInvoices(paged);
+      setTotalPages(computedTotalPages);
     } catch (err) {
       console.error('Failed loading invoices:', err);
       setInvoices([]);
@@ -139,7 +181,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, page, statusFilter, targetMonthYear.month, targetMonthYear.year]);
+  }, [debouncedSearch, page, statusFilter, targetMonthYear.month, targetMonthYear.year, contacts]);
 
   useEffect(() => {
     loadContacts();
@@ -154,12 +196,6 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
     () => [...contacts].sort((a, b) => String(a.company || '').localeCompare(String(b.company || ''), undefined, { sensitivity: 'base' })),
     [contacts]
   );
-  const visibleCustomerOptions = useMemo(() => {
-    const query = draftCustomerSearchTerm.trim().toLowerCase();
-    if (!query) return sortedContacts;
-    return sortedContacts.filter(contact => String(contact.company || '').toLowerCase().includes(query));
-  }, [draftCustomerSearchTerm, sortedContacts]);
-
   const notifyInvoiceEvent = useCallback(async (
     title: string,
     message: string,
@@ -289,41 +325,28 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
     }
   };
 
-  const handleSearchSubmit = () => {
-    setPage(1);
-    setSearchTerm(draftSearchTerm.trim());
-    setDebouncedSearch(draftSearchTerm.trim());
-    setCustomerFilter(draftCustomerFilter);
-    setDraftCustomerSearchTerm('');
-    setSearchModalOpen(false);
-  };
-
-  const handleSearchModalClose = () => {
-    setDraftSearchTerm(searchTerm);
-    setDraftCustomerFilter(customerFilter);
-    setDraftCustomerSearchTerm('');
-    setSearchModalOpen(false);
-  };
-
-  const handleSearchModalOpen = () => {
-    setDraftSearchTerm(searchTerm);
-    setDraftCustomerFilter(customerFilter);
-    setDraftCustomerSearchTerm('');
-    setSearchModalOpen(true);
-  };
-
   const handleRefresh = () => {
     setSearchTerm('');
-    setDraftSearchTerm('');
     setDebouncedSearch('');
-    setCustomerFilter('');
-    setDraftCustomerFilter('');
-    setDraftCustomerSearchTerm('');
     setStatusFilter('all');
     setDateRange({ from: '', to: '' });
     setPage(1);
     setSelectedInvoice(null);
   };
+
+  // Debounce search term changes to prevent lag
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const trimmedSearch = searchTerm.trim();
+      // Only update if search value actually changed
+      if (trimmedSearch !== debouncedSearch) {
+        setPage(1);
+        setDebouncedSearch(trimmedSearch);
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm, debouncedSearch]);
 
   const handleMonthChange = (monthValue: string) => {
     if (!monthValue) {
@@ -388,11 +411,6 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
     return `${MONTH_OPTIONS[targetMonthYear.month - 1]} ${targetMonthYear.year}`;
   }, [targetMonthYear.month, targetMonthYear.year]);
 
-  const filteredInvoices = useMemo(() => {
-    if (!customerFilter) return invoices;
-    return invoices.filter(inv => inv.contact_id === customerFilter);
-  }, [customerFilter, invoices]);
-
   const invoiceRowTone = (invoice: Invoice) => {
     if (invoice.status === InvoiceStatus.CANCELLED) return 'text-red-600';
     if (selectedInvoice?.id === invoice.id) return 'text-brand-blue font-semibold';
@@ -408,15 +426,17 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
       <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
         <div className="flex flex-col gap-3 px-4 py-3 border-b border-slate-200 dark:border-slate-800">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between text-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={handleSearchModalOpen}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
-              >
-                <Search className="w-4 h-4" />
-                Search
-              </button>
+            <div className="flex flex-wrap items-center gap-2 flex-grow">
+              <div className="relative flex-grow max-w-sm">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search by ref no. or customer name..."
+                  className="w-full pl-9 pr-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500"
+                />
+              </div>
               <button
                 type="button"
                 onClick={handleRefresh}
@@ -502,7 +522,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                       </td>
                     </tr>
                   )}
-                  {!loading && filteredInvoices.map((invoice, index) => {
+                  {!loading && invoices.map((invoice, index) => {
                     const customer = customerMap.get(invoice.contact_id);
                     return (
                       <tr
@@ -552,7 +572,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                       </tr>
                     );
                   })}
-                  {!loading && filteredInvoices.length === 0 && (
+                  {!loading && invoices.length === 0 && (
                     <tr>
                       <td colSpan={9} className="px-3 py-6 text-center text-slate-500">
                         No invoices match the current filters.
@@ -814,63 +834,6 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
       )}
 
       {/* Step 8: Search modal */}
-      {searchModalOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-40 p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-lg w-full p-5 border border-slate-200 dark:border-slate-800 space-y-4">
-            <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Search Invoices</h3>
-            <div className="space-y-3">
-              <label className="block text-sm text-slate-700 dark:text-slate-200">
-                <span className="block mb-1">Ref No.</span>
-                <input
-                  type="text"
-                  value={draftSearchTerm}
-                  onChange={(e) => setDraftSearchTerm(e.target.value)}
-                  className="w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
-                />
-              </label>
-              <label className="block text-sm text-slate-700 dark:text-slate-200">
-                <span className="block mb-1">Customer</span>
-                <input
-                  type="text"
-                  value={draftCustomerSearchTerm}
-                  onChange={(e) => setDraftCustomerSearchTerm(e.target.value)}
-                  placeholder="Search customers"
-                  className="mb-2 w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
-                />
-                <select
-                  value={draftCustomerFilter}
-                  onChange={(e) => setDraftCustomerFilter(e.target.value)}
-                  className="w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
-                >
-                  <option value="">All Customers</option>
-                  {visibleCustomerOptions.map(contact => (
-                    <option key={contact.id} value={contact.id}>
-                      {contact.company}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={handleSearchModalClose}
-                className="px-3 py-2 text-sm rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200"
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={handleSearchSubmit}
-                className="px-4 py-2 text-sm rounded bg-slate-700 text-white"
-              >
-                Submit
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Step 9: Cancel Invoice modal */}
       {cancelModalOpen && selectedInvoice && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-40 p-4">

@@ -13,7 +13,7 @@ import {
   cancelOrderSlip,
   finalizeOrderSlip,
   getOrderSlip,
-  getOrderSlipsPage,
+  getAllOrderSlips,
   printOrderSlip,
   unpostOrderSlip,
 } from '../services/orderSlipLocalApiService';
@@ -80,9 +80,6 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
   const [orderSlips, setOrderSlips] = useState<OrderSlip[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchModalOpen, setSearchModalOpen] = useState(false);
-  const [customerFilter, setCustomerFilter] = useState('');
-  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -108,16 +105,63 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
   const loadOrderSlips = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await getOrderSlipsPage({
-        month,
-        year,
-        status: statusFilter === 'all' ? 'all' : statusFilter,
-        search: debouncedSearch,
-        page,
-        perPage: 50,
-      });
-      setOrderSlips(result.items);
-      setTotalPages(Math.max(1, result.meta.total_pages || 1));
+      const allSlips = await getAllOrderSlips();
+
+      // Client-side filtering
+      let filtered = allSlips;
+
+      // Filter by status
+      if (statusFilter !== 'all') {
+        filtered = filtered.filter((slip) => slip.status === statusFilter);
+      }
+
+      // Filter by month/year
+      if (month !== undefined && year !== undefined) {
+        filtered = filtered.filter((slip) => {
+          const slipDate = new Date(slip.created_at || '');
+          if (Number.isNaN(slipDate.getTime())) return false;
+          return (
+            slipDate.getMonth() + 1 === month &&
+            slipDate.getFullYear() === year
+          );
+        });
+      }
+
+      // Client-side smart search filtering
+      if (debouncedSearch) {
+        const query = debouncedSearch.toLowerCase();
+        const isRefNoLike = /[\d-]/g.test(query); // Contains numbers or dashes
+
+        filtered = filtered.filter((slip) => {
+          // Always search slip_no, reference_no, and remarks
+          const refMatch = (slip.slip_no || '').toLowerCase().includes(query) ||
+                          (slip.reference_no || '').toLowerCase().includes(query) ||
+                          (slip.remarks || '').toLowerCase().includes(query);
+
+          if (refMatch) return true;
+
+          // For text-based searches, also match customer names
+          if (!isRefNoLike) {
+            const customerMatch = contacts.some(
+              contact => contact.id === slip.contact_id &&
+                         (contact.company || '').toLowerCase().includes(query)
+            );
+            if (customerMatch) return true;
+          }
+
+          return false;
+        });
+      }
+
+      // Client-side pagination
+      const perPage = 50;
+      const totalFiltered = filtered.length;
+      const computedTotalPages = Math.max(1, Math.ceil(totalFiltered / perPage));
+      const start = (page - 1) * perPage;
+      const paged = filtered.slice(start, start + perPage);
+
+      setOrderSlips(paged);
+      setTotalPages(computedTotalPages);
     } catch (err) {
       console.error('Failed loading order slips:', err);
       setOrderSlips([]);
@@ -125,16 +169,23 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
     } finally {
       setLoading(false);
     }
-  }, [month, year, debouncedSearch, statusFilter, page]);
+  }, [month, year, debouncedSearch, statusFilter, page, contacts]);
 
   useEffect(() => {
     loadContacts();
   }, [loadContacts]);
 
   useEffect(() => {
-    const t = window.setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300);
+    const t = window.setTimeout(() => {
+      const trimmedSearch = searchTerm.trim();
+      // Only update if search value actually changed
+      if (trimmedSearch !== debouncedSearch) {
+        setPage(1);
+        setDebouncedSearch(trimmedSearch);
+      }
+    }, 600);
     return () => window.clearTimeout(t);
-  }, [searchTerm]);
+  }, [searchTerm, debouncedSearch]);
 
   useEffect(() => {
     loadOrderSlips();
@@ -145,11 +196,6 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
     () => [...contacts].sort((a, b) => String(a.company || '').localeCompare(String(b.company || ''), undefined, { sensitivity: 'base' })),
     [contacts]
   );
-  const visibleCustomerOptions = useMemo(() => {
-    const query = customerSearchTerm.trim().toLowerCase();
-    if (!query) return sortedContacts;
-    return sortedContacts.filter(contact => String(contact.company || '').toLowerCase().includes(query));
-  }, [customerSearchTerm, sortedContacts]);
 
   const notifyOrderSlipEvent = useCallback(async (
     title: string,
@@ -221,11 +267,6 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
     return `${MONTH_OPTIONS[month - 1]} ${year}`;
   }, [month, year]);
 
-  const filteredSlips = useMemo(() => {
-    if (!customerFilter) return orderSlips;
-    return orderSlips.filter(slip => slip.contact_id === customerFilter);
-  }, [customerFilter, orderSlips]);
-
   const orderRowTone = (slip: OrderSlip) => {
     if (slip.status === OrderSlipStatus.CANCELLED) return 'text-red-600';
     if (selectedSlip?.id === slip.id) return 'text-brand-blue';
@@ -264,22 +305,6 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
     setYear(undefined);
     setPage(1);
     setSelectedSlip(null);
-  };
-
-  const handleSearchSubmit = () => {
-    setPage(1);
-    setDebouncedSearch(searchTerm.trim());
-    setSearchModalOpen(false);
-  };
-
-  const handleSearchModalOpen = () => {
-    setCustomerSearchTerm('');
-    setSearchModalOpen(true);
-  };
-
-  const handleSearchModalClose = () => {
-    setCustomerSearchTerm('');
-    setSearchModalOpen(false);
   };
 
   const handleFinalize = async () => {
@@ -381,15 +406,17 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
       <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
         <div className="flex flex-col gap-3 px-4 py-3 border-b border-slate-200 dark:border-slate-800">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between text-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={handleSearchModalOpen}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
-              >
-                <Search className="w-4 h-4" />
-                Search
-              </button>
+            <div className="flex flex-wrap items-center gap-2 flex-grow">
+              <div className="relative flex-grow max-w-sm">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search by ref no. or customer name..."
+                  className="w-full pl-9 pr-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500"
+                />
+              </div>
               <button
                 type="button"
                 onClick={handleRefresh}
@@ -483,7 +510,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                       </td>
                     </tr>
                   )}
-                  {!loading && filteredSlips.map((slip, index) => {
+                  {!loading && orderSlips.map((slip, index) => {
                     const customer = customerMap.get(slip.contact_id);
                     return (
                       <tr
@@ -520,7 +547,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                       </tr>
                     );
                   })}
-                  {!loading && filteredSlips.length === 0 && (
+                  {!loading && orderSlips.length === 0 && (
                     <tr>
                       <td colSpan={8} className="px-3 py-6 text-center text-slate-500">
                         No order slips match the current filters.
@@ -729,63 +756,6 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
       )}
 
       {/* Search modal */}
-      {searchModalOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-40 p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-lg w-full p-5 border border-slate-200 dark:border-slate-800 space-y-4">
-            <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Search Order Slips</h3>
-            <div className="space-y-3">
-              <label className="block text-sm text-slate-700 dark:text-slate-200">
-                <span className="block mb-1">Ref No.</span>
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
-                />
-              </label>
-              <label className="block text-sm text-slate-700 dark:text-slate-200">
-                <span className="block mb-1">Customer</span>
-                <input
-                  type="text"
-                  value={customerSearchTerm}
-                  onChange={(e) => setCustomerSearchTerm(e.target.value)}
-                  placeholder="Search customers"
-                  className="mb-2 w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
-                />
-                <select
-                  value={customerFilter}
-                  onChange={(e) => setCustomerFilter(e.target.value)}
-                  className="w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
-                >
-                  <option value="">All Customers</option>
-                  {visibleCustomerOptions.map(contact => (
-                    <option key={contact.id} value={contact.id}>
-                      {contact.company}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={handleSearchModalClose}
-                className="px-3 py-2 text-sm rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200"
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={handleSearchSubmit}
-                className="px-4 py-2 text-sm rounded bg-slate-700 text-white"
-              >
-                Submit
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Cancel modal */}
       {cancelModalOpen && selectedSlip && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-40 p-4">

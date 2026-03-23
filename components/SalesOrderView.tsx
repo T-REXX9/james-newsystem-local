@@ -16,8 +16,8 @@ import {
   convertToDocument,
   getSalesOrder,
   syncDocumentPolicyState,
+  getAllSalesOrders,
 } from '../services/salesOrderLocalApiService';
-import { getAllSalesOrders } from '../services/salesOrderService';
 import { fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { getLocalAuthSession } from '../services/localAuthService';
 import { dispatchWorkflowNotification, fetchProfiles } from '../services/supabaseService';
@@ -49,13 +49,13 @@ const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
 const SALES_ORDER_TAB_ID = 'sales-transaction-sales-order';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SALES_ORDER_LIST_COLUMN_WIDTHS = [
-  '8rem',
-  '30%',
-  '12rem',
-  '11rem',
-  '14rem',
+  '7rem',
   '16%',
-  '10rem',
+  '18rem',
+  '11rem',
+  '13rem',
+  '14%',
+  '9rem',
 ];
 
 const normalizeStatus = (status: unknown): string => String(status || '').trim().toLowerCase();
@@ -89,9 +89,6 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [loading, setLoading] = useState(true);
-  const [searchModalOpen, setSearchModalOpen] = useState(false);
-  const [customerFilter, setCustomerFilter] = useState('');
-  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -109,6 +106,20 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
       year: src.getFullYear(),
     };
   }, [dateRange.from]);
+
+  // Debounce search term changes to prevent lag
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const trimmedSearch = searchTerm.trim();
+      // Only update if search value actually changed
+      if (trimmedSearch !== debouncedSearch) {
+        setPage(1);
+        setDebouncedSearch(trimmedSearch);
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm, debouncedSearch]);
 
   const loadContacts = useCallback(async () => {
     try {
@@ -141,15 +152,35 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
         });
       }
 
-      // Client-side search filtering
+      // Client-side smart search filtering with auto-detection
       if (debouncedSearch) {
         const query = debouncedSearch.toLowerCase();
-        filtered = filtered.filter((order) =>
-          (order.order_no || '').toLowerCase().includes(query) ||
-          (order.contact_id || '').toLowerCase().includes(query) ||
-          (order.remarks || '').toLowerCase().includes(query) ||
-          (order.reference_no || '').toLowerCase().includes(query)
-        );
+
+        // Detect search type: reference_no (usually contains numbers/patterns) vs customer name
+        const isRefNoLike = /[\d-]/g.test(query); // Contains numbers or dashes
+
+        filtered = filtered.filter((order) => {
+          // Always search reference_no, order_no, and remarks
+          const refMatch = (order.reference_no || '').toLowerCase().includes(query) ||
+                          (order.order_no || '').toLowerCase().includes(query) ||
+                          (order.remarks || '').toLowerCase().includes(query);
+
+          if (refMatch) return true;
+
+          // For text-based searches, also match customer names
+          if (!isRefNoLike) {
+            const customerMatch = contacts.some(
+              contact => contact.id === order.contact_id &&
+                         (contact.company || '').toLowerCase().includes(query)
+            );
+            if (customerMatch) return true;
+          }
+
+          // Also always match by contact_id if it matches
+          if ((order.contact_id || '').toLowerCase().includes(query)) return true;
+
+          return false;
+        });
       }
 
       // Client-side pagination
@@ -193,11 +224,6 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
     () => [...contacts].sort((a, b) => String(a.company || '').localeCompare(String(b.company || ''), undefined, { sensitivity: 'base' })),
     [contacts]
   );
-  const visibleCustomerOptions = useMemo(() => {
-    const query = customerSearchTerm.trim().toLowerCase();
-    if (!query) return sortedContacts;
-    return sortedContacts.filter(contact => String(contact.company || '').toLowerCase().includes(query));
-  }, [customerSearchTerm, sortedContacts]);
 
   const notifySalesOrderEvent = useCallback(async (
     title: string,
@@ -464,16 +490,9 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
     }
   };
 
-  const handleSearchSubmit = () => {
-    setPage(1);
-    setDebouncedSearch(searchTerm.trim());
-    setSearchModalOpen(false);
-  };
-
   const handleRefresh = () => {
     setSearchTerm('');
     setDebouncedSearch('');
-    setCustomerFilter('');
     setStatusFilter('all');
     setDateRange({ from: '', to: '' });
     setPage(1);
@@ -549,26 +568,11 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
     alert('Unpost action is not available in the current sales order API.');
   };
 
-  const handleSearchModalOpen = () => {
-    setCustomerSearchTerm('');
-    setSearchModalOpen(true);
-  };
-
-  const handleSearchModalClose = () => {
-    setCustomerSearchTerm('');
-    setSearchModalOpen(false);
-  };
-
   const workflowStage = normalizeStatus(selectedOrder?.status) === 'posted' ? 'document' : 'order';
   const selectedOrderStatus = normalizeStatus(selectedOrder?.status);
   const canConfirm = selectedOrderStatus === 'pending' || (selectedOrderStatus === 'submitted' && Boolean(selectedOrder?.can_approve));
   const confirmLabel = selectedOrderStatus === 'pending' ? 'Approve SO' : 'Approve SO';
   const canGenerate = selectedOrderStatus === 'approved';
-
-  const filteredOrders = useMemo(() => {
-    if (!customerFilter) return orders;
-    return orders.filter(order => order.contact_id === customerFilter);
-  }, [customerFilter, orders]);
 
   const activeFilterLabel = useMemo(() => {
     if (!targetMonthYear.month || !targetMonthYear.year) return 'All Records';
@@ -600,15 +604,17 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
       <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
         <div className="flex flex-col gap-3 px-4 py-3 border-b border-slate-200 dark:border-slate-800">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between text-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={handleSearchModalOpen}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
-              >
-                <Search className="w-4 h-4" />
-                Search
-              </button>
+            <div className="flex flex-wrap items-center gap-2 flex-grow">
+              <div className="relative flex-grow max-w-sm">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search by ref no. or customer name..."
+                  className="w-full pl-9 pr-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500"
+                />
+              </div>
               <button
                 type="button"
                 onClick={handleRefresh}
@@ -703,7 +709,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
                       </td>
                     </tr>
                   )}
-                  {!loading && filteredOrders.map((order, index) => {
+                  {!loading && orders.map((order, index) => {
                     const customer = customerMap.get(order.contact_id);
                     return (
                       <tr
@@ -743,7 +749,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
                       </tr>
                     );
                   })}
-                  {!loading && filteredOrders.length === 0 && (
+                  {!loading && orders.length === 0 && (
                     <tr>
                       <td colSpan={7} className="px-3 py-6 text-center text-slate-500">
                         No orders match the current filters.
@@ -1043,63 +1049,6 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
       ) : (
         <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 py-16 text-center text-slate-500">
           Select a sales order from the table above to view its full details.
-        </div>
-      )}
-
-      {searchModalOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-40 p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-lg w-full p-5 border border-slate-200 dark:border-slate-800 space-y-4">
-            <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Search Sales Orders</h3>
-            <div className="space-y-3">
-              <label className="block text-sm text-slate-700 dark:text-slate-200">
-                <span className="block mb-1">Ref No.</span>
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
-                />
-              </label>
-              <label className="block text-sm text-slate-700 dark:text-slate-200">
-                <span className="block mb-1">Customer</span>
-                <input
-                  type="text"
-                  value={customerSearchTerm}
-                  onChange={(e) => setCustomerSearchTerm(e.target.value)}
-                  placeholder="Search customers"
-                  className="mb-2 w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
-                />
-                <select
-                  value={customerFilter}
-                  onChange={(e) => setCustomerFilter(e.target.value)}
-                  className="w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
-                >
-                  <option value="">All Customers</option>
-                  {visibleCustomerOptions.map(contact => (
-                    <option key={contact.id} value={contact.id}>
-                      {contact.company}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={handleSearchModalClose}
-                className="px-3 py-2 text-sm rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200"
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={handleSearchSubmit}
-                className="px-4 py-2 text-sm rounded bg-slate-700 text-white"
-              >
-                Submit
-              </button>
-            </div>
-          </div>
         </div>
       )}
 

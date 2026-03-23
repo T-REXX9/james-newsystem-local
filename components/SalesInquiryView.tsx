@@ -26,8 +26,7 @@ import {
   updateSalesInquiry,
 } from '../services/salesInquiryLocalApiService';
 import { getProductPrice } from '../services/productLocalApiService';
-import { getSalesOrderByInquiry } from '../services/salesOrderLocalApiService';
-import { getSalesOrder } from '../services/salesOrderService';
+import { getSalesOrderByInquiry, getSalesOrder } from '../services/salesOrderLocalApiService';
 
 import ProductSearchModal from './ProductSearchModal';
 import CustomerAutocomplete from './CustomerAutocomplete';
@@ -96,6 +95,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   const [selectedInquiry, setSelectedInquiry] = useState<SalesInquiry | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | SalesInquiryStatus>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterDay, setFilterDay] = useState('');
   const [filterMonth, setFilterMonth] = useState(String(new Date().getMonth() + 1));
   const [filterYear, setFilterYear] = useState(String(new Date().getFullYear()));
@@ -120,6 +120,19 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
       window.localStorage?.setItem('theme', 'light');
     }
   }, [isDarkMode]);
+
+  // Debounce search term changes to prevent lag
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const trimmedSearch = searchTerm.trim();
+      // Only update if search value actually changed
+      if (trimmedSearch !== debouncedSearch) {
+        setDebouncedSearch(trimmedSearch);
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm, debouncedSearch]);
 
   const toggleTheme = () => setIsDarkMode((prev) => !prev);
 
@@ -300,15 +313,30 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   }, [customerReference, selectedCustomer]);
 
   const filteredInquiries = useMemo(() => {
-    const query = searchTerm.toLowerCase();
+    const query = debouncedSearch.toLowerCase();
+
+    // Detect search type: inquiry_no/reference (usually contains numbers/patterns) vs customer name
+    const isRefNoLike = /[\d-]/g.test(query);
+
     return inquiries.filter((inquiry) => {
       const matchesStatus = statusFilter === 'all' || inquiry.status === statusFilter;
       const customerName = customerMap.get(inquiry.contact_id)?.company?.toLowerCase() || '';
-      const matchesQuery =
-        !query ||
-        inquiry.inquiry_no.toLowerCase().includes(query) ||
-        customerName.includes(query) ||
-        (inquiry.sales_person || '').toLowerCase().includes(query);
+
+      // Smart search matching
+      let matchesQuery = !query;
+      if (query) {
+        // Always search inquiry_no, reference_no, and sales_person
+        matchesQuery =
+          inquiry.inquiry_no.toLowerCase().includes(query) ||
+          (inquiry.reference_no || '').toLowerCase().includes(query) ||
+          (inquiry.sales_person || '').toLowerCase().includes(query);
+
+        // For text-based searches, also match customer names
+        if (!matchesQuery && !isRefNoLike) {
+          matchesQuery = customerName.includes(query);
+        }
+      }
+
       const parsedDate = inquiry.sales_date ? new Date(inquiry.sales_date) : null;
       const dayValue = parsedDate ? String(parsedDate.getDate()) : '';
       const monthValue = parsedDate ? String(parsedDate.getMonth() + 1) : '';
@@ -318,7 +346,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
       const matchesYear = !filterYear || yearValue === filterYear;
       return matchesStatus && matchesQuery && matchesDay && matchesMonth && matchesYear;
     });
-  }, [customerMap, filterDay, filterMonth, filterYear, inquiries, searchTerm, statusFilter]);
+  }, [customerMap, filterDay, filterMonth, filterYear, inquiries, debouncedSearch, statusFilter]);
 
   // Generate initial inquiry number and preload data
   useEffect(() => {
