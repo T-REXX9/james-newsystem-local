@@ -77,6 +77,16 @@ interface SalesInquiryViewProps {
   initialPrefillToken?: string;
 }
 
+const inquiryListColumnWidths = [
+  '8rem',
+  '30%',
+  '12rem',
+  '11rem',
+  '14rem',
+  '16%',
+  '10rem',
+];
+
 const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, initialPrefillToken }) => {
   const { addToast } = useToast();
   const lastAppliedPrefillRef = React.useRef<string | null>(null);
@@ -878,7 +888,12 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
           )}
           {!listLoading && filteredInquiries.length > 0 && (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full table-fixed text-sm">
+                <colgroup>
+                  {inquiryListColumnWidths.map((width) => (
+                    <col key={width} style={{ width }} />
+                  ))}
+                </colgroup>
                 <thead className="bg-slate-50 dark:bg-slate-800">
                   <tr className="text-left text-slate-700 dark:text-slate-200">
                     <th className="px-3 py-2 font-semibold">Date</th>
@@ -892,7 +907,12 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                 </thead>
               </table>
               <div className="max-h-[160px] overflow-y-auto border border-t-0 border-slate-200 dark:border-slate-800">
-                <table className="w-full text-sm">
+                <table className="w-full table-fixed text-sm">
+                  <colgroup>
+                    {inquiryListColumnWidths.map((width) => (
+                      <col key={width} style={{ width }} />
+                    ))}
+                  </colgroup>
                   <tbody>
                     {filteredInquiries.map((inquiry) => {
                       const customer = customerMap.get(inquiry.contact_id);
