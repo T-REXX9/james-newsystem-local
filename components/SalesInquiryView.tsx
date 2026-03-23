@@ -194,14 +194,31 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   const [deleteConfirming, setDeleteConfirming] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
   const [activeRowId, setActiveRowId] = useState<string | null>(null);
+  const getNextLegacyInquiryCounter = useCallback(() => {
+    const counters = inquiries
+      .map((inquiry) => {
+        const match = /(\d+)$/.exec(String(inquiry.inquiry_no || '').trim());
+        return match ? Number.parseInt(match[1], 10) : 0;
+      })
+      .filter((value) => Number.isFinite(value) && value > 0);
+
+    return (counters.length > 0 ? Math.max(...counters) : 0) + 1;
+  }, [inquiries]);
+
   const generateInquiryNumber = useCallback(() => {
     const date = new Date();
-    const year = date.getFullYear();
+    const nextCounter = getNextLegacyInquiryCounter();
+    return `INQ${String(date.getFullYear()).slice(-2)}-${nextCounter}`;
+  }, [getNextLegacyInquiryCounter]);
+
+  const generateLegacyReferenceNo = useCallback(() => {
+    const date = new Date();
+    const year = String(date.getFullYear()).slice(-2);
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
-    const random = String(Math.floor(Math.random() * 100000)).padStart(5, '0');
-    return `INQ${year}${month}${day}-${random}`;
-  }, []);
+    const dateValue = Number.parseInt(`${year}${month}${day}`, 10);
+    return `REF${dateValue + getNextLegacyInquiryCounter()}`;
+  }, [getNextLegacyInquiryCounter]);
 
   const formatInquiryDisplayNo = useCallback((value: string | undefined | null): string => {
     const raw = String(value || '').trim().toUpperCase();
@@ -295,8 +312,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   useEffect(() => {
     const newInquiryNo = generateInquiryNumber();
     setInquiryNo(newInquiryNo);
-    setReferenceNo(newInquiryNo);
-  }, [generateInquiryNumber]);
+    setReferenceNo(generateLegacyReferenceNo());
+  }, [generateInquiryNumber, generateLegacyReferenceNo]);
 
   const resetFormForNew = useCallback(() => {
     const newInquiryNo = generateInquiryNumber();
@@ -306,7 +323,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     setSalesDate(new Date().toISOString().split('T')[0]);
     setSalesPerson('');
     setDeliveryAddress('');
-    setReferenceNo(newInquiryNo);
+    setReferenceNo(generateLegacyReferenceNo());
     setCustomerReference('');
     setSendBy('');
     setPriceGroup('');
@@ -325,7 +342,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     setSubmitError('');
     setSubmitCount(0);
     setLoadedSnapshot(null);
-  }, [generateInquiryNumber]);
+  }, [generateInquiryNumber, generateLegacyReferenceNo]);
 
   const loadInquiryIntoForm = useCallback((inquiry: SalesInquiry) => {
     const customer = customerMap.get(inquiry.contact_id) || null;
