@@ -540,7 +540,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
         urgency_date: urgency !== 'N/A' ? urgencyDate : undefined,
         items: items.map(({ tempId, isManual, brand, ...rest }) => ({
           ...rest,
-          qty: Number(rest.qty) || 0,
+          qty: rest.qty === '' ? 1 : Number(rest.qty) || 1,
           unit_price: Number(rest.unit_price) || 0,
         })),
       };
@@ -592,8 +592,10 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
       errors.itemSelection = `Please select valid products for all items. ${invalidItems.length} item(s) are missing product details.`;
     }
     items.forEach((item) => {
-      const qtyCheck = validateNumeric(item.qty, 'quantity', 1);
-      if (!qtyCheck.isValid) errors[`item-${item.tempId}-qty`] = qtyCheck.message;
+      if (item.qty !== '') {
+        const qtyCheck = validateNumeric(item.qty, 'quantity', 1);
+        if (!qtyCheck.isValid) errors[`item-${item.tempId}-qty`] = qtyCheck.message;
+      }
       const priceCheck = validateNumeric(item.unit_price, 'unit price', 0);
       if (!priceCheck.isValid) errors[`item-${item.tempId}-unit_price`] = priceCheck.message;
       if (item.isManual) {
@@ -1308,7 +1310,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                           <td className="px-3 py-2 border-b border-slate-200 dark:border-slate-800">
                             <input
                               type="number"
-                              disabled={isReadOnly}
+                              disabled={isReadOnly || !isManualItem(item)}
                               value={item.unit_price}
                               onChange={(e) =>
                                 updateItemRow(
@@ -1317,7 +1319,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                                   e.target.value === '' ? '' : parseFloat(e.target.value) || ''
                                 )
                               }
-                              className={`w-28 px-2 py-1.5 border rounded bg-white dark:bg-slate-800 text-sm text-right ${validationErrors[`item-${item.tempId}-unit_price`] ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'} ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}`}
+                              className={`w-28 px-2 py-1.5 border rounded bg-white dark:bg-slate-800 text-sm text-right ${validationErrors[`item-${item.tempId}-unit_price`] ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'} ${(isReadOnly || !isManualItem(item)) ? 'opacity-60 cursor-not-allowed' : ''}`}
                             />
                           </td>
                           <td className="px-3 py-2 border-b border-slate-200 dark:border-slate-800 text-right">{formatCurrency(item.amount || 0)}</td>
