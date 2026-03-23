@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, FolderPlus, Lock, Save, Trash2, Users } from 'lucide-react';
 import { AVAILABLE_APP_MODULES, MODULE_ID_ALIASES } from '../constants';
 import { AccessGroup } from '../types';
+import ConfirmModal from './ConfirmModal';
 
 interface AccessGroupManagerProps {
   groups: AccessGroup[];
@@ -63,6 +64,7 @@ const AccessGroupManager: React.FC<AccessGroupManagerProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteTargetGroup, setDeleteTargetGroup] = useState<AccessGroup | null>(null);
 
   useEffect(() => {
     if (!groups.length) {
@@ -130,12 +132,14 @@ const AccessGroupManager: React.FC<AccessGroupManagerProps> = ({
     }
   };
 
-  const handleDelete = async (groupId: string) => {
-    setDeletingId(groupId);
+  const handleDelete = async () => {
+    if (!deleteTargetGroup) return;
+    setDeletingId(deleteTargetGroup.id);
     try {
-      await onDeleteGroup(groupId);
+      await onDeleteGroup(deleteTargetGroup.id);
     } finally {
       setDeletingId(null);
+      setDeleteTargetGroup(null);
     }
   };
 
@@ -211,7 +215,7 @@ const AccessGroupManager: React.FC<AccessGroupManagerProps> = ({
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation();
-                      handleDelete(group.id);
+                      setDeleteTargetGroup(group);
                     }}
                     disabled={hasAssignedStaff || deletingId === group.id}
                     title={hasAssignedStaff ? 'Remove assigned staff before deleting this group' : 'Delete group'}
@@ -249,7 +253,7 @@ const AccessGroupManager: React.FC<AccessGroupManagerProps> = ({
                 <input
                   value={draftName}
                   onChange={(event) => setDraftName(event.target.value)}
-                  className="input-field"
+                  className="input-field border border-slate-200 rounded-lg px-3 py-2 dark:border-slate-700"
                 />
               </div>
               <div>
@@ -259,7 +263,7 @@ const AccessGroupManager: React.FC<AccessGroupManagerProps> = ({
                 <input
                   value={draftDescription}
                   onChange={(event) => setDraftDescription(event.target.value)}
-                  className="input-field"
+                  className="input-field border border-slate-200 rounded-lg px-3 py-2 dark:border-slate-700"
                   placeholder="Optional description"
                 />
               </div>
@@ -333,6 +337,17 @@ const AccessGroupManager: React.FC<AccessGroupManagerProps> = ({
           </div>
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={deleteTargetGroup !== null}
+        onClose={() => setDeleteTargetGroup(null)}
+        onConfirm={handleDelete}
+        title="Delete Access Group"
+        message={`Are you sure you want to delete "${deleteTargetGroup?.name}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+      />
     </div>
   );
 };
