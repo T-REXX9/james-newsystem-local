@@ -51,18 +51,21 @@ Usage:
   ./setup.sh            # full fresh install (default)
   ./setup.sh install    # same as default
   ./setup.sh update     # update api + web repos, rebuild, restart services
+  ./setup.sh restart    # restart api + web preview only
 EOF
   exit 0
 fi
 
-if [[ "$MODE" != "install" && "$MODE" != "update" ]]; then
-  echo "ERROR: unknown mode '$MODE'. Use: install | update"
+if [[ "$MODE" != "install" && "$MODE" != "update" && "$MODE" != "restart" ]]; then
+  echo "ERROR: unknown mode '$MODE'. Use: install | update | restart"
   exit 1
 fi
 
 TOTAL_STEPS=16
 if [[ "$MODE" == "update" ]]; then
   TOTAL_STEPS=9
+elif [[ "$MODE" == "restart" ]]; then
+  TOTAL_STEPS=4
 fi
 CURRENT_STEP=0
 
@@ -203,6 +206,30 @@ VITE_MAIN_ID=${VITE_MAIN_ID}
 EOF
 }
 
+restart_services() {
+  pkill -f "php -S ${API_HOST}:${API_PORT} -t public" >/dev/null 2>&1 || true
+  pkill -f "vite preview --host ${WEB_HOST} --port ${WEB_PORT}" >/dev/null 2>&1 || true
+
+  nohup bash -lc "cd '$API_DIR' && php -S ${API_HOST}:${API_PORT} -t public" >"$API_LOG" 2>&1 &
+  sleep 2
+  nohup bash -lc "cd '$WEB_DIR' && npm run preview -- --host ${WEB_HOST} --port ${WEB_PORT}" >"$WEB_LOG" 2>&1 &
+  sleep 4
+}
+
+print_service_urls() {
+  local host_ip
+  host_ip="$(hostname -I | awk '{print $1}')"
+
+  echo
+  echo "API health endpoint: http://127.0.0.1:${API_PORT}/api/v1/health"
+  echo "Web app (local):     http://127.0.0.1:${WEB_PORT}"
+  echo "Web app (LAN):       http://${host_ip}:${WEB_PORT}"
+  echo
+  echo "Logs:"
+  echo "  API log: ${API_LOG}"
+  echo "  Web log: ${WEB_LOG}"
+}
+
 build_auth_repo_url() {
   local url="$1"
   if [[ -z "$GITHUB_TOKEN" ]]; then
@@ -303,6 +330,24 @@ git_safe_clone_or_pull "$API_REPO_URL" "$API_DIR" "API repository"
 step "Cloning or updating web repository"
 git_safe_clone_or_pull "$WEB_REPO_URL" "$WEB_DIR" "web repository"
 
+if [[ "$MODE" == "restart" ]]; then
+  step "Writing API and web environment files"
+  write_api_env
+  write_web_env
+
+  step "Restarting API server and web preview"
+  restart_services
+
+  step "Verifying services and printing access URLs"
+  API_HEALTH_URL="http://127.0.0.1:${API_PORT}/api/v1/health"
+  curl -fsS "$API_HEALTH_URL" >/dev/null
+
+  echo
+  echo "Restart complete."
+  print_service_urls
+  exit 0
+fi
+
 if [[ "$MODE" == "update" ]]; then
   step "Writing API and web environment files"
   write_api_env
@@ -315,13 +360,7 @@ if [[ "$MODE" == "update" ]]; then
   (cd "$WEB_DIR" && npm run build)
 
   step "Restarting API server and web preview"
-  pkill -f "php -S ${API_HOST}:${API_PORT} -t public" >/dev/null 2>&1 || true
-  pkill -f "vite preview --host ${WEB_HOST} --port ${WEB_PORT}" >/dev/null 2>&1 || true
-
-  nohup bash -lc "cd '$API_DIR' && php -S ${API_HOST}:${API_PORT} -t public" >"$API_LOG" 2>&1 &
-  sleep 2
-  nohup bash -lc "cd '$WEB_DIR' && npm run preview -- --host ${WEB_HOST} --port ${WEB_PORT}" >"$WEB_LOG" 2>&1 &
-  sleep 4
+  restart_services
 
   step "Verifying services and printing access URLs"
   HOST_IP="$(hostname -I | awk '{print $1}')"
@@ -338,13 +377,7 @@ if [[ "$MODE" == "update" ]]; then
 
   echo
   echo "Update complete."
-  echo "API health endpoint: ${API_HEALTH_URL}"
-  echo "Web app (local):     ${WEB_URL_LOCAL}"
-  echo "Web app (LAN):       ${WEB_URL_LAN}"
-  echo
-  echo "Logs:"
-  echo "  API log: ${API_LOG}"
-  echo "  Web log: ${WEB_LOG}"
+  print_service_urls
   exit 0
 fi
 
@@ -480,13 +513,7 @@ step "Building frontend for preview"
 (cd "$WEB_DIR" && npm run build)
 
 step "Starting API server and web preview in background"
-pkill -f "php -S ${API_HOST}:${API_PORT} -t public" >/dev/null 2>&1 || true
-pkill -f "vite preview --host ${WEB_HOST} --port ${WEB_PORT}" >/dev/null 2>&1 || true
-
-nohup bash -lc "cd '$API_DIR' && php -S ${API_HOST}:${API_PORT} -t public" >"$API_LOG" 2>&1 &
-sleep 2
-nohup bash -lc "cd '$WEB_DIR' && npm run preview -- --host ${WEB_HOST} --port ${WEB_PORT}" >"$WEB_LOG" 2>&1 &
-sleep 4
+restart_services
 
 step "Verifying services and printing access URLs"
 HOST_IP="$(hostname -I | awk '{print $1}')"
