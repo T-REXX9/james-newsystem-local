@@ -25,8 +25,8 @@ export const resolveStockMovementNavigationTarget = (
     // Old-system behavior: receiving references open the receiving report page.
     return { tab: 'warehouse-purchasing-receiving-stock', payload: { rrRefNo: ref } };
   }
-  if (tx === 'transfer receipt' || tx === 'stock transfer' || tx.includes('transfer')) {
-    return { tab: 'warehouse-inventory-transfer-stock', payload: { transferNo: ref } };
+  if (tx === 'transfer product' || tx === 'transfer receipt' || tx === 'stock transfer' || tx.includes('transfer')) {
+    return { tab: 'warehouse-inventory-transfer-stock', payload: { transferId: ref, transferNo: ref } };
   }
   if (tx === 'stock adjustment' || tx.includes('adjust')) {
     return { tab: 'warehouse-inventory-stock-adjustment', payload: { adjustmentNo: ref } };

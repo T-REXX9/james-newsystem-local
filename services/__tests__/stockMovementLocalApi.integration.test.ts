@@ -89,5 +89,44 @@ describe('Stock Movement local API integration', () => {
     },
     120000
   );
+
+  it(
+    'supports Transfer Product transaction type for filtering',
+    async () => {
+      const productId = await getFirstProductId();
+      const seed = Date.now();
+      const refNo = `IT-TP-${seed}`;
+
+      const created = await createStockMovementLog({
+        user_id: 1,
+        item_id: productId,
+        date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+        transaction_type: 'Transfer Product',
+        reference_no: refNo,
+        warehouse_id: 'WH1',
+        status_indicator: '-',
+        qty_out: 5,
+        unit_price: 0,
+        notes: 'transfer product integration test',
+      });
+
+      const createdId = Number(created.id);
+      expect(createdId).toBeGreaterThan(0);
+
+      const listed = await fetchStockMovementLogs({
+        item_id: productId,
+        transaction_type: 'Transfer Product',
+        search: refNo,
+        page: 1,
+        per_page: 20,
+      });
+      expect(Array.isArray(listed.logs)).toBe(true);
+      expect(listed.logs.some((row) => Number(row.id) === createdId)).toBe(true);
+
+      // Cleanup
+      await deleteStockMovementLog(createdId);
+    },
+    120000
+  );
 });
 

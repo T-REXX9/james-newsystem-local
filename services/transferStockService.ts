@@ -1,5 +1,12 @@
 import type { TransferStock, TransferStockDTO, TransferStockItem } from '../types';
 import { getLocalAuthSession } from './localAuthService';
+import {
+  logCreate,
+  logUpdate,
+  logDelete,
+  logActivity,
+  ENTITY_TYPES,
+} from './activityLogService';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
@@ -180,7 +187,25 @@ export async function createTransferStock(data: TransferStockDTO): Promise<Trans
     body: JSON.stringify(body),
   });
 
-  return mapTransferDetail(created);
+  const result = mapTransferDetail(created);
+
+  // Audit log: transfer created
+  logCreate(ENTITY_TYPES.TRANSFER_STOCK, result.id, {
+    transfer_no: result.transfer_no,
+    transfer_date: result.transfer_date,
+    transfer_refno: result.id,
+    status: result.status,
+    items: result.items.map((item) => ({
+      item_id: item.item_id,
+      from_warehouse_id: item.from_warehouse_id,
+      to_warehouse_id: item.to_warehouse_id,
+      transfer_qty: item.transfer_qty,
+      notes: item.notes,
+    })),
+    actor_legacy_user_id: userContext.userId,
+  }).catch(() => {});
+
+  return result;
 }
 
 /**
@@ -241,7 +266,18 @@ export async function updateTransferStock(
     body: JSON.stringify(payload),
   });
 
-  return mapTransferDetail(data);
+  const result = mapTransferDetail(data);
+
+  // Audit log: transfer updated
+  logUpdate(ENTITY_TYPES.TRANSFER_STOCK, id, {
+    transfer_no: result.transfer_no,
+    transfer_date: result.transfer_date,
+    transfer_refno: id,
+    status: result.status,
+    changed_fields: updates,
+  }).catch(() => {});
+
+  return result;
 }
 
 /**
@@ -258,7 +294,20 @@ export async function submitTransferStock(id: string): Promise<TransferStock | n
     }),
   });
 
-  return mapTransferDetail(data);
+  const result = mapTransferDetail(data);
+
+  // Audit log: transfer submitted (Pending → Submitted)
+  logActivity('STATUS_CHANGE', ENTITY_TYPES.TRANSFER_STOCK, id, {
+    old_status: 'pending',
+    new_status: 'submitted',
+    transfer_no: result.transfer_no,
+    transfer_date: result.transfer_date,
+    transfer_refno: id,
+    status: result.status,
+    actor_legacy_user_id: userContext.userId,
+  }).catch(() => {});
+
+  return result;
 }
 
 /**
@@ -275,7 +324,27 @@ export async function approveTransferStock(id: string): Promise<TransferStock | 
     }),
   });
 
-  return mapTransferDetail(data);
+  const result = mapTransferDetail(data);
+
+  // Audit log: transfer approved (Submitted → Approved) with item-level movement details
+  logActivity('STATUS_CHANGE', ENTITY_TYPES.TRANSFER_STOCK, id, {
+    old_status: 'submitted',
+    new_status: 'approved',
+    transfer_no: result.transfer_no,
+    transfer_date: result.transfer_date,
+    transfer_refno: id,
+    status: result.status,
+    items: result.items.map((item) => ({
+      item_id: item.item_id,
+      from_warehouse_id: item.from_warehouse_id,
+      to_warehouse_id: item.to_warehouse_id,
+      transfer_qty: item.transfer_qty,
+      notes: item.notes,
+    })),
+    actor_legacy_user_id: userContext.userId,
+  }).catch(() => {});
+
+  return result;
 }
 
 /**
@@ -286,6 +355,11 @@ export async function deleteTransferStock(id: string): Promise<void> {
     `${API_BASE_URL}/transfer-stocks/${encodeURIComponent(id)}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`,
     { method: 'DELETE' }
   );
+
+  // Audit log: transfer deleted
+  logDelete(ENTITY_TYPES.TRANSFER_STOCK, id, {
+    transfer_refno: id,
+  }).catch(() => {});
 }
 
 /**

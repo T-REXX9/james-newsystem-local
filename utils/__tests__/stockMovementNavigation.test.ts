@@ -40,14 +40,25 @@ describe('resolveStockMovementNavigationTarget', () => {
     });
   });
 
-  it('maps transfer receipt reference', () => {
+  it('maps transfer receipt reference with transferId', () => {
     const target = resolveStockMovementNavigationTarget({
       ...baseLog,
       transaction_type: 'Transfer Receipt',
     } as any);
     expect(target).toEqual({
       tab: 'warehouse-inventory-transfer-stock',
-      payload: { transferNo: 'REF-123' },
+      payload: { transferId: 'REF-123', transferNo: 'REF-123' },
+    });
+  });
+
+  it('maps Transfer Product reference with transferId', () => {
+    const target = resolveStockMovementNavigationTarget({
+      ...baseLog,
+      transaction_type: 'Transfer Product',
+    } as any);
+    expect(target).toEqual({
+      tab: 'warehouse-inventory-transfer-stock',
+      payload: { transferId: 'REF-123', transferNo: 'REF-123' },
     });
   });
 

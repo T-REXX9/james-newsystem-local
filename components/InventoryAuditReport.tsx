@@ -293,50 +293,50 @@ const InventoryAuditReport: React.FC = () => {
       </div>
 
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 mb-6 print:hidden">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end">
-          <div className="grid flex-1 gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,220px)_minmax(0,1fr)_minmax(220px,260px)_minmax(220px,260px)]">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
+          <div className="grid flex-1 gap-4 md:grid-cols-2 xl:grid-cols-[220px_minmax(0,1fr)_minmax(0,1fr)_minmax(220px,260px)_minmax(220px,260px)]">
             <div>
               <label className="mb-1 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
                 <Calendar className="h-4 w-4 text-slate-500" />
                 <span>Time Period</span>
               </label>
-            <select
-              value={filters.timePeriod}
-              onChange={(e) =>
-                setFilters((f) => ({ ...f, timePeriod: e.target.value as InventoryAuditTimePeriod }))
-              }
+              <select
+                value={filters.timePeriod}
+                onChange={(e) =>
+                  setFilters((f) => ({ ...f, timePeriod: e.target.value as InventoryAuditTimePeriod }))
+                }
                 className="h-10 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue dark:border-slate-700 dark:bg-slate-800"
-            >
-              {TIME_PERIOD_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {filters.timePeriod === 'custom' && (
-            <div className="grid gap-4 sm:grid-cols-2 md:col-span-2">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">From</label>
-                <input
-                  type="date"
-                  value={filters.dateFrom || ''}
-                  onChange={(e) => setFilters((f) => ({ ...f, dateFrom: e.target.value }))}
-                  className="h-10 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue dark:border-slate-700 dark:bg-slate-800"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">To</label>
-                <input
-                  type="date"
-                  value={filters.dateTo || ''}
-                  onChange={(e) => setFilters((f) => ({ ...f, dateTo: e.target.value }))}
-                  className="h-10 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue dark:border-slate-700 dark:bg-slate-800"
-                />
-              </div>
+              >
+                {TIME_PERIOD_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </div>
-          )}
+
+            {filters.timePeriod === 'custom' && (
+              <>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">From</label>
+                  <input
+                    type="date"
+                    value={filters.dateFrom || ''}
+                    onChange={(e) => setFilters((f) => ({ ...f, dateFrom: e.target.value }))}
+                    className="h-10 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue dark:border-slate-700 dark:bg-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">To</label>
+                  <input
+                    type="date"
+                    value={filters.dateTo || ''}
+                    onChange={(e) => setFilters((f) => ({ ...f, dateTo: e.target.value }))}
+                    className="h-10 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue dark:border-slate-700 dark:bg-slate-800"
+                  />
+                </div>
+              </>
+            )}
 
             <SearchableFilterSelect
               label="Part No"
@@ -355,14 +355,16 @@ const InventoryAuditReport: React.FC = () => {
             />
           </div>
 
-          <button
-            onClick={handleGenerateReport}
-            disabled={isLoading}
-            className="flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-brand-blue px-4 font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:bg-slate-400 xl:self-end"
-          >
-            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-            Generate Report
-          </button>
+          <div className="xl:pt-6">
+            <button
+              onClick={handleGenerateReport}
+              disabled={isLoading}
+              className="flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-brand-blue px-4 font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:bg-slate-400"
+            >
+              {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+              Generate Report
+            </button>
+          </div>
         </div>
 
         {validationError && (

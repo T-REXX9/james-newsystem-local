@@ -9,7 +9,7 @@ import InventoryLogRow from './InventoryLogRow';
 import { resolveStockMovementNavigationTarget } from '../utils/stockMovementNavigation';
 
 const WAREHOUSES = ['WH1', 'WH2', 'WH3', 'WH4', 'WH5', 'WH6'];
-const TRANSACTION_TYPES = ['Purchase Order', 'Invoice', 'Order Slip', 'Transfer Receipt', 'Credit Memo', 'Stock Adjustment'];
+const TRANSACTION_TYPES = ['Purchase Order', 'Invoice', 'Order Slip', 'Transfer Product', 'Transfer Receipt', 'Credit Memo', 'Stock Adjustment'];
 
 const StockMovementView: React.FC = () => {
   // State
