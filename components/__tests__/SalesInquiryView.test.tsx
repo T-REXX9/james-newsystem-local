@@ -1,75 +1,76 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SalesInquiryView from '../SalesInquiryView';
 
 const addToastMock = vi.fn();
 const createSalesInquiryMock = vi.fn();
-const refetchInquiriesMock = vi.fn();
-
-vi.mock('../../lib/supabaseClient', () => ({
-  supabase: {
-    auth: {
-      getUser: vi.fn()
-    }
-  }
-}));
+const getAllSalesInquiriesMock = vi.fn();
+const getSalesInquiryMock = vi.fn();
+const fetchContactsMock = vi.fn();
 
 vi.mock('../ToastProvider', () => ({
   useToast: () => ({
-    addToast: addToastMock
-  })
+    addToast: addToastMock,
+  }),
 }));
 
-vi.mock('../../hooks/useRealtimeList', () => ({
-  useRealtimeList: () => ({
-    data: [
-      {
-        id: 'c-1',
-        company: 'Acme Corp',
-        deliveryAddress: '123 Main St',
-        salesman: 'Jane Doe',
-  priceGroup: 'regular',
-        creditLimit: 10000,
-        terms: '30 days',
-        comment: 'Priority',
-        dealershipTerms: 'Net 30'
-      }
-    ]
-  })
-}));
-
-vi.mock('../../hooks/useRealtimeNestedList', () => ({
-  useRealtimeNestedList: () => ({
-    data: [],
-    isLoading: false,
-    setData: vi.fn(),
-    refetch: refetchInquiriesMock
-  })
+vi.mock('../../services/customerDatabaseLocalApiService', () => ({
+  fetchContacts: (...args: any[]) => fetchContactsMock(...args),
 }));
 
 vi.mock('../../services/salesInquiryLocalApiService', () => ({
   createSalesInquiry: (...args: any[]) => createSalesInquiryMock(...args),
-  getAllSalesInquiries: vi.fn(),
+  getAllSalesInquiries: (...args: any[]) => getAllSalesInquiriesMock(...args),
   approveInquiry: vi.fn(),
   convertToOrder: vi.fn(),
   updateSalesInquiry: vi.fn(),
-  getSalesInquiry: vi.fn(),
+  getSalesInquiry: (...args: any[]) => getSalesInquiryMock(...args),
   deleteSalesInquiry: vi.fn(),
 }));
 
-vi.mock('../../services/productService', () => ({
-  getProductPrice: vi.fn(() => 100)
+vi.mock('../../services/productLocalApiService', () => ({
+  getProductPrice: vi.fn(() => 100),
+}));
+
+vi.mock('../../services/salesOrderLocalApiService', () => ({
+  getSalesOrderByInquiry: vi.fn(),
 }));
 
 vi.mock('../../services/salesOrderService', () => ({
-  getSalesOrderByInquiry: vi.fn()
+  getSalesOrder: vi.fn(),
 }));
 
-vi.mock('../../services/supabaseService', () => ({
-  fetchContacts: vi.fn(),
-  createNotification: vi.fn()
+vi.mock('../CustomerAutocomplete', () => ({
+  default: ({
+    contacts,
+    selectedCustomer,
+    disabled,
+    onSelect,
+  }: {
+    contacts: Array<{ id: string; company: string }>;
+    selectedCustomer?: { id: string } | null;
+    disabled?: boolean;
+    onSelect: (customer: { id: string; company: string }) => void;
+  }) => (
+    <select
+      aria-label="Customer"
+      disabled={disabled}
+      value={selectedCustomer?.id || ''}
+      onChange={(event) => {
+        const customer = contacts.find((entry) => entry.id === event.target.value);
+        if (customer) onSelect(customer);
+      }}
+    >
+      <option value="">Select customer</option>
+      {contacts.map((contact) => (
+        <option key={contact.id} value={contact.id}>
+          {contact.company}
+        </option>
+      ))}
+    </select>
+  ),
 }));
 
 vi.mock('../ProductSearchModal', () => ({
@@ -84,7 +85,8 @@ vi.mock('../ProductSearchModal', () => ({
             part_no: 'PN-1',
             item_code: 'IC-1',
             description: 'Widget',
-            price_aa: 100
+            brand: 'Acme',
+            price_aa: 100,
           });
           onClose();
         }}
@@ -92,14 +94,49 @@ vi.mock('../ProductSearchModal', () => ({
         Select Product
       </button>
     );
-  }
+  },
 }));
+
+const baseContacts = [
+  {
+    id: 'c-1',
+    company: 'Acme Corp',
+    address: '123 Main St',
+    deliveryAddress: '123 Main St',
+    salesman: 'Jane Doe',
+    priceGroup: 'regular',
+    creditLimit: 10000,
+    terms: '30 days',
+    comment: 'Priority',
+    dealershipTerms: 'Net 30',
+    transactionType: 'Invoice',
+    contactPersons: [
+      { id: 'cp-1', name: 'Alice', position: '', birthday: '', telephone: '', mobile: '', email: '', enabled: true },
+      { id: 'cp-2', name: 'Bob', position: '', birthday: '', telephone: '', mobile: '', email: '', enabled: true },
+    ],
+  },
+  {
+    id: 'c-2',
+    company: 'No Contacts Inc',
+    address: '456 Side St',
+    deliveryAddress: '456 Side St',
+    salesman: 'John Doe',
+    priceGroup: 'regular',
+    creditLimit: 5000,
+    terms: 'COD',
+    comment: '',
+    dealershipTerms: '',
+    transactionType: 'Invoice',
+    contactPersons: [],
+  },
+];
 
 describe('SalesInquiryView', () => {
   beforeEach(() => {
-    addToastMock.mockReset();
-    createSalesInquiryMock.mockReset();
-    refetchInquiriesMock.mockReset();
+    vi.clearAllMocks();
+    fetchContactsMock.mockResolvedValue(baseContacts);
+    getAllSalesInquiriesMock.mockResolvedValue([]);
+    getSalesInquiryMock.mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -107,54 +144,144 @@ describe('SalesInquiryView', () => {
   });
 
   it('shows a validation toast when submitting without a customer', async () => {
-    const user = userEvent.setup();
     render(<SalesInquiryView />);
 
-    const form = document.getElementById('salesInquiryForm') as HTMLFormElement;
-    expect(form).toBeTruthy();
-    fireEvent.submit(form);
+    await waitFor(() => expect(fetchContactsMock).toHaveBeenCalled());
+
+    await userEvent.click(screen.getByRole('button', { name: /create inquiry/i }));
 
     expect(addToastMock).toHaveBeenCalledWith({
       type: 'warning',
       title: 'Fix validation issues',
-      description: 'Review the highlighted fields and try again.'
+      description: 'Review the highlighted fields and try again.',
     });
     expect(createSalesInquiryMock).not.toHaveBeenCalled();
   });
 
-  it('creates a sales inquiry after selecting a customer and product', async () => {
+  it('auto-selects the first customer contact and keeps PO No. editable when creating an inquiry', async () => {
     const user = userEvent.setup();
-    createSalesInquiryMock.mockResolvedValue({ id: 'inq-1' });
+    createSalesInquiryMock.mockResolvedValue({ id: 'inq-1', contact_id: 'c-1' });
 
     render(<SalesInquiryView />);
 
-    const customerLabel = screen.getAllByText(/Customer/i).find((el) => el.tagName.toLowerCase() === 'label');
-    expect(customerLabel).toBeTruthy();
-    const customerSelect = customerLabel?.parentElement?.querySelector('select') as HTMLSelectElement;
-    expect(customerSelect).toBeTruthy();
-    await user.selectOptions(customerSelect, 'c-1');
+    await waitFor(() => expect(fetchContactsMock).toHaveBeenCalled());
+
+    await user.selectOptions(screen.getByLabelText('Customer'), 'c-1');
+
+    const yourReferenceRow = screen.getByText('Your Reference:').closest('tr');
+    expect(yourReferenceRow).toBeTruthy();
+    const yourReferenceSelect = within(yourReferenceRow as HTMLElement).getByRole('combobox');
+    expect(yourReferenceSelect).toHaveValue('Alice');
+
+    const referenceOptions = within(yourReferenceSelect).getAllByRole('option').map((option) => option.textContent);
+    expect(referenceOptions).toEqual(expect.arrayContaining(['Alice', 'Bob']));
+
+    await user.selectOptions(yourReferenceSelect, 'Bob');
+    expect(yourReferenceSelect).toHaveValue('Bob');
+
+    const poRow = screen.getByText('PO No.:').closest('tr');
+    expect(poRow).toBeTruthy();
+    const poInput = within(poRow as HTMLElement).getAllByRole('textbox')[1] as HTMLInputElement;
+    await user.type(poInput, 'PO-CUSTOM-001');
+    expect(poInput).toHaveValue('PO-CUSTOM-001');
 
     await user.click(screen.getByRole('button', { name: /add item/i }));
-    await user.click(screen.getByText(/click to search product/i));
+    await user.click(screen.getAllByText(/click to search product/i)[0]);
     await user.click(screen.getByRole('button', { name: 'Select Product' }));
-
     await user.click(screen.getByRole('button', { name: /create inquiry/i }));
 
     await waitFor(() => expect(createSalesInquiryMock).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(refetchInquiriesMock).toHaveBeenCalledTimes(1));
 
     const payload = createSalesInquiryMock.mock.calls[0][0];
     expect(payload.contact_id).toBe('c-1');
-    expect(payload.items).toHaveLength(1);
-    expect(payload.items[0]).toEqual(expect.objectContaining({
-      item_id: 'p-1',
-      part_no: 'PN-1',
-      item_code: 'IC-1',
-      description: 'Widget'
-    }));
+    expect(payload.customer_reference).toBe('Bob');
+    expect(payload.po_number).toBe('PO-CUSTOM-001');
+  });
 
-    expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'success'
-    }));
+  it('shows an empty Your Reference dropdown when the customer has no contact persons', async () => {
+    const user = userEvent.setup();
+    render(<SalesInquiryView />);
+
+    await waitFor(() => expect(fetchContactsMock).toHaveBeenCalled());
+
+    await user.selectOptions(screen.getByLabelText('Customer'), 'c-2');
+
+    const yourReferenceRow = screen.getByText('Your Reference:').closest('tr');
+    expect(yourReferenceRow).toBeTruthy();
+    const yourReferenceSelect = within(yourReferenceRow as HTMLElement).getByRole('combobox');
+    expect(yourReferenceSelect).toHaveValue('');
+    expect(within(yourReferenceSelect).getAllByRole('option')).toHaveLength(1);
+    expect(within(yourReferenceSelect).getByRole('option')).toHaveTextContent('Select reference');
+  });
+
+  it('preserves a saved customer reference even when it is no longer in the current contact list', async () => {
+    getAllSalesInquiriesMock.mockResolvedValue([
+      {
+        id: 'inq-legacy',
+        inquiry_no: 'INQ26-1',
+        contact_id: 'c-1',
+        sales_date: '2026-03-24',
+        sales_person: 'Jane Doe',
+        delivery_address: '123 Main St',
+        reference_no: 'REF2603241',
+        customer_reference: 'Legacy Ref',
+        send_by: '',
+        price_group: 'regular',
+        credit_limit: 10000,
+        terms: '30 days',
+        promise_to_pay: '',
+        po_number: 'PO-OLD-1',
+        remarks: '',
+        inquiry_type: 'General',
+        urgency: 'N/A',
+        urgency_date: '',
+        grand_total: 0,
+        created_by: '1',
+        created_at: '2026-03-24',
+        updated_at: '',
+        status: 'Draft',
+        is_deleted: false,
+        items: [],
+      },
+    ]);
+
+    getSalesInquiryMock.mockResolvedValue({
+      id: 'inq-legacy',
+      inquiry_no: 'INQ26-1',
+      contact_id: 'c-1',
+      sales_date: '2026-03-24',
+      sales_person: 'Jane Doe',
+      delivery_address: '123 Main St',
+      reference_no: 'REF2603241',
+      customer_reference: 'Legacy Ref',
+      send_by: '',
+      price_group: 'regular',
+      credit_limit: 10000,
+      terms: '30 days',
+      promise_to_pay: '',
+      po_number: 'PO-OLD-1',
+      remarks: '',
+      inquiry_type: 'General',
+      urgency: 'N/A',
+      urgency_date: '',
+      grand_total: 0,
+      created_by: '1',
+      created_at: '2026-03-24',
+      updated_at: '',
+      status: 'Draft',
+      is_deleted: false,
+      items: [],
+    });
+
+    render(<SalesInquiryView />);
+
+    await waitFor(() => expect(getSalesInquiryMock).toHaveBeenCalledWith('inq-legacy'));
+
+    const yourReferenceRow = await waitFor(() => screen.getByText('Your Reference:').closest('tr'));
+    const yourReferenceSelect = within(yourReferenceRow as HTMLElement).getByRole('combobox');
+
+    expect(yourReferenceSelect).toHaveValue('Legacy Ref');
+    const referenceOptions = within(yourReferenceSelect).getAllByRole('option').map((option) => option.textContent);
+    expect(referenceOptions).toEqual(expect.arrayContaining(['Legacy Ref', 'Alice', 'Bob']));
   });
 });

@@ -183,7 +183,7 @@ const StockMovementView: React.FC = () => {
         <div className="h-full flex flex-col gap-4">
           
           {/* Item Selection Card */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-4">
+          <div className="relative z-20 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-4">
             <div className="flex flex-col lg:flex-row gap-4">
               {/* Product Autocomplete */}
               <div className="flex-1 relative">
@@ -206,7 +206,7 @@ const StockMovementView: React.FC = () => {
 
                 {/* Dropdown */}
                 {showItemDropdown && (
-                  <div className="absolute z-10 w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                  <div className="absolute z-30 w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-64 overflow-y-auto">
                     {isLoadingProducts ? (
                       <div className="p-3 text-xs text-slate-500">Loading products...</div>
                     ) : productOptions.length === 0 ? (

@@ -286,6 +286,18 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     () => [SalesInquiryStatus.DRAFT, SalesInquiryStatus.APPROVED, SalesInquiryStatus.CANCELLED],
     []
   );
+  const customerReferenceOptions = useMemo(() => {
+    const contactOptions = (selectedCustomer?.contactPersons || [])
+      .map((contact) => String(contact?.name || '').trim())
+      .filter((value, index, values) => Boolean(value) && values.indexOf(value) === index);
+
+    const currentReference = String(customerReference || '').trim();
+    if (currentReference && !contactOptions.includes(currentReference)) {
+      return [currentReference, ...contactOptions];
+    }
+
+    return contactOptions;
+  }, [customerReference, selectedCustomer]);
 
   const filteredInquiries = useMemo(() => {
     const query = searchTerm.toLowerCase();
@@ -432,6 +444,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   const handleCustomerSelect = (customerId: string) => {
     const customer = customers.find(c => c.id === customerId);
     if (customer) {
+      const defaultReference = String(customer.contactPersons?.[0]?.name || '').trim();
       setSelectedCustomer(customer);
       setDeliveryAddress(customer.deliveryAddress || customer.address || '');
       setSalesPerson(customer.salesman || '');
@@ -440,6 +453,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
       setTerms(customer.terms || '');
       setRemarks(customer.comment || '');
       setPromiseToPay(customer.dealershipTerms || '');
+      setCustomerReference(defaultReference);
     }
   };
 
@@ -1122,7 +1136,19 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                     </td>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Your Reference:</td>
                     <td>
-                      <input type="text" disabled={isReadOnly} value={customerReference} onChange={(e) => setCustomerReference(e.target.value)} className={`w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}`} />
+                      <select
+                        disabled={isReadOnly || !selectedCustomer}
+                        value={customerReference}
+                        onChange={(e) => setCustomerReference(e.target.value)}
+                        className={`w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm ${isReadOnly || !selectedCustomer ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      >
+                        <option value="">{selectedCustomer ? 'Select reference…' : 'Select a customer first'}</option>
+                        {customerReferenceOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
                     </td>
                   </tr>
                   <tr>

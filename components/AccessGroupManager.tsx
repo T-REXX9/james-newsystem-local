@@ -161,14 +161,14 @@ const AccessGroupManager: React.FC<AccessGroupManagerProps> = ({
               value={newGroupName}
               onChange={(event) => setNewGroupName(event.target.value)}
               placeholder="Group name"
-              className="input-field"
+              className="input-field border border-slate-200 rounded-md px-3 py-2 dark:border-slate-600 bg-white dark:bg-slate-900"
             />
             <textarea
               value={newGroupDescription}
               onChange={(event) => setNewGroupDescription(event.target.value)}
               placeholder="Short description"
               rows={3}
-              className="input-field resize-none"
+              className="input-field resize-none border border-slate-200 rounded-md px-3 py-2 dark:border-slate-600 bg-white dark:bg-slate-900"
             />
             <button
               type="button"
