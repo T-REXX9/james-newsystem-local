@@ -49,6 +49,10 @@ vi.mock('../../components/DailyCallMonitoringView', () => ({
   default: () => <div>DailyCallMonitoringView</div>
 }));
 
+vi.mock('../../components/SalesInquiryView', () => ({
+  default: () => <div>SalesInquiryView</div>
+}));
+
 const mockedRestoreLocalAuthSession = vi.mocked(restoreLocalAuthSession);
 const mockedLogoutFromLocalApi = vi.mocked(logoutFromLocalApi);
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
@@ -57,6 +61,7 @@ beforeEach(() => {
   mockedRestoreLocalAuthSession.mockReset();
   mockedLogoutFromLocalApi.mockReset();
   consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  window.history.replaceState(null, '', '/');
 });
 
 afterEach(() => {
@@ -103,6 +108,38 @@ describe('App authentication flow', () => {
     await waitFor(() => expect(screen.getByTestId('topnav')).toBeInTheDocument());
     fireEvent.click(screen.getByTestId('topnav'));
     await waitFor(() => expect(mockedLogoutFromLocalApi).toHaveBeenCalled());
+  });
+
+  it('restores the current module from the URL hash on refresh', async () => {
+    window.history.replaceState(null, '', '/#/sales-transaction-sales-inquiry');
+
+    mockedRestoreLocalAuthSession.mockResolvedValue({
+      token: 'token-1',
+      context: {
+        token: 'token-1',
+        user: {
+          id: 1,
+          main_userid: 1,
+          email: 'owner@example.com',
+        },
+        main_userid: 1,
+        user_type: '1',
+        session_branch: 'mainbranch',
+        logintype: '1',
+        industry: 'Shop',
+      },
+      userProfile: {
+        id: '1',
+        email: 'owner@example.com',
+        full_name: 'Owner User',
+        role: 'Owner',
+        access_rights: ['*'],
+      },
+    } as any);
+
+    render(<App />);
+
+    expect(await screen.findByText('SalesInquiryView')).toBeInTheDocument();
   });
 
   it('reacts to local auth changed event after bootstrap', async () => {

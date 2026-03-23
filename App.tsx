@@ -108,6 +108,40 @@ const CANONICAL_TO_ALIASES: Record<string, string[]> = Object.entries(MODULE_ID_
 
 const normalizeModuleId = (moduleId: string): string => MODULE_ID_ALIASES[moduleId] || moduleId;
 
+const DEFAULT_ACTIVE_TAB = 'dashboard';
+
+const getRouteStateFromLocation = (): { tab: string; payload?: Record<string, string> } => {
+  if (typeof window === 'undefined') {
+    return { tab: DEFAULT_ACTIVE_TAB };
+  }
+
+  const rawHash = window.location.hash.replace(/^#\/?/, '');
+  if (!rawHash) {
+    return { tab: DEFAULT_ACTIVE_TAB };
+  }
+
+  const [rawTab, rawQuery = ''] = rawHash.split('?');
+  const tab = normalizeModuleId(rawTab || DEFAULT_ACTIVE_TAB);
+  const params = new URLSearchParams(rawQuery);
+  const payload = Object.fromEntries(params.entries());
+
+  return Object.keys(payload).length > 0 ? { tab, payload } : { tab };
+};
+
+const writeRouteStateToLocation = (tab: string, payload?: Record<string, string>) => {
+  if (typeof window === 'undefined') return;
+
+  const canonicalTab = normalizeModuleId(tab || DEFAULT_ACTIVE_TAB);
+  const params = new URLSearchParams(payload || {});
+  const nextHash = params.toString() ? `#/${canonicalTab}?${params.toString()}` : `#/${canonicalTab}`;
+
+  if (window.location.hash === nextHash) {
+    return;
+  }
+
+  window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${nextHash}`);
+};
+
 const expandModuleIds = (canonicalId: string): string[] => {
   const aliases = CANONICAL_TO_ALIASES[canonicalId] || [];
   return [canonicalId, ...aliases];
@@ -120,12 +154,15 @@ const getModuleLabel = (moduleId: string): string => {
 };
 
 const App: React.FC = () => {
+  const initialRouteState = getRouteStateFromLocation();
   const [session, setSession] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [appLoading, setAppLoading] = useState(true);
 
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [moduleContext, setModuleContext] = useState<Record<string, Record<string, string>>>({});
+  const [activeTab, setActiveTab] = useState(initialRouteState.tab);
+  const [moduleContext, setModuleContext] = useState<Record<string, Record<string, string>>>(
+    initialRouteState.payload ? { [initialRouteState.tab]: initialRouteState.payload } : {}
+  );
 
   const applyLocalAuthSession = (authSession: LocalAuthSession | null) => {
     if (!authSession) {
@@ -161,7 +198,9 @@ const App: React.FC = () => {
     const handler = (event: Event) => {
       const custom = event as CustomEvent<LocalAuthSession | null>;
       applyLocalAuthSession(custom.detail || null);
-      setActiveTab('dashboard');
+      const routeState = getRouteStateFromLocation();
+      setActiveTab(routeState.tab);
+      setModuleContext(routeState.payload ? { [routeState.tab]: routeState.payload } : {});
       setAppLoading(false);
     };
 
@@ -178,16 +217,38 @@ const App: React.FC = () => {
     const handler = (event: Event) => {
       const customEvent = event as CustomEvent<{ tab: string; payload?: Record<string, string> }>;
       if (!customEvent.detail?.tab) return;
+      const canonicalTab = normalizeModuleId(customEvent.detail.tab);
       setModuleContext((prev) => ({
         ...prev,
+        [canonicalTab]: customEvent.detail.payload || {},
         [customEvent.detail.tab]: customEvent.detail.payload || {},
       }));
-      setActiveTab(normalizeModuleId(customEvent.detail.tab));
+      setActiveTab(canonicalTab);
     };
 
     window.addEventListener('workflow:navigate', handler as EventListener);
     return () => window.removeEventListener('workflow:navigate', handler as EventListener);
   }, []);
+
+  useEffect(() => {
+    const syncFromLocation = () => {
+      const routeState = getRouteStateFromLocation();
+      setActiveTab(routeState.tab);
+      setModuleContext((prev) => ({
+        ...prev,
+        ...(routeState.payload ? { [routeState.tab]: routeState.payload } : {}),
+      }));
+    };
+
+    window.addEventListener('hashchange', syncFromLocation);
+    return () => window.removeEventListener('hashchange', syncFromLocation);
+  }, []);
+
+  useEffect(() => {
+    const canonicalTab = normalizeModuleId(activeTab);
+    const payload = moduleContext[canonicalTab] || moduleContext[activeTab];
+    writeRouteStateToLocation(canonicalTab, payload);
+  }, [activeTab, moduleContext]);
 
   const handleSignOut = async () => {
     try {
