@@ -42,6 +42,8 @@ import AccessGroupManager from './AccessGroupManager';
 import { useToast } from './ToastProvider';
 
 const STAFF_PER_PAGE = 50;
+const STAFF_MEMBER_COLUMN_WIDTH = 288;
+const GROUP_COLUMN_WIDTH = 220;
 
 const getEffectiveCanonicalRights = (rights: string[] | null | undefined): Set<string> => {
   const result = new Set<string>();
@@ -425,6 +427,19 @@ const AccessControlSettings: React.FC = () => {
 
   const rangeStart = totalProfiles === 0 ? 0 : (page - 1) * STAFF_PER_PAGE + 1;
   const rangeEnd = totalProfiles === 0 ? 0 : Math.min(totalProfiles, page * STAFF_PER_PAGE);
+  const stickyStaffColumnStyle = {
+    width: `${STAFF_MEMBER_COLUMN_WIDTH}px`,
+    minWidth: `${STAFF_MEMBER_COLUMN_WIDTH}px`,
+    maxWidth: `${STAFF_MEMBER_COLUMN_WIDTH}px`,
+  } as const;
+  const stickyGroupColumnStyle = {
+    left: `${STAFF_MEMBER_COLUMN_WIDTH}px`,
+    width: `${GROUP_COLUMN_WIDTH}px`,
+    minWidth: `${GROUP_COLUMN_WIDTH}px`,
+    maxWidth: `${GROUP_COLUMN_WIDTH}px`,
+  } as const;
+  const permissionTableMinWidth =
+    STAFF_MEMBER_COLUMN_WIDTH + GROUP_COLUMN_WIDTH + AVAILABLE_APP_MODULES.filter((module) => module.id !== 'settings').length * 112 + 140;
 
   return (
     <div className="relative h-full overflow-y-auto p-8 animate-fadeIn">
@@ -526,19 +541,29 @@ const AccessControlSettings: React.FC = () => {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-left">
+              <table
+                className="border-collapse text-left"
+                style={{ minWidth: `${permissionTableMinWidth}px`, tableLayout: 'fixed' }}
+              >
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
-                    <th className="sticky left-0 z-20 w-64 border-r border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
+                    <th
+                      className="sticky left-0 z-20 border-r border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800"
+                      style={stickyStaffColumnStyle}
+                    >
                       Staff Member
                     </th>
-                    <th className="sticky left-[16rem] z-20 min-w-[180px] border-r border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
+                    <th
+                      className="sticky z-20 border-r border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800"
+                      style={stickyGroupColumnStyle}
+                    >
                       Group
                     </th>
                     {AVAILABLE_APP_MODULES.filter((module) => module.id !== 'settings').map((module) => (
                       <th
                         key={module.id}
-                        className="min-w-[100px] border-l border-slate-100 p-4 text-center dark:border-slate-800"
+                        className="border-l border-slate-100 p-4 text-center dark:border-slate-800"
+                        style={{ minWidth: '112px', width: '112px' }}
                       >
                         {module.label}
                       </th>
@@ -563,7 +588,10 @@ const AccessControlSettings: React.FC = () => {
 
                     return (
                       <tr key={user.id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                        <td className="sticky left-0 z-10 border-r border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+                        <td
+                          className="sticky left-0 z-10 border-r border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
+                          style={stickyStaffColumnStyle}
+                        >
                           <div className="flex items-center gap-3">
                             <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
                               {user.avatar_url ? (
@@ -573,7 +601,7 @@ const AccessControlSettings: React.FC = () => {
                               )}
                             </div>
                             <div>
-                              <p className="text-sm font-bold text-slate-800 dark:text-white">
+                              <p className="text-sm font-bold text-slate-800 dark:text-white break-words">
                                 {user.full_name || 'Unknown'}
                               </p>
                               <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
@@ -597,12 +625,15 @@ const AccessControlSettings: React.FC = () => {
                           </div>
                         </td>
 
-                        <td className="sticky left-[16rem] z-10 border-r border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+                        <td
+                          className="sticky z-10 border-r border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
+                          style={stickyGroupColumnStyle}
+                        >
                           <select
                             value={user.group_id || ''}
                             disabled={isOwner}
                             onChange={(event) => handleGroupAssignmentChange(user.id, event.target.value || null)}
-                            className="input-field min-w-[160px] text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                            className="input-field w-full text-sm disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             {groups.map((group) => (
                               <option key={group.id} value={group.id}>
