@@ -324,17 +324,7 @@ need_cmd npm
 step "Creating installation directories"
 mkdir -p "$INSTALL_DIR" "$LOG_DIR"
 
-step "Cloning or updating API repository"
-git_safe_clone_or_pull "$API_REPO_URL" "$API_DIR" "API repository"
-
-step "Cloning or updating web repository"
-git_safe_clone_or_pull "$WEB_REPO_URL" "$WEB_DIR" "web repository"
-
 if [[ "$MODE" == "restart" ]]; then
-  step "Writing API and web environment files"
-  write_api_env
-  write_web_env
-
   step "Restarting API server and web preview"
   restart_services
 
@@ -347,6 +337,12 @@ if [[ "$MODE" == "restart" ]]; then
   print_service_urls
   exit 0
 fi
+
+step "Cloning or updating API repository"
+git_safe_clone_or_pull "$API_REPO_URL" "$API_DIR" "API repository"
+
+step "Cloning or updating web repository"
+git_safe_clone_or_pull "$WEB_REPO_URL" "$WEB_DIR" "web repository"
 
 if [[ "$MODE" == "update" ]]; then
   step "Writing API and web environment files"
