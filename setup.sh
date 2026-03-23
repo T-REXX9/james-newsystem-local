@@ -184,6 +184,44 @@ validate_stack() {
 }
 
 write_api_env() {
+  local env_example="$API_DIR/.env.example"
+  if [[ -f "$env_example" ]]; then
+    awk \
+      -v app_url="http://127.0.0.1:${API_PORT}" \
+      -v db_host="${DB_HOST}" \
+      -v db_port="${DB_PORT}" \
+      -v db_name="${DB_NAME}" \
+      -v db_user="${DB_USER}" \
+      -v db_pass="${DB_PASS}" '
+      BEGIN {
+        overrides["APP_URL"] = app_url;
+        overrides["DB_HOST"] = db_host;
+        overrides["DB_PORT"] = db_port;
+        overrides["DB_NAME"] = db_name;
+        overrides["DB_USER"] = db_user;
+        overrides["DB_PASS"] = db_pass;
+      }
+      /^[A-Za-z_][A-Za-z0-9_]*=/ {
+        split($0, parts, "=");
+        key = parts[1];
+        if (key in overrides) {
+          print key "=" overrides[key];
+          seen[key] = 1;
+          next;
+        }
+      }
+      { print }
+      END {
+        for (key in overrides) {
+          if (!(key in seen)) {
+            print key "=" overrides[key];
+          }
+        }
+      }
+    ' "$env_example" > "$API_DIR/.env"
+    return 0
+  fi
+
   cat > "$API_DIR/.env" <<EOF
 APP_ENV=local
 APP_DEBUG=true
