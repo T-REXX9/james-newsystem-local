@@ -28,6 +28,17 @@ const MONTH_OPTIONS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
+const INVOICE_LIST_COLUMN_WIDTHS = [
+  '8rem',
+  '23%',
+  '11rem',
+  '11rem',
+  '10rem',
+  '11rem',
+  '10rem',
+  '14%',
+  '10rem',
+];
 
 const documentStatusMeta: Record<InvoiceStatus, { label: string; tone: 'neutral' | 'info' | 'success' | 'warning' | 'danger' }> = {
   [InvoiceStatus.DRAFT]: { label: 'Draft', tone: 'neutral' },
@@ -453,7 +464,12 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
         {/* Step 3: Invoice list table */}
         <div className="p-4">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full table-fixed text-sm">
+              <colgroup>
+                {INVOICE_LIST_COLUMN_WIDTHS.map((width) => (
+                  <col key={width} style={{ width }} />
+                ))}
+              </colgroup>
               <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
                 <tr>
                   <th className="px-3 py-2 text-left">Date</th>
@@ -469,7 +485,12 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
               </thead>
             </table>
             <div className="max-h-[220px] overflow-y-auto border border-t-0 border-slate-300 dark:border-slate-700">
-              <table className="w-full text-sm">
+              <table className="w-full table-fixed text-sm">
+                <colgroup>
+                  {INVOICE_LIST_COLUMN_WIDTHS.map((width) => (
+                    <col key={width} style={{ width }} />
+                  ))}
+                </colgroup>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                   {loading && (
                     <tr>

@@ -43,6 +43,16 @@ const MONTH_OPTIONS = [
   'November',
   'December',
 ];
+const ORDER_SLIP_LIST_COLUMN_WIDTHS = [
+  '8rem',
+  '26%',
+  '11rem',
+  '11rem',
+  '10rem',
+  '11rem',
+  '14%',
+  '10rem',
+];
 
 const formatDate = (value?: string | null): string => {
   if (!value) return '-';
@@ -436,7 +446,12 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
 
         <div className="p-4">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full table-fixed text-sm">
+              <colgroup>
+                {ORDER_SLIP_LIST_COLUMN_WIDTHS.map((width) => (
+                  <col key={width} style={{ width }} />
+                ))}
+              </colgroup>
               <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
                 <tr>
                   <th className="px-3 py-2 text-left">Date</th>
@@ -451,7 +466,12 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
               </thead>
             </table>
             <div className="max-h-[220px] overflow-y-auto border border-t-0 border-slate-300 dark:border-slate-700">
-              <table className="w-full text-sm">
+              <table className="w-full table-fixed text-sm">
+                <colgroup>
+                  {ORDER_SLIP_LIST_COLUMN_WIDTHS.map((width) => (
+                    <col key={width} style={{ width }} />
+                  ))}
+                </colgroup>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                   {loading && (
                     <tr>

@@ -11,6 +11,7 @@ import {
   updateProduct,
   deleteProduct,
 } from '../services/productLocalApiService';
+import { searchStockMovementProducts } from '../services/stockMovementLocalApiService';
 import { fetchProductMovementClassifications } from '../services/inventoryMovementService';
 import { applyOptimisticUpdate, applyOptimisticDelete } from '../utils/optimisticUpdates';
 import ConfirmModal from './ConfirmModal';
@@ -28,6 +29,9 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
   const { addToast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [searchOptions, setSearchOptions] = useState<Product[]>([]);
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const [isLoadingSearchOptions, setIsLoadingSearchOptions] = useState(false);
   const [statusFilter, setStatusFilter] = useState<ProductListStatus>('all');
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -105,6 +109,27 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
       setPage(1);
     }, 250);
     return () => window.clearTimeout(timeout);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const timer = window.setTimeout(async () => {
+      try {
+        setIsLoadingSearchOptions(true);
+        const rows = await searchStockMovementProducts(searchQuery.trim(), 50);
+        if (isMounted) setSearchOptions(rows);
+      } catch (error) {
+        console.error('Error loading product search options:', error);
+        if (isMounted) setSearchOptions([]);
+      } finally {
+        if (isMounted) setIsLoadingSearchOptions(false);
+      }
+    }, 200);
+
+    return () => {
+      isMounted = false;
+      window.clearTimeout(timer);
+    };
   }, [searchQuery]);
 
   const loadProducts = async (targetPage = page) => {
@@ -435,8 +460,48 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
             placeholder="Search part no, brand, description..."
             className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white text-sm rounded-lg pl-10 pr-4 py-2 focus:border-brand-blue outline-none transition-all"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setShowSearchDropdown(true);
+            }}
+            onFocus={() => setShowSearchDropdown(true)}
+            onBlur={() => window.setTimeout(() => setShowSearchDropdown(false), 200)}
           />
+          {showSearchDropdown && (
+            <div className="absolute z-20 w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+              {isLoadingSearchOptions ? (
+                <div className="p-3 text-xs text-slate-500">Loading products...</div>
+              ) : searchOptions.length === 0 ? (
+                <div className="p-3 text-xs text-slate-500">No products found</div>
+              ) : searchOptions.map((product) => (
+                <button
+                  key={product.id}
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery(product.part_no);
+                    setDebouncedSearch(product.part_no.trim());
+                    setPage(1);
+                    setShowSearchDropdown(false);
+                  }}
+                  className="w-full text-left p-3 hover:bg-slate-50 dark:hover:bg-slate-800 border-b border-slate-100 dark:border-slate-800 last:border-0"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-800 dark:text-white text-sm">{product.part_no}</span>
+                    <span className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] rounded uppercase font-bold">{product.brand}</span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{product.description}</p>
+                  <div className="flex gap-2 mt-1 text-[10px] text-slate-400">
+                    <span>Code: {product.item_code}</span>
+                    <span>•</span>
+                    <span>Total Stock: {(
+                      product.stock_wh1 + product.stock_wh2 + product.stock_wh3 +
+                      product.stock_wh4 + product.stock_wh5 + product.stock_wh6
+                    )}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg">

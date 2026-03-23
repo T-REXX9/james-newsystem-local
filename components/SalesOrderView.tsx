@@ -48,6 +48,15 @@ const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
 const SALES_ORDER_TAB_ID = 'sales-transaction-sales-order';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const SALES_ORDER_LIST_COLUMN_WIDTHS = [
+  '8rem',
+  '30%',
+  '12rem',
+  '11rem',
+  '14rem',
+  '16%',
+  '10rem',
+];
 
 const normalizeStatus = (status: unknown): string => String(status || '').trim().toLowerCase();
 const isUuid = (value?: string | null): value is string => UUID_PATTERN.test(String(value || '').trim());
@@ -620,7 +629,12 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
 
         <div className="p-4">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full table-fixed text-sm">
+              <colgroup>
+                {SALES_ORDER_LIST_COLUMN_WIDTHS.map((width) => (
+                  <col key={width} style={{ width }} />
+                ))}
+              </colgroup>
               <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
                 <tr>
                   <th className="px-3 py-2 text-left">Date</th>
@@ -634,7 +648,12 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
               </thead>
             </table>
             <div className="max-h-[220px] overflow-y-auto border border-t-0 border-slate-300 dark:border-slate-700">
-              <table className="w-full text-sm">
+              <table className="w-full table-fixed text-sm">
+                <colgroup>
+                  {SALES_ORDER_LIST_COLUMN_WIDTHS.map((width) => (
+                    <col key={width} style={{ width }} />
+                  ))}
+                </colgroup>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                   {loading && (
                     <tr>
