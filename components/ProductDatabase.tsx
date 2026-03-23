@@ -35,6 +35,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
   const [statusFilter, setStatusFilter] = useState<ProductListStatus>('all');
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [page, setPage] = useState(1);
   const [perPage] = useState(100);
   const [totalItems, setTotalItems] = useState(0);
@@ -145,6 +146,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
       setPage(result.meta.page);
       setTotalItems(result.meta.total);
       setTotalPages(Math.max(1, result.meta.total_pages));
+      setHasLoadedOnce(true);
     } catch (error) {
       console.error('Error loading product page:', error);
       addToast({
@@ -410,7 +412,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
 
   const formatPrice = (val: number | undefined) => val ? val.toLocaleString() : '0';
 
-  if (isLoading) {
+  if (isLoading && !hasLoadedOnce) {
     return (
       <div className="flex h-full items-center justify-center bg-slate-50 dark:bg-slate-950">
         <CustomLoadingSpinner label="Loading" />
@@ -504,6 +506,12 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
           )}
         </div>
         <div className="flex items-center gap-3">
+          {isLoading && hasLoadedOnce && (
+            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Updating...
+            </div>
+          )}
           <div className="flex items-center gap-2 px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg">
             <Filter className="w-4 h-4 text-slate-400" />
             <select

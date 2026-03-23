@@ -511,13 +511,41 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                         className={`cursor-pointer ${index % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50 dark:bg-slate-900/60'} hover:bg-slate-100 dark:hover:bg-slate-800 ${invoiceRowTone(invoice)}`}
                       >
                         <td className="px-3 py-2">{formatDate(invoice.sales_date)}</td>
-                        <td className="px-3 py-2">{customer?.company || invoice.contact_id}</td>
-                        <td className="px-3 py-2">{invoice.order_id || '-'}</td>
-                        <td className="px-3 py-2 font-semibold">{invoice.invoice_no}</td>
-                        <td className="px-3 py-2">{invoice.reference_no || '-'}</td>
-                        <td className="px-3 py-2">{invoice.send_by || '-'}</td>
-                        <td className="px-3 py-2">{invoice.customer_reference || '-'}</td>
-                        <td className="px-3 py-2">{invoice.sales_person || '-'}</td>
+                        <td className="px-3 py-2">
+                          <div className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" title={customer?.company || invoice.contact_id}>
+                            {customer?.company || invoice.contact_id}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="min-w-0 break-all leading-5" title={invoice.order_id || '-'}>
+                            {invoice.order_id || '-'}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="min-w-0 break-all font-semibold leading-5" title={invoice.invoice_no || '-'}>
+                            {invoice.invoice_no || '-'}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="min-w-0 break-all leading-5" title={invoice.reference_no || '-'}>
+                            {invoice.reference_no || '-'}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="min-w-0 break-all leading-5" title={invoice.send_by || '-'}>
+                            {invoice.send_by || '-'}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="min-w-0 break-all leading-5" title={invoice.customer_reference || '-'}>
+                            {invoice.customer_reference || '-'}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" title={invoice.sales_person || '-'}>
+                            {invoice.sales_person || '-'}
+                          </div>
+                        </td>
                         <td className="px-3 py-2">
                           <StatusBadge status={invoice.status} />
                         </td>

@@ -930,26 +930,44 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                           className={`cursor-pointer border-b border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40 ${rowTone}`}
                         >
                           <td className="px-3 py-2">{inquiry.sales_date ? new Date(inquiry.sales_date).toLocaleDateString() : '—'}</td>
-                          <td className="px-3 py-2">{customer?.company || '—'}</td>
                           <td className="px-3 py-2">
-                            <div className="flex items-center gap-2">
-                              <span>{formatInquiryDisplayNo(inquiry.inquiry_no) || '—'}</span>
+                            <div className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" title={customer?.company || '—'}>
+                              {customer?.company || '—'}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="flex min-w-0 items-start gap-2">
+                              <span className="min-w-0 break-all leading-5" title={formatInquiryDisplayNo(inquiry.inquiry_no) || '—'}>
+                                {formatInquiryDisplayNo(inquiry.inquiry_no) || '—'}
+                              </span>
                               <button
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   startNewInquiry();
                                 }}
-                                className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+                                className="shrink-0 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800"
                                 aria-label="Repeat inquiry"
                               >
                                 <Copy className="w-3.5 h-3.5" />
                               </button>
                             </div>
                           </td>
-                          <td className="px-3 py-2">{canOpenConvertedOrder && selectedInquiry?.id === inquiry.id ? 'Open linked SO' : '—'}</td>
-                          <td className="px-3 py-2">{formatInquiryDisplayNo(inquiry.reference_no) || '—'}</td>
-                          <td className="px-3 py-2">{inquiry.sales_person || '—'}</td>
+                          <td className="px-3 py-2">
+                            <div className="min-w-0 break-words leading-5" title={canOpenConvertedOrder && selectedInquiry?.id === inquiry.id ? 'Open linked SO' : '—'}>
+                              {canOpenConvertedOrder && selectedInquiry?.id === inquiry.id ? 'Open linked SO' : '—'}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="min-w-0 break-all leading-5" title={formatInquiryDisplayNo(inquiry.reference_no) || '—'}>
+                              {formatInquiryDisplayNo(inquiry.reference_no) || '—'}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" title={inquiry.sales_person || '—'}>
+                              {inquiry.sales_person || '—'}
+                            </div>
+                          </td>
                           <td className="px-3 py-2">
                             <StatusBadge status={inquiry.status} className="text-[10px] px-2 py-0.5" />
                           </td>

@@ -674,11 +674,31 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
                         className={`cursor-pointer ${index % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50 dark:bg-slate-900/60'} hover:bg-slate-100 dark:hover:bg-slate-800 ${orderRowTone(order)}`}
                       >
                         <td className="px-3 py-2">{formatDate(order.sales_date)}</td>
-                        <td className="px-3 py-2">{getCustomerLabel(order, customer)}</td>
-                        <td className="px-3 py-2">{order.inquiry_id || '-'}</td>
-                        <td className="px-3 py-2 font-semibold">{order.order_no}</td>
-                        <td className="px-3 py-2">{order.reference_no || order.customer_reference || '-'}</td>
-                        <td className="px-3 py-2">{order.sales_person || '-'}</td>
+                        <td className="px-3 py-2">
+                          <div className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" title={getCustomerLabel(order, customer)}>
+                            {getCustomerLabel(order, customer)}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="min-w-0 break-all leading-5" title={order.inquiry_id || '-'}>
+                            {order.inquiry_id || '-'}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="min-w-0 break-all font-semibold leading-5" title={order.order_no || '-'}>
+                            {order.order_no || '-'}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="min-w-0 break-all leading-5" title={order.reference_no || order.customer_reference || '-'}>
+                            {order.reference_no || order.customer_reference || '-'}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" title={order.sales_person || '-'}>
+                            {order.sales_person || '-'}
+                          </div>
+                        </td>
                         <td className="px-3 py-2">
                           <StatusBadge status={order.status} />
                         </td>

@@ -492,12 +492,28 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                         className={`cursor-pointer ${index % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50 dark:bg-slate-900/60'} hover:bg-slate-100 dark:hover:bg-slate-800 ${orderRowTone(slip)}`}
                       >
                         <td className="px-3 py-2">{formatDate(slip.sales_date)}</td>
-                        <td className="px-3 py-2">{customer?.company || slip.contact_id}</td>
-                        <td className="px-3 py-2">{slip.sales_no || slip.order_id || '-'}</td>
-                        <td className="px-3 py-2 font-semibold">{slip.slip_no}</td>
+                        <td className="px-3 py-2">
+                          <div className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" title={customer?.company || slip.contact_id}>
+                            {customer?.company || slip.contact_id}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="min-w-0 break-all leading-5" title={slip.sales_no || slip.order_id || '-'}>
+                            {slip.sales_no || slip.order_id || '-'}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="min-w-0 break-all font-semibold leading-5" title={slip.slip_no || '-'}>
+                            {slip.slip_no || '-'}
+                          </div>
+                        </td>
                         <td className="px-3 py-2">-</td>
                         <td className="px-3 py-2">-</td>
-                        <td className="px-3 py-2">{slip.sales_person || '-'}</td>
+                        <td className="px-3 py-2">
+                          <div className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" title={slip.sales_person || '-'}>
+                            {slip.sales_person || '-'}
+                          </div>
+                        </td>
                         <td className="px-3 py-2">
                           <StatusBadge status={slip.status} />
                         </td>
