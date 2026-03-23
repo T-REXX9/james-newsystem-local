@@ -155,10 +155,13 @@ export const fetchProductsPage = async (params: FetchProductsPageParams = {}): P
   };
 };
 
-export const searchProducts = async (query: string): Promise<Product[]> => {
+export const searchProducts = async (
+  query: string,
+  status: ProductListStatus = 'active',
+): Promise<Product[]> => {
   const page = await fetchProductsPage({
     search: query,
-    status: 'all',
+    status,
     page: 1,
     perPage: 50,
   });

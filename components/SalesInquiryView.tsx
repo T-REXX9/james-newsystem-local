@@ -691,7 +691,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
       // Verify the order was actually created and is accessible
       let verifiedOrder = await getSalesOrder(order.id);
       if (!verifiedOrder) {
-        // Retry a few times with a small delay in case of sync delay
+        // Show a more detailed message during retries
+        addToast({ type: 'info', message: 'Verifying order creation...', durationMs: 3000 });
         for (let attempt = 0; attempt < 3 && !verifiedOrder; attempt++) {
           await new Promise((resolve) => setTimeout(resolve, 500));
           verifiedOrder = await getSalesOrder(order.id);
