@@ -44,6 +44,7 @@ interface InquiryItemRow extends Omit<SalesInquiryItem, 'id' | 'inquiry_id'> {
   brand?: string;
   tempId?: string;
   isNew?: boolean; // Flag to indicate if the row is new and editable via autocomplete
+  isManual?: boolean;
 }
 
 type LoadedFormSnapshot = {
@@ -233,7 +234,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
           description: product.description,
           unit_price: price,
           amount: (item.qty || 1) * price,
-          isNew: false
+          isNew: false,
+          isManual: false,
         };
       }
       return item;
@@ -324,6 +326,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
         ...rest,
         tempId: (item as SalesInquiryItem).id,
         isNew: false,
+        isManual: item.remark === 'NotListed',
       };
     });
 
@@ -443,6 +446,28 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
         approval_status: 'pending',
         tempId: `temp-${Date.now()}`,
         isNew: true,
+        isManual: false,
+      },
+    ]);
+  };
+
+  const addManualItemRow = () => {
+    setItems([
+      ...items,
+      {
+        qty: 1,
+        part_no: '',
+        item_code: '',
+        location: '',
+        brand: '',
+        description: '',
+        unit_price: 0,
+        amount: 0,
+        remark: 'NotListed',
+        approval_status: 'pending',
+        tempId: `manual-${Date.now()}`,
+        isNew: false,
+        isManual: true,
       },
     ]);
   };
@@ -511,7 +536,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
         inquiry_type: finalInquiryType,
         urgency: urgency,
         urgency_date: urgency !== 'N/A' ? urgencyDate : undefined,
-        items: items.map(({ tempId, ...rest }) => rest),
+        items: items.map(({ tempId, isManual, brand, ...rest }) => rest),
       };
 
       if (selectedInquiry && !isCreatingNew) {
@@ -556,7 +581,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     if (items.length === 0) {
       errors.items = 'Please add at least one item to the inquiry.';
     }
-    const invalidItems = items.filter(item => !item.item_id);
+    const invalidItems = items.filter(item => !item.item_id && !item.isManual);
     if (invalidItems.length > 0) {
       errors.itemSelection = `Please select valid products for all items. ${invalidItems.length} item(s) are missing product details.`;
     }
@@ -565,6 +590,10 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
       if (!qtyCheck.isValid) errors[`item-${item.tempId}-qty`] = qtyCheck.message;
       const priceCheck = validateNumeric(item.unit_price, 'unit price', 0);
       if (!priceCheck.isValid) errors[`item-${item.tempId}-unit_price`] = priceCheck.message;
+      if (item.isManual) {
+        const descriptionCheck = validateRequired(item.description, 'a description');
+        if (!descriptionCheck.isValid) errors[`item-${item.tempId}-description`] = descriptionCheck.message;
+      }
     });
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
@@ -745,6 +774,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     if (remark === 'NotListed') return 'text-red-600';
     return 'text-slate-900 dark:text-slate-100';
   };
+  const isManualItem = (item: InquiryItemRow) => Boolean(item.isManual);
 
   return (
     <div className="w-full flex flex-col bg-white dark:bg-slate-900 p-3 gap-4">
@@ -1176,12 +1206,81 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                               className={`w-20 px-2 py-1.5 border rounded bg-white dark:bg-slate-800 text-sm text-right ${validationErrors[`item-${item.tempId}-qty`] ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'} ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}`}
                             />
                           </td>
-                          <td className="px-3 py-2 border-b border-slate-200 dark:border-slate-800">{item.part_no || '—'}</td>
-                          <td className="px-3 py-2 border-b border-slate-200 dark:border-slate-800">{item.item_code || '—'}</td>
-                          <td className="px-3 py-2 border-b border-slate-200 dark:border-slate-800">{item.location || '—'}</td>
-                          <td className="px-3 py-2 border-b border-slate-200 dark:border-slate-800">{item.brand || '—'}</td>
                           <td className="px-3 py-2 border-b border-slate-200 dark:border-slate-800">
-                            {!item.item_id ? (
+                            {isManualItem(item) ? (
+                              <div className="flex items-center gap-1">
+                                <span className="text-xs text-slate-500 dark:text-slate-400">P-</span>
+                                <input
+                                  type="text"
+                                  disabled={isReadOnly}
+                                  value={item.part_no || ''}
+                                  onChange={(e) => updateItemRow(item.tempId, 'part_no', e.target.value.toUpperCase())}
+                                  placeholder="Part no."
+                                  className={`w-full min-w-[110px] px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                />
+                              </div>
+                            ) : (
+                              item.part_no || '—'
+                            )}
+                          </td>
+                          <td className="px-3 py-2 border-b border-slate-200 dark:border-slate-800">
+                            {isManualItem(item) ? (
+                              <input
+                                type="text"
+                                disabled={isReadOnly}
+                                value={item.item_code || ''}
+                                onChange={(e) => updateItemRow(item.tempId, 'item_code', e.target.value.toUpperCase())}
+                                placeholder="Item code"
+                                className={`w-full min-w-[110px] px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}`}
+                              />
+                            ) : (
+                              item.item_code || '—'
+                            )}
+                          </td>
+                          <td className="px-3 py-2 border-b border-slate-200 dark:border-slate-800">
+                            {isManualItem(item) ? (
+                              <input
+                                type="text"
+                                disabled={isReadOnly}
+                                value={item.location || ''}
+                                onChange={(e) => updateItemRow(item.tempId, 'location', e.target.value)}
+                                placeholder="Application / location"
+                                className={`w-full min-w-[130px] px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}`}
+                              />
+                            ) : (
+                              item.location || '—'
+                            )}
+                          </td>
+                          <td className="px-3 py-2 border-b border-slate-200 dark:border-slate-800">
+                            {isManualItem(item) ? (
+                              <input
+                                type="text"
+                                disabled={isReadOnly}
+                                value={item.brand || ''}
+                                onChange={(e) => updateItemRow(item.tempId, 'brand', e.target.value.toUpperCase())}
+                                placeholder="Brand"
+                                className={`w-full min-w-[110px] px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}`}
+                              />
+                            ) : (
+                              item.brand || '—'
+                            )}
+                          </td>
+                          <td className="px-3 py-2 border-b border-slate-200 dark:border-slate-800">
+                            {isManualItem(item) ? (
+                              <div className="space-y-1">
+                                <input
+                                  type="text"
+                                  disabled={isReadOnly}
+                                  value={item.description || ''}
+                                  onChange={(e) => updateItemRow(item.tempId, 'description', e.target.value.toUpperCase())}
+                                  placeholder="Description"
+                                  className={`w-full min-w-[220px] px-2 py-1.5 border rounded bg-white dark:bg-slate-800 text-sm ${validationErrors[`item-${item.tempId}-description`] ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'} ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                />
+                                {validationErrors[`item-${item.tempId}-description`] && (
+                                  <p className="text-[11px] text-rose-600">{validationErrors[`item-${item.tempId}-description`]}</p>
+                                )}
+                              </div>
+                            ) : !item.item_id ? (
                               <button
                                 type="button"
                                 disabled={isReadOnly}
@@ -1231,7 +1330,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
-                              {!item.item_id && (
+                              {!item.item_id && !isManualItem(item) && (
                                 <button
                                   type="button"
                                   disabled={isReadOnly}
@@ -1280,7 +1379,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                             )}
                             <button
                               type="button"
-                              onClick={() => setShowProductModal(true)}
+                              onClick={addManualItemRow}
                               disabled={isReadOnly}
                               className={`px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
                             >
