@@ -33,6 +33,12 @@ interface ApiCustomerRow {
   id?: string | number | null;
   company?: string | null;
   lcompany?: string | null;
+  email?: string | null;
+  lemail?: string | null;
+  phone?: string | null;
+  lphone?: string | null;
+  mobile?: string | null;
+  lmobile?: string | null;
   dealer_since?: string | null;
   date_registered?: string | null;
   ldatereg?: string | null;
@@ -66,6 +72,7 @@ interface ApiCustomerRow {
   notes?: string | null;
   contacts?: ApiContactPersonRow[] | null;
   contact_persons?: ApiContactPersonRow[] | null;
+  terms_history?: ApiCustomerTermsRow[] | null;
 }
 
 interface ApiCustomerDatabaseResponse {
@@ -126,6 +133,10 @@ interface ApiCustomerTermsResponse {
   };
 }
 
+interface ApiCustomerDetailResponse {
+  data?: ApiCustomerRow;
+}
+
 type ContactPayloadWithSalesPersonId = Partial<Contact> & {
   __salesPersonId?: string;
 };
@@ -137,6 +148,15 @@ type LocalContact = Contact & {
 const toNumber = (value: unknown, fallback = 0): number => {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
+};
+
+const sanitizeLegacyString = (value: unknown): string => {
+  if (value === null || value === undefined) return '';
+  const normalized = String(value).trim();
+  if (!normalized) return '';
+  if (normalized.toLowerCase() === 'null') return '';
+  if (normalized.toLowerCase() === 'undefined') return '';
+  return normalized;
 };
 
 const parseApiErrorMessage = async (response: Response): Promise<string> => {
@@ -197,18 +217,18 @@ const normalizeVatType = (value: unknown): CustomerVatType => {
 };
 
 const mapApiContactPerson = (row: ApiContactPersonRow, index: number): ContactPerson => {
-  const firstName = String(row?.lfname || row?.first_name || '').trim();
-  const lastName = String(row?.llname || row?.last_name || '').trim();
+  const firstName = sanitizeLegacyString(row?.lfname || row?.first_name || '');
+  const lastName = sanitizeLegacyString(row?.llname || row?.last_name || '');
   const composedName = `${firstName} ${lastName}`.trim();
   return {
     id: String(row?.id ?? row?.lid ?? `cp-${index}`),
     enabled: true,
     name: composedName || firstName || 'N/A',
-    position: String(row?.lposition || row?.position || ''),
-    birthday: String(row?.lbday || row?.birthday || ''),
-    telephone: String(row?.lc_phone || row?.phone || ''),
-    mobile: String(row?.lc_mobile || row?.mobile || ''),
-    email: String(row?.lemail || row?.email || ''),
+    position: sanitizeLegacyString(row?.lposition || row?.position || ''),
+    birthday: sanitizeLegacyString(row?.lbday || row?.birthday || ''),
+    telephone: sanitizeLegacyString(row?.lc_phone || row?.phone || ''),
+    mobile: sanitizeLegacyString(row?.lc_mobile || row?.mobile || ''),
+    email: sanitizeLegacyString(row?.lemail || row?.email || ''),
   };
 };
 
@@ -221,48 +241,51 @@ const mapApiCustomerToContact = (row: ApiCustomerRow): LocalContact => {
   const contactPersons = contactPersonsRaw.map(mapApiContactPerson);
   const primary = contactPersons[0];
   const status = mapApiStatusToUi(row);
-  const company = String(row?.company || row?.lcompany || '').trim();
-  const salesPersonName = String(row?.sales_person_name || row?.salesman || row?.assigned_to || '').trim();
-  const salesPersonId = String(row?.sales_person_id || row?.lsales_person || '').trim();
+  const company = sanitizeLegacyString(row?.company || row?.lcompany || '');
+  const salesPersonName = sanitizeLegacyString(row?.sales_person_name || row?.salesman || row?.assigned_to || '');
+  const salesPersonId = sanitizeLegacyString(row?.sales_person_id || row?.lsales_person || '');
   const resolvedSalesName = salesPersonName || salesPersonId;
+  const fallbackEmail = sanitizeLegacyString(row?.email || row?.lemail || '');
+  const fallbackPhone = sanitizeLegacyString(row?.phone || row?.lphone || '');
+  const fallbackMobile = sanitizeLegacyString(row?.mobile || row?.lmobile || '');
 
   return {
     id: String(row?.session_id ?? row?.lsessionid ?? row?.id ?? ''),
     company,
-    customerSince: String(row?.dealer_since || row?.date_registered || row?.ldatereg || ''),
-    team: String(row?.team || ''),
+    customerSince: sanitizeLegacyString(row?.dealer_since || row?.date_registered || row?.ldatereg || ''),
+    team: sanitizeLegacyString(row?.team || ''),
     salesman: resolvedSalesName,
-    referBy: String(row?.refer_by || ''),
-    address: String(row?.address || ''),
-    province: String(row?.province || ''),
-    city: String(row?.city || ''),
-    area: String(row?.area || ''),
-    deliveryAddress: String(row?.delivery_address || row?.address || ''),
-    tin: String(row?.tin || ''),
-    priceGroup: row?.pricing_tier ? String(row.pricing_tier) : normalizePriceGroup(row?.price_group || ''),
-    businessLine: String(row?.business_line || ''),
-    terms: String(row?.terms || ''),
-    transactionType: String(row?.transaction_type || ''),
+    referBy: sanitizeLegacyString(row?.refer_by || ''),
+    address: sanitizeLegacyString(row?.address || ''),
+    province: sanitizeLegacyString(row?.province || ''),
+    city: sanitizeLegacyString(row?.city || ''),
+    area: sanitizeLegacyString(row?.area || ''),
+    deliveryAddress: sanitizeLegacyString(row?.delivery_address || row?.address || ''),
+    tin: sanitizeLegacyString(row?.tin || ''),
+    priceGroup: row?.pricing_tier ? sanitizeLegacyString(row.pricing_tier) : normalizePriceGroup(sanitizeLegacyString(row?.price_group || '')),
+    businessLine: sanitizeLegacyString(row?.business_line || ''),
+    terms: sanitizeLegacyString(row?.terms || ''),
+    transactionType: sanitizeLegacyString(row?.transaction_type || ''),
     vatType: normalizeVatType(row?.vat_type),
     vatPercentage: String(toNumber(row?.vat_percent, 0.12) * 100),
-    dealershipTerms: String(row?.dealer_terms || ''),
-    dealershipSince: String(row?.dealer_since || ''),
+    dealershipTerms: sanitizeLegacyString(row?.dealer_terms || ''),
+    dealershipSince: sanitizeLegacyString(row?.dealer_since || ''),
     dealershipQuota: toNumber(row?.dealer_quota, 0),
     creditLimit: toNumber(row?.credit_limit, 0),
     status,
     isHidden: toNumber(row?.status, 1) === 0,
     debtType: String(row?.debt_type || 'Good').toLowerCase() === 'bad' ? 'Bad' : 'Good',
-    comment: String(row?.notes || ''),
+    comment: sanitizeLegacyString(row?.notes || ''),
     contactPersons,
     name: primary?.name || company || 'N/A',
     title: primary?.position || '',
-    email: primary?.email || '',
-    phone: primary?.telephone || primary?.mobile || '',
-    mobile: primary?.mobile || '',
+    email: primary?.email || fallbackEmail,
+    phone: primary?.telephone || primary?.mobile || fallbackPhone || fallbackMobile,
+    mobile: primary?.mobile || fallbackMobile,
     avatar: `https://i.pravatar.cc/150?u=${encodeURIComponent(String(row?.session_id ?? row?.id ?? company ?? Date.now()))}`,
     dealValue: 0,
     stage: DealStage.NEW,
-    lastContactDate: String(row?.date_registered || ''),
+    lastContactDate: sanitizeLegacyString(row?.date_registered || ''),
     interactions: [],
     comments: [],
     salesHistory: [],
@@ -284,6 +307,9 @@ const mapContactPayloadToApi = (contact: ContactPayloadWithSalesPersonId) => {
 
   return {
     company: String(contact?.company || ''),
+    email: String(contact?.email || ''),
+    phone: String(contact?.phone || ''),
+    mobile: String(contact?.mobile || ''),
     sales_person_id: resolvedSalesPerson,
     refer_by: String(contact?.referBy || ''),
     address: String(contact?.address || ''),
@@ -314,6 +340,9 @@ const mapContactUpdatesToApi = (contact: Partial<ContactPayloadWithSalesPersonId
   const payload: Record<string, unknown> = {};
 
   if (hasOwn(contact, 'company')) payload.company = String(contact.company || '');
+  if (hasOwn(contact, 'email')) payload.email = String(contact.email || '');
+  if (hasOwn(contact, 'phone')) payload.phone = String(contact.phone || '');
+  if (hasOwn(contact, 'mobile')) payload.mobile = String(contact.mobile || '');
 
   if (hasOwn(contact, '__salesPersonId') || hasOwn(contact, 'salesman') || hasOwn(contact, 'assignedAgent')) {
     payload.sales_person_id = String(contact.__salesPersonId || contact.salesman || contact.assignedAgent || '').trim();
@@ -545,6 +574,28 @@ export const updateContact = async (id: string, updates: Partial<Contact>): Prom
   }
 };
 
+export const fetchContactById = async (id: string): Promise<Contact | null> => {
+  try {
+    const payload = await requestJson<ApiCustomerDetailResponse>(
+      `${API_BASE_URL}/customer-database/${encodeURIComponent(String(id))}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`
+    );
+    if (!payload?.data) return null;
+    return mapApiCustomerToContact(payload.data);
+  } catch (err) {
+    console.error('Error fetching customer detail via local API:', err);
+    return null;
+  }
+};
+
+const mapApiTermRow = (row: ApiCustomerTermsRow, index: number) => ({
+  id: String(row?.id ?? row?.lid ?? `term-${index}`),
+  since: sanitizeLegacyString(row?.since || row?.lsince || ''),
+  classCode: sanitizeLegacyString(row?.class_code || row?.lclasscode || ''),
+  quota: toNumber(row?.quota ?? row?.lquota, 0),
+  terms: sanitizeLegacyString((row as any)?.lname || row?.terms || row?.lterms || ''),
+  status: sanitizeLegacyString(row?.status || row?.lstatus || ''),
+});
+
 export const bulkUpdateContacts = async (ids: string[], updates: Partial<Contact>): Promise<void> => {
   if (!Array.isArray(ids) || ids.length === 0) return;
 
@@ -653,22 +704,11 @@ export const fetchCustomerMetrics = async (contactId: string): Promise<Record<st
 
 export const fetchCustomerTerms = async (sessionId: string): Promise<Array<Record<string, unknown>>> => {
   try {
-    const query = new URLSearchParams({
-      main_id: String(API_MAIN_ID),
-    });
-    const payload = await requestJson<ApiCustomerTermsResponse>(
-      `${API_BASE_URL}/customer-database/${encodeURIComponent(String(sessionId))}/terms?${query.toString()}`
+    const payload = await requestJson<ApiCustomerDetailResponse>(
+      `${API_BASE_URL}/customer-database/${encodeURIComponent(String(sessionId))}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`
     );
-    const rows = Array.isArray(payload?.data?.items) ? payload.data.items : [];
-
-    return rows.map((row: ApiCustomerTermsRow, index: number) => ({
-      id: String(row?.id ?? row?.lid ?? `term-${index}`),
-      since: String(row?.since || row?.lsince || ''),
-      classCode: String(row?.class_code || row?.lclasscode || ''),
-      quota: toNumber(row?.quota ?? row?.lquota, 0),
-      terms: String(row?.terms ?? row?.lterms ?? ''),
-      status: String(row?.status || row?.lstatus || ''),
-    }));
+    const rows = Array.isArray(payload?.data?.terms_history) ? payload.data.terms_history : [];
+    return rows.map(mapApiTermRow);
   } catch (err) {
     console.error('Error fetching customer terms via local API:', err);
     return [];

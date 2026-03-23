@@ -40,7 +40,9 @@ import {
   WRITABLE_PRICING_GROUP_OPTIONS,
 } from '../constants/pricingGroups';
 
-interface InquiryItemRow extends Omit<SalesInquiryItem, 'id' | 'inquiry_id'> {
+interface InquiryItemRow extends Omit<SalesInquiryItem, 'id' | 'inquiry_id' | 'qty' | 'unit_price'> {
+  qty: number | '';
+  unit_price: number | '';
   brand?: string;
   tempId?: string;
   isNew?: boolean; // Flag to indicate if the row is new and editable via autocomplete
@@ -479,7 +481,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
         const updated = { ...item, [field]: value };
         // Auto-calculate amount
         if (field === 'qty' || field === 'unit_price') {
-          updated.amount = (updated.qty || 0) * (updated.unit_price || 0);
+          updated.amount = (Number(updated.qty) || 0) * (Number(updated.unit_price) || 0);
         }
         return updated;
       }
@@ -536,7 +538,11 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
         inquiry_type: finalInquiryType,
         urgency: urgency,
         urgency_date: urgency !== 'N/A' ? urgencyDate : undefined,
-        items: items.map(({ tempId, isManual, brand, ...rest }) => rest),
+        items: items.map(({ tempId, isManual, brand, ...rest }) => ({
+          ...rest,
+          qty: Number(rest.qty) || 0,
+          unit_price: Number(rest.unit_price) || 0,
+        })),
       };
 
       if (selectedInquiry && !isCreatingNew) {
@@ -1202,7 +1208,13 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                               type="number"
                               disabled={isReadOnly}
                               value={item.qty}
-                              onChange={(e) => updateItemRow(item.tempId, 'qty', parseInt(e.target.value, 10) || 1)}
+                              onChange={(e) =>
+                                updateItemRow(
+                                  item.tempId,
+                                  'qty',
+                                  e.target.value === '' ? '' : parseInt(e.target.value, 10) || ''
+                                )
+                              }
                               className={`w-20 px-2 py-1.5 border rounded bg-white dark:bg-slate-800 text-sm text-right ${validationErrors[`item-${item.tempId}-qty`] ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'} ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}`}
                             />
                           </td>
@@ -1298,7 +1310,13 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                               type="number"
                               disabled={isReadOnly}
                               value={item.unit_price}
-                              onChange={(e) => updateItemRow(item.tempId, 'unit_price', parseFloat(e.target.value) || 0)}
+                              onChange={(e) =>
+                                updateItemRow(
+                                  item.tempId,
+                                  'unit_price',
+                                  e.target.value === '' ? '' : parseFloat(e.target.value) || ''
+                                )
+                              }
                               className={`w-28 px-2 py-1.5 border rounded bg-white dark:bg-slate-800 text-sm text-right ${validationErrors[`item-${item.tempId}-unit_price`] ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'} ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}`}
                             />
                           </td>

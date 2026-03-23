@@ -5,7 +5,7 @@ import {
     FileText, DollarSign, Activity, Clock, UserCog, Save, X as XIcon, Pencil
 } from 'lucide-react';
 import { Contact, CustomerStatus, UserProfile } from '../types';
-import { fetchContactTransactions, fetchCustomerMetrics, fetchCustomerTerms, fetchSalesAgents, updateContact, fetchUpdatedContactDetails } from '../services/customerDatabaseLocalApiService';
+import { fetchContactById, fetchContactTransactions, fetchCustomerMetrics, fetchCustomerTerms, fetchSalesAgents, updateContact, fetchUpdatedContactDetails } from '../services/customerDatabaseLocalApiService';
 import CompanyName from './CompanyName';
 import { toast } from 'sonner';
 import { normalizePriceGroup } from '../constants/pricingGroups';
@@ -71,13 +71,18 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
         const loadData = async () => {
             setLoading(true);
             try {
-                const [txs, mets, customerTerms, agents, updates] = await Promise.all([
+                const [detail, txs, mets, customerTerms, agents, updates] = await Promise.all([
+                    fetchContactById(contactId),
                     fetchContactTransactions(contactId),
                     fetchCustomerMetrics(contactId),
                     fetchCustomerTerms(contactId),
                     fetchSalesAgents(),
                     fetchUpdatedContactDetails(contactId)
                 ]);
+                if (detail) {
+                    setContact((previous) => ({ ...(previous || {}), ...detail } as Contact));
+                    onUpdate(detail);
+                }
                 setTransactions(txs);
                 setMetrics(mets);
                 setTerms(customerTerms as CustomerTermsRow[]);
