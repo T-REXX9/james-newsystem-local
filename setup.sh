@@ -12,7 +12,7 @@ INSTALL_DIR="${INSTALL_DIR:-$HOME/james-system}"
 API_DIR="$INSTALL_DIR/api"
 WEB_DIR="$INSTALL_DIR/james-newsystem"
 
-DB_NAME="${DB_NAME:-topnotch}"
+DB_NAME="${DB_NAME:-}"
 DB_USER="${DB_USER:-james}"
 DB_PASS="${DB_PASS:-james123}"
 DB_HOST="${DB_HOST:-127.0.0.1}"
@@ -283,6 +283,21 @@ build_auth_repo_url() {
   echo "$url"
 }
 
+read_env_example_value() {
+  local env_file="$1"
+  local key="$2"
+
+  [[ -f "$env_file" ]] || return 1
+
+  awk -F= -v wanted_key="$key" '
+    $1 == wanted_key {
+      sub(/^[^=]*=/, "", $0)
+      print $0
+      exit
+    }
+  ' "$env_file"
+}
+
 git_safe_clone_or_pull() {
   local repo_url="$1"
   local target_dir="$2"
@@ -381,6 +396,11 @@ git_safe_clone_or_pull "$API_REPO_URL" "$API_DIR" "API repository"
 
 step "Cloning or updating web repository"
 git_safe_clone_or_pull "$WEB_REPO_URL" "$WEB_DIR" "web repository"
+
+if [[ -z "$DB_NAME" ]]; then
+  DB_NAME="$(read_env_example_value "$API_DIR/.env.example" "DB_NAME" || true)"
+fi
+DB_NAME="${DB_NAME:-topnotch_migrate}"
 
 if [[ "$MODE" == "update" ]]; then
   step "Writing API and web environment files"
