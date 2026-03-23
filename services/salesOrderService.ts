@@ -268,7 +268,7 @@ export const createFromInquiry = async (inquiryId: string): Promise<SalesOrder> 
     const dto: SalesOrderDTO = {
       inquiry_id: inquiry.id,
       contact_id: inquiry.contact_id,
-      sales_date: inquiry.sales_date,
+      sales_date: new Date().toISOString().split('T')[0],
       sales_person: inquiry.sales_person,
       delivery_address: inquiry.delivery_address,
       reference_no: inquiry.reference_no,

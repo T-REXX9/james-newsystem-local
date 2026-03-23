@@ -15,9 +15,9 @@ import {
   confirmSalesOrder,
   convertToDocument,
   getSalesOrder,
-  getSalesOrdersPage,
   syncDocumentPolicyState,
 } from '../services/salesOrderLocalApiService';
+import { getAllSalesOrders } from '../services/salesOrderService';
 import { fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { getLocalAuthSession } from '../services/localAuthService';
 import { dispatchWorkflowNotification, fetchProfiles } from '../services/supabaseService';
@@ -123,16 +123,44 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
   const loadOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await getSalesOrdersPage({
-        month: targetMonthYear.month,
-        year: targetMonthYear.year,
-        status: statusFilter === 'all' ? 'all' : statusFilter,
-        search: debouncedSearch,
-        page,
-        perPage: 50,
-      });
-      setOrders(result.items);
-      setTotalPages(Math.max(1, result.meta.total_pages || 1));
+      const statusParam = statusFilter === 'all' ? undefined : statusFilter;
+      const allOrders = await getAllSalesOrders(
+        statusParam ? { status: statusParam as any } : {}
+      );
+
+      // Client-side date filtering based on created_at (defaults to current month)
+      let filtered = allOrders;
+      if (targetMonthYear.month !== undefined && targetMonthYear.year !== undefined) {
+        filtered = allOrders.filter((order) => {
+          const createdAt = new Date(order.created_at || '');
+          if (Number.isNaN(createdAt.getTime())) return false;
+          return (
+            createdAt.getMonth() + 1 === targetMonthYear.month &&
+            createdAt.getFullYear() === targetMonthYear.year
+          );
+        });
+      }
+
+      // Client-side search filtering
+      if (debouncedSearch) {
+        const query = debouncedSearch.toLowerCase();
+        filtered = filtered.filter((order) =>
+          (order.order_no || '').toLowerCase().includes(query) ||
+          (order.contact_id || '').toLowerCase().includes(query) ||
+          (order.remarks || '').toLowerCase().includes(query) ||
+          (order.reference_no || '').toLowerCase().includes(query)
+        );
+      }
+
+      // Client-side pagination
+      const perPage = 50;
+      const totalFiltered = filtered.length;
+      const computedTotalPages = Math.max(1, Math.ceil(totalFiltered / perPage));
+      const start = (page - 1) * perPage;
+      const paged = filtered.slice(start, start + perPage);
+
+      setOrders(paged);
+      setTotalPages(computedTotalPages);
     } catch (err) {
       console.error('Failed loading sales order list:', err);
       setOrders([]);
@@ -148,6 +176,16 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
 
   useEffect(() => {
     loadOrders();
+  }, [loadOrders]);
+
+  useEffect(() => {
+    const handleSalesOrderCreated = () => {
+      loadOrders();
+    };
+    window.addEventListener('salesorder:created', handleSalesOrderCreated);
+    return () => {
+      window.removeEventListener('salesorder:created', handleSalesOrderCreated);
+    };
   }, [loadOrders]);
 
   const customerMap = useMemo(() => new Map(contacts.map(contact => [contact.id, contact])), [contacts]);

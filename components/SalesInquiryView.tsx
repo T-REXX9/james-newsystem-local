@@ -27,6 +27,7 @@ import {
 } from '../services/salesInquiryLocalApiService';
 import { getProductPrice } from '../services/productLocalApiService';
 import { getSalesOrderByInquiry } from '../services/salesOrderLocalApiService';
+import { getSalesOrder } from '../services/salesOrderService';
 
 import ProductSearchModal from './ProductSearchModal';
 import CustomerAutocomplete from './CustomerAutocomplete';
@@ -686,12 +687,32 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     setLoading(true);
     try {
       const order = await convertToOrder(selectedInquiry.id);
+
+      // Verify the order was actually created and is accessible
+      let verifiedOrder = await getSalesOrder(order.id);
+      if (!verifiedOrder) {
+        // Retry a few times with a small delay in case of sync delay
+        for (let attempt = 0; attempt < 3 && !verifiedOrder; attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          verifiedOrder = await getSalesOrder(order.id);
+        }
+      }
+
+      if (!verifiedOrder) {
+        console.error('Order verification failed: order created but not accessible', { orderId: order.id });
+        addToast({ type: 'error', title: 'Order created but not accessible', description: 'The order was created but could not be verified. Please refresh and try again.', durationMs: 6000 });
+        await refetchInquiries();
+        return;
+      }
+
       await refetchInquiries();
       addToast({ type: 'success', message: `Converted to Sales Order ${order.order_no || ''}`.trim() });
 
-      if (order?.id) {
-        navigateToSalesOrder(order.id);
-      }
+      window.dispatchEvent(new CustomEvent('salesorder:created', {
+        detail: { orderId: order.id, orderNo: order.order_no }
+      }));
+
+      navigateToSalesOrder(order.id);
     } catch (error) {
       console.error('Error converting inquiry to sales order:', error);
       const friendlyMessage = parseSupabaseError(error, 'sales order conversion');

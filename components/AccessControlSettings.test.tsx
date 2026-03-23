@@ -3,7 +3,6 @@ import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import AccessControlSettings from './AccessControlSettings';
-import { DEFAULT_STAFF_ACCESS_RIGHTS } from '../constants';
 import { createStaffAccountLocal, fetchProfilesLocal } from '../services/accessLocalApiService';
 import { fetchAccessGroups } from '../services/accessGroupApiService';
 import { ToastProvider } from './ToastProvider';
@@ -79,7 +78,7 @@ describe('AccessControlSettings - create staff account', () => {
       role: 'Manager',
       birthday: undefined,
       mobile: '09171234567',
-      accessRights: DEFAULT_STAFF_ACCESS_RIGHTS
+      accessRights: ['home']
     });
 
     await waitFor(() => expect(fetchProfilesMock).toHaveBeenCalledTimes(2));
@@ -148,5 +147,41 @@ describe('AccessControlSettings - create staff account', () => {
     expect((await screen.findAllByText(/already exists/i)).length).toBeGreaterThan(0);
     await user.click(screen.getByRole('button', { name: /Retry/i }));
     expect(screen.getByText('Create Staff Account')).toBeInTheDocument();
+  });
+
+  it('clears typed details when the modal is cancelled or closed', async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<AccessControlSettings />);
+
+    const addButtons = await screen.findAllByText('Add New Account');
+    await user.click(addButtons[0]);
+
+    const fullNameInput = screen.getByPlaceholderText('e.g. John Doe');
+    const emailInput = screen.getByPlaceholderText('staff@company.com');
+    const mobileInput = screen.getByPlaceholderText('0917...');
+    const passwordInput = screen.getByPlaceholderText('Set initial password');
+
+    await user.type(fullNameInput, 'Jane Doe');
+    await user.type(emailInput, 'jane@example.com');
+    await user.type(mobileInput, '09171234567');
+    await user.type(passwordInput, 'StrongPass1');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByText('Create Staff Account')).not.toBeInTheDocument();
+
+    await user.click((await screen.findAllByText('Add New Account'))[0]);
+    expect(screen.getByPlaceholderText('e.g. John Doe')).toHaveValue('');
+    expect(screen.getByPlaceholderText('staff@company.com')).toHaveValue('');
+    expect(screen.getByPlaceholderText('0917...')).toHaveValue('');
+    expect(screen.getByPlaceholderText('Set initial password')).toHaveValue('');
+
+    await user.type(screen.getByPlaceholderText('e.g. John Doe'), 'John Smith');
+    await user.click(screen.getByRole('button', { name: 'Close create staff modal' }));
+
+    expect(screen.queryByText('Create Staff Account')).not.toBeInTheDocument();
+
+    await user.click((await screen.findAllByText('Add New Account'))[0]);
+    expect(screen.getByPlaceholderText('e.g. John Doe')).toHaveValue('');
   });
 });

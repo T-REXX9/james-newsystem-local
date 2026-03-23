@@ -44,6 +44,14 @@ import { useToast } from './ToastProvider';
 const STAFF_PER_PAGE = 50;
 const STAFF_MEMBER_COLUMN_WIDTH = 288;
 const GROUP_COLUMN_WIDTH = 220;
+const INITIAL_NEW_USER_FORM = {
+  fullName: '',
+  email: '',
+  role: DEFAULT_STAFF_ROLE,
+  password: '',
+  birthday: '',
+  mobile: '',
+};
 
 const getEffectiveCanonicalRights = (rights: string[] | null | undefined): Set<string> => {
   const result = new Set<string>();
@@ -77,14 +85,7 @@ const AccessControlSettings: React.FC = () => {
 
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
-  const [newUserForm, setNewUserForm] = useState({
-    fullName: '',
-    email: '',
-    role: DEFAULT_STAFF_ROLE,
-    password: '',
-    birthday: '',
-    mobile: '',
-  });
+  const [newUserForm, setNewUserForm] = useState(INITIAL_NEW_USER_FORM);
   const [formErrors, setFormErrors] = useState<StaffAccountValidationError>({});
   const [formMessage, setFormMessage] = useState<{ type: 'success' | 'error' | null; text: string }>({
     type: null,
@@ -352,6 +353,17 @@ const AccessControlSettings: React.FC = () => {
     return Object.keys(errors).length === 0;
   };
 
+  const resetNewUserModalState = () => {
+    setNewUserForm(INITIAL_NEW_USER_FORM);
+    setFormErrors({});
+    setFormMessage({ type: null, text: '' });
+  };
+
+  const closeNewUserModal = () => {
+    setIsAddUserModalOpen(false);
+    resetNewUserModalState();
+  };
+
   const handleCreateUser = async (event: React.FormEvent) => {
     event.preventDefault();
     setFormMessage({ type: null, text: '' });
@@ -387,15 +399,7 @@ const AccessControlSettings: React.FC = () => {
       await loadProfiles(1);
       await loadGroups();
       setIsAddUserModalOpen(false);
-      setNewUserForm({
-        fullName: '',
-        email: '',
-        role: DEFAULT_STAFF_ROLE,
-        password: '',
-        birthday: '',
-        mobile: '',
-      });
-      setFormErrors({});
+      resetNewUserModalState();
       setFormMessage({ type: 'success', text: `Account created for ${payload.fullName}` });
       addToast({
         type: 'success',
@@ -457,9 +461,8 @@ const AccessControlSettings: React.FC = () => {
         {activeTab === 'staff' && (
           <button
             onClick={() => {
+              resetNewUserModalState();
               setIsAddUserModalOpen(true);
-              setFormErrors({});
-              setFormMessage({ type: null, text: '' });
             }}
             className="flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
           >
@@ -721,7 +724,8 @@ const AccessControlSettings: React.FC = () => {
             <div className="flex items-center justify-between border-b border-slate-100 p-6 dark:border-slate-800">
               <h2 className="text-lg font-bold text-slate-800 dark:text-white">Create Staff Account</h2>
               <button
-                onClick={() => setIsAddUserModalOpen(false)}
+                aria-label="Close create staff modal"
+                onClick={closeNewUserModal}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
               >
                 <X className="h-5 w-5" />
@@ -840,7 +844,7 @@ const AccessControlSettings: React.FC = () => {
               <div className="flex justify-end gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => setIsAddUserModalOpen(false)}
+                  onClick={closeNewUserModal}
                   className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
                   Cancel

@@ -123,6 +123,7 @@ export interface SalesOrdersPageFilters {
   search?: string;
   page?: number;
   perPage?: number;
+  dateField?: 'created' | 'sales';
 }
 
 export interface SalesOrdersPageResult {
@@ -148,12 +149,15 @@ export const getSalesOrdersPage = async (filters: SalesOrdersPageFilters): Promi
   const status = String(filters.status || 'all');
   const search = String(filters.search || '').trim();
 
+  const dateField = filters.dateField || 'created';
+
   const query = new URLSearchParams({
     main_id: String(API_MAIN_ID),
     viewer_user_id: String(userContext.userId),
     status,
     page: String(page),
     per_page: String(perPage),
+    date_field: dateField,
   });
   if (month !== undefined) query.set('month', String(month));
   if (year !== undefined) query.set('year', String(year));
