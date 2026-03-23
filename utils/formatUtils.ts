@@ -45,11 +45,34 @@ export const formatComment = (value?: string | null) => {
   return trimmed.length > 90 ? `${trimmed.slice(0, 87)}...` : trimmed;
 };
 
-export const matchesSearch = (contact: { company?: string | null; name?: string | null; province?: string | null; city?: string | null }, query: string) => {
+export const matchesSearch = (contact: { company?: string | null; name?: string | null; province?: string | null; city?: string | null; id?: string | null }, query: string) => {
   if (!query) return true;
+
   const normalized = query.toLowerCase();
-  const fields = [contact.company, contact.name, contact.province, contact.city];
-  return fields.some((field) => (field || '').toLowerCase().includes(normalized));
+
+  // Smart search: detect if query looks like a reference number (contains numbers/dashes)
+  const isRefNoLike = /[\d-]/g.test(normalized);
+
+  // Always search company and name
+  const companyMatch = (contact.company || '').toLowerCase().includes(normalized);
+  const nameMatch = (contact.name || '').toLowerCase().includes(normalized);
+
+  if (companyMatch || nameMatch) return true;
+
+  // For reference number-like searches, also check ID field
+  if (isRefNoLike && contact.id) {
+    const idMatch = (contact.id || '').toLowerCase().includes(normalized);
+    if (idMatch) return true;
+  }
+
+  // For text-based searches, also check location fields
+  if (!isRefNoLike) {
+    const provinceMatch = (contact.province || '').toLowerCase().includes(normalized);
+    const cityMatch = (contact.city || '').toLowerCase().includes(normalized);
+    if (provinceMatch || cityMatch) return true;
+  }
+
+  return false;
 };
 
 export const getPhoneNumber = (contact: { mobile?: string | null; phone?: string | null; contactPersons?: Array<{ mobile?: string | null; telephone?: string | null }> }) => {

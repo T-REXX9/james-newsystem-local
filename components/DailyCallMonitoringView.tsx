@@ -517,10 +517,14 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
   useEffect(() => {
     const handler = setTimeout(() => {
-      setDebouncedSearch(searchValue.trim().toLowerCase());
-    }, 300);
+      const trimmedSearch = searchValue.trim().toLowerCase();
+      // Only update if search value actually changed
+      if (trimmedSearch !== debouncedSearch) {
+        setDebouncedSearch(trimmedSearch);
+      }
+    }, 600);
     return () => clearTimeout(handler);
-  }, [searchValue]);
+  }, [searchValue, debouncedSearch]);
 
   const handleCallContact = (contact: Contact) => {
     const phoneNumber = contact.mobile || contact.phone || contact.contactPersons[0]?.mobile || contact.contactPersons[0]?.telephone;
@@ -899,11 +903,12 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       }
       return;
     }
+    // Don't reset selection/scroll if selected client still exists in filtered results
+    // This prevents the "page reload" feeling when searching
     if (!masterRows.some((row) => row.contact.id === selectedClientId)) {
       setSelectedClientId(null);
-      if (masterScrollRef.current) {
-        masterScrollRef.current.scrollTop = 0;
-      }
+      // Only reset scroll if the change wasn't due to search filtering
+      // (i.e., if other filters changed)
     }
   }, [masterRows, selectedClientId]);
 

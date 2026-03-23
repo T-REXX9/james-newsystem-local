@@ -600,22 +600,23 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
 
                   <td className="p-4 align-top">
                     <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3 border border-slate-100 dark:border-slate-700/50">
-                      {/* Price group labels use abbreviated form (AA/BB/CC/DD) here for compact table display,
-                         while the edit modal uses the full database lname values (AAA/ABB/ACC/ADD).
-                         This matches the old system where inventory.php table used AA/BB/CC/DD
-                         and the form used full group names from the DB. */}
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-                        <div className="flex justify-between items-center"><span className="text-slate-500">AA</span> <span className="font-mono font-medium text-slate-700 dark:text-slate-200">{formatPrice(product.price_aa)}</span></div>
-                        <div className="flex justify-between items-center"><span className="text-slate-500">BB</span> <span className="font-mono font-medium text-slate-700 dark:text-slate-200">{formatPrice(product.price_bb)}</span></div>
-                        <div className="flex justify-between items-center"><span className="text-slate-500">CC</span> <span className="font-mono font-medium text-slate-700 dark:text-slate-200">{formatPrice(product.price_cc)}</span></div>
-                        <div className="flex justify-between items-center"><span className="text-slate-500">DD</span> <span className="font-mono font-medium text-slate-700 dark:text-slate-200">{formatPrice(product.price_dd)}</span></div>
-                        <div className="flex justify-between items-center col-span-2 pt-1 border-t border-slate-200 dark:border-slate-700 mt-1">
-                          <span className="text-amber-600 dark:text-amber-500 font-bold">VIP 1</span>
-                          <span className="font-mono font-bold text-amber-700 dark:text-amber-400">{formatPrice(product.price_vip1)}</span>
+                      {/* New pricing group naming: AA=Regular, VIP1=Silver, VIP2=Gold, Platinum is computed by backend */}
+                      <div className="space-y-2 text-xs">
+                        <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-slate-700">
+                          <span className="font-semibold text-blue-600 dark:text-blue-400">Regular</span>
+                          <span className="font-mono font-medium text-slate-700 dark:text-slate-200">{formatPrice(product.price_aa)}</span>
                         </div>
-                        <div className="flex justify-between items-center col-span-2">
-                          <span className="text-amber-600 dark:text-amber-500 font-bold">VIP2</span>
+                        <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-slate-700">
+                          <span className="font-semibold text-purple-600 dark:text-purple-400">Silver</span>
+                          <span className="font-mono font-bold text-purple-700 dark:text-purple-400">{formatPrice(product.price_vip1)}</span>
+                        </div>
+                        <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-slate-700">
+                          <span className="font-semibold text-amber-600 dark:text-amber-400">Gold</span>
                           <span className="font-mono font-bold text-amber-700 dark:text-amber-400">{formatPrice(product.price_vip2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-slate-500">
+                          <span className="text-xs italic">Platinum</span>
+                          <span className="text-xs italic">(Computed)</span>
                         </div>
                       </div>
                     </div>
@@ -781,7 +782,14 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
                     <label className="block text-xs font-medium text-slate-500 mb-2">Select Price Groups to Update</label>
                     <div className="grid grid-cols-3 gap-2">
                       {['AA', 'BB', 'CC', 'DD', 'VIP1', 'VIP2'].map(group => {
-                        const displayLabels: Record<string, string> = { VIP1: 'VIP 1', VIP2: 'VIP 2' };
+                        const displayLabels: Record<string, string> = {
+                          AA: 'Regular',
+                          VIP1: 'Silver',
+                          VIP2: 'Gold',
+                          BB: 'Legacy: BB',
+                          CC: 'Legacy: CC',
+                          DD: 'Legacy: DD'
+                        };
                         const displayLabel = displayLabels[group] || group;
                         return (
                         <label key={group} className="flex items-center gap-2 p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors">
@@ -984,7 +992,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
                       </div>
                     )}
                     <div className={isMasterAccess ? 'md:col-span-1' : ''}>
-                      <label className="block text-xs font-bold text-blue-600 dark:text-blue-400 mb-1">AAA</label>
+                      <label className="block text-xs font-bold text-blue-600 dark:text-blue-400 mb-1">Regular</label>
                       <input
                         type="number"
                         name="price_aa"
@@ -994,23 +1002,23 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-blue-600 dark:text-blue-400 mb-1">ABB</label>
-                      <input type="number" name="price_bb" value={formData.price_bb === 0 ? '' : formData.price_bb} onChange={handleInputChange} className="input-field bg-blue-50/50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-900" />
+                      <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 mb-1">Legacy: ABB</label>
+                      <input type="number" name="price_bb" value={formData.price_bb === 0 ? '' : formData.price_bb} onChange={handleInputChange} className="input-field bg-slate-50/50 dark:bg-slate-900/20 border-slate-100 dark:border-slate-700" />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-blue-600 dark:text-blue-400 mb-1">ACC</label>
-                      <input type="number" name="price_cc" value={formData.price_cc === 0 ? '' : formData.price_cc} onChange={handleInputChange} className="input-field bg-blue-50/50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-900" />
+                      <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 mb-1">Legacy: ACC</label>
+                      <input type="number" name="price_cc" value={formData.price_cc === 0 ? '' : formData.price_cc} onChange={handleInputChange} className="input-field bg-slate-50/50 dark:bg-slate-900/20 border-slate-100 dark:border-slate-700" />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-blue-600 dark:text-blue-400 mb-1">ADD</label>
-                      <input type="number" name="price_dd" value={formData.price_dd === 0 ? '' : formData.price_dd} onChange={handleInputChange} className="input-field bg-blue-50/50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-900" />
+                      <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 mb-1">Legacy: ADD</label>
+                      <input type="number" name="price_dd" value={formData.price_dd === 0 ? '' : formData.price_dd} onChange={handleInputChange} className="input-field bg-slate-50/50 dark:bg-slate-900/20 border-slate-100 dark:border-slate-700" />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-amber-600 dark:text-amber-500 mb-1">VIP 1</label>
-                      <input type="number" name="price_vip1" value={formData.price_vip1 === 0 ? '' : formData.price_vip1} onChange={handleInputChange} className="input-field bg-amber-50/50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-900" />
+                      <label className="block text-xs font-bold text-purple-600 dark:text-purple-400 mb-1">Silver</label>
+                      <input type="number" name="price_vip1" value={formData.price_vip1 === 0 ? '' : formData.price_vip1} onChange={handleInputChange} className="input-field bg-purple-50/50 dark:bg-purple-900/20 border-purple-100 dark:border-purple-900" />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-amber-600 dark:text-amber-500 mb-1">VIP2</label>
+                      <label className="block text-xs font-bold text-amber-600 dark:text-amber-400 mb-1">Gold</label>
                       <input type="number" name="price_vip2" value={formData.price_vip2 === 0 ? '' : formData.price_vip2} onChange={handleInputChange} className="input-field bg-amber-50/50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-900" />
                     </div>
                   </div>
