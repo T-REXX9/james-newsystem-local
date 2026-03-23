@@ -517,14 +517,10 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
   useEffect(() => {
     const handler = setTimeout(() => {
-      const trimmedSearch = searchValue.trim().toLowerCase();
-      // Only update if search value actually changed
-      if (trimmedSearch !== debouncedSearch) {
-        setDebouncedSearch(trimmedSearch);
-      }
+      setDebouncedSearch(searchValue.trim().toLowerCase());
     }, 600);
     return () => clearTimeout(handler);
-  }, [searchValue, debouncedSearch]);
+  }, [searchValue]);
 
   const handleCallContact = (contact: Contact) => {
     const phoneNumber = contact.mobile || contact.phone || contact.contactPersons[0]?.mobile || contact.contactPersons[0]?.telephone;

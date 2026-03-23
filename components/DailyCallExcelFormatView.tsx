@@ -53,7 +53,7 @@ const pricingTargetLabel = (monthlySales: number) => {
 
 const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ currentUser }) => {
   const { addToast } = useToast();
-  const [customers, setCustomers] = useState<DailyCallCustomerRow[]>([]);
+  const [allCustomers, setAllCustomers] = useState<DailyCallCustomerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<DailyCallCustomerFilterStatus>('all');
@@ -61,24 +61,18 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
-  const debouncedSearch = useDebounce(search, 300);
+  const debouncedSearch = useDebounce(search, 400);
 
+  // Load all data once on mount
   const loadRows = useCallback(
     async (withLoading = true) => {
-      if (withLoading) {
-        setLoading(true);
-      }
-
+      if (withLoading) setLoading(true);
       setError(null);
-      const rows = await fetchCustomersForDailyCall({
-        status: statusFilter,
-        search: debouncedSearch,
-      });
-
-      setCustomers(rows);
+      const rows = await fetchCustomersForDailyCall({});
+      setAllCustomers(rows);
       if (withLoading) setLoading(false);
     },
-    [debouncedSearch, statusFilter]
+    []
   );
 
   useEffect(() => {
@@ -97,6 +91,36 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
 
     return unsubscribe;
   }, [loadRows]);
+
+  // Client-side filtering
+  const customers = useMemo(() => {
+    let filtered = allCustomers;
+
+    // Status filter
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter((row) => {
+        const s = (row.status || '').toLowerCase();
+        if (statusFilter === 'active') return s === 'active';
+        if (statusFilter === 'inactive') return s === 'inactive' || s === 'dormant' || s === 'closed';
+        if (statusFilter === 'prospective') return s === 'prospective' || s === 'new' || s === 'lead';
+        return true;
+      });
+    }
+
+    // Search filter
+    if (debouncedSearch) {
+      const q = debouncedSearch.toLowerCase();
+      filtered = filtered.filter((row) =>
+        (row.shopName || '').toLowerCase().includes(q) ||
+        (row.city || '').toLowerCase().includes(q) ||
+        (row.province || '').toLowerCase().includes(q) ||
+        (row.contactNumber || '').toLowerCase().includes(q) ||
+        (row.assignedTo || '').toLowerCase().includes(q)
+      );
+    }
+
+    return filtered;
+  }, [allCustomers, statusFilter, debouncedSearch]);
 
   useEffect(() => {
     const selectedExists = customers.some((row) => row.id === selectedCustomerId);
@@ -259,7 +283,7 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
                 {customers.map((row, index) => {
                   const isSelected = selectedCustomerId === row.id;
                   const dealerPriceTier = resolveDealerPriceTier(row);
-                  const location = row.province || row.city || '—';
+                  const location = row.province || row.city || row.courier || '—';
                   const statusDate = row.statusDate || row.clientSince || '—';
                   const terms = row.terms || row.modeOfPayment || '—';
                   return (
