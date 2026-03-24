@@ -7,6 +7,7 @@ import { applyOptimisticUpdate } from '../utils/optimisticUpdates'; // Assuming 
 import ValidationSummary from './ValidationSummary';
 import FieldHelp from './FieldHelp';
 import ProductAutocomplete from './ProductAutocomplete';
+import SearchableFilterSelect from './SearchableFilterSelect';
 import { validateRequired } from '../utils/formValidation';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
@@ -48,7 +49,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   const [isCreating, setIsCreating] = useState(false);
 
   // Form State (New PO)
-  const [createForm, setCreateForm] = useState<Partial<PurchaseOrderInsert>>({ status: 'Draft', order_date: new Date().toISOString().split('T')[0] });
+  const [createForm, setCreateForm] = useState<Partial<PurchaseOrderInsert>>({ status: 'Pending', order_date: new Date().toISOString().split('T')[0] });
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [submitCount, setSubmitCount] = useState(0);
   const [submitError, setSubmitError] = useState('');
@@ -111,6 +112,18 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
 
   // Data is already server-filtered by month/year/status/search.
   const filteredOrders = useMemo(() => orders, [orders]);
+  const monthOptions = useMemo(
+    () => Array.from({ length: 12 }, (_, i) => new Date(0, i).toLocaleString('default', { month: 'long' })),
+    []
+  );
+  const yearOptions = useMemo(
+    () => Array.from({ length: 11 }, (_, i) => String(today.getFullYear() - 5 + i)),
+    [today]
+  );
+  const statusOptions = useMemo(
+    () => Object.keys(PO_STATUS_COLORS).filter((status) => status !== 'Draft'),
+    []
+  );
 
   const paginatedOrders = filteredOrders.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
   const totalPages = Math.ceil(filteredOrders.length / PAGE_SIZE);
@@ -155,7 +168,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
     setNewPONumber(nextNum);
     setCreateForm({
       order_date: new Date().toISOString().split('T')[0],
-      status: 'Draft',
+      status: 'Pending',
       remarks: '',
       grand_total: 0
     });
@@ -326,7 +339,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
       </table>
       <div className="mt-12 grid grid-cols-2 gap-16 text-sm">
         <div><p className="mb-8 font-bold">Prepared By:</p><div className="border-b border-black"></div></div>
-        <div><p className="mb-8 font-bold">Approved By:</p><div className="border-b border-black"></div></div>
+        <div><p className="mb-8 font-bold">Posted By:</p><div className="border-b border-black"></div></div>
       </div>
       <div className="mt-8 flex justify-center print:hidden">
         <button onClick={() => window.print()} className="bg-blue-600 text-white px-6 py-2 rounded flex items-center gap-2 hover:bg-blue-700"><Printer size={18} /> Print Now</button>
@@ -363,30 +376,37 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
               <input className="flex-1 text-xs bg-transparent outline-none" placeholder="Search PO # or Supplier..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <select
-                value={filterMonth}
-                onChange={e => setFilterMonth(Number(e.target.value))}
-                className="w-full text-xs border border-slate-200 dark:border-slate-800 rounded px-2 py-1 bg-slate-50 dark:bg-slate-800"
-              >
-                {Array.from({ length: 12 }, (_, i) => (
-                  <option key={i + 1} value={i + 1}>
-                    {new Date(0, i).toLocaleString('default', { month: 'long' })}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="number"
-                min={2000}
-                max={2100}
-                value={filterYear}
-                onChange={e => setFilterYear(Number(e.target.value) || today.getFullYear())}
-                className="w-full text-xs border border-slate-200 dark:border-slate-800 rounded px-2 py-1 bg-slate-50 dark:bg-slate-800"
+              <SearchableFilterSelect
+                value={monthOptions[filterMonth - 1]}
+                options={monthOptions}
+                placeholder="Search month"
+                allLabel="Month"
+                className="min-w-0"
+                onChange={(value) => {
+                  const nextIndex = monthOptions.indexOf(value || '');
+                  if (nextIndex >= 0) setFilterMonth(nextIndex + 1);
+                }}
+              />
+              <SearchableFilterSelect
+                value={String(filterYear)}
+                options={yearOptions}
+                placeholder="Search year"
+                allLabel="Year"
+                className="min-w-0"
+                onChange={(value) => {
+                  const nextYear = Number(value);
+                  if (Number.isFinite(nextYear) && nextYear > 0) setFilterYear(nextYear);
+                }}
               />
             </div>
-            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="w-full text-xs border border-slate-200 dark:border-slate-800 rounded px-2 py-1 bg-slate-50 dark:bg-slate-800">
-              <option value="">All Statuses</option>
-              {Object.keys(PO_STATUS_COLORS).map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+            <SearchableFilterSelect
+              value={filterStatus || undefined}
+              options={statusOptions}
+              placeholder="Search status"
+              allLabel="All Statuses"
+              className="min-w-0"
+              onChange={(value) => setFilterStatus(value || '')}
+            />
           </div>
           <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
             {loading && <div className="p-4 text-center text-xs text-slate-500"><RefreshCw className="animate-spin inline mr-2" /> Loading...</div>}
@@ -490,8 +510,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                   </div>
                   <div className="flex flex-col gap-2 justify-center items-end">
                     <button onClick={() => setPrintMode(true)} className="flex items-center gap-2 px-3 py-1.5 border border-slate-300 rounded hover:bg-slate-50 text-slate-600"><Printer size={16} /> Print</button>
-                    {selectedPO.status === 'Draft' && <button onClick={() => handleStatusChange('Pending')} className="flex items-center gap-2 px-3 py-1.5 bg-yellow-500 text-white rounded hover:bg-yellow-600 shadow-sm">Submit for Approval</button>}
-                    {selectedPO.status === 'Pending' && <button onClick={() => handleStatusChange('Approved')} className="flex items-center gap-2 px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 shadow-sm"><CheckCircle size={16} /> Approve</button>}
+                    {selectedPO.status === 'Pending' && <button onClick={() => handleStatusChange('Posted')} className="flex items-center gap-2 px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 shadow-sm"><CheckCircle size={16} /> Post</button>}
                     {['Draft', 'Pending'].includes(selectedPO.status) && <button onClick={() => handleStatusChange('Cancelled')} className="flex items-center gap-2 px-3 py-1.5 text-red-600 hover:bg-red-50 rounded"><XCircle size={16} /> Cancel</button>}
                   </div>
                 </div>
@@ -501,7 +520,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
               <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
                 <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
                   <h3 className="font-bold text-slate-800 dark:text-white">Items</h3>
-                  {selectedPO.status === 'Draft' && <button onClick={() => {
+                  {['Draft', 'Pending'].includes(selectedPO.status) && <button onClick={() => {
                     setShowAddItem(true);
                     setNewItemId('');
                     setSelectedNewItemProduct(null);
@@ -557,12 +576,12 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                             <div className="text-xs text-slate-500">{item.product?.description}</div>
                           </td>
                           <td className="px-6 py-3 text-center">
-                            {selectedPO.status === 'Draft' ? <input type="number" className="w-16 text-center border rounded p-1 text-xs" value={item.qty || 0} onChange={e => updateItem(item.id, 'qty', Number(e.target.value))} /> : item.qty}
+                            {['Draft', 'Pending'].includes(selectedPO.status) ? <input type="number" className="w-16 text-center border rounded p-1 text-xs" value={item.qty || 0} onChange={e => updateItem(item.id, 'qty', Number(e.target.value))} /> : item.qty}
                           </td>
                           <td className="px-6 py-3 text-right">₱{item.unit_price?.toLocaleString() || '-'}</td>
                           <td className="px-6 py-3 text-right font-medium">₱{item.amount?.toLocaleString() || '-'}</td>
                           <td className="px-6 py-3">
-                            {selectedPO.status === 'Draft' && <button onClick={() => deleteItem(item.id)} className="text-slate-400 hover:text-red-500"><Trash2 size={16} /></button>}
+                            {['Draft', 'Pending'].includes(selectedPO.status) && <button onClick={() => deleteItem(item.id)} className="text-slate-400 hover:text-red-500"><Trash2 size={16} /></button>}
                           </td>
                         </tr>
                       ))}

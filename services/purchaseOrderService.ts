@@ -21,6 +21,15 @@ const toNumber = (value: unknown): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
+const normalizePurchaseOrderStatus = (value: unknown): string => {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (!normalized || normalized === 'draft') return 'Pending';
+  if (normalized === 'approved' || normalized === 'posted') return 'Posted';
+  if (normalized === 'partial delivery') return 'Partial Delivery';
+  if (normalized === 'cancelled') return 'Cancelled';
+  return String(value ?? 'Pending');
+};
+
 const parseApiErrorMessage = async (response: Response): Promise<string> => {
   try {
     const payload = await response.json();
@@ -81,7 +90,7 @@ const toPurchaseOrder = (raw: any): PurchaseOrderWithDetails => {
     warehouse_id: 'WH1',
     remarks: String(raw?.reference ?? ''),
     pr_reference: String(raw?.pr_number ?? ''),
-    status: String(raw?.status ?? 'Pending'),
+    status: normalizePurchaseOrderStatus(raw?.status ?? 'Pending'),
     grand_total: toNumber(raw?.total_cogs ?? 0),
     supplier: {
       id: String(raw?.supplier_id ?? ''),
@@ -108,7 +117,7 @@ const toPurchaseOrderDetail = (payload: any): PurchaseOrderWithDetails => {
     warehouse_id: 'WH1',
     remarks: String(order?.reference ?? ''),
     pr_reference: String(order?.pr_number ?? ''),
-    status: String(order?.status ?? 'Pending'),
+    status: normalizePurchaseOrderStatus(order?.status ?? 'Pending'),
     grand_total: toNumber(summary?.total_cogs ?? 0),
     supplier: {
       id: String(order?.supplier_id ?? ''),
@@ -172,7 +181,7 @@ export const purchaseOrderService = {
         po_number: po?.po_number || undefined,
         order_date: po?.order_date,
         supplier_id: po?.supplier_id || '',
-        status: po?.status || 'Draft',
+        status: normalizePurchaseOrderStatus(po?.status || 'Pending'),
         reference: po?.remarks || '',
       }),
     });
@@ -188,7 +197,7 @@ export const purchaseOrderService = {
       warehouse_id: 'WH1',
       remarks: String(created?.reference ?? ''),
       pr_reference: String(created?.pr_number ?? ''),
-      status: String(created?.status ?? 'Pending'),
+      status: normalizePurchaseOrderStatus(created?.status ?? 'Pending'),
       grand_total: 0,
     } as PurchaseOrder;
   },
@@ -201,7 +210,7 @@ export const purchaseOrderService = {
         main_id: API_MAIN_ID,
         order_date: updates?.order_date,
         supplier_id: updates?.supplier_id,
-        status: updates?.status,
+        status: normalizePurchaseOrderStatus(updates?.status),
         reference: updates?.remarks,
         terms: (updates as any)?.terms,
         address: (updates as any)?.address,
@@ -222,7 +231,7 @@ export const purchaseOrderService = {
       warehouse_id: 'WH1',
       remarks: String(order?.reference ?? ''),
       pr_reference: String(order?.pr_number ?? ''),
-      status: String(order?.status ?? 'Pending'),
+      status: normalizePurchaseOrderStatus(order?.status ?? 'Pending'),
       grand_total: toNumber(summary?.total_cogs ?? 0),
     } as PurchaseOrder;
   },

@@ -24,16 +24,12 @@ export interface PurchaseOrderItemWithProduct extends PurchaseOrderItem {
     product: Product | null;
 }
 
-export type POStatus = 'Draft' | 'Pending' | 'Approved' | 'Sent' | 'Received' | 'Cancelled';
+export type POStatus = 'Draft' | 'Pending' | 'Posted' | 'Partial Delivery' | 'Cancelled';
 
 export const PO_STATUS_COLORS: Record<string, string> = {
     Draft: 'bg-gray-100 text-gray-800',
     Pending: 'bg-yellow-100 text-yellow-800',
-    Approved: 'bg-blue-100 text-blue-800',
-    Sent: 'bg-purple-100 text-purple-800',
-    Received: 'bg-green-100 text-green-800',
     Cancelled: 'bg-red-100 text-red-800',
     Posted: 'bg-green-100 text-green-800',
     'Partial Delivery': 'bg-amber-100 text-amber-800',
-    Delivered: 'bg-emerald-100 text-emerald-800',
 };
