@@ -37,7 +37,7 @@ const SalesMapSidebar: React.FC<SalesMapSidebarProps> = ({ provinceName, onClose
     const totalRegionRevenue = customers.reduce((acc, curr) => acc + curr.totalSpend, 0);
 
     return (
-        <div className="w-[400px] h-full bg-white/95 backdrop-blur-sm border-l border-slate-200 shadow-2xl flex flex-col animate-in slide-in-from-right-10 duration-300 relative z-[1000]">
+        <div className="w-[400px] h-full bg-white/95 backdrop-blur-sm border-l border-slate-200 shadow-2xl flex flex-col animate-in slide-in-from-right-10 duration-300 relative z-30">
             {/* Header */}
             <div className="p-6 border-b border-slate-100 bg-white">
                 <div className="flex justify-between items-start mb-4">

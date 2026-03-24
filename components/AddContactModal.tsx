@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X, Loader2, Eye, EyeOff, Plus, Trash2 } from 'lucide-react';
-import { CustomerStatus, DealStage, Contact, ContactPerson } from '../types';
+import { CustomerStatus, DealStage, Contact, ContactPerson, type CustomerVatType } from '../types';
 import ValidationSummary from './ValidationSummary';
 import FieldHelp from './FieldHelp';
 import { CUSTOMER_VAT_TYPES, DEFAULT_CUSTOMER_VAT_TYPE } from '../constants/customerVat';
@@ -8,6 +8,8 @@ import { WRITABLE_PRICING_GROUP_OPTIONS, normalizePriceGroupToInternalKey } from
 import { validateOptionalEmail, validateOptionalPhone, validateRequired } from '../utils/formValidation';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
+
+const TRANSACTION_TYPE_OPTIONS = ['Order Slip', 'Invoice'] as const;
 
 interface ToastOverride {
   title?: string;
@@ -121,7 +123,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     dealershipSince: contact?.dealershipSince || '',
     dealershipQuota: contact?.dealershipQuota ?? 0,
     creditLimit: contact?.creditLimit ?? 0,
-    status: (contact?.status as CustomerStatus) || ((CustomerStatus && CustomerStatus.PROSPECTIVE) || 'Prospective'),
+    status: (contact?.status as CustomerStatus) || (((CustomerStatus && CustomerStatus.PROSPECTIVE) || 'Prospective') as CustomerStatus),
     isHidden: !!contact?.isHidden,
     debtType: contact?.debtType || 'Good',
     comment: contact?.comment || '',
@@ -456,11 +458,22 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                       </div>
                       <div>
                           <label className="label">Transaction Type</label>
-                          <input className="input" value={formData.transactionType} onChange={e => setFormData({...formData, transactionType: e.target.value})} />
+                          <select
+                            className="input"
+                            value={formData.transactionType}
+                            onChange={e => setFormData({ ...formData, transactionType: e.target.value })}
+                          >
+                            <option value="">Select transaction type</option>
+                            {TRANSACTION_TYPE_OPTIONS.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
                       </div>
                       <div>
                           <label className="label">VAT Type</label>
-                          <select className="input" value={formData.vatType} onChange={e => setFormData({...formData, vatType: e.target.value})}>
+                          <select className="input" value={formData.vatType} onChange={e => setFormData({...formData, vatType: e.target.value as CustomerVatType})}>
                               {CUSTOMER_VAT_TYPES.map((vatType) => (
                                 <option key={vatType} value={vatType}>{vatType}</option>
                               ))}

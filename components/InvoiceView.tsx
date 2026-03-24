@@ -15,6 +15,7 @@ import { fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { isInvoiceAllowedForTransactionType, syncDocumentPolicyState } from '../services/salesOrderLocalApiService';
 import { Contact, Invoice, InvoiceStatus } from '../types';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
+import { useToast } from './ToastProvider';
 
 interface InvoiceViewProps {
   initialInvoiceId?: string;
@@ -61,6 +62,7 @@ const formatCurrency = (value?: number | string | null): string => {
 };
 
 const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvoiceRefNo }) => {
+  const { addToast } = useToast();
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -279,7 +281,12 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
     } catch (err) {
       console.error('Error printing invoice:', err);
       await notifyInvoiceEvent('Invoice Print Failed', `Failed to print invoice ${selectedInvoice.invoice_no}.`, 'print', 'failed', selectedInvoice.id, 'error');
-      alert('Failed to print invoice');
+      addToast({
+        type: 'error',
+        title: 'Failed to print invoice',
+        description: 'We could not generate the invoice printout.',
+        durationMs: 5000,
+      });
     } finally {
       setPrinting(false);
       await loadInvoices();
@@ -300,7 +307,12 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
       await loadInvoices();
     } catch (err) {
       console.error('Failed to cancel invoice:', err);
-      alert('Failed to cancel invoice');
+      addToast({
+        type: 'error',
+        title: 'Failed to cancel invoice',
+        description: 'The invoice could not be cancelled.',
+        durationMs: 5000,
+      });
     } finally {
       setCancelLoading(false);
     }
@@ -319,7 +331,12 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
       await loadInvoices();
     } catch (err) {
       console.error('Failed to unpost invoice:', err);
-      alert('Failed to unpost invoice');
+      addToast({
+        type: 'error',
+        title: 'Failed to unpost invoice',
+        description: 'The invoice could not be unposted.',
+        durationMs: 5000,
+      });
     } finally {
       setUnpostLoading(false);
     }
@@ -390,7 +407,12 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
       await loadInvoices();
     } catch (err) {
       console.error('Failed to update invoice number:', err);
-      alert('Failed to update invoice number');
+      addToast({
+        type: 'error',
+        title: 'Failed to update invoice number',
+        description: 'The invoice number changes could not be saved.',
+        durationMs: 5000,
+      });
     } finally {
       setEditLoading(false);
     }
@@ -528,7 +550,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                       <tr
                         key={invoice.id}
                         onClick={() => setSelectedInvoice(invoice)}
-                        className={`cursor-pointer ${index % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50 dark:bg-slate-900/60'} hover:bg-slate-100 dark:hover:bg-slate-800 ${invoiceRowTone(invoice)}`}
+                        className={`cursor-pointer align-top ${index % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50 dark:bg-slate-900/60'} hover:bg-slate-100 dark:hover:bg-slate-800 ${invoiceRowTone(invoice)}`}
                       >
                         <td className="px-3 py-2">{formatDate(invoice.sales_date)}</td>
                         <td className="px-3 py-2">
@@ -537,27 +559,27 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                           </div>
                         </td>
                         <td className="px-3 py-2">
-                          <div className="min-w-0 break-all leading-5" title={invoice.order_id || '-'}>
+                          <div className="min-w-0 truncate leading-4" title={invoice.order_id || '-'}>
                             {invoice.order_id || '-'}
                           </div>
                         </td>
                         <td className="px-3 py-2">
-                          <div className="min-w-0 break-all font-semibold leading-5" title={invoice.invoice_no || '-'}>
+                          <div className="min-w-0 truncate font-semibold leading-4" title={invoice.invoice_no || '-'}>
                             {invoice.invoice_no || '-'}
                           </div>
                         </td>
                         <td className="px-3 py-2">
-                          <div className="min-w-0 break-all leading-5" title={invoice.reference_no || '-'}>
+                          <div className="min-w-0 truncate leading-4" title={invoice.reference_no || '-'}>
                             {invoice.reference_no || '-'}
                           </div>
                         </td>
                         <td className="px-3 py-2">
-                          <div className="min-w-0 break-all leading-5" title={invoice.send_by || '-'}>
+                          <div className="min-w-0 truncate leading-4" title={invoice.send_by || '-'}>
                             {invoice.send_by || '-'}
                           </div>
                         </td>
                         <td className="px-3 py-2">
-                          <div className="min-w-0 break-all leading-5" title={invoice.customer_reference || '-'}>
+                          <div className="min-w-0 truncate leading-4" title={invoice.customer_reference || '-'}>
                             {invoice.customer_reference || '-'}
                           </div>
                         </td>

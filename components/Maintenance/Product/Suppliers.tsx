@@ -17,6 +17,15 @@ const SupplierForm: React.FC<{
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!formData.name?.trim()) {
+            addToast({
+                type: 'error',
+                title: 'Supplier name is required',
+                description: 'Please enter a supplier name before saving.',
+                durationMs: 4000,
+            });
+            return;
+        }
         setLoading(true);
         try {
             if (initialData?.id) {
@@ -115,7 +124,7 @@ const SupplierForm: React.FC<{
                 </button>
                 <button
                     type="submit"
-                    disabled={loading}
+                    disabled={loading || !formData.name?.trim()}
                     className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
                 >
                     {loading ? 'Saving...' : 'Save'}
@@ -132,6 +141,8 @@ export default function Suppliers() {
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<Supplier | null>(null);
+    const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+    const [deleteLoading, setDeleteLoading] = useState(false);
 
     const loadSuppliers = async (search = searchTerm) => {
         setLoading(true);
@@ -155,17 +166,18 @@ export default function Suppliers() {
         loadSuppliers(searchTerm);
     }, [searchTerm]);
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this item?')) return;
-
+    const handleDeleteConfirm = async () => {
+        if (!deleteTargetId) return;
+        setDeleteLoading(true);
         try {
-            await deleteSupplier(id);
+            await deleteSupplier(deleteTargetId);
             addToast({
                 type: 'success',
                 title: 'Supplier deleted',
                 description: 'Supplier has been removed successfully.',
                 durationMs: 4000,
             });
+            setDeleteTargetId(null);
             await loadSuppliers(searchTerm);
         } catch (error) {
             console.error('Error deleting supplier:', error);
@@ -175,6 +187,8 @@ export default function Suppliers() {
                 description: error instanceof Error ? error.message : 'Unable to delete supplier.',
                 durationMs: 6000,
             });
+        } finally {
+            setDeleteLoading(false);
         }
     };
 
@@ -255,7 +269,7 @@ export default function Suppliers() {
                                                         <Edit2 size={16} />
                                                     </button>
                                                     <button
-                                                        onClick={() => handleDelete(item.id)}
+                                                        onClick={() => setDeleteTargetId(item.id)}
                                                         className="p-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors"
                                                     >
                                                         <Trash2 size={16} />
@@ -294,6 +308,39 @@ export default function Suppliers() {
                                     await loadSuppliers(searchTerm);
                                 }}
                             />
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {deleteTargetId && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200">
+                        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Delete Supplier</h3>
+                        </div>
+                        <div className="px-6 py-4">
+                            <p className="text-sm text-gray-600 dark:text-gray-300">
+                                Are you sure you want to delete this supplier? This action cannot be undone.
+                            </p>
+                        </div>
+                        <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setDeleteTargetId(null)}
+                                disabled={deleteLoading}
+                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600 disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleDeleteConfirm}
+                                disabled={deleteLoading}
+                                className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
+                            >
+                                {deleteLoading ? 'Deleting...' : 'Delete'}
+                            </button>
                         </div>
                     </div>
                 </div>

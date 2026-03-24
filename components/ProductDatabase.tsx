@@ -20,6 +20,7 @@ import FieldHelp from './FieldHelp';
 import { validateMinLength, validateRequired } from '../utils/formValidation';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
+import { fetchCategories, type CategoryRecord } from '../services/categoryLocalApiService';
 
 interface ProductDatabaseProps {
   currentUser: UserProfile | null;
@@ -49,6 +50,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+  const [categories, setCategories] = useState<CategoryRecord[]>([]);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [submitCount, setSubmitCount] = useState(0);
   const [submitError, setSubmitError] = useState('');
@@ -182,6 +184,11 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
   }, []);
 
   const filteredProducts = products;
+
+  useEffect(() => {
+    if (!isModalOpen) return;
+    fetchCategories().then((res) => setCategories(res.items)).catch(() => {});
+  }, [isModalOpen]);
 
   const handleOpenAdd = () => {
     setEditingProduct(null);
@@ -1072,7 +1079,14 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-slate-500 mb-1">Category</label>
-                      <input name="category" value={formData.category} onChange={handleInputChange} className="input-field" />
+                      <select name="category" value={formData.category} onChange={handleInputChange} className="input-field">
+                        <option value="">Select category</option>
+                        {categories.map((category) => (
+                          <option key={category.id} value={category.name}>
+                            {category.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-slate-500 mb-1">Application</label>

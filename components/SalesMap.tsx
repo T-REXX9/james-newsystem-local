@@ -171,7 +171,7 @@ const SalesMap = () => {
             <div className={`flex-1 flex flex-col transition-all duration-500 ease-out ${selectedProvince ? 'mr-0' : ''}`}>
 
                 {/* Premium Header Card */}
-                <div className="absolute top-6 left-6 z-[1000] pointer-events-auto">
+                <div className="absolute top-6 left-6 z-20 pointer-events-auto">
                     <div className="relative group">
                         {/* Glow Effect Behind Card */}
                         <div className="absolute -inset-1 bg-gradient-to-r from-indigo-400/20 via-purple-400/20 to-pink-400/20 rounded-3xl blur-lg opacity-60 group-hover:opacity-100 transition-opacity duration-500" />
@@ -216,7 +216,7 @@ const SalesMap = () => {
                 </div>
 
                 {/* Floating Stats Badge */}
-                <div className="absolute top-6 right-6 z-[1000] pointer-events-auto">
+                <div className="absolute top-6 right-6 z-20 pointer-events-auto">
                     <div className="flex items-center gap-2 bg-white/90 backdrop-blur-xl px-4 py-2 rounded-full border border-slate-200 shadow-lg shadow-slate-200/50">
                         <Zap className="w-4 h-4 text-amber-500" />
                         <span className="text-xs font-medium text-slate-600">{stats.total} Provinces</span>
@@ -248,7 +248,7 @@ const SalesMap = () => {
 
                         {/* Loading State */}
                         {loading && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center z-[500] bg-white/90 backdrop-blur-sm">
+                            <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-white/90 backdrop-blur-sm">
                                 <div className="relative">
                                     <div className="absolute inset-0 bg-indigo-200 rounded-full blur-xl animate-pulse" />
                                     <div className="relative mb-4">
@@ -270,7 +270,7 @@ const SalesMap = () => {
 
                         {/* Error State */}
                         {!loading && error && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center z-[500] bg-slate-50">
+                            <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-slate-50">
                                 <div className="p-4 bg-rose-100 rounded-full mb-4">
                                     <AlertCircle className="h-10 w-10 text-rose-500" />
                                 </div>
@@ -315,7 +315,7 @@ const SalesMap = () => {
                 </div>
 
                 {/* Bottom Info Bar */}
-                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1000] pointer-events-auto">
+                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 pointer-events-auto">
                     <div className="flex items-center gap-3 bg-white/90 backdrop-blur-xl px-5 py-2.5 rounded-full border border-slate-200 shadow-lg shadow-slate-200/50">
                         <Sparkles className="w-4 h-4 text-amber-500" />
                         <span className="text-xs text-slate-500">Click on a province to view detailed insights</span>
