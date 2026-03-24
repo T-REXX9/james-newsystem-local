@@ -341,7 +341,15 @@ const InventoryReport: React.FC = () => {
             <input
               type="date"
               value={filters.dateFrom || ''}
-              onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+              max={filters.dateTo || undefined}
+              onChange={(e) => {
+                const newFrom = e.target.value;
+                setFilters({
+                  ...filters,
+                  dateFrom: newFrom,
+                  dateTo: filters.dateTo && newFrom && filters.dateTo < newFrom ? newFrom : filters.dateTo,
+                });
+              }}
               className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none"
             />
           </div>
@@ -353,6 +361,7 @@ const InventoryReport: React.FC = () => {
             <input
               type="date"
               value={filters.dateTo || ''}
+              min={filters.dateFrom || undefined}
               onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
               className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none"
             />
