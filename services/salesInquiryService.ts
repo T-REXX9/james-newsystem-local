@@ -127,7 +127,7 @@ export const createSalesInquiry = async (data: SalesInquiryDTO): Promise<SalesIn
           unit_price: item.unit_price,
           amount: item.amount,
           remark: item.remark,
-          approval_status: item.approval_status || 'pending',
+          approval_status: item.approval_status || 'approved',
         }))
       )
       .select();
@@ -232,7 +232,7 @@ export const updateSalesInquiry = async (id: string, data: SalesInquiryDTO): Pro
           unit_price: item.unit_price,
           amount: item.amount,
           remark: item.remark,
-          approval_status: item.approval_status || 'pending',
+          approval_status: item.approval_status || 'approved',
         }))
       )
       .select();

@@ -515,7 +515,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
         unit_price: 0,
         amount: 0,
         remark: '',
-        approval_status: 'pending',
+        approval_status: 'approved',
         tempId: `temp-${Date.now()}`,
         isNew: true,
         isManual: false,
@@ -536,7 +536,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
         unit_price: 0,
         amount: 0,
         remark: 'NotListed',
-        approval_status: 'pending',
+        approval_status: 'approved',
         tempId: `manual-${Date.now()}`,
         isNew: false,
         isManual: true,
@@ -712,20 +712,40 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
 
     setLoading(true);
     try {
-      const approvedInquiry = await approveInquiry(selectedInquiry.id);
-      await refetchInquiries();
-
-      if (approvedInquiry) {
-        setIsCreatingNew(false);
-        setSelectedInquiry(approvedInquiry);
-        loadInquiryIntoForm(approvedInquiry);
+      // If still a draft, finalize first, then convert to SO in one step
+      if (selectedInquiry.status === SalesInquiryStatus.DRAFT) {
+        await approveInquiry(selectedInquiry.id);
       }
 
-      addToast({ type: 'success', message: 'Inquiry finalized and ready for conversion.' });
+      const order = await convertToOrder(selectedInquiry.id);
+
+      let verifiedOrder = await getSalesOrder(order.id);
+      if (!verifiedOrder) {
+        addToast({ type: 'info', message: 'Verifying order creation...', durationMs: 3000 });
+        for (let attempt = 0; attempt < 3 && !verifiedOrder; attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          verifiedOrder = await getSalesOrder(order.id);
+        }
+      }
+
+      if (!verifiedOrder) {
+        addToast({ type: 'error', title: 'Order created but not accessible', description: 'The order was created but could not be verified. Please refresh and try again.', durationMs: 6000 });
+        await refetchInquiries();
+        return;
+      }
+
+      await refetchInquiries();
+      addToast({ type: 'success', message: `Converted to Sales Order ${order.order_no || ''}`.trim() });
+
+      window.dispatchEvent(new CustomEvent('salesorder:created', {
+        detail: { orderId: order.id, orderNo: order.order_no }
+      }));
+
+      navigateToSalesOrder(order.id);
     } catch (error) {
-      console.error('Error finalizing inquiry:', error);
-      const friendlyMessage = parseSupabaseError(error, 'sales inquiry');
-      addToast({ type: 'error', title: 'Unable to finalize inquiry', description: friendlyMessage, durationMs: 6000 });
+      console.error('Error generating sales order:', error);
+      const friendlyMessage = parseSupabaseError(error, 'sales order');
+      addToast({ type: 'error', title: 'Unable to generate sales order', description: friendlyMessage, durationMs: 6000 });
     } finally {
       setLoading(false);
     }
@@ -838,6 +858,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   const priceGroupDisplay = normalizePriceGroup(priceGroup);
   const canFinalizeInquiry = Boolean(selectedInquiry && !isCreatingNew && selectedInquiry.status === SalesInquiryStatus.DRAFT);
   const canConvertInquiry = Boolean(selectedInquiry && !isCreatingNew && selectedInquiry.status === SalesInquiryStatus.APPROVED);
+  const canGenerateSO = canFinalizeInquiry || canConvertInquiry;
   const canOpenConvertedOrder = false;
   const currentMonthLabel = new Date(salesDate || Date.now()).toLocaleDateString('en-PH', { month: 'long' });
   const summaryCustomer = selectedCustomer as (Contact & {
@@ -1463,11 +1484,6 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                                 onChange={(e) => updateItemRow(item.tempId, 'remark', e.target.value)}
                                 className={`w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm ${remarkClassName(item.remark)} ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}`}
                               />
-                              {item.approval_status && (
-                                <span className="inline-flex rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">
-                                  {item.approval_status}
-                                </span>
-                              )}
                             </div>
                           </td>
                           <td className="px-3 py-2 border-b border-slate-200 dark:border-slate-800">
@@ -1508,22 +1524,12 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                       <tr>
                         <td colSpan={6} className="px-3 py-3 border-t border-slate-200 dark:border-slate-800">
                           <div className="flex flex-wrap items-center gap-2">
-                            {canFinalizeInquiry && (
+                            {canGenerateSO && (
                               <button
                                 type="button"
                                 onClick={handleFinalizeInquiry}
                                 disabled={loading}
                                 className="px-4 py-2 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 font-semibold hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                              >
-                                {loading ? 'WORKING…' : 'Generate SO'}
-                              </button>
-                            )}
-                            {canConvertInquiry && (
-                              <button
-                                type="button"
-                                onClick={handleConvertInquiry}
-                                disabled={loading}
-                                className="px-4 py-2 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 font-semibold hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                               >
                                 {loading ? 'WORKING…' : 'Generate SO'}
                               </button>
