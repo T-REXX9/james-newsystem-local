@@ -843,11 +843,14 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
                         const product = resolveTransferProduct(item);
                         const fromWarehouseLabel = normalizeWarehouseLabel(item.from_warehouse_id);
                         const toWarehouseLabel = normalizeWarehouseLabel(item.to_warehouse_id);
+                        const partNoLabel = product?.part_no || item.part_no || 'Unknown';
+                        const itemCodeLabel = product?.item_code || item.item_code || '';
                         return (
                           <tr key={item.id}>
                             <td className="px-4 py-3">
                               <div className="text-sm font-medium text-gray-900 dark:text-white">
-                                {product?.part_no || item.part_no || item.item_code || item.item_id || 'Unknown'}
+                                {partNoLabel}
+                                {itemCodeLabel ? ` (${itemCodeLabel})` : ''}
                               </div>
                               <div className="text-xs text-gray-500 dark:text-gray-400">
                                 {product?.description || item.description || ''}

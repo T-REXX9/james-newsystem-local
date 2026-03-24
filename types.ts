@@ -1435,6 +1435,16 @@ export interface TransferStockItem {
   id: string;
   transfer_id: string;
   item_id: string;
+  part_no?: string;
+  item_code?: string;
+  brand?: string;
+  description?: string;
+  location?: string;
+  from_item_session?: string;
+  from_original_qty?: number;
+  to_item_session?: string;
+  to_original_qty?: number;
+  edited?: number;
   from_warehouse_id: string;
   to_warehouse_id: string;
   transfer_qty: number;

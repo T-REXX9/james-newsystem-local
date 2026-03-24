@@ -3,6 +3,7 @@ import { FileText, Calendar, ArrowRight, Users, Loader2 } from 'lucide-react';
 import { UserProfile, CustomerOption } from '../types';
 import { getCustomerList } from '../services/salesReportService';
 import SalesReportDataView from './SalesReportDataView';
+import SearchableFilterSelect from './SearchableFilterSelect';
 
 interface SalesReportFilterProps {
   currentUser?: UserProfile;
@@ -24,6 +25,12 @@ const SalesReportFilter: React.FC<SalesReportFilterProps> = ({ currentUser }) =>
 
   const [dateTo, setDateTo] = useState<string>(new Date().toISOString().split('T')[0]);
   const [showView, setShowView] = useState(false);
+
+  const customerOptions = customers.map((customer) => ({
+    value: customer.id,
+    label: customer.company,
+    keywords: [customer.company, customer.id],
+  }));
 
   useEffect(() => {
     loadCustomers();
@@ -101,39 +108,28 @@ const SalesReportFilter: React.FC<SalesReportFilterProps> = ({ currentUser }) =>
           </div>
         </div>
 
-        <div className="glass-card rounded-3xl overflow-hidden shadow-2xl animate-slideInUp" style={{ animationDelay: '0.1s' }}>
+        <div className="glass-card rounded-3xl overflow-visible shadow-2xl animate-slideInUp" style={{ animationDelay: '0.1s' }}>
           <div className="p-8 space-y-10">
             <div>
               <label className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-4 flex items-center gap-2 uppercase tracking-wider">
                 <Users className="w-4 h-4 text-brand-blue" />
                 Select Customer
               </label>
-              <div className="relative">
-                {isLoadingCustomers ? (
-                  <div className="flex items-center gap-2 px-4 py-3 bg-slate-100 dark:bg-slate-800/50 rounded-xl text-slate-500">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Loading customers...
-                  </div>
-                ) : (
-                  <select
-                    value={selectedCustomer}
-                    onChange={(e) => setSelectedCustomer(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100 font-medium outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent transition-all appearance-none cursor-pointer"
-                  >
-                    <option value="all">All Customers</option>
-                    {customers.map((customer) => (
-                      <option key={customer.id} value={customer.id}>
-                        {customer.company}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                  <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
+              {isLoadingCustomers ? (
+                <div className="flex items-center gap-2 px-4 py-3 bg-slate-100 dark:bg-slate-800/50 rounded-xl text-slate-500">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Loading customers...
                 </div>
-              </div>
+              ) : (
+                <SearchableFilterSelect
+                  value={selectedCustomer === 'all' ? undefined : selectedCustomer}
+                  options={customerOptions}
+                  placeholder="Search customer..."
+                  allLabel="All Customers"
+                  onChange={(value) => setSelectedCustomer(value || 'all')}
+                  className="w-full"
+                />
+              )}
             </div>
 
             <div>
