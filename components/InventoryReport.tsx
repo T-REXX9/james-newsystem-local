@@ -1,4 +1,8 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
+
+// Module-level formatters — created once, never recreated
+const fmtCurrency = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 });
+const fmtCurrencyDecimal = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 2 });
 import {
   fetchInventoryReport,
   fetchInventoryReportOptions,
@@ -19,6 +23,45 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
+
+const InventoryRow = memo(({ row, warehouses }: { row: InventoryReportRow; warehouses: WarehouseOption[] }) => (
+  <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors print:hover:bg-transparent">
+    <td className="p-3 text-sm font-mono text-slate-700 dark:text-slate-300 print:p-1 print:text-black">{row.partNo || '—'}</td>
+    <td className="p-3 text-sm font-mono text-slate-700 dark:text-slate-300 print:p-1 print:text-black">{row.itemCode || '—'}</td>
+    <td className="p-3 text-sm text-slate-800 dark:text-slate-200 print:p-1 print:text-black">{row.description}</td>
+    <td className="p-3 text-sm text-slate-600 dark:text-slate-400 print:p-1 print:text-black">{row.location || '—'}</td>
+    <td className="p-3 text-sm text-right font-mono text-slate-700 dark:text-slate-300 print:p-1 print:text-black">
+      {row.cost != null ? fmtCurrencyDecimal.format(row.cost) : '—'}
+    </td>
+    {warehouses.map((wh) => {
+      const qty = row.warehouseStock[wh.name] || row.warehouseStock[wh.id] || 0;
+      return (
+        <td key={wh.id} className={`p-3 text-sm text-center font-mono print:p-1 print:text-black ${qty === 0 ? 'text-slate-400 dark:text-slate-600' : 'text-slate-800 dark:text-slate-200'}`}>
+          {qty}
+        </td>
+      );
+    })}
+    <td className={`p-3 text-sm text-center font-mono font-semibold print:p-1 print:text-black bg-slate-50 dark:bg-slate-800/50 ${row.totalStock === 0 ? 'text-rose-500' : 'text-slate-800 dark:text-slate-200'}`}>
+      {row.totalStock}
+    </td>
+    <td className="p-3 text-sm text-right font-mono text-emerald-700 dark:text-emerald-400 print:p-1 print:text-black bg-slate-50 dark:bg-slate-800/50">
+      {row.value != null ? fmtCurrency.format(row.value) : '—'}
+    </td>
+  </tr>
+));
+
+const ProductRow = memo(({ row }: { row: InventoryReportRow }) => (
+  <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors print:hover:bg-transparent">
+    <td className="p-3 text-sm font-mono text-slate-700 dark:text-slate-300 print:p-1 print:text-black">{row.partNo || '—'}</td>
+    <td className="p-3 text-sm text-slate-600 dark:text-slate-400 print:p-1 print:text-black">{row.category || '—'}</td>
+    <td className="p-3 text-sm font-mono text-slate-700 dark:text-slate-300 print:p-1 print:text-black">{row.itemCode || '—'}</td>
+    <td className="p-3 text-sm text-slate-800 dark:text-slate-200 print:p-1 print:text-black">{row.description}</td>
+    <td className="p-3 text-sm text-slate-600 dark:text-slate-400 print:p-1 print:text-black">{row.location || '—'}</td>
+    <td className={`p-3 text-sm text-center font-mono font-semibold print:p-1 print:text-black bg-slate-50 dark:bg-slate-800/50 ${row.totalStock === 0 ? 'text-rose-500' : 'text-slate-800 dark:text-slate-200'}`}>
+      {row.totalStock}
+    </td>
+  </tr>
+));
 
 const InventoryReport: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -193,6 +236,15 @@ const InventoryReport: React.FC = () => {
     const totalValue = reportData.reduce((sum, r) => sum + (r.value ?? 0), 0);
     return { totalItems, withStock, withoutStock, totalQuantity, totalValue };
   }, [reportData]);
+
+  // Pre-compute warehouse totals once — not per render
+  const warehouseTotals = useMemo(() => {
+    const totals: Record<string, number> = {};
+    for (const wh of warehouses) {
+      totals[wh.id] = reportData.reduce((sum, row) => sum + (row.warehouseStock[wh.name] || row.warehouseStock[wh.id] || 0), 0);
+    }
+    return totals;
+  }, [reportData, warehouses]);
 
   if (isInitializing) {
     return (
@@ -454,7 +506,7 @@ const InventoryReport: React.FC = () => {
             <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
               <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Value</p>
               <h4 className="text-2xl font-bold text-brand-blue">
-                {new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(summaryStats.totalValue)}
+                {fmtCurrency.format(summaryStats.totalValue)}
               </h4>
             </div>
           ) : (
@@ -527,7 +579,7 @@ const InventoryReport: React.FC = () => {
         ) : (
           <div className="h-full overflow-auto custom-scrollbar print:overflow-visible print:h-auto">
             {isInventoryView ? (
-              /* ── INVENTORY VIEW: Part No | Item Code | Description | Location | Cost | [warehouses] | Total | Value ── */
+              /* ── INVENTORY VIEW ── */
               <table className="w-full text-left border-collapse print:text-xs">
                 <thead className="bg-slate-50 dark:bg-slate-800 sticky top-0 z-10 print:static print:bg-gray-100">
                   <tr className="text-xs uppercase text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-700 print:text-black print:border-gray-300">
@@ -545,47 +597,22 @@ const InventoryReport: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 print:divide-gray-200">
                   {reportData.map((row) => (
-                    <tr key={row.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors print:hover:bg-transparent">
-                      <td className="p-3 font-mono font-medium text-slate-800 dark:text-white print:p-1 print:text-black">{row.partNo}</td>
-                      <td className="p-3 font-mono text-slate-600 dark:text-slate-300 print:p-1 print:text-black">{row.itemCode || '—'}</td>
-                      <td className="p-3 text-slate-600 dark:text-slate-300 print:p-1 print:text-black max-w-xs truncate">{row.description || '—'}</td>
-                      <td className="p-3 text-slate-500 dark:text-slate-400 print:p-1 print:text-black text-sm">{row.location || '—'}</td>
-                      <td className="p-3 text-right font-mono text-slate-600 dark:text-slate-300 print:p-1 print:text-black">
-                        {row.cost ? new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 2 }).format(row.cost) : '—'}
-                      </td>
-                      {warehouses.map((wh) => {
-                        const qty = row.warehouseStock[wh.name] || row.warehouseStock[wh.id] || 0;
-                        return (
-                          <td key={wh.id} className={`p-3 text-center font-mono print:p-1 print:text-black ${qty === 0 ? 'text-slate-400 dark:text-slate-600' : 'text-slate-700 dark:text-slate-300'}`}>
-                            {qty}
-                          </td>
-                        );
-                      })}
-                      <td className={`p-3 text-center font-mono font-bold print:p-1 bg-slate-50 dark:bg-slate-800/50 print:bg-gray-100 ${row.totalStock === 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-white print:text-black'}`}>
-                        {row.totalStock}
-                      </td>
-                      <td className="p-3 text-right font-mono font-semibold text-emerald-700 dark:text-emerald-400 print:p-1 print:text-black bg-slate-50 dark:bg-slate-800/50 print:bg-gray-100">
-                        {row.value ? new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(row.value) : '—'}
-                      </td>
-                    </tr>
+                    <InventoryRow key={row.id} row={row} warehouses={warehouses} />
                   ))}
                 </tbody>
                 <tfoot className="bg-slate-100 dark:bg-slate-800 font-semibold print:bg-gray-200">
                   <tr className="border-t-2 border-slate-300 dark:border-slate-600 print:border-gray-400">
                     <td colSpan={5} className="p-3 text-slate-700 dark:text-slate-300 print:p-1 print:text-black">Total ({reportData.length} items)</td>
-                    {warehouses.map((wh) => {
-                      const whTotal = reportData.reduce((sum, row) => sum + (row.warehouseStock[wh.name] || row.warehouseStock[wh.id] || 0), 0);
-                      return <td key={wh.id} className="p-3 text-center font-mono print:p-1 print:text-black">{whTotal.toLocaleString()}</td>;
-                    })}
+                    {warehouses.map((wh) => (
+                      <td key={wh.id} className="p-3 text-center font-mono print:p-1 print:text-black">{warehouseTotals[wh.id].toLocaleString()}</td>
+                    ))}
                     <td className="p-3 text-center font-mono font-bold text-brand-blue print:p-1 print:text-black">{summaryStats.totalQuantity.toLocaleString()}</td>
-                    <td className="p-3 text-right font-mono font-bold text-emerald-700 dark:text-emerald-400 print:p-1 print:text-black">
-                      {new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(summaryStats.totalValue)}
-                    </td>
+                    <td className="p-3 text-right font-mono font-bold text-emerald-700 dark:text-emerald-400 print:p-1 print:text-black">{fmtCurrency.format(summaryStats.totalValue)}</td>
                   </tr>
                 </tfoot>
               </table>
             ) : (
-              /* ── PRODUCT VIEW: Part No | Category | Item Code | Description | Location | Total Stock ── */
+              /* ── PRODUCT VIEW ── */
               <table className="w-full text-left border-collapse print:text-xs">
                 <thead className="bg-slate-50 dark:bg-slate-800 sticky top-0 z-10 print:static print:bg-gray-100">
                   <tr className="text-xs uppercase text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-700 print:text-black print:border-gray-300">
@@ -599,20 +626,7 @@ const InventoryReport: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 print:divide-gray-200">
                   {reportData.map((row) => (
-                    <tr key={row.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors print:hover:bg-transparent">
-                      <td className="p-3 font-mono font-medium text-slate-800 dark:text-white print:p-1 print:text-black">{row.partNo}</td>
-                      <td className="p-3 print:p-1 print:text-black">
-                        <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded text-xs font-medium print:bg-transparent print:text-black">
-                          {row.category || '—'}
-                        </span>
-                      </td>
-                      <td className="p-3 font-mono text-slate-600 dark:text-slate-300 print:p-1 print:text-black">{row.itemCode || '—'}</td>
-                      <td className="p-3 text-slate-600 dark:text-slate-300 print:p-1 print:text-black max-w-xs truncate">{row.description || '—'}</td>
-                      <td className="p-3 text-slate-500 dark:text-slate-400 print:p-1 print:text-black text-sm">{row.location || '—'}</td>
-                      <td className={`p-3 text-center font-mono font-bold print:p-1 bg-slate-50 dark:bg-slate-800/50 print:bg-gray-100 ${row.totalStock === 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-white print:text-black'}`}>
-                        {row.totalStock}
-                      </td>
-                    </tr>
+                    <ProductRow key={row.id} row={row} />
                   ))}
                 </tbody>
                 <tfoot className="bg-slate-100 dark:bg-slate-800 font-semibold print:bg-gray-200">
