@@ -20,6 +20,7 @@ export interface ReorderReportFilters {
   search?: string;
   hideZeroReorder?: boolean;
   hideZeroReplenish?: boolean;
+  showHidden?: boolean;
   page?: number;
   perPage?: number;
 }
@@ -30,6 +31,7 @@ export interface ReorderReportEntry {
   item_code: string;
   part_no: string;
   description: string;
+  is_hidden: boolean;
   reorder_qty: number;
   replenish_qty: number;
   current_stock: number;
@@ -74,12 +76,20 @@ const toNumber = (value: unknown): number => {
 
 const toString = (value: unknown): string => String(value ?? '');
 
+const toBoolean = (value: unknown): boolean => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  const normalized = String(value ?? '').trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+};
+
 const normalizeEntry = (raw: any): ReorderReportEntry => ({
   id: toString(raw?.id),
   product_session: toString(raw?.product_session),
   item_code: toString(raw?.item_code),
   part_no: toString(raw?.part_no),
   description: toString(raw?.description),
+  is_hidden: toBoolean(raw?.is_hidden),
   reorder_qty: toNumber(raw?.reorder_qty),
   replenish_qty: toNumber(raw?.replenish_qty),
   current_stock: toNumber(raw?.current_stock),
@@ -124,6 +134,7 @@ export const fetchReorderReportEntries = async (filters: ReorderReportFilters): 
   if (filters.search?.trim()) query.set('search', filters.search.trim());
   if (filters.hideZeroReorder) query.set('hide_zero_reorder', '1');
   if (filters.hideZeroReplenish) query.set('hide_zero_replenish', '1');
+  if (filters.showHidden) query.set('include_hidden', '1');
 
   const data = await requestApi(`${API_BASE_URL}/reorder-report?${query.toString()}`);
   const rows = Array.isArray(data?.items) ? data.items : [];
@@ -160,4 +171,26 @@ export const hideReorderReportItems = async (itemIds: string[]): Promise<number>
   });
 
   return toNumber(data?.hidden);
+};
+
+export const restoreReorderReportItems = async (itemIds: string[]): Promise<number> => {
+  const normalizedIds = itemIds
+    .map((id) => Number(id))
+    .filter((id) => Number.isInteger(id) && id > 0)
+    .map((id) => id.toString());
+
+  if (normalizedIds.length === 0) return 0;
+
+  const ctx = getUserContext();
+  const data = await requestApi(`${API_BASE_URL}/reorder-report/restore-items`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      main_id: ctx.mainId,
+      user_id: ctx.userId,
+      item_ids: normalizedIds,
+    }),
+  });
+
+  return toNumber(data?.restored);
 };

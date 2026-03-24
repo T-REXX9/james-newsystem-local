@@ -1,15 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Download, EyeOff, Loader2, Package, Printer, ShoppingCart } from 'lucide-react';
+import { Download, Eye, EyeOff, Loader2, Package, Printer, RotateCcw, Search, ShoppingCart } from 'lucide-react';
 import { purchaseRequestService } from '../services/purchaseRequestService';
 import {
   fetchReorderReportEntries,
   hideReorderReportItems,
+  restoreReorderReportItems,
   REORDER_WAREHOUSE_OPTIONS,
   ReorderReportEntry,
   ReorderWarehouseType,
 } from '../services/reorderReportService';
 import { useToast } from './ToastProvider';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
+import ConfirmModal from './ConfirmModal';
 
 interface AddToPrModalProps {
   items: ReorderReportEntry[];
@@ -24,6 +26,8 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, onClose, onSaved }) 
   const [saving, setSaving] = useState(false);
   const [existingPrId, setExistingPrId] = useState('');
   const [supplierId, setSupplierId] = useState('');
+  const [supplierSearch, setSupplierSearch] = useState('');
+  const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
   const [openAfterSave, setOpenAfterSave] = useState(true);
   const [pendingPRs, setPendingPRs] = useState<Array<{ id: string; pr_number: string }>>([]);
   const [suppliers, setSuppliers] = useState<Array<{ id: string; company: string }>>([]);
@@ -51,7 +55,10 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, onClose, onSaved }) 
         setPendingPRs(pending);
         setSuppliers(supp);
         if (pending.length > 0) setExistingPrId(pending[0].id);
-        if (supp.length > 0) setSupplierId(supp[0].id);
+        if (supp.length > 0) {
+          setSupplierId(supp[0].id);
+          setSupplierSearch(supp[0].company);
+        }
       } finally {
         setLoading(false);
       }
@@ -74,6 +81,14 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, onClose, onSaved }) 
       })),
     [items]
   );
+
+  const filteredSuppliers = useMemo(() => {
+    const query = supplierSearch.trim().toLowerCase();
+    if (!query) return suppliers.slice(0, 50);
+    return suppliers
+      .filter((supplier) => supplier.company.toLowerCase().includes(query))
+      .slice(0, 50);
+  }, [supplierSearch, suppliers]);
 
   const navigateToPR = (prId: string) => {
     if (!prId) return;
@@ -168,17 +183,46 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, onClose, onSaved }) 
             {mode === 'new' ? (
               <div>
                 <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Supplier</label>
-                <select
-                  value={supplierId}
-                  onChange={(e) => setSupplierId(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                >
-                  {suppliers.map((supplier) => (
-                    <option key={supplier.id} value={supplier.id}>
-                      {supplier.company}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-slate-400" size={16} />
+                  <input
+                    value={supplierSearch}
+                    onChange={(e) => {
+                      setSupplierSearch(e.target.value);
+                      setSupplierId('');
+                      setShowSupplierDropdown(true);
+                    }}
+                    onFocus={() => setShowSupplierDropdown(true)}
+                    onBlur={() => window.setTimeout(() => setShowSupplierDropdown(false), 150)}
+                    placeholder="Search supplier..."
+                    className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  />
+                  {showSupplierDropdown ? (
+                    <div className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                      {filteredSuppliers.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">No suppliers found</div>
+                      ) : (
+                        filteredSuppliers.map((supplier) => (
+                          <button
+                            key={supplier.id}
+                            type="button"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => {
+                              setSupplierId(supplier.id);
+                              setSupplierSearch(supplier.company);
+                              setShowSupplierDropdown(false);
+                            }}
+                            className={`block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${
+                              supplier.id === supplierId ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300' : 'text-slate-700 dark:text-slate-200'
+                            }`}
+                          >
+                            {supplier.company}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  ) : null}
+                </div>
               </div>
             ) : (
               <div>
@@ -239,10 +283,12 @@ const ReorderReport: React.FC = () => {
   const [warehouseType, setWarehouseType] = useState<ReorderWarehouseType>('total');
   const [hideZeroReorder, setHideZeroReorder] = useState(false);
   const [hideZeroReplenish, setHideZeroReplenish] = useState(false);
+  const [showHiddenItems, setShowHiddenItems] = useState(false);
   const [searchInput, setSearchInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showAddPrModal, setShowAddPrModal] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<'hide' | 'restore' | null>(null);
   const selectedWarehouseLabel = REORDER_WAREHOUSE_OPTIONS.find((option) => option.id === warehouseType)?.label || 'Total Company';
 
   useEffect(() => {
@@ -258,6 +304,7 @@ const ReorderReport: React.FC = () => {
         search: debouncedSearch,
         hideZeroReorder,
         hideZeroReplenish,
+        showHidden: showHiddenItems,
         page: 1,
         perPage: 200,
       });
@@ -274,7 +321,7 @@ const ReorderReport: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [addToast, warehouseType, debouncedSearch, hideZeroReorder, hideZeroReplenish]);
+  }, [addToast, warehouseType, debouncedSearch, hideZeroReorder, hideZeroReplenish, showHiddenItems]);
 
   useEffect(() => {
     loadReport();
@@ -304,9 +351,15 @@ const ReorderReport: React.FC = () => {
     });
   };
 
+  const selectedHiddenCount = useMemo(
+    () => selectedRows.filter((row) => row.is_hidden).length,
+    [selectedRows]
+  );
+
+  const selectedVisibleCount = selectedRows.length - selectedHiddenCount;
+
   const handleMarkHidden = async () => {
     if (selectedIds.size === 0) return;
-    if (!window.confirm(`Mark ${selectedIds.size} selected item(s) as hidden?`)) return;
 
     setProcessing(true);
     try {
@@ -323,6 +376,31 @@ const ReorderReport: React.FC = () => {
         type: 'error',
         title: 'Failed to hide items',
         description: String(err?.message || 'Unable to mark selected items as hidden.'),
+        durationMs: 6000,
+      });
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleRestoreHidden = async () => {
+    if (selectedIds.size === 0) return;
+
+    setProcessing(true);
+    try {
+      const restoredCount = await restoreReorderReportItems(Array.from(selectedIds));
+      addToast({
+        type: 'success',
+        title: 'Items restored',
+        description: `${restoredCount} item(s) restored successfully.`,
+        durationMs: 4000,
+      });
+      await loadReport();
+    } catch (err: any) {
+      addToast({
+        type: 'error',
+        title: 'Failed to restore items',
+        description: String(err?.message || 'Unable to restore selected items.'),
         durationMs: 6000,
       });
     } finally {
@@ -383,14 +461,6 @@ const ReorderReport: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <CustomLoadingSpinner label="Loading" />
-      </div>
-    );
-  }
-
   return (
     <div className="flex h-full flex-col bg-slate-50 p-6 dark:bg-slate-950">
       <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -438,12 +508,18 @@ const ReorderReport: React.FC = () => {
         </div>
         <div className="md:col-span-2">
           <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Search</label>
-          <input
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Item code, part no, description"
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-          />
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <input
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Item code, part no, description"
+              className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-10 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            />
+            {loading ? (
+              <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-slate-400" size={16} />
+            ) : null}
+          </div>
         </div>
         <label className="flex items-center gap-2 self-end text-sm text-slate-700 dark:text-slate-300">
           <input
@@ -461,20 +537,36 @@ const ReorderReport: React.FC = () => {
           />
           Hide zero replenish qty
         </label>
+        <label className="flex items-center gap-2 self-end text-sm text-slate-700 dark:text-slate-300">
+          <input
+            type="checkbox"
+            checked={showHiddenItems}
+            onChange={(e) => setShowHiddenItems(e.target.checked)}
+          />
+          Show hidden items
+        </label>
       </div>
 
       <div className="mb-3 flex items-center gap-2 print:hidden">
         <button
-          onClick={handleMarkHidden}
-          disabled={selectedIds.size === 0 || processing}
+          onClick={() => setConfirmAction('hide')}
+          disabled={selectedVisibleCount === 0 || processing}
           className="inline-flex items-center gap-2 rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
         >
           {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <EyeOff className="h-4 w-4" />}
           Mark as Hidden
         </button>
         <button
+          onClick={() => setConfirmAction('restore')}
+          disabled={selectedHiddenCount === 0 || processing}
+          className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+        >
+          {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+          Restore Hidden
+        </button>
+        <button
           onClick={() => setShowAddPrModal(true)}
-          disabled={selectedIds.size === 0 || processing}
+          disabled={selectedVisibleCount === 0 || processing}
           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
         >
           <ShoppingCart className="h-4 w-4" />
@@ -504,7 +596,16 @@ const ReorderReport: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {loading ? (
+              <tr>
+                <td colSpan={13} className="px-3 py-10 text-center text-slate-500">
+                  <div className="flex items-center justify-center gap-3">
+                    <CustomLoadingSpinner label="Loading" />
+                    <span>Refreshing reorder report...</span>
+                  </div>
+                </td>
+              </tr>
+            ) : rows.length === 0 ? (
               <tr>
                 <td colSpan={13} className="px-3 py-10 text-center text-slate-500">
                   No items matched the current reorder filter.
@@ -512,7 +613,10 @@ const ReorderReport: React.FC = () => {
               </tr>
             ) : (
               rows.map((row) => (
-                <tr key={row.id} className="border-t border-slate-100 dark:border-slate-800">
+                <tr
+                  key={row.id}
+                  className={`border-t border-slate-100 dark:border-slate-800 ${row.is_hidden ? 'bg-amber-50/60 dark:bg-amber-950/10' : ''}`}
+                >
                   <td className="px-3 py-2">
                     <input
                       type="checkbox"
@@ -522,7 +626,17 @@ const ReorderReport: React.FC = () => {
                   </td>
                   <td className="px-3 py-2">{row.item_code}</td>
                   <td className="px-3 py-2">{row.part_no}</td>
-                  <td className="px-3 py-2">{row.description}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <span>{row.description}</span>
+                      {row.is_hidden ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                          <Eye className="h-3 w-3" />
+                          Hidden
+                        </span>
+                      ) : null}
+                    </div>
+                  </td>
                   <td className="px-3 py-2 text-center">{row.last_arrival_date ? String(row.last_arrival_date).slice(0, 10) : ''}</td>
                   <td className="px-3 py-2 text-center">{row.last_arrival_qty}</td>
                   <td className="px-3 py-2 text-center">{row.current_stock}</td>
@@ -591,9 +705,30 @@ const ReorderReport: React.FC = () => {
           onSaved={() => {
             setShowAddPrModal(false);
             setSelectedIds(new Set());
+            void loadReport();
           }}
         />
       ) : null}
+
+      <ConfirmModal
+        isOpen={confirmAction === 'hide'}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={handleMarkHidden}
+        title="Mark Items as Hidden"
+        message={`Mark ${selectedVisibleCount} selected visible item(s) as hidden? You can restore them later from the reorder report.`}
+        confirmLabel="Mark as Hidden"
+        variant="warning"
+      />
+
+      <ConfirmModal
+        isOpen={confirmAction === 'restore'}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={handleRestoreHidden}
+        title="Restore Hidden Items"
+        message={`Restore ${selectedHiddenCount} selected hidden item(s) back into the active reorder report list?`}
+        confirmLabel="Restore"
+        variant="success"
+      />
     </div>
   );
 };

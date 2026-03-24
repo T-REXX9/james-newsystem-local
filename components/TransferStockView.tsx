@@ -38,6 +38,16 @@ const WAREHOUSES = [
   { id: 'WH6', name: 'WH6' },
 ];
 
+const getTodayDateInputValue = (): string => new Date().toISOString().split('T')[0];
+
+const normalizeWarehouseLabel = (value?: string | null): string => {
+  const normalized = String(value || '').trim().toUpperCase();
+  if (!normalized) return '';
+  if (/^WH\d+$/.test(normalized)) return normalized;
+  if (/^\d+$/.test(normalized)) return `WH${normalized}`;
+  return normalized;
+};
+
 type TransferStatusType = 'pending' | 'submitted' | 'approved' | 'deleted';
 
 const statusMeta: Record<TransferStatusType, { label: string; tone: 'neutral' | 'info' | 'success' | 'warning' | 'danger' }> = {
@@ -245,6 +255,33 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
     ).slice(0, 50);
   }, [products, itemSearch]);
 
+  const resolveTransferProduct = useCallback((item: {
+    item_id?: string;
+    part_no?: string;
+    item_code?: string;
+    description?: string;
+  }): Product | undefined => {
+    const itemId = String(item.item_id || '').trim();
+    if (itemId) {
+      const direct = productMap.get(itemId);
+      if (direct) return direct;
+    }
+
+    const partNo = String(item.part_no || '').trim().toLowerCase();
+    const itemCode = String(item.item_code || '').trim().toLowerCase();
+    const description = String(item.description || '').trim().toLowerCase();
+
+    return products.find((product) => {
+      const productPartNo = String(product.part_no || '').trim().toLowerCase();
+      const productItemCode = String(product.item_code || '').trim().toLowerCase();
+      const productDescription = String(product.description || '').trim().toLowerCase();
+
+      return (partNo !== '' && productPartNo === partNo)
+        || (itemCode !== '' && productItemCode === itemCode)
+        || (description !== '' && productDescription === description);
+    });
+  }, [productMap, products]);
+
   const resetForm = () => {
     setTransferNo('');
     setTransferDate('');
@@ -263,6 +300,17 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
           type: 'error',
           title: 'Missing required fields',
           description: 'Please fill in all required fields and add at least one item.',
+          durationMs: 5000,
+        });
+        return;
+      }
+
+      const today = getTodayDateInputValue();
+      if (transferDate < today) {
+        addToast({
+          type: 'error',
+          title: 'Invalid transfer date',
+          description: 'Transfer date must be today or a future date.',
           durationMs: 5000,
         });
         return;
@@ -616,6 +664,21 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
     ));
   };
 
+  const handleTransferDateChange = (value: string) => {
+    const today = getTodayDateInputValue();
+    if (value && value < today) {
+      addToast({
+        type: 'warning',
+        title: 'Past dates are disabled',
+        description: 'Please select today or a future transfer date.',
+        durationMs: 4000,
+      });
+      setTransferDate(today);
+      return;
+    }
+    setTransferDate(value);
+  };
+
   const canApprove = Boolean(currentUser);
 
   return (
@@ -638,7 +701,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
           onClick={() => {
             setShowCreateForm(true);
             handleGenerateTransferNo();
-            setTransferDate(new Date().toISOString().split('T')[0]);
+            setTransferDate(getTodayDateInputValue());
           }}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
@@ -777,22 +840,24 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
                     </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                       {selectedTransfer.items?.map((item) => {
-                        const product = productMap.get(item.item_id);
+                        const product = resolveTransferProduct(item);
+                        const fromWarehouseLabel = normalizeWarehouseLabel(item.from_warehouse_id);
+                        const toWarehouseLabel = normalizeWarehouseLabel(item.to_warehouse_id);
                         return (
                           <tr key={item.id}>
                             <td className="px-4 py-3">
                               <div className="text-sm font-medium text-gray-900 dark:text-white">
-                                {product?.part_no || 'Unknown'}
+                                {product?.part_no || item.part_no || item.item_code || item.item_id || 'Unknown'}
                               </div>
                               <div className="text-xs text-gray-500 dark:text-gray-400">
-                                {product?.description || ''}
+                                {product?.description || item.description || ''}
                               </div>
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-                              WH{item.from_warehouse_id}
+                              {fromWarehouseLabel || '-'}
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-                              WH{item.to_warehouse_id}
+                              {toWarehouseLabel || '-'}
                             </td>
                             <td className="px-4 py-3 text-sm text-right font-medium text-gray-900 dark:text-white">
                               {item.transfer_qty}
@@ -889,7 +954,8 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
                   <input
                     type="date"
                     value={transferDate}
-                    onChange={(e) => setTransferDate(e.target.value)}
+                    min={getTodayDateInputValue()}
+                    onChange={(e) => handleTransferDateChange(e.target.value)}
                     className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -953,7 +1019,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
                       </thead>
                       <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                         {items.map((item, index) => {
-                          const product = productMap.get(item.item_id);
+                          const product = resolveTransferProduct(item);
                           // Extract numeric warehouse ID from canonical label (WH1 -> 1, WH2 -> 2, etc.)
                           const warehouseNum = item.from_warehouse_id.replace(/^WH/, '');
                           const stockColumn = `stock_wh${warehouseNum}` as keyof Product;
