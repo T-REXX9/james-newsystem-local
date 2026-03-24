@@ -114,11 +114,11 @@ const InventoryReport: React.FC = () => {
     window.print();
   };
 
+  const isInventoryView = filters.reportType === 'inventory';
+
   const handleExportExcel = () => {
     if (reportData.length === 0) return;
 
-    const headers = ['Part No', 'Item Code', 'Description', 'Category', ...warehouses.map((wh) => wh.name), 'Total Stock'];
-    
     const escapeCSV = (value: string | number) => {
       const str = String(value);
       if (str.includes(',') || str.includes('"') || str.includes('\n')) {
@@ -127,27 +127,44 @@ const InventoryReport: React.FC = () => {
       return str;
     };
 
-    const csvRows = [
-      headers.join(','),
-      ...reportData.map((row) => {
-        const values = [
-          row.partNo,
-          row.itemCode,
-          row.description,
-          row.category,
-          ...warehouses.map((wh) => row.warehouseStock[wh.name] || row.warehouseStock[wh.id] || 0),
-          row.totalStock,
-        ];
-        return values.map(escapeCSV).join(',');
-      }),
-    ];
+    let headers: string[];
+    let csvRows: string[];
+
+    if (isInventoryView) {
+      headers = ['Part No', 'Item Code', 'Description', 'Location', 'Cost', ...warehouses.map((wh) => wh.name), 'Total Stock', 'Value'];
+      csvRows = [
+        headers.join(','),
+        ...reportData.map((row) => {
+          const values = [
+            row.partNo,
+            row.itemCode,
+            row.description,
+            row.location || '',
+            row.cost ?? 0,
+            ...warehouses.map((wh) => row.warehouseStock[wh.name] || row.warehouseStock[wh.id] || 0),
+            row.totalStock,
+            row.value ?? 0,
+          ];
+          return values.map(escapeCSV).join(',');
+        }),
+      ];
+    } else {
+      headers = ['Part No', 'Category', 'Item Code', 'Description', 'Location', 'Total Stock'];
+      csvRows = [
+        headers.join(','),
+        ...reportData.map((row) => {
+          const values = [row.partNo, row.category, row.itemCode, row.description, row.location || '', row.totalStock];
+          return values.map(escapeCSV).join(',');
+        }),
+      ];
+    }
 
     const csvContent = csvRows.join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `inventory_report_${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `inventory_report_${filters.reportType}_${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -173,8 +190,9 @@ const InventoryReport: React.FC = () => {
     const withStock = reportData.filter((r) => r.totalStock > 0).length;
     const withoutStock = reportData.filter((r) => r.totalStock === 0).length;
     const totalQuantity = reportData.reduce((sum, r) => sum + r.totalStock, 0);
-    return { totalItems, withStock, withoutStock, totalQuantity };
-  }, [reportData, warehouses]);
+    const totalValue = reportData.reduce((sum, r) => sum + (r.value ?? 0), 0);
+    return { totalItems, withStock, withoutStock, totalQuantity, totalValue };
+  }, [reportData]);
 
   if (isInitializing) {
     return (
@@ -432,10 +450,19 @@ const InventoryReport: React.FC = () => {
             <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Without Stock</p>
             <h4 className="text-2xl font-bold text-rose-600 dark:text-rose-400">{summaryStats.withoutStock}</h4>
           </div>
-          <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Quantity</p>
-            <h4 className="text-2xl font-bold text-brand-blue">{summaryStats.totalQuantity.toLocaleString()}</h4>
-          </div>
+          {isInventoryView ? (
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Value</p>
+              <h4 className="text-2xl font-bold text-brand-blue">
+                {new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(summaryStats.totalValue)}
+              </h4>
+            </div>
+          ) : (
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Quantity</p>
+              <h4 className="text-2xl font-bold text-brand-blue">{summaryStats.totalQuantity.toLocaleString()}</h4>
+            </div>
+          )}
         </div>
       )}
 
@@ -499,90 +526,103 @@ const InventoryReport: React.FC = () => {
           </div>
         ) : (
           <div className="h-full overflow-auto custom-scrollbar print:overflow-visible print:h-auto">
-            <table className="w-full text-left border-collapse print:text-xs">
-              <thead className="bg-slate-50 dark:bg-slate-800 sticky top-0 z-10 print:static print:bg-gray-100">
-                <tr className="text-xs uppercase text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-700 print:text-black print:border-gray-300">
-                  <th className="p-3 print:p-1">Part No</th>
-                  <th className="p-3 print:p-1">Item Code</th>
-                  <th className="p-3 print:p-1">Description</th>
-                  <th className="p-3 print:p-1">Category</th>
-                  {warehouses.map((wh) => (
-                    <th key={wh.id} className="p-3 text-center print:p-1">
-                      {wh.name}
-                    </th>
+            {isInventoryView ? (
+              /* ── INVENTORY VIEW: Part No | Item Code | Description | Location | Cost | [warehouses] | Total | Value ── */
+              <table className="w-full text-left border-collapse print:text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-800 sticky top-0 z-10 print:static print:bg-gray-100">
+                  <tr className="text-xs uppercase text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-700 print:text-black print:border-gray-300">
+                    <th className="p-3 print:p-1">Part No</th>
+                    <th className="p-3 print:p-1">Item Code</th>
+                    <th className="p-3 print:p-1">Description</th>
+                    <th className="p-3 print:p-1">Location</th>
+                    <th className="p-3 text-right print:p-1">Cost</th>
+                    {warehouses.map((wh) => (
+                      <th key={wh.id} className="p-3 text-center print:p-1">{wh.name}</th>
+                    ))}
+                    <th className="p-3 text-center print:p-1 bg-slate-100 dark:bg-slate-700 print:bg-gray-200">Total</th>
+                    <th className="p-3 text-right print:p-1 bg-slate-100 dark:bg-slate-700 print:bg-gray-200">Value</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 print:divide-gray-200">
+                  {reportData.map((row) => (
+                    <tr key={row.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors print:hover:bg-transparent">
+                      <td className="p-3 font-mono font-medium text-slate-800 dark:text-white print:p-1 print:text-black">{row.partNo}</td>
+                      <td className="p-3 font-mono text-slate-600 dark:text-slate-300 print:p-1 print:text-black">{row.itemCode || '—'}</td>
+                      <td className="p-3 text-slate-600 dark:text-slate-300 print:p-1 print:text-black max-w-xs truncate">{row.description || '—'}</td>
+                      <td className="p-3 text-slate-500 dark:text-slate-400 print:p-1 print:text-black text-sm">{row.location || '—'}</td>
+                      <td className="p-3 text-right font-mono text-slate-600 dark:text-slate-300 print:p-1 print:text-black">
+                        {row.cost ? new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 2 }).format(row.cost) : '—'}
+                      </td>
+                      {warehouses.map((wh) => {
+                        const qty = row.warehouseStock[wh.name] || row.warehouseStock[wh.id] || 0;
+                        return (
+                          <td key={wh.id} className={`p-3 text-center font-mono print:p-1 print:text-black ${qty === 0 ? 'text-slate-400 dark:text-slate-600' : 'text-slate-700 dark:text-slate-300'}`}>
+                            {qty}
+                          </td>
+                        );
+                      })}
+                      <td className={`p-3 text-center font-mono font-bold print:p-1 bg-slate-50 dark:bg-slate-800/50 print:bg-gray-100 ${row.totalStock === 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-white print:text-black'}`}>
+                        {row.totalStock}
+                      </td>
+                      <td className="p-3 text-right font-mono font-semibold text-emerald-700 dark:text-emerald-400 print:p-1 print:text-black bg-slate-50 dark:bg-slate-800/50 print:bg-gray-100">
+                        {row.value ? new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(row.value) : '—'}
+                      </td>
+                    </tr>
                   ))}
-                  <th className="p-3 text-center print:p-1 bg-slate-100 dark:bg-slate-700 print:bg-gray-200">
-                    Total
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 print:divide-gray-200">
-                {reportData.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors print:hover:bg-transparent"
-                  >
-                    <td className="p-3 font-mono font-medium text-slate-800 dark:text-white print:p-1 print:text-black">
-                      {row.partNo}
-                    </td>
-                    <td className="p-3 font-mono text-slate-600 dark:text-slate-300 print:p-1 print:text-black">
-                      {row.itemCode || '—'}
-                    </td>
-                    <td className="p-3 text-slate-600 dark:text-slate-300 print:p-1 print:text-black max-w-xs truncate">
-                      {row.description || '—'}
-                    </td>
-                    <td className="p-3 print:p-1 print:text-black">
-                      <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded text-xs font-medium print:bg-transparent print:text-black">
-                        {row.category || '—'}
-                      </span>
-                    </td>
+                </tbody>
+                <tfoot className="bg-slate-100 dark:bg-slate-800 font-semibold print:bg-gray-200">
+                  <tr className="border-t-2 border-slate-300 dark:border-slate-600 print:border-gray-400">
+                    <td colSpan={5} className="p-3 text-slate-700 dark:text-slate-300 print:p-1 print:text-black">Total ({reportData.length} items)</td>
                     {warehouses.map((wh) => {
-                      const qty = row.warehouseStock[wh.name] || row.warehouseStock[wh.id] || 0;
-                      return (
-                        <td
-                          key={wh.id}
-                          className={`p-3 text-center font-mono print:p-1 print:text-black ${
-                            qty === 0 ? 'text-slate-400 dark:text-slate-600' : 'text-slate-700 dark:text-slate-300'
-                          }`}
-                        >
-                          {qty}
-                        </td>
-                      );
+                      const whTotal = reportData.reduce((sum, row) => sum + (row.warehouseStock[wh.name] || row.warehouseStock[wh.id] || 0), 0);
+                      return <td key={wh.id} className="p-3 text-center font-mono print:p-1 print:text-black">{whTotal.toLocaleString()}</td>;
                     })}
-                    <td
-                      className={`p-3 text-center font-mono font-bold print:p-1 bg-slate-50 dark:bg-slate-800/50 print:bg-gray-100 ${
-                        row.totalStock === 0
-                          ? 'text-rose-600 dark:text-rose-400'
-                          : 'text-slate-800 dark:text-white print:text-black'
-                      }`}
-                    >
-                      {row.totalStock}
+                    <td className="p-3 text-center font-mono font-bold text-brand-blue print:p-1 print:text-black">{summaryStats.totalQuantity.toLocaleString()}</td>
+                    <td className="p-3 text-right font-mono font-bold text-emerald-700 dark:text-emerald-400 print:p-1 print:text-black">
+                      {new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(summaryStats.totalValue)}
                     </td>
                   </tr>
-                ))}
-              </tbody>
-              <tfoot className="bg-slate-100 dark:bg-slate-800 font-semibold print:bg-gray-200">
-                <tr className="border-t-2 border-slate-300 dark:border-slate-600 print:border-gray-400">
-                  <td colSpan={4} className="p-3 text-slate-700 dark:text-slate-300 print:p-1 print:text-black">
-                    Total ({reportData.length} items)
-                  </td>
-                  {warehouses.map((wh) => {
-                    const whTotal = reportData.reduce(
-                      (sum, row) => sum + (row.warehouseStock[wh.name] || row.warehouseStock[wh.id] || 0),
-                      0
-                    );
-                    return (
-                      <td key={wh.id} className="p-3 text-center font-mono print:p-1 print:text-black">
-                        {whTotal.toLocaleString()}
+                </tfoot>
+              </table>
+            ) : (
+              /* ── PRODUCT VIEW: Part No | Category | Item Code | Description | Location | Total Stock ── */
+              <table className="w-full text-left border-collapse print:text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-800 sticky top-0 z-10 print:static print:bg-gray-100">
+                  <tr className="text-xs uppercase text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-700 print:text-black print:border-gray-300">
+                    <th className="p-3 print:p-1">Part No</th>
+                    <th className="p-3 print:p-1">Category</th>
+                    <th className="p-3 print:p-1">Item Code</th>
+                    <th className="p-3 print:p-1">Description</th>
+                    <th className="p-3 print:p-1">Location</th>
+                    <th className="p-3 text-center print:p-1 bg-slate-100 dark:bg-slate-700 print:bg-gray-200">Stock</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 print:divide-gray-200">
+                  {reportData.map((row) => (
+                    <tr key={row.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors print:hover:bg-transparent">
+                      <td className="p-3 font-mono font-medium text-slate-800 dark:text-white print:p-1 print:text-black">{row.partNo}</td>
+                      <td className="p-3 print:p-1 print:text-black">
+                        <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded text-xs font-medium print:bg-transparent print:text-black">
+                          {row.category || '—'}
+                        </span>
                       </td>
-                    );
-                  })}
-                  <td className="p-3 text-center font-mono font-bold text-brand-blue print:p-1 print:text-black">
-                    {summaryStats.totalQuantity.toLocaleString()}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
+                      <td className="p-3 font-mono text-slate-600 dark:text-slate-300 print:p-1 print:text-black">{row.itemCode || '—'}</td>
+                      <td className="p-3 text-slate-600 dark:text-slate-300 print:p-1 print:text-black max-w-xs truncate">{row.description || '—'}</td>
+                      <td className="p-3 text-slate-500 dark:text-slate-400 print:p-1 print:text-black text-sm">{row.location || '—'}</td>
+                      <td className={`p-3 text-center font-mono font-bold print:p-1 bg-slate-50 dark:bg-slate-800/50 print:bg-gray-100 ${row.totalStock === 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-white print:text-black'}`}>
+                        {row.totalStock}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-slate-100 dark:bg-slate-800 font-semibold print:bg-gray-200">
+                  <tr className="border-t-2 border-slate-300 dark:border-slate-600 print:border-gray-400">
+                    <td colSpan={5} className="p-3 text-slate-700 dark:text-slate-300 print:p-1 print:text-black">Total ({reportData.length} items)</td>
+                    <td className="p-3 text-center font-mono font-bold text-brand-blue print:p-1 print:text-black">{summaryStats.totalQuantity.toLocaleString()}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            )}
           </div>
         )}
       </div>
