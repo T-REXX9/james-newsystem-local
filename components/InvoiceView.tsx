@@ -7,12 +7,11 @@ import {
   getAllInvoices,
   printInvoice,
   cancelInvoice,
-  unpostInvoice,
   updateInvoiceNumber,
 } from '../services/invoiceLocalApiService';
 import { getLocalAuthSession } from '../services/localAuthService';
 import { fetchContacts } from '../services/customerDatabaseLocalApiService';
-import { isInvoiceAllowedForTransactionType, syncDocumentPolicyState } from '../services/salesOrderLocalApiService';
+import { isInvoiceAllowedForTransactionType, syncDocumentPolicyState, unpostSalesOrder } from '../services/salesOrderLocalApiService';
 import { Contact, Invoice, InvoiceStatus } from '../types';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 import { useToast } from './ToastProvider';
@@ -322,19 +321,23 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
     if (!selectedInvoice) return;
     setUnpostLoading(true);
     try {
-      const updated = await unpostInvoice(selectedInvoice.id);
-      if (updated) {
-        setInvoices(prev => prev.map(row => row.id === updated.id ? updated : row));
-        setSelectedInvoice(updated);
+      const salesOrderId = String(selectedInvoice.order_id || '').trim();
+      if (!salesOrderId) {
+        throw new Error('This invoice is not linked to a sales order.');
       }
+
+      await unpostSalesOrder(salesOrderId);
       setUnpostModalOpen(false);
       await loadInvoices();
+      window.dispatchEvent(new CustomEvent('workflow:navigate', {
+        detail: { tab: 'sales-transaction-sales-order', payload: { orderId: salesOrderId } },
+      }));
     } catch (err) {
       console.error('Failed to unpost invoice:', err);
       addToast({
         type: 'error',
         title: 'Failed to unpost invoice',
-        description: 'The invoice could not be unposted.',
+        description: err instanceof Error ? err.message : 'The invoice could not be unposted.',
         durationMs: 5000,
       });
     } finally {

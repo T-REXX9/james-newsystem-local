@@ -96,6 +96,7 @@ export interface SpecialPriceCustomer {
     patient_refno: string;
     company: string;
     patient_code: string;
+    balance: number;
 }
 
 export interface SpecialPriceArea {

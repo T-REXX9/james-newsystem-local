@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, Plus, Search, Trash2, X } from 'lucide-react';
 import ConfirmModal from '../../ConfirmModal';
+import SearchableSelect, { SearchableSelectOption } from '../../SearchableSelect';
 import { useToast } from '../../ToastProvider';
 import { useDebounce } from '../../../hooks/useDebounce';
 import {
@@ -49,6 +50,7 @@ interface PickerModalShellProps {
     isOpen: boolean;
     title: string;
     search: string;
+    searchPlaceholder?: string;
     onSearchChange: (value: string) => void;
     loading: boolean;
     confirmLabel: string;
@@ -79,7 +81,35 @@ interface AddCategoryModalProps {
     onAdded: () => Promise<void>;
 }
 
-const PRICE_TYPES = ['Fix Amount', 'Percentage'];
+interface PickerColumn<T> {
+    key: string;
+    label: string;
+    render: (item: T) => React.ReactNode;
+}
+
+interface SearchablePickerModalProps<T> {
+    isOpen: boolean;
+    title: string;
+    refno: string | null;
+    searchPlaceholder: string;
+    emptyMessage: string;
+    loadingTitle: string;
+    successTitle: string;
+    successDescription: string;
+    errorTitle: string;
+    fetchItems: (search: string, page: number, perPage: number) => Promise<{ items: T[] }>;
+    submitSelection: (refno: string, selectedId: string) => Promise<unknown>;
+    getItemId: (item: T) => string;
+    columns: PickerColumn<T>[];
+    confirmLabel: string;
+    onClose: () => void;
+    onAdded: () => Promise<void>;
+}
+
+const PRICE_TYPES: SearchableSelectOption[] = [
+    { value: 'Fix Amount', label: 'Fix Amount', keywords: ['fix'] },
+    { value: 'Percentage', label: 'Percentage', keywords: ['percent'] },
+];
 const RECORDS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
 const PRODUCT_PER_PAGE_OPTIONS = [10, 20, 50];
 
@@ -97,6 +127,13 @@ const formatAmount = (amount: number): string => {
         maximumFractionDigits: 2,
     });
 };
+
+const PAGE_SIZE_OPTIONS = (options: number[]): SearchableSelectOption[] =>
+    options.map((option) => ({
+        value: String(option),
+        label: `${option} per page`,
+        keywords: [String(option), 'page size', 'per page'],
+    }));
 
 const PaginationControls: React.FC<{
     meta: PaginationMeta;
@@ -117,18 +154,15 @@ const PaginationControls: React.FC<{
             <div className="flex flex-wrap items-center gap-3">
                 <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
                     <span>Per page</span>
-                    <select
-                        value={perPage}
-                        onChange={(event) => onPerPageChange(Number(event.target.value))}
+                    <SearchableSelect
+                        value={String(perPage)}
+                        options={PAGE_SIZE_OPTIONS(perPageOptions)}
+                        onChange={(value) => onPerPageChange(Number(value))}
                         disabled={disabled}
-                        className="rounded-md border border-gray-300 bg-white px-2 py-1 dark:border-gray-600 dark:bg-gray-700"
-                    >
-                        {perPageOptions.map((option) => (
-                            <option key={option} value={option}>
-                                {option}
-                            </option>
-                        ))}
-                    </select>
+                        placeholder="Rows"
+                        searchPlaceholder="Search page size..."
+                        buttonClassName="min-w-[140px] py-1"
+                    />
                 </label>
                 <div className="flex items-center gap-2">
                     <button
@@ -157,6 +191,7 @@ const PickerModalShell: React.FC<PickerModalShellProps> = ({
     isOpen,
     title,
     search,
+    searchPlaceholder = 'Search...',
     onSearchChange,
     loading,
     confirmLabel,
@@ -186,7 +221,7 @@ const PickerModalShell: React.FC<PickerModalShellProps> = ({
                             type="text"
                             value={search}
                             onChange={(event) => onSearchChange(event.target.value)}
-                            placeholder="Search..."
+                            placeholder={searchPlaceholder}
                             className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                         />
                     </div>
@@ -217,137 +252,124 @@ const PickerModalShell: React.FC<PickerModalShellProps> = ({
 };
 
 const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, refno, onClose, onAdded }) => {
-    const { addToast } = useToast();
-    const [search, setSearch] = useState('');
-    const debouncedSearch = useDebounce(search, 300);
-    const [items, setItems] = useState<SpecialPriceCustomerPicker[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
-    const [selected, setSelected] = useState<string | null>(null);
-
-    useEffect(() => {
-        if (!isOpen) {
-            setSearch('');
-            setSelected(null);
-            setItems([]);
-            return;
-        }
-
-        let active = true;
-        const loadItems = async () => {
-            setLoading(true);
-            try {
-                const result = await fetchCustomerPicker(debouncedSearch, 1, 100);
-                if (active) {
-                    setItems(result.items);
-                }
-            } catch (error) {
-                if (active) {
-                    addToast({
-                        type: 'error',
-                        title: 'Unable to load customers',
-                        description: error instanceof Error ? error.message : 'Unable to load customers.',
-                        durationMs: 6000,
-                    });
-                }
-            } finally {
-                if (active) {
-                    setLoading(false);
-                }
-            }
-        };
-
-        loadItems();
-        return () => {
-            active = false;
-        };
-    }, [addToast, debouncedSearch, isOpen]);
-
-    const handleConfirm = async () => {
-        if (!refno || !selected) return;
-
-        setSubmitting(true);
-        try {
-            await addCustomer(refno, selected);
-            addToast({
-                type: 'success',
-                title: 'Customer added',
-                description: 'Customer has been added successfully.',
-                durationMs: 4000,
-            });
-            onClose();
-            await onAdded();
-        } catch (error) {
-            addToast({
-                type: 'error',
-                title: 'Unable to add customer',
-                description: error instanceof Error ? error.message : 'Unable to add customer.',
-                durationMs: 6000,
-            });
-        } finally {
-            setSubmitting(false);
-        }
-    };
-
     return (
-        <PickerModalShell
+        <SearchablePickerModal<SpecialPriceCustomerPicker>
             isOpen={isOpen}
             title="Add Customer"
-            search={search}
-            onSearchChange={setSearch}
-            loading={submitting}
+            refno={refno}
+            searchPlaceholder="Search customers..."
+            emptyMessage="No customers found"
+            loadingTitle="Unable to load customers"
+            successTitle="Customer added"
+            successDescription="Customer has been added successfully."
+            errorTitle="Unable to add customer"
+            fetchItems={fetchCustomerPicker}
+            submitSelection={addCustomer}
+            getItemId={(item) => item.lsessionid}
+            columns={[
+                {
+                    key: 'patient_code',
+                    label: 'Customer Code',
+                    render: (item) => item.lpatient_code || '-',
+                },
+                {
+                    key: 'company',
+                    label: 'Customer Name',
+                    render: (item) => item.lcompany || '-',
+                },
+            ]}
             confirmLabel="Add Customer"
-            confirmDisabled={!selected}
             onClose={onClose}
-            onConfirm={handleConfirm}
-        >
-            <table className="w-full">
-                <thead className="bg-gray-50 dark:bg-gray-900/50 sticky top-0">
-                    <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer Code</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer Name</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {loading ? (
-                        <tr>
-                            <td colSpan={2} className="px-4 py-6 text-center text-sm text-gray-500">
-                                Loading...
-                            </td>
-                        </tr>
-                    ) : items.length === 0 ? (
-                        <tr>
-                            <td colSpan={2} className="px-4 py-6 text-center text-sm text-gray-500">
-                                No customers found
-                            </td>
-                        </tr>
-                    ) : (
-                        items.map((item) => (
-                            <tr
-                                key={item.lsessionid}
-                                onClick={() => setSelected(item.lsessionid)}
-                                className={`cursor-pointer transition-colors ${
-                                    selected === item.lsessionid
-                                        ? 'bg-blue-50 dark:bg-blue-900/30'
-                                        : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
-                                }`}
-                            >
-                                <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{item.lpatient_code || '-'}</td>
-                                <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{item.lcompany || '-'}</td>
-                            </tr>
-                        ))
-                    )}
-                </tbody>
-            </table>
-        </PickerModalShell>
+            onAdded={onAdded}
+        />
     );
 };
 
 const AddAreaModal: React.FC<AddAreaModalProps> = ({ isOpen, refno, onClose, onAdded }) => {
+    return (
+        <SearchablePickerModal<SpecialPriceAreaPicker>
+            isOpen={isOpen}
+            title="Add Area"
+            refno={refno}
+            searchPlaceholder="Search areas..."
+            emptyMessage="No areas found"
+            loadingTitle="Unable to load areas"
+            successTitle="Area added"
+            successDescription="Area has been added successfully."
+            errorTitle="Unable to add area"
+            fetchItems={fetchAreaPicker}
+            submitSelection={addArea}
+            getItemId={(item) => item.code}
+            columns={[
+                {
+                    key: 'code',
+                    label: 'Area Code',
+                    render: (item) => item.code || '-',
+                },
+                {
+                    key: 'name',
+                    label: 'Area Name',
+                    render: (item) => item.name || '-',
+                },
+            ]}
+            confirmLabel="Add Area"
+            onClose={onClose}
+            onAdded={onAdded}
+        />
+    );
+};
+
+const AddCategoryModal: React.FC<AddCategoryModalProps> = ({ isOpen, refno, onClose, onAdded }) => {
+    return (
+        <SearchablePickerModal<SpecialPriceCategoryPicker>
+            isOpen={isOpen}
+            title="Add Category"
+            refno={refno}
+            searchPlaceholder="Search categories..."
+            emptyMessage="No categories found"
+            loadingTitle="Unable to load categories"
+            successTitle="Category added"
+            successDescription="Category has been added successfully."
+            errorTitle="Unable to add category"
+            fetchItems={fetchCategoryPicker}
+            submitSelection={addCategory}
+            getItemId={(item) => item.id}
+            columns={[
+                {
+                    key: 'name',
+                    label: 'Category Name',
+                    render: (item) => item.name || '-',
+                },
+            ]}
+            confirmLabel="Add Category"
+            onClose={onClose}
+            onAdded={onAdded}
+        />
+    );
+};
+
+const SearchablePickerModal = <T,>({
+    isOpen,
+    title,
+    refno,
+    searchPlaceholder,
+    emptyMessage,
+    loadingTitle,
+    successTitle,
+    successDescription,
+    errorTitle,
+    fetchItems,
+    submitSelection,
+    getItemId,
+    columns,
+    confirmLabel,
+    onClose,
+    onAdded,
+}: SearchablePickerModalProps<T>) => {
     const { addToast } = useToast();
     const [search, setSearch] = useState('');
     const debouncedSearch = useDebounce(search, 300);
-    const [items, setItems] = useState<SpecialPriceAreaPicker[]>([]);
+    const [items, setItems] = useState<T[]>([]);
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [selected, setSelected] = useState<string | null>(null);
@@ -364,7 +386,7 @@ const AddAreaModal: React.FC<AddAreaModalProps> = ({ isOpen, refno, onClose, onA
         const loadItems = async () => {
             setLoading(true);
             try {
-                const result = await fetchAreaPicker(debouncedSearch, 1, 100);
+                const result = await fetchItems(debouncedSearch, 1, 100);
                 if (active) {
                     setItems(result.items);
                 }
@@ -372,8 +394,8 @@ const AddAreaModal: React.FC<AddAreaModalProps> = ({ isOpen, refno, onClose, onA
                 if (active) {
                     addToast({
                         type: 'error',
-                        title: 'Unable to load areas',
-                        description: error instanceof Error ? error.message : 'Unable to load areas.',
+                        title: loadingTitle,
+                        description: error instanceof Error ? error.message : `${loadingTitle}.`,
                         durationMs: 6000,
                     });
                 }
@@ -388,18 +410,18 @@ const AddAreaModal: React.FC<AddAreaModalProps> = ({ isOpen, refno, onClose, onA
         return () => {
             active = false;
         };
-    }, [addToast, debouncedSearch, isOpen]);
+    }, [addToast, debouncedSearch, fetchItems, isOpen, loadingTitle]);
 
     const handleConfirm = async () => {
         if (!refno || !selected) return;
 
         setSubmitting(true);
         try {
-            await addArea(refno, selected);
+            await submitSelection(refno, selected);
             addToast({
                 type: 'success',
-                title: 'Area added',
-                description: 'Area has been added successfully.',
+                title: successTitle,
+                description: successDescription,
                 durationMs: 4000,
             });
             onClose();
@@ -407,8 +429,8 @@ const AddAreaModal: React.FC<AddAreaModalProps> = ({ isOpen, refno, onClose, onA
         } catch (error) {
             addToast({
                 type: 'error',
-                title: 'Unable to add area',
-                description: error instanceof Error ? error.message : 'Unable to add area.',
+                title: errorTitle,
+                description: error instanceof Error ? error.message : `${errorTitle}.`,
                 durationMs: 6000,
             });
         } finally {
@@ -419,11 +441,12 @@ const AddAreaModal: React.FC<AddAreaModalProps> = ({ isOpen, refno, onClose, onA
     return (
         <PickerModalShell
             isOpen={isOpen}
-            title="Add Area"
+            title={title}
             search={search}
+            searchPlaceholder={searchPlaceholder}
             onSearchChange={setSearch}
             loading={submitting}
-            confirmLabel="Add Area"
+            confirmLabel={confirmLabel}
             confirmDisabled={!selected}
             onClose={onClose}
             onConfirm={handleConfirm}
@@ -431,157 +454,42 @@ const AddAreaModal: React.FC<AddAreaModalProps> = ({ isOpen, refno, onClose, onA
             <table className="w-full">
                 <thead className="bg-gray-50 dark:bg-gray-900/50 sticky top-0">
                     <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Area Code</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Area Name</th>
+                        {columns.map((column) => (
+                            <th key={column.key} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                {column.label}
+                            </th>
+                        ))}
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                     {loading ? (
                         <tr>
-                            <td colSpan={2} className="px-4 py-6 text-center text-sm text-gray-500">
+                            <td colSpan={columns.length} className="px-4 py-6 text-center text-sm text-gray-500">
                                 Loading...
                             </td>
                         </tr>
                     ) : items.length === 0 ? (
                         <tr>
-                            <td colSpan={2} className="px-4 py-6 text-center text-sm text-gray-500">
-                                No areas found
+                            <td colSpan={columns.length} className="px-4 py-6 text-center text-sm text-gray-500">
+                                {emptyMessage}
                             </td>
                         </tr>
                     ) : (
                         items.map((item) => (
                             <tr
-                                key={item.code}
-                                onClick={() => setSelected(item.code)}
+                                key={getItemId(item)}
+                                onClick={() => setSelected(getItemId(item))}
                                 className={`cursor-pointer transition-colors ${
-                                    selected === item.code
+                                    selected === getItemId(item)
                                         ? 'bg-blue-50 dark:bg-blue-900/30'
                                         : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
                                 }`}
                             >
-                                <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{item.code || '-'}</td>
-                                <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{item.name || '-'}</td>
-                            </tr>
-                        ))
-                    )}
-                </tbody>
-            </table>
-        </PickerModalShell>
-    );
-};
-
-const AddCategoryModal: React.FC<AddCategoryModalProps> = ({ isOpen, refno, onClose, onAdded }) => {
-    const { addToast } = useToast();
-    const [search, setSearch] = useState('');
-    const debouncedSearch = useDebounce(search, 300);
-    const [items, setItems] = useState<SpecialPriceCategoryPicker[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
-    const [selected, setSelected] = useState<string | null>(null);
-
-    useEffect(() => {
-        if (!isOpen) {
-            setSearch('');
-            setSelected(null);
-            setItems([]);
-            return;
-        }
-
-        let active = true;
-        const loadItems = async () => {
-            setLoading(true);
-            try {
-                const result = await fetchCategoryPicker(debouncedSearch, 1, 100);
-                if (active) {
-                    setItems(result.items);
-                }
-            } catch (error) {
-                if (active) {
-                    addToast({
-                        type: 'error',
-                        title: 'Unable to load categories',
-                        description: error instanceof Error ? error.message : 'Unable to load categories.',
-                        durationMs: 6000,
-                    });
-                }
-            } finally {
-                if (active) {
-                    setLoading(false);
-                }
-            }
-        };
-
-        loadItems();
-        return () => {
-            active = false;
-        };
-    }, [addToast, debouncedSearch, isOpen]);
-
-    const handleConfirm = async () => {
-        if (!refno || !selected) return;
-
-        setSubmitting(true);
-        try {
-            await addCategory(refno, selected);
-            addToast({
-                type: 'success',
-                title: 'Category added',
-                description: 'Category has been added successfully.',
-                durationMs: 4000,
-            });
-            onClose();
-            await onAdded();
-        } catch (error) {
-            addToast({
-                type: 'error',
-                title: 'Unable to add category',
-                description: error instanceof Error ? error.message : 'Unable to add category.',
-                durationMs: 6000,
-            });
-        } finally {
-            setSubmitting(false);
-        }
-    };
-
-    return (
-        <PickerModalShell
-            isOpen={isOpen}
-            title="Add Category"
-            search={search}
-            onSearchChange={setSearch}
-            loading={submitting}
-            confirmLabel="Add Category"
-            confirmDisabled={!selected}
-            onClose={onClose}
-            onConfirm={handleConfirm}
-        >
-            <table className="w-full">
-                <thead className="bg-gray-50 dark:bg-gray-900/50 sticky top-0">
-                    <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category Name</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {loading ? (
-                        <tr>
-                            <td className="px-4 py-6 text-center text-sm text-gray-500">Loading...</td>
-                        </tr>
-                    ) : items.length === 0 ? (
-                        <tr>
-                            <td className="px-4 py-6 text-center text-sm text-gray-500">No categories found</td>
-                        </tr>
-                    ) : (
-                        items.map((item) => (
-                            <tr
-                                key={item.id}
-                                onClick={() => setSelected(item.id)}
-                                className={`cursor-pointer transition-colors ${
-                                    selected === item.id
-                                        ? 'bg-blue-50 dark:bg-blue-900/30'
-                                        : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
-                                }`}
-                            >
-                                <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{item.name || '-'}</td>
+                                {columns.map((column) => (
+                                    <td key={column.key} className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
+                                        {column.render(item)}
+                                    </td>
+                                ))}
                             </tr>
                         ))
                     )}
@@ -967,17 +875,14 @@ export default function SpecialPrice() {
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Type</label>
-                                            <select
+                                            <SearchableSelect
                                                 value={createType}
-                                                onChange={(event) => setCreateType(event.target.value)}
-                                                className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 bg-white"
-                                            >
-                                                {PRICE_TYPES.map((type) => (
-                                                    <option key={type} value={type}>
-                                                        {type}
-                                                    </option>
-                                                ))}
-                                            </select>
+                                                options={PRICE_TYPES}
+                                                onChange={setCreateType}
+                                                placeholder="Select type"
+                                                searchPlaceholder="Search price type..."
+                                                className="mt-1"
+                                            />
                                         </div>
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Amount</label>
@@ -1024,18 +929,15 @@ export default function SpecialPrice() {
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Type</label>
-                                            <select
+                                            <SearchableSelect
                                                 value={editType}
-                                                onChange={(event) => setEditType(event.target.value)}
-                                                className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 bg-white"
+                                                options={PRICE_TYPES}
+                                                onChange={setEditType}
+                                                placeholder="Select type"
+                                                searchPlaceholder="Search price type..."
+                                                className="mt-1"
                                                 disabled={detailLoading}
-                                            >
-                                                {PRICE_TYPES.map((type) => (
-                                                    <option key={type} value={type}>
-                                                        {type}
-                                                    </option>
-                                                ))}
-                                            </select>
+                                            />
                                         </div>
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Amount</label>
@@ -1083,7 +985,7 @@ export default function SpecialPrice() {
 
                                 <DetailTableSection
                                     title="Customers"
-                                    columns={['', 'Customer Code', 'Customer Name']}
+                                    columns={['', 'Customer Code', 'Customer Name', 'Balance']}
                                     loading={detailLoading}
                                     emptyMessage="No customers found"
                                 >
@@ -1107,6 +1009,7 @@ export default function SpecialPrice() {
                                             </td>
                                             <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{customer.patient_code || '-'}</td>
                                             <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{customer.company || '-'}</td>
+                                            <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{formatAmount(customer.balance)}</td>
                                         </tr>
                                     ))}
                                 </DetailTableSection>

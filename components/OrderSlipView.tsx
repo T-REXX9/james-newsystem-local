@@ -15,10 +15,9 @@ import {
   getOrderSlip,
   getAllOrderSlips,
   printOrderSlip,
-  unpostOrderSlip,
 } from '../services/orderSlipLocalApiService';
 import { fetchContacts } from '../services/customerDatabaseLocalApiService';
-import { isOrderSlipAllowedForTransactionType, syncDocumentPolicyState } from '../services/salesOrderLocalApiService';
+import { isOrderSlipAllowedForTransactionType, syncDocumentPolicyState, unpostSalesOrder } from '../services/salesOrderLocalApiService';
 import { Contact, OrderSlip, OrderSlipStatus } from '../types';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 import { getLocalAuthSession } from '../services/localAuthService';
@@ -385,16 +384,18 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
     setUnpostLoading(true);
 
     try {
-      const updated = await unpostOrderSlip(selectedSlip.id);
-      if (updated) {
-        setOrderSlips(prev => prev.map(row => row.id === updated.id ? updated : row));
-        setSelectedSlip(updated);
+      const salesOrderId = String(selectedSlip.order_id || '').trim();
+      if (!salesOrderId) {
+        throw new Error('This order slip is not linked to a sales order.');
       }
+
+      await unpostSalesOrder(salesOrderId);
       setUnpostModalOpen(false);
       await loadOrderSlips();
+      navigateToModule('salesorder', { orderId: salesOrderId });
     } catch (err) {
       console.error('Failed to unpost order slip:', err);
-      alert('Failed to unpost order slip');
+      alert(err instanceof Error ? err.message : 'Failed to unpost order slip');
     } finally {
       setUnpostLoading(false);
     }

@@ -17,12 +17,14 @@ import {
   getSalesOrder,
   syncDocumentPolicyState,
   getAllSalesOrders,
+  unpostSalesOrder,
 } from '../services/salesOrderLocalApiService';
 import { fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { getLocalAuthSession } from '../services/localAuthService';
 import { dispatchWorkflowNotification, fetchProfiles } from '../services/supabaseService';
 import StatusBadge from './StatusBadge';
 import WorkflowStepper from './WorkflowStepper';
+import ConfirmModal from './ConfirmModal';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 import { normalizePriceGroup } from '../constants/pricingGroups';
 
@@ -92,6 +94,8 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [unpostModalOpen, setUnpostModalOpen] = useState(false);
+  const [unpostLoading, setUnpostLoading] = useState(false);
 
   const targetMonthYear = useMemo(() => {
     if (!dateRange.from) {
@@ -564,8 +568,26 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
     }
   };
 
-  const handleUnpost = () => {
-    alert('Unpost action is not available in the current sales order API.');
+  const handleUnpost = async () => {
+    if (!selectedOrder) return;
+
+    setUnpostLoading(true);
+    try {
+      const refreshed = await unpostSalesOrder(selectedOrder.id);
+      if (refreshed) {
+        setSelectedOrder(refreshed);
+        setOrders(prev => prev.map(row => row.id === refreshed.id ? refreshed : row));
+      }
+      setDocumentMessage('');
+      setDocumentLink(null);
+      setUnpostModalOpen(false);
+      await loadOrders();
+    } catch (err) {
+      console.error('Failed to unpost sales order:', err);
+      alert(err instanceof Error ? err.message : 'Failed to unpost sales order');
+    } finally {
+      setUnpostLoading(false);
+    }
   };
 
   const workflowStage = normalizeStatus(selectedOrder?.status) === 'posted' ? 'document' : 'order';
@@ -1021,10 +1043,11 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
                 {selectedOrderStatus === 'posted' && (
                   <button
                     type="button"
-                    onClick={handleUnpost}
+                    onClick={() => setUnpostModalOpen(true)}
+                    disabled={unpostLoading}
                     className="px-3 py-2 rounded bg-red-600 text-white text-sm"
                   >
-                    Unpost
+                    {unpostLoading ? 'Unposting...' : 'Unpost'}
                   </button>
                 )}
               </div>
@@ -1124,6 +1147,21 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={unpostModalOpen && Boolean(selectedOrder)}
+        onClose={() => {
+          if (!unpostLoading) {
+            setUnpostModalOpen(false);
+          }
+        }}
+        onConfirm={handleUnpost}
+        title="Unpost Sales Order"
+        message={`Unpost Sales Order ${selectedOrder?.order_no || selectedOrder?.reference_no || selectedOrder?.id || ''}? This will remove its linked invoice or order slip and return the sales order to pending.`}
+        confirmLabel={unpostLoading ? 'Unposting...' : 'Unpost'}
+        cancelLabel="Cancel"
+        variant="warning"
+      />
     </div>
   );
 };

@@ -89,13 +89,14 @@ const toSpecialPriceDetail = (raw: unknown): SpecialPriceDetail => {
 
   return {
     ...toSpecialPriceRecord(value),
-    customers: Array.isArray(value.customers)
+        customers: Array.isArray(value.customers)
       ? value.customers.map((item) => {
           const customer = isObject(item) ? item : {};
           return {
             patient_refno: String(customer.patient_refno ?? ''),
             company: String(customer.company ?? ''),
             patient_code: String(customer.patient_code ?? ''),
+            balance: Number(customer.balance ?? 0),
           };
         })
       : [],

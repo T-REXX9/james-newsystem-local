@@ -231,6 +231,19 @@ export const confirmSalesOrder = async (id: string): Promise<SalesOrder | null> 
   return mapApiOrderDetail(data);
 };
 
+export const unpostSalesOrder = async (id: string): Promise<SalesOrder | null> => {
+  const payload = {
+    main_id: API_MAIN_ID,
+    user_id: getUserContext().userId,
+  };
+  const data = await requestApi(`${API_BASE_URL}/sales-orders/${encodeURIComponent(id)}/actions/unpost`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return mapApiOrderDetail(data);
+};
+
 const mapConvertedOrderSlip = (payload: any): OrderSlip => {
   const doc = payload?.order_slip || {};
   const items = Array.isArray(payload?.items) ? payload.items : [];
