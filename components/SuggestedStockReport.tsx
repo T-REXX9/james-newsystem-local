@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Package, Calendar, ArrowRight, Users, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Package, Calendar, ArrowRight, Users, Loader2, Search, ChevronDown, Check } from 'lucide-react';
 import { UserProfile } from '../types';
 import {
   fetchCustomersWithNotListedInquiries,
@@ -18,6 +18,8 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
   const [selectedCustomer, setSelectedCustomer] = useState<string>('all');
   const [customers, setCustomers] = useState<CustomerWithInquiries[]>([]);
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(true);
+  const [isCustomerOpen, setIsCustomerOpen] = useState(false);
+  const [customerQuery, setCustomerQuery] = useState('');
 
   const [dateFrom, setDateFrom] = useState<string>(() => {
     const d = new Date();
@@ -27,10 +29,36 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
 
   const [dateTo, setDateTo] = useState<string>(new Date().toISOString().split('T')[0]);
   const [showView, setShowView] = useState(false);
+  const customerPickerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     loadCustomers();
   }, [dateFrom, dateTo]);
+
+  useEffect(() => {
+    if (!isCustomerOpen) {
+      setCustomerQuery('');
+    }
+  }, [isCustomerOpen]);
+
+  useEffect(() => {
+    if (!isCustomerOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!customerPickerRef.current?.contains(event.target as Node)) {
+        setIsCustomerOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [isCustomerOpen]);
+
+  useEffect(() => {
+    if (selectedCustomer !== 'all' && !customers.some((customer) => customer.id === selectedCustomer)) {
+      setSelectedCustomer('all');
+    }
+  }, [customers, selectedCustomer]);
 
   const loadCustomers = async () => {
     setIsLoadingCustomers(true);
@@ -69,10 +97,35 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
   };
 
   const handleGenerateReport = () => {
+    if (reportType === 'custom' && dateFrom > dateTo) {
+      return;
+    }
     setShowView(true);
   };
 
   const totalInquiries = customers.reduce((sum, c) => sum + c.inquiryCount, 0);
+  const customerOptions = useMemo(
+    () => [
+      {
+        id: 'all',
+        label: `All Customers (${totalInquiries} items)`,
+      },
+      ...customers.map((customer) => ({
+        id: customer.id,
+        label: `${customer.company} (${customer.inquiryCount} items)`,
+      })),
+    ],
+    [customers, totalInquiries]
+  );
+  const filteredCustomerOptions = useMemo(() => {
+    const needle = customerQuery.trim().toLowerCase();
+    if (!needle) return customerOptions;
+    return customerOptions.filter((option) => option.label.toLowerCase().includes(needle));
+  }, [customerOptions, customerQuery]);
+  const selectedCustomerLabel =
+    customerOptions.find((option) => option.id === selectedCustomer)?.label ||
+    `All Customers (${totalInquiries} items)`;
+  const customDateInvalid = reportType === 'custom' && Boolean(dateFrom && dateTo && dateFrom > dateTo);
 
   if (showView) {
     return (
@@ -134,31 +187,65 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
                 <Users className="w-4 h-4 text-brand-blue" />
                 Select Customer
               </label>
-              <div className="relative">
+              <div ref={customerPickerRef} className="relative">
                 {isLoadingCustomers ? (
                   <div className="flex items-center gap-2 px-4 py-3 bg-slate-100 dark:bg-slate-800/50 rounded-xl text-slate-500">
                     <Loader2 className="w-4 h-4 animate-spin" />
                     Loading customers...
                   </div>
                 ) : (
-                  <select
-                    value={selectedCustomer}
-                    onChange={(e) => setSelectedCustomer(e.target.value)}
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomerOpen((open) => !open)}
                     className="w-full px-4 py-3 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100 font-medium outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent transition-all appearance-none cursor-pointer"
                   >
-                    <option value="all">All Customers ({totalInquiries} items)</option>
-                    {customers.map((customer) => (
-                      <option key={customer.id} value={customer.id}>
-                        {customer.company} ({customer.inquiryCount} items)
-                      </option>
-                    ))}
-                  </select>
+                    <span className="block truncate text-left pr-8">{selectedCustomerLabel}</span>
+                  </button>
                 )}
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                  <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
+                {!isLoadingCustomers && (
+                  <>
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                      <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${isCustomerOpen ? 'rotate-180' : ''}`} />
+                    </div>
+                    {isCustomerOpen && (
+                      <div className="absolute left-0 top-[calc(100%+0.5rem)] z-20 w-full rounded-xl border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                        <div className="relative">
+                          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                          <input
+                            type="text"
+                            value={customerQuery}
+                            onChange={(e) => setCustomerQuery(e.target.value)}
+                            placeholder="Search customer..."
+                            className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-brand-blue dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                            autoFocus
+                          />
+                        </div>
+                        <div className="mt-2 max-h-64 overflow-y-auto rounded-lg border border-slate-100 dark:border-slate-800">
+                          {filteredCustomerOptions.length === 0 ? (
+                            <p className="px-3 py-4 text-sm text-slate-500 dark:text-slate-400">No customers found.</p>
+                          ) : (
+                            filteredCustomerOptions.map((option) => (
+                              <button
+                                key={option.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedCustomer(option.id);
+                                  setIsCustomerOpen(false);
+                                }}
+                                className="flex w-full items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 text-left text-sm text-slate-700 last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800"
+                              >
+                                <span className="truncate">{option.label}</span>
+                                {selectedCustomer === option.id && (
+                                  <Check className="h-4 w-4 shrink-0 text-brand-blue" />
+                                )}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             </div>
 
@@ -207,7 +294,14 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
                 <input
                   type="date"
                   value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
+                  max={dateTo || undefined}
+                  onChange={(e) => {
+                    const nextFrom = e.target.value;
+                    setDateFrom(nextFrom);
+                    if (dateTo && nextFrom && dateTo < nextFrom) {
+                      setDateTo(nextFrom);
+                    }
+                  }}
                   className="w-full px-4 pb-2 pt-1 bg-transparent text-slate-800 dark:text-slate-100 font-medium outline-none"
                 />
               </div>
@@ -218,19 +312,38 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
                 <input
                   type="date"
                   value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
+                  min={dateFrom || undefined}
+                  onChange={(e) => {
+                    const nextTo = e.target.value;
+                    setDateTo(nextTo);
+                    if (dateFrom && nextTo && nextTo < dateFrom) {
+                      setDateFrom(nextTo);
+                    }
+                  }}
                   className="w-full px-4 pb-2 pt-1 bg-transparent text-slate-800 dark:text-slate-100 font-medium outline-none"
                 />
               </div>
             </div>
+            {customDateInvalid && (
+              <p className="text-sm font-medium text-rose-600 dark:text-rose-400">
+                Date To must be the same as or later than Date From.
+              </p>
+            )}
           </div>
 
           <div className="p-8 bg-slate-50/50 dark:bg-slate-800/50 backdrop-blur-md border-t border-slate-200/60 dark:border-slate-700/60 flex justify-end">
             <button
               onClick={handleGenerateReport}
-              className="group relative flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-brand-blue to-blue-700 text-white rounded-xl shadow-xl shadow-brand-blue/20 font-bold transition-all duration-300 hover:shadow-brand-blue/40 hover:-translate-y-1 active:translate-y-0 overflow-hidden"
+              disabled={customDateInvalid}
+              className={`group relative flex items-center gap-3 px-8 py-4 rounded-xl font-bold transition-all duration-300 overflow-hidden ${
+                customDateInvalid
+                  ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none dark:bg-slate-700 dark:text-slate-400'
+                  : 'bg-gradient-to-r from-brand-blue to-blue-700 text-white shadow-xl shadow-brand-blue/20 hover:shadow-brand-blue/40 hover:-translate-y-1 active:translate-y-0'
+              }`}
             >
-              <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></span>
+              {!customDateInvalid && (
+                <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></span>
+              )}
               <span>Generate Report</span>
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </button>
