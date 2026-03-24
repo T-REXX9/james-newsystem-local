@@ -4,6 +4,7 @@ import { purchaseRequestService } from '../services/purchaseRequestService';
 import {
   fetchReorderReportEntries,
   hideReorderReportItems,
+  REORDER_WAREHOUSE_OPTIONS,
   ReorderReportEntry,
   ReorderWarehouseType,
 } from '../services/reorderReportService';
@@ -242,6 +243,7 @@ const ReorderReport: React.FC = () => {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showAddPrModal, setShowAddPrModal] = useState(false);
+  const selectedWarehouseLabel = REORDER_WAREHOUSE_OPTIONS.find((option) => option.id === warehouseType)?.label || 'Total Company';
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), 250);
@@ -342,7 +344,7 @@ const ReorderReport: React.FC = () => {
       'Bal Qty',
       'Total RR',
       'Total Return',
-      warehouseType === 'wh1' ? 'Replenish Qty' : 'Reorder Qty',
+      warehouseType === 'total' ? 'Reorder Qty' : 'Replenish Qty',
       'PR',
       'PO',
       'RR',
@@ -398,7 +400,7 @@ const ReorderReport: React.FC = () => {
             Reorder Quantity Report
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {warehouseType === 'wh1' ? 'WH1' : 'Total Company'} • {rows.length} item(s)
+            {selectedWarehouseLabel} • {rows.length} item(s)
           </p>
         </div>
         <div className="flex items-center gap-2 print:hidden">
@@ -427,8 +429,11 @@ const ReorderReport: React.FC = () => {
             onChange={(e) => setWarehouseType(e.target.value as ReorderWarehouseType)}
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
           >
-            <option value="total">Total Company</option>
-            <option value="wh1">WH1</option>
+            {REORDER_WAREHOUSE_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </div>
         <div className="md:col-span-2">
@@ -492,7 +497,7 @@ const ReorderReport: React.FC = () => {
               <th className="px-3 py-2 text-center">Bal Qty</th>
               <th className="px-3 py-2 text-center">RR Qty</th>
               <th className="px-3 py-2 text-center">Return</th>
-              <th className="px-3 py-2 text-center">{warehouseType === 'wh1' ? 'Replenish Qty' : 'Reorder Qty'}</th>
+              <th className="px-3 py-2 text-center">{warehouseType === 'total' ? 'Reorder Qty' : 'Replenish Qty'}</th>
               <th className="px-3 py-2 text-center">PR</th>
               <th className="px-3 py-2 text-center">PO</th>
               <th className="px-3 py-2 text-center">RR</th>
