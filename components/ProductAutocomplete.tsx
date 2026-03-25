@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
-import { Search, Loader2, Package, AlertCircle } from 'lucide-react';
+import { Search, Loader2, Package, AlertCircle, X } from 'lucide-react';
 import { Product } from '../types';
 import { searchProducts } from '../services/productLocalApiService';
 import { useDebounce } from '../hooks/useDebounce';
@@ -26,6 +26,9 @@ const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
     const [noResults, setNoResults] = useState(false);
     const wrapperRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const listRef = useRef<HTMLUListElement>(null);
+    const itemRefs = useRef<Array<HTMLLIElement | null>>([]);
+    const allowAutoOpenRef = useRef(true);
     const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
 
     // Debounce query to avoid too many requests
@@ -77,6 +80,7 @@ const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
                 return;
             }
 
+            allowAutoOpenRef.current = false;
             setShowDropdown(false);
         };
 
@@ -96,7 +100,7 @@ const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
                 setResults(data);
                 setNoResults(data.length === 0);
 
-                if (data.length > 0) {
+                if (allowAutoOpenRef.current && data.length > 0) {
                     setShowDropdown(true);
                     requestAnimationFrame(updatePosition);
                 }
@@ -119,6 +123,15 @@ const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
         }
     }, [autoFocus]);
 
+    useEffect(() => {
+        if (!showDropdown || selectedIndex < 0) return;
+        const activeItem = itemRefs.current[selectedIndex];
+        if (!activeItem) return;
+        activeItem.scrollIntoView({
+            block: 'nearest',
+        });
+    }, [selectedIndex, showDropdown]);
+
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (!showDropdown) return;
 
@@ -134,12 +147,14 @@ const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
                 handleSelect(results[selectedIndex]);
             }
         } else if (e.key === 'Escape') {
+            allowAutoOpenRef.current = false;
             setShowDropdown(false);
         }
     };
 
     const handleSelect = (product: Product) => {
         onSelect(product);
+        allowAutoOpenRef.current = false;
         setQuery('');
         setShowDropdown(false);
         setResults([]);
@@ -181,21 +196,25 @@ const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
     return (
         <div className={`relative ${className}`} ref={wrapperRef}>
             <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+                <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                     {loading ? (
-                        <Loader2 className="h-3.5 w-3.5 text-brand-blue animate-spin" />
+                        <Loader2 className="h-4 w-4 text-brand-blue animate-spin" />
                     ) : (
-                        <Search className="h-3.5 w-3.5 text-slate-400" />
+                        <Search className="h-4 w-4 text-slate-400" />
                     )}
                 </div>
                 <input
                     ref={inputRef}
                     type="text"
-                    className="block w-full pl-8 pr-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded-md leading-5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-blue/50 focus:border-brand-blue sm:text-xs transition-shadow"
+                    className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-12 text-sm leading-5 text-slate-900 placeholder:text-[13px] placeholder:text-slate-400 transition-shadow focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/50 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                     placeholder={placeholder}
                     value={query}
-                    onChange={(e) => setQuery(e.target.value)}
+                    onChange={(e) => {
+                        allowAutoOpenRef.current = true;
+                        setQuery(e.target.value);
+                    }}
                     onFocus={() => {
+                        allowAutoOpenRef.current = true;
                         // Trigger search on focus if we don't have results yet, or just show dropdown
                         if (results.length === 0) {
                             searchProducts('').then(data => {
@@ -211,10 +230,24 @@ const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
                     onKeyDown={handleKeyDown}
                     autoComplete="off"
                 />
-                <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none">
-                    <span className="text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-700 px-1.5 rounded border border-slate-200 dark:border-slate-600">
-                        /
-                    </span>
+                <div className="absolute inset-y-0 right-0 flex items-center pr-2">
+                    {showDropdown ? (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                allowAutoOpenRef.current = false;
+                                setShowDropdown(false);
+                            }}
+                            className="flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-red-500 dark:hover:bg-slate-700"
+                            title="Close search results"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    ) : (
+                        <span className="pointer-events-none inline-flex h-8 min-w-8 items-center justify-center rounded-md border border-slate-200 bg-slate-100 px-2 text-[11px] font-medium text-slate-400 dark:border-slate-600 dark:bg-slate-700">
+                            /
+                        </span>
+                    )}
                 </div>
             </div>
 
@@ -227,14 +260,27 @@ const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
                     {/* Header Legend */}
                     <div className="sticky top-0 z-10 px-3 py-1.5 bg-slate-50 dark:bg-slate-800/50 backdrop-blur-sm border-b border-slate-100 dark:border-slate-700/50 flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
                         <span>Result Matches</span>
-                        <span className="flex items-center gap-2">
-                            <span className="flex items-center gap-1"><kbd className="font-mono bg-slate-200 dark:bg-slate-700 px-1 rounded">↓</kbd> Navigate</span>
-                            <span className="flex items-center gap-1"><kbd className="font-mono bg-slate-200 dark:bg-slate-700 px-1 rounded">↵</kbd> Select</span>
-                        </span>
+                        <div className="flex items-center gap-2">
+                            <span className="flex items-center gap-2">
+                                <span className="flex items-center gap-1"><kbd className="font-mono bg-slate-200 dark:bg-slate-700 px-1 rounded">↓</kbd> Navigate</span>
+                                <span className="flex items-center gap-1"><kbd className="font-mono bg-slate-200 dark:bg-slate-700 px-1 rounded">↵</kbd> Select</span>
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    allowAutoOpenRef.current = false;
+                                    setShowDropdown(false);
+                                }}
+                                className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 shadow-sm hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition-colors dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-red-900/30 dark:hover:text-red-400"
+                            >
+                                <X className="h-3.5 w-3.5" />
+                                Close
+                            </button>
+                        </div>
                     </div>
 
                     {results.length > 0 ? (
-                        <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                        <ul ref={listRef} className="divide-y divide-slate-100 dark:divide-slate-800">
                             {results.map((product, index) => {
                                 const isSelected = index === selectedIndex;
                                 const matchType = getMatchLabel(product);
@@ -242,6 +288,9 @@ const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
                                 return (
                                     <li
                                         key={product.id}
+                                        ref={(element) => {
+                                            itemRefs.current[index] = element;
+                                        }}
                                         className={`cursor-pointer select-none relative py-2 pl-3 pr-4 group transition-colors ${isSelected
                                             ? 'bg-brand-blue/10 dark:bg-brand-blue/20'
                                             : 'hover:bg-slate-50 dark:hover:bg-slate-800'

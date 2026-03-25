@@ -5,6 +5,7 @@ import { useToast } from '../ToastProvider';
 import { ArrowLeft, Save, Plus, Trash2, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
 import CustomLoadingSpinner from '../CustomLoadingSpinner';
 import ProductAutocomplete from '../ProductAutocomplete';
+import SearchableSelect from '../SearchableSelect';
 import { Product } from '../../types'; // Import from main types for compatibility with ProductAutocomplete
 import ValidationSummary from '../ValidationSummary';
 import FieldHelp from '../FieldHelp';
@@ -93,11 +94,11 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
         setItems(items.filter(item => item.tempId !== id));
     };
 
-    const handleSupplierChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const id = e.target.value;
+    const handleSupplierChange = (id: string) => {
         setSupplierId(id);
         const supplier = suppliers.find(s => s.id === id);
         setSupplierName(supplier?.company || '');
+        handleBlur('supplierId', id);
     };
 
     const validateForm = () => {
@@ -254,19 +255,18 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                                 Supplier <span className="text-red-500">*</span>
                             </label>
-                            <select
+                            <SearchableSelect
                                 value={supplierId}
+                                options={suppliers.map(s => ({
+                                    value: s.id,
+                                    label: s.company || s.name || s.id,
+                                    keywords: [s.company || '', s.name || '', s.id],
+                                }))}
                                 onChange={handleSupplierChange}
-                                onBlur={(e) => handleBlur('supplierId', e.target.value)}
-                                className={`w-full px-3 py-2 border rounded-lg bg-slate-50 dark:bg-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none ${
-                                    validationErrors.supplierId ? 'border-rose-400' : 'border-slate-300 dark:border-slate-600'
-                                }`}
-                            >
-                                <option value="">Select Supplier</option>
-                                {suppliers.map(s => (
-                                    <option key={s.id} value={s.id}>{s.company || s.name || s.id}</option>
-                                ))}
-                            </select>
+                                placeholder="Select Supplier..."
+                                searchPlaceholder="Search supplier..."
+                                buttonClassName={validationErrors.supplierId ? 'border-rose-400' : ''}
+                            />
                             {validationErrors.supplierId && (
                                 <p className="mt-1 text-xs text-rose-600">{validationErrors.supplierId}</p>
                             )}

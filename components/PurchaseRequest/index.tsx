@@ -155,7 +155,6 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
     };
 
     const handleDeleteItem = async (itemId: string) => {
-        if (!confirm('Remove this item?')) return;
         try {
             await purchaseRequestService.deletePRItem(itemId);
             if (selectedRequest) {
@@ -180,7 +179,6 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
 
     const handleConvertPO = async () => {
         if (!selectedRequest) return;
-        if (!confirm(`Convert PR ${selectedRequest.pr_number} items to a new Purchase Order?`)) return;
         try {
             const poId = await purchaseRequestService.convertToPO([selectedRequest.id], 'user-id-placeholder');
             alert(`Converted to PO! (ID: ${poId}) - Logic pending full PO implementation integration.`);

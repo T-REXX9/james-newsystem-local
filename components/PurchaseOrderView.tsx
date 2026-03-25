@@ -8,6 +8,8 @@ import ValidationSummary from './ValidationSummary';
 import FieldHelp from './FieldHelp';
 import ProductAutocomplete from './ProductAutocomplete';
 import SearchableFilterSelect from './SearchableFilterSelect';
+import SearchableSelect from './SearchableSelect';
+import ConfirmModal from './ConfirmModal';
 import { validateRequired } from '../utils/formValidation';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
@@ -64,6 +66,19 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   const [newItemEta, setNewItemEta] = useState('');
 
   const [printMode, setPrintMode] = useState(false);
+
+  // Confirm Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    variant: 'danger' | 'warning' | 'info' | 'success';
+    confirmLabel: string;
+    onConfirm: () => Promise<void>;
+  }>({ isOpen: false, title: '', message: '', variant: 'info', confirmLabel: 'Confirm', onConfirm: async () => {} });
+
+  const openConfirm = (opts: Omit<typeof confirmModal, 'isOpen'>) => setConfirmModal({ ...opts, isOpen: true });
+  const closeConfirm = () => setConfirmModal(prev => ({ ...prev, isOpen: false }));
 
   // Fetch initial data
   useEffect(() => {
@@ -232,18 +247,23 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
     setValidationErrors((prev) => ({ ...prev, [field]: message }));
   };
 
-  const handleStatusChange = async (newStatus: string) => {
+  const handleStatusChange = (newStatus: string) => {
     if (!selectedPO) return;
-    if (!confirm(`Change status to ${newStatus}?`)) return;
-    try {
-      await purchaseOrderService.updatePurchaseOrder(selectedPO.id, { status: newStatus });
-      // Refresh
-      const updated = await purchaseOrderService.getPurchaseOrderById(selectedPO.id);
-      setSelectedPO(updated as unknown as PurchaseOrderWithDetails);
-      fetchOrders(); // Update list
-    } catch (err: any) {
-      alert('Error updating status: ' + err.message);
-    }
+    const variant = newStatus === 'Cancelled' ? 'danger' : newStatus === 'Posted' ? 'success' : 'warning';
+    const confirmLabel = newStatus === 'Posted' ? 'Post' : newStatus === 'Cancelled' ? 'Cancel PO' : 'Confirm';
+    openConfirm({
+      title: `${newStatus === 'Cancelled' ? 'Cancel' : 'Post'} Purchase Order`,
+      message: `Are you sure you want to change the status of ${selectedPO.po_number} to "${newStatus}"? This action cannot be undone.`,
+      variant,
+      confirmLabel,
+      onConfirm: async () => {
+        await purchaseOrderService.updatePurchaseOrder(selectedPO.id, { status: newStatus });
+        const updated = await purchaseOrderService.getPurchaseOrderById(selectedPO.id);
+        setSelectedPO(updated as unknown as PurchaseOrderWithDetails);
+        fetchOrders();
+        addToast({ type: 'success', title: `Status updated to ${newStatus}`, durationMs: 4000 });
+      },
+    });
   };
 
   const addItem = async () => {
@@ -270,15 +290,20 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
     }
   };
 
-  const deleteItem = async (itemId: string) => {
-    if (!selectedPO || !confirm('Remove item?')) return;
-    try {
-      await purchaseOrderService.deletePurchaseOrderItem(itemId);
-      const updated = await purchaseOrderService.getPurchaseOrderById(selectedPO.id);
-      setSelectedPO(updated as unknown as PurchaseOrderWithDetails);
-    } catch (err: any) {
-      alert('Error removing item: ' + err.message);
-    }
+  const deleteItem = (itemId: string) => {
+    if (!selectedPO) return;
+    openConfirm({
+      title: 'Remove Item',
+      message: 'Are you sure you want to remove this item from the purchase order?',
+      variant: 'danger',
+      confirmLabel: 'Remove',
+      onConfirm: async () => {
+        await purchaseOrderService.deletePurchaseOrderItem(itemId);
+        const updated = await purchaseOrderService.getPurchaseOrderById(selectedPO.id);
+        setSelectedPO(updated as unknown as PurchaseOrderWithDetails);
+        addToast({ type: 'success', title: 'Item removed', durationMs: 3000 });
+      },
+    });
   };
 
   const updateItem = async (itemId: string, field: string, value: any) => {
@@ -375,30 +400,28 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
               <Search className="w-4 h-4 text-slate-400" />
               <input className="flex-1 text-xs bg-transparent outline-none" placeholder="Search PO # or Supplier..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <SearchableFilterSelect
-                value={monthOptions[filterMonth - 1]}
-                options={monthOptions}
-                placeholder="Search month"
-                allLabel="Month"
-                className="min-w-0"
-                onChange={(value) => {
-                  const nextIndex = monthOptions.indexOf(value || '');
-                  if (nextIndex >= 0) setFilterMonth(nextIndex + 1);
-                }}
-              />
-              <SearchableFilterSelect
-                value={String(filterYear)}
-                options={yearOptions}
-                placeholder="Search year"
-                allLabel="Year"
-                className="min-w-0"
-                onChange={(value) => {
-                  const nextYear = Number(value);
-                  if (Number.isFinite(nextYear) && nextYear > 0) setFilterYear(nextYear);
-                }}
-              />
-            </div>
+            <SearchableFilterSelect
+              value={monthOptions[filterMonth - 1]}
+              options={monthOptions}
+              placeholder="Search month"
+              allLabel="Month"
+              className="min-w-0"
+              onChange={(value) => {
+                const nextIndex = monthOptions.indexOf(value || '');
+                if (nextIndex >= 0) setFilterMonth(nextIndex + 1);
+              }}
+            />
+            <SearchableFilterSelect
+              value={String(filterYear)}
+              options={yearOptions}
+              placeholder="Search year"
+              allLabel="Year"
+              className="min-w-0"
+              onChange={(value) => {
+                const nextYear = Number(value);
+                if (Number.isFinite(nextYear) && nextYear > 0) setFilterYear(nextYear);
+              }}
+            />
             <SearchableFilterSelect
               value={filterStatus || undefined}
               options={statusOptions}
@@ -455,16 +478,17 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                 </div>
                 <div>
                   <label className="block text-sm font-semibold mb-1">Supplier</label>
-                  <select
-                    required
+                  <SearchableSelect
                     value={createForm.supplier_id || ''}
-                    onChange={e => setCreateForm({ ...createForm, supplier_id: e.target.value })}
-                    onBlur={e => handleCreateBlur('supplier_id', e.target.value)}
-                    className={`w-full border rounded p-2 ${validationErrors.supplier_id ? 'border-rose-400' : 'border-slate-300'}`}
-                  >
-                    <option value="">Select Supplier...</option>
-                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.company}</option>)}
-                  </select>
+                    options={suppliers.map(s => ({ value: s.id, label: s.company || s.id, keywords: [s.company || '', s.id] }))}
+                    onChange={(value) => {
+                      setCreateForm({ ...createForm, supplier_id: value });
+                      handleCreateBlur('supplier_id', value);
+                    }}
+                    placeholder="Select Supplier..."
+                    searchPlaceholder="Search supplier..."
+                    buttonClassName={validationErrors.supplier_id ? 'border-rose-400' : ''}
+                  />
                   {validationErrors.supplier_id && (
                     <p className="mt-1 text-xs text-rose-600">{validationErrors.supplier_id}</p>
                   )}
@@ -598,6 +622,17 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
           )}
         </section>
       </div>
+
+      {/* Confirmation Modal */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={closeConfirm}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        variant={confirmModal.variant}
+        confirmLabel={confirmModal.confirmLabel}
+      />
     </div>
   );
 };

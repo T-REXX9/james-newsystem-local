@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { CreatePRPayload, CreatePRItemPayload, Contact } from '../../purchaseRequest.types';
-import { Save, Plus, Trash2, X } from 'lucide-react';
+import { Save, Plus, Trash2, ArrowLeft, ClipboardList } from 'lucide-react';
 import ValidationSummary from '../ValidationSummary';
 import FieldHelp from '../FieldHelp';
 import { validateNumeric, validateRequired } from '../../utils/formValidation';
@@ -72,7 +72,7 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
         setSelectedProduct(null);
         setQuantity(1);
         // Keep supplier? maybe user adds multiple from same
-        // setEtaDate(''); 
+        setEtaDate('');
     };
 
     const removeItem = (index: number) => {
@@ -131,78 +131,95 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
     };
 
     return (
-        <div className="bg-slate-100 dark:bg-slate-950 p-4 h-full overflow-y-auto">
-            <div className="max-w-4xl mx-auto bg-white dark:bg-slate-900 rounded-lg shadow border border-slate-200 dark:border-slate-800 p-6">
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-bold text-slate-800 dark:text-white">New Purchase Request</h2>
-                    <button onClick={onCancel} className="text-slate-500 hover:text-slate-700">
-                        <X size={24} />
+        <div className="h-full overflow-y-auto bg-slate-100 p-4 dark:bg-slate-950">
+            <div className="mx-auto max-w-6xl space-y-6">
+                <div className="flex items-center justify-between rounded-2xl bg-gradient-to-r from-slate-800 to-slate-900 px-5 py-4 text-white shadow-sm">
+                    <div className="flex items-center gap-3">
+                        <span className="rounded-xl bg-white/10 p-2.5">
+                            <ClipboardList size={20} />
+                        </span>
+                        <div>
+                            <h2 className="text-xl font-bold">New Purchase Request</h2>
+                            <p className="text-sm text-slate-300">Prepare item requests with the same cleaner structure used across purchasing screens.</p>
+                        </div>
+                    </div>
+                    <button onClick={onCancel} className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-white/15">
+                        <ArrowLeft size={16} />
+                        Back
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
-                    {submitError && (
-                        <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                            {submitError}
+                <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow dark:border-slate-800 dark:bg-slate-900">
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                        <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
+                        {submitError && (
+                            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                                {submitError}
+                            </div>
+                        )}
+                        {/* Header Fields */}
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                            <div>
+                                <label className="block text-sm font-semibold mb-1">PR Number</label>
+                                <input type="text" value={initialPRNumber} disabled className="w-full bg-slate-100 border border-slate-300 rounded p-2 text-slate-500" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold mb-1">Request Date</label>
+                                <input type="date" required value={requestDate} onChange={e => setRequestDate(e.target.value)} className="w-full border border-slate-300 rounded p-2" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold mb-1">Reference No.</label>
+                                <input type="text" value={referenceNo} onChange={e => setReferenceNo(e.target.value)} className="w-full border border-slate-300 rounded p-2" placeholder="Optional external ref" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold mb-1">Notes</label>
+                                <input type="text" value={notes} onChange={e => setNotes(e.target.value)} className="w-full border border-slate-300 rounded p-2" placeholder="Purpose of request..." />
+                            </div>
                         </div>
-                    )}
-                    {/* Header Fields */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-semibold mb-1">PR Number</label>
-                            <input type="text" value={initialPRNumber} disabled className="w-full bg-slate-100 border border-slate-300 rounded p-2 text-slate-500" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-semibold mb-1">Request Date</label>
-                            <input type="date" required value={requestDate} onChange={e => setRequestDate(e.target.value)} className="w-full border border-slate-300 rounded p-2" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-semibold mb-1">Reference No.</label>
-                            <input type="text" value={referenceNo} onChange={e => setReferenceNo(e.target.value)} className="w-full border border-slate-300 rounded p-2" placeholder="Optional external ref" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-semibold mb-1">Notes</label>
-                            <input type="text" value={notes} onChange={e => setNotes(e.target.value)} className="w-full border border-slate-300 rounded p-2" placeholder="Purpose of request..." />
-                        </div>
-                    </div>
 
-                    <hr className="border-slate-100 dark:border-slate-800" />
+                        <hr className="border-slate-100 dark:border-slate-800" />
 
                     {/* Add Item Section */}
-                    <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded border border-slate-200 dark:border-slate-800">
-                        <h3 className="text-sm font-bold mb-3 uppercase text-slate-500">Add Line Item</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
-                            <div className="md:col-span-4">
-                                <label className="text-xs font-semibold block mb-1">Product</label>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-800/50">
+                        <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-slate-500">Add Line Item</h3>
+                        <div className="grid gap-3 xl:grid-cols-[minmax(0,2.9fr)_minmax(180px,1.15fr)_120px_230px_190px_56px] xl:items-start">
+                            <div className="grid gap-1 [grid-template-rows:auto_44px_auto]">
+                                <label className="block text-xs font-semibold">Product</label>
                                 <ProductAutocomplete
                                     onSelect={(product) => {
                                         setSelectedProduct(product);
                                         setSelectedProductId(product.id);
                                         setValidationErrors((prev) => ({ ...prev, selectedProductId: '' }));
                                     }}
-                                    placeholder="Search item by part no, code, or description..."
+                                    placeholder="Part no. or Item code"
                                     className={validationErrors.selectedProductId ? 'rounded-md ring-1 ring-rose-400' : ''}
                                 />
+                                <p className="text-xs leading-snug text-slate-500">
+                                    {selectedProduct
+                                        ? `${selectedProduct.part_no} • ${selectedProduct.description}`
+                                        : 'Search by part number, item code, or description.'}
+                                </p>
                                 {validationErrors.selectedProductId && (
-                                    <p className="mt-1 text-xs text-rose-600">{validationErrors.selectedProductId}</p>
+                                    <p className="text-xs text-rose-600">{validationErrors.selectedProductId}</p>
                                 )}
                             </div>
-                            <div className="md:col-span-3">
-                                <label className="text-xs font-semibold block mb-1">Selected Description</label>
+                            <div className="grid gap-1 [grid-template-rows:auto_44px_auto]">
+                                <label className="block text-xs font-semibold">Part No.</label>
                                 <input
                                     type="text"
                                     readOnly
-                                    value={selectedProduct?.description || ''}
+                                    value={selectedProduct?.part_no || ''}
                                     onBlur={() => handleBlur('selectedProductId', selectedProductId)}
-                                    placeholder="No product selected yet"
+                                    placeholder="Auto-filled"
                                     className="w-full text-sm rounded border border-gray-300 bg-slate-100 p-2 text-slate-600"
                                 />
+                                <div />
                             </div>
-                            <div className="md:col-span-1">
-                                <label className="text-xs font-semibold block mb-1">Qty</label>
+                            <div className="grid gap-1 [grid-template-rows:auto_44px_auto]">
+                                <label className="block text-xs font-semibold">Qty</label>
                                 <input
                                     type="number"
+                                    aria-label="Line item quantity"
                                     min="1"
                                     value={quantity}
                                     onChange={e => setQuantity(Number(e.target.value))}
@@ -212,12 +229,14 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
                                     }`}
                                 />
                                 {validationErrors.quantity && (
-                                    <p className="mt-1 text-xs text-rose-600">{validationErrors.quantity}</p>
+                                    <p className="text-xs text-rose-600">{validationErrors.quantity}</p>
                                 )}
+                                {!validationErrors.quantity && <div />}
                             </div>
-                            <div className="md:col-span-2">
-                                <label className="text-xs font-semibold block mb-1">Supplier (Optional)</label>
+                            <div className="grid gap-1 [grid-template-rows:auto_44px_auto]">
+                                <label className="block text-xs font-semibold">Supplier (Optional)</label>
                                 <select
+                                    aria-label="Line item supplier"
                                     value={selectedSupplierId}
                                     onChange={e => setSelectedSupplierId(e.target.value)}
                                     className="w-full text-sm rounded border-gray-300 p-2"
@@ -227,61 +246,63 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
                                         <option key={s.id} value={s.id}>{s.company}</option>
                                     ))}
                                 </select>
+                                <div />
                             </div>
-                            <div className="md:col-span-1">
-                                <label className="text-xs font-semibold block mb-1">ETA (Optional)</label>
-                                <input type="date" value={etaDate} onChange={e => setEtaDate(e.target.value)} className="w-full text-sm rounded border-gray-300 p-2" />
-                                <FieldHelp text="Set an expected arrival date if the supplier provided one." example="2026-02-05" />
+                            <div className="grid gap-1 [grid-template-rows:auto_44px_auto]">
+                                <label className="block text-xs font-semibold">ETA (Optional)</label>
+                                <input aria-label="Line item ETA" type="date" value={etaDate} onChange={e => setEtaDate(e.target.value)} className="w-full text-sm rounded border-gray-300 p-2" />
+                                <FieldHelp text="Set an expected arrival date if the supplier provided one." example="2026-02-05" className="mt-0" />
                             </div>
-                            <div className="md:col-span-1">
-                                <button type="button" onClick={handleAddItem} className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 flex justify-center">
+                            <div className="flex xl:pt-[1.45rem] xl:justify-end">
+                                <button type="button" onClick={handleAddItem} aria-label="Add line item" className="flex h-10 w-10 items-center justify-center rounded bg-blue-600 text-white transition-colors hover:bg-blue-700">
                                     <Plus size={18} />
                                 </button>
                             </div>
                         </div>
                     </div>
 
-                    {/* Items Table */}
-                    {validationErrors.items && (
-                        <div className="text-xs text-rose-600">{validationErrors.items}</div>
-                    )}
-                    <div className="overflow-x-auto border border-slate-200 rounded">
-                        <table className="w-full text-sm text-left">
-                            <thead className="bg-slate-50 text-slate-500 font-semibold">
-                                <tr>
-                                    <th className="p-2">Part No</th>
-                                    <th className="p-2">Description</th>
-                                    <th className="p-2 text-center">Qty</th>
-                                    <th className="p-2">Supplier</th>
-                                    <th className="p-2">ETA</th>
-                                    <th className="p-2 text-center">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {items.length === 0 && <tr><td colSpan={6} className="p-4 text-center text-slate-400">No items added yet.</td></tr>}
-                                {items.map((item, idx) => (
-                                    <tr key={idx}>
-                                        <td className="p-2">{item.part_number}</td>
-                                        <td className="p-2">{item.description}</td>
-                                        <td className="p-2 text-center">{item.quantity}</td>
-                                        <td className="p-2 truncate max-w-[150px]">{item.supplier_name || '-'}</td>
-                                        <td className="p-2">{item.eta_date || '-'}</td>
-                                        <td className="p-2 text-center">
-                                            <button type="button" onClick={() => removeItem(idx)} className="text-red-500 hover:text-red-700"><Trash2 size={16} /></button>
-                                        </td>
+                        {/* Items Table */}
+                        {validationErrors.items && (
+                            <div className="text-xs text-rose-600">{validationErrors.items}</div>
+                        )}
+                        <div className="overflow-x-auto border border-slate-200 rounded">
+                            <table className="w-full text-sm text-left">
+                                <thead className="bg-slate-50 text-slate-500 font-semibold">
+                                    <tr>
+                                        <th className="p-2">Part No</th>
+                                        <th className="p-2">Description</th>
+                                        <th className="p-2 text-center">Qty</th>
+                                        <th className="p-2">Supplier</th>
+                                        <th className="p-2">ETA</th>
+                                        <th className="p-2 text-center">Action</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {items.length === 0 && <tr><td colSpan={6} className="p-4 text-center text-slate-400">No items added yet.</td></tr>}
+                                    {items.map((item, idx) => (
+                                        <tr key={idx}>
+                                            <td className="p-2">{item.part_number}</td>
+                                            <td className="p-2">{item.description}</td>
+                                            <td className="p-2 text-center">{item.quantity}</td>
+                                            <td className="max-w-[150px] truncate p-2">{item.supplier_name || '-'}</td>
+                                            <td className="p-2">{item.eta_date || '-'}</td>
+                                            <td className="p-2 text-center">
+                                                <button type="button" onClick={() => removeItem(idx)} aria-label={`Remove item ${idx + 1}`} className="text-red-500 hover:text-red-700"><Trash2 size={16} /></button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
 
-                    <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
-                        <button type="button" onClick={onCancel} className="px-4 py-2 border rounded text-slate-600 hover:bg-slate-50">Cancel</button>
-                        <button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2">
-                            {isSubmitting ? 'Saving...' : <><Save size={18} /> Create Request</>}
-                        </button>
-                    </div>
-                </form>
+                        <div className="flex justify-end gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
+                            <button type="button" onClick={onCancel} className="px-4 py-2 border rounded text-slate-600 hover:bg-slate-50">Cancel</button>
+                            <button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2">
+                                {isSubmitting ? 'Saving...' : <><Save size={18} /> Create Request</>}
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     );
