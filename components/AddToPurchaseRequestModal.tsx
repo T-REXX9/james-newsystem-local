@@ -137,7 +137,7 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
       if (result) {
         addToast({ 
           type: 'success', 
-          title: 'Items added to purchase request',
+          title: mode === 'existing' ? 'Item added to purchase order' : 'Purchase order created',
           description: 'The items have been added successfully.',
           durationMs: 4000,
         });
@@ -153,7 +153,7 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
       addToast({ 
         type: 'error', 
         title: 'Unable to add items',
-        description: parseSupabaseError(err, 'purchase request'),
+        description: parseSupabaseError(err, 'purchase order'),
         durationMs: 6000,
       });
     } finally {
@@ -211,7 +211,7 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
               <ShoppingCart className="w-5 h-5 text-brand-blue dark:text-blue-400" />
             </div>
             <h2 className="text-lg font-bold text-slate-800 dark:text-white">
-              Add to Purchase Request
+              Add to Purchase Order
             </h2>
           </div>
           <button
@@ -263,7 +263,7 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
                       : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
                   }`}
                 >
-                  Add to Existing PO
+                  Add to Existing Purchase Order
                 </button>
                 <button
                   type="button"
@@ -424,7 +424,7 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
                 ) : (
                   <>
                     <ShoppingCart className="w-4 h-4" />
-                    {mode === 'existing' ? 'Add to PO' : 'Create PO'}
+                    {mode === 'existing' ? 'Add to Purchase Order' : 'Create Purchase Order'}
                   </>
                 )}
               </button>

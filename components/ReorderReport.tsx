@@ -570,7 +570,7 @@ const ReorderReport: React.FC = () => {
           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
         >
           <ShoppingCart className="h-4 w-4" />
-          Add to PR
+          Add to PO
         </button>
       </div>
 

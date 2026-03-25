@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { PurchaseRequestWithItems, PurchaseRequestItem, Product, Contact, PRStatus } from '../../purchaseRequest.types';
 import { Printer, CheckCircle, XCircle, Trash2, Save, FileOutput, Plus } from 'lucide-react';
+import ConfirmModal from '../ConfirmModal';
+import ProductAutocomplete from '../ProductAutocomplete';
+import { Product as SearchProduct } from '../../types';
 
 interface PurchaseRequestViewProps {
     request: PurchaseRequestWithItems;
@@ -30,38 +33,75 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
     isApprover = true // Default true for now until strict RBAC
 }) => {
     const [showAddItem, setShowAddItem] = useState(false);
+    const [confirmModal, setConfirmModal] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        confirmLabel: string;
+        variant: 'danger' | 'warning' | 'info' | 'success';
+        onConfirm: (() => Promise<void>) | null;
+    }>({
+        isOpen: false,
+        title: '',
+        message: '',
+        confirmLabel: 'Confirm',
+        variant: 'warning',
+        onConfirm: null,
+    });
 
     // Add Item State
     const [selectedProductId, setSelectedProductId] = useState('');
+    const [selectedProduct, setSelectedProduct] = useState<SearchProduct | null>(null);
     const [quantity, setQuantity] = useState(1);
     const [selectedSupplierId, setSelectedSupplierId] = useState('');
 
     const handleStatusChange = async (newStatus: PRStatus) => {
-        if (confirm(`Change status to ${newStatus}?`)) {
-            await onUpdate(request.id, { status: newStatus });
-        }
+        setConfirmModal({
+            isOpen: true,
+            title: `${newStatus} Purchase Request`,
+            message: `Are you sure you want to change the status of ${request.pr_number} to ${newStatus}?`,
+            confirmLabel: newStatus === 'Approved' ? 'Approve' : 'Confirm',
+            variant: newStatus === 'Cancelled' ? 'danger' : 'warning',
+            onConfirm: async () => {
+                await onUpdate(request.id, { status: newStatus });
+            },
+        });
     };
 
     const handleAddItem = async () => {
         if (!selectedProductId || quantity <= 0) return;
-        const product = products.find(p => p.id === selectedProductId);
+        const product = selectedProduct || products.find(p => p.id === selectedProductId);
         const supplier = suppliers.find(s => s.id === selectedSupplierId);
 
         await onAddItem({
             item_id: selectedProductId,
             item_code: product?.item_code,
-            part_number: product?.part_number,
-            description: product?.description || product?.name,
-            quantity: quantity,
-            unit_cost: product?.cost || 0,
+            part_number: (product as any)?.part_no || product?.part_number,
+            description: product?.description || (product as any)?.name,
+            quantity,
+            unit_cost: (product as any)?.cost || 0,
             supplier_id: selectedSupplierId || null,
             supplier_name: supplier?.company || null
         });
 
         setShowAddItem(false);
         setSelectedProductId('');
+        setSelectedProduct(null);
         setQuantity(1);
         setSelectedSupplierId('');
+    };
+
+    const handleDeleteItemRequest = (itemId: string, partNumber?: string) => {
+        setConfirmModal({
+            isOpen: true,
+            title: 'Delete Item',
+            message: `Are you sure you want to delete ${partNumber || 'this item'} from ${request.pr_number}?`,
+            confirmLabel: 'Delete',
+            variant: 'danger',
+            onConfirm: async () => {
+                await onDeleteItem(itemId);
+            },
+        });
     };
 
     const handleEditItem = async (itemId: string, field: keyof PurchaseRequestItem, value: any) => {
@@ -120,10 +160,13 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                         <div className="p-4 bg-blue-50 border-b border-blue-100 grid grid-cols-12 gap-2 items-end">
                             <div className="col-span-5">
                                 <label className="text-xs font-semibold">Product</label>
-                                <select value={selectedProductId} onChange={e => setSelectedProductId(e.target.value)} className="w-full text-sm rounded border-gray-300">
-                                    <option value="">Select...</option>
-                                    {products.map(p => <option key={p.id} value={p.id}>{p.part_number} - {p.name}</option>)}
-                                </select>
+                                <ProductAutocomplete
+                                    onSelect={(product) => {
+                                        setSelectedProduct(product);
+                                        setSelectedProductId(product.id);
+                                    }}
+                                    placeholder="Search item by part no, code, or description..."
+                                />
                             </div>
                             <div className="col-span-2">
                                 <label className="text-xs font-semibold">Qty</label>
@@ -189,7 +232,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                                         <td className="px-6 py-3 text-xs">{item.eta_date || '-'}</td>
                                         <td className="px-6 py-3 text-center">
                                             {request.status === 'Pending' && (
-                                                <button onClick={() => onDeleteItem(item.id)} className="text-slate-400 hover:text-red-500"><Trash2 size={16} /></button>
+                                                <button onClick={() => handleDeleteItemRequest(item.id, item.part_number)} className="text-slate-400 hover:text-red-500"><Trash2 size={16} /></button>
                                             )}
                                         </td>
                                     </tr>
@@ -199,6 +242,19 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                     </div>
                 </div>
             </div>
+
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                onClose={() => setConfirmModal((prev) => ({ ...prev, isOpen: false, onConfirm: null }))}
+                onConfirm={async () => {
+                    if (!confirmModal.onConfirm) return;
+                    await confirmModal.onConfirm();
+                }}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                confirmLabel={confirmModal.confirmLabel}
+                variant={confirmModal.variant}
+            />
         </div>
     );
 };

@@ -38,6 +38,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     const [isOpen, setIsOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+    const [optionsMaxHeight, setOptionsMaxHeight] = useState(240);
 
     const selectedOption = useMemo(
         () => options.find((option) => option.value === value) ?? null,
@@ -63,14 +64,16 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
 
         const rect = buttonRef.current.getBoundingClientRect();
         const availableBelow = Math.max(window.innerHeight - rect.bottom - 12, 180);
+        const dropdownMaxHeight = Math.min(320, availableBelow);
         setDropdownStyle({
             position: 'fixed',
             top: `${rect.bottom + 2}px`,
             left: `${rect.left}px`,
             width: `${Math.max(rect.width, 220)}px`,
-            maxHeight: `${Math.min(320, availableBelow)}px`,
+            maxHeight: `${dropdownMaxHeight}px`,
             zIndex: 9999,
         });
+        setOptionsMaxHeight(Math.max(120, dropdownMaxHeight - 57));
     }, [isOpen]);
 
     useEffect(() => {
@@ -174,7 +177,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                                 />
                             </div>
                         </div>
-                        <div className="overflow-y-auto py-1" style={{ maxHeight: 'calc(100% - 57px)' }}>
+                        <div className="overflow-y-auto py-1" style={{ maxHeight: `${optionsMaxHeight}px` }}>
                             {filteredOptions.length === 0 ? (
                                 <div className="px-3 py-4 text-sm text-gray-500 dark:text-gray-400">No matches found</div>
                             ) : (
