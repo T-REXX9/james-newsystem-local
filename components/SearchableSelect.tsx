@@ -62,11 +62,13 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
         if (!buttonRef.current || !isOpen) return;
 
         const rect = buttonRef.current.getBoundingClientRect();
+        const availableBelow = Math.max(window.innerHeight - rect.bottom - 12, 180);
         setDropdownStyle({
             position: 'fixed',
-            top: `${rect.bottom + 6}px`,
+            top: `${rect.bottom + 2}px`,
             left: `${rect.left}px`,
             width: `${Math.max(rect.width, 220)}px`,
+            maxHeight: `${Math.min(320, availableBelow)}px`,
             zIndex: 9999,
         });
     }, [isOpen]);
@@ -172,7 +174,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                                 />
                             </div>
                         </div>
-                        <div className="max-h-64 overflow-y-auto py-1">
+                        <div className="overflow-y-auto py-1" style={{ maxHeight: 'calc(100% - 57px)' }}>
                             {filteredOptions.length === 0 ? (
                                 <div className="px-3 py-4 text-sm text-gray-500 dark:text-gray-400">No matches found</div>
                             ) : (

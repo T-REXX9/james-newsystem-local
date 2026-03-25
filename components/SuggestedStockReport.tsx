@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Package, Calendar, ArrowRight, Users, Loader2, Search, ChevronDown, Check } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Package, Calendar, ArrowRight, Users, Loader2 } from 'lucide-react';
 import { UserProfile } from '../types';
 import {
   fetchCustomersWithNotListedInquiries,
   CustomerWithInquiries,
 } from '../services/suggestedStockService';
 import SuggestedStockDataView from './SuggestedStockDataView';
+import SearchableSelect, { SearchableSelectOption } from './SearchableSelect';
 
 interface SuggestedStockReportProps {
   currentUser?: UserProfile | null;
@@ -18,8 +19,6 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
   const [selectedCustomer, setSelectedCustomer] = useState<string>('all');
   const [customers, setCustomers] = useState<CustomerWithInquiries[]>([]);
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(true);
-  const [isCustomerOpen, setIsCustomerOpen] = useState(false);
-  const [customerQuery, setCustomerQuery] = useState('');
 
   const [dateFrom, setDateFrom] = useState<string>(() => {
     const d = new Date();
@@ -29,30 +28,10 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
 
   const [dateTo, setDateTo] = useState<string>(new Date().toISOString().split('T')[0]);
   const [showView, setShowView] = useState(false);
-  const customerPickerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     loadCustomers();
   }, [dateFrom, dateTo]);
-
-  useEffect(() => {
-    if (!isCustomerOpen) {
-      setCustomerQuery('');
-    }
-  }, [isCustomerOpen]);
-
-  useEffect(() => {
-    if (!isCustomerOpen) return;
-
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!customerPickerRef.current?.contains(event.target as Node)) {
-        setIsCustomerOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handlePointerDown);
-    return () => document.removeEventListener('mousedown', handlePointerDown);
-  }, [isCustomerOpen]);
 
   useEffect(() => {
     if (selectedCustomer !== 'all' && !customers.some((customer) => customer.id === selectedCustomer)) {
@@ -104,26 +83,23 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
   };
 
   const totalInquiries = customers.reduce((sum, c) => sum + c.inquiryCount, 0);
-  const customerOptions = useMemo(
+  const customerOptions = useMemo<SearchableSelectOption[]>(
     () => [
       {
-        id: 'all',
+        value: 'all',
         label: `All Customers (${totalInquiries} items)`,
+        keywords: ['all', 'customers', String(totalInquiries)],
       },
       ...customers.map((customer) => ({
-        id: customer.id,
+        value: customer.id,
         label: `${customer.company} (${customer.inquiryCount} items)`,
+        keywords: [customer.company, String(customer.inquiryCount)],
       })),
     ],
     [customers, totalInquiries]
   );
-  const filteredCustomerOptions = useMemo(() => {
-    const needle = customerQuery.trim().toLowerCase();
-    if (!needle) return customerOptions;
-    return customerOptions.filter((option) => option.label.toLowerCase().includes(needle));
-  }, [customerOptions, customerQuery]);
   const selectedCustomerLabel =
-    customerOptions.find((option) => option.id === selectedCustomer)?.label ||
+    customerOptions.find((option) => option.value === selectedCustomer)?.label ||
     `All Customers (${totalInquiries} items)`;
   const customDateInvalid = reportType === 'custom' && Boolean(dateFrom && dateTo && dateFrom > dateTo);
 
@@ -187,64 +163,22 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
                 <Users className="w-4 h-4 text-brand-blue" />
                 Select Customer
               </label>
-              <div ref={customerPickerRef} className="relative">
+              <div className="relative">
                 {isLoadingCustomers ? (
                   <div className="flex items-center gap-2 px-4 py-3 bg-slate-100 dark:bg-slate-800/50 rounded-xl text-slate-500">
                     <Loader2 className="w-4 h-4 animate-spin" />
                     Loading customers...
                   </div>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => setIsCustomerOpen((open) => !open)}
-                    className="w-full px-4 py-3 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100 font-medium outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent transition-all appearance-none cursor-pointer"
-                  >
-                    <span className="block truncate text-left pr-8">{selectedCustomerLabel}</span>
-                  </button>
-                )}
-                {!isLoadingCustomers && (
-                  <>
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                      <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${isCustomerOpen ? 'rotate-180' : ''}`} />
-                    </div>
-                    {isCustomerOpen && (
-                      <div className="absolute left-0 top-[calc(100%+0.5rem)] z-20 w-full rounded-xl border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-900">
-                        <div className="relative">
-                          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                          <input
-                            type="text"
-                            value={customerQuery}
-                            onChange={(e) => setCustomerQuery(e.target.value)}
-                            placeholder="Search customer..."
-                            className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-brand-blue dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                            autoFocus
-                          />
-                        </div>
-                        <div className="mt-2 max-h-64 overflow-y-auto rounded-lg border border-slate-100 dark:border-slate-800">
-                          {filteredCustomerOptions.length === 0 ? (
-                            <p className="px-3 py-4 text-sm text-slate-500 dark:text-slate-400">No customers found.</p>
-                          ) : (
-                            filteredCustomerOptions.map((option) => (
-                              <button
-                                key={option.id}
-                                type="button"
-                                onClick={() => {
-                                  setSelectedCustomer(option.id);
-                                  setIsCustomerOpen(false);
-                                }}
-                                className="flex w-full items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 text-left text-sm text-slate-700 last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800"
-                              >
-                                <span className="truncate">{option.label}</span>
-                                {selectedCustomer === option.id && (
-                                  <Check className="h-4 w-4 shrink-0 text-brand-blue" />
-                                )}
-                              </button>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </>
+                  <SearchableSelect
+                    value={selectedCustomer}
+                    options={customerOptions}
+                    onChange={setSelectedCustomer}
+                    placeholder={selectedCustomerLabel}
+                    searchPlaceholder="Search customer..."
+                    buttonClassName="w-full rounded-xl px-4 py-3 bg-slate-100 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 font-medium"
+                    dropdownClassName="rounded-xl border-slate-200 dark:border-slate-700"
+                  />
                 )}
               </div>
             </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Loader2, ShoppingCart, Plus, Check } from 'lucide-react';
 import { UserProfile } from '../types';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
+import SearchableSelect, { SearchableSelectOption } from './SearchableSelect';
 import {
   fetchSuppliers,
   fetchPurchaseOrders,
@@ -51,8 +52,30 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
   const [selectedPO, setSelectedPO] = useState<string>('');
   const [selectedSupplier, setSelectedSupplier] = useState<string>('');
   const [selectedWarehouse, setSelectedWarehouse] = useState<string>('WH1');
-  const [qty, setQty] = useState<number>(item.totalQty || 1);
-  const [unitPrice, setUnitPrice] = useState<number>(0);
+  const [qty, setQty] = useState<string>(item.totalQty > 0 ? String(item.totalQty) : '');
+  const [unitPrice, setUnitPrice] = useState<string>('');
+
+  const purchaseOrderOptions: SearchableSelectOption[] = purchaseOrders.map((po) => ({
+    value: po.id,
+    label: `${po.poNo} - ${po.supplierName} (${po.status})`,
+    keywords: [po.poNo, po.supplierName, po.status],
+  }));
+
+  const supplierOptions: SearchableSelectOption[] = suppliers.map((supplier) => ({
+    value: supplier.id,
+    label: supplier.company,
+    keywords: [supplier.company],
+  }));
+
+  const warehouseOptions: SearchableSelectOption[] = WAREHOUSES.map((warehouse) => ({
+    value: warehouse.id,
+    label: warehouse.name,
+    keywords: [warehouse.id, warehouse.name],
+  }));
+
+  useEffect(() => {
+    setQty(item.totalQty > 0 ? String(item.totalQty) : '');
+  }, [item.totalQty]);
 
   useEffect(() => {
     loadOptions();
@@ -92,8 +115,8 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
         partNo: item.partNo,
         itemCode: item.itemCode,
         description: item.description,
-        qty,
-        unitPrice,
+        qty: Math.max(1, Number(qty)),
+        unitPrice: Math.max(0, Number(unitPrice || 0)),
       };
 
       let result: boolean | string | null;
@@ -270,21 +293,19 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
                       No active purchase orders found. Create a new one instead.
                     </p>
                   ) : (
-                    <select
+                    <SearchableSelect
                       value={selectedPO}
-                      onChange={(e) => setSelectedPO(e.target.value)}
-                      onBlur={(e) => handleBlur('selectedPO', e.target.value)}
-                      className={`w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800/50 border rounded-xl text-slate-800 dark:text-slate-100 font-medium outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent ${
+                      options={purchaseOrderOptions}
+                      onChange={(value) => {
+                        setSelectedPO(value);
+                        handleBlur('selectedPO', value);
+                      }}
+                      placeholder="Select a purchase order"
+                      searchPlaceholder="Search purchase order..."
+                      buttonClassName={`w-full rounded-xl px-4 py-2.5 bg-slate-100 dark:bg-slate-800/50 font-medium ${
                         validationErrors.selectedPO ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'
                       }`}
-                      required
-                    >
-                      {purchaseOrders.map((po) => (
-                        <option key={po.id} value={po.id}>
-                          {po.poNo} - {po.supplierName} ({po.status})
-                        </option>
-                      ))}
-                    </select>
+                    />
                   )}
                 </div>
               ) : (
@@ -298,39 +319,33 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
                         No suppliers found. Please add suppliers first.
                       </p>
                     ) : (
-                    <select
+                    <SearchableSelect
                       value={selectedSupplier}
-                      onChange={(e) => setSelectedSupplier(e.target.value)}
-                      onBlur={(e) => handleBlur('selectedSupplier', e.target.value)}
-                      className={`w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800/50 border rounded-xl text-slate-800 dark:text-slate-100 font-medium outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent ${
+                      options={supplierOptions}
+                      onChange={(value) => {
+                        setSelectedSupplier(value);
+                        handleBlur('selectedSupplier', value);
+                      }}
+                      placeholder="Select a supplier"
+                      searchPlaceholder="Search supplier..."
+                      buttonClassName={`w-full rounded-xl px-4 py-2.5 bg-slate-100 dark:bg-slate-800/50 font-medium ${
                         validationErrors.selectedSupplier ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'
                       }`}
-                      required
-                    >
-                        {suppliers.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.company}
-                          </option>
-                        ))}
-                      </select>
+                    />
                     )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                       Destination Warehouse
                     </label>
-                    <select
+                    <SearchableSelect
                       value={selectedWarehouse}
-                      onChange={(e) => setSelectedWarehouse(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100 font-medium outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent"
-                      required
-                    >
-                      {WAREHOUSES.map((wh) => (
-                        <option key={wh.id} value={wh.id}>
-                          {wh.name}
-                        </option>
-                      ))}
-                    </select>
+                      options={warehouseOptions}
+                      onChange={setSelectedWarehouse}
+                      placeholder="Select a warehouse"
+                      searchPlaceholder="Search warehouse..."
+                      buttonClassName="w-full rounded-xl px-4 py-2.5 bg-slate-100 dark:bg-slate-800/50 font-medium border-slate-200 dark:border-slate-700"
+                    />
                   </div>
                 </div>
               )}
@@ -341,10 +356,10 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
                     Quantity
                   </label>
                   <input
-                    type="number"
-                    min="1"
+                    type="text"
+                    inputMode="numeric"
                     value={qty}
-                    onChange={(e) => setQty(Math.max(1, parseInt(e.target.value) || 1))}
+                    onChange={(e) => setQty(e.target.value.replace(/[^\d]/g, ''))}
                     onBlur={(e) => handleBlur('qty', e.target.value)}
                     className={`w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800/50 border rounded-xl text-slate-800 dark:text-slate-100 font-medium outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent ${
                       validationErrors.qty ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'
@@ -360,11 +375,14 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
                     Unit Price
                   </label>
                   <input
-                    type="number"
-                    min="0"
-                    step="0.01"
+                    type="text"
+                    inputMode="decimal"
                     value={unitPrice}
-                    onChange={(e) => setUnitPrice(Math.max(0, parseFloat(e.target.value) || 0))}
+                    onChange={(e) => {
+                      const nextValue = e.target.value.replace(/[^0-9.]/g, '');
+                      const normalizedValue = nextValue.replace(/(\..*)\./g, '$1');
+                      setUnitPrice(normalizedValue);
+                    }}
                     onBlur={(e) => handleBlur('unitPrice', e.target.value)}
                     className={`w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800/50 border rounded-xl text-slate-800 dark:text-slate-100 font-medium outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent ${
                       validationErrors.unitPrice ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'
