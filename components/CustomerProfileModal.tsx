@@ -256,10 +256,20 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({ contact, cu
         <aside className="hidden w-80 shrink-0 border-r border-slate-200 bg-slate-50 p-4 md:flex md:flex-col dark:border-slate-800 dark:bg-slate-900/70">
           <div className="mb-4 flex items-start justify-between">
             <div className="flex items-center gap-3">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-blue text-xl font-bold text-white">
-                {contact.company?.charAt(0)?.toUpperCase() || 'C'}
+              <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full bg-brand-blue text-white shadow-sm">
+                {contact.avatar ? (
+                  <img
+                    src={contact.avatar}
+                    alt={contact.company || 'Customer avatar'}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-xl font-bold">
+                    {contact.company?.charAt(0)?.toUpperCase() || 'C'}
+                  </div>
+                )}
               </div>
-              <div>
+              <div className="min-w-0">
                 <h2 className="text-base font-bold text-slate-900 dark:text-white">{contact.company}</h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400">Member since {contact.customerSince || '—'}</p>
               </div>

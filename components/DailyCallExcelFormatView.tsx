@@ -1,14 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Loader2, RefreshCw, Search, Sheet, Users } from 'lucide-react';
+import { AlertTriangle, Loader2, RefreshCw, Search, Sheet, UserPlus, Users } from 'lucide-react';
 import { useDebounce } from '../hooks/useDebounce';
 import {
   fetchCustomersForDailyCall,
   subscribeToDailyCallMonitoringUpdates,
 } from '../services/dailyCallMonitoringService';
-import { DailyCallCustomerFilterStatus, DailyCallCustomerRow, UserProfile } from '../types';
+import { createContact } from '../services/customerDatabaseLocalApiService';
+import { Contact, DailyCallCustomerFilterStatus, DailyCallCustomerRow, UserProfile } from '../types';
 import { useToast } from './ToastProvider';
 import DailyCallCustomerDetailModal from './DailyCallCustomerDetailModal';
 import { isKnownPriceGroup, normalizePriceGroup } from '../constants/pricingGroups';
+import AddContactModal from './AddContactModal';
 
 interface DailyCallExcelFormatViewProps {
   currentUser: UserProfile | null;
@@ -60,6 +62,7 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
   const [search, setSearch] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
 
   const debouncedSearch = useDebounce(search, 400);
 
@@ -150,6 +153,39 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
     setSelectedCustomerId(null);
   }, []);
 
+  const handleSubmitNewCustomer = useCallback(async (data: Omit<Contact, 'id'>) => {
+    const assignedName = currentUser?.full_name?.trim() || currentUser?.email || 'Sales Agent';
+    const payload = {
+      ...data,
+      salesman: assignedName,
+      assignedAgent: assignedName,
+      team: data.team || currentUser?.team || '',
+      __salesPersonId: String(currentUser?.id || ''),
+    } as Omit<Contact, 'id'> & { __salesPersonId?: string };
+
+    try {
+      const created = await createContact(payload);
+      await loadRows(false);
+      setSelectedCustomerId(created.id);
+      setShowAddCustomerModal(false);
+      addToast({
+        type: 'success',
+        title: 'Customer created',
+        description: 'New customer has been added to daily call monitoring.',
+        durationMs: 4000,
+      });
+      return created;
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: 'Unable to create customer',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        durationMs: 6000,
+      });
+      throw error;
+    }
+  }, [addToast, currentUser?.email, currentUser?.full_name, currentUser?.id, currentUser?.team, loadRows]);
+
   if (loading) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
@@ -168,6 +204,13 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
 
   return (
     <div className="space-y-4">
+      <AddContactModal
+        isOpen={showAddCustomerModal}
+        onClose={() => setShowAddCustomerModal(false)}
+        onSubmit={handleSubmitNewCustomer}
+        mode="create"
+      />
+
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
@@ -175,14 +218,24 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
             Excel-format customer monitoring
           </div>
 
-          <div className="relative w-full lg:max-w-sm">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search customer, city, contact"
-              className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-800 outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            />
+          <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+            <button
+              type="button"
+              onClick={() => setShowAddCustomerModal(true)}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            >
+              <UserPlus className="h-4 w-4" />
+              New Customer
+            </button>
+            <div className="relative w-full lg:w-80">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search customer, city, contact"
+                className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-800 outline-none transition focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              />
+            </div>
           </div>
         </div>
 
@@ -228,6 +281,14 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
           <Users className="mx-auto mb-2 h-8 w-8 opacity-70" />
           <p className="font-semibold">No customers found for this view.</p>
           <p className="mt-1 text-xs">Try adjusting the status filter or search query.</p>
+          <button
+            type="button"
+            onClick={() => setShowAddCustomerModal(true)}
+            className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+          >
+            <UserPlus className="h-4 w-4" />
+            Create New Customer
+          </button>
         </div>
       ) : (
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">

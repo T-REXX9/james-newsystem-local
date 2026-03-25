@@ -35,6 +35,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recha
 import AgentCallActivity from './AgentCallActivity';
 import CustomerProfileModal from './CustomerProfileModal';
 import ContactDetails from './ContactDetails';
+import AddContactModal from './AddContactModal';
 import { useToast } from './ToastProvider';
 import {
   countCallLogsByChannelInRange,
@@ -50,6 +51,7 @@ import {
   fetchAgentSnapshotForDailyCall,
   subscribeToDailyCallMonitoringUpdates
 } from '../services/dailyCallMonitoringService';
+import { createContact } from '../services/customerDatabaseLocalApiService';
 import {
   CallLogEntry,
   Contact,
@@ -409,6 +411,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [activeTab, setActiveTab] = useState<'master' | 'today' | 'activity'>('master');
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(false);
   const [showContactDetails, setShowContactDetails] = useState(false);
+  const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
   const [isFiltering, setIsFiltering] = useState(false);
   const [masterViewportHeight, setMasterViewportHeight] = useState(420);
   const masterViewportWrapperRef = useRef<HTMLDivElement | null>(null);
@@ -539,6 +542,40 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     }
     handleOpenSMSModal(contact);
   };
+
+  const handleSubmitNewCustomer = useCallback(async (data: Omit<Contact, 'id'>) => {
+    const assignedName = currentUser?.full_name?.trim() || currentUser?.email || agentDisplayName;
+    const payload = {
+      ...data,
+      salesman: assignedName,
+      assignedAgent: assignedName,
+      team: data.team || currentUser?.team || '',
+      __salesPersonId: String(currentUser?.id || ''),
+    } as Omit<Contact, 'id'> & { __salesPersonId?: string };
+
+    try {
+      const created = await createContact(payload);
+      setContacts((prev) => (prev.some((contact) => contact.id === created.id) ? prev : [...prev, created]));
+      await loadAgentData();
+      setSelectedClientId(created.id);
+      setShowAddCustomerModal(false);
+      addToast({
+        type: 'success',
+        title: 'Customer created',
+        description: 'New customer has been added to daily call monitoring.',
+        durationMs: 4000,
+      });
+      return created;
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: 'Unable to create customer',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        durationMs: 6000,
+      });
+      throw error;
+    }
+  }, [addToast, agentDisplayName, currentUser?.email, currentUser?.full_name, currentUser?.id, currentUser?.team, loadAgentData]);
 
   const handleEmailContact = (contact: Contact) => {
     const email = contact.email || contact.contactPersons[0]?.email;
@@ -1173,6 +1210,13 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
   return (
     <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950">
+      <AddContactModal
+        isOpen={showAddCustomerModal}
+        onClose={() => setShowAddCustomerModal(false)}
+        onSubmit={handleSubmitNewCustomer}
+        mode="create"
+      />
+
       <header className="flex-shrink-0 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between px-4 lg:px-6 py-3">
         <div>
           <div className="flex items-center gap-2">
@@ -1184,6 +1228,14 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAddCustomerModal(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-blue text-white text-xs font-semibold shadow-sm hover:bg-blue-700"
+            title="Create New Customer"
+          >
+            <UserPlus className="w-4 h-4" />
+            New Customer
+          </button>
           <button
             onClick={() => setSummaryCollapsed(!summaryCollapsed)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
@@ -1537,7 +1589,19 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                   {masterRows.length === 0 && (
                     <tr>
                       <td colSpan={7} className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-center text-sm text-slate-500 dark:text-slate-400`}>
-                        {dataUnavailable ? 'Client data is unavailable. Retry loading the dashboard.' : 'No clients match the current filters.'}
+                        <div className="flex flex-col items-center gap-3 py-4">
+                          <span>{dataUnavailable ? 'Client data is unavailable. Retry loading the dashboard.' : 'No clients match the current filters.'}</span>
+                          {!dataUnavailable && (
+                            <button
+                              type="button"
+                              onClick={() => setShowAddCustomerModal(true)}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                            >
+                              <UserPlus className="h-4 w-4" />
+                              Create New Customer
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )}

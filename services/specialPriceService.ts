@@ -8,7 +8,35 @@ import {
 } from '../maintenance.types';
 import { getLocalAuthToken } from './localAuthService';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+const DEFAULT_API_BASE_URL = '/api/v1';
+
+const isLoopbackHost = (hostname: string): boolean => {
+  const normalized = hostname.trim().toLowerCase();
+  return normalized === '127.0.0.1' || normalized === 'localhost' || normalized === '::1';
+};
+
+const resolveApiBaseUrl = (): string => {
+  const configured = String((import.meta as any)?.env?.VITE_API_BASE_URL || '').trim();
+  if (!configured) return DEFAULT_API_BASE_URL;
+
+  if (typeof window === 'undefined') return configured;
+
+  try {
+    const resolvedUrl = new URL(configured, window.location.origin);
+    const appHostname = window.location.hostname;
+
+    // Guard against accidentally shipping a localhost API URL in a deployed build.
+    if (isLoopbackHost(resolvedUrl.hostname) && !isLoopbackHost(appHostname)) {
+      return DEFAULT_API_BASE_URL;
+    }
+
+    return configured;
+  } catch {
+    return configured;
+  }
+};
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 export interface PaginationMeta {
   page: number;
