@@ -107,7 +107,7 @@ interface SearchablePickerModalProps<T> {
 }
 
 const PRICE_TYPES: SearchableSelectOption[] = [
-    { value: 'Fix Amount', label: 'Fix Amount', keywords: ['fix'] },
+    { value: 'Fixed Amount Deduction', label: 'Fixed Amount Deduction', keywords: ['fix', 'fixed', 'deduction', 'amount'] },
     { value: 'Percentage', label: 'Percentage', keywords: ['percent'] },
 ];
 const RECORDS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
@@ -558,7 +558,7 @@ export default function SpecialPrice() {
     const [selectedRefno, setSelectedRefno] = useState<string | null>(null);
     const [detail, setDetail] = useState<SpecialPriceDetail | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
-    const [editType, setEditType] = useState('Fix Amount');
+    const [editType, setEditType] = useState('Fixed Amount Deduction');
     const [editAmount, setEditAmount] = useState('');
     const [addCustomerOpen, setAddCustomerOpen] = useState(false);
     const [addAreaOpen, setAddAreaOpen] = useState(false);
@@ -590,7 +590,7 @@ export default function SpecialPrice() {
     const [productPerPage, setProductPerPage] = useState(20);
     const [createItemSession, setCreateItemSession] = useState('');
     const [selectedProduct, setSelectedProduct] = useState<SpecialPriceProduct | null>(null);
-    const [createType, setCreateType] = useState('Fix Amount');
+    const [createType, setCreateType] = useState('Fixed Amount Deduction');
     const [createAmount, setCreateAmount] = useState('');
     const [submittingCreate, setSubmittingCreate] = useState(false);
     const [submittingUpdate, setSubmittingUpdate] = useState(false);
@@ -638,7 +638,7 @@ export default function SpecialPrice() {
             try {
                 const result = await fetchSpecialPriceDetail(refno);
                 setDetail(result);
-                setEditType(result.type || 'Fix Amount');
+                setEditType(result.type || 'Fixed Amount Deduction');
                 setEditAmount(String(result.amount ?? ''));
             } catch (error) {
                 addToast({
@@ -673,7 +673,7 @@ export default function SpecialPrice() {
     useEffect(() => {
         if (!selectedRefno) {
             setDetail(null);
-            setEditType('Fix Amount');
+            setEditType('Fixed Amount Deduction');
             setEditAmount('');
             return;
         }
@@ -696,12 +696,12 @@ export default function SpecialPrice() {
             });
             setCreateItemSession('');
             setSelectedProduct(null);
-            setCreateType('Fix Amount');
+            setCreateType('Fixed Amount Deduction');
             setCreateAmount('');
             await loadRecords();
             setSelectedRefno(created.refno);
             setDetail(created);
-            setEditType(created.type || 'Fix Amount');
+            setEditType(created.type || 'Fixed Amount Deduction');
             setEditAmount(String(created.amount ?? ''));
         } catch (error) {
             addToast({
@@ -723,7 +723,7 @@ export default function SpecialPrice() {
         try {
             const updated = await updateSpecialPrice(selectedRefno, editType, Number(editAmount));
             setDetail(updated);
-            setEditType(updated.type || 'Fix Amount');
+            setEditType(updated.type || 'Fixed Amount Deduction');
             setEditAmount(String(updated.amount ?? ''));
             await loadRecords();
             addToast({

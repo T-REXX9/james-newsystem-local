@@ -94,7 +94,7 @@ const toPaginationMeta = (raw: unknown): PaginationMeta => {
 };
 
 const normalizePriceType = (type: string): string => {
-  if (type === 'Fix') return 'Fix Amount';
+  if (type === 'Fix' || type === 'Fix Amount') return 'Fixed Amount Deduction';
   return type;
 };
 
