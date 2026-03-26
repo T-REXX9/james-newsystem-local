@@ -15,7 +15,7 @@ import {
   SalesInquiryItem,
   SalesInquiryStatus,
 } from '../types';
-import { fetchContacts } from '../services/customerDatabaseLocalApiService';
+import { fetchContactById, fetchContacts } from '../services/customerDatabaseLocalApiService';
 import {
   approveInquiry,
   convertToOrder,
@@ -491,22 +491,43 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     void selectInquiry(inquiries[0]);
   }, [inquiries, isCreatingNew, selectInquiry, selectedInquiry]);
 
+  const applySelectedCustomer = useCallback((customer: Contact) => {
+    const defaultReference = String(customer.contactPersons?.[0]?.name || '').trim();
+    setSelectedCustomer(customer);
+    setDeliveryAddress(customer.deliveryAddress || customer.address || '');
+    setSalesPerson(customer.salesman || '');
+    setPriceGroup(customer.priceGroup || '');
+    setCreditLimit(Number(customer.creditLimit || 0));
+    setTerms(customer.terms || '');
+    setRemarks(customer.comment || '');
+    setPromiseToPay('');
+    setCustomerReference(defaultReference);
+  }, []);
+
   // When customer is selected, populate metrics and delivery address
-  const handleCustomerSelect = (customerId: string) => {
-    const customer = customers.find(c => c.id === customerId);
-    if (customer) {
-      const defaultReference = String(customer.contactPersons?.[0]?.name || '').trim();
-      setSelectedCustomer(customer);
-      setDeliveryAddress(customer.deliveryAddress || customer.address || '');
-      setSalesPerson(customer.salesman || '');
-      setPriceGroup(customer.priceGroup || '');
-      setCreditLimit(customer.creditLimit || 0);
-      setTerms(customer.terms || '');
-      setRemarks(customer.comment || '');
-      setPromiseToPay('');
-      setCustomerReference(defaultReference);
+  const handleCustomerSelect = useCallback(async (customerId: string) => {
+    const fallbackCustomer = customers.find((customer) => customer.id === customerId) || null;
+    const latestCustomer = await fetchContactById(customerId);
+    const customer = latestCustomer || fallbackCustomer;
+    if (!customer) {
+      return;
     }
-  };
+
+    if (latestCustomer) {
+      setCustomers((prev) => {
+        const next = prev.slice();
+        const existingIndex = next.findIndex((entry) => entry.id === latestCustomer.id);
+        if (existingIndex >= 0) {
+          next[existingIndex] = latestCustomer;
+        } else {
+          next.push(latestCustomer);
+        }
+        return next;
+      });
+    }
+
+    applySelectedCustomer(customer);
+  }, [applySelectedCustomer, customers]);
 
   useEffect(() => {
     if (!initialContactId) return;
