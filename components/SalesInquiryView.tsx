@@ -30,6 +30,7 @@ import { getSalesOrderByInquiry, getSalesOrder } from '../services/salesOrderLoc
 
 import ProductSearchModal from './ProductSearchModal';
 import CustomerAutocomplete from './CustomerAutocomplete';
+import SearchableSelect from './SearchableSelect';
 import StatusBadge from './StatusBadge';
 import { useToast } from './ToastProvider';
 import ValidationSummary from './ValidationSummary';
@@ -39,6 +40,8 @@ import {
   normalizePriceGroup,
   WRITABLE_PRICING_GROUP_OPTIONS,
 } from '../constants/pricingGroups';
+import { fetchCouriers, CourierRecord } from '../services/courierLocalApiService';
+import { fetchRemarkTemplates, RemarkTemplateRecord } from '../services/remarkTemplateLocalApiService';
 
 interface InquiryItemRow extends Omit<SalesInquiryItem, 'id' | 'inquiry_id' | 'qty' | 'unit_price'> {
   qty: number | '';
@@ -198,6 +201,26 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   const [newInquiryType, setNewInquiryType] = useState('');
   const [urgency, setUrgency] = useState('N/A');
   const [urgencyDate, setUrgencyDate] = useState('');
+
+  // Courier & Remark Template options (loaded from database)
+  const [courierOptions, setCourierOptions] = useState<CourierRecord[]>([]);
+  const [remarkTemplateOptions, setRemarkTemplateOptions] = useState<RemarkTemplateRecord[]>([]);
+
+  useEffect(() => {
+    const loadDropdownData = async () => {
+      try {
+        const [courierRes, remarkRes] = await Promise.all([
+          fetchCouriers(),
+          fetchRemarkTemplates(),
+        ]);
+        setCourierOptions(courierRes.items || []);
+        setRemarkTemplateOptions(remarkRes.items || []);
+      } catch (err) {
+        console.error('Failed to load courier/remark options:', err);
+      }
+    };
+    loadDropdownData();
+  }, []);
 
   // Items Table
   const [items, setItems] = useState<InquiryItemRow[]>([]);
@@ -1248,13 +1271,17 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                   <tr>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Remarks:</td>
                     <td colSpan={3}>
-                      <select disabled={isReadOnly} value={remarks} onChange={(e) => setRemarks(e.target.value)} className={`w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}`}>
-                        <option value="">Select remark…</option>
-                        <option value="Urgent follow-up">Urgent follow-up</option>
-                        <option value="Awaiting approval">Awaiting approval</option>
-                        <option value="Customer callback">Customer callback</option>
-                        <option value="Price check">Price check</option>
-                      </select>
+                      <SearchableSelect
+                        value={remarks}
+                        options={remarkTemplateOptions.map(r => ({
+                          value: r.name,
+                          label: r.name,
+                        }))}
+                        onChange={(val) => setRemarks(val)}
+                        placeholder="Select remark…"
+                        searchPlaceholder="Search remarks..."
+                        disabled={isReadOnly}
+                      />
                     </td>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Inquiry Type:</td>
                     <td>
@@ -1286,13 +1313,17 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                   <tr>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Send By:</td>
                     <td>
-                      <select disabled={isReadOnly} value={sendBy} onChange={(e) => setSendBy(e.target.value)} className={`w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}`}>
-                        <option value="">Select…</option>
-                        <option value="Email">Email</option>
-                        <option value="Phone">Phone</option>
-                        <option value="Courier">Courier</option>
-                        <option value="Walk-in">Walk-in</option>
-                      </select>
+                      <SearchableSelect
+                        value={sendBy}
+                        options={courierOptions.map(c => ({
+                          value: c.name,
+                          label: c.name,
+                        }))}
+                        onChange={(val) => setSendBy(val)}
+                        placeholder="Select…"
+                        searchPlaceholder="Search courier..."
+                        disabled={isReadOnly}
+                      />
                     </td>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap text-red-600">Urgency/Type:</td>
                     <td>
