@@ -15,6 +15,7 @@ import {
   getOrderSlip,
   getAllOrderSlips,
   printOrderSlip,
+  updateOrderSlip,
 } from '../services/orderSlipLocalApiService';
 import { fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { isOrderSlipAllowedForTransactionType, syncDocumentPolicyState, unpostSalesOrder } from '../services/salesOrderLocalApiService';
@@ -84,6 +85,8 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
   const [cancelLoading, setCancelLoading] = useState(false);
   const [unpostModalOpen, setUnpostModalOpen] = useState(false);
   const [unpostLoading, setUnpostLoading] = useState(false);
+  const [trackingNoDraft, setTrackingNoDraft] = useState('');
+  const [trackingSaveLoading, setTrackingSaveLoading] = useState(false);
 
   const isAdmin = useMemo(() => {
     const session = getLocalAuthSession();
@@ -239,6 +242,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
       .then((detail) => {
         if (!active || !detail) return;
         setSelectedSlip(detail);
+        setTrackingNoDraft(detail.tracking_no || '');
       })
       .catch((err) => {
         console.error('Failed loading selected order slip detail:', err);
@@ -249,11 +253,15 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
   }, [selectedSlip?.id]);
 
   useEffect(() => {
+    setTrackingNoDraft(selectedSlip?.tracking_no || '');
+  }, [selectedSlip?.id, selectedSlip?.tracking_no]);
+
+  useEffect(() => {
     setPage(1);
   }, [statusFilter, month, year]);
 
   const selectedCustomer = selectedSlip ? customerMap.get(selectedSlip.contact_id) : null;
-  const selectedCustomerLabel = selectedCustomer?.company || selectedSlip?.contact_id || '-';
+  const selectedCustomerLabel = selectedCustomer?.company || selectedSlip?.customer_name || selectedSlip?.contact_id || '-';
   const selectedSlipPriceGroupDisplay = normalizePriceGroup(selectedSlip?.price_group || '');
   const canProcessOrderSlip = isOrderSlipAllowedForTransactionType(selectedCustomer?.transactionType);
 
@@ -298,7 +306,6 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
   const handleRefresh = () => {
     setSearchTerm('');
     setDebouncedSearch('');
-    setCustomerFilter('');
     setStatusFilter('all');
     setMonth(undefined);
     setYear(undefined);
@@ -398,6 +405,26 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
       alert(err instanceof Error ? err.message : 'Failed to unpost order slip');
     } finally {
       setUnpostLoading(false);
+    }
+  };
+
+  const handleSaveTrackingNo = async () => {
+    if (!selectedSlip) return;
+    setTrackingSaveLoading(true);
+    try {
+      const updated = await updateOrderSlip(selectedSlip.id, {
+        tracking_no: trackingNoDraft.trim(),
+      });
+      if (updated) {
+        setSelectedSlip(updated);
+        setOrderSlips(prev => prev.map(row => row.id === updated.id ? { ...row, tracking_no: updated.tracking_no } : row));
+      }
+      await loadOrderSlips();
+    } catch (err) {
+      console.error('Failed to update order slip tracking number:', err);
+      alert('Failed to update tracking number');
+    } finally {
+      setTrackingSaveLoading(false);
     }
   };
 
@@ -522,7 +549,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                         <td className="px-3 py-2">{formatDate(slip.sales_date)}</td>
                         <td className="px-3 py-2">
                           <div className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" title={customer?.company || slip.contact_id}>
-                            {customer?.company || slip.contact_id}
+                            {customer?.company || slip.customer_name || slip.contact_id}
                           </div>
                         </td>
                         <td className="px-3 py-2">
@@ -535,8 +562,8 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                             {slip.slip_no || '-'}
                           </div>
                         </td>
-                        <td className="px-3 py-2">-</td>
-                        <td className="px-3 py-2">-</td>
+                        <td className="px-3 py-2">{slip.debit_memo_no || '-'}</td>
+                        <td className="px-3 py-2">{slip.tracking_no || '-'}</td>
                         <td className="px-3 py-2">
                           <div className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" title={slip.sales_person || '-'}>
                             {slip.sales_person || '-'}
@@ -612,34 +639,62 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                     <td><input readOnly value={selectedCustomerLabel} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Date:</td>
                     <td><input readOnly value={selectedSlip.sales_date || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
-                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Sales Person:</td>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Terms Strictly:</td>
+                    <td><input readOnly value={selectedSlip.terms || 'N/A'} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                  </tr>
+                  <tr>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Address:</td>
+                    <td><input readOnly value={selectedSlip.delivery_address || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Reference No.:</td>
+                    <td><input readOnly value={selectedSlip.reference_no || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Salesperson:</td>
                     <td><input readOnly value={selectedSlip.sales_person || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
                   </tr>
                   <tr>
-                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Delivery Address:</td>
-                    <td><input readOnly value={selectedSlip.delivery_address || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
-                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Our Reference:</td>
-                    <td><input readOnly value={selectedSlip.reference_no || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
-                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Your Reference:</td>
-                    <td><input readOnly value={selectedSlip.customer_reference || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Shipped Via:</td>
+                    <td><input readOnly value={selectedSlip.send_by || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Prod Type:</td>
+                    <td><input readOnly value={selectedSlip.product_type || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap"></td>
+                    <td></td>
                   </tr>
                   <tr>
-                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Price Group:</td>
-                    <td><input readOnly value={selectedSlipPriceGroupDisplay} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
-                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Credit Limit:</td>
-                    <td><input readOnly value={formatCurrency(selectedSlip.credit_limit || 0)} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
-                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Terms Strictly:</td>
-                    <td><input readOnly value={selectedSlip.terms || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
-                  </tr>
-                  <tr>
-                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Promise to Pay:</td>
-                    <td colSpan={3}><input readOnly value={selectedSlip.promise_to_pay || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Del. to:</td>
+                    <td><input readOnly value={selectedSlip.delivered_to || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">PO No.:</td>
                     <td><input readOnly value={selectedSlip.po_number || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap"></td>
+                    <td></td>
                   </tr>
                   <tr>
-                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Remarks:</td>
-                    <td colSpan={5}><input readOnly value={selectedSlip.remarks || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Tracking No.:</td>
+                    <td>
+                      <select
+                        value={trackingNoDraft}
+                        onChange={(e) => setTrackingNoDraft(e.target.value)}
+                        className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm"
+                      >
+                        <option value="">Select Tracking</option>
+                        {selectedSlip.tracking_no && !selectedSlip.tracking_options?.includes(selectedSlip.tracking_no) ? (
+                          <option value={selectedSlip.tracking_no}>{selectedSlip.tracking_no}</option>
+                        ) : null}
+                        {(selectedSlip.tracking_options || []).map((trackingNo) => (
+                          <option key={trackingNo} value={trackingNo}>
+                            {trackingNo}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td colSpan={4}>
+                      <button
+                        type="button"
+                        onClick={handleSaveTrackingNo}
+                        disabled={trackingSaveLoading || trackingNoDraft === (selectedSlip.tracking_no || '')}
+                        className="px-3 py-2 rounded bg-slate-700 text-white text-sm disabled:opacity-50"
+                      >
+                        {trackingSaveLoading ? 'Saving...' : 'Update Tracking'}
+                      </button>
+                    </td>
                   </tr>
                 </tbody>
               </table>

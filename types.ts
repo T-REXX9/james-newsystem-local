@@ -1113,12 +1113,15 @@ export interface OrderSlip {
   order_id: string;
   sales_no?: string;
   contact_id: string;
+  customer_name?: string;
   sales_date: string;
   sales_person: string;
   delivery_address: string;
   reference_no: string;
   customer_reference: string;
   send_by: string;
+  delivered_to?: string;
+  product_type?: string;
   price_group: string;
   credit_limit: number;
   terms: string;
@@ -1135,6 +1138,9 @@ export interface OrderSlip {
   created_by: string;
   created_at: string;
   updated_at?: string;
+  debit_memo_no?: string;
+  tracking_no?: string;
+  tracking_options?: string[];
   items: OrderSlipItem[];
   is_deleted?: boolean;
   deleted_at?: string;

@@ -79,12 +79,15 @@ const mapOrderSlipSummary = (raw: any): OrderSlip => {
     order_id: String(raw?.order_id || ''),
     sales_no: String(raw?.sales_no || ''),
     contact_id: String(raw?.contact_id || ''),
+    customer_name: String(raw?.customer_name || ''),
     sales_date: String(raw?.sales_date || new Date().toISOString().slice(0, 10)),
     sales_person: String(raw?.sales_person || ''),
     delivery_address: String(raw?.delivery_address || ''),
     reference_no: String(raw?.reference_no || ''),
     customer_reference: String(raw?.customer_reference || ''),
     send_by: String(raw?.send_by || ''),
+    delivered_to: String(raw?.delivered_to || ''),
+    product_type: String(raw?.product_type || ''),
     price_group: String(raw?.price_group || ''),
     credit_limit: toNumber(raw?.credit_limit, 0),
     terms: String(raw?.terms || ''),
@@ -101,6 +104,8 @@ const mapOrderSlipSummary = (raw: any): OrderSlip => {
     created_by: String(raw?.created_by || ''),
     created_at: String(raw?.created_at || ''),
     updated_at: '',
+    debit_memo_no: String(raw?.debit_memo_no || ''),
+    tracking_no: String(raw?.tracking_no || ''),
     items: [],
     is_deleted: toNumber(raw?.is_cancelled, 0) > 0,
   };
@@ -118,6 +123,9 @@ const mapOrderSlipDetail = (payload: any): OrderSlip => {
     ...mapped,
     items: items.map((row: any) => mapApiItem(row, mapped.id)),
     grand_total: toNumber(summary?.grand_total, mapped.grand_total),
+    tracking_options: Array.isArray(payload?.tracking_options)
+      ? payload.tracking_options.map((value: unknown) => String(value || '')).filter(Boolean)
+      : [],
   };
 };
 
@@ -200,6 +208,20 @@ export const getOrderSlip = async (id: string): Promise<OrderSlip | null> => {
   } catch {
     return null;
   }
+};
+
+export const updateOrderSlip = async (id: string, updates: Record<string, unknown>): Promise<OrderSlip | null> => {
+  const payload = {
+    main_id: API_MAIN_ID,
+    user_id: getUserContext().userId,
+    ...updates,
+  };
+  const data = await requestApi(`${API_BASE_URL}/order-slips/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return mapOrderSlipDetail(data);
 };
 
 export const finalizeOrderSlip = async (id: string): Promise<OrderSlip | null> => {
