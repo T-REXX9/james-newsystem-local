@@ -434,7 +434,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     setPriceGroup(rawPriceGroup);
     setCreditLimit(Number.isFinite(inquiry.credit_limit) ? inquiry.credit_limit : (customer?.creditLimit || 0));
     setTerms(inquiry.terms || customer?.terms || '');
-    setPromiseToPay(inquiry.promise_to_pay || customer?.dealershipTerms || '');
+    setPromiseToPay(inquiry.promise_to_pay || '');
     setRemarks(inquiry.remarks || '');
     setInquiryType(inquiry.inquiry_type || 'General');
     setShowNewInquiryType(false);
@@ -503,7 +503,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
       setCreditLimit(customer.creditLimit || 0);
       setTerms(customer.terms || '');
       setRemarks(customer.comment || '');
-      setPromiseToPay(customer.dealershipTerms || '');
+      setPromiseToPay('');
       setCustomerReference(defaultReference);
     }
   };
@@ -1261,7 +1261,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                   <tr>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Promise to Pay:</td>
                     <td colSpan={3}>
-                      <input type="text" disabled={isReadOnly} value={promiseToPay} onChange={(e) => setPromiseToPay(e.target.value)} className={`w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}`} />
+                      <input type="text" disabled={isReadOnly} value={promiseToPay} onChange={(e) => setPromiseToPay(e.target.value)} placeholder="if applicable" className={`w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}`} />
                     </td>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">PO No.:</td>
                     <td>
