@@ -976,6 +976,10 @@ export interface SalesInquiry {
   is_deleted: boolean;
   deleted_at?: string;
   items?: SalesInquiryItem[];
+  so_no?: string;
+  so_refno?: string;
+  invoice_no?: string;
+  dr_no?: string;
 }
 
 export interface InquiryReportFilters {
@@ -1060,6 +1064,9 @@ export interface SalesOrder {
   items: SalesOrderItem[];
   is_deleted?: boolean;
   deleted_at?: string;
+  inquiry_no?: string;
+  order_slip_no?: string;
+  invoice_no?: string;
 }
 
 export interface SalesOrderDTO {

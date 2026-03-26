@@ -98,6 +98,9 @@ const mapApiOrderSummary = (raw: any): SalesOrder => {
     updated_at: '',
     items: [],
     is_deleted: toNumber(raw?.is_cancelled, 0) > 0,
+    inquiry_no: String(raw?.inquiry_no || ''),
+    order_slip_no: String(raw?.order_slip_no || ''),
+    invoice_no: String(raw?.invoice_no || ''),
   };
 };
 

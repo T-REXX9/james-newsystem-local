@@ -103,6 +103,10 @@ const mapApiInquiry = (row: any): SalesInquiry => {
     is_deleted: toNumber(row?.is_cancelled, 0) > 0,
     deleted_at: undefined,
     items: mappedItems,
+    so_no: String(row?.so_no || ''),
+    so_refno: String(row?.so_refno || ''),
+    invoice_no: String(row?.invoice_no || ''),
+    dr_no: String(row?.dr_no || ''),
   };
 };
 

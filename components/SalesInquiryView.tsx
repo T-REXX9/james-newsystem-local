@@ -1079,13 +1079,13 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                             </div>
                           </td>
                           <td className="px-3 py-2">
-                            <div className="min-w-0 break-words leading-5" title={canOpenConvertedOrder && selectedInquiry?.id === inquiry.id ? 'Open linked SO' : '—'}>
-                              {canOpenConvertedOrder && selectedInquiry?.id === inquiry.id ? 'Open linked SO' : '—'}
+                            <div className="min-w-0 break-all leading-5" title={inquiry.so_no || '—'}>
+                              {inquiry.so_no || '—'}
                             </div>
                           </td>
                           <td className="px-3 py-2">
-                            <div className="min-w-0 break-all leading-5" title={formatInquiryDisplayNo(inquiry.reference_no) || '—'}>
-                              {formatInquiryDisplayNo(inquiry.reference_no) || '—'}
+                            <div className="min-w-0 break-all leading-5" title={inquiry.invoice_no || inquiry.dr_no || '—'}>
+                              {inquiry.invoice_no || inquiry.dr_no || '—'}
                             </div>
                           </td>
                           <td className="px-3 py-2">
@@ -1269,7 +1269,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                     </td>
                   </tr>
                   <tr>
-                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Remarks:</td>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Remark:</td>
                     <td colSpan={3}>
                       <SearchableSelect
                         value={remarks}

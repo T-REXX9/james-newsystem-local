@@ -746,8 +746,8 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
                           </div>
                         </td>
                         <td className="px-3 py-2">
-                          <div className="min-w-0 break-all leading-5" title={order.inquiry_id || '-'}>
-                            {order.inquiry_id || '-'}
+                          <div className="min-w-0 break-all leading-5" title={order.inquiry_no || '-'}>
+                            {order.inquiry_no || '-'}
                           </div>
                         </td>
                         <td className="px-3 py-2">
@@ -756,8 +756,8 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
                           </div>
                         </td>
                         <td className="px-3 py-2">
-                          <div className="min-w-0 break-all leading-5" title={order.reference_no || order.customer_reference || '-'}>
-                            {order.reference_no || order.customer_reference || '-'}
+                          <div className="min-w-0 break-all leading-5" title={order.order_slip_no || order.invoice_no || '-'}>
+                            {order.order_slip_no || order.invoice_no || '-'}
                           </div>
                         </td>
                         <td className="px-3 py-2">
