@@ -28,7 +28,9 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
         items: []
     });
 
-    const [availableItems, setAvailableItems] = useState<RRItemForReturn[]>([]);
+    const [itemLookup, setItemLookup] = useState<Record<string, RRItemForReturn>>({});
+    const [itemSearchResults, setItemSearchResults] = useState<RRItemForReturn[]>([]);
+    const [itemSearchLoading, setItemSearchLoading] = useState(false);
     const [itemSearchTerm, setItemSearchTerm] = useState('');
     const [showItemDropdown, setShowItemDropdown] = useState(false);
 
@@ -52,18 +54,60 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
 
     const handleSelectRR = async (rr: any) => {
         setSelectedRR(rr);
-        setLoading(true);
-        try {
-            const items = await returnToSupplierService.getRRItemsForReturn(rr.id);
-            setAvailableItems(items);
-            setStep(2);
-        } catch (err) {
-            console.error(err);
-            // Handle error
-        } finally {
-            setLoading(false);
-        }
+        setItemLookup({});
+        setItemSearchResults([]);
+        setItemSearchTerm('');
+        setShowItemDropdown(false);
+        setStep(2);
     };
+
+    useEffect(() => {
+        if (!selectedRR || step !== 2 || !showItemDropdown) {
+            return;
+        }
+
+        let cancelled = false;
+
+        const searchItems = async () => {
+            setItemSearchLoading(true);
+            try {
+                const results = await returnToSupplierService.getRRItemsForReturn(selectedRR.id, {
+                    search: itemSearchTerm,
+                    limit: 12,
+                });
+                if (cancelled) return;
+
+                setItemSearchResults(results);
+                setItemLookup((prev) => {
+                    const next = { ...prev };
+                    for (const item of results) {
+                        next[item.id] = item;
+                    }
+                    return next;
+                });
+            } catch (err) {
+                if (!cancelled) {
+                    console.error(err);
+                    addToast({
+                        type: 'error',
+                        title: 'Unable to load RR items',
+                        description: parseSupabaseError(err, 'RR item search'),
+                        durationMs: 5000,
+                    });
+                }
+            } finally {
+                if (!cancelled) {
+                    setItemSearchLoading(false);
+                }
+            }
+        };
+
+        const debounce = setTimeout(searchItems, itemSearchTerm.trim() === '' ? 0 : 250);
+        return () => {
+            cancelled = true;
+            clearTimeout(debounce);
+        };
+    }, [addToast, itemSearchTerm, selectedRR, showItemDropdown, step]);
 
     const handleAddItem = (item: RRItemForReturn) => {
         const existing = formData.items.find(i => i.rr_item_id === item.id);
@@ -86,6 +130,7 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
         }));
         setItemSearchTerm('');
         setShowItemDropdown(false);
+        setItemSearchResults([]);
     };
 
     const updateItem = (index: number, field: keyof CreateReturnItemDTO, value: any) => {
@@ -190,18 +235,14 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
     };
 
     // Filter available items for dropdown
-    const filteredAvailableItems = availableItems.filter(item => {
-        const search = itemSearchTerm.toLowerCase();
+    const filteredAvailableItems = itemSearchResults.filter(item => {
         const alreadyAdded = formData.items.some(i => i.rr_item_id === item.id);
         if (alreadyAdded) return false;
-
-        return item.part_number.toLowerCase().includes(search) ||
-            (item.item_code || '').toLowerCase().includes(search) ||
-            (item.description && item.description.toLowerCase().includes(search));
+        return availableMaxQty(item.id) > 0;
     });
 
     const availableMaxQty = (rrItemId: string) => {
-        const item = availableItems.find(i => i.id === rrItemId);
+        const item = itemLookup[rrItemId];
         if (!item) return 0;
         return item.quantity_received - item.qty_returned_already;
     };
@@ -302,7 +343,7 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
                                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                                     <input
                                         type="text"
-                                        placeholder="Search items from this RR to add..."
+                                        placeholder="Search part no, item code, or description from this RR..."
                                         value={itemSearchTerm}
                                         onChange={(e) => {
                                             setItemSearchTerm(e.target.value);
@@ -312,8 +353,11 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
                                         className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
 
-                                    {showItemDropdown && itemSearchTerm && (
+                                    {showItemDropdown && (
                                         <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                            {itemSearchLoading && (
+                                                <div className="p-3 text-sm text-gray-500">Loading matching RR items...</div>
+                                            )}
                                             {filteredAvailableItems.map(item => {
                                                 const max = availableMaxQty(item.id);
                                                 if (max <= 0) return null; // Don't show fully returned items
@@ -323,14 +367,22 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
                                                         onClick={() => handleAddItem(item)}
                                                         className="p-3 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer border-b border-gray-100 dark:border-gray-700"
                                                     >
-                                                        <div className="font-medium text-sm text-gray-900 dark:text-white">{item.part_number}</div>
-                                                        <div className="text-xs text-gray-500">{item.description}</div>
+                                                        <div className="font-medium text-sm text-gray-900 dark:text-white">
+                                                            {item.part_number || item.item_code}
+                                                        </div>
+                                                        <div className="text-xs text-gray-500">
+                                                            {item.description || 'No description'}
+                                                        </div>
                                                         <div className="text-xs text-green-600">Available to Return: {max}</div>
                                                     </div>
                                                 );
                                             })}
-                                            {filteredAvailableItems.length === 0 && (
-                                                <div className="p-3 text-sm text-gray-500">No matching items found</div>
+                                            {!itemSearchLoading && filteredAvailableItems.length === 0 && (
+                                                <div className="p-3 text-sm text-gray-500">
+                                                    {itemSearchTerm.trim() === ''
+                                                        ? 'Start typing or pick from the first matching RR items.'
+                                                        : 'No matching items found.'}
+                                                </div>
                                             )}
                                         </div>
                                     )}

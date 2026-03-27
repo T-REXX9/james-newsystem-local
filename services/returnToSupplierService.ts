@@ -152,9 +152,19 @@ export const returnToSupplierService = {
     });
   },
 
-  getRRItemsForReturn: async (rrId: string): Promise<RRItemForReturn[]> => {
+  getRRItemsForReturn: async (rrId: string, options?: { search?: string; limit?: number }): Promise<RRItemForReturn[]> => {
+    const params = new URLSearchParams({
+      main_id: String(API_MAIN_ID),
+      limit: String(options?.limit ?? 12),
+    });
+
+    const search = options?.search?.trim() || '';
+    if (search !== '') {
+      params.set('search', search);
+    }
+
     const data = await requestApi(
-      `${API_BASE_URL}/return-to-suppliers/rr/${encodeURIComponent(rrId)}/items?main_id=${encodeURIComponent(String(API_MAIN_ID))}`
+      `${API_BASE_URL}/return-to-suppliers/rr/${encodeURIComponent(rrId)}/items?${params.toString()}`
     );
 
     const rows = Array.isArray(data) ? data : [];

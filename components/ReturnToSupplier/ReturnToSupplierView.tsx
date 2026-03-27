@@ -3,6 +3,8 @@ import { SupplierReturn, SupplierReturnItem } from '../../returnToSupplier.types
 import { returnToSupplierService } from '../../services/returnToSupplierService';
 import StatusBadge from '../StatusBadge';
 import { Send, Printer } from 'lucide-react';
+import ConfirmModal from '../ConfirmModal';
+import { useToast } from '../ToastProvider';
 
 interface ReturnToSupplierViewProps {
     returnRecord: SupplierReturn;
@@ -10,9 +12,11 @@ interface ReturnToSupplierViewProps {
 }
 
 const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecord, onUpdate }) => {
+    const { addToast } = useToast();
     const [items, setItems] = useState<SupplierReturnItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [processing, setProcessing] = useState(false);
+    const [finalizeModalOpen, setFinalizeModalOpen] = useState(false);
 
     useEffect(() => {
         const fetchItems = async () => {
@@ -30,15 +34,24 @@ const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecor
     }, [returnRecord.id]);
 
     const handleFinalize = async () => {
-        if (!confirm('Are you sure you want to finalize this return? This will deduct inventory and cannot be undone.')) return;
-
         setProcessing(true);
         try {
             await returnToSupplierService.finalizeReturn(returnRecord.id);
+            addToast({
+                type: 'success',
+                title: 'Return finalized',
+                description: `${returnRecord.return_no} has been posted successfully.`,
+                durationMs: 4000,
+            });
             onUpdate();
         } catch (err: any) {
             console.error(err);
-            alert('Error finalizing: ' + err.message);
+            addToast({
+                type: 'error',
+                title: 'Unable to finalize return',
+                description: err?.message || 'Something went wrong while finalizing the return.',
+                durationMs: 6000,
+            });
         } finally {
             setProcessing(false);
         }
@@ -138,7 +151,7 @@ const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecor
 
                 {returnRecord.status === 'Pending' && (
                     <button
-                        onClick={handleFinalize}
+                        onClick={() => setFinalizeModalOpen(true)}
                         disabled={processing}
                         className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
                     >
@@ -147,6 +160,21 @@ const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecor
                     </button>
                 )}
             </div>
+
+            <ConfirmModal
+                isOpen={finalizeModalOpen}
+                onClose={() => {
+                    if (!processing) {
+                        setFinalizeModalOpen(false);
+                    }
+                }}
+                onConfirm={handleFinalize}
+                title="Finalize Return to Supplier"
+                message={`Post ${returnRecord.return_no}? This will deduct inventory for the returned items and cannot be undone.`}
+                confirmLabel={processing ? 'Finalizing...' : 'Finalize Return'}
+                cancelLabel="Cancel"
+                variant="warning"
+            />
         </div>
     );
 };
