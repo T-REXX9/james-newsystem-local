@@ -14,6 +14,7 @@ import {
 import { searchStockMovementProducts } from '../services/stockMovementLocalApiService';
 import { fetchProductMovementClassifications } from '../services/inventoryMovementService';
 import { applyOptimisticUpdate, applyOptimisticDelete } from '../utils/optimisticUpdates';
+import SearchableSelect from './SearchableSelect';
 import ConfirmModal from './ConfirmModal';
 import ValidationSummary from './ValidationSummary';
 import FieldHelp from './FieldHelp';
@@ -1079,14 +1080,14 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-slate-500 mb-1">Category</label>
-                      <select name="category" value={formData.category} onChange={handleInputChange} className="input-field">
-                        <option value="">Select category</option>
-                        {categories.map((category) => (
-                          <option key={category.id} value={category.name}>
-                            {category.name}
-                          </option>
-                        ))}
-                      </select>
+                      <SearchableSelect
+                        value={formData.category}
+                        options={categories.map((cat) => ({ value: cat.name, label: cat.name }))}
+                        onChange={(val) => setFormData((prev) => ({ ...prev, category: val }))}
+                        placeholder="Select category"
+                        searchPlaceholder="Search categories..."
+                        buttonClassName="input-field"
+                      />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-slate-500 mb-1">Application</label>
