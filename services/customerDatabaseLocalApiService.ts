@@ -732,10 +732,16 @@ export interface ProvinceSummary {
 export const fetchProvinceSummary = async (): Promise<ProvinceSummary[]> => {
   try {
     const query = new URLSearchParams({ main_id: String(API_MAIN_ID) });
-    const payload = await requestJson<{ data: ProvinceSummary[] }>(
+    const payload = await requestJson<{ ok?: boolean; data: { data: ProvinceSummary[] } | ProvinceSummary[] }>(
       `${API_BASE_URL}/customer-database/province-summary?${query.toString()}`
     );
-    return Array.isArray(payload?.data) ? payload.data : [];
+    // The API wraps as { ok, data: { data: [...] } } — unwrap the double nesting
+    const inner = payload?.data;
+    if (Array.isArray(inner)) return inner;
+    if (inner && typeof inner === 'object' && 'data' in inner && Array.isArray((inner as any).data)) {
+      return (inner as any).data;
+    }
+    return [];
   } catch (err) {
     console.error('Error fetching province summary:', err);
     return [];
