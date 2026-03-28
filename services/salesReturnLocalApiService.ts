@@ -42,6 +42,20 @@ interface SalesReturnListResponse {
   };
 }
 
+export interface SourceItem {
+  source_item_id: number;
+  linv_refno: string;
+  item_code: string;
+  part_no: string;
+  brand: string;
+  description: string;
+  unit_price: number;
+  original_qty: number;
+  remaining_qty: number;
+  unit: string;
+  discount: number;
+}
+
 interface SalesReturnListParams {
   search?: string;
   status?: string;
@@ -76,6 +90,19 @@ const parseApiError = async (response: Response): Promise<string> => {
 
 const requestApi = async <T>(url: string): Promise<T> => {
   const response = await fetch(url);
+  if (!response.ok) throw new Error(await parseApiError(response));
+
+  const payload = await response.json();
+  if (!payload?.ok) throw new Error(payload?.error || 'API request failed');
+  return payload.data as T;
+};
+
+const mutateApi = async <T>(url: string, method: string, body?: Record<string, unknown>): Promise<T> => {
+  const response = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
   if (!response.ok) throw new Error(await parseApiError(response));
 
   const payload = await response.json();
@@ -154,6 +181,74 @@ export const salesReturnService = {
     );
     const rows = Array.isArray(data?.items) ? data.items : [];
     return rows.map(mapItem);
+  },
+
+  async create(payload: Record<string, unknown>): Promise<SalesReturnRecord> {
+    const session = getLocalAuthSession();
+    const userId = Number(session?.context?.user?.id || 0);
+    const data = await mutateApi<any>(`${API_BASE_URL}/sales-returns`, 'POST', {
+      ...payload,
+      main_id: getMainId(),
+      user_id: userId,
+    });
+    return mapRecord(data);
+  },
+
+  async update(refno: string, payload: Record<string, unknown>): Promise<SalesReturnRecord> {
+    const data = await mutateApi<any>(
+      `${API_BASE_URL}/sales-returns/${encodeURIComponent(refno)}`,
+      'PATCH',
+      { ...payload, main_id: getMainId() }
+    );
+    return mapRecord(data);
+  },
+
+  async sourceItems(refno: string): Promise<SourceItem[]> {
+    const query = new URLSearchParams({ main_id: String(getMainId()) });
+    const data = await requestApi<any>(
+      `${API_BASE_URL}/sales-returns/${encodeURIComponent(refno)}/source-items?${query.toString()}`
+    );
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  async addItem(refno: string, payload: Record<string, unknown>): Promise<any> {
+    const session = getLocalAuthSession();
+    const userId = Number(session?.context?.user?.id || 0);
+    return mutateApi<any>(
+      `${API_BASE_URL}/sales-returns/${encodeURIComponent(refno)}/items`,
+      'POST',
+      { ...payload, main_id: getMainId(), user_id: userId }
+    );
+  },
+
+  async deleteItem(itemId: number): Promise<void> {
+    const query = new URLSearchParams({ main_id: String(getMainId()) });
+    await mutateApi<any>(
+      `${API_BASE_URL}/sales-return-items/${itemId}?${query.toString()}`,
+      'DELETE'
+    );
+  },
+
+  async post(refno: string): Promise<SalesReturnRecord> {
+    const session = getLocalAuthSession();
+    const userId = Number(session?.context?.user?.id || 0);
+    const data = await mutateApi<any>(
+      `${API_BASE_URL}/sales-returns/${encodeURIComponent(refno)}/actions/post`,
+      'POST',
+      { main_id: getMainId(), user_id: userId }
+    );
+    return mapRecord(data);
+  },
+
+  async unpost(refno: string): Promise<SalesReturnRecord> {
+    const session = getLocalAuthSession();
+    const userId = Number(session?.context?.user?.id || 0);
+    const data = await mutateApi<any>(
+      `${API_BASE_URL}/sales-returns/${encodeURIComponent(refno)}/actions/unpost`,
+      'POST',
+      { main_id: getMainId(), user_id: userId }
+    );
+    return mapRecord(data);
   },
 };
 

@@ -61,6 +61,12 @@ const getMainId = (): number => {
   return Number.isFinite(mainId) && mainId > 0 ? mainId : 1;
 };
 
+const getUserType = (): string => {
+  const session = getLocalAuthSession();
+  const raw = String(session?.context?.user_type || '').trim();
+  return raw !== '' ? raw : '2';
+};
+
 const parseApiError = async (response: Response): Promise<string> => {
   try {
     const payload = await response.json();
@@ -89,6 +95,7 @@ export const statementOfAccountService = {
   async getCustomers(search = ''): Promise<SoaCustomer[]> {
     const query = new URLSearchParams({
       main_id: String(getMainId()),
+      user_type: getUserType(),
       search: search.trim(),
       limit: search.trim() === '' ? '120' : '60',
     });
