@@ -714,3 +714,30 @@ export const fetchCustomerTerms = async (sessionId: string): Promise<Array<Recor
     return [];
   }
 };
+
+// ---------------------------------------------------------------------------
+// Province Summary (for Sales Map)
+// ---------------------------------------------------------------------------
+
+export interface ProvinceSummary {
+  province: string;
+  customer_count: number;
+}
+
+/**
+ * Fetch customer counts grouped by province.
+ * The API resolves province from `lprovince` first, then falls back to
+ * matching the address text against the refprovince table.
+ */
+export const fetchProvinceSummary = async (): Promise<ProvinceSummary[]> => {
+  try {
+    const query = new URLSearchParams({ main_id: String(API_MAIN_ID) });
+    const payload = await requestJson<{ data: ProvinceSummary[] }>(
+      `${API_BASE_URL}/customer-database/province-summary?${query.toString()}`
+    );
+    return Array.isArray(payload?.data) ? payload.data : [];
+  } catch (err) {
+    console.error('Error fetching province summary:', err);
+    return [];
+  }
+};

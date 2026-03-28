@@ -43,7 +43,7 @@ interface TopNavProps {
   };
 
   return (
-    <div className="h-16 bg-gradient-to-r from-brand-blue to-[#0a3d74] flex items-center justify-between px-6 fixed top-0 left-0 right-0 z-50 text-white shadow-md print:hidden">
+    <div className="h-16 bg-gradient-to-r from-brand-blue to-[#0a3d74] flex items-center justify-between px-6 fixed top-0 left-0 right-0 z-[1000] text-white shadow-md print:hidden">
       <div className="flex items-center space-x-6 flex-1 min-w-0">
         <div className="flex items-center space-x-3 cursor-pointer group" onClick={() => onNavigate?.('home')}>
            <div className="w-9 h-9 bg-white/10 rounded-lg flex items-center justify-center font-bold border border-white/10 group-hover:bg-white/20 transition-colors">T</div>

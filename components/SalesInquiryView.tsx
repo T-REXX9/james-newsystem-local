@@ -1272,7 +1272,19 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                     </td>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Credit Limit:</td>
                     <td>
-                      <input type="text" readOnly value={formatCurrency(creditLimit || 0)} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" />
+                      {isReadOnly ? (
+                        <input type="text" readOnly value={formatCurrency(creditLimit || 0)} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm opacity-60 cursor-not-allowed" />
+                      ) : (
+                        <input
+                          type="text"
+                          value={creditLimit || ''}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9.]/g, '');
+                            setCreditLimit(parseFloat(raw) || 0);
+                          }}
+                          className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm"
+                        />
+                      )}
                     </td>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Terms Strictly:</td>
                     <td>

@@ -1,21 +1,30 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { MapContainer, GeoJSON, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { AlertCircle, Map, Users, Sparkles, Zap } from 'lucide-react';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
 import SalesMapSidebar from './SalesMapSidebar';
+import { fetchContacts, fetchProvinceSummary, type ProvinceSummary } from '../services/customerDatabaseLocalApiService';
+import { Contact } from '../types';
 
 // Using the valid GeoJSON Source we found
 const GEOJSON_URL = 'https://raw.githubusercontent.com/macoymejia/geojsonph/master/Province/Provinces.json';
 
-const generateMockCustomerData = (provinceName: string) => {
-    // Generate random customer count (0-20 range for demo)
-    const customerCount = Math.floor(Math.random() * 21);
-    return {
-        customerCount,
-        revenue: Math.floor(Math.random() * 800000) + 100000,
-    };
+/** Group contacts by province (uppercase key for matching) → contacts[] */
+const groupContactsByProvince = (contacts: Contact[]): globalThis.Map<string, Contact[]> => {
+    const result = new globalThis.Map<string, Contact[]>();
+    for (const c of contacts) {
+        const key = (c.province || '').trim().toUpperCase();
+        if (!key) continue;
+        const existing = result.get(key);
+        if (existing) {
+            existing.push(c);
+        } else {
+            result.set(key, [c]);
+        }
+    }
+    return result;
 };
 
 const MapController = () => {
@@ -45,40 +54,108 @@ const MapController = () => {
     return null;
 };
 
+/** Build a lookup from province name → customer count using the summary endpoint */
+const buildCountMap = (summaries: ProvinceSummary[]): globalThis.Map<string, number> => {
+    const result = new globalThis.Map<string, number>();
+    for (const s of summaries) {
+        // API already returns GeoJSON-matching names; key by lowercase for safe lookup
+        const key = s.province.trim().toLowerCase();
+        result.set(key, (result.get(key) || 0) + Number(s.customer_count));
+    }
+    return result;
+};
+
 const SalesMap = () => {
     const [geoData, setGeoData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [selectedProvince, setSelectedProvince] = useState<string | null>(null);
 
+    // Sidebar: contacts loaded on-demand when a province is clicked
+    const [sidebarContacts, setSidebarContacts] = useState<Contact[]>([]);
+    const [sidebarLoading, setSidebarLoading] = useState(false);
+    // Cache so we don't re-fetch the same province
+    const contactsCache = useMemo(() => new globalThis.Map<string, Contact[]>(), []);
+    // Keep full contacts list for sidebar lookups
+    const [allContacts, setAllContacts] = useState<Contact[] | null>(null);
+
+    // When a province is selected, load contacts for sidebar
     useEffect(() => {
-        const fetchGeoJSON = async () => {
+        if (!selectedProvince) {
+            setSidebarContacts([]);
+            return;
+        }
+
+        const key = selectedProvince.trim().toUpperCase();
+
+        // Check cache first
+        const cached = contactsCache.get(key);
+        if (cached) {
+            setSidebarContacts(cached);
+            return;
+        }
+
+        // Load all contacts once (lazy), then filter
+        const load = async () => {
+            setSidebarLoading(true);
             try {
-                const response = await fetch(GEOJSON_URL);
-                if (!response.ok) throw new Error('Failed to load map data');
-                const data = await response.json();
+                let contacts = allContacts;
+                if (!contacts) {
+                    contacts = await fetchContacts();
+                    setAllContacts(contacts);
+                }
+                const grouped = groupContactsByProvince(contacts);
+                // Cache all groups
+                for (const [k, v] of grouped) {
+                    contactsCache.set(k, v);
+                }
+                setSidebarContacts(grouped.get(key) || []);
+            } catch {
+                setSidebarContacts([]);
+            } finally {
+                setSidebarLoading(false);
+            }
+        };
+        load();
+    }, [selectedProvince]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => {
+        const loadData = async () => {
+            try {
+                const [geoResponse, summaries] = await Promise.all([
+                    fetch(GEOJSON_URL),
+                    fetchProvinceSummary(),
+                ]);
+
+                if (!geoResponse.ok) throw new Error('Failed to load map data');
+                const data = await geoResponse.json();
+
+                const countMap = buildCountMap(summaries);
 
                 const enhancedFeatures = data.features.map((feature: any) => {
                     const name = feature.properties.PROVINCE || feature.properties.NAME_1 || "Unknown";
+                    const key = name.trim().toLowerCase();
+                    const customerCount = countMap.get(key) || 0;
                     return {
                         ...feature,
                         properties: {
                             ...feature.properties,
                             provinceName: name,
-                            customerData: generateMockCustomerData(name)
+                            normalizedKey: key,
+                            customerData: { customerCount }
                         }
                     };
                 });
 
                 setGeoData({ ...data, features: enhancedFeatures });
             } catch (err) {
-                console.error("GeoJSON Error:", err);
-                setError("Could not load high-fidelity map data.");
+                console.error("GeoJSON / Province Summary Error:", err);
+                setError("Could not load map data.");
             } finally {
                 setLoading(false);
             }
         };
-        fetchGeoJSON();
+        loadData();
     }, []);
 
     const getCustomerColor = (count: number): string => {
@@ -327,6 +404,8 @@ const SalesMap = () => {
             {selectedProvince && (
                 <SalesMapSidebar
                     provinceName={selectedProvince}
+                    contacts={sidebarContacts}
+                    loading={sidebarLoading}
                     onClose={() => setSelectedProvince(null)}
                 />
             )}
