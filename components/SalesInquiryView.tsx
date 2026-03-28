@@ -491,6 +491,13 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     void selectInquiry(inquiries[0]);
   }, [inquiries, isCreatingNew, selectInquiry, selectedInquiry]);
 
+  useEffect(() => {
+    if (!selectedInquiry || isCreatingNew) return;
+    if (customers.length === 0) return;
+    if (selectedCustomer?.id === selectedInquiry.contact_id) return;
+    loadInquiryIntoForm(selectedInquiry);
+  }, [customers, isCreatingNew, loadInquiryIntoForm, selectedCustomer?.id, selectedInquiry]);
+
   const applySelectedCustomer = useCallback((customer: Contact) => {
     const defaultReference = String(customer.contactPersons?.[0]?.name || '').trim();
     setSelectedCustomer(customer);
@@ -505,8 +512,16 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   }, []);
 
   // When customer is selected, populate metrics and delivery address
-  const handleCustomerSelect = useCallback(async (customerId: string) => {
-    const fallbackCustomer = customers.find((customer) => customer.id === customerId) || null;
+  const handleCustomerSelect = useCallback(async (selected: string | Contact) => {
+    const customerId = typeof selected === 'string' ? selected : selected.id;
+    const fallbackCustomer = typeof selected === 'string'
+      ? (customers.find((customer) => customer.id === customerId) || null)
+      : selected;
+
+    if (fallbackCustomer) {
+      applySelectedCustomer(fallbackCustomer);
+    }
+
     const latestCustomer = await fetchContactById(customerId);
     const customer = latestCustomer || fallbackCustomer;
     if (!customer) {
@@ -541,7 +556,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     setIsCreatingNew(true);
     setSelectedInquiry(null);
     resetFormForNew();
-    handleCustomerSelect(customer.id);
+    handleCustomerSelect(customer);
     lastAppliedPrefillRef.current = prefillKey;
   }, [customers, handleCustomerSelect, initialContactId, initialPrefillToken, resetFormForNew]);
 
@@ -910,6 +925,9 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     monthlySales?: number;
     since?: string;
   }) | null;
+  const selectedCustomerCreditLimit = Number(creditLimit || summaryCustomer?.creditLimit || 0);
+  const selectedCustomerBalance = Number(summaryCustomer?.balance || 0);
+  const exceedsCreditLimit = selectedCustomerCreditLimit > 0 && selectedCustomerBalance > selectedCustomerCreditLimit;
   const displayMetricValue = (value: number | string | undefined | null, isCurrency = false) => {
     if (value === '' || value === null || value === undefined) return '—';
     if (typeof value === 'number') return isCurrency ? formatCurrency(value) : String(value);
@@ -1179,6 +1197,12 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                 </tbody>
               </table>
 
+              {exceedsCreditLimit && (
+                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+                  Balance exceeds credit limit. The old system treats this as informational only, so inquiry creation can still proceed.
+                </div>
+              )}
+
               <table width="100%" cellPadding="8" className="tlbcustom text-sm text-slate-700 dark:text-slate-200">
                 <colgroup>
                   <col style={{ width: '12%' }} />
@@ -1196,7 +1220,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                         contacts={customers}
                         selectedCustomer={selectedCustomer}
                         disabled={isReadOnly}
-                        onSelect={(customer) => handleCustomerSelect(customer.id)}
+                        onSelect={(customer) => handleCustomerSelect(customer)}
                         inputClassName={validationErrors.customer ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'}
                       />
                       {validationErrors.customer && <p className="mt-1 text-[11px] text-rose-600">{validationErrors.customer}</p>}

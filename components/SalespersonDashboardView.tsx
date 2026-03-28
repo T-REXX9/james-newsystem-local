@@ -3,9 +3,10 @@ import {
     AlertCircle,
     ArrowUpRight,
     BarChart3,
-    Building2,
     ChevronDown,
     Clock,
+    FileCheck2,
+    FileText,
     MapPin,
     Phone,
     PhilippinePeso,
@@ -16,22 +17,20 @@ import {
     UserCheck,
     UserPlus,
     Users,
-    UserX,
 } from 'lucide-react';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
 import CustomerRecordModal from './CustomerRecordModal';
 import {
-    fetchCallLogs,
-    fetchContacts,
-    fetchPurchases,
-} from '../services/supabaseService';
-import {
-    CallLogEntry,
     Contact,
     CustomerStatus,
-    Purchase,
+    SalesInquiry,
+    SalesOrder,
     UserProfile,
 } from '../types';
+import { fetchContacts } from '../services/customerDatabaseLocalApiService';
+import { getAllSalesInquiries } from '../services/salesInquiryLocalApiService';
+import { getAllSalesOrders } from '../services/salesOrderLocalApiService';
+import { fetchStaffById } from '../services/staffLocalApiService';
 
 interface SalespersonDashboardViewProps {
     currentUser: UserProfile | null;
@@ -87,8 +86,10 @@ const SalespersonDashboardView: React.FC<SalespersonDashboardViewProps> = ({
     onNavigate,
 }) => {
     const [contacts, setContacts] = useState<Contact[]>([]);
-    const [purchases, setPurchases] = useState<Purchase[]>([]);
-    const [callLogs, setCallLogs] = useState<CallLogEntry[]>([]);
+    const [inquiries, setInquiries] = useState<SalesInquiry[]>([]);
+    const [orders, setOrders] = useState<SalesOrder[]>([]);
+    const [staffCommission, setStaffCommission] = useState(0);
+    const [staffQuota, setStaffQuota] = useState(0);
     const [loading, setLoading] = useState(true);
     const [hasLoadedData, setHasLoadedData] = useState(false);
     const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
@@ -108,10 +109,11 @@ const SalespersonDashboardView: React.FC<SalespersonDashboardViewProps> = ({
         if (!agentName || !isSalesAgent) return;
         setLoading(true);
         try {
-            const [contactData, purchaseData, callLogData] = await Promise.all([
+            const [contactData, inquiryData, orderData, staffData] = await Promise.all([
                 fetchContacts(),
-                fetchPurchases(),
-                fetchCallLogs(),
+                getAllSalesInquiries(),
+                getAllSalesOrders(),
+                currentUser?.id ? fetchStaffById(currentUser.id).catch(() => null) : Promise.resolve(null),
             ]);
 
             const assignedContacts = contactData.filter(
@@ -120,15 +122,17 @@ const SalespersonDashboardView: React.FC<SalespersonDashboardViewProps> = ({
             const contactIds = new Set(assignedContacts.map((c) => c.id));
 
             setContacts(assignedContacts);
-            setPurchases(purchaseData.filter((p) => contactIds.has(p.contact_id)));
-            setCallLogs(callLogData.filter((log) => log.agent_name === agentName));
+            setInquiries(inquiryData.filter((inquiry) => contactIds.has(inquiry.contact_id)));
+            setOrders(orderData.filter((order) => contactIds.has(order.contact_id)));
+            setStaffCommission(Number(staffData?.commission || currentUser?.commission || 0));
+            setStaffQuota(Number(staffData?.sales_quota || currentUser?.monthly_quota || 0));
             setHasLoadedData(true);
         } catch (error) {
             console.error('Error loading salesperson dashboard:', error);
         } finally {
             setLoading(false);
         }
-    }, [agentName, isSalesAgent]);
+    }, [agentName, currentUser?.commission, currentUser?.id, currentUser?.monthly_quota, isSalesAgent]);
 
     useEffect(() => {
         if (!agentName || !isSalesAgent) {
@@ -139,52 +143,58 @@ const SalespersonDashboardView: React.FC<SalespersonDashboardViewProps> = ({
     }, [agentName, isSalesAgent, loadData]);
 
     // KPI Calculations
-    const quota = currentUser?.monthly_quota || 0;
-    const currentMonthPurchases = useMemo(
+    const quota = staffQuota || currentUser?.monthly_quota || 0;
+    const currentMonthOrders = useMemo(
         () =>
-            purchases.filter(
-                (p) => isWithinCurrentMonth(p.purchased_at) && p.status === 'paid'
+            orders.filter(
+                (order) =>
+                    isWithinCurrentMonth(order.sales_date || order.created_at || '') &&
+                    String(order.status || '').toLowerCase() !== 'cancelled'
             ),
-        [purchases]
+        [orders]
     );
     const currentSales = useMemo(
-        () => currentMonthPurchases.reduce((sum, p) => sum + (p.amount || 0), 0),
-        [currentMonthPurchases]
+        () => currentMonthOrders.reduce((sum, order) => sum + (order.grand_total || 0), 0),
+        [currentMonthOrders]
     );
     const percentAchieved = quota > 0 ? Math.min(100, Math.round((currentSales / quota) * 100)) : 0;
+    const todaysSales = useMemo(() => {
+        const today = new Date().toISOString().slice(0, 10);
+        return orders
+            .filter((order) => (order.sales_date || '').slice(0, 10) === today && String(order.status || '').toLowerCase() !== 'cancelled')
+            .reduce((sum, order) => sum + (order.grand_total || 0), 0);
+    }, [orders]);
+    const pendingOrders = useMemo(
+        () => orders.filter((order) => ['pending', 'submitted'].includes(String(order.status || '').toLowerCase())).length,
+        [orders]
+    );
+    const customerInquiries = useMemo(
+        () => inquiries.filter((inquiry) => isWithinCurrentMonth(inquiry.sales_date || inquiry.created_at || '')).length,
+        [inquiries]
+    );
+    const estimatedCommission = useMemo(() => currentSales * (staffCommission / 100), [currentSales, staffCommission]);
 
     // Build contact lists with last contact info
-    const lastContactMap = useMemo(() => {
-        const map = new Map<string, string>();
-        callLogs.forEach((log) => {
-            const current = map.get(log.contact_id);
-            if (!current || Date.parse(log.occurred_at) > Date.parse(current)) {
-                map.set(log.contact_id, log.occurred_at);
-            }
+    const ordersByContact = useMemo(() => {
+        const map = new Map<string, SalesOrder[]>();
+        orders.forEach((order) => {
+            if (!map.has(order.contact_id)) map.set(order.contact_id, []);
+            map.get(order.contact_id)!.push(order);
         });
         return map;
-    }, [callLogs]);
-
-    const purchasesByContact = useMemo(() => {
-        const map = new Map<string, Purchase[]>();
-        purchases.forEach((p) => {
-            if (!map.has(p.contact_id)) map.set(p.contact_id, []);
-            map.get(p.contact_id)!.push(p);
-        });
-        return map;
-    }, [purchases]);
+    }, [orders]);
 
     const buildContactEntry = useCallback(
         (contact: Contact) => {
-            const lastContact = lastContactMap.get(contact.id);
+            const lastContact = contact.lastContactDate;
             const totalSales =
-                purchasesByContact
+                ordersByContact
                     .get(contact.id)
-                    ?.filter((p) => p.status === 'paid')
-                    .reduce((sum, p) => sum + p.amount, 0) || 0;
+                    ?.filter((order) => String(order.status || '').toLowerCase() !== 'cancelled')
+                    .reduce((sum, order) => sum + (order.grand_total || 0), 0) || 0;
             return { contact, lastContact, totalSales };
         },
-        [lastContactMap, purchasesByContact]
+        [ordersByContact]
     );
 
     const hasPositiveIndicator = (contact: Contact) =>
@@ -295,7 +305,7 @@ const SalespersonDashboardView: React.FC<SalespersonDashboardViewProps> = ({
             </header>
 
             {/* KPI Cards */}
-            <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                 {/* Monthly Quota */}
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
                     <div className="flex items-center justify-between mb-4">
@@ -334,7 +344,7 @@ const SalespersonDashboardView: React.FC<SalespersonDashboardViewProps> = ({
                         {hasLoadedData ? formatCurrency(currentSales) : '—'}
                     </p>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-                        {currentMonthPurchases.length} transactions this month
+                        {currentMonthOrders.length} orders this month
                     </p>
                 </div>
 
@@ -386,6 +396,106 @@ const SalespersonDashboardView: React.FC<SalespersonDashboardViewProps> = ({
                             style={{ width: `${percentAchieved}%` }}
                         />
                     </div>
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
+                            <ArrowUpRight className="w-5 h-5" />
+                            <span className="text-xs font-semibold uppercase tracking-wide">
+                                Sales Today
+                            </span>
+                        </div>
+                        <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/30">
+                            <PhilippinePeso className="w-5 h-5 text-emerald-500" />
+                        </div>
+                    </div>
+                    <p className="text-3xl font-bold text-slate-800 dark:text-white">
+                        {hasLoadedData ? formatCurrency(todaysSales) : '—'}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                        Live from assigned sales orders
+                    </p>
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
+                            <FileText className="w-5 h-5" />
+                            <span className="text-xs font-semibold uppercase tracking-wide">
+                                Customer Inquiries
+                            </span>
+                        </div>
+                        <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-900/30">
+                            <FileText className="w-5 h-5 text-brand-blue" />
+                        </div>
+                    </div>
+                    <p className="text-3xl font-bold text-slate-800 dark:text-white">
+                        {hasLoadedData ? customerInquiries : '—'}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                        Inquiries for the current month
+                    </p>
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
+                            <FileCheck2 className="w-5 h-5" />
+                            <span className="text-xs font-semibold uppercase tracking-wide">
+                                Pending Orders
+                            </span>
+                        </div>
+                        <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-900/30">
+                            <AlertCircle className="w-5 h-5 text-amber-500" />
+                        </div>
+                    </div>
+                    <p className="text-3xl font-bold text-slate-800 dark:text-white">
+                        {hasLoadedData ? pendingOrders : '—'}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                        Pending and submitted sales orders
+                    </p>
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
+                            <Users className="w-5 h-5" />
+                            <span className="text-xs font-semibold uppercase tracking-wide">
+                                Total Orders
+                            </span>
+                        </div>
+                        <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800">
+                            <Users className="w-5 h-5 text-slate-600 dark:text-slate-200" />
+                        </div>
+                    </div>
+                    <p className="text-3xl font-bold text-slate-800 dark:text-white">
+                        {hasLoadedData ? orders.length : '—'}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                        Orders assigned to this agent
+                    </p>
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
+                            <PhilippinePeso className="w-5 h-5" />
+                            <span className="text-xs font-semibold uppercase tracking-wide">
+                                Commission
+                            </span>
+                        </div>
+                        <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/30">
+                            <TrendingUp className="w-5 h-5 text-emerald-500" />
+                        </div>
+                    </div>
+                    <p className="text-3xl font-bold text-slate-800 dark:text-white">
+                        {hasLoadedData ? formatCurrency(estimatedCommission) : '—'}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                        Estimated at {staffCommission}% commission rate
+                    </p>
                 </div>
             </section>
 

@@ -9,6 +9,7 @@ const createSalesInquiryMock = vi.fn();
 const getAllSalesInquiriesMock = vi.fn();
 const getSalesInquiryMock = vi.fn();
 const fetchContactsMock = vi.fn();
+const fetchContactByIdMock = vi.fn();
 
 vi.mock('../ToastProvider', () => ({
   useToast: () => ({
@@ -18,6 +19,7 @@ vi.mock('../ToastProvider', () => ({
 
 vi.mock('../../services/customerDatabaseLocalApiService', () => ({
   fetchContacts: (...args: any[]) => fetchContactsMock(...args),
+  fetchContactById: (...args: any[]) => fetchContactByIdMock(...args),
 }));
 
 vi.mock('../../services/salesInquiryLocalApiService', () => ({
@@ -135,6 +137,7 @@ describe('SalesInquiryView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fetchContactsMock.mockResolvedValue(baseContacts);
+    fetchContactByIdMock.mockImplementation(async (id: string) => baseContacts.find((contact) => contact.id === id) || null);
     getAllSalesInquiriesMock.mockResolvedValue([]);
     getSalesInquiryMock.mockResolvedValue(null);
   });
@@ -212,6 +215,29 @@ describe('SalesInquiryView', () => {
     expect(yourReferenceSelect).toHaveValue('');
     expect(within(yourReferenceSelect).getAllByRole('option')).toHaveLength(1);
     expect(within(yourReferenceSelect).getByRole('option')).toHaveTextContent('Select reference');
+  });
+
+  it('shows the legacy informational warning when balance exceeds credit limit', async () => {
+    const user = userEvent.setup();
+    fetchContactsMock.mockResolvedValue([
+      {
+        ...baseContacts[0],
+        creditLimit: 10000,
+        balance: 15000,
+      },
+    ]);
+    fetchContactByIdMock.mockResolvedValue({
+      ...baseContacts[0],
+      creditLimit: 10000,
+      balance: 15000,
+    });
+
+    render(<SalesInquiryView />);
+
+    await waitFor(() => expect(fetchContactsMock).toHaveBeenCalled());
+    await user.selectOptions(screen.getByLabelText('Customer'), 'c-1');
+
+    expect(await screen.findByText(/balance exceeds credit limit\./i)).toHaveTextContent(/informational only/i);
   });
 
   it('preserves a saved customer reference even when it is no longer in the current contact list', async () => {

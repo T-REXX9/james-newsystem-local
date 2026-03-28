@@ -17,7 +17,7 @@ import {
   printOrderSlip,
   updateOrderSlip,
 } from '../services/orderSlipLocalApiService';
-import { fetchContacts } from '../services/customerDatabaseLocalApiService';
+import { fetchContactById, fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { isOrderSlipAllowedForTransactionType, syncDocumentPolicyState, unpostSalesOrder } from '../services/salesOrderLocalApiService';
 import { Contact, OrderSlip, OrderSlipStatus } from '../types';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
@@ -79,6 +79,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
   const [printing, setPrinting] = useState(false);
   const [orderSlips, setOrderSlips] = useState<OrderSlip[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(true);
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
@@ -219,11 +220,24 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
     window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab, payload } }));
   }, []);
 
+  const selectSlip = useCallback(async (slip: OrderSlip) => {
+    setSelectedSlip(slip);
+    try {
+      const detail = await getOrderSlip(slip.id);
+      if (detail) {
+        setSelectedSlip(detail);
+        setTrackingNoDraft(detail.tracking_no || '');
+      }
+    } catch (err) {
+      console.error('Failed loading selected order slip detail:', err);
+    }
+  }, []);
+
   useEffect(() => {
     if (orderSlips.length > 0 && !selectedSlip) {
-      setSelectedSlip(orderSlips[0]);
+      void selectSlip(orderSlips[0]);
     }
-  }, [orderSlips, selectedSlip]);
+  }, [orderSlips, selectSlip, selectedSlip]);
 
   useEffect(() => {
     if (!orderSlips.length) return;
@@ -232,25 +246,29 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
       ? orderSlips.find(entry => String(entry.slip_no || '').toLowerCase() === initialSlipRefNo.toLowerCase())
       : null;
     const slip = slipById || slipByNo;
-    if (slip) setSelectedSlip(slip);
-  }, [initialSlipId, initialSlipRefNo, orderSlips]);
+    if (slip) void selectSlip(slip);
+  }, [initialSlipId, initialSlipRefNo, orderSlips, selectSlip]);
 
   useEffect(() => {
-    if (!selectedSlip?.id) return;
+    if (!selectedSlip?.contact_id) {
+      setSelectedCustomerDetail(null);
+      return;
+    }
     let active = true;
-    getOrderSlip(selectedSlip.id)
+    fetchContactById(selectedSlip.contact_id)
       .then((detail) => {
-        if (!active || !detail) return;
-        setSelectedSlip(detail);
-        setTrackingNoDraft(detail.tracking_no || '');
+        if (!active) return;
+        setSelectedCustomerDetail(detail);
       })
       .catch((err) => {
-        console.error('Failed loading selected order slip detail:', err);
+        console.error('Failed loading selected order slip customer detail:', err);
+        if (!active) return;
+        setSelectedCustomerDetail(null);
       });
     return () => {
       active = false;
     };
-  }, [selectedSlip?.id]);
+  }, [selectedSlip?.contact_id]);
 
   useEffect(() => {
     setTrackingNoDraft(selectedSlip?.tracking_no || '');
@@ -260,7 +278,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
     setPage(1);
   }, [statusFilter, month, year]);
 
-  const selectedCustomer = selectedSlip ? customerMap.get(selectedSlip.contact_id) : null;
+  const selectedCustomer = selectedCustomerDetail || (selectedSlip ? customerMap.get(selectedSlip.contact_id) : null);
   const selectedCustomerLabel = selectedCustomer?.company || selectedSlip?.customer_name || selectedSlip?.contact_id || '-';
   const selectedSlipPriceGroupDisplay = normalizePriceGroup(selectedSlip?.price_group || '');
   const canProcessOrderSlip = isOrderSlipAllowedForTransactionType(selectedCustomer?.transactionType);
@@ -543,7 +561,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                     return (
                       <tr
                         key={slip.id}
-                        onClick={() => setSelectedSlip(slip)}
+                        onClick={() => void selectSlip(slip)}
                         className={`cursor-pointer ${index % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50 dark:bg-slate-900/60'} hover:bg-slate-100 dark:hover:bg-slate-800 ${orderRowTone(slip)}`}
                       >
                         <td className="px-3 py-2">{formatDate(slip.sales_date)}</td>

@@ -10,7 +10,7 @@ import {
   updateInvoiceNumber,
 } from '../services/invoiceLocalApiService';
 import { getLocalAuthSession } from '../services/localAuthService';
-import { fetchContacts } from '../services/customerDatabaseLocalApiService';
+import { fetchContactById, fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { isInvoiceAllowedForTransactionType, syncDocumentPolicyState, unpostSalesOrder } from '../services/salesOrderLocalApiService';
 import { Contact, Invoice, InvoiceStatus } from '../types';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
@@ -70,6 +70,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
   const [printing, setPrinting] = useState(false);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -213,11 +214,23 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
     void type;
   }, []);
 
+  const selectInvoice = useCallback(async (invoice: Invoice) => {
+    setSelectedInvoice(invoice);
+    try {
+      const detail = await getInvoice(invoice.id);
+      if (detail) {
+        setSelectedInvoice(detail);
+      }
+    } catch (err) {
+      console.error('Failed loading selected invoice detail:', err);
+    }
+  }, []);
+
   useEffect(() => {
     if (invoices.length > 0 && !selectedInvoice) {
-      setSelectedInvoice(invoices[0]);
+      void selectInvoice(invoices[0]);
     }
-  }, [invoices, selectedInvoice]);
+  }, [invoices, selectInvoice, selectedInvoice]);
 
   useEffect(() => {
     if (!invoices.length) return;
@@ -226,30 +239,35 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
       ? invoices.find(entry => String(entry.invoice_no || '').toLowerCase() === initialInvoiceRefNo.toLowerCase())
       : null;
     const invoice = invoiceById || invoiceByNo;
-    if (invoice) setSelectedInvoice(invoice);
-  }, [initialInvoiceId, initialInvoiceRefNo, invoices]);
+    if (invoice) void selectInvoice(invoice);
+  }, [initialInvoiceId, initialInvoiceRefNo, invoices, selectInvoice]);
 
   useEffect(() => {
-    if (!selectedInvoice?.id) return;
+    if (!selectedInvoice?.contact_id) {
+      setSelectedCustomerDetail(null);
+      return;
+    }
     let active = true;
-    getInvoice(selectedInvoice.id)
+    fetchContactById(selectedInvoice.contact_id)
       .then((detail) => {
-        if (!active || !detail) return;
-        setSelectedInvoice(detail);
+        if (!active) return;
+        setSelectedCustomerDetail(detail);
       })
       .catch((err) => {
-        console.error('Failed loading selected invoice detail:', err);
+        console.error('Failed loading selected invoice customer detail:', err);
+        if (!active) return;
+        setSelectedCustomerDetail(null);
       });
     return () => {
       active = false;
     };
-  }, [selectedInvoice?.id]);
+  }, [selectedInvoice?.contact_id]);
 
   useEffect(() => {
     setPage(1);
   }, [statusFilter, dateRange.from, dateRange.to]);
 
-  const selectedCustomer = selectedInvoice ? customerMap.get(selectedInvoice.contact_id) : null;
+  const selectedCustomer = selectedCustomerDetail || (selectedInvoice ? customerMap.get(selectedInvoice.contact_id) : null);
   const selectedCustomerLabel = selectedCustomer?.company || selectedInvoice?.contact_id || '-';
   const subtotal = selectedInvoice?.items.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
   const vatAmount = subtotal * VAT_RATE;
@@ -552,7 +570,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                     return (
                       <tr
                         key={invoice.id}
-                        onClick={() => setSelectedInvoice(invoice)}
+                        onClick={() => void selectInvoice(invoice)}
                         className={`cursor-pointer align-top ${index % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50 dark:bg-slate-900/60'} hover:bg-slate-100 dark:hover:bg-slate-800 ${invoiceRowTone(invoice)}`}
                       >
                         <td className="px-3 py-2">{formatDate(invoice.sales_date)}</td>

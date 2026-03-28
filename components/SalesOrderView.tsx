@@ -19,7 +19,7 @@ import {
   getAllSalesOrders,
   unpostSalesOrder,
 } from '../services/salesOrderLocalApiService';
-import { fetchContacts } from '../services/customerDatabaseLocalApiService';
+import { fetchContactById, fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { getLocalAuthSession } from '../services/localAuthService';
 import { dispatchWorkflowNotification, fetchProfiles } from '../services/supabaseService';
 import StatusBadge from './StatusBadge';
@@ -89,6 +89,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
   const [totalPages, setTotalPages] = useState(1);
   const [orders, setOrders] = useState<SalesOrder[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<Contact | null>(null);
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
@@ -312,18 +313,30 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
     navigateToModule('invoice', { invoiceId: link.id });
   }, [navigateToModule]);
 
+  const selectOrder = useCallback(async (order: SalesOrder) => {
+    setSelectedOrder(order);
+    try {
+      const detail = await getSalesOrder(order.id);
+      if (detail) {
+        setSelectedOrder(detail);
+      }
+    } catch (err) {
+      console.error('Failed loading selected sales order detail:', err);
+    }
+  }, []);
+
   useEffect(() => {
     if (orders.length > 0 && !selectedOrder) {
-      setSelectedOrder(orders[0]);
+      void selectOrder(orders[0]);
     }
-  }, [orders, selectedOrder]);
+  }, [orders, selectOrder, selectedOrder]);
 
   useEffect(() => {
     if (!initialOrderId) return;
 
     const initial = orders.find(order => order.id === initialOrderId);
     if (initial) {
-      setSelectedOrder(initial);
+      void selectOrder(initial);
       return;
     }
 
@@ -359,22 +372,27 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
   }, [statusFilter, dateRange.from, dateRange.to]);
 
   useEffect(() => {
-    if (!selectedOrder?.id) return;
+    if (!selectedOrder?.contact_id) {
+      setSelectedCustomerDetail(null);
+      return;
+    }
     let active = true;
-    getSalesOrder(selectedOrder.id)
+    fetchContactById(selectedOrder.contact_id)
       .then((detail) => {
-        if (!active || !detail) return;
-        setSelectedOrder(detail);
+        if (!active) return;
+        setSelectedCustomerDetail(detail);
       })
       .catch((err) => {
-        console.error('Failed loading selected sales order detail:', err);
+        console.error('Failed loading selected sales order customer detail:', err);
+        if (!active) return;
+        setSelectedCustomerDetail(null);
       });
     return () => {
       active = false;
     };
-  }, [selectedOrder?.id]);
+  }, [selectedOrder?.contact_id]);
 
-  const selectedCustomer = selectedOrder ? customerMap.get(selectedOrder.contact_id) : null;
+  const selectedCustomer = selectedCustomerDetail || (selectedOrder ? customerMap.get(selectedOrder.contact_id) : null);
   const selectedCustomerLabel = selectedOrder ? getCustomerLabel(selectedOrder, selectedCustomer) : '-';
   const selectedOrderPriceGroupDisplay = normalizePriceGroup(
     selectedOrder?.price_group || selectedCustomer?.priceGroup || ''
@@ -607,6 +625,9 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
     monthlySales?: number;
     since?: string;
   }) | null;
+  const selectedOrderCreditLimit = Number(selectedOrder?.credit_limit || selectedCustomer?.creditLimit || 0);
+  const selectedOrderBalance = Number(summaryCustomer?.balance || 0);
+  const exceedsCreditLimit = selectedOrderCreditLimit > 0 && selectedOrderBalance > selectedOrderCreditLimit;
   const displayMetricValue = (value: number | string | undefined | null, isCurrency = false) => {
     if (value === '' || value === null || value === undefined) return '—';
     if (typeof value === 'number') return isCurrency ? formatCurrency(value) : String(value);
@@ -736,7 +757,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
                     return (
                       <tr
                         key={order.id}
-                        onClick={() => setSelectedOrder(order)}
+                        onClick={() => void selectOrder(order)}
                         className={`cursor-pointer ${index % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50 dark:bg-slate-900/60'} hover:bg-slate-100 dark:hover:bg-slate-800 ${orderRowTone(order)}`}
                       >
                         <td className="px-3 py-2">{formatDate(order.sales_date)}</td>
@@ -850,6 +871,12 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
               {selectedOrderStatus === 'submitted' && !selectedOrder?.can_approve && (
                 <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded p-2">
                   This sales order is waiting for an assigned approver account.
+                </div>
+              )}
+
+              {exceedsCreditLimit && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded p-2">
+                  Balance exceeds credit limit. The old system keeps this as an informational warning and does not block the sales order flow.
                 </div>
               )}
 
