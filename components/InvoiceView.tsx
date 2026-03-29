@@ -590,13 +590,13 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                           </div>
                         </td>
                         <td className="px-3 py-2">
-                          <div className="min-w-0 truncate leading-4" title={invoice.reference_no || '-'}>
-                            {invoice.reference_no || '-'}
+                          <div className="min-w-0 truncate leading-4" title={invoice.debit_memo_no || '-'}>
+                            {invoice.debit_memo_no || '-'}
                           </div>
                         </td>
                         <td className="px-3 py-2">
-                          <div className="min-w-0 truncate leading-4" title={invoice.send_by || '-'}>
-                            {invoice.send_by || '-'}
+                          <div className="min-w-0 truncate leading-4" title={invoice.tracking_no || '-'}>
+                            {invoice.tracking_no || '-'}
                           </div>
                         </td>
                         <td className="px-3 py-2">

@@ -1208,6 +1208,8 @@ export interface Invoice {
   promise_to_pay: string;
   po_number: string;
   remarks?: string;
+  debit_memo_no?: string;
+  tracking_no?: string;
   inquiry_type: string;
   urgency: string;
   urgency_date?: string;

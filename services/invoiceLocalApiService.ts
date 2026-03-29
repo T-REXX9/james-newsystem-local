@@ -82,6 +82,8 @@ const mapInvoiceSummary = (raw: any): Invoice => {
     promise_to_pay: String(raw?.promise_to_pay || ''),
     po_number: String(raw?.po_number || ''),
     remarks: String(raw?.remarks || ''),
+    debit_memo_no: String(raw?.debit_memo_no || ''),
+    tracking_no: String(raw?.tracking_no || ''),
     inquiry_type: '',
     urgency: '',
     urgency_date: '',
