@@ -5,7 +5,7 @@
 import { supabase } from '../lib/supabaseClient';
 import type { RealtimeChannelStatus } from '@supabase/supabase-js';
 import { DEFAULT_STAFF_ACCESS_RIGHTS, DEFAULT_STAFF_ROLE, generateAvatarUrl, STAFF_ROLES } from '../constants';
-import { Contact, ContactPerson, PipelineDeal, Product, Task, UserProfile, CallLogEntry, Inquiry, Purchase, ReorderReportEntry, TeamMessage, CreateStaffAccountInput, CreateStaffAccountResult, StaffAccountValidationError, Notification, CreateNotificationInput, NotificationType, RecycleBinItemType, CreateIncidentReportInput, AgentSalesData, AgentPerformanceSummary, TopCustomer, StandardNotificationPayload } from '../types';
+import { Contact, ContactPerson, PipelineDeal, Product, Task, UserProfile, CallLogEntry, Inquiry, Purchase, ReorderReportEntry, TeamMessage, CreateStaffAccountInput, CreateStaffAccountResult, StaffAccountValidationError, Notification, CreateNotificationInput, NotificationType, NotificationCategory, RecycleBinItemType, CreateIncidentReportInput, AgentSalesData, AgentPerformanceSummary, TopCustomer, StandardNotificationPayload } from '../types';
 import { sanitizeObject, SanitizationConfig } from '../utils/dataSanitization';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { ENTITY_TYPES, logCreate, logDelete, logUpdate } from './activityLogService';
@@ -2565,12 +2565,30 @@ const asNotificationMetadataString = (value: unknown): string | undefined => {
   return normalizedValue ? normalizedValue : undefined;
 };
 
+const normalizeNotificationCategory = (
+  category?: unknown,
+  metadata?: Partial<StandardNotificationPayload> & Record<string, unknown>
+): NotificationCategory => {
+  const explicitCategory = asNotificationMetadataString(category)?.toLowerCase();
+  if (explicitCategory === 'alert' || explicitCategory === 'notification') {
+    return explicitCategory;
+  }
+
+  const metadataCategory = asNotificationMetadataString(metadata?.category)?.toLowerCase();
+  if (metadataCategory === 'alert' || metadataCategory === 'notification') {
+    return metadataCategory;
+  }
+
+  return asNotificationMetadataString(metadata?.alert_type) ? 'alert' : 'notification';
+};
+
 const normalizeNotificationPayload = (
   recipientId: string,
   title: string,
   type: NotificationType,
   actionUrl?: string,
-  metadata?: Partial<StandardNotificationPayload> & Record<string, unknown>
+  metadata?: Partial<StandardNotificationPayload> & Record<string, unknown>,
+  category?: NotificationCategory
 ): StandardNotificationPayload => {
   const action = String(metadata?.action || title || 'notify');
   const entityType = String(metadata?.entity_type || 'system');
@@ -2578,6 +2596,7 @@ const normalizeNotificationPayload = (
   const refno = asNotificationMetadataString(metadata?.refno) || entityId;
   const status = metadata?.status ? String(metadata.status) : 'created';
   const normalizedActionUrl = actionUrl || metadata?.action_url ? String(actionUrl || metadata?.action_url) : undefined;
+  const normalizedCategory = normalizeNotificationCategory(category, metadata);
 
   return {
     ...metadata,
@@ -2589,6 +2608,7 @@ const normalizeNotificationPayload = (
     org_id: metadata?.org_id ? String(metadata.org_id) : undefined,
     tenant: metadata?.tenant ? String(metadata.tenant) : undefined,
     severity: (metadata?.severity as NotificationType) || type,
+    category: normalizedCategory,
     action,
     status,
     action_url: normalizedActionUrl,
@@ -2624,13 +2644,16 @@ export const createNotification = async (input: CreateNotificationInput): Promis
       input.title,
       input.type,
       input.action_url,
-      input.metadata
+      input.metadata,
+      input.category
     );
+    const category = normalizeNotificationCategory(input.category, metadata);
     const existing = await findExistingNotificationByIdempotency(input.recipient_id, metadata.idempotency_key);
     if (existing) return existing;
 
     const payload: CreateNotificationInput = {
       ...input,
+      category,
       action_url: input.action_url || metadata.action_url,
       metadata,
     };

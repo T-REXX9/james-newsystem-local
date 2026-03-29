@@ -155,6 +155,7 @@ BEGIN
           title,
           message,
           type,
+          category,
           action_url,
           metadata,
           is_read
@@ -168,8 +169,10 @@ BEGIN
             COALESCE(v_part_no, NEW.item_code)
           ),
           'warning',
+          'alert',
           '/dashboard',  -- Link to owner dashboard
           jsonb_build_object(
+            'category', 'alert',
             'alert_type', 'inquiry_threshold',
             'item_code', NEW.item_code,
             'part_no', v_part_no,

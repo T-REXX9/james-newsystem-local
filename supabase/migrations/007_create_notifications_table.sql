@@ -5,6 +5,8 @@ CREATE TABLE IF NOT EXISTS public.notifications (
   title TEXT NOT NULL,
   message TEXT NOT NULL,
   type TEXT NOT NULL CHECK (type IN ('info', 'success', 'warning', 'error')),
+  category TEXT NOT NULL DEFAULT 'notification'
+    CONSTRAINT notifications_category_check CHECK (category IN ('notification', 'alert')),
   action_url TEXT,
   metadata JSONB,
   is_read BOOLEAN NOT NULL DEFAULT FALSE,

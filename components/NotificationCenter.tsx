@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Bell,
   BellDot,
-  Check,
   Trash2,
   Info,
   CheckCircle,
@@ -10,12 +9,48 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useNotifications } from './NotificationProvider';
-import { Notification } from '../types';
+import { Notification, NotificationCategory } from '../types';
+
+const NOTIFICATION_TABS: Array<{
+  id: NotificationCategory;
+  label: string;
+  emptyTitle: string;
+  emptyDescription: string;
+}> = [
+  {
+    id: 'notification',
+    label: 'Notifications',
+    emptyTitle: 'No notifications here.',
+    emptyDescription: 'You can check it again later.',
+  },
+  {
+    id: 'alert',
+    label: 'Alerts',
+    emptyTitle: 'No alerts here.',
+    emptyDescription: 'You can check it again later.',
+  },
+];
+
+const resolveNotificationCategory = (notification: Notification): NotificationCategory => {
+  if (notification.category === 'alert' || notification.category === 'notification') {
+    return notification.category;
+  }
+
+  const metadataCategory = typeof notification.metadata?.category === 'string'
+    ? notification.metadata.category.toLowerCase()
+    : undefined;
+
+  if (metadataCategory === 'alert' || metadataCategory === 'notification') {
+    return metadataCategory;
+  }
+
+  return notification.metadata?.alert_type ? 'alert' : 'notification';
+};
 
 const NotificationCenter: React.FC = () => {
-  const { notifications, unreadCount, markAsRead, markAllAsRead, deleteNotification } =
-    useNotifications();
+  const { notifications, unreadCount, markAsRead, deleteNotification } = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<NotificationCategory>('notification');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown when clicking outside
@@ -74,9 +109,7 @@ const NotificationCenter: React.FC = () => {
   };
 
   const handleNotificationClick = async (notification: Notification) => {
-    if (!notification.is_read) {
-      await markAsRead(notification);
-    }
+    await markAsRead(notification);
     if (notification.action_url) {
       const tabId = notification.action_url.replace(/^\/+/, '').split(/[?#]/)[0].trim();
       if (tabId) {
@@ -86,8 +119,36 @@ const NotificationCenter: React.FC = () => {
     }
   };
 
-  const unreadNotifications = notifications.filter((n) => !n.is_read);
-  const readNotifications = notifications.filter((n) => n.is_read);
+  const notificationsByTab = NOTIFICATION_TABS.reduce<Record<NotificationCategory, Notification[]>>(
+    (acc, tab) => {
+      acc[tab.id] = notifications.filter((notification) => resolveNotificationCategory(notification) === tab.id);
+      return acc;
+    },
+    {
+      notification: [],
+      alert: [],
+    }
+  );
+
+  const unreadCountByTab = NOTIFICATION_TABS.reduce<Record<NotificationCategory, number>>(
+    (acc, tab) => {
+      acc[tab.id] = notificationsByTab[tab.id].filter((notification) => !notification.is_read).length;
+      return acc;
+    },
+    {
+      notification: 0,
+      alert: 0,
+    }
+  );
+
+  const activeTabConfig = NOTIFICATION_TABS.find((tab) => tab.id === activeTab) || NOTIFICATION_TABS[0];
+  const activeNotifications = notificationsByTab[activeTab];
+  const unreadNotifications = activeNotifications.filter((notification) => !notification.is_read);
+  const readNotifications = activeNotifications.filter((notification) => notification.is_read);
+
+  const handleMarkTabAsRead = async () => {
+    await Promise.all(unreadNotifications.map((notification) => markAsRead(notification)));
+  };
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -115,11 +176,11 @@ const NotificationCenter: React.FC = () => {
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700">
             <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-              Notifications
+              {activeTabConfig.label}
             </h3>
-            {unreadCount > 0 && (
+            {unreadNotifications.length > 0 && (
               <button
-                onClick={() => markAllAsRead()}
+                onClick={handleMarkTabAsRead}
                 className="text-xs px-2 py-1 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors font-medium"
               >
                 Mark all as read
@@ -127,13 +188,42 @@ const NotificationCenter: React.FC = () => {
             )}
           </div>
 
+          <div className="grid grid-cols-2 gap-2 px-4 py-3 border-b border-slate-200 dark:border-slate-700">
+            {NOTIFICATION_TABS.map((tab) => {
+              const isActive = tab.id === activeTab;
+              const totalCount = notificationsByTab[tab.id].length;
+              const unreadTabCount = unreadCountByTab[tab.id];
+
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center justify-between rounded-md border px-3 py-2 text-sm transition-colors ${
+                    isActive
+                      ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/30 dark:text-blue-200'
+                      : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <span className="font-medium">{tab.label}</span>
+                  <span className="flex items-center gap-2">
+                    {unreadTabCount > 0 && <span className="inline-block h-2 w-2 rounded-full bg-blue-600" />}
+                    <span>{totalCount}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
           {/* Notifications List */}
           <div className="overflow-y-auto flex-1">
-            {notifications.length === 0 ? (
+            {activeNotifications.length === 0 ? (
               <div className="px-4 py-8 text-center">
                 <Bell className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-700" />
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  No notifications yet
+                  {activeTabConfig.emptyTitle}
+                </p>
+                <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                  {activeTabConfig.emptyDescription}
                 </p>
               </div>
             ) : (

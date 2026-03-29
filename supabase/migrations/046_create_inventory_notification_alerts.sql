@@ -87,6 +87,7 @@ BEGIN
         title,
         message,
         type,
+        category,
         action_url,
         metadata,
         is_read
@@ -95,8 +96,10 @@ BEGIN
         v_title,
         v_message,
         CASE WHEN v_alert_type = 'expired_inventory' THEN 'error' ELSE 'warning' END,
+        'alert',
         'warehouse-inventory-product-database',
         jsonb_build_object(
+          'category', 'alert',
           'alert_type', v_alert_type,
           'entity_type', 'product',
           'entity_id', NEW.id,

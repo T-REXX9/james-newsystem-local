@@ -4,7 +4,7 @@ import {
   fetchNotifications,
   getUnreadCount,
   markAsRead,
-  markNotificationsAsReadByMetadata,
+  markNotificationsAsReadByEntityKey,
   markAllAsRead,
   deleteNotification,
   subscribeToNotifications,
@@ -245,7 +245,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
 
       try {
         const result = readTarget
-          ? await markNotificationsAsReadByMetadata(userId, readTarget)
+          ? await markNotificationsAsReadByEntityKey(userId, readTarget)
           : {
             success: await markAsRead(notification.id),
             updatedCount: notification.is_read ? 0 : 1,
@@ -260,15 +260,27 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
         const updatedIds = result.updatedIds.length > 0 ? result.updatedIds : pendingReadIds;
         const updatedIdSet = new Set(updatedIds);
         const readAt = result.readAt || new Date().toISOString();
+        let locallyUpdatedUnreadCount = 0;
 
-        setNotifications((prev) =>
-          prev.map((notif) =>
-            updatedIdSet.has(notif.id)
-              ? { ...notif, is_read: true, read_at: notif.read_at || readAt }
-              : notif
-          )
-        );
-        setUnreadCount((prev) => Math.max(0, prev - result.updatedCount));
+        setNotifications((prev) => {
+          const nextNotifications = prev.map((notif) => {
+            if (!updatedIdSet.has(notif.id)) {
+              return notif;
+            }
+
+            if (!notif.is_read) {
+              locallyUpdatedUnreadCount += 1;
+            }
+
+            return { ...notif, is_read: true, read_at: notif.read_at || readAt };
+          });
+          notificationsRef.current = nextNotifications;
+          return nextNotifications;
+        });
+
+        if (locallyUpdatedUnreadCount > 0) {
+          setUnreadCount((prev) => Math.max(0, prev - locallyUpdatedUnreadCount));
+        }
       } catch (err) {
         console.error('Error marking notification as read:', err);
       } finally {
@@ -280,18 +292,45 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
 
   // Handle mark all as read
   const handleMarkAllAsRead = useCallback(async () => {
+    const pendingReadIds = notificationsRef.current
+      .filter((notif) => !notif.is_read)
+      .map((notif) => notif.id);
+
+    pendingReadIds.forEach((id) => pendingReadIdsRef.current.add(id));
+
     try {
-      await markAllAsRead(userId);
-      setNotifications((prev) =>
-        prev.map((notif) => ({
-          ...notif,
-          is_read: true,
-          read_at: notif.is_read ? notif.read_at : new Date().toISOString(),
-        }))
-      );
-      setUnreadCount(0);
+      const success = await markAllAsRead(userId);
+      if (!success) {
+        return;
+      }
+
+      const readAt = new Date().toISOString();
+      let locallyUpdatedUnreadCount = 0;
+
+      setNotifications((prev) => {
+        const nextNotifications = prev.map((notif) => {
+          if (notif.is_read) {
+            return notif;
+          }
+
+          locallyUpdatedUnreadCount += 1;
+          return {
+            ...notif,
+            is_read: true,
+            read_at: notif.read_at || readAt,
+          };
+        });
+        notificationsRef.current = nextNotifications;
+        return nextNotifications;
+      });
+
+      if (locallyUpdatedUnreadCount > 0) {
+        setUnreadCount((prev) => Math.max(0, prev - locallyUpdatedUnreadCount));
+      }
     } catch (err) {
       console.error('Error marking all as read:', err);
+    } finally {
+      pendingReadIds.forEach((id) => pendingReadIdsRef.current.delete(id));
     }
   }, [userId]);
 

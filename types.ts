@@ -46,6 +46,7 @@ export enum InvoiceStatus {
 }
 
 export type NotificationType = 'info' | 'success' | 'warning' | 'error';
+export type NotificationCategory = 'notification' | 'alert';
 
 export interface StandardNotificationPayload {
   actor_id: string;
@@ -55,6 +56,7 @@ export interface StandardNotificationPayload {
   org_id?: string;
   tenant?: string;
   severity: NotificationType;
+  category?: NotificationCategory;
   action: string;
   status?: string;
   action_url?: string;
@@ -69,6 +71,7 @@ export interface Notification {
   title: string;
   message: string;
   type: NotificationType;
+  category?: NotificationCategory;
   action_url?: string;
   metadata?: StandardNotificationPayload;
   is_read: boolean;
@@ -83,6 +86,7 @@ export interface CreateNotificationInput {
   title: string;
   message: string;
   type: NotificationType;
+  category?: NotificationCategory;
   action_url?: string;
   metadata?: StandardNotificationPayload;
 }
