@@ -25,7 +25,7 @@ import {
   getAllSalesInquiries,
   updateSalesInquiry,
 } from '../services/salesInquiryLocalApiService';
-import { getProductPrice } from '../services/productLocalApiService';
+import { getProductPrice, fetchProductById } from '../services/productLocalApiService';
 import { getSalesOrderByInquiry, getSalesOrder } from '../services/salesOrderLocalApiService';
 
 import ProductSearchModal from './ProductSearchModal';
@@ -38,6 +38,7 @@ import { validateNumeric, validateRequired } from '../utils/formValidation';
 import { parseSupabaseError } from '../utils/errorHandler';
 import {
   normalizePriceGroup,
+  normalizePriceGroupToInternalKey,
   WRITABLE_PRICING_GROUP_OPTIONS,
 } from '../constants/pricingGroups';
 import { fetchCouriers, CourierRecord } from '../services/courierLocalApiService';
@@ -308,6 +309,42 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     }));
   };
 
+  const handlePriceGroupChange = useCallback(async (newGroup: string) => {
+    setPriceGroup(newGroup);
+
+    // Re-price all existing items that have a linked product
+    const itemsWithProduct = items.filter((item) => item.item_id);
+    if (itemsWithProduct.length === 0) return;
+
+    const productResults = await Promise.all(
+      itemsWithProduct.map((item) => fetchProductById(item.item_id).catch(() => null))
+    );
+
+    const priceMap = new Map<string, number>();
+    itemsWithProduct.forEach((item, idx) => {
+      const product = productResults[idx];
+      if (product) {
+        priceMap.set(item.item_id, getProductPrice(product, newGroup));
+      }
+    });
+
+    if (priceMap.size > 0) {
+      setItems((prev) =>
+        prev.map((item) => {
+          const newPrice = priceMap.get(item.item_id);
+          if (newPrice !== undefined) {
+            return {
+              ...item,
+              unit_price: newPrice,
+              amount: (Number(item.qty) || 0) * newPrice,
+            };
+          }
+          return item;
+        })
+      );
+    }
+  }, [items]);
+
   const formatCurrency = useCallback((value: number) => {
     const normalized = Number.isFinite(value) ? value : 0;
     return new Intl.NumberFormat('en-PH', {
@@ -410,7 +447,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   const loadInquiryIntoForm = useCallback((inquiry: SalesInquiry) => {
     const customer = customerMap.get(inquiry.contact_id) || null;
     const normalizedSalesDate = (inquiry.sales_date || '').split('T')[0];
-    const rawPriceGroup = inquiry.price_group || customer?.priceGroup || '';
+    const rawPriceGroup = normalizePriceGroupToInternalKey(inquiry.price_group || customer?.priceGroup || '');
     setInquiryNo((prev) => inquiry.inquiry_no || prev);
 
     const mappedItems: InquiryItemRow[] = (inquiry.items || []).map((item) => {
@@ -503,7 +540,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     setSelectedCustomer(customer);
     setDeliveryAddress(customer.deliveryAddress || customer.address || '');
     setSalesPerson(customer.salesman || '');
-    setPriceGroup(customer.priceGroup || '');
+    setPriceGroup(normalizePriceGroupToInternalKey(customer.priceGroup));
     setCreditLimit(Number(customer.creditLimit || 0));
     setTerms(customer.terms || '');
     setRemarks(customer.comment || '');
@@ -1282,7 +1319,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                         <select
                           disabled={isReadOnly}
                           value={priceGroup}
-                          onChange={(e) => setPriceGroup(e.target.value)}
+                          onChange={(e) => handlePriceGroupChange(e.target.value)}
                           className={`w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}`}
                         >
                           <option value="">—</option>

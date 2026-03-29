@@ -2668,6 +2668,68 @@ export const markAsRead = async (notificationId: string): Promise<boolean> => {
   }
 };
 
+export interface NotificationReadMetadataKey {
+  entityType?: string;
+  entityId?: string;
+  refno?: string;
+}
+
+export interface NotificationBatchReadResult {
+  success: boolean;
+  updatedCount: number;
+  updatedIds: string[];
+  readAt?: string;
+}
+
+export const markNotificationsAsReadByMetadata = async (
+  userId: string,
+  key: NotificationReadMetadataKey
+): Promise<NotificationBatchReadResult> => {
+  const readAt = new Date().toISOString();
+
+  try {
+    let query = supabase
+      .from('notifications')
+      .update({ is_read: true, read_at: readAt })
+      .eq('recipient_id', userId)
+      .eq('is_read', false);
+
+    if (key.entityType && key.entityId) {
+      query = query.contains('metadata', {
+        entity_type: key.entityType,
+        entity_id: key.entityId,
+      });
+    } else if (key.refno) {
+      query = query.contains('metadata', { refno: key.refno });
+    } else {
+      return {
+        success: false,
+        updatedCount: 0,
+        updatedIds: [],
+      };
+    }
+
+    const { data, error } = await query.select('id');
+    if (error) throw error;
+
+    const updatedIds = (((data as Array<{ id: string }> | null) || [])).map((row) => row.id);
+
+    return {
+      success: true,
+      updatedCount: updatedIds.length,
+      updatedIds,
+      readAt,
+    };
+  } catch (err) {
+    console.error('Error marking notifications as read by metadata:', err);
+    return {
+      success: false,
+      updatedCount: 0,
+      updatedIds: [],
+    };
+  }
+};
+
 export const markAllAsRead = async (userId: string): Promise<boolean> => {
   try {
     const { error } = await supabase
@@ -2876,6 +2938,7 @@ export const dispatchWorkflowNotification = async (input: NotifyWorkflowEventInp
         input.type,
         input.actionUrl,
         {
+          ...input.metadata,
           actor_id: actorId,
           actor_role: actorRole,
           entity_type: input.entityType,
@@ -2887,7 +2950,6 @@ export const dispatchWorkflowNotification = async (input: NotifyWorkflowEventInp
           tenant: input.tenant,
           severity: input.type,
           correlation_id: input.correlationId,
-          ...input.metadata,
         }
       )
     }));

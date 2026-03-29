@@ -196,6 +196,16 @@ export const updateProduct = async (id: string, updates: Partial<Product>): Prom
   if (!response.ok) throw new Error(await parseApiErrorMessage(response));
 };
 
+export const fetchProductById = async (id: string): Promise<Product | null> => {
+  const query = new URLSearchParams({ main_id: String(API_MAIN_ID) });
+  const response = await fetch(`${API_BASE_URL}/products/${encodeURIComponent(id)}?${query.toString()}`);
+  if (!response.ok) return null;
+  const payload = await response.json();
+  const raw = payload?.data ?? payload;
+  if (!raw?.id) return null;
+  return normalizeApiProduct(raw);
+};
+
 export const deleteProduct = async (id: string): Promise<void> => {
   const query = new URLSearchParams({ main_id: String(API_MAIN_ID) });
   const response = await fetch(`${API_BASE_URL}/products/${encodeURIComponent(id)}?${query.toString()}`, {
