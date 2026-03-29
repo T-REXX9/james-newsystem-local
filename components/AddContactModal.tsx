@@ -5,7 +5,7 @@ import ValidationSummary from './ValidationSummary';
 import FieldHelp from './FieldHelp';
 import { CUSTOMER_VAT_TYPES, DEFAULT_CUSTOMER_VAT_TYPE } from '../constants/customerVat';
 import { WRITABLE_PRICING_GROUP_OPTIONS, normalizePriceGroupToInternalKey } from '../constants/pricingGroups';
-import { validateOptionalEmail, validateOptionalPhone, validateRequired } from '../utils/formValidation';
+import { validateMaxLength, validateOptionalEmail, validateOptionalPhone, validateRequired } from '../utils/formValidation';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
 
@@ -258,7 +258,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
         name: fullContactPersons[0]?.name || 'Unknown Contact',
         title: fullContactPersons[0]?.position || '',
         email: fullContactPersons[0]?.email || '',
-        phone: fullContactPersons[0]?.mobile || '',
+        phone: fullContactPersons[0]?.telephone || '',
         mobile: fullContactPersons[0]?.mobile || '',
         avatar: formData.avatar || `https://i.pravatar.cc/150?u=${Date.now()}`,
         dealValue: formData.dealValue ?? 0,
@@ -315,6 +315,16 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
 
       const phoneValidation = validateOptionalPhone(primaryPerson.mobile);
       if (!phoneValidation.isValid) errors.primaryMobile = phoneValidation.message;
+
+      if (primaryPerson.telephone) {
+        const telephoneLengthValidation = validateMaxLength(primaryPerson.telephone, 'telephone number', 15);
+        if (!telephoneLengthValidation.isValid) errors.primaryTelephone = telephoneLengthValidation.message;
+      }
+
+      if (primaryPerson.mobile) {
+        const mobileLengthValidation = validateMaxLength(primaryPerson.mobile, 'mobile number', 15);
+        if (!mobileLengthValidation.isValid) errors.primaryMobile = mobileLengthValidation.message;
+      }
     }
 
     setValidationErrors(errors);
@@ -333,6 +343,11 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     }
     if (field === 'primaryMobile') {
       const result = validateOptionalPhone(value);
+      message = result.isValid ? '' : result.message;
+    }
+    if (field === 'primaryTelephone') {
+      const normalized = String(value || '').trim();
+      const result = normalized ? validateMaxLength(normalized, 'telephone number', 15) : { isValid: true, message: '' };
       message = result.isValid ? '' : result.message;
     }
     if (message || validationErrors[field]) {
@@ -588,7 +603,15 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                                    </div>
                                    <div>
                                        <label className="label">Telephone</label>
-                                       <input className="input" value={person.telephone} onChange={e => handleContactPersonChange(idx, 'telephone', e.target.value)} />
+                                       <input
+                                         className={`input ${idx === 0 && validationErrors.primaryTelephone ? 'border-rose-500' : ''}`}
+                                         value={person.telephone}
+                                         onChange={e => handleContactPersonChange(idx, 'telephone', e.target.value)}
+                                         onBlur={e => idx === 0 && handleBlur('primaryTelephone', e.target.value)}
+                                       />
+                                       {idx === 0 && validationErrors.primaryTelephone && (
+                                         <div className="mt-1 text-xs text-rose-600">{validationErrors.primaryTelephone}</div>
+                                       )}
                                    </div>
                                    <div>
                                        <label className="label">Email</label>

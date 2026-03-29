@@ -2559,6 +2559,12 @@ const buildDefaultIdempotencyKey = (
   status?: string
 ) => [recipientId, action, entityType, entityId, status || 'unknown', title].join(':');
 
+const asNotificationMetadataString = (value: unknown): string | undefined => {
+  if (value === null || value === undefined) return undefined;
+  const normalizedValue = String(value).trim();
+  return normalizedValue ? normalizedValue : undefined;
+};
+
 const normalizeNotificationPayload = (
   recipientId: string,
   title: string,
@@ -2569,6 +2575,7 @@ const normalizeNotificationPayload = (
   const action = String(metadata?.action || title || 'notify');
   const entityType = String(metadata?.entity_type || 'system');
   const entityId = String(metadata?.entity_id || recipientId);
+  const refno = asNotificationMetadataString(metadata?.refno) || entityId;
   const status = metadata?.status ? String(metadata.status) : 'created';
   const normalizedActionUrl = actionUrl || metadata?.action_url ? String(actionUrl || metadata?.action_url) : undefined;
 
@@ -2578,6 +2585,7 @@ const normalizeNotificationPayload = (
     actor_role: String(metadata?.actor_role || 'system'),
     entity_type: entityType,
     entity_id: entityId,
+    refno,
     org_id: metadata?.org_id ? String(metadata.org_id) : undefined,
     tenant: metadata?.tenant ? String(metadata.tenant) : undefined,
     severity: (metadata?.severity as NotificationType) || type,
@@ -2681,11 +2689,14 @@ export interface NotificationBatchReadResult {
   readAt?: string;
 }
 
-export const markNotificationsAsReadByMetadata = async (
+export const markNotificationsAsReadByEntityKey = async (
   userId: string,
   key: NotificationReadMetadataKey
 ): Promise<NotificationBatchReadResult> => {
   const readAt = new Date().toISOString();
+  const entityType = asNotificationMetadataString(key.entityType);
+  const entityId = asNotificationMetadataString(key.entityId);
+  const refno = asNotificationMetadataString(key.refno);
 
   try {
     let query = supabase
@@ -2694,13 +2705,13 @@ export const markNotificationsAsReadByMetadata = async (
       .eq('recipient_id', userId)
       .eq('is_read', false);
 
-    if (key.entityType && key.entityId) {
+    if (entityType && entityId) {
       query = query.contains('metadata', {
-        entity_type: key.entityType,
-        entity_id: key.entityId,
+        entity_type: entityType,
+        entity_id: entityId,
       });
-    } else if (key.refno) {
-      query = query.contains('metadata', { refno: key.refno });
+    } else if (refno) {
+      query = query.contains('metadata', { refno });
     } else {
       return {
         success: false,
@@ -2729,6 +2740,11 @@ export const markNotificationsAsReadByMetadata = async (
     };
   }
 };
+
+export const markNotificationsAsReadByMetadata = async (
+  userId: string,
+  key: NotificationReadMetadataKey
+): Promise<NotificationBatchReadResult> => markNotificationsAsReadByEntityKey(userId, key);
 
 export const markAllAsRead = async (userId: string): Promise<boolean> => {
   try {
@@ -2925,6 +2941,12 @@ export const dispatchWorkflowNotification = async (input: NotifyWorkflowEventInp
     const validTargetUserIds = (input.targetUserIds || []).filter(isNotificationUuid);
     const recipients = new Set<string>([...validTargetUserIds, ...roleRecipients]);
     if (input.includeActor === true) recipients.add(actorId);
+    const workflowEntityMetadata = {
+      ...input.metadata,
+      entity_type: input.entityType,
+      entity_id: input.entityId,
+      refno: asNotificationMetadataString(input.metadata?.refno) || input.entityId,
+    };
 
     const notificationInputs: CreateNotificationInput[] = Array.from(recipients).map((recipientId) => ({
       recipient_id: recipientId,
@@ -2938,7 +2960,7 @@ export const dispatchWorkflowNotification = async (input: NotifyWorkflowEventInp
         input.type,
         input.actionUrl,
         {
-          ...input.metadata,
+          ...workflowEntityMetadata,
           actor_id: actorId,
           actor_role: actorRole,
           entity_type: input.entityType,
