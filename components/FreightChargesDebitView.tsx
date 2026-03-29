@@ -1,11 +1,16 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, RefreshCcw, Search, Trash2 } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { FileText, Loader2, Plus, RefreshCcw, Search, Trash2 } from 'lucide-react';
 import {
   freightChargesService,
   FreightCharge,
   FreightTransactionType,
   LedgerCustomer,
 } from '../services/freightChargesService';
+import { getAllInvoices } from '../services/invoiceLocalApiService';
+import { getAllOrderSlips } from '../services/orderSlipLocalApiService';
+import { Contact, Invoice, OrderSlip } from '../types';
+import { fetchContacts } from '../services/customerDatabaseLocalApiService';
+import { useDebounce } from '../hooks/useDebounce';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
@@ -17,6 +22,162 @@ const toDateInput = (value?: string): string => {
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
+};
+
+interface SourceDocument {
+  id: string;
+  doc_no: string;
+  type: 'Invoice' | 'Order Slip';
+  contact_id: string;
+  customer_name: string;
+  sales_date: string;
+  sales_person: string;
+  grand_total: number;
+}
+
+const SourceDocumentAutocomplete: React.FC<{
+  documents: SourceDocument[];
+  selectedDoc: SourceDocument | null;
+  onSelect: (doc: SourceDocument) => void;
+  disabled?: boolean;
+}> = ({ documents, selectedDoc, onSelect, disabled = false }) => {
+  const [query, setQuery] = useState(selectedDoc?.doc_no || '');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const debouncedQuery = useDebounce(query, 200);
+
+  useEffect(() => {
+    setQuery(selectedDoc?.doc_no || '');
+  }, [selectedDoc]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (wrapperRef.current?.contains(event.target as Node)) return;
+      setShowDropdown(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const results = useMemo(() => {
+    const q = debouncedQuery.trim().toLowerCase();
+    const sorted = [...documents].sort((a, b) => b.sales_date.localeCompare(a.sales_date));
+    if (!q) return sorted.slice(0, 40);
+    return sorted.filter((doc) => {
+      const values = [
+        doc.doc_no,
+        doc.id,
+        doc.customer_name,
+        doc.sales_person,
+      ];
+      return values.some((value) => (value || '').toLowerCase().includes(q));
+    }).slice(0, 40);
+  }, [debouncedQuery, documents]);
+
+  useEffect(() => {
+    setSelectedIndex(results.length > 0 ? 0 : -1);
+  }, [results]);
+
+  const handleSelect = (doc: SourceDocument) => {
+    onSelect(doc);
+    setQuery(doc.doc_no || doc.id);
+    setShowDropdown(false);
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (disabled) return;
+    if (!showDropdown && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+      event.preventDefault();
+      setShowDropdown(true);
+      return;
+    }
+    if (!showDropdown) return;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setSelectedIndex((prev) => Math.min(prev + 1, results.length - 1));
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setSelectedIndex((prev) => Math.max(prev - 1, 0));
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (selectedIndex >= 0 && results[selectedIndex]) {
+        handleSelect(results[selectedIndex]);
+      }
+      return;
+    }
+    if (event.key === 'Escape') {
+      setShowDropdown(false);
+    }
+  };
+
+  const isSearching = query !== debouncedQuery;
+
+  return (
+    <div className="relative" ref={wrapperRef}>
+      <div className="relative">
+        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          {isSearching ? (
+            <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+          ) : (
+            <FileText className="w-4 h-4 text-slate-400" />
+          )}
+        </div>
+        <input
+          value={query}
+          disabled={disabled}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setShowDropdown(true);
+          }}
+          onFocus={() => {
+            if (!disabled) setShowDropdown(true);
+          }}
+          onKeyDown={handleKeyDown}
+          placeholder="Search invoice or order slip..."
+          className="w-full rounded-lg border border-slate-300 bg-white pl-10 pr-3 py-2 text-sm dark:bg-slate-900 dark:border-slate-700"
+        />
+      </div>
+
+      {showDropdown && (
+        <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
+          {results.length === 0 ? (
+            <div className="px-3 py-3 text-sm text-slate-500">No invoice or order slip found.</div>
+          ) : (
+            <ul className="max-h-72 overflow-auto divide-y divide-slate-100 dark:divide-slate-800">
+              {results.map((doc, index) => (
+                <li
+                  key={`${doc.type}-${doc.id}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    handleSelect(doc);
+                  }}
+                  onMouseEnter={() => setSelectedIndex(index)}
+                  className={`cursor-pointer px-3 py-2 ${selectedIndex === index ? 'bg-blue-50 dark:bg-blue-950/30' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-sm text-slate-900 dark:text-white">{doc.doc_no || doc.id}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] ${doc.type === 'Invoice' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                      {doc.type}
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{doc.customer_name || 'Unknown Customer'}</div>
+                  <div className="text-[11px] text-slate-400 dark:text-slate-500">
+                    {doc.sales_date || '-'} | {doc.sales_person || '-'} | {peso.format(doc.grand_total || 0)}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
 };
 
 const FreightChargesDebitView: React.FC = () => {
@@ -42,6 +203,9 @@ const FreightChargesDebitView: React.FC = () => {
 
   const [customerSearch, setCustomerSearch] = useState('');
   const [customers, setCustomers] = useState<LedgerCustomer[]>([]);
+  const [sourceDocs, setSourceDocs] = useState<SourceDocument[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [selectedDoc, setSelectedDoc] = useState<SourceDocument | null>(null);
 
   const [isCreating, setIsCreating] = useState(false);
   const [form, setForm] = useState({
@@ -125,6 +289,73 @@ const FreightChargesDebitView: React.FC = () => {
     }
   };
 
+  const fetchSourceDocuments = async () => {
+    try {
+      const [customerRows, invoices, orderSlips] = await Promise.all([
+        fetchContacts().catch(() => [] as Contact[]),
+        getAllInvoices().catch(() => [] as Invoice[]),
+        getAllOrderSlips().catch(() => [] as OrderSlip[]),
+      ]);
+
+      const customerById = new Map(customerRows.map((contact) => [contact.id, contact.company || '']));
+      const docs: SourceDocument[] = [
+        ...invoices.map((invoice) => ({
+          id: invoice.id,
+          doc_no: invoice.invoice_no,
+          type: 'Invoice' as const,
+          contact_id: invoice.contact_id,
+          customer_name: customerById.get(invoice.contact_id) || '',
+          sales_date: invoice.sales_date,
+          sales_person: invoice.sales_person,
+          grand_total: Number(invoice.grand_total || 0),
+        })),
+        ...orderSlips.map((slip) => ({
+          id: slip.id,
+          doc_no: slip.slip_no,
+          type: 'Order Slip' as const,
+          contact_id: slip.contact_id,
+          customer_name: customerById.get(slip.contact_id) || slip.customer_name || '',
+          sales_date: slip.sales_date,
+          sales_person: slip.sales_person,
+          grand_total: Number(slip.grand_total || 0),
+        })),
+      ];
+
+      setContacts(customerRows);
+      setSourceDocs(docs);
+    } catch {
+      setContacts([]);
+      setSourceDocs([]);
+    }
+  };
+
+  const applySourceDocument = (doc: SourceDocument | null) => {
+    setSelectedDoc(doc);
+    if (!doc) {
+      setForm((prev) => ({
+        ...prev,
+        transactionType: 'No Reference',
+        transactionRefNo: '',
+        invoiceNo: '',
+      }));
+      return;
+    }
+
+    const matchedCustomer = customers.find((customer) => customer.sessionId === doc.contact_id);
+    const matchedContact = contacts.find((contact) => contact.id === doc.contact_id);
+    const customerName = matchedCustomer?.company || matchedContact?.company || doc.customer_name || '';
+
+    setCustomerSearch(customerName);
+    setForm((prev) => ({
+      ...prev,
+      customerId: doc.contact_id || prev.customerId,
+      transactionType: doc.type,
+      transactionRefNo: doc.id,
+      invoiceNo: doc.doc_no,
+      date: toDateInput(doc.sales_date) || prev.date,
+    }));
+  };
+
   useEffect(() => {
     const timer = window.setTimeout(() => setSearch(searchInput.trim()), 300);
     return () => window.clearTimeout(timer);
@@ -151,7 +382,19 @@ const FreightChargesDebitView: React.FC = () => {
 
   useEffect(() => {
     fetchCustomers('');
+    fetchSourceDocuments();
   }, []);
+
+  useEffect(() => {
+    if (!form.transactionRefNo || !sourceDocs.length) {
+      setSelectedDoc(null);
+      return;
+    }
+
+    const matched = sourceDocs.find((doc) => doc.id === form.transactionRefNo)
+      || sourceDocs.find((doc) => doc.doc_no === form.invoiceNo && doc.type === form.transactionType);
+    setSelectedDoc(matched || null);
+  }, [form.transactionRefNo, form.invoiceNo, form.transactionType, sourceDocs]);
 
   const selectedCustomerName = useMemo(() => {
     const customer = customers.find((c) => c.sessionId === form.customerId);
@@ -179,6 +422,7 @@ const FreightChargesDebitView: React.FC = () => {
       transactionRefNo: '',
       invoiceNo: '',
     });
+    setSelectedDoc(null);
     if (customers.length === 0) {
       await fetchCustomers('');
     }
@@ -522,11 +766,30 @@ const FreightChargesDebitView: React.FC = () => {
                 </label>
 
                 <label className="text-sm">
+                  <span className="block text-slate-600 dark:text-slate-300 mb-1">Invoice / Order Slip</span>
+                  <SourceDocumentAutocomplete
+                    documents={sourceDocs}
+                    selectedDoc={selectedDoc}
+                    onSelect={applySourceDocument}
+                    disabled={!canEdit}
+                  />
+                  <span className="mt-1 block text-xs text-slate-500">Selecting a document auto-fills customer, date, type, and reference.</span>
+                </label>
+
+                <label className="text-sm">
                   <span className="block text-slate-600 dark:text-slate-300 mb-1">Transaction Type</span>
                   <select
                     value={form.transactionType}
                     disabled={!canEdit}
-                    onChange={(e) => setForm((prev) => ({ ...prev, transactionType: e.target.value as FreightTransactionType }))}
+                    onChange={(e) => {
+                      const nextType = e.target.value as FreightTransactionType;
+                      setSelectedDoc((prev) => (prev?.type === nextType ? prev : null));
+                      setForm((prev) => ({
+                        ...prev,
+                        transactionType: nextType,
+                        ...(nextType === 'No Reference' ? { transactionRefNo: '', invoiceNo: '' } : {}),
+                      }));
+                    }}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:bg-slate-900 dark:border-slate-700"
                   >
                     <option value="No Reference">No Reference</option>
@@ -540,7 +803,10 @@ const FreightChargesDebitView: React.FC = () => {
                   <input
                     value={form.transactionRefNo}
                     disabled={!canEdit}
-                    onChange={(e) => setForm((prev) => ({ ...prev, transactionRefNo: e.target.value }))}
+                    onChange={(e) => {
+                      setSelectedDoc(null);
+                      setForm((prev) => ({ ...prev, transactionRefNo: e.target.value }));
+                    }}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:bg-slate-900 dark:border-slate-700"
                   />
                 </label>
