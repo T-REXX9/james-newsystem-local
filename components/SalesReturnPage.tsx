@@ -1,14 +1,29 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { RefreshCcw, Search, Plus, Trash2, CheckCircle, XCircle } from 'lucide-react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { RefreshCcw, Search, Plus, Trash2, CheckCircle, XCircle, FileText, Loader2 } from 'lucide-react';
+import ReactDOM from 'react-dom';
 import {
   SalesReturnItem,
   SalesReturnRecord,
   SourceItem,
   salesReturnService,
 } from '../services/salesReturnLocalApiService';
-import { Contact } from '../types';
+import { Contact, Invoice, OrderSlip } from '../types';
 import { fetchContacts } from '../services/customerDatabaseLocalApiService';
+import { getAllInvoices } from '../services/invoiceLocalApiService';
+import { getAllOrderSlips } from '../services/orderSlipLocalApiService';
 import CustomerAutocomplete from './CustomerAutocomplete';
+import { useDebounce } from '../hooks/useDebounce';
+
+/** Unified source document type — mirrors old system's tbl_invoice_or */
+interface SourceDocument {
+  id: string;
+  doc_no: string;
+  type: 'Invoice' | 'OR';
+  contact_id: string;
+  sales_person: string;
+  sales_date: string;
+  grand_total: number;
+}
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
@@ -155,6 +170,223 @@ const SourceItemsModal: React.FC<{
 };
 
 /* -------------------------------------------------------------------------- */
+/*  Source Document Autocomplete                                               */
+/*  Unified search for Invoices + Order Slips — mirrors old system's           */
+/*  tbl_invoice_or search that returns both types in one dropdown.             */
+/* -------------------------------------------------------------------------- */
+const SourceDocAutocomplete: React.FC<{
+  documents: SourceDocument[];
+  customers: Contact[];
+  selectedDoc: SourceDocument | null;
+  onSelect: (doc: SourceDocument) => void;
+  disabled?: boolean;
+  placeholder?: string;
+  inputClassName?: string;
+}> = ({ documents, customers, selectedDoc, onSelect, disabled = false, placeholder = 'Search invoice or OR number...', inputClassName = '' }) => {
+  const customerMap = useMemo(() => new Map(customers.map((c) => [c.id, c])), [customers]);
+  const [query, setQuery] = useState(selectedDoc?.doc_no || '');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const debouncedQuery = useDebounce(query, 250);
+
+  useEffect(() => {
+    setQuery(selectedDoc?.doc_no || '');
+  }, [selectedDoc]);
+
+  const updatePosition = useCallback(() => {
+    if (inputRef.current && showDropdown) {
+      const rect = inputRef.current.getBoundingClientRect();
+      setDropdownStyle({
+        position: 'fixed',
+        top: `${rect.bottom + 4}px`,
+        left: `${rect.left}px`,
+        width: `${Math.max(rect.width, 360)}px`,
+        maxHeight: '320px',
+        zIndex: 9999,
+      });
+    }
+  }, [showDropdown]);
+
+  useEffect(() => {
+    if (!showDropdown) return undefined;
+    updatePosition();
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [showDropdown, updatePosition]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (wrapperRef.current?.contains(target)) return;
+      const dropdownEl = document.getElementById('source-doc-autocomplete-dropdown');
+      if (dropdownEl?.contains(target)) return;
+      setShowDropdown(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const results = useMemo(() => {
+    const q = debouncedQuery.trim().toLowerCase();
+    const sorted = [...documents].sort((a, b) => b.sales_date.localeCompare(a.sales_date));
+    if (!q) return sorted.slice(0, 50);
+    return sorted.filter((doc) => {
+      const no = doc.doc_no?.toLowerCase() || '';
+      const id = doc.id?.toLowerCase() || '';
+      const custName = customerMap.get(doc.contact_id)?.company?.toLowerCase() || '';
+      return no.includes(q) || id.includes(q) || custName.includes(q);
+    });
+  }, [debouncedQuery, documents, customerMap]);
+
+  useEffect(() => {
+    setSelectedIndex(results.length > 0 ? 0 : -1);
+  }, [results]);
+
+  const handleSelect = (doc: SourceDocument) => {
+    onSelect(doc);
+    setQuery(doc.doc_no || doc.id);
+    setShowDropdown(false);
+    setSelectedIndex(-1);
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (disabled) return;
+    if (!showDropdown && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+      event.preventDefault();
+      setShowDropdown(true);
+      return;
+    }
+    if (!showDropdown) return;
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setSelectedIndex((prev) => (prev < results.length - 1 ? prev + 1 : prev));
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : 0));
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      if (selectedIndex >= 0 && results[selectedIndex]) handleSelect(results[selectedIndex]);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      setShowDropdown(false);
+    }
+  };
+
+  const isSearching = query !== debouncedQuery;
+
+  return (
+    <div className="relative" ref={wrapperRef}>
+      <div className="relative">
+        <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+          {isSearching ? (
+            <Loader2 className="h-3.5 w-3.5 text-brand-blue animate-spin" />
+          ) : (
+            <FileText className="h-3.5 w-3.5 text-slate-400" />
+          )}
+        </div>
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          disabled={disabled}
+          placeholder={placeholder}
+          className={`block w-full pl-8 pr-3 py-1.5 border rounded-md leading-5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-blue/50 focus:border-brand-blue sm:text-xs transition-shadow ${disabled ? 'opacity-60 cursor-not-allowed' : ''} ${inputClassName}`}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setShowDropdown(true);
+          }}
+          onFocus={() => {
+            if (!disabled) {
+              setShowDropdown(true);
+              requestAnimationFrame(updatePosition);
+            }
+          }}
+          onKeyDown={handleKeyDown}
+          autoComplete="off"
+        />
+      </div>
+
+      {showDropdown && ReactDOM.createPortal(
+        <div
+          id="source-doc-autocomplete-dropdown"
+          className="fixed bg-white dark:bg-slate-900 shadow-xl rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm border border-slate-200 dark:border-slate-700"
+          style={dropdownStyle}
+        >
+          <div className="sticky top-0 z-10 px-3 py-1.5 bg-slate-50 dark:bg-slate-800/50 backdrop-blur-sm border-b border-slate-100 dark:border-slate-700/50 flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
+            <span>Invoice / OR Matches</span>
+            <span className="flex items-center gap-2">
+              <span className="flex items-center gap-1"><kbd className="font-mono bg-slate-200 dark:bg-slate-700 px-1 rounded">↓</kbd> Navigate</span>
+              <span className="flex items-center gap-1"><kbd className="font-mono bg-slate-200 dark:bg-slate-700 px-1 rounded">↵</kbd> Select</span>
+            </span>
+          </div>
+
+          {results.length > 0 ? (
+            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+              {results.map((doc, index) => {
+                const isSelected = index === selectedIndex;
+                const typeBadgeCls = doc.type === 'Invoice'
+                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                  : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
+                return (
+                  <li
+                    key={`${doc.type}-${doc.id}`}
+                    className={`cursor-pointer select-none relative py-2 pl-3 pr-4 group transition-colors ${isSelected
+                      ? 'bg-brand-blue/10 dark:bg-brand-blue/20'
+                      : 'hover:bg-slate-50 dark:hover:bg-slate-800'
+                    }`}
+                    onClick={() => handleSelect(doc)}
+                    onMouseEnter={() => setSelectedIndex(index)}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`mt-0.5 p-1.5 rounded ${isSelected ? 'bg-brand-blue text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+                        <FileText className="h-4 w-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs font-bold ${isSelected ? 'text-brand-blue' : 'text-slate-900 dark:text-white'}`}>
+                            {doc.doc_no || doc.id}
+                          </span>
+                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${typeBadgeCls}`}>
+                            {doc.type}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 truncate">
+                          {customerMap.get(doc.contact_id)?.company || 'Unknown Customer'}
+                        </div>
+                        <div className="flex items-center gap-3 mt-1 text-[10px] text-slate-400">
+                          <span>Date: {doc.sales_date || '—'}</span>
+                          <span>•</span>
+                          <span>Salesman: {doc.sales_person || '—'}</span>
+                          <span>•</span>
+                          <span>Total: {peso.format(doc.grand_total)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="py-8 px-4 text-center text-slate-500 dark:text-slate-400">
+              <p className="text-sm font-medium">No invoices or order slips found</p>
+              <p className="text-xs mt-1">Try searching by document number or customer name.</p>
+            </div>
+          )}
+        </div>,
+        document.body,
+      )}
+    </div>
+  );
+};
+
+/* -------------------------------------------------------------------------- */
 /*  Create Credit Memo Modal                                                   */
 /* -------------------------------------------------------------------------- */
 const CreateModal: React.FC<{
@@ -165,7 +397,7 @@ const CreateModal: React.FC<{
   const [form, setForm] = useState({
     customer_id: '',
     invoice_refno: '',
-    type: '',
+    type: 'Invoice' as string,
     salesman: '',
     remark: '',
     date: new Date().toISOString().slice(0, 10),
@@ -173,13 +405,75 @@ const CreateModal: React.FC<{
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [customers, setCustomers] = useState<Contact[]>([]);
+  const [sourceDocs, setSourceDocs] = useState<SourceDocument[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Contact | null>(null);
+  const [selectedDoc, setSelectedDoc] = useState<SourceDocument | null>(null);
+  const [pendingContactId, setPendingContactId] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
       fetchContacts().then(setCustomers).catch(() => setCustomers([]));
+      // Load both invoices and order slips into a unified list (mirrors old system's tbl_invoice_or)
+      Promise.all([
+        getAllInvoices().catch(() => [] as Invoice[]),
+        getAllOrderSlips().catch(() => [] as OrderSlip[]),
+      ]).then(([invoices, orderSlips]) => {
+        const docs: SourceDocument[] = [
+          ...invoices.map((inv): SourceDocument => ({
+            id: inv.id,
+            doc_no: inv.invoice_no,
+            type: 'Invoice',
+            contact_id: inv.contact_id,
+            sales_person: inv.sales_person,
+            sales_date: inv.sales_date,
+            grand_total: inv.grand_total,
+          })),
+          ...orderSlips.map((os): SourceDocument => ({
+            id: os.id,
+            doc_no: os.slip_no,
+            type: 'OR',
+            contact_id: os.contact_id,
+            sales_person: os.sales_person,
+            sales_date: os.sales_date,
+            grand_total: os.grand_total,
+          })),
+        ];
+        setSourceDocs(docs);
+      });
     }
   }, [open]);
+
+  // Resolve pending customer match once customers list is loaded
+  useEffect(() => {
+    if (pendingContactId && customers.length > 0) {
+      const matched = customers.find((c) => c.id === pendingContactId);
+      if (matched) {
+        setSelectedCustomer(matched);
+        setForm((f) => ({ ...f, customer_id: matched.id }));
+      }
+      setPendingContactId(null);
+    }
+  }, [pendingContactId, customers]);
+
+  const handleDocSelect = (doc: SourceDocument) => {
+    setSelectedDoc(doc);
+    setForm((f) => ({
+      ...f,
+      invoice_refno: doc.id,
+      type: doc.type,
+      salesman: doc.sales_person || f.salesman,
+    }));
+    // Auto-populate customer from the document's contact_id
+    if (doc.contact_id) {
+      const matched = customers.find((c) => c.id === doc.contact_id);
+      if (matched) {
+        setSelectedCustomer(matched);
+        setForm((f) => ({ ...f, customer_id: matched.id }));
+      } else {
+        setPendingContactId(doc.contact_id);
+      }
+    }
+  };
 
   const handleCreate = async () => {
     setBusy(true);
@@ -207,6 +501,18 @@ const CreateModal: React.FC<{
 
         <div className="grid grid-cols-1 gap-3 text-sm">
           <div className="block">
+            <span className="text-slate-600 dark:text-slate-300 text-sm">Invoice / OR No.</span>
+            <SourceDocAutocomplete
+              documents={sourceDocs}
+              customers={customers}
+              selectedDoc={selectedDoc}
+              onSelect={handleDocSelect}
+              placeholder="Search invoice or OR number..."
+              inputClassName="border-slate-300 dark:border-slate-600"
+            />
+            <p className="text-[10px] text-slate-400 mt-0.5">Selecting a document auto-fills customer, type, and salesman.</p>
+          </div>
+          <div className="block">
             <span className="text-slate-600 dark:text-slate-300 text-sm">Customer</span>
             <CustomerAutocomplete
               contacts={customers}
@@ -219,14 +525,6 @@ const CreateModal: React.FC<{
               inputClassName="border-slate-300 dark:border-slate-600"
             />
           </div>
-          <label className="block">
-            <span className="text-slate-600 dark:text-slate-300">Invoice Refno (optional)</span>
-            <input
-              value={form.invoice_refno}
-              onChange={(e) => setForm((f) => ({ ...f, invoice_refno: e.target.value }))}
-              className="w-full mt-1 px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
-            />
-          </label>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="text-slate-600 dark:text-slate-300">Type</span>
@@ -235,7 +533,6 @@ const CreateModal: React.FC<{
                 onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
                 className="w-full mt-1 px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
               >
-                <option value="">Select type</option>
                 <option value="Invoice">Invoice</option>
                 <option value="OR">OR (Delivery Receipt)</option>
               </select>
