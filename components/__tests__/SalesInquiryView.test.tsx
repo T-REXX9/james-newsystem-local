@@ -10,6 +10,8 @@ const getAllSalesInquiriesMock = vi.fn();
 const getSalesInquiryMock = vi.fn();
 const fetchContactsMock = vi.fn();
 const fetchContactByIdMock = vi.fn();
+const getProductPriceMock = vi.fn();
+const fetchProductByIdMock = vi.fn();
 
 vi.mock('../ToastProvider', () => ({
   useToast: () => ({
@@ -33,7 +35,8 @@ vi.mock('../../services/salesInquiryLocalApiService', () => ({
 }));
 
 vi.mock('../../services/productLocalApiService', () => ({
-  getProductPrice: vi.fn(() => 100),
+  getProductPrice: (...args: any[]) => getProductPriceMock(...args),
+  fetchProductById: (...args: any[]) => fetchProductByIdMock(...args),
 }));
 
 vi.mock('../../services/salesOrderLocalApiService', () => ({
@@ -140,6 +143,25 @@ describe('SalesInquiryView', () => {
     fetchContactByIdMock.mockImplementation(async (id: string) => baseContacts.find((contact) => contact.id === id) || null);
     getAllSalesInquiriesMock.mockResolvedValue([]);
     getSalesInquiryMock.mockResolvedValue(null);
+    fetchProductByIdMock.mockImplementation(async (id: string) => (
+      id
+        ? {
+            id,
+            part_no: 'PN-1',
+            item_code: 'IC-1',
+            description: 'Widget',
+            brand: 'Acme',
+            price_aa: 100,
+            price_vip1: 200,
+            price_vip2: 300,
+          }
+        : null
+    ));
+    getProductPriceMock.mockImplementation((_product: any, priceGroup?: string) => {
+      if (priceGroup === 'gold') return 300;
+      if (priceGroup === 'silver') return 200;
+      return 100;
+    });
   });
 
   afterEach(() => {
@@ -199,6 +221,68 @@ describe('SalesInquiryView', () => {
     expect(payload.contact_id).toBe('c-1');
     expect(payload.customer_reference).toBe('Bob');
     expect(payload.po_number).toBe('PO-CUSTOM-001');
+  });
+
+  it('defaults the inquiry price group from the selected customer', async () => {
+    const user = userEvent.setup();
+    fetchContactsMock.mockResolvedValue([
+      {
+        ...baseContacts[0],
+        priceGroup: 'gold',
+      },
+    ]);
+    fetchContactByIdMock.mockResolvedValue({
+      ...baseContacts[0],
+      priceGroup: 'gold',
+    });
+
+    render(<SalesInquiryView />);
+
+    await waitFor(() => expect(fetchContactsMock).toHaveBeenCalled());
+    await user.selectOptions(screen.getByLabelText('Customer'), 'c-1');
+
+    const priceGroupRow = screen.getByText('Price Group:').closest('tr');
+    expect(priceGroupRow).toBeTruthy();
+    const priceGroupSelect = within(priceGroupRow as HTMLElement).getByRole('combobox');
+    expect(priceGroupSelect).toHaveValue('gold');
+  });
+
+  it('reprices existing inquiry items when switching to a customer with a different default price group', async () => {
+    const user = userEvent.setup();
+    fetchContactsMock.mockResolvedValue([
+      {
+        ...baseContacts[0],
+        priceGroup: 'gold',
+      },
+      {
+        ...baseContacts[1],
+        priceGroup: 'silver',
+      },
+    ]);
+    fetchContactByIdMock.mockImplementation(async (id: string) => {
+      if (id === 'c-1') {
+        return { ...baseContacts[0], priceGroup: 'gold' };
+      }
+      if (id === 'c-2') {
+        return { ...baseContacts[1], priceGroup: 'silver' };
+      }
+      return null;
+    });
+
+    render(<SalesInquiryView />);
+
+    await waitFor(() => expect(fetchContactsMock).toHaveBeenCalled());
+
+    await user.selectOptions(screen.getByLabelText('Customer'), 'c-1');
+    await user.click(screen.getByRole('button', { name: /add item/i }));
+    await user.click(screen.getAllByText(/click to search product/i)[0]);
+    await user.click(screen.getByRole('button', { name: 'Select Product' }));
+
+    expect(await screen.findByDisplayValue('300')).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('Customer'), 'c-2');
+
+    expect(await screen.findByDisplayValue('200')).toBeInTheDocument();
   });
 
   it('shows an empty Your Reference dropdown when the customer has no contact persons', async () => {

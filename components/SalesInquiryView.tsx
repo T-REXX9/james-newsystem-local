@@ -309,10 +309,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     }));
   };
 
-  const handlePriceGroupChange = useCallback(async (newGroup: string) => {
-    setPriceGroup(newGroup);
-
-    // Re-price all existing items that have a linked product
+  const repriceItemsForGroup = useCallback(async (targetGroup: string) => {
+    const effectiveGroup = normalizePriceGroupToInternalKey(targetGroup);
     const itemsWithProduct = items.filter((item) => item.item_id);
     if (itemsWithProduct.length === 0) return;
 
@@ -324,26 +322,33 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     itemsWithProduct.forEach((item, idx) => {
       const product = productResults[idx];
       if (product) {
-        priceMap.set(item.item_id, getProductPrice(product, newGroup));
+        priceMap.set(item.item_id, getProductPrice(product, effectiveGroup));
       }
     });
 
-    if (priceMap.size > 0) {
-      setItems((prev) =>
-        prev.map((item) => {
-          const newPrice = priceMap.get(item.item_id);
-          if (newPrice !== undefined) {
-            return {
-              ...item,
-              unit_price: newPrice,
-              amount: (Number(item.qty) || 0) * newPrice,
-            };
-          }
+    if (priceMap.size === 0) return;
+
+    setItems((prev) =>
+      prev.map((item) => {
+        const newPrice = priceMap.get(item.item_id);
+        if (newPrice === undefined) {
           return item;
-        })
-      );
-    }
+        }
+
+        return {
+          ...item,
+          unit_price: newPrice,
+          amount: (Number(item.qty) || 0) * newPrice,
+        };
+      })
+    );
   }, [items]);
+
+  const handlePriceGroupChange = useCallback(async (newGroup: string) => {
+    const normalizedGroup = normalizePriceGroupToInternalKey(newGroup);
+    setPriceGroup(normalizedGroup);
+    await repriceItemsForGroup(normalizedGroup);
+  }, [repriceItemsForGroup]);
 
   const formatCurrency = useCallback((value: number) => {
     const normalized = Number.isFinite(value) ? value : 0;
@@ -536,16 +541,18 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   }, [customers, isCreatingNew, loadInquiryIntoForm, selectedCustomer?.id, selectedInquiry]);
 
   const applySelectedCustomer = useCallback((customer: Contact) => {
+    const normalizedGroup = normalizePriceGroupToInternalKey(customer.priceGroup);
     const defaultReference = String(customer.contactPersons?.[0]?.name || '').trim();
     setSelectedCustomer(customer);
     setDeliveryAddress(customer.deliveryAddress || customer.address || '');
     setSalesPerson(customer.salesman || '');
-    setPriceGroup(normalizePriceGroupToInternalKey(customer.priceGroup));
+    setPriceGroup(normalizedGroup);
     setCreditLimit(Number(customer.creditLimit || 0));
     setTerms(customer.terms || '');
     setRemarks(customer.comment || '');
     setPromiseToPay('');
     setCustomerReference(defaultReference);
+    return normalizedGroup;
   }, []);
 
   // When customer is selected, populate metrics and delivery address
@@ -555,8 +562,9 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
       ? (customers.find((customer) => customer.id === customerId) || null)
       : selected;
 
+    let fallbackGroup = '';
     if (fallbackCustomer) {
-      applySelectedCustomer(fallbackCustomer);
+      fallbackGroup = applySelectedCustomer(fallbackCustomer);
     }
 
     const latestCustomer = await fetchContactById(customerId);
@@ -578,8 +586,9 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
       });
     }
 
-    applySelectedCustomer(customer);
-  }, [applySelectedCustomer, customers]);
+    const appliedGroup = applySelectedCustomer(customer);
+    await repriceItemsForGroup(appliedGroup || fallbackGroup);
+  }, [applySelectedCustomer, customers, repriceItemsForGroup]);
 
   useEffect(() => {
     if (!initialContactId) return;
@@ -1317,12 +1326,12 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                         />
                       ) : (
                         <select
-                          disabled={isReadOnly}
+                          disabled={isReadOnly || !selectedCustomer}
                           value={priceGroup}
                           onChange={(e) => handlePriceGroupChange(e.target.value)}
-                          className={`w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          className={`w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm ${isReadOnly || !selectedCustomer ? 'opacity-60 cursor-not-allowed' : ''}`}
                         >
-                          <option value="">—</option>
+                          {!selectedCustomer && <option value="">Select a customer first</option>}
                           {WRITABLE_PRICING_GROUP_OPTIONS.map((option) => (
                             <option key={option.value} value={option.value}>
                               {option.label}

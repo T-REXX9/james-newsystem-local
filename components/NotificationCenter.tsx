@@ -75,7 +75,7 @@ const NotificationCenter: React.FC = () => {
 
   const handleNotificationClick = async (notification: Notification) => {
     if (!notification.is_read) {
-      await markAsRead(notification.id);
+      await markAsRead(notification);
     }
     if (notification.action_url) {
       const tabId = notification.action_url.replace(/^\/+/, '').split(/[?#]/)[0].trim();

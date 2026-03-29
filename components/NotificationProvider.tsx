@@ -4,6 +4,7 @@ import {
   fetchNotifications,
   getUnreadCount,
   markAsRead,
+  markNotificationsAsReadByMetadata,
   markAllAsRead,
   deleteNotification,
   subscribeToNotifications,
@@ -15,7 +16,7 @@ interface NotificationContextValue {
   notifications: Notification[];
   unreadCount: number;
   isLoading: boolean;
-  markAsRead: (id: string) => Promise<void>;
+  markAsRead: (notification: Notification) => Promise<void>;
   markAllAsRead: () => Promise<void>;
   deleteNotification: (id: string) => Promise<void>;
   refreshNotifications: () => Promise<void>;
@@ -36,6 +37,48 @@ interface NotificationProviderProps {
   children: React.ReactNode;
 }
 
+const asTrimmedString = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const trimmedValue = value.trim();
+  return trimmedValue ? trimmedValue : undefined;
+};
+
+const getNotificationReadTarget = (notification: Notification) => {
+  const entityType = asTrimmedString(notification.metadata?.entity_type);
+  const entityId = asTrimmedString(notification.metadata?.entity_id);
+  const refno = asTrimmedString(notification.metadata?.refno);
+
+  if (entityType && entityId) {
+    return { entityType, entityId };
+  }
+
+  if (refno) {
+    return { refno };
+  }
+
+  return null;
+};
+
+const matchesNotificationReadTarget = (
+  notification: Notification,
+  target: ReturnType<typeof getNotificationReadTarget>
+) => {
+  if (!target) return false;
+
+  if ('entityType' in target && target.entityType && target.entityId) {
+    return (
+      asTrimmedString(notification.metadata?.entity_type) === target.entityType &&
+      asTrimmedString(notification.metadata?.entity_id) === target.entityId
+    );
+  }
+
+  if ('refno' in target && target.refno) {
+    return asTrimmedString(notification.metadata?.refno) === target.refno;
+  }
+
+  return false;
+};
+
 export const NotificationProvider: React.FC<NotificationProviderProps> = ({ userId, children }) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -43,6 +86,12 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
   const retryCountRef = useRef(0);
   const reconnectTimeoutRef = useRef<number | null>(null);
   const hasSubscribedRef = useRef(false);
+  const notificationsRef = useRef<Notification[]>([]);
+  const pendingReadIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    notificationsRef.current = notifications;
+  }, [notifications]);
 
   // Fetch initial notifications
   const refreshNotifications = useCallback(async () => {
@@ -53,6 +102,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
         getUnreadCount(userId),
       ]);
       setNotifications(notifs);
+      notificationsRef.current = notifs;
       setUnreadCount(count);
     } catch (err) {
       console.error('Error refreshing notifications:', err);
@@ -115,8 +165,14 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
             const mergedNotification = existing
               ? { ...existing, ...updatedNotification }
               : updatedNotification;
+            const shouldSuppressUnreadDecrement =
+              mergedNotification.is_read && pendingReadIdsRef.current.has(updatedNotification.id);
 
-            if (existing && !existing.is_read && mergedNotification.is_read) {
+            if (shouldSuppressUnreadDecrement) {
+              pendingReadIdsRef.current.delete(updatedNotification.id);
+            }
+
+            if (existing && !existing.is_read && mergedNotification.is_read && !shouldSuppressUnreadDecrement) {
               setUnreadCount((count) => Math.max(0, count - 1));
             }
 
@@ -130,6 +186,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
           });
         },
         onDelete: (notificationId) => {
+          pendingReadIdsRef.current.delete(notificationId);
           setNotifications((prev) => {
             const removed = prev.find((notif) => notif.id === notificationId);
             if (removed && !removed.is_read) {
@@ -174,22 +231,51 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
 
   // Handle mark as read
   const handleMarkAsRead = useCallback(
-    async (id: string) => {
+    async (notification: Notification) => {
+      const readTarget = getNotificationReadTarget(notification);
+      const pendingReadIds = readTarget
+        ? notificationsRef.current
+          .filter((notif) => !notif.is_read && matchesNotificationReadTarget(notif, readTarget))
+          .map((notif) => notif.id)
+        : notification.is_read
+          ? []
+          : [notification.id];
+
+      pendingReadIds.forEach((id) => pendingReadIdsRef.current.add(id));
+
       try {
-        await markAsRead(id);
+        const result = readTarget
+          ? await markNotificationsAsReadByMetadata(userId, readTarget)
+          : {
+            success: await markAsRead(notification.id),
+            updatedCount: notification.is_read ? 0 : 1,
+            updatedIds: [notification.id],
+            readAt: new Date().toISOString(),
+          };
+
+        if (!result.success) {
+          return;
+        }
+
+        const updatedIds = result.updatedIds.length > 0 ? result.updatedIds : pendingReadIds;
+        const updatedIdSet = new Set(updatedIds);
+        const readAt = result.readAt || new Date().toISOString();
+
         setNotifications((prev) =>
           prev.map((notif) =>
-            notif.id === id
-              ? { ...notif, is_read: true, read_at: new Date().toISOString() }
+            updatedIdSet.has(notif.id)
+              ? { ...notif, is_read: true, read_at: notif.read_at || readAt }
               : notif
           )
         );
-        setUnreadCount((prev) => Math.max(0, prev - 1));
+        setUnreadCount((prev) => Math.max(0, prev - result.updatedCount));
       } catch (err) {
         console.error('Error marking notification as read:', err);
+      } finally {
+        pendingReadIds.forEach((id) => pendingReadIdsRef.current.delete(id));
       }
     },
-    []
+    [userId]
   );
 
   // Handle mark all as read
