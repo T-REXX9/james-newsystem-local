@@ -6,6 +6,9 @@ import {
   SourceItem,
   salesReturnService,
 } from '../services/salesReturnLocalApiService';
+import { Contact } from '../types';
+import { fetchContacts } from '../services/customerDatabaseLocalApiService';
+import CustomerAutocomplete from './CustomerAutocomplete';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
@@ -169,6 +172,14 @@ const CreateModal: React.FC<{
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [customers, setCustomers] = useState<Contact[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<Contact | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      fetchContacts().then(setCustomers).catch(() => setCustomers([]));
+    }
+  }, [open]);
 
   const handleCreate = async () => {
     setBusy(true);
@@ -195,14 +206,19 @@ const CreateModal: React.FC<{
         )}
 
         <div className="grid grid-cols-1 gap-3 text-sm">
-          <label className="block">
-            <span className="text-slate-600 dark:text-slate-300">Customer ID</span>
-            <input
-              value={form.customer_id}
-              onChange={(e) => setForm((f) => ({ ...f, customer_id: e.target.value }))}
-              className="w-full mt-1 px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
+          <div className="block">
+            <span className="text-slate-600 dark:text-slate-300 text-sm">Customer</span>
+            <CustomerAutocomplete
+              contacts={customers}
+              selectedCustomer={selectedCustomer}
+              onSelect={(customer) => {
+                setSelectedCustomer(customer);
+                setForm((f) => ({ ...f, customer_id: customer.id }));
+              }}
+              placeholder="Search customer..."
+              inputClassName="border-slate-300 dark:border-slate-600"
             />
-          </label>
+          </div>
           <label className="block">
             <span className="text-slate-600 dark:text-slate-300">Invoice Refno (optional)</span>
             <input
