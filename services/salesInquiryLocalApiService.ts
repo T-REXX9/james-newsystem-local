@@ -107,6 +107,7 @@ const mapApiInquiry = (row: any): SalesInquiry => {
     so_refno: String(row?.so_refno || ''),
     invoice_no: String(row?.invoice_no || ''),
     dr_no: String(row?.dr_no || ''),
+    is_editable: toNumber(row?.is_editable, 1) > 0,
   };
 };
 

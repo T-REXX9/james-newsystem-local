@@ -984,6 +984,7 @@ export interface SalesInquiry {
   so_refno?: string;
   invoice_no?: string;
   dr_no?: string;
+  is_editable?: boolean;
 }
 
 export interface InquiryReportFilters {

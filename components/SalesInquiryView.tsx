@@ -676,6 +676,15 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!isCreatingNew && selectedInquiry && selectedInquiry.is_editable === false) {
+      addToast({
+        type: 'warning',
+        title: 'Inquiry locked',
+        description: 'This inquiry can no longer be edited because it has already been converted to an invoice or order slip.',
+      });
+      return;
+    }
+
     if (!validateInquiryForm()) {
       setSubmitCount((prev) => prev + 1);
       addToast({ type: 'warning', title: 'Fix validation issues', description: 'Review the highlighted fields and try again.' });
@@ -784,6 +793,14 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
 
   // Handle delete
   const handleDeleteClick = () => {
+    if (!isCreatingNew && selectedInquiry && selectedInquiry.is_editable === false) {
+      addToast({
+        type: 'warning',
+        title: 'Inquiry locked',
+        description: 'This inquiry is locked because its sales order already has an invoice or order slip.',
+      });
+      return;
+    }
     setShowDeleteModal(true);
   };
 
@@ -959,7 +976,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   };
   const activeInquiryNumber = !isCreatingNew && selectedInquiry?.inquiry_no ? selectedInquiry.inquiry_no : inquiryNo;
   const activeInquiryNumberDisplay = formatInquiryDisplayNo(activeInquiryNumber);
-  const isReadOnly = selectedInquiry?.status === SalesInquiryStatus.CANCELLED;
+  const isConversionLocked = Boolean(selectedInquiry && !isCreatingNew && selectedInquiry.is_editable === false);
+  const isReadOnly = selectedInquiry?.status === SalesInquiryStatus.CANCELLED || isConversionLocked;
   const priceGroupDisplay = normalizePriceGroup(priceGroup);
   const canFinalizeInquiry = Boolean(selectedInquiry && !isCreatingNew && selectedInquiry.status === SalesInquiryStatus.DRAFT);
   const canConvertInquiry = Boolean(selectedInquiry && !isCreatingNew && selectedInquiry.status === SalesInquiryStatus.APPROVED);
@@ -1213,6 +1231,11 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
             <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
             {submitError && (
               <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 mb-4">{submitError}</div>
+            )}
+            {isConversionLocked && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 mb-4">
+                This inquiry is locked. Old-system behavior stops inquiry editing once the linked sales order has already been converted to an invoice or order slip.
+              </div>
             )}
 
             <form id="salesInquiryForm" onSubmit={handleSubmit} className="space-y-4">
