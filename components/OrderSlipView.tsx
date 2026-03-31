@@ -23,6 +23,11 @@ import { Contact, OrderSlip, OrderSlipStatus } from '../types';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 import { getLocalAuthSession } from '../services/localAuthService';
 import { normalizePriceGroup } from '../constants/pricingGroups';
+import {
+  dispatchWorkflowNotification,
+  markNotificationsAsReadByEntityKey,
+  resolveNotificationUserId,
+} from '../services/notificationLocalApiService';
 
 interface OrderSlipViewProps {
   initialSlipId?: string;
@@ -53,6 +58,7 @@ const ORDER_SLIP_LIST_COLUMN_WIDTHS = [
   '14%',
   '10rem',
 ];
+const ORDER_SLIP_TAB_ID = 'sales-transaction-order-slip';
 
 const formatDate = (value?: string | null): string => {
   if (!value) return '-';
@@ -206,14 +212,30 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
     action: string,
     status: 'success' | 'failed',
     entityId: string,
+    recipients: { targetRoles?: string[]; targetUserIds?: string[] } = {},
     type: 'success' | 'error' | 'warning' | 'info' = 'success'
   ) => {
-    void title;
-    void message;
-    void action;
-    void status;
-    void entityId;
-    void type;
+    const session = getLocalAuthSession();
+    await dispatchWorkflowNotification({
+      title,
+      message,
+      type,
+      action,
+      status,
+      entityType: 'order_slip',
+      entityId,
+      actionUrl: ORDER_SLIP_TAB_ID,
+      actorId: String(session?.userProfile?.id || '').trim(),
+      actorRole: session?.userProfile?.role || 'Unknown',
+      targetRoles: recipients.targetRoles,
+      targetUserIds: recipients.targetUserIds,
+      includeActor: false,
+      metadata: {
+        refno: `order_slip:${entityId}`,
+        order_slip_id: entityId,
+        action_url: ORDER_SLIP_TAB_ID,
+      },
+    });
   }, []);
 
   const navigateToModule = useCallback((tab: string, payload?: Record<string, string>) => {
@@ -287,6 +309,15 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
     syncDocumentPolicyState(selectedCustomer?.transactionType || null);
   }, [selectedCustomer?.transactionType]);
 
+  useEffect(() => {
+    const userId = String(getLocalAuthSession()?.userProfile?.id || '').trim();
+    if (!selectedSlip?.id || !userId) return;
+    void markNotificationsAsReadByEntityKey(userId, {
+      entityType: 'order_slip',
+      entityId: selectedSlip.id,
+    });
+  }, [selectedSlip?.id]);
+
   const activeFilterLabel = useMemo(() => {
     if (!month || !year) return 'All Records';
     return `${MONTH_OPTIONS[month - 1]} ${year}`;
@@ -339,15 +370,34 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
     setSelectedSlip(prev => prev ? { ...prev, status: OrderSlipStatus.FINALIZED } : null);
 
     try {
+      const creatorUserId = await resolveNotificationUserId(selectedSlip.created_by);
       const updated = await finalizeOrderSlip(selectedSlip.id);
       if (updated) {
         setOrderSlips(prev => prev.map(row => row.id === updated.id ? updated : row));
         setSelectedSlip(updated);
       }
-      await notifyOrderSlipEvent('Order Slip Finalized', `Order Slip ${selectedSlip.slip_no} marked as finalized.`, 'finalize', 'success', selectedSlip.id);
+      await notifyOrderSlipEvent(
+        'Order Slip Finalized',
+        `Order Slip ${selectedSlip.slip_no} marked as finalized.`,
+        'finalize',
+        'success',
+        selectedSlip.id,
+        {
+          targetRoles: ['Owner', 'Manager'],
+          targetUserIds: creatorUserId ? [creatorUserId] : [],
+        }
+      );
     } catch (err) {
       console.error('Error finalizing order slip:', err);
-      await notifyOrderSlipEvent('Order Slip Finalization Failed', `Failed to finalize order slip ${selectedSlip.slip_no}.`, 'finalize', 'failed', selectedSlip.id, 'error');
+      await notifyOrderSlipEvent(
+        'Order Slip Finalization Failed',
+        `Failed to finalize order slip ${selectedSlip.slip_no}.`,
+        'finalize',
+        'failed',
+        selectedSlip.id,
+        { targetRoles: ['Owner', 'Manager'] },
+        'error'
+      );
       alert('Failed to finalize order slip');
     } finally {
       setFinalizing(false);
@@ -364,16 +414,35 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
     setSelectedSlip(prev => prev ? { ...prev, printed_at: printedAt } : null);
 
     try {
+      const creatorUserId = await resolveNotificationUserId(selectedSlip.created_by);
       const updated = await printOrderSlip(selectedSlip.id);
       if (updated) {
         setOrderSlips(prev => prev.map(row => row.id === updated.id ? updated : row));
         setSelectedSlip(updated);
       }
-      await notifyOrderSlipEvent('Order Slip Printed', `Order Slip ${selectedSlip.slip_no} was printed.`, 'print', 'success', selectedSlip.id);
+      await notifyOrderSlipEvent(
+        'Order Slip Printed',
+        `Order Slip ${selectedSlip.slip_no} was printed.`,
+        'print',
+        'success',
+        selectedSlip.id,
+        {
+          targetRoles: ['Owner', 'Manager'],
+          targetUserIds: creatorUserId ? [creatorUserId] : [],
+        }
+      );
       window.print();
     } catch (err) {
       console.error('Error printing order slip:', err);
-      await notifyOrderSlipEvent('Order Slip Print Failed', `Failed to print order slip ${selectedSlip.slip_no}.`, 'print', 'failed', selectedSlip.id, 'error');
+      await notifyOrderSlipEvent(
+        'Order Slip Print Failed',
+        `Failed to print order slip ${selectedSlip.slip_no}.`,
+        'print',
+        'failed',
+        selectedSlip.id,
+        { targetRoles: ['Owner', 'Manager'] },
+        'error'
+      );
       alert('Failed to mark order slip as printed');
     } finally {
       setPrinting(false);
@@ -390,12 +459,33 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
     setSelectedSlip(prev => prev ? { ...prev, status: OrderSlipStatus.CANCELLED } : null);
 
     try {
+      const creatorUserId = await resolveNotificationUserId(selectedSlip.created_by);
       await cancelOrderSlip(selectedSlip.id, cancelReason.trim());
+      await notifyOrderSlipEvent(
+        'Order Slip Cancelled',
+        `Order Slip ${selectedSlip.slip_no} has been cancelled.`,
+        'cancel',
+        'success',
+        selectedSlip.id,
+        {
+          targetRoles: ['Owner', 'Manager'],
+          targetUserIds: creatorUserId ? [creatorUserId] : [],
+        }
+      );
       setCancelModalOpen(false);
       setCancelReason('');
       await loadOrderSlips();
     } catch (err) {
       console.error('Failed to cancel order slip:', err);
+      await notifyOrderSlipEvent(
+        'Order Slip Cancel Failed',
+        `Failed to cancel order slip ${selectedSlip.slip_no}.`,
+        'cancel',
+        'failed',
+        selectedSlip.id,
+        { targetRoles: ['Owner', 'Manager'] },
+        'error'
+      );
       setOrderSlips(prev => applyOptimisticUpdate(prev, selectedSlip.id, { status: previousStatus } as Partial<OrderSlip>));
       setSelectedSlip(prev => prev ? { ...prev, status: previousStatus } : null);
       alert('Failed to cancel order slip');
@@ -415,11 +505,32 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
       }
 
       await unpostSalesOrder(salesOrderId);
+      const creatorUserId = await resolveNotificationUserId(selectedSlip.created_by);
+      await notifyOrderSlipEvent(
+        'Order Slip Unposted',
+        `Order Slip ${selectedSlip.slip_no} has been unposted.`,
+        'unpost',
+        'success',
+        selectedSlip.id,
+        {
+          targetRoles: ['Owner', 'Manager'],
+          targetUserIds: creatorUserId ? [creatorUserId] : [],
+        }
+      );
       setUnpostModalOpen(false);
       await loadOrderSlips();
       navigateToModule('salesorder', { orderId: salesOrderId });
     } catch (err) {
       console.error('Failed to unpost order slip:', err);
+      await notifyOrderSlipEvent(
+        'Order Slip Unpost Failed',
+        `Failed to unpost order slip ${selectedSlip.slip_no}.`,
+        'unpost',
+        'failed',
+        selectedSlip.id,
+        { targetRoles: ['Owner', 'Manager'] },
+        'error'
+      );
       alert(err instanceof Error ? err.message : 'Failed to unpost order slip');
     } finally {
       setUnpostLoading(false);

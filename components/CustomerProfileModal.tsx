@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   Calendar,
@@ -158,6 +159,15 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({ contact, cu
     return () => window.removeEventListener('keydown', handleEsc);
   }, [onClose]);
 
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
   const visibleTimeline = useMemo(() => {
     if (activeTab === 'calls') return timeline.filter((item) => item.type === 'call');
     if (activeTab === 'inquiries') return timeline.filter((item) => item.type === 'inquiry');
@@ -250,9 +260,14 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({ contact, cu
     { key: 'credit', label: 'Credit Ledger' }
   ];
 
-  return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm p-2 md:p-4 animate-fadeIn">
-      <div className="mx-auto flex h-[90vh] w-full max-w-[1400px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-950">
+  const modal = (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/60 p-2 pt-20 backdrop-blur-sm animate-fadeIn md:p-4 md:pt-24"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div className="mx-auto flex h-[min(90vh,calc(100vh-6rem))] max-h-[calc(100vh-6rem)] w-full max-w-[1400px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-950 md:h-[min(92vh,calc(100vh-7rem))] md:max-h-[calc(100vh-7rem)]">
         <aside className="hidden w-80 shrink-0 border-r border-slate-200 bg-slate-50 p-4 md:flex md:flex-col dark:border-slate-800 dark:bg-slate-900/70">
           <div className="mb-4 flex items-start justify-between">
             <div className="flex items-center gap-3">
@@ -546,6 +561,9 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({ contact, cu
       </div>
     </div>
   );
+
+  if (typeof document === 'undefined' || !document.body) return null;
+  return createPortal(modal, document.body);
 };
 
 export default CustomerProfileModal;

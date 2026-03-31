@@ -15,6 +15,11 @@ import { isInvoiceAllowedForTransactionType, syncDocumentPolicyState, unpostSale
 import { Contact, Invoice, InvoiceStatus } from '../types';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 import { useToast } from './ToastProvider';
+import {
+  dispatchWorkflowNotification,
+  markNotificationsAsReadByEntityKey,
+  resolveNotificationUserId,
+} from '../services/notificationLocalApiService';
 
 interface InvoiceViewProps {
   initialInvoiceId?: string;
@@ -28,6 +33,7 @@ const MONTH_OPTIONS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
+const INVOICE_TAB_ID = 'sales-transaction-invoice';
 const INVOICE_LIST_COLUMN_WIDTHS = [
   '8rem',
   '23%',
@@ -204,14 +210,30 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
     action: string,
     status: 'success' | 'failed',
     entityId: string,
+    recipients: { targetRoles?: string[]; targetUserIds?: string[] } = {},
     type: 'success' | 'error' | 'warning' | 'info' = 'success'
   ) => {
-    void title;
-    void message;
-    void action;
-    void status;
-    void entityId;
-    void type;
+    const session = getLocalAuthSession();
+    await dispatchWorkflowNotification({
+      title,
+      message,
+      type,
+      action,
+      status,
+      entityType: 'invoice',
+      entityId,
+      actionUrl: INVOICE_TAB_ID,
+      actorId: String(session?.userProfile?.id || '').trim(),
+      actorRole: session?.userProfile?.role || 'Unknown',
+      targetRoles: recipients.targetRoles,
+      targetUserIds: recipients.targetUserIds,
+      includeActor: false,
+      metadata: {
+        refno: `invoice:${entityId}`,
+        invoice_id: entityId,
+        action_url: INVOICE_TAB_ID,
+      },
+    });
   }, []);
 
   const selectInvoice = useCallback(async (invoice: Invoice) => {
@@ -279,6 +301,15 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
     syncDocumentPolicyState(selectedCustomer?.transactionType || null);
   }, [selectedCustomer?.transactionType]);
 
+  useEffect(() => {
+    const userId = String(getLocalAuthSession()?.userProfile?.id || '').trim();
+    if (!selectedInvoice?.id || !userId) return;
+    void markNotificationsAsReadByEntityKey(userId, {
+      entityType: 'invoice',
+      entityId: selectedInvoice.id,
+    });
+  }, [selectedInvoice?.id]);
+
   const handlePrint = async () => {
     if (!selectedInvoice || !canProcessInvoice) return;
     setPrinting(true);
@@ -297,7 +328,15 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
       window.print();
     } catch (err) {
       console.error('Error printing invoice:', err);
-      await notifyInvoiceEvent('Invoice Print Failed', `Failed to print invoice ${selectedInvoice.invoice_no}.`, 'print', 'failed', selectedInvoice.id, 'error');
+      await notifyInvoiceEvent(
+        'Invoice Print Failed',
+        `Failed to print invoice ${selectedInvoice.invoice_no}.`,
+        'print',
+        'failed',
+        selectedInvoice.id,
+        {},
+        'error'
+      );
       addToast({
         type: 'error',
         title: 'Failed to print invoice',
@@ -315,15 +354,36 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
     setCancelLoading(true);
     try {
       const updated = await cancelInvoice(selectedInvoice.id, cancelReason.trim());
+      const salesOwnerUserId = await resolveNotificationUserId(selectedInvoice.created_by, selectedInvoice.sales_person);
       if (updated) {
         setInvoices(prev => prev.map(row => row.id === updated.id ? updated : row));
         setSelectedInvoice(updated);
       }
+      await notifyInvoiceEvent(
+        'Invoice Cancelled',
+        `Invoice ${selectedInvoice.invoice_no} has been cancelled.`,
+        'cancel',
+        'success',
+        selectedInvoice.id,
+        {
+          targetRoles: ['Owner', 'Manager'],
+          targetUserIds: salesOwnerUserId ? [salesOwnerUserId] : [],
+        }
+      );
       setCancelModalOpen(false);
       setCancelReason('');
       await loadInvoices();
     } catch (err) {
       console.error('Failed to cancel invoice:', err);
+      await notifyInvoiceEvent(
+        'Invoice Cancel Failed',
+        `Failed to cancel invoice ${selectedInvoice.invoice_no}.`,
+        'cancel',
+        'failed',
+        selectedInvoice.id,
+        { targetRoles: ['Owner', 'Manager'] },
+        'error'
+      );
       addToast({
         type: 'error',
         title: 'Failed to cancel invoice',
@@ -345,6 +405,18 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
       }
 
       await unpostSalesOrder(salesOrderId);
+      const salesOwnerUserId = await resolveNotificationUserId(selectedInvoice.created_by, selectedInvoice.sales_person);
+      await notifyInvoiceEvent(
+        'Invoice Unposted',
+        `Invoice ${selectedInvoice.invoice_no} has been unposted.`,
+        'unpost',
+        'success',
+        selectedInvoice.id,
+        {
+          targetRoles: ['Owner', 'Manager'],
+          targetUserIds: salesOwnerUserId ? [salesOwnerUserId] : [],
+        }
+      );
       setUnpostModalOpen(false);
       await loadInvoices();
       window.dispatchEvent(new CustomEvent('workflow:navigate', {
@@ -352,6 +424,15 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
       }));
     } catch (err) {
       console.error('Failed to unpost invoice:', err);
+      await notifyInvoiceEvent(
+        'Invoice Unpost Failed',
+        `Failed to unpost invoice ${selectedInvoice.invoice_no}.`,
+        'unpost',
+        'failed',
+        selectedInvoice.id,
+        { targetRoles: ['Owner', 'Manager'] },
+        'error'
+      );
       addToast({
         type: 'error',
         title: 'Failed to unpost invoice',

@@ -21,7 +21,11 @@ import {
 } from '../services/salesOrderLocalApiService';
 import { fetchContactById, fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { getLocalAuthSession } from '../services/localAuthService';
-import { dispatchWorkflowNotification, fetchProfiles } from '../services/supabaseService';
+import {
+  dispatchWorkflowNotification,
+  markNotificationsAsReadByEntityKey,
+  resolveNotificationUserId,
+} from '../services/notificationLocalApiService';
 import StatusBadge from './StatusBadge';
 import WorkflowStepper from './WorkflowStepper';
 import ConfirmModal from './ConfirmModal';
@@ -76,6 +80,7 @@ const formatCurrency = (value?: number | string | null): string => {
 };
 
 const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
+  const userId = String(getLocalAuthSession()?.userProfile?.id || '').trim();
   const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | string>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -279,31 +284,13 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
     setSelectedOrder(prev => prev ? { ...prev, status } : null);
   }, []);
 
-  const resolveSubmitterProfileId = useCallback(async (order: SalesOrder): Promise<string | null> => {
-    if (isUuid(order.submitter_profile_id)) {
-      return order.submitter_profile_id;
-    }
-
-    const legacyUserId = String(order.submitter_legacy_user_id || order.created_by || '').trim();
-    const createdByLabel = String(order.created_by || '').trim().toLowerCase();
-    const profiles = await fetchProfiles();
-    const matched = profiles.find((profile) => {
-      if (legacyUserId && String(profile.main_userid || '').trim() === legacyUserId) {
-        return true;
-      }
-
-      if (!createdByLabel) {
-        return false;
-      }
-
-      return [
-        profile.full_name,
-        profile.email,
-      ].some((value) => String(value || '').trim().toLowerCase() === createdByLabel);
-    });
-
-    return isUuid(matched?.id) ? matched!.id : null;
-  }, []);
+  const resolveSubmitterProfileId = useCallback(async (order: SalesOrder): Promise<string | null> => (
+    resolveNotificationUserId(
+      order.submitter_profile_id,
+      order.submitter_legacy_user_id,
+      order.created_by
+    )
+  ), []);
 
   const openDocumentFromLink = useCallback((link: { type: 'orderslip' | 'invoice'; id: string }) => {
     if (link.type === 'orderslip') {
@@ -402,6 +389,14 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
   useEffect(() => {
     syncDocumentPolicyState(selectedCustomer?.transactionType || null);
   }, [selectedCustomer?.transactionType]);
+
+  useEffect(() => {
+    if (!selectedOrder?.id || !userId) return;
+    void markNotificationsAsReadByEntityKey(userId, {
+      entityType: 'sales_order',
+      entityId: selectedOrder.id,
+    });
+  }, [selectedOrder?.id, userId]);
 
   const handleConfirmOrder = async () => {
     if (!selectedOrder) return;
@@ -553,9 +548,10 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
     }
 
     setCancelLoading(true);
+    const orderToCancel = selectedOrder;
     try {
       const response = await fetch(
-        `${API_BASE_URL}/sales-orders/${encodeURIComponent(selectedOrder.id)}/actions/cancel`,
+        `${API_BASE_URL}/sales-orders/${encodeURIComponent(orderToCancel.id)}/actions/cancel`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -570,7 +566,19 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
         throw new Error(`Cancel failed (${response.status})`);
       }
 
-      const refreshed = await getSalesOrder(selectedOrder.id);
+      const refreshed = await getSalesOrder(orderToCancel.id);
+      const submitterProfileId = await resolveSubmitterProfileId(refreshed || orderToCancel);
+      await notifySalesOrderEvent(
+        'Sales Order Cancelled',
+        `SO ${orderToCancel.reference_no || orderToCancel.order_no} has been cancelled.`,
+        'cancel',
+        'cancelled',
+        orderToCancel.id,
+        {
+          targetRoles: ['Owner', 'Manager'],
+          targetUserIds: submitterProfileId ? [submitterProfileId] : [],
+        }
+      );
       if (refreshed) {
         setSelectedOrder(refreshed);
         setOrders(prev => prev.map(row => row.id === refreshed.id ? refreshed : row));
@@ -590,8 +598,21 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
     if (!selectedOrder) return;
 
     setUnpostLoading(true);
+    const orderToUnpost = selectedOrder;
     try {
-      const refreshed = await unpostSalesOrder(selectedOrder.id);
+      const refreshed = await unpostSalesOrder(orderToUnpost.id);
+      const submitterProfileId = await resolveSubmitterProfileId(refreshed || orderToUnpost);
+      await notifySalesOrderEvent(
+        'Sales Order Unposted',
+        `SO ${orderToUnpost.reference_no || orderToUnpost.order_no} has been unposted.`,
+        'unpost',
+        'unposted',
+        orderToUnpost.id,
+        {
+          targetRoles: ['Owner', 'Manager'],
+          targetUserIds: submitterProfileId ? [submitterProfileId] : [],
+        }
+      );
       if (refreshed) {
         setSelectedOrder(refreshed);
         setOrders(prev => prev.map(row => row.id === refreshed.id ? refreshed : row));

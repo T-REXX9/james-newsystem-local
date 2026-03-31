@@ -7,8 +7,8 @@ import {
   markNotificationsAsReadByEntityKey,
   markAllAsRead,
   deleteNotification,
-  subscribeToNotifications,
-} from '../services/supabaseService';
+  triggerInventoryAlertScan,
+} from '../services/notificationLocalApiService';
 
 const MAX_NOTIFICATIONS = 50;
 
@@ -83,11 +83,9 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const retryCountRef = useRef(0);
-  const reconnectTimeoutRef = useRef<number | null>(null);
-  const hasSubscribedRef = useRef(false);
   const notificationsRef = useRef<Notification[]>([]);
   const pendingReadIdsRef = useRef<Set<string>>(new Set());
+  const refreshRequestIdRef = useRef(0);
 
   useEffect(() => {
     notificationsRef.current = notifications;
@@ -95,19 +93,27 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
 
   // Fetch initial notifications
   const refreshNotifications = useCallback(async () => {
+    const requestId = ++refreshRequestIdRef.current;
     setIsLoading(true);
     try {
       const [notifs, count] = await Promise.all([
         fetchNotifications(userId),
         getUnreadCount(userId),
       ]);
-      setNotifications(notifs);
-      notificationsRef.current = notifs;
+      if (requestId !== refreshRequestIdRef.current) {
+        return;
+      }
+
+      const safeNotifications = Array.isArray(notifs) ? notifs : [];
+      setNotifications(safeNotifications);
+      notificationsRef.current = safeNotifications;
       setUnreadCount(count);
     } catch (err) {
       console.error('Error refreshing notifications:', err);
     } finally {
-      setIsLoading(false);
+      if (requestId === refreshRequestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [userId]);
 
@@ -116,116 +122,32 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
     refreshNotifications();
   }, [userId, refreshNotifications]);
 
-  // Subscribe to real-time updates
   useEffect(() => {
-    let isCancelled = false;
-    let unsubscribe: (() => void) | null = null;
-    const maxRetries = 5;
-    retryCountRef.current = 0;
-    hasSubscribedRef.current = false;
+    void triggerInventoryAlertScan().then(() => refreshNotifications());
 
-    const clearReconnectTimer = () => {
-      if (reconnectTimeoutRef.current !== null) {
-        window.clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
-    };
-
-    const scheduleReconnect = () => {
-      if (isCancelled || retryCountRef.current >= maxRetries) {
-        return;
-      }
-      retryCountRef.current += 1;
-      const delay = Math.min(1000 * Math.pow(2, retryCountRef.current), 30000);
-      clearReconnectTimer();
-      reconnectTimeoutRef.current = window.setTimeout(() => {
-        if (isCancelled) return;
-        setupSubscription();
-      }, delay);
-    };
-
-    const setupSubscription = () => {
-      if (isCancelled) return;
-      clearReconnectTimer();
-      if (unsubscribe) {
-        unsubscribe();
-        unsubscribe = null;
-      }
-
-      unsubscribe = subscribeToNotifications(userId, {
-        onInsert: (newNotification) => {
-          setNotifications((prev) => [newNotification, ...prev].slice(0, MAX_NOTIFICATIONS));
-          if (!newNotification.is_read) {
-            setUnreadCount((prev) => prev + 1);
-          }
-        },
-        onUpdate: (updatedNotification) => {
-          setNotifications((prev) => {
-            const existing = prev.find((notif) => notif.id === updatedNotification.id);
-            const mergedNotification = existing
-              ? { ...existing, ...updatedNotification }
-              : updatedNotification;
-            const shouldSuppressUnreadDecrement =
-              mergedNotification.is_read && pendingReadIdsRef.current.has(updatedNotification.id);
-
-            if (shouldSuppressUnreadDecrement) {
-              pendingReadIdsRef.current.delete(updatedNotification.id);
-            }
-
-            if (existing && !existing.is_read && mergedNotification.is_read && !shouldSuppressUnreadDecrement) {
-              setUnreadCount((count) => Math.max(0, count - 1));
-            }
-
-            if (!existing && !mergedNotification.is_read) {
-              setUnreadCount((count) => count + 1);
-            }
-
-            return existing
-              ? prev.map((notif) => (notif.id === updatedNotification.id ? mergedNotification : notif))
-              : [mergedNotification, ...prev].slice(0, MAX_NOTIFICATIONS);
-          });
-        },
-        onDelete: (notificationId) => {
-          pendingReadIdsRef.current.delete(notificationId);
-          setNotifications((prev) => {
-            const removed = prev.find((notif) => notif.id === notificationId);
-            if (removed && !removed.is_read) {
-              setUnreadCount((count) => Math.max(0, count - 1));
-            }
-            return prev.filter((notif) => notif.id !== notificationId);
-          });
-        },
-        onStatusChange: (status) => {
-          if (isCancelled) return;
-
-          if (status === 'SUBSCRIBED') {
-            const isReconnect = hasSubscribedRef.current || retryCountRef.current > 0;
-            retryCountRef.current = 0;
-            hasSubscribedRef.current = true;
-            if (isReconnect) {
-              refreshNotifications();
-            }
-            return;
-          }
-
-          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-            scheduleReconnect();
-          }
-        },
-        onError: () => {
-          scheduleReconnect();
-        }
-      });
-    };
-
-    setupSubscription();
+    const intervalId = window.setInterval(() => {
+      void triggerInventoryAlertScan().then(() => refreshNotifications());
+    }, 10 * 60 * 1000);
 
     return () => {
-      isCancelled = true;
-      clearReconnectTimer();
-      if (unsubscribe) {
-        unsubscribe();
-      }
+      window.clearInterval(intervalId);
+    };
+  }, [refreshNotifications]);
+
+  // Refresh notifications on a polling interval while we finish the local API migration.
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      void refreshNotifications();
+    }, 30000);
+
+    const handleFocus = () => {
+      void refreshNotifications();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocus);
     };
   }, [userId, refreshNotifications]);
 
@@ -337,7 +259,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
   // Handle delete notification
   const handleDeleteNotification = useCallback(async (id: string) => {
     try {
-      await deleteNotification(id, userId);
+      await deleteNotification(id);
       setNotifications((prev) => {
         const notification = prev.find((notif) => notif.id === id);
         if (notification && !notification.is_read) {

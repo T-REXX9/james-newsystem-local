@@ -11,6 +11,15 @@ type CollectionAction =
   | 'postrecord'
   | 'posttoledger';
 
+export type CollectionActionResult = {
+  collection_refno?: string;
+  approver_action?: string;
+  collection_status?: string | null;
+  next_approvers?: string[];
+  status?: string;
+  [key: string]: unknown;
+};
+
 export type DailyCollectionHeader = {
   lrefno: string;
   lcolection_no: string;
@@ -345,7 +354,7 @@ export const dailyCollectionService = {
     });
   },
 
-  async runAction(refno: string, action: CollectionAction, remarks?: string): Promise<void> {
+  async runAction(refno: string, action: CollectionAction, remarks?: string): Promise<CollectionActionResult> {
     const ctx = getUserContext();
     const body: Record<string, unknown> = {
       main_id: ctx.mainId,
@@ -354,7 +363,7 @@ export const dailyCollectionService = {
       body.staff_id = ctx.staffId;
       if (remarks) body.remarks = remarks;
     }
-    await requestApi(`${API_BASE_URL}/collections/${encodeURIComponent(refno)}/actions/${action}`, {
+    return await requestApi(`${API_BASE_URL}/collections/${encodeURIComponent(refno)}/actions/${action}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

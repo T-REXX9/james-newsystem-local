@@ -13,6 +13,11 @@ import ConfirmModal from './ConfirmModal';
 import { validateRequired } from '../utils/formValidation';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
+import { getLocalAuthSession } from '../services/localAuthService';
+import {
+  dispatchWorkflowNotification,
+  markNotificationsAsReadByEntityKey,
+} from '../services/notificationLocalApiService';
 
 // Inline StatusBadge if generic one is not suitable for POs, but I'll use simple spans for now to be safe, or try to use the imported one if generic. 
 // I'll stick to my own badge logic or reuse if I knew it works. I'll use my own for safety.
@@ -32,9 +37,11 @@ interface PurchaseOrderViewProps {
 }
 
 const PAGE_SIZE = 10;
+const PURCHASE_ORDER_TAB_ID = 'purchases-transaction-purchase-order';
 
 const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, initialPORefNo }) => {
   const { addToast } = useToast();
+  const currentUser = getLocalAuthSession()?.userProfile;
   const today = new Date();
   // List State
   const [orders, setOrders] = useState<PurchaseOrderWithDetails[]>([]);
@@ -79,6 +86,37 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
 
   const openConfirm = (opts: Omit<typeof confirmModal, 'isOpen'>) => setConfirmModal({ ...opts, isOpen: true });
   const closeConfirm = () => setConfirmModal(prev => ({ ...prev, isOpen: false }));
+
+  const notifyPurchaseOrderEvent = async (
+    title: string,
+    message: string,
+    action: string,
+    status: string,
+    entityId: string,
+    recipients: { targetRoles?: string[]; targetUserIds?: string[] } = {},
+    type: 'success' | 'error' | 'warning' | 'info' = 'success'
+  ) => {
+    await dispatchWorkflowNotification({
+      title,
+      message,
+      type,
+      action,
+      status,
+      entityType: 'purchase_order',
+      entityId,
+      actionUrl: PURCHASE_ORDER_TAB_ID,
+      actorId: String(currentUser?.id || '').trim(),
+      actorRole: currentUser?.role || 'Unknown',
+      targetRoles: recipients.targetRoles,
+      targetUserIds: recipients.targetUserIds,
+      includeActor: false,
+      metadata: {
+        refno: `purchase_order:${entityId}`,
+        purchase_order_id: entityId,
+        action_url: PURCHASE_ORDER_TAB_ID,
+      },
+    });
+  };
 
   // Fetch initial data
   useEffect(() => {
@@ -156,6 +194,14 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
     }
   };
 
+  useEffect(() => {
+    if (!selectedPO?.id || !currentUser?.id) return;
+    void markNotificationsAsReadByEntityKey(String(currentUser.id), {
+      entityType: 'purchase_order',
+      entityId: selectedPO.id,
+    });
+  }, [currentUser?.id, selectedPO?.id]);
+
   // Selection Logic
   useEffect(() => {
     if (orders.length > 0 && !selectedPO) {
@@ -206,6 +252,14 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
       // Select the new PO
       const fullPO = await purchaseOrderService.getPurchaseOrderById(newPO.id);
       setSelectedPO(fullPO as unknown as PurchaseOrderWithDetails);
+      await notifyPurchaseOrderEvent(
+        'Purchase Order Created',
+        `Purchase order ${newPONumber} has been created and submitted successfully.`,
+        'create',
+        'created',
+        newPO.id,
+        { targetRoles: ['Owner', 'Purchasing Manager'] }
+      );
       setIsCreating(false);
       addToast({ 
         type: 'success', 
@@ -260,6 +314,20 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
         await purchaseOrderService.updatePurchaseOrder(selectedPO.id, { status: newStatus });
         const updated = await purchaseOrderService.getPurchaseOrderById(selectedPO.id);
         setSelectedPO(updated as unknown as PurchaseOrderWithDetails);
+        await notifyPurchaseOrderEvent(
+          newStatus === 'Posted' ? 'Purchase Order Posted' : 'Purchase Order Cancelled',
+          newStatus === 'Posted'
+            ? `Purchase order ${selectedPO.po_number} has been posted for processing.`
+            : `Purchase order ${selectedPO.po_number} has been cancelled.`,
+          newStatus === 'Posted' ? 'post' : 'cancel',
+          newStatus === 'Posted' ? 'posted' : 'cancelled',
+          selectedPO.id,
+          {
+            targetRoles: newStatus === 'Posted'
+              ? ['Owner', 'Purchasing Manager', 'Warehouse', 'Warehouse Staff']
+              : ['Owner', 'Purchasing Manager'],
+          }
+        );
         fetchOrders();
         addToast({ type: 'success', title: `Status updated to ${newStatus}`, durationMs: 4000 });
       },

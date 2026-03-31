@@ -9,7 +9,10 @@ import {
   CollectionUnpaidRow,
 } from '../services/dailyCollectionService';
 import { getLocalAuthSession } from '../services/localAuthService';
-import { dispatchWorkflowNotification } from '../services/supabaseService';
+import {
+  dispatchWorkflowNotification,
+  markNotificationsAsReadByEntityKey,
+} from '../services/notificationLocalApiService';
 import DeleteCollectionReportModal from './DeleteCollectionReportModal';
 import { BUTTON_BASE, BUTTON_PRIMARY, BUTTON_SUCCESS } from '../utils/uiConstants';
 import { useDialogAccessibility } from '../hooks/useDialogAccessibility';
@@ -287,6 +290,14 @@ const DailyCollectionEntryView: React.FC = () => {
   }, [selectedRefno]);
 
   useEffect(() => {
+    if (!selectedRefno || !actorId) return;
+    void markNotificationsAsReadByEntityKey(String(actorId), {
+      entityType: 'daily_collection',
+      entityId: selectedRefno,
+    });
+  }, [actorId, selectedRefno]);
+
+  useEffect(() => {
     const timer = window.setTimeout(() => {
       fetchCustomers(customerSearch.trim());
     }, 250);
@@ -337,11 +348,14 @@ const DailyCollectionEntryView: React.FC = () => {
     setWorkingAction(action);
     setError('');
     try {
-      await dailyCollectionService.runAction(selectedRefno, action, remarks);
+      const result = await dailyCollectionService.runAction(selectedRefno, action, remarks);
       await Promise.all([fetchList(), fetchDetail(selectedRefno)]);
 
       const referenceNo = selectedHeader?.lcolection_no || selectedRefno;
       const submitterUserIds = selectedHeader?.created_by ? [selectedHeader.created_by] : [];
+      const nextApprovers = result?.next_approvers || [];
+      const hasNextApprovers = nextApprovers.length > 0;
+
       if (action === 'submitrecord') {
         await notifyCollectionEvent({
           title: 'Collection Submitted',
@@ -354,27 +368,51 @@ const DailyCollectionEntryView: React.FC = () => {
         });
       }
       if (action === 'approverecord') {
-        await notifyCollectionEvent({
-          title: 'Collection Approved',
-          message: `Collection ${referenceNo} has been approved.`,
-          type: 'success',
-          action: 'approve_collection',
-          status: 'approved',
-          entityId: selectedRefno,
-          targetUserIds: submitterUserIds,
-        });
+        if (hasNextApprovers) {
+          await notifyCollectionEvent({
+            title: 'Collection',
+            message: `Collection ${referenceNo} is waiting for your approval.`,
+            type: 'info',
+            action: 'waiting_next_approver',
+            status: 'pending_approval',
+            entityId: selectedRefno,
+            targetUserIds: nextApprovers.map(String),
+          });
+        } else {
+          await notifyCollectionEvent({
+            title: 'Collection Approved',
+            message: `Collection ${referenceNo} has been approved.`,
+            type: 'success',
+            action: 'approve_collection',
+            status: 'approved',
+            entityId: selectedRefno,
+            targetUserIds: submitterUserIds,
+          });
+        }
       }
       if (action === 'disapproverecord') {
-        await notifyCollectionEvent({
-          title: 'Collection Disapproved',
-          message: `Collection ${referenceNo} was disapproved.${remarks ? ` Reason: ${remarks}` : ''}`,
-          type: 'error',
-          action: 'disapprove_collection',
-          status: 'disapproved',
-          entityId: selectedRefno,
-          targetUserIds: submitterUserIds,
-          metadata: remarks ? { disapproval_reason: remarks } : undefined,
-        });
+        if (hasNextApprovers) {
+          await notifyCollectionEvent({
+            title: 'Collection',
+            message: `Collection ${referenceNo} is waiting for your approval.`,
+            type: 'info',
+            action: 'waiting_next_approver',
+            status: 'pending_approval',
+            entityId: selectedRefno,
+            targetUserIds: nextApprovers.map(String),
+          });
+        } else {
+          await notifyCollectionEvent({
+            title: 'Collection Disapproved',
+            message: `Collection ${referenceNo} was disapproved.${remarks ? ` Reason: ${remarks}` : ''}`,
+            type: 'error',
+            action: 'disapprove_collection',
+            status: 'disapproved',
+            entityId: selectedRefno,
+            targetUserIds: submitterUserIds,
+            metadata: remarks ? { disapproval_reason: remarks } : undefined,
+          });
+        }
       }
     } catch (err: any) {
       setError(err?.message || `Failed to run ${action}`);

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Calendar, Printer, RefreshCcw, Search } from 'lucide-react';
+import { Calendar, Loader2, Printer, RefreshCcw } from 'lucide-react';
 import {
   accountsReceivableService,
   ArDateType,
@@ -7,6 +7,9 @@ import {
   ArResponse,
   ArRow,
 } from '../services/accountsReceivableService';
+import SearchableFilterSelect from './SearchableFilterSelect';
+import { getCustomerList } from '../services/salesReportService';
+import { CustomerOption } from '../types';
 import { BUTTON_BASE, BUTTON_PRIMARY } from '../utils/uiConstants';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
@@ -55,8 +58,9 @@ const flattenRows = (report: ArResponse | null): Array<ArRow & { customer: strin
 };
 
 const AccountsReceivableView: React.FC = () => {
-  const [customerSearch, setCustomerSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState('');
+  const [customers, setCustomers] = useState<CustomerOption[]>([]);
+  const [customersLoading, setCustomersLoading] = useState(true);
   const [debtType, setDebtType] = useState<ArDebtType>('All');
   const [dateType, setDateType] = useState<ArDateType>('all');
   const [dateFrom, setDateFrom] = useState('');
@@ -66,9 +70,17 @@ const AccountsReceivableView: React.FC = () => {
   const [report, setReport] = useState<ArResponse | null>(null);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedSearch(customerSearch.trim()), 220);
-    return () => window.clearTimeout(timer);
-  }, [customerSearch]);
+    const loadCustomers = async () => {
+      setCustomersLoading(true);
+      try {
+        setCustomers(await getCustomerList());
+      } finally {
+        setCustomersLoading(false);
+      }
+    };
+
+    loadCustomers();
+  }, []);
 
   const generate = async () => {
     if (dateType === 'custom' && (!dateFrom || !dateTo)) {
@@ -80,7 +92,7 @@ const AccountsReceivableView: React.FC = () => {
     setError('');
     try {
       const payload = await accountsReceivableService.getReport({
-        customerId: debouncedSearch || undefined,
+        customerId: selectedCustomer || undefined,
         debtType,
         dateType,
         dateFrom: dateType === 'custom' ? dateFrom : undefined,
@@ -99,12 +111,20 @@ const AccountsReceivableView: React.FC = () => {
     generate();
   }, []);
 
+  const customerOptions = useMemo(
+    () =>
+      customers.map((customer) => ({
+        value: customer.id,
+        label: customer.company,
+        keywords: [customer.company, customer.id],
+      })),
+    [customers]
+  );
   const flattenedRows = useMemo(() => flattenRows(report), [report]);
-  const isSingleCustomer = !!debouncedSearch;
+  const isSingleCustomer = !!selectedCustomer;
   const selectedCustomerName = useMemo(() => {
-    if (!report || report.customers.length !== 1) return '';
-    return report.customers[0]?.company || report.customers[0]?.customer_code || report.customers[0]?.session_id || '';
-  }, [report]);
+    return customers.find((customer) => customer.id === selectedCustomer)?.company || '';
+  }, [customers, selectedCustomer]);
 
   return (
     <div className="h-full bg-slate-100 dark:bg-slate-950 p-4">
@@ -117,15 +137,22 @@ const AccountsReceivableView: React.FC = () => {
             </div>
 
             <label className="block text-sm text-slate-600 dark:text-slate-300">
-              Customer Search
-              <div className="relative mt-1">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  value={customerSearch}
-                  onChange={(e) => setCustomerSearch(e.target.value)}
-                  placeholder="Blank = all customers"
-                  className={`${INPUT_CLASS} pl-9`}
-                />
+              Customer
+              <div className="mt-1">
+                {customersLoading ? (
+                  <div className="flex items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading customers...
+                  </div>
+                ) : (
+                  <SearchableFilterSelect
+                    value={selectedCustomer || undefined}
+                    options={customerOptions}
+                    placeholder="Search customer..."
+                    allLabel="All Customers"
+                    onChange={(value) => setSelectedCustomer(value || '')}
+                  />
+                )}
               </div>
             </label>
 

@@ -15,7 +15,11 @@ import {
 } from '../services/transferStockService';
 import { fetchProducts } from '../services/productLocalApiService';
 import { getLocalAuthSession } from '../services/localAuthService';
-import { dispatchWorkflowNotification, fetchProfiles } from '../services/supabaseService';
+import {
+  dispatchWorkflowNotification,
+  fetchNotificationProfiles,
+  markNotificationsAsReadByEntityKey,
+} from '../services/notificationLocalApiService';
 import {
   Product,
   TransferStock,
@@ -205,6 +209,14 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
     };
   }, [selectedTransfer?.id]);
 
+  useEffect(() => {
+    if (!selectedTransfer?.id || !currentUser?.id) return;
+    void markNotificationsAsReadByEntityKey(String(currentUser.id), {
+      entityType: 'transfer_stock',
+      entityId: selectedTransfer.id,
+    });
+  }, [currentUser?.id, selectedTransfer?.id]);
+
   const filteredTransfers = useMemo(() => {
     const query = searchTerm.toLowerCase();
     return transferStocks.filter(transfer => {
@@ -224,9 +236,9 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
 
     const legacyUserId = String(transfer.processed_by_legacy_user_id || transfer.processed_by || '').trim();
     const processedByLabel = String(transfer.processed_by || '').trim().toLowerCase();
-    const profiles = await fetchProfiles();
+    const profiles = await fetchNotificationProfiles();
     const matched = profiles.find((profile) => {
-      if (legacyUserId && String(profile.main_userid || '').trim() === legacyUserId) {
+      if (legacyUserId && String(profile.id || '').trim() === legacyUserId) {
         return true;
       }
 

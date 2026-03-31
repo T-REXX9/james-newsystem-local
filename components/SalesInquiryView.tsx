@@ -16,6 +16,7 @@ import {
   SalesInquiryStatus,
 } from '../types';
 import { fetchContactById, fetchContacts } from '../services/customerDatabaseLocalApiService';
+import { getLocalAuthSession } from '../services/localAuthService';
 import {
   approveInquiry,
   convertToOrder,
@@ -43,6 +44,11 @@ import {
 } from '../constants/pricingGroups';
 import { fetchCouriers, CourierRecord } from '../services/courierLocalApiService';
 import { fetchRemarkTemplates, RemarkTemplateRecord } from '../services/remarkTemplateLocalApiService';
+import {
+  dispatchWorkflowNotification,
+  markNotificationsAsReadByEntityKey,
+  resolveNotificationUserId,
+} from '../services/notificationLocalApiService';
 
 interface InquiryItemRow extends Omit<SalesInquiryItem, 'id' | 'inquiry_id' | 'qty' | 'unit_price'> {
   qty: number | '';
@@ -90,6 +96,7 @@ const inquiryListColumnWidths = [
   '16%',
   '10rem',
 ];
+const SALES_INQUIRY_TAB_ID = 'sales-transaction-sales-inquiry';
 
 const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, initialPrefillToken }) => {
   const { addToast } = useToast();
@@ -359,6 +366,38 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     }).format(normalized);
   }, []);
 
+  const notifyInquiryEvent = useCallback(async (
+    title: string,
+    message: string,
+    action: string,
+    status: string,
+    entityId: string,
+    recipients: { targetRoles?: string[]; targetUserIds?: string[] } = {},
+    type: 'success' | 'error' | 'warning' | 'info' = 'success'
+  ) => {
+    const session = getLocalAuthSession();
+    await dispatchWorkflowNotification({
+      title,
+      message,
+      type,
+      action,
+      status,
+      entityType: 'sales_inquiry',
+      entityId,
+      actionUrl: SALES_INQUIRY_TAB_ID,
+      actorId: String(session?.userProfile?.id || '').trim(),
+      actorRole: session?.userProfile?.role || 'Unknown',
+      targetRoles: recipients.targetRoles,
+      targetUserIds: recipients.targetUserIds,
+      includeActor: false,
+      metadata: {
+        refno: `sales_inquiry:${entityId}`,
+        inquiry_id: entityId,
+        action_url: SALES_INQUIRY_TAB_ID,
+      },
+    });
+  }, []);
+
   const customerMap = useMemo(() => new Map(customers.map((customer) => [customer.id, customer])), [customers]);
   const oldSystemInquiryStatuses = useMemo(
     () => [SalesInquiryStatus.DRAFT, SalesInquiryStatus.APPROVED, SalesInquiryStatus.CANCELLED],
@@ -539,6 +578,15 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     if (selectedCustomer?.id === selectedInquiry.contact_id) return;
     loadInquiryIntoForm(selectedInquiry);
   }, [customers, isCreatingNew, loadInquiryIntoForm, selectedCustomer?.id, selectedInquiry]);
+
+  useEffect(() => {
+    const userId = String(getLocalAuthSession()?.userProfile?.id || '').trim();
+    if (!selectedInquiry?.id || isCreatingNew || !userId) return;
+    void markNotificationsAsReadByEntityKey(userId, {
+      entityType: 'sales_inquiry',
+      entityId: selectedInquiry.id,
+    });
+  }, [isCreatingNew, selectedInquiry?.id]);
 
   const applySelectedCustomer = useCallback((customer: Contact) => {
     const normalizedGroup = normalizePriceGroupToInternalKey(customer.priceGroup);
@@ -746,6 +794,14 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
       addToast({ type: 'success', message: 'Sales Inquiry created successfully!' });
 
       if (created?.id && (created as SalesInquiry).contact_id) {
+        await notifyInquiryEvent(
+          'Sales Inquiry Submitted',
+          `Sales inquiry ${(created as SalesInquiry).inquiry_no || referenceNo} is waiting for approval.`,
+          'submit',
+          'submitted',
+          created.id,
+          { targetRoles: ['Owner', 'Manager', 'Approver'] }
+        );
         setIsCreatingNew(false);
         setSelectedInquiry(created as SalesInquiry);
         loadInquiryIntoForm(created as SalesInquiry);
@@ -835,8 +891,17 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     setLoading(true);
     try {
       // If still a draft, finalize first, then convert to SO in one step
+      const creatorUserId = await resolveNotificationUserId(selectedInquiry.created_by, selectedInquiry.sales_person);
       if (selectedInquiry.status === SalesInquiryStatus.DRAFT) {
         await approveInquiry(selectedInquiry.id);
+        await notifyInquiryEvent(
+          'Sales Inquiry Approved',
+          `Sales inquiry ${selectedInquiry.inquiry_no} has been approved.`,
+          'approve',
+          'approved',
+          selectedInquiry.id,
+          { targetUserIds: creatorUserId ? [creatorUserId] : [] }
+        );
       }
 
       const order = await convertToOrder(selectedInquiry.id);
@@ -858,6 +923,17 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
 
       await refetchInquiries();
       addToast({ type: 'success', message: `Converted to Sales Order ${order.order_no || ''}`.trim() });
+      await notifyInquiryEvent(
+        'Sales Inquiry Converted',
+        `Sales inquiry ${selectedInquiry.inquiry_no} has been converted to Sales Order ${order.order_no || ''}.`.trim(),
+        'convert_to_so',
+        'converted',
+        selectedInquiry.id,
+        {
+          targetRoles: ['Owner', 'Manager'],
+          targetUserIds: creatorUserId ? [creatorUserId] : [],
+        }
+      );
 
       window.dispatchEvent(new CustomEvent('salesorder:created', {
         detail: { orderId: order.id, orderNo: order.order_no }
@@ -887,6 +963,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
 
     setLoading(true);
     try {
+      const creatorUserId = await resolveNotificationUserId(selectedInquiry.created_by, selectedInquiry.sales_person);
       const order = await convertToOrder(selectedInquiry.id);
 
       // Verify the order was actually created and is accessible
@@ -909,6 +986,17 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
 
       await refetchInquiries();
       addToast({ type: 'success', message: `Converted to Sales Order ${order.order_no || ''}`.trim() });
+      await notifyInquiryEvent(
+        'Sales Inquiry Converted',
+        `Sales inquiry ${selectedInquiry.inquiry_no} has been converted to Sales Order ${order.order_no || ''}.`.trim(),
+        'convert_to_so',
+        'converted',
+        selectedInquiry.id,
+        {
+          targetRoles: ['Owner', 'Manager'],
+          targetUserIds: creatorUserId ? [creatorUserId] : [],
+        }
+      );
 
       window.dispatchEvent(new CustomEvent('salesorder:created', {
         detail: { orderId: order.id, orderNo: order.order_no }
