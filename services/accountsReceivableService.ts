@@ -2,6 +2,7 @@ import { getLocalAuthSession } from './localAuthService';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
+const REQUEST_TIMEOUT_MS = 30000;
 
 export type ArDebtType = 'All' | 'Good' | 'Bad';
 export type ArDateType = 'all' | 'today' | 'week' | 'month' | 'year' | 'custom';
@@ -50,7 +51,21 @@ const parseApiError = async (response: Response): Promise<string> => {
 };
 
 const requestApi = async (url: string, init?: RequestInit): Promise<any> => {
-  const response = await fetch(url, init);
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(url, { ...init, signal: controller.signal });
+  } catch (error: any) {
+    if (error?.name === 'AbortError') {
+      throw new Error('Accounts receivable request timed out. Please try again.');
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+
   if (!response.ok) throw new Error(await parseApiError(response));
   const payload = await response.json();
   if (!payload?.ok) throw new Error(payload?.error || 'API request failed');

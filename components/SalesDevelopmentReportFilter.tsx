@@ -58,7 +58,7 @@ const SalesDevelopmentReportFilterView: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950 p-6 md:p-8 animate-fadeIn overflow-y-auto">
+    <div className="flex min-h-0 flex-col h-full bg-slate-50 dark:bg-slate-950 p-6 md:p-8 animate-fadeIn overflow-y-auto">
       <div className="max-w-4xl mx-auto w-full">
         <div className="flex items-center gap-4 mb-8 animate-slideInUp">
           <div className="p-3 bg-gradient-to-br from-brand-blue to-blue-600 rounded-2xl shadow-lg shadow-blue-500/20 text-white transform hover:scale-105 transition-transform duration-300">

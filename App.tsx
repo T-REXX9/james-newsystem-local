@@ -53,6 +53,7 @@ import CollectionSummaryView from './components/CollectionSummaryView';
 import StatementOfAccountView from './components/StatementOfAccountView';
 import AccountsReceivableView from './components/AccountsReceivableView';
 import FreightChargesDebitView from './components/FreightChargesDebitView';
+import FreightChargesReportView from './components/FreightChargesReportView';
 import SalesReturnReport from './components/SalesReturnReport';
 import SalesReturnPage from './components/SalesReturnPage';
 import PurchaseHistoryReportView from './components/PurchaseHistoryReportView';
@@ -629,7 +630,7 @@ const App: React.FC = () => {
       case 'accounting-reports-freight-charges-report':
         return (
           <div className="h-full overflow-y-auto">
-            <FreightChargesDebitView />
+            <FreightChargesReportView />
           </div>
         );
       case 'accounting-reports-accounts-receivable-report':

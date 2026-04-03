@@ -68,7 +68,7 @@ const SalesReportDetailModal: React.FC<SalesReportDetailModalProps> = ({
               Transaction Details
             </h2>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              {transaction.type === 'invoice' ? 'Invoice' : 'Delivery Receipt'}: {transaction.refNo}
+              {transaction.type === 'invoice' ? 'Invoice' : transaction.type === 'dr' ? 'Delivery Receipt' : 'Sales Order'}: {transaction.refNo}
             </p>
           </div>
           <button

@@ -1602,7 +1602,7 @@ export interface SalesReportTransaction {
   salesperson: string;
   category: string;
   vatType: 'exclusive' | 'inclusive' | null;
-  type: 'invoice' | 'dr';
+  type: 'invoice' | 'dr' | 'so';
   orderSlipAmount?: number;
 }
 
@@ -1966,16 +1966,22 @@ export interface AIDashboardStats {
 
 export type LoyaltyEvaluationPeriod = 'calendar_month' | 'rolling_30_days';
 export type LoyaltyEligibilityStatus = 'eligible' | 'partially_used' | 'fully_used' | 'expired';
+export type LoyaltyDiscountType = 'purchase_threshold' | 'customer_specific' | 'date_range';
 
 export interface LoyaltyDiscountRule {
   id: string;
   name: string;
   description?: string;
+  discount_type: LoyaltyDiscountType;
   min_purchase_amount: number;
   discount_percentage: number;
   evaluation_period: LoyaltyEvaluationPeriod;
   is_active: boolean;
   priority: number;
+  target_customer_ids?: string[];
+  target_customer_names?: string[];
+  start_date?: string | null;
+  end_date?: string | null;
   created_by?: string;
   created_at: string;
   updated_at?: string;
@@ -2032,20 +2038,30 @@ export interface DiscountUsageLog {
 export interface CreateLoyaltyDiscountRuleDTO {
   name: string;
   description?: string;
+  discount_type?: LoyaltyDiscountType;
   min_purchase_amount: number;
   discount_percentage: number;
   evaluation_period?: LoyaltyEvaluationPeriod;
   priority?: number;
+  target_customer_ids?: string[];
+  target_customer_names?: string[];
+  start_date?: string | null;
+  end_date?: string | null;
 }
 
 export interface UpdateLoyaltyDiscountRuleDTO {
   name?: string;
   description?: string;
+  discount_type?: LoyaltyDiscountType;
   min_purchase_amount?: number;
   discount_percentage?: number;
   evaluation_period?: LoyaltyEvaluationPeriod;
   priority?: number;
   is_active?: boolean;
+  target_customer_ids?: string[];
+  target_customer_names?: string[];
+  start_date?: string | null;
+  end_date?: string | null;
 }
 
 export interface LoyaltyDiscountStats {

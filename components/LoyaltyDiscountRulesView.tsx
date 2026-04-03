@@ -1,37 +1,63 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
     Gift, Plus, Search, Edit2, Trash2, X, Save,
     ToggleLeft, ToggleRight, Users, TrendingUp, DollarSign,
-    ChevronDown, Calendar, Percent, Award
+    ChevronDown, Calendar, Percent, Award, UserCheck, Clock
 } from 'lucide-react';
-import { UserProfile, LoyaltyDiscountRule, CreateLoyaltyDiscountRuleDTO } from '../types';
-import * as loyaltyDiscountService from '../services/loyaltyDiscountService';
+import { UserProfile, LoyaltyDiscountRule, CreateLoyaltyDiscountRuleDTO, LoyaltyDiscountStats, LoyaltyDiscountType, Contact } from '../types';
+import * as loyaltyDiscountService from '../services/loyaltyDiscountLocalApiService';
+import { fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { useToast } from './ToastProvider';
 
 interface LoyaltyDiscountRulesViewProps {
     currentUser: UserProfile | null;
 }
 
+const DISCOUNT_TYPE_LABELS: Record<LoyaltyDiscountType, string> = {
+    purchase_threshold: 'Purchase Threshold',
+    customer_specific: 'Customer Based',
+    date_range: 'Date Range',
+};
+
+const DISCOUNT_TYPE_DESCRIPTIONS: Record<LoyaltyDiscountType, string> = {
+    purchase_threshold: 'Customers who meet the minimum purchase threshold during the evaluation period qualify for the discount.',
+    customer_specific: 'Selected customers receive this discount regardless of purchase amount.',
+    date_range: 'Discount is active during the specified date range for all qualifying transactions.',
+};
+
 const LoyaltyDiscountRulesView: React.FC<LoyaltyDiscountRulesViewProps> = ({ currentUser }) => {
     const [rules, setRules] = useState<LoyaltyDiscountRule[]>([]);
-    const [stats, setStats] = useState<any>(null);
+    const [stats, setStats] = useState<LoyaltyDiscountStats | null>(null);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [showModal, setShowModal] = useState(false);
     const [editingRule, setEditingRule] = useState<LoyaltyDiscountRule | null>(null);
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState<string | null>(null);
+    const [toggling, setToggling] = useState<string | null>(null);
     const { addToast } = useToast();
 
     // Form state
     const [form, setForm] = useState<CreateLoyaltyDiscountRuleDTO>({
         name: '',
         description: '',
+        discount_type: 'purchase_threshold',
         min_purchase_amount: 30000,
         discount_percentage: 5,
         evaluation_period: 'calendar_month',
         priority: 0,
+        target_customer_ids: [],
+        target_customer_names: [],
+        start_date: null,
+        end_date: null,
     });
+
+    // Customer picker state
+    const [customers, setCustomers] = useState<Contact[]>([]);
+    const [customerSearch, setCustomerSearch] = useState('');
+    const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+    const [loadingCustomers, setLoadingCustomers] = useState(false);
+    const customerDropdownRef = useRef<HTMLDivElement>(null);
 
     const loadData = useCallback(async () => {
         try {
@@ -41,9 +67,9 @@ const LoyaltyDiscountRulesView: React.FC<LoyaltyDiscountRulesViewProps> = ({ cur
             ]);
             setRules(rulesData);
             setStats(statsData);
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error loading loyalty discount rules:', error);
-            addToast('Failed to load discount rules', 'error');
+            addToast(error?.message || 'Failed to load discount rules', 'error');
         } finally {
             setLoading(false);
         }
@@ -52,6 +78,36 @@ const LoyaltyDiscountRulesView: React.FC<LoyaltyDiscountRulesViewProps> = ({ cur
     useEffect(() => {
         loadData();
     }, [loadData]);
+
+    // Load customers when modal opens and type is customer_specific
+    useEffect(() => {
+        if (showModal && form.discount_type === 'customer_specific' && customers.length === 0) {
+            setLoadingCustomers(true);
+            fetchContacts()
+                .then(setCustomers)
+                .catch(() => addToast('Failed to load customers', 'error'))
+                .finally(() => setLoadingCustomers(false));
+        }
+    }, [showModal, form.discount_type]);
+
+    // Close customer dropdown on outside click
+    useEffect(() => {
+        const handleClick = (e: MouseEvent) => {
+            if (customerDropdownRef.current && !customerDropdownRef.current.contains(e.target as Node)) {
+                setShowCustomerDropdown(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClick);
+        return () => document.removeEventListener('mousedown', handleClick);
+    }, []);
+
+    const filteredCustomers = useMemo(() => {
+        const term = customerSearch.trim().toLowerCase();
+        if (!term) return customers.slice(0, 50);
+        return customers
+            .filter(c => c.company?.toLowerCase().includes(term) || c.id?.toLowerCase().includes(term))
+            .slice(0, 50);
+    }, [customers, customerSearch]);
 
     const filteredRules = useMemo(() => {
         return rules.filter(rule => {
@@ -66,12 +122,18 @@ const LoyaltyDiscountRulesView: React.FC<LoyaltyDiscountRulesViewProps> = ({ cur
         setForm({
             name: '',
             description: '',
+            discount_type: 'purchase_threshold',
             min_purchase_amount: 30000,
             discount_percentage: 5,
             evaluation_period: 'calendar_month',
             priority: 0,
+            target_customer_ids: [],
+            target_customer_names: [],
+            start_date: null,
+            end_date: null,
         });
         setEditingRule(null);
+        setCustomerSearch('');
     };
 
     const openCreateModal = () => {
@@ -84,10 +146,15 @@ const LoyaltyDiscountRulesView: React.FC<LoyaltyDiscountRulesViewProps> = ({ cur
         setForm({
             name: rule.name,
             description: rule.description || '',
+            discount_type: rule.discount_type || 'purchase_threshold',
             min_purchase_amount: rule.min_purchase_amount,
             discount_percentage: rule.discount_percentage,
             evaluation_period: rule.evaluation_period,
             priority: rule.priority,
+            target_customer_ids: rule.target_customer_ids || [],
+            target_customer_names: rule.target_customer_names || [],
+            start_date: rule.start_date || null,
+            end_date: rule.end_date || null,
         });
         setShowModal(true);
     };
@@ -97,9 +164,45 @@ const LoyaltyDiscountRulesView: React.FC<LoyaltyDiscountRulesViewProps> = ({ cur
         resetForm();
     };
 
+    const addCustomerToForm = (customer: Contact) => {
+        const ids = form.target_customer_ids || [];
+        if (ids.includes(customer.id)) return;
+        setForm(prev => ({
+            ...prev,
+            target_customer_ids: [...(prev.target_customer_ids || []), customer.id],
+            target_customer_names: [...(prev.target_customer_names || []), customer.company || customer.id],
+        }));
+        setCustomerSearch('');
+        setShowCustomerDropdown(false);
+    };
+
+    const removeCustomerFromForm = (index: number) => {
+        setForm(prev => ({
+            ...prev,
+            target_customer_ids: (prev.target_customer_ids || []).filter((_, i) => i !== index),
+            target_customer_names: (prev.target_customer_names || []).filter((_, i) => i !== index),
+        }));
+    };
+
     const handleSave = async () => {
-        if (!form.name || form.min_purchase_amount <= 0 || form.discount_percentage <= 0) {
-            addToast('Please fill in all required fields with valid values', 'error');
+        if (!form.name) {
+            addToast('Rule name is required', 'error');
+            return;
+        }
+        if (form.discount_percentage <= 0) {
+            addToast('Discount percentage must be greater than 0', 'error');
+            return;
+        }
+        if (form.discount_type === 'purchase_threshold' && form.min_purchase_amount <= 0) {
+            addToast('Min. purchase amount must be greater than 0 for purchase threshold rules', 'error');
+            return;
+        }
+        if (form.discount_type === 'customer_specific' && (!form.target_customer_ids || form.target_customer_ids.length === 0)) {
+            addToast('Please select at least one customer', 'error');
+            return;
+        }
+        if (form.discount_type === 'date_range' && (!form.start_date || !form.end_date)) {
+            addToast('Start date and end date are required for date range rules', 'error');
             return;
         }
 
@@ -111,17 +214,25 @@ const LoyaltyDiscountRulesView: React.FC<LoyaltyDiscountRulesViewProps> = ({ cur
         setSaving(true);
         try {
             if (editingRule) {
-                await loyaltyDiscountService.updateRule(editingRule.id, form);
+                const updated = await loyaltyDiscountService.updateRule(editingRule.id, form);
+                if (!updated?.id) {
+                    addToast('Failed to update discount rule — unexpected response', 'error');
+                    return;
+                }
                 addToast('Discount rule updated successfully', 'success');
             } else {
-                await loyaltyDiscountService.createRule(form, currentUser.id);
+                const created = await loyaltyDiscountService.createRule(form, currentUser.id);
+                if (!created?.id) {
+                    addToast('Failed to create discount rule — unexpected response', 'error');
+                    return;
+                }
                 addToast('Discount rule created successfully', 'success');
             }
             closeModal();
             loadData();
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error saving discount rule:', error);
-            addToast('Failed to save discount rule', 'error');
+            addToast(error?.message || 'Failed to save discount rule', 'error');
         } finally {
             setSaving(false);
         }
@@ -135,22 +246,29 @@ const LoyaltyDiscountRulesView: React.FC<LoyaltyDiscountRulesViewProps> = ({ cur
             await loyaltyDiscountService.deleteRule(id);
             addToast('Discount rule deleted', 'success');
             loadData();
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error deleting discount rule:', error);
-            addToast('Failed to delete discount rule', 'error');
+            addToast(error?.message || 'Failed to delete discount rule', 'error');
         } finally {
             setDeleting(null);
         }
     };
 
     const handleToggleActive = async (rule: LoyaltyDiscountRule) => {
+        setToggling(rule.id);
         try {
-            await loyaltyDiscountService.updateRule(rule.id, { is_active: !rule.is_active });
+            const updated = await loyaltyDiscountService.updateRuleStatus(rule.id, !rule.is_active);
+            if (!updated?.id) {
+                addToast('Failed to update status — unexpected response', 'error');
+                return;
+            }
             addToast(`Rule ${rule.is_active ? 'disabled' : 'enabled'}`, 'success');
             loadData();
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error toggling rule status:', error);
-            addToast('Failed to update status', 'error');
+            addToast(error?.message || 'Failed to update status', 'error');
+        } finally {
+            setToggling(null);
         }
     };
 
@@ -160,6 +278,32 @@ const LoyaltyDiscountRulesView: React.FC<LoyaltyDiscountRulesViewProps> = ({ cur
             currency: 'PHP',
             minimumFractionDigits: 0,
         }).format(amount);
+    };
+
+    const getDiscountTypeBadge = (type: LoyaltyDiscountType | undefined) => {
+        switch (type) {
+            case 'customer_specific':
+                return (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs rounded-md">
+                        <UserCheck className="w-3 h-3" />
+                        Customer Based
+                    </span>
+                );
+            case 'date_range':
+                return (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs rounded-md">
+                        <Clock className="w-3 h-3" />
+                        Date Range
+                    </span>
+                );
+            default:
+                return (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs rounded-md">
+                        <Calendar className="w-3 h-3" />
+                        {(editingRule || {} as any).evaluation_period === 'rolling_30_days' ? 'Rolling 30 Days' : 'Monthly'}
+                    </span>
+                );
+        }
     };
 
     if (loading) {
@@ -242,6 +386,15 @@ const LoyaltyDiscountRulesView: React.FC<LoyaltyDiscountRulesViewProps> = ({ cur
                 </div>
             )}
 
+            {/* Stats Note */}
+            {stats && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/50 rounded-lg">
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                        Stats are derived from current month invoice records. Discount usage history is not tracked — "Discount Given" will show ₱0 until a dedicated usage log is enabled.
+                    </p>
+                </div>
+            )}
+
             {/* Search */}
             <div className="relative max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -288,7 +441,8 @@ const LoyaltyDiscountRulesView: React.FC<LoyaltyDiscountRulesViewProps> = ({ cur
                                 <div className="flex items-center gap-1">
                                     <button
                                         onClick={() => handleToggleActive(rule)}
-                                        className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                                        disabled={toggling === rule.id}
+                                        className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50"
                                         title={rule.is_active ? 'Disable' : 'Enable'}
                                     >
                                         {rule.is_active ? (
@@ -317,15 +471,17 @@ const LoyaltyDiscountRulesView: React.FC<LoyaltyDiscountRulesViewProps> = ({ cur
 
                             {/* Rule Details */}
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="flex items-center gap-2">
-                                    <div className="p-1.5 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
-                                        <DollarSign className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                                {rule.discount_type !== 'customer_specific' && (
+                                    <div className="flex items-center gap-2">
+                                        <div className="p-1.5 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
+                                            <DollarSign className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-slate-500">Min. Purchase</p>
+                                            <p className="font-semibold text-slate-800 dark:text-white">{formatCurrency(rule.min_purchase_amount)}</p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <p className="text-xs text-slate-500">Min. Purchase</p>
-                                        <p className="font-semibold text-slate-800 dark:text-white">{formatCurrency(rule.min_purchase_amount)}</p>
-                                    </div>
-                                </div>
+                                )}
                                 <div className="flex items-center gap-2">
                                     <div className="p-1.5 bg-violet-100 dark:bg-violet-900/30 rounded-lg">
                                         <Percent className="w-4 h-4 text-violet-600 dark:text-violet-400" />
@@ -337,12 +493,37 @@ const LoyaltyDiscountRulesView: React.FC<LoyaltyDiscountRulesViewProps> = ({ cur
                                 </div>
                             </div>
 
+                            {/* Customer list for customer_specific */}
+                            {rule.discount_type === 'customer_specific' && rule.target_customer_names && rule.target_customer_names.length > 0 && (
+                                <div className="mt-3">
+                                    <p className="text-xs text-slate-500 mb-1.5">Assigned Customers:</p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {rule.target_customer_names.slice(0, 5).map((name, i) => (
+                                            <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-xs rounded-md">
+                                                <UserCheck className="w-3 h-3" />
+                                                {name}
+                                            </span>
+                                        ))}
+                                        {rule.target_customer_names.length > 5 && (
+                                            <span className="text-xs text-slate-500">+{rule.target_customer_names.length - 5} more</span>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Date range for date_range */}
+                            {rule.discount_type === 'date_range' && rule.start_date && rule.end_date && (
+                                <div className="mt-3">
+                                    <p className="text-xs text-slate-500 mb-1">Active Period:</p>
+                                    <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                        {rule.start_date} to {rule.end_date}
+                                    </p>
+                                </div>
+                            )}
+
                             {/* Footer */}
                             <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs rounded-md">
-                                    <Calendar className="w-3 h-3" />
-                                    {rule.evaluation_period === 'calendar_month' ? 'Monthly' : 'Rolling 30 Days'}
-                                </span>
+                                {getDiscountTypeBadgeForRule(rule)}
                                 {rule.priority > 0 && (
                                     <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">
                                         Priority: {rule.priority}
@@ -398,20 +579,63 @@ const LoyaltyDiscountRulesView: React.FC<LoyaltyDiscountRulesViewProps> = ({ cur
                                 />
                             </div>
 
-                            {/* Min Purchase and Discount */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                                        Min. Purchase (₱) <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        type="number"
-                                        value={form.min_purchase_amount}
-                                        onChange={(e) => setForm(prev => ({ ...prev, min_purchase_amount: parseFloat(e.target.value) || 0 }))}
-                                        min={0}
-                                        className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue outline-none"
-                                    />
+                            {/* Discount Type Selector */}
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                                    Discount Type <span className="text-red-500">*</span>
+                                </label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {(['purchase_threshold', 'customer_specific', 'date_range'] as LoyaltyDiscountType[]).map((type) => (
+                                        <button
+                                            key={type}
+                                            type="button"
+                                            onClick={() => setForm(prev => ({ ...prev, discount_type: type }))}
+                                            className={`px-3 py-2.5 rounded-xl text-xs font-medium border transition-colors ${
+                                                form.discount_type === type
+                                                    ? 'bg-brand-blue text-white border-brand-blue'
+                                                    : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-brand-blue/50'
+                                            }`}
+                                        >
+                                            {DISCOUNT_TYPE_LABELS[type]}
+                                        </button>
+                                    ))}
                                 </div>
+                            </div>
+
+                            {/* Min Purchase — only for purchase_threshold and date_range */}
+                            {(form.discount_type === 'purchase_threshold' || form.discount_type === 'date_range') && (
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                                            Min. Purchase (₱) {form.discount_type === 'purchase_threshold' && <span className="text-red-500">*</span>}
+                                        </label>
+                                        <input
+                                            type="number"
+                                            value={form.min_purchase_amount}
+                                            onChange={(e) => setForm(prev => ({ ...prev, min_purchase_amount: parseFloat(e.target.value) || 0 }))}
+                                            min={0}
+                                            className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                                            Discount (%) <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            value={form.discount_percentage}
+                                            onChange={(e) => setForm(prev => ({ ...prev, discount_percentage: parseFloat(e.target.value) || 0 }))}
+                                            min={0.1}
+                                            max={100}
+                                            step={0.5}
+                                            className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue outline-none"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Discount percentage — only for customer_specific (no min purchase) */}
+                            {form.discount_type === 'customer_specific' && (
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                                         Discount (%) <span className="text-red-500">*</span>
@@ -426,25 +650,129 @@ const LoyaltyDiscountRulesView: React.FC<LoyaltyDiscountRulesViewProps> = ({ cur
                                         className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue outline-none"
                                     />
                                 </div>
-                            </div>
+                            )}
 
-                            {/* Evaluation Period */}
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                                    Evaluation Period
-                                </label>
-                                <div className="relative">
-                                    <select
-                                        value={form.evaluation_period}
-                                        onChange={(e) => setForm(prev => ({ ...prev, evaluation_period: e.target.value as 'calendar_month' | 'rolling_30_days' }))}
-                                        className="w-full appearance-none px-4 py-2.5 pr-10 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm cursor-pointer focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue outline-none"
-                                    >
-                                        <option value="calendar_month">Calendar Month</option>
-                                        <option value="rolling_30_days">Rolling 30 Days</option>
-                                    </select>
-                                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                            {/* Customer Picker — only for customer_specific */}
+                            {form.discount_type === 'customer_specific' && (
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                                        Select Customers <span className="text-red-500">*</span>
+                                    </label>
+
+                                    {/* Selected customers */}
+                                    {(form.target_customer_names || []).length > 0 && (
+                                        <div className="flex flex-wrap gap-1.5 mb-2">
+                                            {(form.target_customer_names || []).map((name, i) => (
+                                                <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-xs rounded-lg">
+                                                    {name}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => removeCustomerFromForm(i)}
+                                                        className="ml-0.5 hover:text-red-500"
+                                                    >
+                                                        <X className="w-3 h-3" />
+                                                    </button>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Search input */}
+                                    <div className="relative" ref={customerDropdownRef}>
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                        <input
+                                            type="text"
+                                            value={customerSearch}
+                                            onChange={(e) => {
+                                                setCustomerSearch(e.target.value);
+                                                setShowCustomerDropdown(true);
+                                            }}
+                                            onFocus={() => setShowCustomerDropdown(true)}
+                                            placeholder={loadingCustomers ? 'Loading customers...' : 'Search customers...'}
+                                            disabled={loadingCustomers}
+                                            className="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue outline-none"
+                                        />
+
+                                        {/* Dropdown */}
+                                        {showCustomerDropdown && !loadingCustomers && (
+                                            <div className="absolute z-10 mt-1 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                                                {filteredCustomers.length === 0 ? (
+                                                    <div className="px-4 py-3 text-xs text-slate-500">No customers found</div>
+                                                ) : (
+                                                    filteredCustomers.map(c => {
+                                                        const alreadySelected = (form.target_customer_ids || []).includes(c.id);
+                                                        return (
+                                                            <button
+                                                                key={c.id}
+                                                                type="button"
+                                                                onClick={() => !alreadySelected && addCustomerToForm(c)}
+                                                                disabled={alreadySelected}
+                                                                className={`w-full text-left px-4 py-2.5 text-sm border-b border-slate-100 dark:border-slate-700 last:border-0 ${
+                                                                    alreadySelected
+                                                                        ? 'opacity-40 cursor-not-allowed bg-slate-50 dark:bg-slate-900'
+                                                                        : 'hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer'
+                                                                }`}
+                                                            >
+                                                                <span className="font-medium text-slate-800 dark:text-white">{c.company || '(No name)'}</span>
+                                                                {alreadySelected && <span className="ml-2 text-xs text-slate-400">Added</span>}
+                                                            </button>
+                                                        );
+                                                    })
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
+                            )}
+
+                            {/* Date Range — only for date_range */}
+                            {form.discount_type === 'date_range' && (
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                                            Start Date <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={form.start_date || ''}
+                                            onChange={(e) => setForm(prev => ({ ...prev, start_date: e.target.value || null }))}
+                                            className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                                            End Date <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={form.end_date || ''}
+                                            onChange={(e) => setForm(prev => ({ ...prev, end_date: e.target.value || null }))}
+                                            min={form.start_date || undefined}
+                                            className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue outline-none"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Evaluation Period — only for purchase_threshold */}
+                            {form.discount_type === 'purchase_threshold' && (
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                                        Evaluation Period
+                                    </label>
+                                    <div className="relative">
+                                        <select
+                                            value={form.evaluation_period}
+                                            onChange={(e) => setForm(prev => ({ ...prev, evaluation_period: e.target.value as 'calendar_month' | 'rolling_30_days' }))}
+                                            className="w-full appearance-none px-4 py-2.5 pr-10 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm cursor-pointer focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue outline-none"
+                                        >
+                                            <option value="calendar_month">Calendar Month</option>
+                                            <option value="rolling_30_days">Rolling 30 Days</option>
+                                        </select>
+                                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Priority */}
                             <div>
@@ -464,7 +792,7 @@ const LoyaltyDiscountRulesView: React.FC<LoyaltyDiscountRulesViewProps> = ({ cur
                             {/* Info */}
                             <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900/50 rounded-lg">
                                 <p className="text-xs text-blue-700 dark:text-blue-300">
-                                    Clients who meet the minimum purchase threshold during the evaluation period will receive the discount on their next month's purchases.
+                                    {DISCOUNT_TYPE_DESCRIPTIONS[form.discount_type || 'purchase_threshold']}
                                 </p>
                             </div>
                         </div>
@@ -492,5 +820,31 @@ const LoyaltyDiscountRulesView: React.FC<LoyaltyDiscountRulesViewProps> = ({ cur
         </div>
     );
 };
+
+function getDiscountTypeBadgeForRule(rule: LoyaltyDiscountRule) {
+    switch (rule.discount_type) {
+        case 'customer_specific':
+            return (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs rounded-md">
+                    <UserCheck className="w-3 h-3" />
+                    Customer Based
+                </span>
+            );
+        case 'date_range':
+            return (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs rounded-md">
+                    <Clock className="w-3 h-3" />
+                    Date Range
+                </span>
+            );
+        default:
+            return (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs rounded-md">
+                    <Calendar className="w-3 h-3" />
+                    {rule.evaluation_period === 'rolling_30_days' ? 'Rolling 30 Days' : 'Monthly'}
+                </span>
+            );
+    }
+}
 
 export default LoyaltyDiscountRulesView;

@@ -128,7 +128,7 @@ export const getSalesReportData = async (
       salesperson: String(tx?.salesperson || 'Unassigned'),
       category: String(tx?.category || 'Uncategorized'),
       vatType: tx?.vat_type === 'exclusive' || tx?.vat_type === 'inclusive' ? tx.vat_type : null,
-      type: tx?.type === 'dr' ? 'dr' : 'invoice',
+      type: tx?.type === 'dr' ? 'dr' : tx?.type === 'so' ? 'so' : 'invoice',
     }));
 
     const summary: SalesReportSummary = {
@@ -153,7 +153,7 @@ export const getSalesReportData = async (
 
 export const getTransactionDetails = async (
   transactionId: string,
-  type: 'invoice' | 'dr'
+  type: 'invoice' | 'dr' | 'so'
 ): Promise<any[]> => {
   try {
     const query = new URLSearchParams({
