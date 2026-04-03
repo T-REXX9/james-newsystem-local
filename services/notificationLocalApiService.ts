@@ -369,6 +369,13 @@ export async function triggerInventoryAlertScan(): Promise<Notification[]> {
       throw new Error(await parseApiErrorMessage(response));
     }
 
+    // Check if response is JSON before parsing
+    const contentType = response.headers.get('content-type');
+    if (!contentType?.includes('application/json')) {
+      console.warn('Inventory alert scan returned non-JSON response:', contentType);
+      return [];
+    }
+
     const result = await response.json();
     return (result.data || result || []) as Notification[];
   } catch (error) {
