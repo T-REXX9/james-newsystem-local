@@ -538,6 +538,25 @@ export interface CallLogEntry {
   next_action_due?: string | null;
 }
 
+export type CustomerLogEntryType = 'Note' | 'Status';
+export type CustomerLogTopic = 'Sales' | 'Payment' | 'Comment' | 'Status';
+export type CustomerLogStatus = 'Note' | 'Call Back' | "Can't be Reach" | 'No Answer';
+
+export interface CustomerLogEntry {
+  id: string;
+  contact_id: string;
+  entry_type: CustomerLogEntryType;
+  topic: CustomerLogTopic;
+  status: string;
+  note?: string;
+  promise_to_pay?: string;
+  comments?: string;
+  attachment?: string | null;
+  occurred_at: string;
+  created_by: string;
+  created_by_name: string;
+}
+
 export interface Inquiry {
   id: string;
   contact_id: string;

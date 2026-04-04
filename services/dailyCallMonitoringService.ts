@@ -1,6 +1,7 @@
 import {
   CallLogEntry,
   Contact,
+  CustomerLogEntry,
   CustomerStatus,
   DailyActivityRecord,
   DailyCallCustomerFilterStatus,
@@ -258,6 +259,21 @@ const mapCallLog = (row: any): CallLogEntry => ({
   next_action_due: row?.next_action_due ?? null,
 });
 
+const mapCustomerLog = (row: any): CustomerLogEntry => ({
+  id: String(row?.id || ''),
+  contact_id: String(row?.contact_id || ''),
+  entry_type: row?.entry_type === 'Status' ? 'Status' : 'Note',
+  topic: row?.topic === 'Payment' || row?.topic === 'Comment' || row?.topic === 'Status' ? row.topic : 'Sales',
+  status: cleanNullableText(row?.status, 'Note'),
+  note: cleanNullableText(row?.note),
+  promise_to_pay: cleanNullableText(row?.promise_to_pay),
+  comments: cleanNullableText(row?.comments),
+  attachment: cleanNullableText(row?.attachment) || null,
+  occurred_at: String(row?.occurred_at || ''),
+  created_by: String(row?.created_by || ''),
+  created_by_name: cleanNullableText(row?.created_by_name, String(row?.created_by || '')),
+});
+
 const mapInquiry = (row: any): Inquiry => ({
   id: String(row?.id || ''),
   contact_id: String(row?.contact_id || ''),
@@ -470,6 +486,14 @@ export const fetchContactSalesReportsForDailyCall = async (contactId: string): P
   return data.map((row: any) => mapInquiry({ ...row, title: row?.id || 'Sales Report', occurred_at: row?.date, notes: row?.notes }));
 };
 
+export const fetchContactCustomerLogsForDailyCall = async (contactId: string): Promise<CustomerLogEntry[]> => {
+  const mainId = resolveMainId();
+  const params = new URLSearchParams({ main_id: String(mainId) });
+  const payload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/customers/${contactId}/customer-logs?${params.toString()}`);
+  const data = Array.isArray(payload?.data) ? payload.data : [];
+  return data.map(mapCustomerLog);
+};
+
 export const createCallLogForDailyCall = async (
   input: Omit<CallLogEntry, 'id'>
 ): Promise<CallLogEntry> => {
@@ -491,6 +515,44 @@ export const createCallLogForDailyCall = async (
   });
 
   return mapCallLog(payload?.data || {});
+};
+
+export interface CreateCustomerLogForDailyCallInput {
+  contact_id: string;
+  entry_type: CustomerLogEntry['entry_type'];
+  topic?: CustomerLogEntry['topic'];
+  status: string;
+  note?: string;
+  promise_to_pay?: string;
+  comments?: string;
+  attachment?: string | null;
+  occurred_at?: string;
+}
+
+export const createCustomerLogForDailyCall = async (
+  input: CreateCustomerLogForDailyCallInput
+): Promise<CustomerLogEntry> => {
+  const mainId = resolveMainId();
+  const session = getLocalAuthSession();
+  const payload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/customer-logs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      main_id: mainId,
+      user_id: session?.userProfile?.id || null,
+      contact_id: input.contact_id,
+      entry_type: input.entry_type,
+      topic: input.topic,
+      status: input.status,
+      note: input.note || '',
+      promise_to_pay: input.promise_to_pay || '',
+      comments: input.comments || '',
+      attachment: input.attachment || '',
+      occurred_at: input.occurred_at || new Date().toISOString(),
+    }),
+  });
+
+  return mapCustomerLog(payload?.data || {});
 };
 
 export const subscribeToDailyCallMonitoringUpdates = (

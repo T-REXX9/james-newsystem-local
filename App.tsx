@@ -92,6 +92,7 @@ import { NotificationProvider } from './components/NotificationProvider';
 import CustomLoadingSpinner from './components/CustomLoadingSpinner';
 import { AVAILABLE_APP_MODULES, MODULE_ID_ALIASES } from './constants';
 import {
+  getLocalAuthSession,
   LocalAuthSession,
   localAuthChangedEventName,
   logoutFromLocalApi,
@@ -156,9 +157,13 @@ const getModuleLabel = (moduleId: string): string => {
 
 const App: React.FC = () => {
   const initialRouteState = getRouteStateFromLocation();
-  const [session, setSession] = useState<any>(null);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [appLoading, setAppLoading] = useState(true);
+  const initialStoredSession = getLocalAuthSession();
+  const [session, setSession] = useState<any>(() => initialStoredSession ? {
+    token: initialStoredSession.token,
+    user: { id: initialStoredSession.userProfile.id },
+  } : null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(() => initialStoredSession?.userProfile || null);
+  const [appLoading, setAppLoading] = useState(() => !initialStoredSession);
 
   const [activeTab, setActiveTab] = useState(initialRouteState.tab);
   const [moduleContext, setModuleContext] = useState<Record<string, Record<string, string>>>(

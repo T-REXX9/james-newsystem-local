@@ -2,9 +2,10 @@ import React from 'react';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
 import App from '../../App';
-import { restoreLocalAuthSession, logoutFromLocalApi, localAuthChangedEventName } from '../../services/localAuthService';
+import { getLocalAuthSession, restoreLocalAuthSession, logoutFromLocalApi, localAuthChangedEventName } from '../../services/localAuthService';
 
 vi.mock('../../services/localAuthService', () => ({
+  getLocalAuthSession: vi.fn(() => null),
   restoreLocalAuthSession: vi.fn(),
   logoutFromLocalApi: vi.fn(),
   localAuthChangedEventName: 'local-auth-changed',
@@ -54,10 +55,13 @@ vi.mock('../../components/SalesInquiryView', () => ({
 }));
 
 const mockedRestoreLocalAuthSession = vi.mocked(restoreLocalAuthSession);
+const mockedGetLocalAuthSession = vi.mocked(getLocalAuthSession);
 const mockedLogoutFromLocalApi = vi.mocked(logoutFromLocalApi);
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
+  mockedGetLocalAuthSession.mockReset();
+  mockedGetLocalAuthSession.mockReturnValue(null);
   mockedRestoreLocalAuthSession.mockReset();
   mockedLogoutFromLocalApi.mockReset();
   consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -108,6 +112,41 @@ describe('App authentication flow', () => {
     await waitFor(() => expect(screen.getByTestId('topnav')).toBeInTheDocument());
     fireEvent.click(screen.getByTestId('topnav'));
     await waitFor(() => expect(mockedLogoutFromLocalApi).toHaveBeenCalled());
+  });
+
+  it('boots immediately from cached local auth session while restore runs in background', async () => {
+    mockedGetLocalAuthSession.mockReturnValue({
+      token: 'cached-token',
+      context: {
+        token: 'cached-token',
+        user: {
+          id: 1,
+          main_userid: 1,
+          email: 'owner@example.com',
+        },
+        main_userid: 1,
+        user_type: '1',
+        session_branch: 'mainbranch',
+        logintype: '1',
+        industry: 'Shop',
+      },
+      userProfile: {
+        id: '1',
+        email: 'owner@example.com',
+        full_name: 'Owner User',
+        role: 'Owner',
+        access_rights: ['*'],
+      },
+    } as any);
+
+    mockedRestoreLocalAuthSession.mockImplementation(
+      () => new Promise(() => {})
+    );
+
+    render(<App />);
+
+    expect(await screen.findByTestId('topnav')).toBeInTheDocument();
+    expect(screen.queryByText('Loading application')).not.toBeInTheDocument();
   });
 
   it('restores the current module from the URL hash on refresh', async () => {

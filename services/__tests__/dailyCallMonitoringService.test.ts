@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createCallLogForDailyCall,
+  createCustomerLogForDailyCall,
   fetchAgentSnapshotForDailyCall,
+  fetchContactCustomerLogsForDailyCall,
   fetchCustomersForDailyCall,
   subscribeToDailyCallMonitoringUpdates,
 } from '../dailyCallMonitoringService';
@@ -161,6 +163,72 @@ describe('dailyCallMonitoringService', () => {
     expect(fetchSpy.mock.calls[0][0]).toContain('/daily-call-monitoring/call-logs');
     expect(fetchSpy.mock.calls[0][1]).toMatchObject({ method: 'POST' });
     expect(result).toMatchObject({ id: 'log-9', contact_id: '1', notes: 'hello' });
+  });
+
+  it('fetchContactCustomerLogsForDailyCall returns legacy customer log entries', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [
+          {
+            id: 'cust-log-1',
+            contact_id: '1',
+            entry_type: 'Note',
+            topic: 'Payment',
+            status: 'Call Back',
+            note: 'Will pay on Friday',
+            promise_to_pay: 'Friday afternoon',
+            comments: 'Asked for reminder',
+            occurred_at: '2026-03-07T00:00:00Z',
+            created_by: '7',
+            created_by_name: 'Jane Doe',
+          },
+        ],
+      }),
+    } as Response);
+
+    const result = await fetchContactCustomerLogsForDailyCall('1');
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      id: 'cust-log-1',
+      topic: 'Payment',
+      promise_to_pay: 'Friday afternoon',
+      created_by_name: 'Jane Doe',
+    });
+  });
+
+  it('createCustomerLogForDailyCall posts legacy customer logs to the local API', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: {
+          id: 'cust-log-2',
+          contact_id: '1',
+          entry_type: 'Status',
+          topic: 'Status',
+          status: 'No Answer',
+          note: '',
+          promise_to_pay: '',
+          comments: '',
+          occurred_at: '2026-03-08T00:00:00Z',
+          created_by: '7',
+          created_by_name: 'Jane Doe',
+        },
+      }),
+    } as Response);
+
+    const result = await createCustomerLogForDailyCall({
+      contact_id: '1',
+      entry_type: 'Status',
+      topic: 'Status',
+      status: 'No Answer',
+    });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(String(fetchSpy.mock.calls[0][0])).toContain('/daily-call-monitoring/customer-logs');
+    expect(fetchSpy.mock.calls[0][1]).toMatchObject({ method: 'POST' });
+    expect(result).toMatchObject({ id: 'cust-log-2', entry_type: 'Status', status: 'No Answer' });
   });
 
   it('subscribeToDailyCallMonitoringUpdates triggers onUpdate on interval and supports unsubscribe', () => {

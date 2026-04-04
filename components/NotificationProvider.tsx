@@ -10,13 +10,17 @@ import {
   triggerInventoryAlertScan,
 } from '../services/notificationLocalApiService';
 
-const MAX_NOTIFICATIONS = 50;
+const MAX_NOTIFICATIONS = 500;
+const INVENTORY_SCAN_INTERVAL_MS = 10 * 60 * 1000;
+const INVENTORY_SCAN_THROTTLE_KEY = 'notification_inventory_scan_started_at';
+const INVENTORY_SCAN_DEFER_MS = 5000;
 
 interface NotificationContextValue {
   notifications: Notification[];
   unreadCount: number;
   isLoading: boolean;
   markAsRead: (notification: Notification) => Promise<void>;
+  markManyAsRead: (notifications: Notification[]) => Promise<void>;
   markAllAsRead: () => Promise<void>;
   deleteNotification: (id: string) => Promise<void>;
   refreshNotifications: () => Promise<void>;
@@ -91,23 +95,108 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
     notificationsRef.current = notifications;
   }, [notifications]);
 
+  const applyOptimisticReadState = useCallback((ids: string[], readAt: string) => {
+    if (ids.length === 0) {
+      return 0;
+    }
+
+    const idSet = new Set(ids);
+    let countMarkedRead = 0;
+
+    setNotifications((prev) => {
+      const nextNotifications = prev.map((notif) => {
+        if (!idSet.has(notif.id) || notif.is_read) {
+          return notif;
+        }
+
+        countMarkedRead += 1;
+        return {
+          ...notif,
+          is_read: true,
+          read_at: notif.read_at || readAt,
+        };
+      });
+
+      notificationsRef.current = nextNotifications;
+      return nextNotifications;
+    });
+
+    if (countMarkedRead > 0) {
+      setUnreadCount((prev) => Math.max(0, prev - countMarkedRead));
+    }
+
+    return countMarkedRead;
+  }, []);
+
+  const revertOptimisticReadState = useCallback((ids: string[]) => {
+    if (ids.length === 0) {
+      return;
+    }
+
+    const idSet = new Set(ids);
+    let countRestoredUnread = 0;
+
+    setNotifications((prev) => {
+      const nextNotifications = prev.map((notif) => {
+        if (!idSet.has(notif.id) || !notif.is_read) {
+          return notif;
+        }
+
+        countRestoredUnread += 1;
+        return {
+          ...notif,
+          is_read: false,
+          read_at: null,
+        };
+      });
+
+      notificationsRef.current = nextNotifications;
+      return nextNotifications;
+    });
+
+    if (countRestoredUnread > 0) {
+      setUnreadCount((prev) => prev + countRestoredUnread);
+    }
+  }, []);
+
   // Fetch initial notifications
   const refreshNotifications = useCallback(async () => {
     const requestId = ++refreshRequestIdRef.current;
     setIsLoading(true);
     try {
       const [notifs, count] = await Promise.all([
-        fetchNotifications(userId),
+        fetchNotifications(userId, MAX_NOTIFICATIONS),
         getUnreadCount(userId),
       ]);
       if (requestId !== refreshRequestIdRef.current) {
         return;
       }
 
-      const safeNotifications = Array.isArray(notifs) ? notifs : [];
+      const pendingReadIds = pendingReadIdsRef.current;
+      const safeNotifications = (Array.isArray(notifs) ? notifs : []).map((notif) => {
+        if (!pendingReadIds.has(notif.id) || notif.is_read) {
+          return notif;
+        }
+
+        return {
+          ...notif,
+          is_read: true,
+          read_at: notif.read_at || new Date().toISOString(),
+        };
+      });
+      const pendingUnreadLoadedCount = safeNotifications.filter(
+        (notif) => pendingReadIds.has(notif.id) && !notifs.find((serverNotif) => serverNotif.id === notif.id)?.is_read
+      ).length;
+
+      const serverUnreadCount = Math.max(0, count - pendingUnreadLoadedCount);
+      const loadedUnreadCount = safeNotifications.filter((notif) => !notif.is_read).length;
+      const effectiveUnreadCount = safeNotifications.length < MAX_NOTIFICATIONS
+        ? loadedUnreadCount
+        : Math.max(serverUnreadCount, loadedUnreadCount);
+
       setNotifications(safeNotifications);
       notificationsRef.current = safeNotifications;
-      setUnreadCount(count);
+      setUnreadCount(effectiveUnreadCount);
     } catch (err) {
       console.error('Error refreshing notifications:', err);
     } finally {
@@ -122,14 +211,41 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
     refreshNotifications();
   }, [userId, refreshNotifications]);
 
+  // Enable inventory alert scanning with 10-minute intervals
   useEffect(() => {
-    void triggerInventoryAlertScan().then(() => refreshNotifications());
+    const canStartInventoryScan = () => {
+      if (typeof window === 'undefined') {
+        return true;
+      }
+
+      const lastStartedAt = Number(window.localStorage.getItem(INVENTORY_SCAN_THROTTLE_KEY) || 0);
+      const now = Date.now();
+      if (Number.isFinite(lastStartedAt) && lastStartedAt > 0 && now - lastStartedAt < INVENTORY_SCAN_INTERVAL_MS) {
+        return false;
+      }
+
+      window.localStorage.setItem(INVENTORY_SCAN_THROTTLE_KEY, String(now));
+      return true;
+    };
+
+    const runInventoryScan = () => {
+      if (!canStartInventoryScan()) {
+        return;
+      }
+
+      void triggerInventoryAlertScan().then(() => {
+        void refreshNotifications();
+      });
+    };
+
+    const startupScanTimeoutId = window.setTimeout(runInventoryScan, INVENTORY_SCAN_DEFER_MS);
 
     const intervalId = window.setInterval(() => {
-      void triggerInventoryAlertScan().then(() => refreshNotifications());
-    }, 10 * 60 * 1000);
+      runInventoryScan();
+    }, INVENTORY_SCAN_INTERVAL_MS);
 
     return () => {
+      window.clearTimeout(startupScanTimeoutId);
       window.clearInterval(intervalId);
     };
   }, [refreshNotifications]);
@@ -151,65 +267,89 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
     };
   }, [userId, refreshNotifications]);
 
-  // Handle mark as read
-  const handleMarkAsRead = useCallback(
-    async (notification: Notification) => {
-      const readTarget = getNotificationReadTarget(notification);
-      const pendingReadIds = readTarget
-        ? notificationsRef.current
-          .filter((notif) => !notif.is_read && matchesNotificationReadTarget(notif, readTarget))
-          .map((notif) => notif.id)
-        : notification.is_read
-          ? []
-          : [notification.id];
+  const handleMarkManyAsRead = useCallback(
+    async (inputNotifications: Notification[]) => {
+      const unreadNotifications = inputNotifications.filter((notification) => !notification.is_read);
+      if (unreadNotifications.length === 0) {
+        return;
+      }
 
-      pendingReadIds.forEach((id) => pendingReadIdsRef.current.add(id));
+      const groups = new Map<string, { target: ReturnType<typeof getNotificationReadTarget>; notifications: Notification[] }>();
+      const directNotifications: Notification[] = [];
 
-      try {
-        const result = readTarget
-          ? await markNotificationsAsReadByEntityKey(userId, readTarget)
-          : {
-            success: await markAsRead(notification.id),
-            updatedCount: notification.is_read ? 0 : 1,
-            updatedIds: [notification.id],
-            readAt: new Date().toISOString(),
-          };
-
-        if (!result.success) {
+      unreadNotifications.forEach((notification) => {
+        const readTarget = getNotificationReadTarget(notification);
+        if (!readTarget) {
+          directNotifications.push(notification);
           return;
         }
 
-        const updatedIds = result.updatedIds.length > 0 ? result.updatedIds : pendingReadIds;
-        const updatedIdSet = new Set(updatedIds);
-        const readAt = result.readAt || new Date().toISOString();
-        let locallyUpdatedUnreadCount = 0;
+        const groupKey = 'entityType' in readTarget
+          ? `entity:${readTarget.entityType}:${readTarget.entityId}`
+          : `refno:${readTarget.refno}`;
+        const existingGroup = groups.get(groupKey);
+        if (existingGroup) {
+          existingGroup.notifications.push(notification);
+          return;
+        }
 
-        setNotifications((prev) => {
-          const nextNotifications = prev.map((notif) => {
-            if (!updatedIdSet.has(notif.id)) {
-              return notif;
-            }
+        groups.set(groupKey, {
+          target: readTarget,
+          notifications: [notification],
+        });
+      });
 
-            if (!notif.is_read) {
-              locallyUpdatedUnreadCount += 1;
-            }
+      const pendingIds = new Set<string>();
+      groups.forEach(({ notifications: groupedNotifications }) => {
+        groupedNotifications.forEach((notification) => pendingIds.add(notification.id));
+      });
+      directNotifications.forEach((notification) => pendingIds.add(notification.id));
 
-            return { ...notif, is_read: true, read_at: notif.read_at || readAt };
-          });
-          notificationsRef.current = nextNotifications;
-          return nextNotifications;
+      const pendingReadIds = Array.from(pendingIds);
+      const readAt = new Date().toISOString();
+
+      pendingReadIds.forEach((id) => pendingReadIdsRef.current.add(id));
+      applyOptimisticReadState(pendingReadIds, readAt);
+
+      try {
+        const groupOperations = Array.from(groups.values()).map(async ({ target, notifications: groupedNotifications }) => {
+          const fallbackIds = groupedNotifications.map((notif) => notif.id);
+          const result = await markNotificationsAsReadByEntityKey(userId, target || {});
+          return {
+            success: result.success,
+            ids: result.updatedIds.length > 0 ? result.updatedIds : fallbackIds,
+          };
         });
 
-        if (locallyUpdatedUnreadCount > 0) {
-          setUnreadCount((prev) => Math.max(0, prev - locallyUpdatedUnreadCount));
+        const directOperations = directNotifications.map(async (notification) => ({
+          success: await markAsRead(notification.id),
+          ids: [notification.id],
+        }));
+
+        const results = await Promise.all([...groupOperations, ...directOperations]);
+        const failedIds = results
+          .filter((result) => !result.success)
+          .flatMap((result) => result.ids);
+
+        if (failedIds.length > 0) {
+          revertOptimisticReadState(failedIds);
         }
       } catch (err) {
-        console.error('Error marking notification as read:', err);
+        console.error('Error marking notifications as read:', err);
+        revertOptimisticReadState(pendingReadIds);
       } finally {
         pendingReadIds.forEach((id) => pendingReadIdsRef.current.delete(id));
       }
     },
-    [userId]
+    [applyOptimisticReadState, revertOptimisticReadState, userId]
+  );
+
+  // Handle mark as read
+  const handleMarkAsRead = useCallback(
+    async (notification: Notification) => {
+      await handleMarkManyAsRead([notification]);
+    },
+    [handleMarkManyAsRead]
   );
 
   // Handle mark all as read
@@ -227,7 +367,6 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
       }
 
       const readAt = new Date().toISOString();
-      let locallyUpdatedUnreadCount = 0;
 
       setNotifications((prev) => {
         const nextNotifications = prev.map((notif) => {
@@ -235,7 +374,6 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
             return notif;
           }
 
-          locallyUpdatedUnreadCount += 1;
           return {
             ...notif,
             is_read: true,
@@ -246,9 +384,9 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
         return nextNotifications;
       });
 
-      if (locallyUpdatedUnreadCount > 0) {
-        setUnreadCount((prev) => Math.max(0, prev - locallyUpdatedUnreadCount));
-      }
+      // Fetch the actual unread count from the server to ensure accuracy
+      const count = await getUnreadCount(userId);
+      setUnreadCount(count);
     } catch (err) {
       console.error('Error marking all as read:', err);
     } finally {
@@ -277,6 +415,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
     unreadCount,
     isLoading,
     markAsRead: handleMarkAsRead,
+    markManyAsRead: handleMarkManyAsRead,
     markAllAsRead: handleMarkAllAsRead,
     deleteNotification: handleDeleteNotification,
     refreshNotifications,

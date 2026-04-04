@@ -48,13 +48,18 @@ import {
 } from './callMetricsUtils';
 import {
   createCallLogForDailyCall,
+  createCustomerLogForDailyCall,
   fetchAgentSnapshotForDailyCall,
+  fetchContactCustomerLogsForDailyCall,
   subscribeToDailyCallMonitoringUpdates
 } from '../services/dailyCallMonitoringService';
 import { createContact } from '../services/customerDatabaseLocalApiService';
 import {
   CallLogEntry,
   Contact,
+  CustomerLogEntry,
+  CustomerLogStatus,
+  CustomerLogTopic,
   CustomerStatus,
   DealStage,
   Inquiry,
@@ -117,6 +122,8 @@ interface MasterRow {
 type ClientListKey = 'active' | 'inactivePositive' | 'prospectivePositive';
 
 const PIE_COLORS = ['#2563eb', '#0ea5e9', '#059669', '#f97316'];
+const CUSTOMER_LOG_TOPICS: CustomerLogTopic[] = ['Sales', 'Payment', 'Comment'];
+const CUSTOMER_LOG_STATUSES: CustomerLogStatus[] = ['Note', 'Call Back', "Can't be Reach", 'No Answer'];
 
 const getCurrentMonthPurchases = (purchases: Purchase[]) =>
   purchases.filter((purchase) => isWithinCurrentMonth(purchase.purchased_at) && purchase.status === 'paid');
@@ -259,6 +266,29 @@ const getContactLocationLabel = (contact: Contact): string => {
   return 'No location';
 };
 
+const buildProtocolLink = (protocol: 'tel' | 'sms', phoneNumber: string, body?: string): string => {
+  const normalizedNumber = String(phoneNumber || '').trim();
+  if (!normalizedNumber) {
+    return '';
+  }
+
+  if (protocol === 'tel') {
+    return `tel:${normalizedNumber}`;
+  }
+
+  const normalizedBody = String(body || '').trim();
+  if (!normalizedBody) {
+    return `sms:${normalizedNumber}`;
+  }
+
+  return `sms:${normalizedNumber}?body=${encodeURIComponent(normalizedBody)}`;
+};
+
+const launchProtocolLink = (target: string) => {
+  if (!target) return;
+  window.open(target, '_self');
+};
+
 const MasterTableRow = React.memo(({
   row,
   densityConfig,
@@ -390,6 +420,15 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [smsRecipient, setSMSRecipient] = useState<Contact | null>(null);
   const [smsMessage, setSMSMessage] = useState('');
   const [sendingSMS, setSendingSMS] = useState(false);
+  const [customerLogs, setCustomerLogs] = useState<CustomerLogEntry[]>([]);
+  const [customerLogsLoading, setCustomerLogsLoading] = useState(false);
+  const [customerLogTopic, setCustomerLogTopic] = useState<CustomerLogTopic>('Sales');
+  const [customerLogStatus, setCustomerLogStatus] = useState<CustomerLogStatus>('Note');
+  const [customerLogNote, setCustomerLogNote] = useState('');
+  const [customerLogPromiseToPay, setCustomerLogPromiseToPay] = useState('');
+  const [customerLogComments, setCustomerLogComments] = useState('');
+  const [savingCustomerLog, setSavingCustomerLog] = useState(false);
+  const [savingStatusLog, setSavingStatusLog] = useState(false);
 
   const [repFilter, setRepFilter] = useState('All');
   const [provinceFilter, setProvinceFilter] = useState('All');
@@ -526,12 +565,40 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   }, [searchValue]);
 
   const handleCallContact = (contact: Contact) => {
-    const phoneNumber = contact.mobile || contact.phone || contact.contactPersons[0]?.mobile || contact.contactPersons[0]?.telephone;
+    const phoneNumber = getPhoneNumber(contact);
     if (!phoneNumber) {
       addToast({ type: 'error', message: 'No phone number available for this contact' });
       return;
     }
-    window.location.href = `tel:${phoneNumber}`;
+
+    const logCall = async () => {
+      try {
+        const createdLog = await createCallLogForDailyCall({
+          contact_id: contact.id,
+          agent_name: agentDataName || agentDisplayName,
+          channel: 'call',
+          direction: 'outbound',
+          duration_seconds: 0,
+          notes: `Dialed ${phoneNumber}`,
+          outcome: 'logged' as any,
+          occurred_at: new Date().toISOString(),
+          next_action: null,
+          next_action_due: null,
+        });
+
+        setCallLogs((previous) => [createdLog, ...previous]);
+      } catch (error) {
+        console.error('Error logging outbound call:', error);
+        addToast({
+          type: 'error',
+          message: 'Call opened, but the activity log could not be saved.',
+        });
+      } finally {
+        launchProtocolLink(buildProtocolLink('tel', phoneNumber));
+      }
+    };
+
+    void logCall();
   };
 
   const handleSMSContact = (contact: Contact) => {
@@ -595,7 +662,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const handleSendSMS = async () => {
     if (!smsRecipient || !smsMessage.trim()) return;
 
-    const phoneNumber = smsRecipient.mobile || smsRecipient.phone || smsRecipient.contactPersons[0]?.mobile || smsRecipient.contactPersons[0]?.telephone;
+    const phoneNumber = getPhoneNumber(smsRecipient);
     if (!phoneNumber) {
       addToast({ type: 'error', message: 'No phone number available for this contact' });
       return;
@@ -603,9 +670,9 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
     setSendingSMS(true);
     try {
-      await createCallLogForDailyCall({
+      const createdLog = await createCallLogForDailyCall({
         contact_id: smsRecipient.id,
-        agent_name: agentDataName || 'Unknown',
+        agent_name: agentDataName || agentDisplayName,
         channel: 'text',
         direction: 'outbound',
         duration_seconds: 0,
@@ -616,19 +683,114 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         next_action_due: null,
       });
 
-      addToast({ type: 'success', message: 'SMS logged successfully' });
+      setCallLogs((previous) => [createdLog, ...previous]);
+      launchProtocolLink(buildProtocolLink('sms', phoneNumber, smsMessage.trim()));
+      addToast({ type: 'success', message: 'SMS app opened and activity logged.' });
       setShowSMSModal(false);
       setSMSRecipient(null);
       setSMSMessage('');
-
-      await loadAgentData();
     } catch (error) {
       console.error('Error sending SMS:', error);
-      addToast({ type: 'error', message: 'Failed to send SMS' });
+      addToast({ type: 'error', message: 'Failed to log SMS before opening the message app.' });
     } finally {
       setSendingSMS(false);
     }
   };
+
+  useEffect(() => {
+    if (!detailsPanelOpen || !selectedClientId) {
+      setCustomerLogs([]);
+      return;
+    }
+
+    let cancelled = false;
+    setCustomerLogsLoading(true);
+
+    fetchContactCustomerLogsForDailyCall(selectedClientId)
+      .then((rows) => {
+        if (!cancelled) {
+          setCustomerLogs(rows);
+        }
+      })
+      .catch((error) => {
+        console.error('Error loading customer logs:', error);
+        if (!cancelled) {
+          setCustomerLogs([]);
+          addToast({ type: 'error', message: 'Customer log history could not be loaded.' });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setCustomerLogsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [addToast, detailsPanelOpen, selectedClientId]);
+
+  const handleSaveCustomerLog = useCallback(async () => {
+    if (!selectedClientId) return;
+    if (!customerLogNote.trim() && !customerLogPromiseToPay.trim() && !customerLogComments.trim()) {
+      addToast({ type: 'error', message: 'Add a note, promise to pay, or comment first.' });
+      return;
+    }
+
+    setSavingCustomerLog(true);
+    try {
+      const createdLog = await createCustomerLogForDailyCall({
+        contact_id: selectedClientId,
+        entry_type: 'Note',
+        topic: customerLogTopic,
+        status: customerLogStatus,
+        note: customerLogNote.trim(),
+        promise_to_pay: customerLogPromiseToPay.trim(),
+        comments: customerLogComments.trim(),
+      });
+
+      setCustomerLogs((previous) => [createdLog, ...previous]);
+      setCustomerLogNote('');
+      setCustomerLogPromiseToPay('');
+      setCustomerLogComments('');
+      addToast({ type: 'success', message: 'Customer note saved.' });
+    } catch (error) {
+      console.error('Error saving customer log:', error);
+      addToast({ type: 'error', message: 'Customer note could not be saved.' });
+    } finally {
+      setSavingCustomerLog(false);
+    }
+  }, [
+    addToast,
+    customerLogComments,
+    customerLogNote,
+    customerLogPromiseToPay,
+    customerLogStatus,
+    customerLogTopic,
+    selectedClientId
+  ]);
+
+  const handleSaveCustomerStatus = useCallback(async () => {
+    if (!selectedClientId) return;
+
+    setSavingStatusLog(true);
+    try {
+      const createdLog = await createCustomerLogForDailyCall({
+        contact_id: selectedClientId,
+        entry_type: 'Status',
+        topic: 'Status',
+        status: customerLogStatus,
+      });
+
+      setCustomerLogs((previous) => [createdLog, ...previous]);
+      addToast({ type: 'success', message: 'Customer status updated.' });
+    } catch (error) {
+      console.error('Error saving customer status:', error);
+      addToast({ type: 'error', message: 'Customer status could not be updated.' });
+    } finally {
+      setSavingStatusLog(false);
+    }
+  }, [addToast, customerLogStatus, selectedClientId]);
 
   const handleEnableCallForwarding = (forwardingNumber: string) => {
     if (!forwardingNumber) return;
@@ -950,10 +1112,15 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     if (!wrapper) return;
 
     const updateHeight = () => {
+      const measuredHeight = wrapper.clientHeight;
+      if (measuredHeight > 0) {
+        setMasterViewportHeight(Math.max(320, Math.floor(measuredHeight)));
+        return;
+      }
+
       const rect = wrapper.getBoundingClientRect();
       const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
-      const bottomPadding = 16; // keep breathing room above viewport bottom
-      const availableHeight = Math.max(320, Math.floor(viewportHeight - rect.top - bottomPadding));
+      const availableHeight = Math.max(320, Math.floor(viewportHeight - rect.top));
       setMasterViewportHeight(availableHeight);
     };
 
@@ -1000,6 +1167,16 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       return true;
     });
   }, [selectedTimeline, historyTab]);
+
+  const filteredCustomerLogs = useMemo(
+    () => customerLogs.filter((entry) => entry.entry_type === 'Note' && entry.topic === customerLogTopic),
+    [customerLogs, customerLogTopic]
+  );
+
+  const statusUpdateLogs = useMemo(
+    () => customerLogs.filter((entry) => entry.entry_type === 'Status'),
+    [customerLogs]
+  );
 
   const todayStart = useMemo(() => getStartOfToday(), []);
   const monthStart = useMemo(() => getStartOfMonth(), []);
@@ -1405,7 +1582,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       )}
 
       {/* Master Call View - Main Focus */}
-      <section className="flex-1 flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-brand-blue/70 rounded-xl shadow-sm mx-4 lg:mx-6 mb-4 overflow-hidden">
+      <section className="flex-1 min-h-0 flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-brand-blue/70 rounded-xl shadow-sm mx-4 lg:mx-6 mb-4 overflow-hidden">
         <div className="flex-shrink-0 p-3 border-b border-slate-100 dark:border-slate-800 flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
@@ -1487,12 +1664,11 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             </div>
           </div>
         </div>
-        <div className="flex-1 overflow-hidden" ref={masterViewportWrapperRef}>
+        <div className="flex-1 min-h-0 overflow-hidden" ref={masterViewportWrapperRef}>
           {activeTab === 'master' && (
             <div
               ref={masterScrollRef}
               className="h-full overflow-y-auto relative"
-              style={{ height: `${masterViewportHeight}px` }}
               onScroll={handleMasterTableScroll}
             >
               {isFiltering && (
@@ -1744,6 +1920,190 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 <FileText className="w-4 h-4" />
                 Sales Inquiry
               </button>
+            </div>
+            <div className="space-y-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/40 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-800 dark:text-white">Customer Log</h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Matches the old daily call monitoring note and status workflow.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveCustomerStatus}
+                  disabled={savingStatusLog}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {savingStatusLog ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                  {savingStatusLog ? 'Updating...' : 'Update Status'}
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {CUSTOMER_LOG_TOPICS.map((topic) => (
+                  <button
+                    key={topic}
+                    type="button"
+                    onClick={() => setCustomerLogTopic(topic)}
+                    className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      customerLogTopic === topic
+                        ? 'border-brand-blue bg-brand-blue/10 text-brand-blue'
+                        : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    {topic}
+                  </button>
+                ))}
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="space-y-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Topic</span>
+                  <select
+                    aria-label="Customer log topic"
+                    value={customerLogTopic}
+                    onChange={(event) => setCustomerLogTopic(event.target.value as CustomerLogTopic)}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+                  >
+                    {CUSTOMER_LOG_TOPICS.map((topic) => (
+                      <option key={topic} value={topic}>{topic}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Status</span>
+                  <select
+                    aria-label="Customer log status"
+                    value={customerLogStatus}
+                    onChange={(event) => setCustomerLogStatus(event.target.value as CustomerLogStatus)}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+                  >
+                    {CUSTOMER_LOG_STATUSES.map((status) => (
+                      <option key={status} value={status}>{status}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <label className="space-y-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Note</span>
+                <textarea
+                  aria-label="Customer note"
+                  value={customerLogNote}
+                  onChange={(event) => setCustomerLogNote(event.target.value)}
+                  placeholder="Add the conversation note"
+                  rows={4}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+                />
+              </label>
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="space-y-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Promise To Pay</span>
+                  <textarea
+                    aria-label="Customer promise to pay"
+                    value={customerLogPromiseToPay}
+                    onChange={(event) => setCustomerLogPromiseToPay(event.target.value)}
+                    placeholder="Optional promise to pay details"
+                    rows={3}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Comments</span>
+                  <textarea
+                    aria-label="Customer comments"
+                    value={customerLogComments}
+                    onChange={(event) => setCustomerLogComments(event.target.value)}
+                    placeholder="Optional internal comments"
+                    rows={3}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+                  />
+                </label>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleSaveCustomerLog}
+                  disabled={savingCustomerLog}
+                  className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-xs font-semibold text-white hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {savingCustomerLog ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                  {savingCustomerLog ? 'Saving...' : 'Save Note'}
+                </button>
+              </div>
+              <div className="grid gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{customerLogTopic} History</span>
+                    <span className="text-[11px] text-slate-400 dark:text-slate-500">{filteredCustomerLogs.length} entr{filteredCustomerLogs.length === 1 ? 'y' : 'ies'}</span>
+                  </div>
+                  <div className="max-h-64 space-y-2 overflow-y-auto">
+                    {customerLogsLoading ? (
+                      <div className="rounded-lg border border-slate-200 bg-white px-3 py-4 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+                        Loading customer logs...
+                      </div>
+                    ) : filteredCustomerLogs.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                        No {customerLogTopic.toLowerCase()} notes yet.
+                      </div>
+                    ) : (
+                      filteredCustomerLogs.map((entry) => (
+                        <div
+                          key={entry.id}
+                          className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2">
+                              <span className="rounded-full bg-brand-blue/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-blue">
+                                {entry.status || 'Note'}
+                              </span>
+                              <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{entry.created_by_name || 'Unknown user'}</span>
+                            </div>
+                            <span className="text-[11px] text-slate-400 dark:text-slate-500">{formatDate(entry.occurred_at)}</span>
+                          </div>
+                          {entry.note && (
+                            <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">{entry.note}</p>
+                          )}
+                          {entry.promise_to_pay && (
+                            <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-300">Promise to pay: {entry.promise_to_pay}</p>
+                          )}
+                          {entry.comments && (
+                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Comments: {entry.comments}</p>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">Status History</span>
+                    <span className="text-[11px] text-slate-400 dark:text-slate-500">{statusUpdateLogs.length} update{statusUpdateLogs.length === 1 ? '' : 's'}</span>
+                  </div>
+                  <div className="max-h-64 space-y-2 overflow-y-auto">
+                    {customerLogsLoading ? (
+                      <div className="rounded-lg border border-slate-200 bg-white px-3 py-4 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+                        Loading statuses...
+                      </div>
+                    ) : statusUpdateLogs.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                        No status updates yet.
+                      </div>
+                    ) : (
+                      statusUpdateLogs.map((entry) => (
+                        <div
+                          key={entry.id}
+                          className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                              {entry.status}
+                            </span>
+                            <span className="text-[11px] text-slate-400 dark:text-slate-500">{formatDate(entry.occurred_at)}</span>
+                          </div>
+                          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{entry.created_by_name || 'Unknown user'}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between">

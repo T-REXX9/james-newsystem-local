@@ -186,9 +186,29 @@ export const restoreLocalAuthSession = async (): Promise<LocalAuthSession | null
   const existing = getStoredSession();
   if (!existing?.token) return null;
 
-  const response = await fetch(`${API_BASE_URL}/auth/me`, {
-    headers: { Authorization: `Bearer ${existing.token}` },
-  });
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId = controller
+    ? window.setTimeout(() => {
+        controller.abort();
+      }, 8000)
+    : null;
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${existing.token}` },
+      signal: controller?.signal,
+    });
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') {
+      return existing;
+    }
+    throw error;
+  } finally {
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId);
+    }
+  }
 
   if (!response.ok) {
     persistSession(null);

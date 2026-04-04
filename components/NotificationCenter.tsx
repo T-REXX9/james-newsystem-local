@@ -48,7 +48,7 @@ const resolveNotificationCategory = (notification: Notification): NotificationCa
 };
 
 const NotificationCenter: React.FC = () => {
-  const { notifications, unreadCount, markAsRead, deleteNotification } = useNotifications();
+  const { notifications, unreadCount, markAsRead, markManyAsRead, deleteNotification } = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<NotificationCategory>('notification');
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -147,7 +147,7 @@ const NotificationCenter: React.FC = () => {
   const readNotifications = activeNotifications.filter((notification) => notification.is_read);
 
   const handleMarkTabAsRead = async () => {
-    await Promise.all(unreadNotifications.map((notification) => markAsRead(notification)));
+    await markManyAsRead(unreadNotifications);
   };
 
   return (
