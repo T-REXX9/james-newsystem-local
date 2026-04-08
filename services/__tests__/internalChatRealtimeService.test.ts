@@ -17,6 +17,9 @@ describe('internalChatRealtimeService', () => {
     on: ReturnType<typeof vi.fn>;
     off: ReturnType<typeof vi.fn>;
     close: ReturnType<typeof vi.fn>;
+    io: {
+      on: ReturnType<typeof vi.fn>;
+    };
   };
 
   beforeEach(() => {
@@ -27,6 +30,9 @@ describe('internalChatRealtimeService', () => {
       on: vi.fn(),
       off: vi.fn(),
       close: vi.fn(),
+      io: {
+        on: vi.fn(),
+      },
     };
 
     ioMock.mockReturnValue(socketMock);

@@ -29,6 +29,26 @@ const resolveSocketUrl = (): string => {
   return '';
 };
 
+const logRealtimeEvent = (level: 'info' | 'warn' | 'error', message: string, details?: Record<string, unknown>) => {
+  const payload = {
+    socketUrl: resolveSocketUrl(),
+    socketPath: SOCKET_PATH,
+    ...(details || {}),
+  };
+
+  if (level === 'error') {
+    console.error(`[InternalChatRealtime] ${message}`, payload);
+    return;
+  }
+
+  if (level === 'warn') {
+    console.warn(`[InternalChatRealtime] ${message}`, payload);
+    return;
+  }
+
+  console.info(`[InternalChatRealtime] ${message}`, payload);
+};
+
 export const openInternalChatRealtimeStream = (
   onEvent: (event: InternalChatRealtimeEvent) => void,
   onError?: () => void
@@ -77,12 +97,75 @@ export const openInternalChatRealtimeStream = (
     onError?.();
   };
 
+  socket.on('connect', () => {
+    logRealtimeEvent('info', 'Connected', {
+      socketId: socket.id,
+      userId: session.userProfile?.id || session.context?.user?.id || null,
+    });
+  });
+
+  socket.on('disconnect', (reason) => {
+    if (reason === 'io client disconnect') {
+      logRealtimeEvent('info', 'Closed by client', { reason });
+      return;
+    }
+
+    logRealtimeEvent('warn', 'Disconnected', {
+      reason,
+      active: typeof document !== 'undefined' ? document.visibilityState : 'unknown',
+    });
+    onError?.();
+  });
+
+  socket.io.on('reconnect_attempt', (attempt) => {
+    logRealtimeEvent('warn', 'Reconnecting', { attempt });
+  });
+
+  socket.io.on('reconnect', (attempt) => {
+    logRealtimeEvent('info', 'Reconnected', { attempt });
+  });
+
+  socket.io.on('reconnect_error', (error) => {
+    logRealtimeEvent('error', 'Reconnect failed', {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  });
+
+  socket.io.on('reconnect_failed', () => {
+    logRealtimeEvent('error', 'Reconnect attempts exhausted');
+  });
+
+  socket.io.on('error', (error) => {
+    logRealtimeEvent('error', 'Manager error', {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  });
+
+  socket.on('error', (error) => {
+    logRealtimeEvent('error', 'Socket error', {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  });
+
+  socket.on('connect_error', (error) => {
+    logRealtimeEvent('error', 'Connect failed', {
+      message: error instanceof Error ? error.message : String(error),
+      description:
+        typeof error === 'object' && error !== null && 'description' in error
+          ? String((error as { description?: unknown }).description || '')
+          : '',
+      context:
+        typeof error === 'object' && error !== null && 'context' in error
+          ? (error as { context?: unknown }).context
+          : undefined,
+    });
+    handleError();
+  });
+
   socket.on('chat:event', handleEvent);
-  socket.on('connect_error', handleError);
 
   return () => {
     socket.off('chat:event', handleEvent);
-    socket.off('connect_error', handleError);
     socket.close();
   };
 };

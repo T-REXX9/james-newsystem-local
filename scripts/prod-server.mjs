@@ -420,10 +420,39 @@ io.use((socket, next) => {
     socket.data.claims = claims;
     socket.join(`user:${userId}`);
     socket.join(`main:${mainId}`);
+    console.info('[InternalChatProdServer] Authenticated socket', {
+      socketId: socket.id,
+      userId,
+      mainId,
+      transport: socket.conn.transport.name,
+    });
     next();
   } catch (error) {
+    console.error('[InternalChatProdServer] Socket authentication failed', {
+      message: error instanceof Error ? error.message : String(error),
+      address: socket.handshake.address,
+      authKeys: Object.keys(socket.handshake.auth || {}),
+    });
     next(error);
   }
+});
+
+io.on('connection', (socket) => {
+  socket.on('disconnect', (reason) => {
+    console.warn('[InternalChatProdServer] Socket disconnected', {
+      socketId: socket.id,
+      userId: String(socket.data?.claims?.sub || ''),
+      reason,
+    });
+  });
+});
+
+io.engine.on('connection_error', (error) => {
+  console.error('[InternalChatProdServer] Engine connection error', {
+    code: error.code,
+    message: error.message,
+    context: error.context,
+  });
 });
 
 const emitToUser = (userId, payload) => {

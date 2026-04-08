@@ -121,14 +121,39 @@ io.use((socket, next) => {
     socket.data.claims = claims;
     socket.join(`user:${userId}`);
     socket.join(`main:${mainId}`);
+    console.info('[InternalChatRealtimeServer] Authenticated socket', {
+      socketId: socket.id,
+      userId,
+      mainId,
+      transport: socket.conn.transport.name,
+    });
     next();
   } catch (error) {
+    console.error('[InternalChatRealtimeServer] Socket authentication failed', {
+      message: error instanceof Error ? error.message : String(error),
+      address: socket.handshake.address,
+      authKeys: Object.keys(socket.handshake.auth || {}),
+    });
     next(error);
   }
 });
 
-io.on('connection', () => {
-  // Socket membership is handled in middleware.
+io.on('connection', (socket) => {
+  socket.on('disconnect', (reason) => {
+    console.warn('[InternalChatRealtimeServer] Socket disconnected', {
+      socketId: socket.id,
+      userId: String(socket.data?.claims?.sub || ''),
+      reason,
+    });
+  });
+});
+
+io.engine.on('connection_error', (error) => {
+  console.error('[InternalChatRealtimeServer] Engine connection error', {
+    code: error.code,
+    message: error.message,
+    context: error.context,
+  });
 });
 
 const emitToUser = (userId, payload) => {
