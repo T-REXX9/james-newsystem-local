@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "realtime": "node scripts/internal-chat-realtime-server.mjs",
     "test": "vitest"
   },
   "dependencies": {
@@ -29,6 +30,8 @@
     "react-leaflet": "^5.0.0",
     "react-router-dom": "^7.11.0",
     "recharts": "^3.4.1",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
     "sonner": "^2.0.7"
   },
   "devDependencies": {

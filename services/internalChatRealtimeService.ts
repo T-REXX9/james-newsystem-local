@@ -1,29 +1,39 @@
+import { io } from 'socket.io-client';
 import { getLocalAuthSession } from './localAuthService';
+import { InternalChatMessage } from './internalChatLocalApiService';
 
-const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
+const SOCKET_URL = (import.meta as any)?.env?.VITE_INTERNAL_CHAT_SOCKET_URL || '';
+const SOCKET_PATH = '/socket.io';
 
-export interface InternalChatRealtimeState {
-  latest_message_id: string;
-  latest_message_at: string;
-  latest_message_preview: string;
-  latest_conversation_key: string;
-  latest_sender_id: string;
-  latest_sender_name: string;
-  latest_alert_id: string;
-  unread_count: number;
-}
+export type InternalChatRealtimeEvent =
+  | {
+      type: 'message.created';
+      message: InternalChatMessage;
+    }
+  | {
+      type: 'conversation.read';
+      user_id: string;
+      conversation_key: string;
+      updated_count: number;
+    };
 
-const buildStreamUrl = (token: string): string => {
-  const streamUrl = new URL(`${API_BASE_URL}/internal-chat/stream`, window.location.origin);
-  streamUrl.searchParams.set('token', token);
-  return streamUrl.toString();
+const resolveSocketUrl = (): string => {
+  if (SOCKET_URL) {
+    return SOCKET_URL;
+  }
+
+  if (typeof window !== 'undefined') {
+    return window.location.origin;
+  }
+
+  return '';
 };
 
 export const openInternalChatRealtimeStream = (
-  onState: (state: InternalChatRealtimeState) => void,
+  onEvent: (event: InternalChatRealtimeEvent) => void,
   onError?: () => void
 ): (() => void) => {
-  if (typeof window === 'undefined' || typeof EventSource === 'undefined') {
+  if (typeof window === 'undefined') {
     return () => {};
   }
 
@@ -32,27 +42,47 @@ export const openInternalChatRealtimeStream = (
     return () => {};
   }
 
-  const eventSource = new EventSource(buildStreamUrl(session.token));
+  const socket = io(resolveSocketUrl(), {
+    path: SOCKET_PATH,
+    transports: ['websocket'],
+    auth: {
+      token: session.token,
+    },
+    reconnection: true,
+  });
 
-  const handleState = (event: MessageEvent<string>) => {
-    try {
-      const payload = JSON.parse(event.data) as InternalChatRealtimeState;
-      onState({
-        ...payload,
-        unread_count: Number(payload?.unread_count || 0),
-      });
-    } catch {
+  const handleEvent = (payload: InternalChatRealtimeEvent) => {
+    if (!payload || typeof payload !== 'object' || typeof payload.type !== 'string') {
       onError?.();
+      return;
     }
-  };
 
-  eventSource.addEventListener('chat_state', handleState as EventListener);
-  eventSource.onerror = () => {
+    if (payload.type === 'message.created' && payload.message) {
+      onEvent(payload);
+      return;
+    }
+
+    if (payload.type === 'conversation.read') {
+      onEvent({
+        ...payload,
+        updated_count: Number(payload.updated_count || 0),
+      });
+      return;
+    }
+
     onError?.();
   };
 
+  const handleError = () => {
+    onError?.();
+  };
+
+  socket.on('chat:event', handleEvent);
+  socket.on('connect_error', handleError);
+
   return () => {
-    eventSource.removeEventListener('chat_state', handleState as EventListener);
-    eventSource.close();
+    socket.off('chat:event', handleEvent);
+    socket.off('connect_error', handleError);
+    socket.close();
   };
 };

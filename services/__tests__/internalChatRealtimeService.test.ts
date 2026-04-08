@@ -2,109 +2,99 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { openInternalChatRealtimeStream } from '../internalChatRealtimeService';
 
 const getLocalAuthSessionMock = vi.fn();
+const ioMock = vi.fn();
 
 vi.mock('../localAuthService', () => ({
   getLocalAuthSession: () => getLocalAuthSessionMock(),
 }));
 
-class MockEventSource {
-  static lastInstance: MockEventSource | null = null;
-
-  public readonly url: string;
-  public onerror: (() => void) | null = null;
-  private readonly listeners = new Map<string, Set<EventListener>>();
-
-  constructor(url: string) {
-    this.url = url;
-    MockEventSource.lastInstance = this;
-  }
-
-  addEventListener(type: string, listener: EventListener) {
-    const bucket = this.listeners.get(type) || new Set<EventListener>();
-    bucket.add(listener);
-    this.listeners.set(type, bucket);
-  }
-
-  removeEventListener(type: string, listener: EventListener) {
-    this.listeners.get(type)?.delete(listener);
-  }
-
-  emit(type: string, data: string) {
-    const event = new MessageEvent(type, { data });
-    this.listeners.get(type)?.forEach((listener) => listener(event));
-  }
-
-  close() {
-    // noop
-  }
-}
+vi.mock('socket.io-client', () => ({
+  io: (...args: unknown[]) => ioMock(...args),
+}));
 
 describe('internalChatRealtimeService', () => {
-  const originalEventSource = globalThis.EventSource;
+  let socketMock: {
+    on: ReturnType<typeof vi.fn>;
+    off: ReturnType<typeof vi.fn>;
+    close: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     getLocalAuthSessionMock.mockReset();
-    MockEventSource.lastInstance = null;
-    Object.defineProperty(globalThis, 'EventSource', {
-      configurable: true,
-      writable: true,
-      value: MockEventSource,
-    });
+    ioMock.mockReset();
+
+    socketMock = {
+      on: vi.fn(),
+      off: vi.fn(),
+      close: vi.fn(),
+    };
+
+    ioMock.mockReturnValue(socketMock);
   });
 
   afterEach(() => {
-    Object.defineProperty(globalThis, 'EventSource', {
-      configurable: true,
-      writable: true,
-      value: originalEventSource,
-    });
+    vi.clearAllMocks();
   });
 
-  it('opens a stream with the local auth token and forwards chat updates', () => {
+  it('opens a websocket with the local auth token and forwards chat events', () => {
     getLocalAuthSessionMock.mockReturnValue({
       token: 'abc123',
     });
 
-    const onState = vi.fn();
+    const onEvent = vi.fn();
     const onError = vi.fn();
-    const cleanup = openInternalChatRealtimeStream(onState, onError);
+    const cleanup = openInternalChatRealtimeStream(onEvent, onError);
 
-    expect(MockEventSource.lastInstance).not.toBeNull();
-    expect(MockEventSource.lastInstance?.url).toContain('/api/v1/internal-chat/stream');
-    expect(MockEventSource.lastInstance?.url).toContain('token=abc123');
-
-    MockEventSource.lastInstance?.emit(
-      'chat_state',
-      JSON.stringify({
-        latest_message_id: '10',
-        latest_message_at: '2026-04-08 23:00:00',
-        latest_message_preview: 'hello',
-        latest_conversation_key: 'dm:1:2',
-        latest_sender_id: '1',
-        latest_sender_name: 'Master User',
-        latest_alert_id: '4',
-        unread_count: '2',
+    expect(ioMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        path: '/socket.io',
+        transports: ['websocket'],
+        auth: { token: 'abc123' },
       })
     );
 
-    expect(onState).toHaveBeenCalledWith(
+    const chatHandler = socketMock.on.mock.calls.find(([name]) => name === 'chat:event')?.[1];
+    expect(typeof chatHandler).toBe('function');
+
+    chatHandler?.({
+      type: 'message.created',
+      message: {
+        id: '10',
+        conversation_key: 'dm:1:2',
+        sender_id: '1',
+        recipient_id: '2',
+        message: 'hello',
+        created_at: '2026-04-08 23:00:00',
+        is_from_current_user: false,
+        sender_name: 'Master User',
+        recipient_name: 'Sales Agent',
+        sender_avatar_url: '',
+        recipient_avatar_url: '',
+      },
+    });
+
+    expect(onEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        latest_message_id: '10',
-        latest_message_preview: 'hello',
-        unread_count: 2,
+        type: 'message.created',
+        message: expect.objectContaining({
+          id: '10',
+          message: 'hello',
+        }),
       })
     );
 
     cleanup();
+    expect(socketMock.close).toHaveBeenCalledTimes(1);
     expect(onError).not.toHaveBeenCalled();
   });
 
-  it('does not open a stream without a local auth token', () => {
+  it('does not open a websocket without a local auth token', () => {
     getLocalAuthSessionMock.mockReturnValue(null);
 
     const cleanup = openInternalChatRealtimeStream(vi.fn(), vi.fn());
 
-    expect(MockEventSource.lastInstance).toBeNull();
+    expect(ioMock).not.toHaveBeenCalled();
     cleanup();
   });
 });

@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
+  const realtimeTarget = `http://${env.REALTIME_HOST || process.env.REALTIME_HOST || '127.0.0.1'}:${env.REALTIME_PORT || process.env.REALTIME_PORT || '8082'}`;
   const extraAllowedHosts = (env.VITE_ALLOWED_HOSTS || '')
     .split(',')
     .map((host) => host.trim())
@@ -27,6 +28,11 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:8081',
           changeOrigin: true,
         },
+        '/socket.io': {
+          target: realtimeTarget,
+          changeOrigin: true,
+          ws: true,
+        },
       },
     },
     preview: {
@@ -41,6 +47,11 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: 'http://127.0.0.1:8081',
           changeOrigin: true,
+        },
+        '/socket.io': {
+          target: realtimeTarget,
+          changeOrigin: true,
+          ws: true,
         },
       },
     },

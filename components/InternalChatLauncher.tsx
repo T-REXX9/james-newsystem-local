@@ -22,7 +22,7 @@ import {
   sendInternalChatMessage,
 } from '../services/internalChatLocalApiService';
 import {
-  InternalChatRealtimeState,
+  InternalChatRealtimeEvent,
   openInternalChatRealtimeStream,
 } from '../services/internalChatRealtimeService';
 import { useToast } from './ToastProvider';
@@ -37,7 +37,7 @@ interface MentionContext {
   query: string;
 }
 
-const INTERNAL_CHAT_REALTIME_ENABLED = false;
+const INTERNAL_CHAT_REALTIME_ENABLED = true;
 
 const formatRelativeTime = (value?: string) => {
   if (!value) return '';
@@ -65,6 +65,39 @@ const avatarFallback = (name: string) => {
   if (!trimmed) return 'U';
   const tokens = trimmed.split(/\s+/).filter(Boolean);
   return tokens.slice(0, 2).map((token) => token[0]?.toUpperCase() || '').join('') || 'U';
+};
+
+const compareMessages = (left: InternalChatMessage, right: InternalChatMessage) => {
+  const leftTime = Date.parse(left.created_at || '');
+  const rightTime = Date.parse(right.created_at || '');
+  if (!Number.isNaN(leftTime) && !Number.isNaN(rightTime) && leftTime !== rightTime) {
+    return leftTime - rightTime;
+  }
+
+  return Number(left.id || 0) - Number(right.id || 0);
+};
+
+const mergeConversationMessages = (
+  previous: Record<string, InternalChatMessage[]>,
+  incoming: InternalChatMessage[]
+): Record<string, InternalChatMessage[]> => {
+  if (incoming.length === 0) {
+    return previous;
+  }
+
+  const nextState = { ...previous };
+
+  incoming.forEach((message) => {
+    const key = message.conversation_key;
+    const existing = nextState[key] || [];
+    if (existing.some((item) => item.id === message.id)) {
+      return;
+    }
+
+    nextState[key] = [...existing, message].sort(compareMessages);
+  });
+
+  return nextState;
 };
 
 const getMentionContext = (value: string, cursorPosition: number): MentionContext | null => {
@@ -109,8 +142,6 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   const hasLoadedShellDataRef = useRef(false);
   const isOpenRef = useRef(false);
   const isMinimizedRef = useRef(false);
-  const lastRealtimeMessageIdRef = useRef('0');
-  const hasReceivedRealtimeSnapshotRef = useRef(false);
   const lastRealtimeErrorToastAtRef = useRef(0);
   const shellAbortControllerRef = useRef<AbortController | null>(null);
   const messageAbortControllerRef = useRef<AbortController | null>(null);
@@ -256,8 +287,6 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   useEffect(() => {
     if (!user) {
       hasLoadedShellDataRef.current = false;
-      lastRealtimeMessageIdRef.current = '0';
-      hasReceivedRealtimeSnapshotRef.current = false;
       shellAbortControllerRef.current?.abort();
       messageAbortControllerRef.current?.abort();
       setParticipants([]);
@@ -275,40 +304,37 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     if (!INTERNAL_CHAT_REALTIME_ENABLED || !user || !isPageActive) return;
 
     return openInternalChatRealtimeStream(
-      (state: InternalChatRealtimeState) => {
-        setUnreadCount(state.unread_count);
-
-        const latestMessageId = state.latest_message_id || '0';
-        const previousMessageId = lastRealtimeMessageIdRef.current;
-        const isFirstSnapshot = !hasReceivedRealtimeSnapshotRef.current;
-        const hasNewMessage = !isFirstSnapshot && latestMessageId !== '0' && latestMessageId !== previousMessageId;
-        hasReceivedRealtimeSnapshotRef.current = true;
-        lastRealtimeMessageIdRef.current = latestMessageId;
-
+      (event: InternalChatRealtimeEvent) => {
         const currentConversationKey = selectedConversationKeyRef.current;
         const launcherOpen = isOpenRef.current;
         const launcherMinimized = isMinimizedRef.current;
 
-        if (launcherOpen) {
+        if (event.type === 'conversation.read') {
           void loadShellData({ background: true });
-          if (currentConversationKey) {
-            void refreshConversationMessages(
-              currentConversationKey,
-              !launcherMinimized && state.latest_conversation_key === currentConversationKey
-            );
-          }
+          return;
         }
 
-        if (
-          hasNewMessage &&
-          state.latest_sender_id &&
-          state.latest_sender_id !== user.id &&
-          (!launcherOpen || launcherMinimized || state.latest_conversation_key !== currentConversationKey)
-        ) {
+        const incomingMessage: InternalChatMessage = {
+          ...event.message,
+          is_from_current_user: event.message.sender_id === user.id,
+        };
+
+        setMessagesByConversation((prev) => mergeConversationMessages(prev, [incomingMessage]));
+        void loadShellData({ background: true });
+
+        if (launcherOpen && currentConversationKey === incomingMessage.conversation_key) {
+          void refreshConversationMessages(
+            currentConversationKey,
+            !launcherMinimized && incomingMessage.sender_id !== user.id
+          );
+          return;
+        }
+
+        if (incomingMessage.sender_id !== user.id) {
           addToast({
             type: 'info',
-            title: state.latest_sender_name ? `New message from ${state.latest_sender_name}` : 'New internal message',
-            description: state.latest_message_preview || 'Open chat to view the message.',
+            title: incomingMessage.sender_name ? `New message from ${incomingMessage.sender_name}` : 'New internal message',
+            description: incomingMessage.message || 'Open chat to view the message.',
           });
         }
       },
@@ -507,23 +533,14 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
       });
 
       if (created.length > 0) {
-        setMessagesByConversation((prev) => {
-          const nextState = { ...prev };
-          created.forEach((message) => {
-            const bucket = nextState[message.conversation_key] || [];
-            nextState[message.conversation_key] = [...bucket, message];
-          });
-          return nextState;
-        });
+        setMessagesByConversation((prev) => mergeConversationMessages(prev, created));
       }
 
       setDraft('');
       setMentionSelections({});
       setMentionContext(null);
 
-      const nextConversations = await fetchInternalChatConversations();
-      setConversations(nextConversations);
-      await refreshUnreadCount();
+      await loadShellData({ background: true });
 
       if (!selectedConversationKey && created[0]?.conversation_key) {
         setSelectedConversationKey(created[0].conversation_key);
