@@ -10,7 +10,7 @@ import {
   triggerInventoryAlertScan,
 } from '../services/notificationLocalApiService';
 
-const MAX_NOTIFICATIONS = 500;
+const MAX_NOTIFICATIONS = 100;
 const INVENTORY_SCAN_INTERVAL_MS = 10 * 60 * 1000;
 const INVENTORY_SCAN_THROTTLE_KEY = 'notification_inventory_scan_started_at';
 const INVENTORY_SCAN_DEFER_MS = 5000;

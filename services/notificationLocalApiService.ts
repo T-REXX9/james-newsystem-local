@@ -9,6 +9,7 @@ import { getLocalAuthSession } from './localAuthService';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const PROFILES_CACHE_TTL_MS = 60 * 1000;
+const DEFAULT_NOTIFICATION_MAX_AGE_DAYS = 10;
 
 let profilesCache: UserProfile[] | null = null;
 let profilesCachedAt = 0;
@@ -101,12 +102,17 @@ const extractApiData = <T>(result: unknown): T | undefined => {
   return outerData as T | undefined;
 };
 
-export async function fetchNotifications(userId?: string, limit = 50): Promise<Notification[]> {
+export async function fetchNotifications(
+  userId?: string,
+  limit = 50,
+  maxAgeDays = DEFAULT_NOTIFICATION_MAX_AGE_DAYS
+): Promise<Notification[]> {
   try {
     const effectiveUserId = getEffectiveUserId(userId);
     const params = new URLSearchParams({
       user_id: effectiveUserId,
       limit: String(limit),
+      max_age_days: String(maxAgeDays),
     });
 
     const response = await fetch(`${API_BASE_URL}/notifications?${params.toString()}`, {
@@ -150,10 +156,16 @@ export async function createNotification(input: CreateNotificationInput): Promis
   }
 }
 
-export async function getUnreadCount(userId?: string): Promise<number> {
+export async function getUnreadCount(
+  userId?: string,
+  maxAgeDays = DEFAULT_NOTIFICATION_MAX_AGE_DAYS
+): Promise<number> {
   try {
     const effectiveUserId = getEffectiveUserId(userId);
-    const params = new URLSearchParams({ user_id: effectiveUserId });
+    const params = new URLSearchParams({
+      user_id: effectiveUserId,
+      max_age_days: String(maxAgeDays),
+    });
     const response = await fetch(`${API_BASE_URL}/notifications/unread-count?${params.toString()}`, {
       headers: getAuthHeaders(),
     });
