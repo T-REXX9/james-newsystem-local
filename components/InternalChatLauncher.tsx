@@ -21,6 +21,10 @@ import {
   markInternalChatConversationRead,
   sendInternalChatMessage,
 } from '../services/internalChatLocalApiService';
+import {
+  InternalChatRealtimeState,
+  openInternalChatRealtimeStream,
+} from '../services/internalChatRealtimeService';
 import { useToast } from './ToastProvider';
 
 interface InternalChatLauncherProps {
@@ -32,9 +36,6 @@ interface MentionContext {
   end: number;
   query: string;
 }
-
-const UNREAD_POLL_MS = 30000;
-const OPEN_REFRESH_MS = 12000;
 
 const formatRelativeTime = (value?: string) => {
   if (!value) return '';
@@ -104,6 +105,11 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   const selectedConversationKeyRef = useRef<string | null>(null);
   const latestShellRequestRef = useRef(0);
   const hasLoadedShellDataRef = useRef(false);
+  const isOpenRef = useRef(false);
+  const isMinimizedRef = useRef(false);
+  const lastRealtimeMessageIdRef = useRef('0');
+  const hasReceivedRealtimeSnapshotRef = useRef(false);
+  const lastRealtimeErrorToastAtRef = useRef(0);
 
   const refreshUnreadCount = async (silent = true) => {
     if (!user) return;
@@ -196,30 +202,87 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   };
 
   useEffect(() => {
-    if (!user) return;
-    refreshUnreadCount();
-
-    const intervalId = window.setInterval(() => {
-      refreshUnreadCount();
-    }, UNREAD_POLL_MS);
-
-    return () => window.clearInterval(intervalId);
-  }, [user]);
-
-  useEffect(() => {
     selectedConversationKeyRef.current = selectedConversationKey;
   }, [selectedConversationKey]);
 
   useEffect(() => {
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
+
+  useEffect(() => {
+    isMinimizedRef.current = isMinimized;
+  }, [isMinimized]);
+
+  useEffect(() => {
     if (!user) {
       hasLoadedShellDataRef.current = false;
+      lastRealtimeMessageIdRef.current = '0';
+      hasReceivedRealtimeSnapshotRef.current = false;
       setParticipants([]);
       setConversations([]);
       setSelectedConversationKey(null);
       setMessagesByConversation({});
+      setUnreadCount(0);
       return;
     }
+
+    void refreshUnreadCount();
   }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    return openInternalChatRealtimeStream(
+      (state: InternalChatRealtimeState) => {
+        setUnreadCount(state.unread_count);
+
+        const latestMessageId = state.latest_message_id || '0';
+        const previousMessageId = lastRealtimeMessageIdRef.current;
+        const isFirstSnapshot = !hasReceivedRealtimeSnapshotRef.current;
+        const hasNewMessage = !isFirstSnapshot && latestMessageId !== '0' && latestMessageId !== previousMessageId;
+        hasReceivedRealtimeSnapshotRef.current = true;
+        lastRealtimeMessageIdRef.current = latestMessageId;
+
+        const currentConversationKey = selectedConversationKeyRef.current;
+        const launcherOpen = isOpenRef.current;
+        const launcherMinimized = isMinimizedRef.current;
+
+        if (launcherOpen) {
+          void loadShellData({ background: true });
+          if (currentConversationKey) {
+            void refreshConversationMessages(
+              currentConversationKey,
+              !launcherMinimized && state.latest_conversation_key === currentConversationKey
+            );
+          }
+        }
+
+        if (
+          hasNewMessage &&
+          state.latest_sender_id &&
+          state.latest_sender_id !== user.id &&
+          (!launcherOpen || launcherMinimized || state.latest_conversation_key !== currentConversationKey)
+        ) {
+          addToast({
+            type: 'info',
+            title: state.latest_sender_name ? `New message from ${state.latest_sender_name}` : 'New internal message',
+            description: state.latest_message_preview || 'Open chat to view the message.',
+          });
+        }
+      },
+      () => {
+        const now = Date.now();
+        if (isOpenRef.current && now - lastRealtimeErrorToastAtRef.current >= 10000) {
+          lastRealtimeErrorToastAtRef.current = now;
+          addToast({
+            type: 'warning',
+            title: 'Live chat disconnected',
+            description: 'Trying to reconnect to internal chat.',
+          });
+        }
+      }
+    );
+  }, [addToast, user]);
 
   useEffect(() => {
     if (!user || !isOpen || isMinimized) return;
@@ -227,15 +290,6 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     void loadShellData({
       background: hasLoadedShellDataRef.current,
     });
-    const intervalId = window.setInterval(() => {
-      void loadShellData({ background: true });
-      const currentConversationKey = selectedConversationKeyRef.current;
-      if (currentConversationKey) {
-        void refreshConversationMessages(currentConversationKey);
-      }
-    }, OPEN_REFRESH_MS);
-
-    return () => window.clearInterval(intervalId);
   }, [user, isOpen, isMinimized]);
 
   useEffect(() => {
