@@ -44,6 +44,10 @@ export interface NotifyWorkflowEventInput {
   metadata?: Record<string, unknown>;
 }
 
+export interface NotificationRequestOptions {
+  signal?: AbortSignal;
+}
+
 const parseApiErrorMessage = async (response: Response): Promise<string> => {
   try {
     const payload = await response.json();
@@ -105,7 +109,8 @@ const extractApiData = <T>(result: unknown): T | undefined => {
 export async function fetchNotifications(
   userId?: string,
   limit = 50,
-  maxAgeDays = DEFAULT_NOTIFICATION_MAX_AGE_DAYS
+  maxAgeDays = DEFAULT_NOTIFICATION_MAX_AGE_DAYS,
+  options?: NotificationRequestOptions
 ): Promise<Notification[]> {
   try {
     const effectiveUserId = getEffectiveUserId(userId);
@@ -117,6 +122,7 @@ export async function fetchNotifications(
 
     const response = await fetch(`${API_BASE_URL}/notifications?${params.toString()}`, {
       headers: getAuthHeaders(),
+      signal: options?.signal,
     });
 
     if (!response.ok) {
@@ -127,6 +133,9 @@ export async function fetchNotifications(
     const notifications = extractApiData<Notification[]>(result);
     return Array.isArray(notifications) ? notifications : [];
   } catch (error) {
+    if ((error as Error)?.name === 'AbortError') {
+      return [];
+    }
     console.error('Error fetching notifications:', error);
     return [];
   }
@@ -158,7 +167,8 @@ export async function createNotification(input: CreateNotificationInput): Promis
 
 export async function getUnreadCount(
   userId?: string,
-  maxAgeDays = DEFAULT_NOTIFICATION_MAX_AGE_DAYS
+  maxAgeDays = DEFAULT_NOTIFICATION_MAX_AGE_DAYS,
+  options?: NotificationRequestOptions
 ): Promise<number> {
   try {
     const effectiveUserId = getEffectiveUserId(userId);
@@ -168,6 +178,7 @@ export async function getUnreadCount(
     });
     const response = await fetch(`${API_BASE_URL}/notifications/unread-count?${params.toString()}`, {
       headers: getAuthHeaders(),
+      signal: options?.signal,
     });
 
     if (!response.ok) {
@@ -178,6 +189,9 @@ export async function getUnreadCount(
     const payload = extractApiData<{ count?: unknown }>(result);
     return Number(payload?.count ?? 0);
   } catch (error) {
+    if ((error as Error)?.name === 'AbortError') {
+      return 0;
+    }
     console.error('Error fetching unread notification count:', error);
     return 0;
   }

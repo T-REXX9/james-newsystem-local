@@ -40,6 +40,10 @@ export interface SendInternalChatMessageInput {
   conversationKey?: string;
 }
 
+export interface InternalChatRequestOptions {
+  signal?: AbortSignal;
+}
+
 const parseApiErrorMessage = async (response: Response): Promise<string> => {
   try {
     const payload = await response.json();
@@ -100,19 +104,29 @@ export const buildDirectConversationKey = (firstUserId: string, secondUserId: st
   return `dm:${ids[0]}:${ids[1]}`;
 };
 
-export async function fetchInternalChatParticipants(): Promise<InternalChatParticipant[]> {
-  const payload = await requestJson<{ items?: InternalChatParticipant[] }>(`${API_BASE_URL}/internal-chat/participants`);
+export async function fetchInternalChatParticipants(options?: InternalChatRequestOptions): Promise<InternalChatParticipant[]> {
+  const payload = await requestJson<{ items?: InternalChatParticipant[] }>(`${API_BASE_URL}/internal-chat/participants`, {
+    signal: options?.signal,
+  });
   return Array.isArray(payload?.items) ? payload.items : [];
 }
 
-export async function fetchInternalChatConversations(): Promise<InternalChatConversationSummary[]> {
-  const payload = await requestJson<{ items?: InternalChatConversationSummary[] }>(`${API_BASE_URL}/internal-chat/conversations`);
+export async function fetchInternalChatConversations(options?: InternalChatRequestOptions): Promise<InternalChatConversationSummary[]> {
+  const payload = await requestJson<{ items?: InternalChatConversationSummary[] }>(`${API_BASE_URL}/internal-chat/conversations`, {
+    signal: options?.signal,
+  });
   return Array.isArray(payload?.items) ? payload.items : [];
 }
 
-export async function fetchInternalChatMessages(conversationKey: string): Promise<InternalChatMessage[]> {
+export async function fetchInternalChatMessages(
+  conversationKey: string,
+  options?: InternalChatRequestOptions
+): Promise<InternalChatMessage[]> {
   const payload = await requestJson<{ items?: InternalChatMessage[] }>(
-    `${API_BASE_URL}/internal-chat/conversations/${encodeURIComponent(conversationKey)}/messages`
+    `${API_BASE_URL}/internal-chat/conversations/${encodeURIComponent(conversationKey)}/messages`,
+    {
+      signal: options?.signal,
+    }
   );
   return Array.isArray(payload?.items) ? payload.items : [];
 }
@@ -135,7 +149,9 @@ export async function markInternalChatConversationRead(conversationKey: string):
   });
 }
 
-export async function fetchInternalChatUnreadCount(): Promise<number> {
-  const payload = await requestJson<{ count?: number }>(`${API_BASE_URL}/internal-chat/unread-count`);
+export async function fetchInternalChatUnreadCount(options?: InternalChatRequestOptions): Promise<number> {
+  const payload = await requestJson<{ count?: number }>(`${API_BASE_URL}/internal-chat/unread-count`, {
+    signal: options?.signal,
+  });
   return Number(payload?.count || 0);
 }

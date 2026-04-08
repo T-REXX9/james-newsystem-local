@@ -90,6 +90,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
   const notificationsRef = useRef<Notification[]>([]);
   const pendingReadIdsRef = useRef<Set<string>>(new Set());
   const refreshRequestIdRef = useRef(0);
+  const refreshAbortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     notificationsRef.current = notifications;
@@ -166,11 +167,14 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
   // Fetch initial notifications
   const refreshNotifications = useCallback(async () => {
     const requestId = ++refreshRequestIdRef.current;
+    refreshAbortControllerRef.current?.abort();
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    refreshAbortControllerRef.current = controller;
     setIsLoading(true);
     try {
       const [notifs, count] = await Promise.all([
-        fetchNotifications(userId, MAX_NOTIFICATIONS),
-        getUnreadCount(userId),
+        fetchNotifications(userId, MAX_NOTIFICATIONS, undefined, { signal: controller?.signal }),
+        getUnreadCount(userId, undefined, { signal: controller?.signal }),
       ]);
       if (requestId !== refreshRequestIdRef.current) {
         return;
@@ -202,6 +206,9 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
       notificationsRef.current = safeNotifications;
       setUnreadCount(effectiveUnreadCount);
     } catch (err) {
+      if ((err as Error)?.name === 'AbortError') {
+        return;
+      }
       console.error('Error refreshing notifications:', err);
     } finally {
       if (requestId === refreshRequestIdRef.current) {
@@ -209,6 +216,10 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
       }
     }
   }, [userId]);
+
+  useEffect(() => () => {
+    refreshAbortControllerRef.current?.abort();
+  }, []);
 
   // Initial fetch on mount and when userId changes
   useEffect(() => {

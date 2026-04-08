@@ -86,7 +86,14 @@ describe('NotificationCenter', () => {
     renderNotificationCenter();
 
     await waitFor(() => {
-      expect(fetchNotificationsMock).toHaveBeenCalledWith('user-1', 100);
+      expect(fetchNotificationsMock).toHaveBeenCalledWith(
+        'user-1',
+        100,
+        undefined,
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+        })
+      );
     });
 
     const bellButton = screen.getByTitle('Notifications');

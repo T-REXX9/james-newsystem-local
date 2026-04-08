@@ -110,6 +110,11 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   const lastRealtimeMessageIdRef = useRef('0');
   const hasReceivedRealtimeSnapshotRef = useRef(false);
   const lastRealtimeErrorToastAtRef = useRef(0);
+  const shellAbortControllerRef = useRef<AbortController | null>(null);
+  const messageAbortControllerRef = useRef<AbortController | null>(null);
+  const [isPageActive, setIsPageActive] = useState(() => (
+    typeof document !== 'undefined' ? document.visibilityState === 'visible' && document.hasFocus() : true
+  ));
 
   const refreshUnreadCount = async (silent = true) => {
     if (!user) return;
@@ -139,10 +144,13 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     }
 
     try {
+      shellAbortControllerRef.current?.abort();
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      shellAbortControllerRef.current = controller;
       const [participantRows, conversationRows, nextUnreadCount] = await Promise.all([
-        fetchInternalChatParticipants(),
-        fetchInternalChatConversations(),
-        fetchInternalChatUnreadCount(),
+        fetchInternalChatParticipants({ signal: controller?.signal }),
+        fetchInternalChatConversations({ signal: controller?.signal }),
+        fetchInternalChatUnreadCount({ signal: controller?.signal }),
       ]);
 
       if (requestId !== latestShellRequestRef.current) {
@@ -167,6 +175,9 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
         setSelectedConversationKey(nextSelection);
       }
     } catch (error) {
+      if ((error as Error)?.name === 'AbortError') {
+        return;
+      }
       addToast({
         type: 'error',
         title: 'Unable to load internal chat',
@@ -183,7 +194,10 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     if (!user || !conversationKey) return;
 
     try {
-      const items = await fetchInternalChatMessages(conversationKey);
+      messageAbortControllerRef.current?.abort();
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      messageAbortControllerRef.current = controller;
+      const items = await fetchInternalChatMessages(conversationKey, { signal: controller?.signal });
       setMessagesByConversation((prev) => ({ ...prev, [conversationKey]: items }));
 
       if (markRead) {
@@ -193,6 +207,9 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
         setConversations(nextConversations);
       }
     } catch (error) {
+      if ((error as Error)?.name === 'AbortError') {
+        return;
+      }
       addToast({
         type: 'error',
         title: 'Unable to load chat messages',
@@ -214,10 +231,33 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   }, [isMinimized]);
 
   useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
+    const syncPageActivity = () => {
+      setIsPageActive(document.visibilityState === 'visible' && document.hasFocus());
+    };
+
+    syncPageActivity();
+    window.addEventListener('focus', syncPageActivity);
+    window.addEventListener('blur', syncPageActivity);
+    document.addEventListener('visibilitychange', syncPageActivity);
+
+    return () => {
+      window.removeEventListener('focus', syncPageActivity);
+      window.removeEventListener('blur', syncPageActivity);
+      document.removeEventListener('visibilitychange', syncPageActivity);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!user) {
       hasLoadedShellDataRef.current = false;
       lastRealtimeMessageIdRef.current = '0';
       hasReceivedRealtimeSnapshotRef.current = false;
+      shellAbortControllerRef.current?.abort();
+      messageAbortControllerRef.current?.abort();
       setParticipants([]);
       setConversations([]);
       setSelectedConversationKey(null);
@@ -230,7 +270,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   }, [user]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isPageActive) return;
 
     return openInternalChatRealtimeStream(
       (state: InternalChatRealtimeState) => {
@@ -282,7 +322,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
         }
       }
     );
-  }, [addToast, user]);
+  }, [addToast, isPageActive, user]);
 
   useEffect(() => {
     if (!user || !isOpen || isMinimized) return;
@@ -302,6 +342,11 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     const viewport = messageViewportRef.current;
     viewport.scrollTop = viewport.scrollHeight;
   }, [messagesByConversation, selectedConversationKey]);
+
+  useEffect(() => () => {
+    shellAbortControllerRef.current?.abort();
+    messageAbortControllerRef.current?.abort();
+  }, []);
 
   const participantMap = useMemo(() => {
     const map = new Map<string, InternalChatParticipant>();
