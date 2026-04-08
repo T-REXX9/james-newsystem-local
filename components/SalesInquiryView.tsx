@@ -885,25 +885,44 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     }
   };
 
-  const handleFinalizeInquiry = async () => {
-    if (!selectedInquiry || isCreatingNew) return;
+  const handleApproveInquiry = async () => {
+    if (!selectedInquiry || isCreatingNew || selectedInquiry.status !== SalesInquiryStatus.DRAFT) return;
 
     setLoading(true);
     try {
-      // If still a draft, finalize first, then convert to SO in one step
       const creatorUserId = await resolveNotificationUserId(selectedInquiry.created_by, selectedInquiry.sales_person);
-      if (selectedInquiry.status === SalesInquiryStatus.DRAFT) {
-        await approveInquiry(selectedInquiry.id);
-        await notifyInquiryEvent(
-          'Sales Inquiry Approved',
-          `Sales inquiry ${selectedInquiry.inquiry_no} has been approved.`,
-          'approve',
-          'approved',
-          selectedInquiry.id,
-          { targetUserIds: creatorUserId ? [creatorUserId] : [] }
-        );
+      const approvedInquiry = await approveInquiry(selectedInquiry.id);
+
+      await refetchInquiries();
+      if (approvedInquiry?.id) {
+        setSelectedInquiry(approvedInquiry);
+        loadInquiryIntoForm(approvedInquiry);
       }
 
+      addToast({ type: 'success', message: 'Sales Inquiry approved successfully!' });
+      await notifyInquiryEvent(
+        'Sales Inquiry Approved',
+        `Sales inquiry ${selectedInquiry.inquiry_no} has been approved.`,
+        'approve',
+        'approved',
+        selectedInquiry.id,
+        { targetUserIds: creatorUserId ? [creatorUserId] : [] }
+      );
+    } catch (error) {
+      console.error('Error approving inquiry:', error);
+      const friendlyMessage = parseSupabaseError(error, 'sales inquiry approval');
+      addToast({ type: 'error', title: 'Unable to approve inquiry', description: friendlyMessage, durationMs: 6000 });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFinalizeInquiry = async () => {
+    if (!selectedInquiry || isCreatingNew || selectedInquiry.status !== SalesInquiryStatus.APPROVED) return;
+
+    setLoading(true);
+    try {
+      const creatorUserId = await resolveNotificationUserId(selectedInquiry.created_by, selectedInquiry.sales_person);
       const order = await convertToOrder(selectedInquiry.id);
 
       let verifiedOrder = await getSalesOrder(order.id);
@@ -1066,10 +1085,16 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   const activeInquiryNumberDisplay = formatInquiryDisplayNo(activeInquiryNumber);
   const isConversionLocked = Boolean(selectedInquiry && !isCreatingNew && selectedInquiry.is_editable === false);
   const isReadOnly = selectedInquiry?.status === SalesInquiryStatus.CANCELLED || isConversionLocked;
+  const currentUserRole = String(getLocalAuthSession()?.userProfile?.role || '').trim();
+  const canApproveInquiryAction = Boolean(
+    selectedInquiry &&
+    !isCreatingNew &&
+    !isReadOnly &&
+    selectedInquiry.status === SalesInquiryStatus.DRAFT &&
+    ['Owner', 'Developer', 'Manager', 'Approver'].includes(currentUserRole)
+  );
   const priceGroupDisplay = normalizePriceGroup(priceGroup);
-  const canFinalizeInquiry = Boolean(selectedInquiry && !isCreatingNew && selectedInquiry.status === SalesInquiryStatus.DRAFT);
-  const canConvertInquiry = Boolean(selectedInquiry && !isCreatingNew && selectedInquiry.status === SalesInquiryStatus.APPROVED);
-  const canGenerateSO = canFinalizeInquiry || canConvertInquiry;
+  const canGenerateSO = Boolean(selectedInquiry && !isCreatingNew && selectedInquiry.status === SalesInquiryStatus.APPROVED);
   const canOpenConvertedOrder = false;
   const currentMonthLabel = new Date(salesDate || Date.now()).toLocaleDateString('en-PH', { month: 'long' });
   const summaryCustomer = selectedCustomer as (Contact & {
@@ -1769,6 +1794,16 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                       <tr>
                         <td colSpan={6} className="px-3 py-3 border-t border-slate-200 dark:border-slate-800">
                           <div className="flex flex-wrap items-center gap-2">
+                            {canApproveInquiryAction && (
+                              <button
+                                type="button"
+                                onClick={handleApproveInquiry}
+                                disabled={loading}
+                                className="px-4 py-2 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 font-semibold hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                              >
+                                {loading ? 'WORKING…' : 'Approve Inquiry'}
+                              </button>
+                            )}
                             {canGenerateSO && (
                               <button
                                 type="button"

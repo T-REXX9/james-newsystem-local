@@ -8,10 +8,14 @@ const addToastMock = vi.fn();
 const createSalesInquiryMock = vi.fn();
 const getAllSalesInquiriesMock = vi.fn();
 const getSalesInquiryMock = vi.fn();
+const approveInquiryMock = vi.fn();
 const fetchContactsMock = vi.fn();
 const fetchContactByIdMock = vi.fn();
 const getProductPriceMock = vi.fn();
 const fetchProductByIdMock = vi.fn();
+const dispatchWorkflowNotificationMock = vi.fn();
+const markNotificationsAsReadByEntityKeyMock = vi.fn();
+const resolveNotificationUserIdMock = vi.fn();
 
 vi.mock('../ToastProvider', () => ({
   useToast: () => ({
@@ -27,16 +31,29 @@ vi.mock('../../services/customerDatabaseLocalApiService', () => ({
 vi.mock('../../services/salesInquiryLocalApiService', () => ({
   createSalesInquiry: (...args: any[]) => createSalesInquiryMock(...args),
   getAllSalesInquiries: (...args: any[]) => getAllSalesInquiriesMock(...args),
-  approveInquiry: vi.fn(),
+  approveInquiry: (...args: any[]) => approveInquiryMock(...args),
   convertToOrder: vi.fn(),
   updateSalesInquiry: vi.fn(),
   getSalesInquiry: (...args: any[]) => getSalesInquiryMock(...args),
   deleteSalesInquiry: vi.fn(),
 }));
 
+vi.mock('../../services/localAuthService', () => ({
+  getLocalAuthSession: vi.fn(() => ({
+    context: { user: { id: 1 } },
+    userProfile: { id: 'user-1', role: 'Owner' },
+  })),
+}));
+
 vi.mock('../../services/productLocalApiService', () => ({
   getProductPrice: (...args: any[]) => getProductPriceMock(...args),
   fetchProductById: (...args: any[]) => fetchProductByIdMock(...args),
+}));
+
+vi.mock('../../services/notificationLocalApiService', () => ({
+  dispatchWorkflowNotification: (...args: any[]) => dispatchWorkflowNotificationMock(...args),
+  markNotificationsAsReadByEntityKey: (...args: any[]) => markNotificationsAsReadByEntityKeyMock(...args),
+  resolveNotificationUserId: (...args: any[]) => resolveNotificationUserIdMock(...args),
 }));
 
 vi.mock('../../services/salesOrderLocalApiService', () => ({
@@ -143,6 +160,10 @@ describe('SalesInquiryView', () => {
     fetchContactByIdMock.mockImplementation(async (id: string) => baseContacts.find((contact) => contact.id === id) || null);
     getAllSalesInquiriesMock.mockResolvedValue([]);
     getSalesInquiryMock.mockResolvedValue(null);
+    approveInquiryMock.mockResolvedValue(null);
+    dispatchWorkflowNotificationMock.mockResolvedValue(undefined);
+    markNotificationsAsReadByEntityKeyMock.mockResolvedValue(undefined);
+    resolveNotificationUserIdMock.mockResolvedValue('user-2');
     fetchProductByIdMock.mockImplementation(async (id: string) => (
       id
         ? {
@@ -181,6 +202,72 @@ describe('SalesInquiryView', () => {
       description: 'Review the highlighted fields and try again.',
     });
     expect(createSalesInquiryMock).not.toHaveBeenCalled();
+  });
+
+  it('shows an approve button for pending inquiries and approves without generating an SO', async () => {
+    const user = userEvent.setup();
+    const pendingInquiry = {
+      id: 'inq-1',
+      inquiry_no: 'INQ26-1',
+      contact_id: 'c-1',
+      sales_date: '2026-04-09',
+      sales_person: 'Jane Doe',
+      delivery_address: '123 Main St',
+      reference_no: 'REF260410',
+      customer_reference: 'Alice',
+      send_by: '',
+      price_group: 'regular',
+      credit_limit: 10000,
+      terms: '30 days',
+      promise_to_pay: '',
+      po_number: '',
+      remarks: '',
+      inquiry_type: 'General',
+      urgency: 'N/A',
+      urgency_date: '',
+      grand_total: 100,
+      created_by: 'user-2',
+      created_at: '2026-04-09',
+      status: 'Pending',
+      is_deleted: false,
+      items: [
+        {
+          id: 'item-1',
+          inquiry_id: 'inq-1',
+          item_id: 'p-1',
+          qty: 1,
+          part_no: 'PN-1',
+          item_code: 'IC-1',
+          location: 'WH1',
+          description: 'Widget',
+          unit_price: 100,
+          amount: 100,
+          remark: 'OnStock',
+          approval_status: 'approved',
+        },
+      ],
+      is_editable: true,
+      so_no: '',
+      so_refno: '',
+      invoice_no: '',
+      dr_no: '',
+    };
+
+    const approvedInquiry = { ...pendingInquiry, status: 'Submitted' };
+
+    getAllSalesInquiriesMock.mockResolvedValue([pendingInquiry]);
+    getSalesInquiryMock.mockImplementation(async (id: string) => (id === 'inq-1' ? pendingInquiry : null));
+    approveInquiryMock.mockResolvedValue(approvedInquiry);
+
+    render(<SalesInquiryView />);
+
+    await waitFor(() => expect(getAllSalesInquiriesMock).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByRole('button', { name: /approve inquiry/i })).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: /approve inquiry/i }));
+
+    await waitFor(() => expect(approveInquiryMock).toHaveBeenCalledWith('inq-1'));
+    expect(addToastMock).toHaveBeenCalledWith({ type: 'success', message: 'Sales Inquiry approved successfully!' });
   });
 
   it('auto-selects the first customer contact and keeps PO No. editable when creating an inquiry', async () => {
