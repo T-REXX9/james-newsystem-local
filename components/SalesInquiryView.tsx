@@ -797,7 +797,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
       if (created?.id && (created as SalesInquiry).contact_id) {
         await notifyInquiryEvent(
           'Sales Inquiry Created',
-          `Sales inquiry ${(created as SalesInquiry).inquiry_no || referenceNo} is waiting for approval.`,
+          `Sales inquiry ${(created as SalesInquiry).inquiry_no || referenceNo} has been created.`,
           'create',
           'pending',
           created.id,
@@ -890,44 +890,25 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     }
   };
 
-  const handleApproveInquiry = async () => {
-    if (!selectedInquiry || isCreatingNew || selectedInquiry.status !== SalesInquiryStatus.DRAFT) return;
-
-    setLoading(true);
-    try {
-      const creatorUserId = await resolveNotificationUserId(selectedInquiry.created_by, selectedInquiry.sales_person);
-      const approvedInquiry = await approveInquiry(selectedInquiry.id);
-
-      await refetchInquiries();
-      if (approvedInquiry?.id) {
-        setSelectedInquiry(approvedInquiry);
-        loadInquiryIntoForm(approvedInquiry);
-      }
-
-      addToast({ type: 'success', message: 'Sales Inquiry approved successfully!' });
-      await notifyInquiryEvent(
-        'Sales Inquiry Approved',
-        `Sales inquiry ${selectedInquiry.inquiry_no} has been approved.`,
-        'approve',
-        'approved',
-        selectedInquiry.id,
-        { targetUserIds: creatorUserId ? [creatorUserId] : [] }
-      );
-    } catch (error) {
-      console.error('Error approving inquiry:', error);
-      const friendlyMessage = parseSupabaseError(error, 'sales inquiry approval');
-      addToast({ type: 'error', title: 'Unable to approve inquiry', description: friendlyMessage, durationMs: 6000 });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleFinalizeInquiry = async () => {
-    if (!selectedInquiry || isCreatingNew || selectedInquiry.status !== SalesInquiryStatus.APPROVED) return;
+    if (
+      !selectedInquiry ||
+      isCreatingNew ||
+      (selectedInquiry.status !== SalesInquiryStatus.DRAFT && selectedInquiry.status !== SalesInquiryStatus.APPROVED)
+    ) {
+      return;
+    }
 
     setLoading(true);
     try {
       const creatorUserId = await resolveNotificationUserId(selectedInquiry.created_by, selectedInquiry.sales_person);
+      if (selectedInquiry.status === SalesInquiryStatus.DRAFT) {
+        const approvedInquiry = await approveInquiry(selectedInquiry.id);
+        if (approvedInquiry?.id) {
+          setSelectedInquiry(approvedInquiry);
+          loadInquiryIntoForm(approvedInquiry);
+        }
+      }
       const order = await convertToOrder(selectedInquiry.id);
 
       let verifiedOrder = await getSalesOrder(order.id);
@@ -980,60 +961,6 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
         payload: { orderId }
       }
     }));
-  };
-
-  const handleConvertInquiry = async () => {
-    if (!selectedInquiry || isCreatingNew) return;
-
-    setLoading(true);
-    try {
-      const creatorUserId = await resolveNotificationUserId(selectedInquiry.created_by, selectedInquiry.sales_person);
-      const order = await convertToOrder(selectedInquiry.id);
-
-      // Verify the order was actually created and is accessible
-      let verifiedOrder = await getSalesOrder(order.id);
-      if (!verifiedOrder) {
-        // Show a more detailed message during retries
-        addToast({ type: 'info', message: 'Verifying order creation...', durationMs: 3000 });
-        for (let attempt = 0; attempt < 3 && !verifiedOrder; attempt++) {
-          await new Promise((resolve) => setTimeout(resolve, 500));
-          verifiedOrder = await getSalesOrder(order.id);
-        }
-      }
-
-      if (!verifiedOrder) {
-        console.error('Order verification failed: order created but not accessible', { orderId: order.id });
-        addToast({ type: 'error', title: 'Order created but not accessible', description: 'The order was created but could not be verified. Please refresh and try again.', durationMs: 6000 });
-        await refetchInquiries();
-        return;
-      }
-
-      await refetchInquiries();
-      addToast({ type: 'success', message: `Converted to Sales Order ${order.order_no || ''}`.trim() });
-      await notifyInquiryEvent(
-        'Sales Inquiry Converted',
-        `Sales inquiry ${selectedInquiry.inquiry_no} has been converted to Sales Order ${order.order_no || ''}.`.trim(),
-        'convert_to_so',
-        'converted',
-        selectedInquiry.id,
-        {
-          targetRoles: ['Owner', 'Manager'],
-          targetUserIds: creatorUserId ? [creatorUserId] : [],
-        }
-      );
-
-      window.dispatchEvent(new CustomEvent('salesorder:created', {
-        detail: { orderId: order.id, orderNo: order.order_no }
-      }));
-
-      navigateToSalesOrder(order.id);
-    } catch (error) {
-      console.error('Error converting inquiry to sales order:', error);
-      const friendlyMessage = parseSupabaseError(error, 'sales order conversion');
-      addToast({ type: 'error', title: 'Unable to convert inquiry', description: friendlyMessage, durationMs: 6000 });
-    } finally {
-      setLoading(false);
-    }
   };
 
   const handleOpenConvertedOrder = async () => {
@@ -1090,16 +1017,16 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   const activeInquiryNumberDisplay = formatInquiryDisplayNo(activeInquiryNumber);
   const isConversionLocked = Boolean(selectedInquiry && !isCreatingNew && selectedInquiry.is_editable === false);
   const isReadOnly = selectedInquiry?.status === SalesInquiryStatus.CANCELLED || isConversionLocked;
-  const currentUserRole = String(getLocalAuthSession()?.userProfile?.role || '').trim();
-  const canApproveInquiryAction = Boolean(
+  const priceGroupDisplay = normalizePriceGroup(priceGroup);
+  const canGenerateSO = Boolean(
     selectedInquiry &&
     !isCreatingNew &&
     !isReadOnly &&
-    selectedInquiry.status === SalesInquiryStatus.DRAFT &&
-    ['Owner', 'Developer', 'Manager', 'Approver'].includes(currentUserRole)
+    (
+      selectedInquiry.status === SalesInquiryStatus.DRAFT ||
+      selectedInquiry.status === SalesInquiryStatus.APPROVED
+    )
   );
-  const priceGroupDisplay = normalizePriceGroup(priceGroup);
-  const canGenerateSO = Boolean(selectedInquiry && !isCreatingNew && selectedInquiry.status === SalesInquiryStatus.APPROVED);
   const canOpenConvertedOrder = false;
   const currentMonthLabel = new Date(salesDate || Date.now()).toLocaleDateString('en-PH', { month: 'long' });
   const summaryCustomer = selectedCustomer as (Contact & {
@@ -1799,16 +1726,6 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                       <tr>
                         <td colSpan={6} className="px-3 py-3 border-t border-slate-200 dark:border-slate-800">
                           <div className="flex flex-wrap items-center gap-2">
-                            {canApproveInquiryAction && (
-                              <button
-                                type="button"
-                                onClick={handleApproveInquiry}
-                                disabled={loading}
-                                className="px-4 py-2 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 font-semibold hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                              >
-                                {loading ? 'WORKING…' : 'Approve Inquiry'}
-                              </button>
-                            )}
                             {canGenerateSO && (
                               <button
                                 type="button"
