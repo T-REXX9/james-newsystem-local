@@ -85,7 +85,6 @@ export const openInternalChatRealtimeStream = (
 
   const socket = io(resolveSocketUrl(), {
     path: SOCKET_PATH,
-    transports: ['websocket'],
     auth: {
       token: session.token,
     },

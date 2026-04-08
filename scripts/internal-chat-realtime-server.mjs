@@ -101,7 +101,6 @@ const io = new Server(server, {
     origin: true,
     credentials: true,
   },
-  transports: ['websocket'],
 });
 
 io.use((socket, next) => {

@@ -55,7 +55,6 @@ describe('internalChatRealtimeService', () => {
       expect.any(String),
       expect.objectContaining({
         path: '/socket.io',
-        transports: ['websocket'],
         auth: { token: 'abc123' },
       })
     );
