@@ -340,7 +340,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
       },
       () => {
         const now = Date.now();
-        if (isOpenRef.current && now - lastRealtimeErrorToastAtRef.current >= 10000) {
+        if (isOpenRef.current && isPageActive && now - lastRealtimeErrorToastAtRef.current >= 10000) {
           lastRealtimeErrorToastAtRef.current = now;
           addToast({
             type: 'warning',

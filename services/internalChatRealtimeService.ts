@@ -3,6 +3,7 @@ import { getLocalAuthSession } from './localAuthService';
 import { InternalChatMessage } from './internalChatLocalApiService';
 
 const SOCKET_URL = (import.meta as any)?.env?.VITE_INTERNAL_CHAT_SOCKET_URL || '';
+const SOCKET_PORT = (import.meta as any)?.env?.VITE_INTERNAL_CHAT_SOCKET_PORT || '';
 const SOCKET_PATH = '/socket.io';
 
 export type InternalChatRealtimeEvent =
@@ -23,6 +24,9 @@ const resolveSocketUrl = (): string => {
   }
 
   if (typeof window !== 'undefined') {
+    if (SOCKET_PORT) {
+      return `${window.location.protocol}//${window.location.hostname}:${SOCKET_PORT}`;
+    }
     return window.location.origin;
   }
 
@@ -61,6 +65,8 @@ export const openInternalChatRealtimeStream = (
   if (!session?.token) {
     return () => {};
   }
+
+  let closedByClient = false;
 
   const socket = io(resolveSocketUrl(), {
     path: SOCKET_PATH,
@@ -105,7 +111,7 @@ export const openInternalChatRealtimeStream = (
   });
 
   socket.on('disconnect', (reason) => {
-    if (reason === 'io client disconnect') {
+    if (closedByClient || reason === 'io client disconnect') {
       logRealtimeEvent('info', 'Closed by client', { reason });
       return;
     }
@@ -165,6 +171,7 @@ export const openInternalChatRealtimeStream = (
   socket.on('chat:event', handleEvent);
 
   return () => {
+    closedByClient = true;
     socket.off('chat:event', handleEvent);
     socket.close();
   };
