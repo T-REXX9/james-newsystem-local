@@ -37,6 +37,8 @@ interface MentionContext {
   query: string;
 }
 
+const INTERNAL_CHAT_REALTIME_ENABLED = false;
+
 const formatRelativeTime = (value?: string) => {
   if (!value) return '';
   const parsed = new Date(value);
@@ -270,7 +272,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   }, [user]);
 
   useEffect(() => {
-    if (!user || !isPageActive) return;
+    if (!INTERNAL_CHAT_REALTIME_ENABLED || !user || !isPageActive) return;
 
     return openInternalChatRealtimeStream(
       (state: InternalChatRealtimeState) => {
