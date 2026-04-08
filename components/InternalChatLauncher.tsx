@@ -145,9 +145,6 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   const lastRealtimeErrorToastAtRef = useRef(0);
   const shellAbortControllerRef = useRef<AbortController | null>(null);
   const messageAbortControllerRef = useRef<AbortController | null>(null);
-  const [isPageActive, setIsPageActive] = useState(() => (
-    typeof document !== 'undefined' ? document.visibilityState === 'visible' && document.hasFocus() : true
-  ));
 
   const refreshUnreadCount = async (silent = true) => {
     if (!user) return;
@@ -264,27 +261,6 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   }, [isMinimized]);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || typeof document === 'undefined') {
-      return;
-    }
-
-    const syncPageActivity = () => {
-      setIsPageActive(document.visibilityState === 'visible' && document.hasFocus());
-    };
-
-    syncPageActivity();
-    window.addEventListener('focus', syncPageActivity);
-    window.addEventListener('blur', syncPageActivity);
-    document.addEventListener('visibilitychange', syncPageActivity);
-
-    return () => {
-      window.removeEventListener('focus', syncPageActivity);
-      window.removeEventListener('blur', syncPageActivity);
-      document.removeEventListener('visibilitychange', syncPageActivity);
-    };
-  }, []);
-
-  useEffect(() => {
     if (!user) {
       hasLoadedShellDataRef.current = false;
       shellAbortControllerRef.current?.abort();
@@ -301,7 +277,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   }, [user]);
 
   useEffect(() => {
-    if (!INTERNAL_CHAT_REALTIME_ENABLED || !user || !isPageActive) return;
+    if (!INTERNAL_CHAT_REALTIME_ENABLED || !user) return;
 
     return openInternalChatRealtimeStream(
       (event: InternalChatRealtimeEvent) => {
@@ -340,7 +316,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
       },
       () => {
         const now = Date.now();
-        if (isOpenRef.current && isPageActive && now - lastRealtimeErrorToastAtRef.current >= 10000) {
+        if (isOpenRef.current && now - lastRealtimeErrorToastAtRef.current >= 10000) {
           lastRealtimeErrorToastAtRef.current = now;
           addToast({
             type: 'warning',
@@ -350,7 +326,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
         }
       }
     );
-  }, [addToast, isPageActive, user]);
+  }, [addToast, user]);
 
   useEffect(() => {
     if (!user || !isOpen || isMinimized) return;

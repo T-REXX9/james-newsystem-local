@@ -89,6 +89,7 @@ export const openInternalChatRealtimeStream = (
       token: session.token,
     },
     reconnection: true,
+    reconnectionAttempts: Infinity,
   });
 
   const handleEvent = (payload: InternalChatRealtimeEvent) => {
