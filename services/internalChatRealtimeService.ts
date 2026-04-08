@@ -6,6 +6,11 @@ const SOCKET_URL = (import.meta as any)?.env?.VITE_INTERNAL_CHAT_SOCKET_URL || '
 const SOCKET_PORT = (import.meta as any)?.env?.VITE_INTERNAL_CHAT_SOCKET_PORT || '';
 const SOCKET_PATH = '/socket.io';
 
+const isLoopbackHost = (hostname: string): boolean => {
+  const normalized = hostname.trim().toLowerCase();
+  return normalized === '127.0.0.1' || normalized === 'localhost' || normalized === '::1';
+};
+
 export type InternalChatRealtimeEvent =
   | {
       type: 'message.created';
@@ -19,18 +24,28 @@ export type InternalChatRealtimeEvent =
     };
 
 const resolveSocketUrl = (): string => {
-  if (SOCKET_URL) {
-    return SOCKET_URL;
+  const configured = String(SOCKET_URL || '').trim();
+  if (typeof window === 'undefined') {
+    return configured;
   }
 
-  if (typeof window !== 'undefined') {
-    if (SOCKET_PORT) {
-      return `${window.location.protocol}//${window.location.hostname}:${SOCKET_PORT}`;
+  if (configured) {
+    try {
+      const resolvedUrl = new URL(configured, window.location.origin);
+      if (isLoopbackHost(resolvedUrl.hostname) && !isLoopbackHost(window.location.hostname)) {
+        return window.location.origin;
+      }
+      return resolvedUrl.toString().replace(/\/$/, '');
+    } catch {
+      return configured;
     }
-    return window.location.origin;
   }
 
-  return '';
+  if (SOCKET_PORT && isLoopbackHost(window.location.hostname)) {
+    return `${window.location.protocol}//${window.location.hostname}:${SOCKET_PORT}`;
+  }
+
+  return window.location.origin;
 };
 
 const logRealtimeEvent = (level: 'info' | 'warn' | 'error', message: string, details?: Record<string, unknown>) => {

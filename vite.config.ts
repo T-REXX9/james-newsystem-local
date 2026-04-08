@@ -2,9 +2,24 @@ import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
+const normalizeProxyHost = (value: string | undefined, fallback: string): string => {
+  const normalized = String(value || '').trim();
+  if (!normalized || normalized === '0.0.0.0' || normalized === '::') {
+    return fallback;
+  }
+  return normalized;
+};
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const realtimeTarget = `http://${env.REALTIME_HOST || process.env.REALTIME_HOST || '127.0.0.1'}:${env.REALTIME_PORT || process.env.REALTIME_PORT || '8082'}`;
+  const apiTarget = `http://${normalizeProxyHost(
+    env.API_HOST || process.env.API_HOST,
+    '127.0.0.1'
+  )}:${env.API_PORT || process.env.API_PORT || '8081'}`;
+  const realtimeTarget = `http://${normalizeProxyHost(
+    env.REALTIME_HOST || process.env.REALTIME_HOST,
+    '127.0.0.1'
+  )}:${env.REALTIME_PORT || process.env.REALTIME_PORT || '8082'}`;
   const extraAllowedHosts = (env.VITE_ALLOWED_HOSTS || '')
     .split(',')
     .map((host) => host.trim())
@@ -25,7 +40,7 @@ export default defineConfig(({ mode }) => {
       ],
       proxy: {
         '/api': {
-          target: 'http://127.0.0.1:8081',
+          target: apiTarget,
           changeOrigin: true,
         },
         '/socket.io': {
@@ -45,7 +60,7 @@ export default defineConfig(({ mode }) => {
       ],
       proxy: {
         '/api': {
-          target: 'http://127.0.0.1:8081',
+          target: apiTarget,
           changeOrigin: true,
         },
         '/socket.io': {
