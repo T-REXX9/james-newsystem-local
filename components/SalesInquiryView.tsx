@@ -770,6 +770,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
         inquiry_type: finalInquiryType,
         urgency: urgency,
         urgency_date: urgency !== 'N/A' ? urgencyDate : undefined,
+        status: selectedInquiry && !isCreatingNew ? selectedInquiry.status : SalesInquiryStatus.DRAFT,
         items: items.map(({ tempId, isManual, brand, ...rest }) => ({
           ...rest,
           qty: rest.qty === '' ? 1 : Number(rest.qty) || 1,
@@ -795,16 +796,20 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
 
       if (created?.id && (created as SalesInquiry).contact_id) {
         await notifyInquiryEvent(
-          'Sales Inquiry Submitted',
+          'Sales Inquiry Created',
           `Sales inquiry ${(created as SalesInquiry).inquiry_no || referenceNo} is waiting for approval.`,
-          'submit',
-          'submitted',
+          'create',
+          'pending',
           created.id,
           { targetRoles: ['Owner', 'Manager', 'Approver'] }
         );
         setIsCreatingNew(false);
-        setSelectedInquiry(created as SalesInquiry);
-        loadInquiryIntoForm(created as SalesInquiry);
+        const createdInquiry = {
+          ...(created as SalesInquiry),
+          status: SalesInquiryStatus.DRAFT,
+        };
+        setSelectedInquiry(createdInquiry);
+        loadInquiryIntoForm(createdInquiry);
       } else {
         startNewInquiry();
       }
