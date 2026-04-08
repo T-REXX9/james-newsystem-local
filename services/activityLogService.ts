@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabaseClient';
+import { getLocalAuthSession } from './localAuthService';
 
 export const ENTITY_TYPES = {
   SALES_ORDER: 'Sales Order',
@@ -36,6 +37,11 @@ export const logActivity = async (
   details?: ActivityLogDetails
 ): Promise<boolean> => {
   try {
+    // Local API mode does not have a reachable Supabase activity_logs backend.
+    if (getLocalAuthSession()) {
+      return true;
+    }
+
     const { data: authData } = await supabase.auth.getUser();
     const user = authData?.user;
     if (!user) return false;

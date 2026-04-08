@@ -5,6 +5,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import AccessControlSettings from './AccessControlSettings';
 import { createStaffAccountLocal, fetchProfilesLocal } from '../services/accessLocalApiService';
 import { fetchAccessGroups } from '../services/accessGroupApiService';
+import { fetchRoles } from '../services/staffLocalApiService';
+import { ROLE_DEFAULT_ACCESS_RIGHTS } from '../constants';
 import { ToastProvider } from './ToastProvider';
 
 vi.mock('../services/accessLocalApiService', () => ({
@@ -21,9 +23,14 @@ vi.mock('../services/accessGroupApiService', () => ({
   assignStaffToGroup: vi.fn(),
 }));
 
+vi.mock('../services/staffLocalApiService', () => ({
+  fetchRoles: vi.fn(),
+}));
+
 const fetchProfilesMock = fetchProfilesLocal as unknown as ReturnType<typeof vi.fn>;
 const createStaffAccountMock = createStaffAccountLocal as unknown as ReturnType<typeof vi.fn>;
 const fetchAccessGroupsMock = fetchAccessGroups as unknown as ReturnType<typeof vi.fn>;
+const fetchRolesMock = fetchRoles as unknown as ReturnType<typeof vi.fn>;
 
 const renderWithProviders = (ui: React.ReactElement) =>
   render(<ToastProvider>{ui}</ToastProvider>);
@@ -35,6 +42,12 @@ beforeEach(() => {
     meta: { page: 1, per_page: 50, total: 0, total_pages: 1 },
   });
   fetchAccessGroupsMock.mockResolvedValue([]);
+  fetchRolesMock.mockResolvedValue([
+    { id: 2, name: 'Sales Person' },
+    { id: 3, name: 'Accountant' },
+    { id: 4, name: 'Warehouse Personnel' },
+    { id: 9, name: 'Sales Agent' },
+  ]);
 });
 
 afterEach(() => {
@@ -63,7 +76,7 @@ describe('AccessControlSettings - create staff account', () => {
     await user.click(addButtons[0]);
 
     await user.type(screen.getByPlaceholderText('e.g. John Doe'), 'Jane Doe');
-    await user.selectOptions(screen.getByRole('combobox'), 'Manager');
+    await user.selectOptions(screen.getByRole('combobox'), 'Sales Agent');
     await user.type(screen.getByPlaceholderText('staff@company.com'), 'jane@example.com');
     await user.type(screen.getByPlaceholderText('0917...'), '09171234567');
     await user.type(screen.getByPlaceholderText('Set initial password'), 'StrongPass1');
@@ -75,10 +88,10 @@ describe('AccessControlSettings - create staff account', () => {
       fullName: 'Jane Doe',
       email: 'jane@example.com',
       password: 'StrongPass1',
-      role: 'Manager',
+      role: 'Sales Agent',
       birthday: undefined,
       mobile: '09171234567',
-      accessRights: ['home']
+      accessRights: ROLE_DEFAULT_ACCESS_RIGHTS['Sales Agent']
     });
 
     await waitFor(() => expect(fetchProfilesMock).toHaveBeenCalledTimes(2));

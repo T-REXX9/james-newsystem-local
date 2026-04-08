@@ -79,6 +79,18 @@ export type CollectionPaymentPayload = {
   transactions: CollectionPaymentTransaction[];
 };
 
+export const LEGACY_COLLECTION_ITEM_STATUSES = [
+  'Pending',
+  'Deposited',
+  'Received',
+  'Cleared',
+  '1st Bounce',
+  '2nd Bounce',
+  'Cancelled',
+] as const;
+
+export type LegacyCollectionItemStatus = typeof LEGACY_COLLECTION_ITEM_STATUSES[number];
+
 export type CollectionCustomer = {
   id: string;
   code: string;
@@ -338,6 +350,25 @@ export const dailyCollectionService = {
   async deleteItem(itemId: number): Promise<void> {
     await requestApi(`${API_BASE_URL}/collection-items/${encodeURIComponent(String(itemId))}`, {
       method: 'DELETE',
+    });
+  },
+
+  async updateItemStatus(item: DailyCollectionItem, status: LegacyCollectionItemStatus): Promise<void> {
+    const ctx = getUserContext();
+    await requestApi(`${API_BASE_URL}/collection-items/${encodeURIComponent(String(item.lid))}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        main_id: ctx.mainId,
+        user_id: ctx.userId,
+        type: item.ltype,
+        bank: item.lbank,
+        check_no: item.lchk_no,
+        check_date: item.lchk_date,
+        amount: item.lamt,
+        status,
+        remarks: item.lremarks,
+      }),
     });
   },
 

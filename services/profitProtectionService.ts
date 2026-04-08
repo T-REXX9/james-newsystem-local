@@ -1,4 +1,3 @@
-import { supabase } from './supabaseService';
 import {
     ProfitThresholdConfig,
     ProfitOverrideLog,
@@ -7,12 +6,82 @@ import {
     ProfitCalculation,
     CreateProfitOverrideDTO,
     CreateAdminOverrideDTO,
-    Product,
 } from '../types';
+import { getLocalAuthSession } from './localAuthService';
 
-// Cast supabase to allow querying new tables before types are regenerated
-// TODO: Regenerate Supabase types after migration to remove this cast
-const db = supabase as any;
+const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
+const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
+
+const DEFAULT_THRESHOLD_CONFIG: ProfitThresholdConfig = {
+    percentage: 50,
+    enforce_approval: true,
+    allow_override: true,
+};
+
+const parseApiErrorMessage = async (response: Response): Promise<string> => {
+    try {
+        const payload = await response.json();
+        if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error.trim();
+        if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message.trim();
+    } catch {
+        // ignore parse errors
+    }
+    return `API request failed (${response.status})`;
+};
+
+const requestApi = async (url: string, init?: RequestInit): Promise<any> => {
+    const response = await fetch(url, init);
+    if (!response.ok) {
+        throw new Error(await parseApiErrorMessage(response));
+    }
+    const payload = await response.json();
+    if (!payload?.ok) {
+        throw new Error(payload?.error || 'API request failed');
+    }
+    return payload?.data;
+};
+
+const toNumber = (value: unknown, fallback = 0): number => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+};
+
+const toBool = (value: unknown, fallback = false): boolean => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value > 0;
+    if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        if (!normalized) return fallback;
+        return ['1', 'true', 'yes', 'on'].includes(normalized);
+    }
+    return fallback;
+};
+
+const clampThreshold = (value: number): number => Math.max(10, Math.min(90, Math.round(value)));
+
+const resolveMainId = (): number => {
+    const session = getLocalAuthSession();
+    const fromSession = Number(
+        session?.context?.main_userid ||
+        session?.context?.user?.main_userid ||
+        (session?.context as any)?.user?.main_id ||
+        API_MAIN_ID ||
+        1
+    );
+    return Number.isFinite(fromSession) && fromSession > 0 ? fromSession : 1;
+};
+
+const resolveUserId = (): number => {
+    const session = getLocalAuthSession();
+    const userId = Number(session?.context?.user?.id || 0);
+    return Number.isFinite(userId) && userId > 0 ? userId : 1;
+};
+
+const normalizeThresholdConfig = (raw: any): ProfitThresholdConfig => ({
+    percentage: clampThreshold(toNumber(raw?.percentage, DEFAULT_THRESHOLD_CONFIG.percentage)),
+    enforce_approval: toBool(raw?.enforce_approval, DEFAULT_THRESHOLD_CONFIG.enforce_approval),
+    allow_override: toBool(raw?.allow_override, DEFAULT_THRESHOLD_CONFIG.allow_override),
+});
 
 // ============================================================================
 // System Settings
@@ -22,22 +91,13 @@ const db = supabase as any;
  * Get the current profit threshold configuration
  */
 export async function getProfitThreshold(): Promise<ProfitThresholdConfig> {
-    const { data, error } = await db
-        .from('system_settings')
-        .select('setting_value')
-        .eq('setting_key', 'min_gross_profit_threshold')
-        .single();
-
-    if (error || !data) {
-        // Return default values if setting doesn't exist
-        return {
-            percentage: 50,
-            enforce_approval: true,
-            allow_override: true,
-        };
+    const query = new URLSearchParams({ main_id: String(resolveMainId()) });
+    try {
+        const data = await requestApi(`${API_BASE_URL}/profit-protection/threshold?${query.toString()}`);
+        return normalizeThresholdConfig(data);
+    } catch {
+        return DEFAULT_THRESHOLD_CONFIG;
     }
-
-    return data.setting_value as ProfitThresholdConfig;
 }
 
 /**
@@ -46,51 +106,47 @@ export async function getProfitThreshold(): Promise<ProfitThresholdConfig> {
 export async function setProfitThreshold(
     config: ProfitThresholdConfig
 ): Promise<boolean> {
-    const { error } = await db
-        .from('system_settings')
-        .update({ setting_value: config })
-        .eq('setting_key', 'min_gross_profit_threshold');
+    const payload = {
+        main_id: resolveMainId(),
+        user_id: resolveUserId(),
+        percentage: clampThreshold(toNumber(config?.percentage, DEFAULT_THRESHOLD_CONFIG.percentage)),
+        enforce_approval: Boolean(config?.enforce_approval),
+        allow_override: Boolean(config?.allow_override),
+    };
 
-    if (error) {
+    try {
+        await requestApi(`${API_BASE_URL}/profit-protection/threshold`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        return true;
+    } catch (error) {
         console.error('Error updating profit threshold:', error);
         return false;
     }
-
-    return true;
 }
 
 /**
  * Get a system setting by key
+ * Note: Local API currently supports only `min_gross_profit_threshold` for this service.
  */
 export async function getSystemSetting<T>(key: string, defaultValue: T): Promise<T> {
-    const { data, error } = await db
-        .from('system_settings')
-        .select('setting_value')
-        .eq('setting_key', key)
-        .single();
-
-    if (error || !data) {
-        return defaultValue;
+    if (key === 'min_gross_profit_threshold') {
+        return await getProfitThreshold() as T;
     }
-
-    return data.setting_value as T;
+    return defaultValue;
 }
 
 /**
  * Set a system setting
+ * Note: Local API currently supports only `min_gross_profit_threshold` for this service.
  */
 export async function setSystemSetting(key: string, value: any): Promise<boolean> {
-    const { error } = await db.rpc('set_system_setting', {
-        p_key: key,
-        p_value: value,
-    });
-
-    if (error) {
-        console.error('Error setting system setting:', error);
-        return false;
+    if (key === 'min_gross_profit_threshold') {
+        return await setProfitThreshold(normalizeThresholdConfig(value));
     }
-
-    return true;
+    return false;
 }
 
 // ============================================================================
@@ -110,13 +166,11 @@ export function calculateProfit(
     const profitAmount = netPrice - cost;
     const profitPercentage = netPrice > 0 ? (profitAmount / netPrice) * 100 : 0;
 
-    const threshold = thresholdPercentage ?? 50; // Default 50% threshold
+    const threshold = thresholdPercentage ?? 50;
     const isBelowThreshold = profitPercentage < threshold;
 
-    // Calculate suggested price to meet threshold
     let suggestedPrice: number | undefined;
     if (isBelowThreshold && cost > 0) {
-        // Formula: suggested = cost / (1 - threshold/100)
         suggestedPrice = cost / (1 - threshold / 100);
     }
 
@@ -143,49 +197,24 @@ export async function detectLowProfitItems(
         discount?: number;
     }>
 ): Promise<LowProfitItem[]> {
-    // Get threshold config
-    const config = await getProfitThreshold();
-    const threshold = config.percentage;
-
-    // Get product costs
-    const productIds = items.map(item => item.product_id);
-    const { data: products } = await db
-        .from('products')
-        .select('id, description, item_code, cost')
-        .in('id', productIds);
-
-    const productMap = new Map<string, Product>(
-        (products || []).map((p: any) => [p.id, p as Product])
-    );
-
-    const lowProfitItems: LowProfitItem[] = [];
-
-    for (const item of items) {
-        const product = productMap.get(item.product_id);
-        if (!product) continue;
-
-        const cost = product.cost || 0;
-        const discount = item.discount || 0;
-        const calc = calculateProfit(item.unit_price, cost, discount, threshold);
-
-        if (calc.is_below_threshold) {
-            lowProfitItems.push({
-                product_id: item.product_id,
-                product_name: product.description || '',
-                item_code: product.item_code || '',
-                cost,
-                selling_price: item.unit_price,
-                discount,
-                net_price: calc.net_price,
-                profit_amount: calc.profit_amount,
-                profit_percentage: calc.profit_percentage,
-                threshold_percentage: threshold,
-                below_threshold: true,
-            });
-        }
+    if (!Array.isArray(items) || items.length === 0) {
+        return [];
     }
 
-    return lowProfitItems;
+    try {
+        const data = await requestApi(`${API_BASE_URL}/profit-protection/validate-items`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                main_id: resolveMainId(),
+                items,
+            }),
+        });
+        return Array.isArray(data?.low_profit_items) ? data.low_profit_items as LowProfitItem[] : [];
+    } catch (error) {
+        console.error('Error detecting low-profit items:', error);
+        return [];
+    }
 }
 
 /**
@@ -196,7 +225,6 @@ export function suggestPrice(cost: number, targetProfitPct: number): number {
         return cost;
     }
 
-    // Formula: price = cost / (1 - margin)
     const price = cost / (1 - targetProfitPct / 100);
     return Math.ceil(price);
 }
@@ -212,21 +240,21 @@ export async function logProfitOverride(
     dto: CreateProfitOverrideDTO,
     approvedBy: string
 ): Promise<ProfitOverrideLog | null> {
-    const { data, error } = await db
-        .from('profit_override_logs')
-        .insert({
-            ...dto,
-            approved_by: approvedBy,
-        })
-        .select()
-        .single();
-
-    if (error) {
+    try {
+        const data = await requestApi(`${API_BASE_URL}/profit-protection/overrides`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                main_id: resolveMainId(),
+                approved_by: approvedBy,
+                ...dto,
+            }),
+        });
+        return (data || null) as ProfitOverrideLog | null;
+    } catch (error) {
         console.error('Error logging profit override:', error);
         return null;
     }
-
-    return data as ProfitOverrideLog;
 }
 
 /**
@@ -239,29 +267,20 @@ export async function getProfitOverrideHistory(
         limit?: number;
     }
 ): Promise<ProfitOverrideLog[]> {
-    let query = db
-        .from('profit_override_logs')
-        .select('*, approver:profiles(id, full_name)')
-        .order('created_at', { ascending: false });
+    const query = new URLSearchParams({
+        main_id: String(resolveMainId()),
+        limit: String(Math.max(1, Math.min(500, Number(filters?.limit || 100)))),
+    });
+    if (filters?.order_id) query.set('order_id', filters.order_id);
+    if (filters?.item_id) query.set('item_id', filters.item_id);
 
-    if (filters?.order_id) {
-        query = query.eq('order_id', filters.order_id);
-    }
-    if (filters?.item_id) {
-        query = query.eq('item_id', filters.item_id);
-    }
-    if (filters?.limit) {
-        query = query.limit(filters.limit);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
+    try {
+        const data = await requestApi(`${API_BASE_URL}/profit-protection/overrides?${query.toString()}`);
+        return Array.isArray(data) ? data as ProfitOverrideLog[] : [];
+    } catch (error) {
         console.error('Error fetching profit override history:', error);
         return [];
     }
-
-    return (data || []) as ProfitOverrideLog[];
 }
 
 /**
@@ -271,21 +290,21 @@ export async function logAdminOverride(
     dto: CreateAdminOverrideDTO,
     performedBy: string
 ): Promise<AdminOverrideLog | null> {
-    const { data, error } = await db
-        .from('admin_override_logs')
-        .insert({
-            ...dto,
-            performed_by: performedBy,
-        })
-        .select()
-        .single();
-
-    if (error) {
+    try {
+        const data = await requestApi(`${API_BASE_URL}/profit-protection/admin-overrides`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                main_id: resolveMainId(),
+                performed_by: performedBy,
+                ...dto,
+            }),
+        });
+        return (data || null) as AdminOverrideLog | null;
+    } catch (error) {
         console.error('Error logging admin override:', error);
         return null;
     }
-
-    return data as AdminOverrideLog;
 }
 
 /**
@@ -299,32 +318,21 @@ export async function getAdminOverrideHistory(
         limit?: number;
     }
 ): Promise<AdminOverrideLog[]> {
-    let query = db
-        .from('admin_override_logs')
-        .select('*, performer:profiles(id, full_name)')
-        .order('created_at', { ascending: false });
+    const query = new URLSearchParams({
+        main_id: String(resolveMainId()),
+        limit: String(Math.max(1, Math.min(500, Number(filters?.limit || 100)))),
+    });
+    if (filters?.override_type) query.set('override_type', filters.override_type);
+    if (filters?.entity_type) query.set('entity_type', filters.entity_type);
+    if (filters?.entity_id) query.set('entity_id', filters.entity_id);
 
-    if (filters?.override_type) {
-        query = query.eq('override_type', filters.override_type);
-    }
-    if (filters?.entity_type) {
-        query = query.eq('entity_type', filters.entity_type);
-    }
-    if (filters?.entity_id) {
-        query = query.eq('entity_id', filters.entity_id);
-    }
-    if (filters?.limit) {
-        query = query.limit(filters.limit);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
+    try {
+        const data = await requestApi(`${API_BASE_URL}/profit-protection/admin-overrides?${query.toString()}`);
+        return Array.isArray(data) ? data as AdminOverrideLog[] : [];
+    } catch (error) {
         console.error('Error fetching admin override history:', error);
         return [];
     }
-
-    return (data || []) as AdminOverrideLog[];
 }
 
 // ============================================================================
@@ -348,16 +356,36 @@ export async function validateOrderProfits(
     lowProfitCount: number;
     requiresApproval: boolean;
 }> {
-    const lowProfitItems = await detectLowProfitItems(items);
-    const config = await getProfitThreshold();
+    try {
+        const data = await requestApi(`${API_BASE_URL}/profit-protection/validate-items`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                main_id: resolveMainId(),
+                items,
+            }),
+        });
 
-    return {
-        hasLowProfitItems: lowProfitItems.length > 0,
-        lowProfitItems,
-        totalItemsCount: items.length,
-        lowProfitCount: lowProfitItems.length,
-        requiresApproval: config.enforce_approval && lowProfitItems.length > 0,
-    };
+        const lowProfitItems = Array.isArray(data?.low_profit_items) ? data.low_profit_items as LowProfitItem[] : [];
+        return {
+            hasLowProfitItems: Boolean(data?.has_low_profit_items ?? (lowProfitItems.length > 0)),
+            lowProfitItems,
+            totalItemsCount: toNumber(data?.total_items_count, items.length),
+            lowProfitCount: toNumber(data?.low_profit_count, lowProfitItems.length),
+            requiresApproval: Boolean(data?.requires_approval),
+        };
+    } catch (error) {
+        console.error('Error validating order profits:', error);
+        const lowProfitItems = await detectLowProfitItems(items);
+        const config = await getProfitThreshold();
+        return {
+            hasLowProfitItems: lowProfitItems.length > 0,
+            lowProfitItems,
+            totalItemsCount: items.length,
+            lowProfitCount: lowProfitItems.length,
+            requiresApproval: config.enforce_approval && lowProfitItems.length > 0,
+        };
+    }
 }
 
 /**
@@ -372,20 +400,21 @@ export async function getProfitOverrideStats(
     average_override_profit_pct: number;
     top_override_reasons: Array<{ reason: string; count: number }>;
 }> {
-    let query = db
-        .from('profit_override_logs')
-        .select('original_profit_pct, override_profit_pct, reason');
+    const query = new URLSearchParams({
+        main_id: String(resolveMainId()),
+    });
+    if (startDate) query.set('start_date', startDate.toISOString());
+    if (endDate) query.set('end_date', endDate.toISOString());
 
-    if (startDate) {
-        query = query.gte('created_at', startDate.toISOString());
-    }
-    if (endDate) {
-        query = query.lte('created_at', endDate.toISOString());
-    }
-
-    const { data, error } = await query;
-
-    if (error || !data || data.length === 0) {
+    try {
+        const data = await requestApi(`${API_BASE_URL}/profit-protection/override-stats?${query.toString()}`);
+        return {
+            total_overrides: toNumber(data?.total_overrides, 0),
+            average_original_profit_pct: toNumber(data?.average_original_profit_pct, 0),
+            average_override_profit_pct: toNumber(data?.average_override_profit_pct, 0),
+            top_override_reasons: Array.isArray(data?.top_override_reasons) ? data.top_override_reasons : [],
+        };
+    } catch {
         return {
             total_overrides: 0,
             average_original_profit_pct: 0,
@@ -393,27 +422,4 @@ export async function getProfitOverrideStats(
             top_override_reasons: [],
         };
     }
-
-    const totalOverrides = data.length;
-    const avgOriginal = data.reduce((sum: number, r: any) => sum + (r.original_profit_pct || 0), 0) / totalOverrides;
-    const avgOverride = data.reduce((sum: number, r: any) => sum + (r.override_profit_pct || 0), 0) / totalOverrides;
-
-    // Count reasons
-    const reasonCounts = new Map<string, number>();
-    for (const row of data) {
-        const reason = row.reason || 'No reason provided';
-        reasonCounts.set(reason, (reasonCounts.get(reason) || 0) + 1);
-    }
-
-    const topReasons = Array.from(reasonCounts.entries())
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
-        .map(([reason, count]) => ({ reason, count }));
-
-    return {
-        total_overrides: totalOverrides,
-        average_original_profit_pct: Math.round(avgOriginal * 100) / 100,
-        average_override_profit_pct: Math.round(avgOverride * 100) / 100,
-        top_override_reasons: topReasons,
-    };
 }

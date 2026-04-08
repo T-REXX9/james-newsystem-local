@@ -759,7 +759,11 @@ const App: React.FC = () => {
       case 'maintenance-system-loyalty-discounts':
         return <LoyaltyDiscountRulesView currentUser={userProfile} />;
       case 'maintenance-system-profit-protection':
-        return <ProfitThresholdSettings currentUser={userProfile} />;
+        return (
+          <div className="h-full overflow-y-auto">
+            <ProfitThresholdSettings currentUser={userProfile} />
+          </div>
+        );
       case 'maintenance-system-ai-templates':
         return <AIMessageTemplatesView currentUser={userProfile} />;
       case 'mail':

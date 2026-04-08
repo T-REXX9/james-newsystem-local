@@ -159,6 +159,10 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
     }
   }, []);
 
+  const invalidateInFlightRefreshes = useCallback(() => {
+    refreshRequestIdRef.current += 1;
+  }, []);
+
   // Fetch initial notifications
   const refreshNotifications = useCallback(async () => {
     const requestId = ++refreshRequestIdRef.current;
@@ -308,6 +312,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
       const pendingReadIds = Array.from(pendingIds);
       const readAt = new Date().toISOString();
 
+      invalidateInFlightRefreshes();
       pendingReadIds.forEach((id) => pendingReadIdsRef.current.add(id));
       applyOptimisticReadState(pendingReadIds, readAt);
 
@@ -338,10 +343,11 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
         console.error('Error marking notifications as read:', err);
         revertOptimisticReadState(pendingReadIds);
       } finally {
+        await refreshNotifications();
         pendingReadIds.forEach((id) => pendingReadIdsRef.current.delete(id));
       }
     },
-    [applyOptimisticReadState, revertOptimisticReadState, userId]
+    [applyOptimisticReadState, invalidateInFlightRefreshes, refreshNotifications, revertOptimisticReadState, userId]
   );
 
   // Handle mark as read
@@ -358,6 +364,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
       .filter((notif) => !notif.is_read)
       .map((notif) => notif.id);
 
+    invalidateInFlightRefreshes();
     pendingReadIds.forEach((id) => pendingReadIdsRef.current.add(id));
 
     try {
@@ -383,20 +390,19 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
         notificationsRef.current = nextNotifications;
         return nextNotifications;
       });
-
-      // Fetch the actual unread count from the server to ensure accuracy
-      const count = await getUnreadCount(userId);
-      setUnreadCount(count);
+      setUnreadCount(0);
+      await refreshNotifications();
     } catch (err) {
       console.error('Error marking all as read:', err);
     } finally {
       pendingReadIds.forEach((id) => pendingReadIdsRef.current.delete(id));
     }
-  }, [userId]);
+  }, [invalidateInFlightRefreshes, refreshNotifications, userId]);
 
   // Handle delete notification
   const handleDeleteNotification = useCallback(async (id: string) => {
     try {
+      invalidateInFlightRefreshes();
       await deleteNotification(id);
       setNotifications((prev) => {
         const notification = prev.find((notif) => notif.id === id);
@@ -408,7 +414,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
     } catch (err) {
       console.error('Error deleting notification:', err);
     }
-  }, [userId]);
+  }, [invalidateInFlightRefreshes]);
 
   const value: NotificationContextValue = {
     notifications,

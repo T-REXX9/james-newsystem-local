@@ -17,7 +17,6 @@ import {
   DEFAULT_STAFF_ROLE,
   MODULE_ID_ALIASES,
   ROLE_DEFAULT_ACCESS_RIGHTS,
-  STAFF_ROLES,
 } from '../constants';
 import {
   createStaffAccountLocal,
@@ -30,6 +29,7 @@ import {
   fetchAccessGroups,
   updateAccessGroup,
 } from '../services/accessGroupApiService';
+import { fetchRoles } from '../services/staffLocalApiService';
 import { parseSupabaseError } from '../utils/errorHandler';
 import {
   AccessGroup,
@@ -47,10 +47,25 @@ const GROUP_COLUMN_WIDTH = 220;
 const INITIAL_NEW_USER_FORM = {
   fullName: '',
   email: '',
-  role: DEFAULT_STAFF_ROLE,
+  role: '',
   password: '',
   birthday: '',
   mobile: '',
+};
+
+const sanitizeAssignableRoles = (roles: Array<{ name?: string | null }>): string[] => {
+  const seen = new Set<string>();
+
+  return roles
+    .map((role) => String(role?.name || '').trim())
+    .filter((role) => {
+      if (!role) return false;
+      const normalized = role.toLowerCase();
+      if (normalized === 'main' || normalized === 'owner') return false;
+      if (seen.has(normalized)) return false;
+      seen.add(normalized);
+      return true;
+    });
 };
 
 const getEffectiveCanonicalRights = (rights: string[] | null | undefined): Set<string> => {
@@ -91,6 +106,8 @@ const AccessControlSettings: React.FC = () => {
     type: null,
     text: '',
   });
+  const [availableRoles, setAvailableRoles] = useState<string[]>([]);
+  const [isRolesLoading, setIsRolesLoading] = useState(true);
 
   const groupMap = useMemo(
     () => Object.fromEntries(groups.map((group) => [group.id, group])),
@@ -117,6 +134,10 @@ const AccessControlSettings: React.FC = () => {
 
   useEffect(() => {
     loadGroups();
+  }, []);
+
+  useEffect(() => {
+    loadRoles();
   }, []);
 
   const loadProfiles = async (targetPage = page) => {
@@ -161,6 +182,36 @@ const AccessControlSettings: React.FC = () => {
       });
     } finally {
       setIsGroupsLoading(false);
+    }
+  };
+
+  const loadRoles = async () => {
+    setIsRolesLoading(true);
+    try {
+      const data = await fetchRoles();
+      const nextRoles = sanitizeAssignableRoles(data);
+      setAvailableRoles(nextRoles);
+      setNewUserForm((prev) => {
+        if (prev.role && nextRoles.includes(prev.role)) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          role: nextRoles.includes(DEFAULT_STAFF_ROLE) ? DEFAULT_STAFF_ROLE : (nextRoles[0] || ''),
+        };
+      });
+    } catch (error) {
+      console.error('Unable to load staff roles:', error);
+      setAvailableRoles([]);
+      addToast({
+        type: 'error',
+        title: 'Unable to load staff roles',
+        description: parseSupabaseError(error, 'staff roles'),
+        durationMs: 6000,
+      });
+    } finally {
+      setIsRolesLoading(false);
     }
   };
 
@@ -345,7 +396,9 @@ const AccessControlSettings: React.FC = () => {
     } else if (newUserForm.password.length < 8) {
       errors.password = 'Password must be at least 8 characters';
     }
-    if (newUserForm.role && !STAFF_ROLES.includes(newUserForm.role)) {
+    if (!newUserForm.role.trim()) {
+      errors.role = 'Please select a role';
+    } else if (availableRoles.length > 0 && !availableRoles.includes(newUserForm.role)) {
       errors.role = 'Please select a valid role';
     }
 
@@ -354,7 +407,10 @@ const AccessControlSettings: React.FC = () => {
   };
 
   const resetNewUserModalState = () => {
-    setNewUserForm(INITIAL_NEW_USER_FORM);
+    setNewUserForm({
+      ...INITIAL_NEW_USER_FORM,
+      role: availableRoles.includes(DEFAULT_STAFF_ROLE) ? DEFAULT_STAFF_ROLE : (availableRoles[0] || ''),
+    });
     setFormErrors({});
     setFormMessage({ type: null, text: '' });
   };
@@ -765,8 +821,11 @@ const AccessControlSettings: React.FC = () => {
                   className="input-field"
                   value={newUserForm.role}
                   onChange={(event) => setNewUserForm({ ...newUserForm, role: event.target.value })}
+                  disabled={isRolesLoading || availableRoles.length === 0}
                 >
-                  {STAFF_ROLES.map((role) => (
+                  {isRolesLoading && <option value="">Loading roles...</option>}
+                  {!isRolesLoading && availableRoles.length === 0 && <option value="">No roles available</option>}
+                  {availableRoles.map((role) => (
                     <option key={role} value={role}>
                       {role}
                     </option>

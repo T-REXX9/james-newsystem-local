@@ -118,11 +118,6 @@ This file tracks routed pages in the new system that are still using Supabase di
       - `james-newsystem/components/LoyaltyDiscountRulesView.tsx`
       - `james-newsystem/services/loyaltyDiscountService.ts`
 
-19. `maintenance-system-profit-protection`
-    - References:
-      - `james-newsystem/components/ProfitThresholdSettings.tsx`
-      - `james-newsystem/services/profitProtectionService.ts`
-
 ## Excluded From This List
 
 - Placeholder/static pages without active backend integration, such as:

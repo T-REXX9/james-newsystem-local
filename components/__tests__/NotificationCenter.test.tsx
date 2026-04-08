@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NotificationProvider } from '../NotificationProvider';
 import NotificationCenter from '../NotificationCenter';
@@ -206,6 +206,62 @@ describe('NotificationCenter', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Direct notification')).toBeInTheDocument();
+    });
+  });
+
+  it('ignores stale refresh results that finish after a notification is marked as read', async () => {
+    const unreadNotification = createNotification({
+      id: 'notif-race',
+      category: 'notification',
+      type: 'info',
+      title: 'Race notification',
+      metadata: undefined,
+    });
+    const readNotification = {
+      ...unreadNotification,
+      is_read: true,
+      read_at: '2026-04-04T01:00:00.000Z',
+    };
+
+    const staleNotifications = createDeferred<Notification[]>();
+    const staleCount = createDeferred<number>();
+    const refreshedNotifications = createDeferred<Notification[]>();
+    const refreshedCount = createDeferred<number>();
+
+    fetchNotificationsMock
+      .mockResolvedValueOnce([unreadNotification])
+      .mockReturnValueOnce(staleNotifications.promise)
+      .mockReturnValueOnce(refreshedNotifications.promise);
+    getUnreadCountMock
+      .mockResolvedValueOnce(1)
+      .mockReturnValueOnce(staleCount.promise)
+      .mockReturnValueOnce(refreshedCount.promise);
+    markAsReadMock.mockResolvedValue(true);
+
+    const user = userEvent.setup();
+    renderNotificationCenter();
+
+    await screen.findByText('1');
+
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
+
+    await user.click(screen.getByTitle('Notifications'));
+    await user.click(screen.getByText('Race notification'));
+
+    const bellButton = screen.getByTitle('Notifications');
+    await waitFor(() => {
+      expect(within(bellButton).queryByText('1')).not.toBeInTheDocument();
+    });
+
+    staleNotifications.resolve([unreadNotification]);
+    staleCount.resolve(1);
+    refreshedNotifications.resolve([readNotification]);
+    refreshedCount.resolve(0);
+
+    await waitFor(() => {
+      expect(within(bellButton).queryByText('1')).not.toBeInTheDocument();
     });
   });
 });

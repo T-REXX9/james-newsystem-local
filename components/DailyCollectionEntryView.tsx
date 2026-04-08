@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Calendar, Search, X } from 'lucide-react';
 import {
   dailyCollectionService,
@@ -7,6 +8,8 @@ import {
   DailyCollectionItem,
   CollectionCustomer,
   CollectionUnpaidRow,
+  LEGACY_COLLECTION_ITEM_STATUSES,
+  LegacyCollectionItemStatus,
 } from '../services/dailyCollectionService';
 import { getLocalAuthSession } from '../services/localAuthService';
 import {
@@ -90,6 +93,13 @@ const DailyCollectionEntryView: React.FC = () => {
   const [unpaidRows, setUnpaidRows] = useState<CollectionUnpaidRow[]>([]);
   const [selectedTransactions, setSelectedTransactions] = useState<Record<string, boolean>>({});
   const [customerSearch, setCustomerSearch] = useState('');
+  const [transactionSearch, setTransactionSearch] = useState('');
+  const [showTransactionCombo, setShowTransactionCombo] = useState(false);
+  const [transactionComboPosition, setTransactionComboPosition] = useState({
+    top: 0,
+    left: 0,
+    width: 0,
+  });
   const [loadingCustomers, setLoadingCustomers] = useState(false);
 
   const [search, setSearch] = useState('');
@@ -99,6 +109,7 @@ const DailyCollectionEntryView: React.FC = () => {
   const [listLoading, setListLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [savingPayment, setSavingPayment] = useState(false);
+  const [savingItemStatusId, setSavingItemStatusId] = useState<number | null>(null);
   const [workingAction, setWorkingAction] = useState('');
   const [showDeleteReportModal, setShowDeleteReportModal] = useState(false);
   const [error, setError] = useState('');
@@ -128,6 +139,34 @@ const DailyCollectionEntryView: React.FC = () => {
       .filter((row) => selectedTransactions[`${row.transactionType}:${row.lrefno}`])
       .reduce((sum, row) => sum + Number(row.totalAmount || 0), 0);
   }, [unpaidRows, selectedTransactions]);
+
+  const selectedTransactionKeys = useMemo(() => (
+    Object.entries(selectedTransactions)
+      .filter(([, value]) => value)
+      .map(([key]) => key)
+  ), [selectedTransactions]);
+
+  const filteredUnpaidRows = useMemo(() => {
+    const needle = transactionSearch.trim().toLowerCase();
+    if (!needle) return unpaidRows;
+    return unpaidRows.filter((row) => (
+      row.linvoice_no.toLowerCase().includes(needle)
+      || row.transactionType.toLowerCase().includes(needle)
+      || String(row.totalAmount || 0).includes(needle)
+    ));
+  }, [transactionSearch, unpaidRows]);
+
+  const selectedTransactionsLabel = useMemo(() => {
+    if (selectedTransactionKeys.length === 0) return 'Select transaction no.';
+    if (selectedTransactionKeys.length === 1) {
+      const [transactionType, refno] = selectedTransactionKeys[0].split(':');
+      const selectedRow = unpaidRows.find(
+        (row) => row.transactionType === transactionType && row.lrefno === refno,
+      );
+      return selectedRow?.linvoice_no || selectedTransactionKeys[0];
+    }
+    return `${selectedTransactionKeys.length} transactions selected`;
+  }, [selectedTransactionKeys, unpaidRows]);
 
   const customerOptions = useMemo(() => {
     const selectedCustomer = customers.find((customer) => customer.id === form.customerId);
@@ -265,6 +304,9 @@ const DailyCollectionEntryView: React.FC = () => {
   }, [statusFilter, filterMonth, filterYear]);
 
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const transactionComboRef = useRef<HTMLDivElement | null>(null);
+  const transactionComboTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const transactionComboPanelRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (searchDebounceRef.current) {
       clearTimeout(searchDebounceRef.current);
@@ -308,14 +350,55 @@ const DailyCollectionEntryView: React.FC = () => {
     if (!form.customerId) {
       setUnpaidRows([]);
       setSelectedTransactions({});
+      setTransactionSearch('');
+      setShowTransactionCombo(false);
       return;
     }
     setSelectedTransactions({});
+    setTransactionSearch('');
+    setShowTransactionCombo(false);
     dailyCollectionService
       .getUnpaidTransactions(form.customerId)
       .then(setUnpaidRows)
       .catch(() => setUnpaidRows([]));
   }, [form.customerId]);
+
+  useEffect(() => {
+    if (!showTransactionCombo) return;
+
+    const updateTransactionComboPosition = () => {
+      const rect = transactionComboTriggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      setTransactionComboPosition({
+        top: rect.bottom + 4,
+        left: rect.left,
+        width: rect.width,
+      });
+    };
+
+    updateTransactionComboPosition();
+
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        !transactionComboRef.current?.contains(target)
+        && !transactionComboPanelRef.current?.contains(target)
+      ) {
+        setShowTransactionCombo(false);
+      }
+    };
+
+    window.addEventListener('resize', updateTransactionComboPosition);
+    window.addEventListener('scroll', updateTransactionComboPosition, true);
+    document.addEventListener('mousedown', onPointerDown);
+
+    return () => {
+      window.removeEventListener('resize', updateTransactionComboPosition);
+      window.removeEventListener('scroll', updateTransactionComboPosition, true);
+      document.removeEventListener('mousedown', onPointerDown);
+    };
+  }, [showTransactionCombo]);
 
   useEffect(() => {
     if (selectedAmount > 0) {
@@ -493,6 +576,28 @@ const DailyCollectionEntryView: React.FC = () => {
     setForm((prev) => ({ ...prev, type: newType, status: autoStatus }));
   };
 
+  const toggleTransactionSelection = (key: string) => {
+    setSelectedTransactions((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
+  const handleItemStatusChange = async (item: DailyCollectionItem, nextStatus: LegacyCollectionItemStatus) => {
+    if (!selectedRefno || item.lstatus === nextStatus) return;
+
+    setSavingItemStatusId(item.lid);
+    setError('');
+    try {
+      await dailyCollectionService.updateItemStatus(item, nextStatus);
+      await fetchDetail(selectedRefno);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to update payment status');
+    } finally {
+      setSavingItemStatusId(null);
+    }
+  };
+
   const handleSavePayment = async () => {
     if (!selectedRefno) return;
     if (!form.customerId) {
@@ -632,9 +737,64 @@ const DailyCollectionEntryView: React.FC = () => {
 
   const statusButtons = renderStatusButtons();
 
+  const transactionComboDropdown = showTransactionCombo && form.customerId
+    ? createPortal(
+      <div
+        ref={transactionComboPanelRef}
+        className="fixed z-[200] rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl"
+        style={{
+          top: transactionComboPosition.top,
+          left: transactionComboPosition.left,
+          width: transactionComboPosition.width,
+        }}
+      >
+        <div className="p-2 border-b border-slate-200 dark:border-slate-800">
+          <input
+            className={INPUT_CLASS}
+            value={transactionSearch}
+            onChange={(e) => setTransactionSearch(e.target.value)}
+            placeholder="Search transaction no."
+          />
+        </div>
+
+        <div className="max-h-56 overflow-y-auto p-1" role="listbox" aria-multiselectable="true">
+          {unpaidRows.length === 0 && (
+            <p className="px-2 py-2 text-sm text-slate-500 dark:text-slate-400">No unpaid items</p>
+          )}
+
+          {unpaidRows.length > 0 && filteredUnpaidRows.length === 0 && (
+            <p className="px-2 py-2 text-sm text-slate-500 dark:text-slate-400">No matching transaction</p>
+          )}
+
+          {filteredUnpaidRows.map((row) => {
+            const key = `${row.transactionType}:${row.lrefno}`;
+            const checked = !!selectedTransactions[key];
+            return (
+              <label
+                key={key}
+                className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 text-sm"
+              >
+                <input
+                  type="checkbox"
+                  className="accent-brand-blue"
+                  checked={checked}
+                  onChange={() => toggleTransactionSelection(key)}
+                />
+                <span className="flex-1 min-w-0 truncate">{row.linvoice_no || row.lrefno}</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">{peso.format(row.totalAmount || 0)}</span>
+              </label>
+            );
+          })}
+        </div>
+      </div>,
+      document.body,
+    )
+    : null;
+
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950">
-      <div className="flex-1 flex gap-3 overflow-hidden p-3">
+    <>
+      <div className="h-full flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950">
+        <div className="flex-1 flex gap-3 overflow-hidden p-3">
         {/* Left panel */}
         <div className="w-[280px] shrink-0 flex flex-col rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
           <div className="p-3">
@@ -886,6 +1046,20 @@ const DailyCollectionEntryView: React.FC = () => {
                               <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusBadgeClasses(item.lstatus || item.lcollection_status)}`}>
                                 {item.lstatus || item.lcollection_status || 'Pending'}
                               </span>
+                              {!posted && (
+                                <select
+                                  className={`${SELECT_CLASS} w-full mt-2`}
+                                  value={item.lstatus || 'Pending'}
+                                  onChange={(e) => handleItemStatusChange(item, e.target.value as LegacyCollectionItemStatus)}
+                                  disabled={savingItemStatusId === item.lid}
+                                >
+                                  {LEGACY_COLLECTION_ITEM_STATUSES.map((statusOption) => (
+                                    <option key={statusOption} value={statusOption}>
+                                      {statusOption}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
                             </td>
                             <td className="px-3 py-2">{item.lremarks || '-'}</td>
                             <td className="px-3 py-2">
@@ -962,31 +1136,20 @@ const DailyCollectionEntryView: React.FC = () => {
                             </div>
                           </td>
                           <td className="px-3 py-2 min-w-[220px]">
-                            <select
-                              className={`${SELECT_CLASS} w-full`}
-                              multiple
-                              value={Object.entries(selectedTransactions).filter(([, value]) => value).map(([key]) => key)}
-                              onChange={(e) => {
-                                const selected = Array.from(e.target.selectedOptions, (opt) => opt.value);
-                                const newSelections: Record<string, boolean> = {};
-                                unpaidRows.forEach((row) => {
-                                  const key = `${row.transactionType}:${row.lrefno}`;
-                                  newSelections[key] = selected.includes(key);
-                                });
-                                setSelectedTransactions(newSelections);
-                              }}
-                            >
-                              {!form.customerId && <option disabled value="">Pick a customer</option>}
-                              {form.customerId && unpaidRows.length === 0 && <option disabled value="">No unpaid items</option>}
-                              {unpaidRows.map((row) => {
-                                const key = `${row.transactionType}:${row.lrefno}`;
-                                return (
-                                  <option key={key} value={key}>
-                                    {row.linvoice_no} - {peso.format(row.totalAmount || 0)}
-                                  </option>
-                                );
-                              })}
-                            </select>
+                            <div className="relative" ref={transactionComboRef}>
+                              <button
+                                type="button"
+                                ref={transactionComboTriggerRef}
+                                className={`${SELECT_CLASS} w-full flex items-center justify-between gap-2 text-left`}
+                                onClick={() => setShowTransactionCombo((prev) => !prev)}
+                                disabled={!form.customerId}
+                                aria-haspopup="listbox"
+                                aria-expanded={showTransactionCombo}
+                              >
+                                <span className="truncate">{form.customerId ? selectedTransactionsLabel : 'Pick a customer first'}</span>
+                                <span className="text-xs text-slate-500 dark:text-slate-400">{showTransactionCombo ? '^' : 'v'}</span>
+                              </button>
+                            </div>
                           </td>
                           <td className="px-3 py-2 min-w-[130px]">
                             <select
@@ -1157,15 +1320,17 @@ const DailyCollectionEntryView: React.FC = () => {
             </>
           )}
         </div>
+        </div>
+        <DeleteCollectionReportModal
+          isOpen={showDeleteReportModal}
+          onClose={() => setShowDeleteReportModal(false)}
+          onConfirm={handleDeleteCollectionReport}
+          refNo={selectedRefno}
+          itemCount={items.length}
+        />
       </div>
-      <DeleteCollectionReportModal
-        isOpen={showDeleteReportModal}
-        onClose={() => setShowDeleteReportModal(false)}
-        onConfirm={handleDeleteCollectionReport}
-        refNo={selectedRefno}
-        itemCount={items.length}
-      />
-    </div>
+      {transactionComboDropdown}
+    </>
   );
 };
 

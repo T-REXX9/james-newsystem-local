@@ -1,9 +1,10 @@
 
-import React, { useState, useEffect } from 'react';
-import { LogOut, Sun, Moon } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { LogOut } from 'lucide-react';
 import { UserProfile } from '../types';
 import NotificationCenter from './NotificationCenter';
 import TopbarNavigation from './TopbarNavigation';
+import InternalChatLauncher from './InternalChatLauncher';
 
 interface TopNavProps {
   activeTab?: string;
@@ -12,35 +13,12 @@ interface TopNavProps {
   onSignOut?: () => void;
 }
 
-  const TopNav: React.FC<TopNavProps> = ({ activeTab = 'home', onNavigate, user, onSignOut }) => {
-  const [isDark, setIsDark] = useState(true);
-
+const TopNav: React.FC<TopNavProps> = ({ activeTab = 'home', onNavigate, user, onSignOut }) => {
   useEffect(() => {
-    // Check local storage or default to dark (since index.html has class="dark")
-    const savedTheme = localStorage.getItem('theme');
     const html = document.documentElement;
-
-    if (savedTheme === 'light') {
-        setIsDark(false);
-        html.classList.remove('dark');
-    } else {
-        setIsDark(true);
-        html.classList.add('dark');
-    }
+    html.classList.remove('dark');
+    localStorage.setItem('theme', 'light');
   }, []);
-
-  const toggleTheme = () => {
-    const html = document.documentElement;
-    if (isDark) {
-        html.classList.remove('dark');
-        localStorage.setItem('theme', 'light');
-        setIsDark(false);
-    } else {
-        html.classList.add('dark');
-        localStorage.setItem('theme', 'dark');
-        setIsDark(true);
-    }
-  };
 
   return (
     <div className="h-16 bg-gradient-to-r from-brand-blue to-[#0a3d74] flex items-center justify-between px-6 fixed top-0 left-0 right-0 z-[1000] text-white shadow-md print:hidden">
@@ -58,14 +36,7 @@ interface TopNavProps {
       </div>
 
       <div className="flex items-center space-x-4 pr-4 shrink-0">
-         {/* Theme Switcher */}
-         <button
-           onClick={toggleTheme}
-           className="p-2 text-white/70 hover:text-white transition-colors rounded-full hover:bg-white/10"
-           title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
-         >
-            {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-         </button>
+         <InternalChatLauncher user={user || null} />
 
          {/* Notification Center */}
          <NotificationCenter />

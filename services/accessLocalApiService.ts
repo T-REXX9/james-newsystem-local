@@ -5,7 +5,7 @@ import {
     StaffAccountValidationError,
     UserProfile,
 } from '../types';
-import { DEFAULT_STAFF_ACCESS_RIGHTS, DEFAULT_STAFF_ROLE, ROLE_DEFAULT_ACCESS_RIGHTS, STAFF_ROLES } from '../constants';
+import { DEFAULT_STAFF_ACCESS_RIGHTS, DEFAULT_STAFF_ROLE, ROLE_DEFAULT_ACCESS_RIGHTS } from '../constants';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
@@ -115,8 +115,8 @@ const validateStaffAccountInput = (input: CreateStaffAccountInput): StaffAccount
         }
     }
 
-    if (input.role && !STAFF_ROLES.includes(input.role)) {
-        errors.role = 'Invalid role';
+    if (!input.role?.trim()) {
+        errors.role = 'Role is required';
     }
 
     if (input.accessRights && !input.accessRights.length) {
@@ -211,7 +211,7 @@ export const createStaffAccountLocal = async (
         return { success: false, error: 'Validation failed', validationErrors };
     }
 
-    const role = input.role && STAFF_ROLES.includes(input.role) ? input.role : DEFAULT_STAFF_ROLE;
+    const role = input.role?.trim() || DEFAULT_STAFF_ROLE;
     const accessRights = normalizeAccessRights(input.accessRights);
 
     try {
