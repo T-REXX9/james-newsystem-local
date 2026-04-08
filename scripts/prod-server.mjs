@@ -23,7 +23,7 @@ const PHP_FPM_HOST = process.env.PHP_FPM_HOST || '127.0.0.1';
 const PHP_FPM_PORT = Number(process.env.PHP_FPM_PORT || 9070);
 const APP_BASE_PATH = '/james-newsystem/';
 const SOCKET_PATH = '/socket.io';
-const TOKEN_SECRET = process.env.AUTH_SECRET || process.env.APP_KEY || 'change-me-in-env';
+const TOKEN_SECRET = process.env.AUTH_SECRET || process.env.APP_KEY || 'change-this-secret';
 const NOTIFY_SECRET = process.env.INTERNAL_CHAT_SOCKET_SECRET || TOKEN_SECRET;
 
 const MIME_TYPES = {

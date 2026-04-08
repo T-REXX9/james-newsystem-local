@@ -5,7 +5,7 @@ import { Server } from 'socket.io';
 const HOST = process.env.INTERNAL_CHAT_SOCKET_HOST || '127.0.0.1';
 const PORT = Number(process.env.INTERNAL_CHAT_SOCKET_PORT || 8082);
 const SOCKET_PATH = process.env.INTERNAL_CHAT_SOCKET_PATH || '/socket.io';
-const TOKEN_SECRET = process.env.AUTH_SECRET || process.env.APP_KEY || 'change-me-in-env';
+const TOKEN_SECRET = process.env.AUTH_SECRET || process.env.APP_KEY || 'change-this-secret';
 const NOTIFY_SECRET = process.env.INTERNAL_CHAT_SOCKET_SECRET || TOKEN_SECRET;
 
 const json = (response, statusCode, payload) => {
