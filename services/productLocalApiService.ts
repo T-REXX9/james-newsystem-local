@@ -91,6 +91,14 @@ export interface FetchProductsPageResult {
     per_page: number;
     total: number;
     total_pages: number;
+    warehouse_labels?: {
+      wh1: string;
+      wh2: string;
+      wh3: string;
+      wh4: string;
+      wh5: string;
+      wh6: string;
+    };
   };
 }
 
@@ -151,6 +159,7 @@ export const fetchProductsPage = async (params: FetchProductsPageParams = {}): P
       per_page: Number(meta.per_page || perPage),
       total: Number(meta.total || 0),
       total_pages: Number(meta.total_pages || 1),
+      warehouse_labels: meta.warehouse_labels || undefined,
     },
   };
 };

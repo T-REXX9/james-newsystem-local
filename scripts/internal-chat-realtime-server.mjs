@@ -163,6 +163,26 @@ const emitToUser = (userId, payload) => {
   io.to(`user:${normalized}`).emit('chat:event', payload);
 };
 
+const participantsFromConversationKey = (conversationKey) => {
+  const match = String(conversationKey || '').trim().match(/^dm:(\d+):(\d+)$/);
+  if (!match) {
+    return [];
+  }
+
+  return [match[1], match[2]];
+};
+
+const emitToConversationParticipants = (conversationKey, payload) => {
+  const participants = participantsFromConversationKey(conversationKey);
+  if (participants.length === 0) {
+    return;
+  }
+
+  for (const participantId of participants) {
+    emitToUser(participantId, payload);
+  }
+};
+
 const broadcastInternalChatEvent = (payload) => {
   const type = String(payload?.type || '').trim();
 
@@ -181,6 +201,10 @@ const broadcastInternalChatEvent = (payload) => {
         recipient_name: String(item?.recipient_name || ''),
         sender_avatar_url: String(item?.sender_avatar_url || ''),
         recipient_avatar_url: String(item?.recipient_avatar_url || ''),
+        delivery_status: String(item?.delivery_status || 'sent'),
+        is_read_by_recipient: Boolean(item?.is_read_by_recipient),
+        reactions: Array.isArray(item?.reactions) ? item.reactions : [],
+        current_user_reaction: item?.current_user_reaction ?? null,
       };
 
       emitToUser(message.sender_id, { type: 'message.created', message });
@@ -192,11 +216,35 @@ const broadcastInternalChatEvent = (payload) => {
   }
 
   if (type === 'conversation.read') {
-    emitToUser(String(payload?.user_id || ''), {
+    emitToConversationParticipants(String(payload?.conversation_key || ''), {
       type: 'conversation.read',
       user_id: String(payload?.user_id || ''),
+      read_by_user_id: String(payload?.read_by_user_id || payload?.user_id || ''),
       conversation_key: String(payload?.conversation_key || ''),
       updated_count: Number(payload?.updated_count || 0),
+    });
+    return;
+  }
+
+  if (type === 'reaction.updated') {
+    emitToConversationParticipants(String(payload?.conversation_key || ''), {
+      type: 'reaction.updated',
+      conversation_key: String(payload?.conversation_key || ''),
+      message_id: String(payload?.message_id || ''),
+      reactions: Array.isArray(payload?.reactions) ? payload.reactions : [],
+      current_user_reaction: payload?.current_user_reaction ?? null,
+      actor_user_id: String(payload?.actor_user_id || ''),
+    });
+    return;
+  }
+
+  if (type === 'typing.updated') {
+    emitToConversationParticipants(String(payload?.conversation_key || ''), {
+      type: 'typing.updated',
+      conversation_key: String(payload?.conversation_key || ''),
+      user_id: String(payload?.user_id || ''),
+      is_typing: Boolean(payload?.is_typing),
+      typing_user_ids: Array.isArray(payload?.typing_user_ids) ? payload.typing_user_ids.map((id) => String(id || '')) : [],
     });
   }
 };

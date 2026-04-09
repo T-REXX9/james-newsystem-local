@@ -5,6 +5,7 @@ import { UserProfile } from '../types';
 import NotificationCenter from './NotificationCenter';
 import TopbarNavigation from './TopbarNavigation';
 import InternalChatLauncher from './InternalChatLauncher';
+import ProductQuickSearchLauncher from './ProductQuickSearchLauncher';
 
 interface TopNavProps {
   activeTab?: string;
@@ -36,6 +37,7 @@ const TopNav: React.FC<TopNavProps> = ({ activeTab = 'home', onNavigate, user, o
       </div>
 
       <div className="flex items-center space-x-4 pr-4 shrink-0">
+         <ProductQuickSearchLauncher />
          <InternalChatLauncher user={user || null} />
 
          {/* Notification Center */}

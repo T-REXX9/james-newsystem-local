@@ -14,12 +14,15 @@ import {
   fetchInternalChatConversations,
   fetchInternalChatMessages,
   fetchInternalChatParticipants,
+  fetchInternalChatTypingState,
   fetchInternalChatUnreadCount,
   InternalChatConversationSummary,
   InternalChatMessage,
   InternalChatParticipant,
   markInternalChatConversationRead,
   sendInternalChatMessage,
+  toggleInternalChatReaction,
+  updateInternalChatTyping,
 } from '../services/internalChatLocalApiService';
 import {
   InternalChatRealtimeEvent,
@@ -38,6 +41,9 @@ interface MentionContext {
 }
 
 const INTERNAL_CHAT_REALTIME_ENABLED = true;
+const REACTION_OPTIONS = ['👍', '❤️', '😂', '😮', '😢', '👀'] as const;
+const TYPING_DEBOUNCE_MS = 350;
+const TYPING_IDLE_MS = 3000;
 
 const formatRelativeTime = (value?: string) => {
   if (!value) return '';
@@ -90,7 +96,11 @@ const mergeConversationMessages = (
   incoming.forEach((message) => {
     const key = message.conversation_key;
     const existing = nextState[key] || [];
-    if (existing.some((item) => item.id === message.id)) {
+    const existingIndex = existing.findIndex((item) => item.id === message.id);
+    if (existingIndex >= 0) {
+      nextState[key] = existing
+        .map((item, index) => (index === existingIndex ? { ...item, ...message } : item))
+        .sort(compareMessages);
       return;
     }
 
@@ -98,6 +108,93 @@ const mergeConversationMessages = (
   });
 
   return nextState;
+};
+
+const updateConversationMessage = (
+  previous: Record<string, InternalChatMessage[]>,
+  conversationKey: string,
+  messageId: string,
+  updater: (message: InternalChatMessage) => InternalChatMessage
+): Record<string, InternalChatMessage[]> => {
+  const existing = previous[conversationKey] || [];
+  const nextMessages = existing.map((message) => (message.id === messageId ? updater(message) : message));
+  return {
+    ...previous,
+    [conversationKey]: nextMessages.sort(compareMessages),
+  };
+};
+
+const removeConversationMessages = (
+  previous: Record<string, InternalChatMessage[]>,
+  messageIds: string[]
+): Record<string, InternalChatMessage[]> => {
+  if (messageIds.length === 0) {
+    return previous;
+  }
+
+  const ids = new Set(messageIds);
+  return Object.fromEntries(
+    Object.entries(previous).map(([conversationKey, messages]) => [
+      conversationKey,
+      messages.filter((message) => !ids.has(message.id)),
+    ])
+  );
+};
+
+const sortReactionSummaries = (reactions: InternalChatMessage['reactions']): InternalChatMessage['reactions'] =>
+  [...reactions].sort((left, right) => {
+    if ((left.count || 0) !== (right.count || 0)) {
+      return (right.count || 0) - (left.count || 0);
+    }
+
+    return left.emoji.localeCompare(right.emoji);
+  });
+
+const toggleReactionState = (message: InternalChatMessage, emoji: string): Pick<InternalChatMessage, 'reactions' | 'current_user_reaction'> => {
+  const previousReaction = message.current_user_reaction || null;
+  const nextReaction = previousReaction === emoji ? null : emoji;
+  const reactionMap = new Map(
+    (message.reactions || []).map((reaction) => [
+      reaction.emoji,
+      { ...reaction },
+    ])
+  );
+
+  if (previousReaction) {
+    const existing = reactionMap.get(previousReaction);
+    if (existing) {
+      existing.count = Math.max(0, existing.count - 1);
+      existing.reacted_by_current_user = false;
+      if (existing.count === 0) {
+        reactionMap.delete(previousReaction);
+      } else {
+        reactionMap.set(previousReaction, existing);
+      }
+    }
+  }
+
+  if (nextReaction) {
+    const existing = reactionMap.get(nextReaction) || {
+      emoji: nextReaction,
+      count: 0,
+      reacted_by_current_user: false,
+    };
+    existing.count += 1;
+    existing.reacted_by_current_user = true;
+    reactionMap.set(nextReaction, existing);
+  }
+
+  return {
+    reactions: sortReactionSummaries(Array.from(reactionMap.values())),
+    current_user_reaction: nextReaction,
+  };
+};
+
+const formatDeliveryStatus = (message: InternalChatMessage): string => {
+  if (message.is_pending) return 'Sending...';
+  if (message.delivery_status === 'read') return 'Seen';
+  if (message.delivery_status === 'delivered') return 'Delivered';
+  return 'Sent';
 };
 
 const getMentionContext = (value: string, cursorPosition: number): MentionContext | null => {
@@ -129,12 +226,14 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   const [conversations, setConversations] = useState<InternalChatConversationSummary[]>([]);
   const [selectedConversationKey, setSelectedConversationKey] = useState<string | null>(null);
   const [messagesByConversation, setMessagesByConversation] = useState<Record<string, InternalChatMessage[]>>({});
+  const [typingByConversation, setTypingByConversation] = useState<Record<string, string[]>>({});
   const [draft, setDraft] = useState('');
   const [mentionSelections, setMentionSelections] = useState<Record<string, string>>({});
   const [mentionContext, setMentionContext] = useState<MentionContext | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [reactionPendingIds, setReactionPendingIds] = useState<Record<string, boolean>>({});
   const messageViewportRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const selectedConversationKeyRef = useRef<string | null>(null);
@@ -145,6 +244,65 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   const lastRealtimeErrorToastAtRef = useRef(0);
   const shellAbortControllerRef = useRef<AbortController | null>(null);
   const messageAbortControllerRef = useRef<AbortController | null>(null);
+  const typingStartTimeoutRef = useRef<number | null>(null);
+  const typingStopTimeoutRef = useRef<number | null>(null);
+  const activeTypingConversationKeyRef = useRef<string | null>(null);
+
+  const clearTypingTimers = () => {
+    if (typingStartTimeoutRef.current !== null) {
+      window.clearTimeout(typingStartTimeoutRef.current);
+      typingStartTimeoutRef.current = null;
+    }
+    if (typingStopTimeoutRef.current !== null) {
+      window.clearTimeout(typingStopTimeoutRef.current);
+      typingStopTimeoutRef.current = null;
+    }
+  };
+
+  const pushTypingState = async (conversationKey: string, isTyping: boolean) => {
+    if (!user || !conversationKey) return;
+
+    try {
+      const payload = await updateInternalChatTyping(conversationKey, isTyping);
+      setTypingByConversation((prev) => ({
+        ...prev,
+        [conversationKey]: payload.typing_user_ids,
+      }));
+    } catch {
+      // Typing is best-effort and should not interrupt chat usage.
+    }
+  };
+
+  const stopTyping = (conversationKey = activeTypingConversationKeyRef.current) => {
+    clearTypingTimers();
+
+    const targetConversationKey = conversationKey || activeTypingConversationKeyRef.current;
+    activeTypingConversationKeyRef.current = null;
+    if (!targetConversationKey) return;
+
+    void pushTypingState(targetConversationKey, false);
+  };
+
+  const scheduleTypingUpdate = (nextDraft: string, conversationKey: string | null) => {
+    if (!conversationKey || !selectedOtherParticipant) {
+      stopTyping();
+      return;
+    }
+
+    if (nextDraft.trim() === '') {
+      stopTyping(conversationKey);
+      return;
+    }
+
+    clearTypingTimers();
+    activeTypingConversationKeyRef.current = conversationKey;
+    typingStartTimeoutRef.current = window.setTimeout(() => {
+      void pushTypingState(conversationKey, true);
+    }, TYPING_DEBOUNCE_MS);
+    typingStopTimeoutRef.current = window.setTimeout(() => {
+      stopTyping(conversationKey);
+    }, TYPING_IDLE_MS);
+  };
 
   const refreshUnreadCount = async (silent = true) => {
     if (!user) return;
@@ -227,8 +385,23 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
       messageAbortControllerRef.current?.abort();
       const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
       messageAbortControllerRef.current = controller;
-      const items = await fetchInternalChatMessages(conversationKey, { signal: controller?.signal });
+      const [itemsResult, typingResult] = await Promise.allSettled([
+        fetchInternalChatMessages(conversationKey, { signal: controller?.signal }),
+        fetchInternalChatTypingState(conversationKey, { signal: controller?.signal }),
+      ]);
+
+      if (itemsResult.status === 'rejected') {
+        throw itemsResult.reason;
+      }
+
+      const items = itemsResult.value;
       setMessagesByConversation((prev) => ({ ...prev, [conversationKey]: items }));
+      if (typingResult.status === 'fulfilled') {
+        setTypingByConversation((prev) => ({
+          ...prev,
+          [conversationKey]: typingResult.value.typing_user_ids,
+        }));
+      }
 
       if (markRead) {
         await markInternalChatConversationRead(conversationKey);
@@ -265,10 +438,12 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
       hasLoadedShellDataRef.current = false;
       shellAbortControllerRef.current?.abort();
       messageAbortControllerRef.current?.abort();
+      stopTyping();
       setParticipants([]);
       setConversations([]);
       setSelectedConversationKey(null);
       setMessagesByConversation({});
+      setTypingByConversation({});
       setUnreadCount(0);
       return;
     }
@@ -286,7 +461,25 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
         const launcherMinimized = isMinimizedRef.current;
 
         if (event.type === 'conversation.read') {
+          if (currentConversationKey === event.conversation_key) {
+            void refreshConversationMessages(event.conversation_key, false);
+          }
           void loadShellData({ background: true });
+          return;
+        }
+
+        if (event.type === 'reaction.updated') {
+          if (currentConversationKey === event.conversation_key) {
+            void refreshConversationMessages(event.conversation_key, false);
+          }
+          return;
+        }
+
+        if (event.type === 'typing.updated') {
+          setTypingByConversation((prev) => ({
+            ...prev,
+            [event.conversation_key]: (event.typing_user_ids || []).filter((typingUserId) => typingUserId !== user.id),
+          }));
           return;
         }
 
@@ -342,12 +535,19 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   }, [isOpen, isMinimized, selectedConversationKey]);
 
   useEffect(() => {
+    if (!isOpen || isMinimized) {
+      stopTyping(selectedConversationKeyRef.current);
+    }
+  }, [isMinimized, isOpen]);
+
+  useEffect(() => {
     if (!messageViewportRef.current || !selectedConversationKey) return;
     const viewport = messageViewportRef.current;
     viewport.scrollTop = viewport.scrollHeight;
   }, [messagesByConversation, selectedConversationKey]);
 
   useEffect(() => () => {
+    stopTyping();
     shellAbortControllerRef.current?.abort();
     messageAbortControllerRef.current?.abort();
   }, []);
@@ -410,6 +610,11 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   }, [conversations, participants, searchQuery, user]);
 
   const selectedMessages = selectedConversationKey ? messagesByConversation[selectedConversationKey] || [] : [];
+  const selectedTypingUserIds = selectedConversationKey ? typingByConversation[selectedConversationKey] || [] : [];
+  const selectedTypingLabel = selectedTypingUserIds
+    .map((userId) => participantMap.get(userId)?.full_name?.trim() || `User ${userId}`)
+    .filter(Boolean)
+    .join(', ');
 
   const mentionSuggestions = useMemo(() => {
     if (!mentionContext) return [];
@@ -441,10 +646,14 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
       return;
     }
 
+    stopTyping(selectedConversationKeyRef.current);
     setIsOpen(false);
   };
 
   const handleSelectConversation = async (conversationKey: string) => {
+    if (selectedConversationKeyRef.current && selectedConversationKeyRef.current !== conversationKey) {
+      stopTyping(selectedConversationKeyRef.current);
+    }
     setSelectedConversationKey(conversationKey);
     setIsOpen(true);
     setIsMinimized(false);
@@ -454,6 +663,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   const handleDraftChange = (value: string, cursorPosition: number) => {
     setDraft(value);
     setMentionContext(getMentionContext(value, cursorPosition));
+    scheduleTypingUpdate(value, selectedConversationKeyRef.current);
   };
 
   const insertMention = (participant: InternalChatParticipant) => {
@@ -463,6 +673,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
       `${draft.slice(0, mentionContext.start)}${token} ${draft.slice(mentionContext.end)}`;
 
     setDraft(nextValue);
+    scheduleTypingUpdate(nextValue, selectedConversationKeyRef.current);
     setMentionSelections((prev) => ({
       ...prev,
       [participant.id]: token,
@@ -501,6 +712,40 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     }
 
     setIsSending(true);
+    const previousDraft = draft;
+    const pendingCreatedAt = new Date().toISOString();
+    const pendingMessages: InternalChatMessage[] = recipientIds.map((recipientId) => {
+      const conversationKey =
+        selectedConversationKey && selectedOtherParticipant?.id === recipientId
+          ? selectedConversationKey
+          : buildDirectConversationKey(user.id, recipientId);
+
+      return {
+        id: `pending:${conversationKey}:${recipientId}:${Date.now()}`,
+        conversation_key: conversationKey,
+        sender_id: user.id,
+        recipient_id: recipientId,
+        message: trimmedMessage,
+        created_at: pendingCreatedAt,
+        is_from_current_user: true,
+        sender_name: user.full_name || 'You',
+        recipient_name: participantMap.get(recipientId)?.full_name || `User ${recipientId}`,
+        sender_avatar_url: user.avatar_url || '',
+        recipient_avatar_url: participantMap.get(recipientId)?.avatar_url || '',
+        delivery_status: 'sent',
+        is_read_by_recipient: false,
+        reactions: [],
+        current_user_reaction: null,
+        is_pending: true,
+      };
+    });
+
+    setMessagesByConversation((prev) => mergeConversationMessages(prev, pendingMessages));
+    setDraft('');
+    setMentionSelections({});
+    setMentionContext(null);
+    stopTyping(selectedConversationKeyRef.current);
+
     try {
       const created = await sendInternalChatMessage({
         message: trimmedMessage,
@@ -508,13 +753,10 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
         recipientIds,
       });
 
-      if (created.length > 0) {
-        setMessagesByConversation((prev) => mergeConversationMessages(prev, created));
-      }
-
-      setDraft('');
-      setMentionSelections({});
-      setMentionContext(null);
+      setMessagesByConversation((prev) => {
+        const withoutPending = removeConversationMessages(prev, pendingMessages.map((message) => message.id));
+        return created.length > 0 ? mergeConversationMessages(withoutPending, created) : withoutPending;
+      });
 
       await loadShellData({ background: true });
 
@@ -522,6 +764,8 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
         setSelectedConversationKey(created[0].conversation_key);
       }
     } catch (error) {
+      setMessagesByConversation((prev) => removeConversationMessages(prev, pendingMessages.map((message) => message.id)));
+      setDraft(previousDraft);
       addToast({
         type: 'error',
         title: 'Unable to send message',
@@ -529,6 +773,53 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
       });
     } finally {
       setIsSending(false);
+    }
+  };
+
+  const handleToggleReaction = async (message: InternalChatMessage, emoji: string) => {
+    if (!user || reactionPendingIds[message.id]) return;
+
+    const previousMessage = {
+      reactions: [...(message.reactions || [])],
+      current_user_reaction: message.current_user_reaction,
+    };
+
+    setReactionPendingIds((prev) => ({ ...prev, [message.id]: true }));
+    setMessagesByConversation((prev) =>
+      updateConversationMessage(prev, message.conversation_key, message.id, (current) => ({
+        ...current,
+        ...toggleReactionState(current, emoji),
+      }))
+    );
+
+    try {
+      const payload = await toggleInternalChatReaction(message.id, emoji);
+      setMessagesByConversation((prev) =>
+        updateConversationMessage(prev, message.conversation_key, message.id, (current) => ({
+          ...current,
+          reactions: payload.reactions || [],
+          current_user_reaction: payload.current_user_reaction ?? null,
+        }))
+      );
+    } catch (error) {
+      setMessagesByConversation((prev) =>
+        updateConversationMessage(prev, message.conversation_key, message.id, (current) => ({
+          ...current,
+          reactions: previousMessage.reactions,
+          current_user_reaction: previousMessage.current_user_reaction,
+        }))
+      );
+      addToast({
+        type: 'error',
+        title: 'Unable to update reaction',
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    } finally {
+      setReactionPendingIds((prev) => {
+        const next = { ...prev };
+        delete next[message.id];
+        return next;
+      });
     }
   };
 
@@ -572,14 +863,20 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
               </div>
               <div className="flex items-center gap-1">
                 <button
-                  onClick={() => setIsMinimized(true)}
+                  onClick={() => {
+                    stopTyping(selectedConversationKeyRef.current);
+                    setIsMinimized(true);
+                  }}
                   className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-900"
                   aria-label="Minimize chat"
                 >
                   <Minus className="h-4 w-4" />
                 </button>
                 <button
-                  onClick={() => setIsOpen(false)}
+                  onClick={() => {
+                    stopTyping(selectedConversationKeyRef.current);
+                    setIsOpen(false);
+                  }}
                   className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-900"
                   aria-label="Close chat"
                 >
@@ -673,7 +970,10 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
                 </div>
               </div>
               <button
-                onClick={() => setIsMinimized(true)}
+                onClick={() => {
+                  stopTyping(selectedConversationKeyRef.current);
+                  setIsMinimized(true);
+                }}
                 className="rounded-md p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
                 aria-label="Collapse chat"
               >
@@ -695,16 +995,70 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
                   const isMine = message.is_from_current_user;
                   return (
                     <div key={message.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[78%] rounded-2xl px-4 py-3 shadow-sm ${isMine ? 'bg-brand-blue text-white' : 'bg-white text-slate-900 border border-slate-200'}`}>
-                        <div className="mb-1 flex items-center gap-2 text-[11px] opacity-80">
-                          <span className="font-semibold">{isMine ? 'You' : message.sender_name}</span>
-                          <span>{formatRelativeTime(message.created_at)}</span>
+                      <div className="max-w-[78%]">
+                        <div className={`rounded-2xl px-4 py-3 shadow-sm ${isMine ? 'bg-brand-blue text-white' : 'bg-white text-slate-900 border border-slate-200'}`}>
+                          <div className="mb-1 flex items-center gap-2 text-[11px] opacity-80">
+                            <span className="font-semibold">{isMine ? 'You' : message.sender_name}</span>
+                            <span>{formatRelativeTime(message.created_at)}</span>
+                          </div>
+                          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.message}</p>
                         </div>
-                        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.message}</p>
+                        <div className={`mt-2 flex flex-wrap items-center gap-2 ${isMine ? 'justify-end' : 'justify-start'}`}>
+                          {message.reactions.length > 0 && (
+                            <>
+                              {message.reactions.map((reaction) => (
+                                <button
+                                  key={`${message.id}:${reaction.emoji}`}
+                                  onClick={() => void handleToggleReaction(message, reaction.emoji)}
+                                  disabled={Boolean(reactionPendingIds[message.id])}
+                                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] transition ${
+                                    reaction.reacted_by_current_user
+                                      ? 'border-brand-blue bg-brand-blue/10 text-brand-blue'
+                                      : 'border-slate-200 bg-white text-slate-600 hover:border-brand-blue/30 hover:text-brand-blue'
+                                  } disabled:cursor-not-allowed disabled:opacity-60`}
+                                >
+                                  <span>{reaction.emoji}</span>
+                                  <span>{reaction.count}</span>
+                                </button>
+                              ))}
+                            </>
+                          )}
+                          {REACTION_OPTIONS.map((emoji) => (
+                            <button
+                              key={`${message.id}:picker:${emoji}`}
+                              onClick={() => void handleToggleReaction(message, emoji)}
+                              disabled={Boolean(reactionPendingIds[message.id])}
+                              className={`inline-flex h-7 w-7 items-center justify-center rounded-full border text-sm transition ${
+                                message.current_user_reaction === emoji
+                                  ? 'border-brand-blue bg-brand-blue/10'
+                                  : 'border-transparent bg-slate-100 hover:border-slate-200 hover:bg-white'
+                              } disabled:cursor-not-allowed disabled:opacity-50`}
+                              aria-label={`React with ${emoji}`}
+                              title={`React with ${emoji}`}
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
+                        <div className={`mt-1 flex items-center gap-2 text-[11px] text-slate-400 ${isMine ? 'justify-end' : 'justify-start'}`}>
+                          {isMine && (
+                            <span className={message.delivery_status === 'read' && !message.is_pending ? 'text-brand-blue' : ''}>
+                              {formatDeliveryStatus(message)}
+                            </span>
+                          )}
+                          {Boolean(reactionPendingIds[message.id]) && <span>Updating reaction...</span>}
+                        </div>
                       </div>
                     </div>
                   );
                 })
+              )}
+              {selectedConversationKey && selectedTypingUserIds.length > 0 && (
+                <div className="flex justify-start">
+                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-xs text-slate-500 shadow-sm">
+                    {selectedTypingLabel || 'Someone'} is typing...
+                  </div>
+                </div>
               )}
             </div>
 
@@ -725,6 +1079,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
                       void handleSend();
                     }
                   }}
+                  onBlur={() => stopTyping(selectedConversationKeyRef.current)}
                   rows={3}
                   placeholder={selectedOtherParticipant ? `Message ${participantLabel(selectedOtherParticipant)}. Use @name to include other accounts.` : 'Select an account or type @name to mention recipients.'}
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 pr-14 text-sm text-slate-900 outline-none transition focus:border-brand-blue focus:bg-white focus:ring-2 focus:ring-brand-blue/20"

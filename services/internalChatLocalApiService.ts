@@ -32,6 +32,11 @@ export interface InternalChatMessage {
   recipient_name: string;
   sender_avatar_url: string;
   recipient_avatar_url: string;
+  delivery_status: 'sent' | 'delivered' | 'read';
+  is_read_by_recipient: boolean;
+  reactions: InternalChatReactionSummary[];
+  current_user_reaction: string | null;
+  is_pending?: boolean;
 }
 
 export interface SendInternalChatMessageInput {
@@ -42,6 +47,25 @@ export interface SendInternalChatMessageInput {
 
 export interface InternalChatRequestOptions {
   signal?: AbortSignal;
+}
+
+export interface InternalChatReactionSummary {
+  emoji: string;
+  count: number;
+  reacted_by_current_user: boolean;
+}
+
+export interface InternalChatReactionPayload {
+  message_id: string;
+  conversation_key: string;
+  reactions: InternalChatReactionSummary[];
+  current_user_reaction: string | null;
+  actor_user_id?: string;
+}
+
+export interface InternalChatTypingState {
+  conversation_key: string;
+  typing_user_ids: string[];
 }
 
 const parseApiErrorMessage = async (response: Response): Promise<string> => {
@@ -131,6 +155,25 @@ export async function fetchInternalChatMessages(
   return Array.isArray(payload?.items) ? payload.items : [];
 }
 
+export async function fetchInternalChatTypingState(
+  conversationKey: string,
+  options?: InternalChatRequestOptions
+): Promise<InternalChatTypingState> {
+  const payload = await requestJson<InternalChatTypingState>(
+    `${API_BASE_URL}/internal-chat/conversations/${encodeURIComponent(conversationKey)}/typing`,
+    {
+      signal: options?.signal,
+    }
+  );
+
+  return {
+    conversation_key: payload?.conversation_key || conversationKey,
+    typing_user_ids: Array.isArray(payload?.typing_user_ids)
+      ? payload.typing_user_ids.map((value) => String(value || '')).filter(Boolean)
+      : [],
+  };
+}
+
 export async function sendInternalChatMessage(input: SendInternalChatMessageInput): Promise<InternalChatMessage[]> {
   const payload = await requestJson<{ items?: InternalChatMessage[] }>(`${API_BASE_URL}/internal-chat/messages`, {
     method: 'POST',
@@ -143,10 +186,36 @@ export async function sendInternalChatMessage(input: SendInternalChatMessageInpu
   return Array.isArray(payload?.items) ? payload.items : [];
 }
 
+export async function toggleInternalChatReaction(messageId: string, emoji: string): Promise<InternalChatReactionPayload> {
+  return await requestJson<InternalChatReactionPayload>(`${API_BASE_URL}/internal-chat/messages/${encodeURIComponent(messageId)}/reaction`, {
+    method: 'POST',
+    body: JSON.stringify({ emoji }),
+  });
+}
+
 export async function markInternalChatConversationRead(conversationKey: string): Promise<void> {
   await requestJson(`${API_BASE_URL}/internal-chat/conversations/${encodeURIComponent(conversationKey)}/read`, {
     method: 'POST',
   });
+}
+
+export async function updateInternalChatTyping(conversationKey: string, isTyping: boolean): Promise<InternalChatTypingState> {
+  const payload = await requestJson<InternalChatTypingState>(
+    `${API_BASE_URL}/internal-chat/conversations/${encodeURIComponent(conversationKey)}/typing`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        is_typing: isTyping,
+      }),
+    }
+  );
+
+  return {
+    conversation_key: payload?.conversation_key || conversationKey,
+    typing_user_ids: Array.isArray(payload?.typing_user_ids)
+      ? payload.typing_user_ids.map((value) => String(value || '')).filter(Boolean)
+      : [],
+  };
 }
 
 export async function fetchInternalChatUnreadCount(options?: InternalChatRequestOptions): Promise<number> {

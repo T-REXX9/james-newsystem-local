@@ -1,6 +1,6 @@
 import { io } from 'socket.io-client';
 import { getLocalAuthSession } from './localAuthService';
-import { InternalChatMessage } from './internalChatLocalApiService';
+import { InternalChatMessage, InternalChatReactionSummary } from './internalChatLocalApiService';
 
 const SOCKET_URL = (import.meta as any)?.env?.VITE_INTERNAL_CHAT_SOCKET_URL || '';
 const SOCKET_PORT = (import.meta as any)?.env?.VITE_INTERNAL_CHAT_SOCKET_PORT || '';
@@ -19,8 +19,24 @@ export type InternalChatRealtimeEvent =
   | {
       type: 'conversation.read';
       user_id: string;
+      read_by_user_id?: string;
       conversation_key: string;
       updated_count: number;
+    }
+  | {
+      type: 'reaction.updated';
+      conversation_key: string;
+      message_id: string;
+      reactions: InternalChatReactionSummary[];
+      current_user_reaction: string | null;
+      actor_user_id: string;
+    }
+  | {
+      type: 'typing.updated';
+      conversation_key: string;
+      user_id: string;
+      is_typing: boolean;
+      typing_user_ids: string[];
     };
 
 const resolveSocketUrl = (): string => {
@@ -107,6 +123,27 @@ export const openInternalChatRealtimeStream = (
       onEvent({
         ...payload,
         updated_count: Number(payload.updated_count || 0),
+      });
+      return;
+    }
+
+    if (payload.type === 'reaction.updated') {
+      onEvent({
+        ...payload,
+        reactions: Array.isArray(payload.reactions) ? payload.reactions : [],
+        current_user_reaction: payload.current_user_reaction ?? null,
+        actor_user_id: String(payload.actor_user_id || ''),
+      });
+      return;
+    }
+
+    if (payload.type === 'typing.updated') {
+      onEvent({
+        ...payload,
+        is_typing: Boolean(payload.is_typing),
+        typing_user_ids: Array.isArray(payload.typing_user_ids)
+          ? payload.typing_user_ids.map((id) => String(id || '')).filter(Boolean)
+          : [],
       });
       return;
     }
