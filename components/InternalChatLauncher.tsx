@@ -350,8 +350,13 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
       setUnreadCount(nextUnreadCount);
       hasLoadedShellDataRef.current = true;
 
-      const preferredSelection = forceSelection ? null : selectedConversationKey;
-      if (!preferredSelection) {
+      const preferredSelection = forceSelection ? null : selectedConversationKeyRef.current;
+      const hasPreferredSelection = preferredSelection
+        ? conversationRows.some((item) => item.conversation_key === preferredSelection) ||
+          participantRows.some((participant) => buildDirectConversationKey(user.id, participant.id) === preferredSelection)
+        : false;
+
+      if (!hasPreferredSelection) {
         const unreadConversation = conversationRows.find((item) => item.unread_count > 0);
         const newestConversation = conversationRows[0];
         const firstParticipant = participantRows[0];
@@ -650,14 +655,14 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     setIsOpen(false);
   };
 
-  const handleSelectConversation = async (conversationKey: string) => {
+  const handleSelectConversation = (conversationKey: string) => {
     if (selectedConversationKeyRef.current && selectedConversationKeyRef.current !== conversationKey) {
       stopTyping(selectedConversationKeyRef.current);
     }
+    selectedConversationKeyRef.current = conversationKey;
     setSelectedConversationKey(conversationKey);
     setIsOpen(true);
     setIsMinimized(false);
-    await refreshConversationMessages(conversationKey, true);
   };
 
   const handleDraftChange = (value: string, cursorPosition: number) => {
