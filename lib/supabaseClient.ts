@@ -9,16 +9,59 @@ import {
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const localApiBaseUrl = String(import.meta.env.VITE_API_BASE_URL || '').trim();
+const isLocalApiMode = localApiBaseUrl !== '';
 export const shouldSeedMockData =
   import.meta.env.DEV === true || String(import.meta.env.VITE_SEED_MOCK_DATA || '').toLowerCase() === 'true';
 
-if (!supabaseUrl || !supabaseAnonKey) {
+if ((!supabaseUrl || !supabaseAnonKey) && !isLocalApiMode) {
   throw new Error(
     'Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.'
   );
 }
 
-const rawSupabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
+const effectiveSupabaseUrl = supabaseUrl || 'http://127.0.0.1:54321';
+const effectiveSupabaseAnonKey = supabaseAnonKey || 'local-api-mode-anon-key';
+
+const clearPersistedSupabaseAuth = () => {
+  if (typeof window === 'undefined') return;
+
+  const shouldRemoveKey = (key: string): boolean =>
+    key === 'supabase.auth.token' ||
+    /^sb-.*-auth-token$/.test(key) ||
+    key.startsWith('sb-') && key.includes('-auth-token');
+
+  for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
+    const key = window.localStorage.key(index);
+    if (key && shouldRemoveKey(key)) {
+      window.localStorage.removeItem(key);
+    }
+  }
+
+  for (let index = window.sessionStorage.length - 1; index >= 0; index -= 1) {
+    const key = window.sessionStorage.key(index);
+    if (key && shouldRemoveKey(key)) {
+      window.sessionStorage.removeItem(key);
+    }
+  }
+};
+
+if (isLocalApiMode) {
+  clearPersistedSupabaseAuth();
+}
+
+const rawSupabase = createClient<Database>(effectiveSupabaseUrl, effectiveSupabaseAnonKey, {
+  auth: {
+    persistSession: !isLocalApiMode,
+    autoRefreshToken: !isLocalApiMode,
+    detectSessionInUrl: !isLocalApiMode,
+    storageKey: isLocalApiMode ? 'supabase-auth-disabled-local-api-mode' : undefined,
+  },
+});
+
+if (isLocalApiMode && typeof rawSupabase.auth.stopAutoRefresh === 'function') {
+  rawSupabase.auth.stopAutoRefresh();
+}
 
 const toAuthUser = () => {
   const session = getLocalAuthSession();
