@@ -42,8 +42,8 @@ interface MentionContext {
 
 const INTERNAL_CHAT_REALTIME_ENABLED = true;
 const REACTION_OPTIONS = ['👍', '❤️', '😂', '😮', '😢', '👀'] as const;
-const TYPING_DEBOUNCE_MS = 350;
 const TYPING_IDLE_MS = 3000;
+const TYPING_KEEPALIVE_MS = 2500;
 
 const formatRelativeTime = (value?: string) => {
   if (!value) return '';
@@ -235,6 +235,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   const [isSending, setIsSending] = useState(false);
   const [reactionPendingIds, setReactionPendingIds] = useState<Record<string, boolean>>({});
   const messageViewportRef = useRef<HTMLDivElement | null>(null);
+  const messageBottomRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const selectedConversationKeyRef = useRef<string | null>(null);
   const latestShellRequestRef = useRef(0);
@@ -246,6 +247,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   const messageAbortControllerRef = useRef<AbortController | null>(null);
   const typingStartTimeoutRef = useRef<number | null>(null);
   const typingStopTimeoutRef = useRef<number | null>(null);
+  const typingKeepAliveTimeoutRef = useRef<number | null>(null);
   const activeTypingConversationKeyRef = useRef<string | null>(null);
 
   const clearTypingTimers = () => {
@@ -256,6 +258,10 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     if (typingStopTimeoutRef.current !== null) {
       window.clearTimeout(typingStopTimeoutRef.current);
       typingStopTimeoutRef.current = null;
+    }
+    if (typingKeepAliveTimeoutRef.current !== null) {
+      window.clearTimeout(typingKeepAliveTimeoutRef.current);
+      typingKeepAliveTimeoutRef.current = null;
     }
   };
 
@@ -283,6 +289,23 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     void pushTypingState(targetConversationKey, false);
   };
 
+  const scheduleTypingKeepAlive = (conversationKey: string) => {
+    if (!conversationKey) return;
+
+    if (typingKeepAliveTimeoutRef.current !== null) {
+      window.clearTimeout(typingKeepAliveTimeoutRef.current);
+    }
+
+    typingKeepAliveTimeoutRef.current = window.setTimeout(() => {
+      if (activeTypingConversationKeyRef.current !== conversationKey) {
+        return;
+      }
+
+      void pushTypingState(conversationKey, true);
+      scheduleTypingKeepAlive(conversationKey);
+    }, TYPING_KEEPALIVE_MS);
+  };
+
   const scheduleTypingUpdate = (nextDraft: string, conversationKey: string | null) => {
     if (!conversationKey || !selectedOtherParticipant) {
       stopTyping();
@@ -294,11 +317,33 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
       return;
     }
 
-    clearTypingTimers();
-    activeTypingConversationKeyRef.current = conversationKey;
-    typingStartTimeoutRef.current = window.setTimeout(() => {
+    const wasTypingInConversation = activeTypingConversationKeyRef.current === conversationKey;
+    if (!wasTypingInConversation) {
+      if (
+        activeTypingConversationKeyRef.current &&
+        activeTypingConversationKeyRef.current !== conversationKey
+      ) {
+        stopTyping(activeTypingConversationKeyRef.current);
+      }
+
+      clearTypingTimers();
+      activeTypingConversationKeyRef.current = conversationKey;
       void pushTypingState(conversationKey, true);
-    }, TYPING_DEBOUNCE_MS);
+    } else {
+      if (typingStartTimeoutRef.current !== null) {
+        window.clearTimeout(typingStartTimeoutRef.current);
+        typingStartTimeoutRef.current = null;
+      }
+      if (typingKeepAliveTimeoutRef.current !== null) {
+        window.clearTimeout(typingKeepAliveTimeoutRef.current);
+        typingKeepAliveTimeoutRef.current = null;
+      }
+      if (typingStopTimeoutRef.current !== null) {
+        window.clearTimeout(typingStopTimeoutRef.current);
+      }
+    }
+
+    scheduleTypingKeepAlive(conversationKey);
     typingStopTimeoutRef.current = window.setTimeout(() => {
       stopTyping(conversationKey);
     }, TYPING_IDLE_MS);
@@ -545,12 +590,6 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     }
   }, [isMinimized, isOpen]);
 
-  useEffect(() => {
-    if (!messageViewportRef.current || !selectedConversationKey) return;
-    const viewport = messageViewportRef.current;
-    viewport.scrollTop = viewport.scrollHeight;
-  }, [messagesByConversation, selectedConversationKey]);
-
   useEffect(() => () => {
     stopTyping();
     shellAbortControllerRef.current?.abort();
@@ -620,6 +659,21 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     .map((userId) => participantMap.get(userId)?.full_name?.trim() || `User ${userId}`)
     .filter(Boolean)
     .join(', ');
+
+  useEffect(() => {
+    if (!selectedConversationKey) return;
+    requestAnimationFrame(() => {
+      if (messageBottomRef.current) {
+        messageBottomRef.current.scrollIntoView({ block: 'end' });
+        return;
+      }
+
+      if (messageViewportRef.current) {
+        const viewport = messageViewportRef.current;
+        viewport.scrollTop = viewport.scrollHeight;
+      }
+    });
+  }, [selectedConversationKey, selectedMessages.length, selectedTypingUserIds.length]);
 
   const mentionSuggestions = useMemo(() => {
     if (!mentionContext) return [];
@@ -986,7 +1040,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
               </button>
             </div>
 
-            <div ref={messageViewportRef} className="flex-1 space-y-4 overflow-y-auto bg-slate-50/50 px-5 py-4">
+            <div ref={messageViewportRef} className="flex-1 space-y-4 overflow-y-auto bg-slate-50/50 px-5 py-4 pb-6">
               {!selectedConversationKey ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-10 text-center text-sm text-slate-500">
                   Select an account to start chatting.
@@ -1065,6 +1119,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
                   </div>
                 </div>
               )}
+              <div ref={messageBottomRef} aria-hidden="true" />
             </div>
 
             <div className="border-t border-slate-200 bg-white px-5 py-4">

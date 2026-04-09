@@ -1,0 +1,1 @@
+import{s}from"./index-CUh5RLpP.js";import"./inventoryLogService-B0c2-9UQ.js";const a=async e=>{try{const{error:r}=await s.from("sales_inquiries").update({is_deleted:!1,deleted_at:null}).eq("id",e);if(r)throw r;return!0}catch(r){return console.error("Error restoring sales inquiry:",r),!1}};export{a as restoreSalesInquiry};
