@@ -84,6 +84,7 @@ type LoadedFormSnapshot = {
 
 interface SalesInquiryViewProps {
   initialContactId?: string;
+  initialInquiryId?: string;
   initialPrefillToken?: string;
 }
 
@@ -98,7 +99,7 @@ const inquiryListColumnWidths = [
 ];
 const SALES_INQUIRY_TAB_ID = 'sales-transaction-sales-inquiry';
 
-const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, initialPrefillToken }) => {
+const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, initialInquiryId, initialPrefillToken }) => {
   const { addToast } = useToast();
   const lastAppliedPrefillRef = React.useRef<string | null>(null);
   // Data
@@ -640,6 +641,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
 
   useEffect(() => {
     if (!initialContactId) return;
+    if (initialInquiryId) return;
 
     const prefillKey = `${initialPrefillToken || 'default'}:${initialContactId}`;
     if (lastAppliedPrefillRef.current === prefillKey) return;
@@ -652,7 +654,48 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     resetFormForNew();
     handleCustomerSelect(customer);
     lastAppliedPrefillRef.current = prefillKey;
-  }, [customers, handleCustomerSelect, initialContactId, initialPrefillToken, resetFormForNew]);
+  }, [customers, handleCustomerSelect, initialContactId, initialInquiryId, initialPrefillToken, resetFormForNew]);
+
+  useEffect(() => {
+    if (!initialInquiryId) return;
+
+    const inquiryInList = inquiries.find((entry) => entry.id === initialInquiryId);
+    if (inquiryInList) {
+      const salesDate = inquiryInList.sales_date ? new Date(inquiryInList.sales_date) : null;
+      if (salesDate && !Number.isNaN(salesDate.getTime())) {
+        setFilterDay('');
+        setFilterMonth(String(salesDate.getMonth() + 1));
+        setFilterYear(String(salesDate.getFullYear()));
+      }
+      void selectInquiry(inquiryInList);
+      return;
+    }
+
+    let active = true;
+    getSalesInquiry(initialInquiryId)
+      .then((detail) => {
+        if (!active || !detail) return;
+
+        const salesDate = detail.sales_date ? new Date(detail.sales_date) : null;
+        if (salesDate && !Number.isNaN(salesDate.getTime())) {
+          setFilterDay('');
+          setFilterMonth(String(salesDate.getMonth() + 1));
+          setFilterYear(String(salesDate.getFullYear()));
+        }
+
+        setSelectedInquiry(detail);
+        setIsCreatingNew(false);
+        loadInquiryIntoForm(detail);
+        setInquiries((prev) => (prev.some((entry) => entry.id === detail.id) ? prev : [detail, ...prev].sort(sortByCreatedAt)));
+      })
+      .catch((err) => {
+        console.error('Failed loading initial sales inquiry detail:', err);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [initialInquiryId, inquiries, loadInquiryIntoForm, selectInquiry]);
 
   // Add new item row
   const addItemRow = () => {

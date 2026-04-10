@@ -522,6 +522,10 @@ const App: React.FC = () => {
                 moduleContext['sales-transaction-sales-inquiry']?.contactId ||
                 moduleContext.salesinquiry?.contactId
               }
+              initialInquiryId={
+                moduleContext['sales-transaction-sales-inquiry']?.inquiryId ||
+                moduleContext.salesinquiry?.inquiryId
+              }
               initialPrefillToken={
                 moduleContext['sales-transaction-sales-inquiry']?.prefillToken ||
                 moduleContext.salesinquiry?.prefillToken

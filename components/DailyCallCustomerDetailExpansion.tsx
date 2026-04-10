@@ -21,7 +21,7 @@ const tabs: Array<{
   label: string;
   icon: React.ComponentType<{ className?: string }>;
 }> = [
-  { id: 'sales', label: 'Sales Reports', icon: BarChart3 },
+  { id: 'sales', label: 'Sales Inquiry Reports', icon: BarChart3 },
   { id: 'incident', label: 'Incident Reports', icon: FileWarning },
   { id: 'returns', label: 'Sales Returns', icon: RotateCcw },
   { id: 'lbc-rto', label: 'LBC RTO', icon: Truck },
