@@ -36,13 +36,25 @@ export interface InternalChatMessage {
   is_read_by_recipient: boolean;
   reactions: InternalChatReactionSummary[];
   current_user_reaction: string | null;
+  reply_to_message_id: string | null;
+  reply_preview: InternalChatReplyPreview | null;
   is_pending?: boolean;
+}
+
+export interface InternalChatReplyPreview {
+  message_id: string;
+  sender_id: string;
+  sender_name: string;
+  message: string;
+  is_from_current_user: boolean;
+  is_available?: boolean;
 }
 
 export interface SendInternalChatMessageInput {
   message: string;
   recipientIds?: string[];
   conversationKey?: string;
+  replyToMessageId?: string;
 }
 
 export interface InternalChatRequestOptions {
@@ -181,6 +193,7 @@ export async function sendInternalChatMessage(input: SendInternalChatMessageInpu
       message: input.message,
       recipient_ids: input.recipientIds || [],
       conversation_key: input.conversationKey || undefined,
+      reply_to_message_id: input.replyToMessageId || undefined,
     }),
   });
   return Array.isArray(payload?.items) ? payload.items : [];

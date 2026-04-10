@@ -2,10 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ChevronDown,
+  CornerUpLeft,
   MessageSquare,
   Minus,
   Search,
   Send,
+  SmilePlus,
   X,
 } from 'lucide-react';
 import { UserProfile } from '../types';
@@ -40,10 +42,19 @@ interface MentionContext {
   query: string;
 }
 
+interface ComposerReplyTarget {
+  message_id: string;
+  sender_id: string;
+  sender_name: string;
+  message: string;
+  is_from_current_user: boolean;
+}
+
 const INTERNAL_CHAT_REALTIME_ENABLED = true;
 const REACTION_OPTIONS = ['👍', '❤️', '😂', '😮', '😢', '👀'] as const;
 const TYPING_IDLE_MS = 3000;
 const TYPING_KEEPALIVE_MS = 2500;
+const MESSAGE_HIGHLIGHT_MS = 1800;
 
 const formatRelativeTime = (value?: string) => {
   if (!value) return '';
@@ -62,6 +73,15 @@ const formatRelativeTime = (value?: string) => {
 
   return parsed.toLocaleDateString();
 };
+
+const truncateReplyText = (value: string, maxLength = 120) => {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+};
+
+const replySenderLabel = (replyPreview: Pick<ComposerReplyTarget, 'sender_name' | 'is_from_current_user'>) =>
+  replyPreview.is_from_current_user ? 'You' : replyPreview.sender_name?.trim() || 'Unknown User';
 
 const participantLabel = (participant: InternalChatParticipant) =>
   participant.full_name?.trim() || participant.email?.trim() || `User ${participant.id}`;
@@ -230,12 +250,18 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   const [draft, setDraft] = useState('');
   const [mentionSelections, setMentionSelections] = useState<Record<string, string>>({});
   const [mentionContext, setMentionContext] = useState<MentionContext | null>(null);
+  const [openMessageActionId, setOpenMessageActionId] = useState<string | null>(null);
+  const [openReactionPickerId, setOpenReactionPickerId] = useState<string | null>(null);
+  const [replyTarget, setReplyTarget] = useState<ComposerReplyTarget | null>(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [reactionPendingIds, setReactionPendingIds] = useState<Record<string, boolean>>({});
   const messageViewportRef = useRef<HTMLDivElement | null>(null);
   const messageBottomRef = useRef<HTMLDivElement | null>(null);
+  const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const messageActionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const selectedConversationKeyRef = useRef<string | null>(null);
   const latestShellRequestRef = useRef(0);
@@ -249,6 +275,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   const typingStopTimeoutRef = useRef<number | null>(null);
   const typingKeepAliveTimeoutRef = useRef<number | null>(null);
   const activeTypingConversationKeyRef = useRef<string | null>(null);
+  const highlightTimeoutRef = useRef<number | null>(null);
 
   const clearTypingTimers = () => {
     if (typingStartTimeoutRef.current !== null) {
@@ -660,6 +687,60 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     .filter(Boolean)
     .join(', ');
 
+  const setMessageRef = (messageId: string, node: HTMLDivElement | null) => {
+    if (node) {
+      messageRefs.current[messageId] = node;
+      return;
+    }
+
+    delete messageRefs.current[messageId];
+  };
+
+  const setMessageActionRef = (messageId: string, node: HTMLDivElement | null) => {
+    if (node) {
+      messageActionRefs.current[messageId] = node;
+      return;
+    }
+
+    delete messageActionRefs.current[messageId];
+  };
+
+  const enterReplyMode = (message: InternalChatMessage) => {
+    setReplyTarget({
+      message_id: message.id,
+      sender_id: message.sender_id,
+      sender_name: message.sender_name,
+      message: message.message,
+      is_from_current_user: message.is_from_current_user,
+    });
+    setOpenMessageActionId(null);
+    setOpenReactionPickerId(null);
+
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+    });
+  };
+
+  const jumpToOriginalMessage = (messageId: string) => {
+    const target = messageRefs.current[messageId];
+    if (!target) return;
+
+    target.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+    });
+    setHighlightedMessageId(messageId);
+
+    if (highlightTimeoutRef.current !== null) {
+      window.clearTimeout(highlightTimeoutRef.current);
+    }
+
+    highlightTimeoutRef.current = window.setTimeout(() => {
+      setHighlightedMessageId((current) => (current === messageId ? null : current));
+      highlightTimeoutRef.current = null;
+    }, MESSAGE_HIGHLIGHT_MS);
+  };
+
   useEffect(() => {
     if (!selectedConversationKey) return;
     requestAnimationFrame(() => {
@@ -674,6 +755,65 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
       }
     });
   }, [selectedConversationKey, selectedMessages.length, selectedTypingUserIds.length]);
+
+  useEffect(() => {
+    setOpenMessageActionId(null);
+    setOpenReactionPickerId(null);
+    setReplyTarget(null);
+  }, [selectedConversationKey]);
+
+  useEffect(() => {
+    if (!replyTarget) return;
+
+    const activeMentionRecipientIds = Object.entries(mentionSelections)
+      .filter(([, token]) => token && draft.includes(token))
+      .map(([participantId]) => participantId)
+      .filter((participantId) => participantId !== selectedOtherParticipant?.id);
+
+    if (activeMentionRecipientIds.length > 0) {
+      setReplyTarget(null);
+    }
+  }, [draft, mentionSelections, replyTarget, selectedOtherParticipant]);
+
+  useEffect(() => {
+    if (!openMessageActionId || typeof document === 'undefined') return;
+
+    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
+      const container = messageActionRefs.current[openMessageActionId];
+      if (!container) {
+        setOpenMessageActionId(null);
+        setOpenReactionPickerId(null);
+        return;
+      }
+
+      if (event.target instanceof Node && container.contains(event.target)) {
+        return;
+      }
+
+      setOpenMessageActionId(null);
+      setOpenReactionPickerId(null);
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+    };
+  }, [openMessageActionId]);
+
+  useEffect(() => () => {
+    if (highlightTimeoutRef.current !== null) {
+      window.clearTimeout(highlightTimeoutRef.current);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!openMessageActionId) {
+      setOpenReactionPickerId(null);
+    }
+  }, [openMessageActionId]);
 
   const mentionSuggestions = useMemo(() => {
     if (!mentionContext) return [];
@@ -713,6 +853,9 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     if (selectedConversationKeyRef.current && selectedConversationKeyRef.current !== conversationKey) {
       stopTyping(selectedConversationKeyRef.current);
     }
+    setOpenMessageActionId(null);
+    setOpenReactionPickerId(null);
+    setReplyTarget(null);
     selectedConversationKeyRef.current = conversationKey;
     setSelectedConversationKey(conversationKey);
     setIsOpen(true);
@@ -738,6 +881,9 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
       [participant.id]: token,
     }));
     setMentionContext(null);
+    if (replyTarget && participant.id !== selectedOtherParticipant?.id) {
+      setReplyTarget(null);
+    }
 
     requestAnimationFrame(() => {
       if (!textareaRef.current) return;
@@ -770,7 +916,19 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
       return;
     }
 
+    const canAttachReply =
+      Boolean(replyTarget) &&
+      Boolean(selectedConversationKey) &&
+      recipientIds.length === 1 &&
+      selectedOtherParticipant?.id === recipientIds[0];
+    const activeReplyTarget = canAttachReply ? replyTarget : null;
+    if (replyTarget && !activeReplyTarget) {
+      setReplyTarget(null);
+    }
+
     setIsSending(true);
+    setOpenMessageActionId(null);
+    setOpenReactionPickerId(null);
     const previousDraft = draft;
     const pendingCreatedAt = new Date().toISOString();
     const pendingMessages: InternalChatMessage[] = recipientIds.map((recipientId) => {
@@ -795,6 +953,13 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
         is_read_by_recipient: false,
         reactions: [],
         current_user_reaction: null,
+        reply_to_message_id: activeReplyTarget?.message_id ?? null,
+        reply_preview: activeReplyTarget
+          ? {
+              ...activeReplyTarget,
+              is_available: true,
+            }
+          : null,
         is_pending: true,
       };
     });
@@ -810,12 +975,14 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
         message: trimmedMessage,
         conversationKey: selectedConversationKey || undefined,
         recipientIds,
+        replyToMessageId: activeReplyTarget?.message_id,
       });
 
       setMessagesByConversation((prev) => {
         const withoutPending = removeConversationMessages(prev, pendingMessages.map((message) => message.id));
         return created.length > 0 ? mergeConversationMessages(withoutPending, created) : withoutPending;
       });
+      setReplyTarget(null);
 
       await loadShellData({ background: true });
 
@@ -835,8 +1002,17 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     }
   };
 
-  const handleToggleReaction = async (message: InternalChatMessage, emoji: string) => {
+  const handleToggleReaction = async (
+    message: InternalChatMessage,
+    emoji: string,
+    options?: { collapseAfter?: boolean }
+  ) => {
     if (!user || reactionPendingIds[message.id]) return;
+
+    if (options?.collapseAfter) {
+      setOpenMessageActionId(null);
+      setOpenReactionPickerId(null);
+    }
 
     const previousMessage = {
       reactions: [...(message.reactions || [])],
@@ -975,11 +1151,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
                       }`}
                     >
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-blue/10 text-xs font-semibold text-brand-blue">
-                        {participant.avatar_url ? (
-                          <img src={participant.avatar_url} alt={participantLabel(participant)} className="h-full w-full object-cover" />
-                        ) : (
-                          avatarFallback(participantLabel(participant))
-                        )}
+                        {avatarFallback(participantLabel(participant))}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
@@ -1009,15 +1181,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-brand-blue/10 text-sm font-semibold text-brand-blue">
-                  {selectedOtherParticipant?.avatar_url ? (
-                    <img
-                      src={selectedOtherParticipant.avatar_url}
-                      alt={selectedOtherParticipant ? participantLabel(selectedOtherParticipant) : 'Conversation'}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    avatarFallback(selectedOtherParticipant ? participantLabel(selectedOtherParticipant) : 'Chat')
-                  )}
+                  {avatarFallback(selectedOtherParticipant ? participantLabel(selectedOtherParticipant) : 'Chat')}
                 </div>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-slate-900">
@@ -1052,60 +1216,165 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
               ) : (
                 selectedMessages.map((message) => {
                   const isMine = message.is_from_current_user;
+                  const isActionOpen = openMessageActionId === message.id;
+                  const isHighlighted = highlightedMessageId === message.id;
+                  const replyPreview = message.reply_preview;
+                  const replyPreviewText =
+                    replyPreview?.is_available === false
+                      ? 'Original message unavailable'
+                      : truncateReplyText(replyPreview?.message || '');
+                  const isReactionPickerOpen = openReactionPickerId === message.id;
+
                   return (
-                    <div key={message.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
-                      <div className="max-w-[78%]">
-                        <div className={`rounded-2xl px-4 py-3 shadow-sm ${isMine ? 'bg-brand-blue text-white' : 'bg-white text-slate-900 border border-slate-200'}`}>
-                          <div className="mb-1 flex items-center gap-2 text-[11px] opacity-80">
-                            <span className="font-semibold">{isMine ? 'You' : message.sender_name}</span>
-                            <span>{formatRelativeTime(message.created_at)}</span>
+                    <div
+                      key={message.id}
+                      ref={(node) => setMessageRef(message.id, node)}
+                      className={`group flex scroll-mt-24 transition-all duration-300 ${isMine ? 'justify-end' : 'justify-start'} ${
+                        isHighlighted ? 'animate-pulse rounded-3xl ring-2 ring-brand-blue/30 ring-offset-2 ring-offset-slate-50' : ''
+                      }`}
+                    >
+                      <div
+                        ref={(node) => setMessageActionRef(message.id, node)}
+                        className="relative w-fit max-w-[78%]"
+                      >
+                        <div
+                          className={`absolute top-1/2 z-10 -translate-y-1/2 items-center gap-1 transition ${
+                            isMine ? 'right-full mr-3' : 'left-full ml-3'
+                          } ${
+                            isActionOpen
+                              ? 'flex opacity-100'
+                              : 'pointer-events-none flex opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100'
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setOpenMessageActionId(message.id);
+                              setOpenReactionPickerId((current) => (current === message.id ? null : message.id));
+                            }}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm ring-1 ring-slate-200 transition hover:text-brand-blue"
+                            aria-label={`React to message ${message.id}`}
+                          >
+                            <SmilePlus className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              enterReplyMode(message);
+                            }}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm ring-1 ring-slate-200 transition hover:text-brand-blue"
+                            aria-label={`Reply to message ${message.id}`}
+                          >
+                            <CornerUpLeft className="h-4 w-4" />
+                          </button>
+                        </div>
+                        <div>
+                          <div
+                            onClick={() => {
+                              setOpenMessageActionId((current) => (current === message.id ? null : message.id));
+                              setOpenReactionPickerId(null);
+                            }}
+                            className={`cursor-pointer rounded-2xl px-4 py-3 shadow-sm ${isMine ? 'bg-brand-blue text-white' : 'bg-white text-slate-900 border border-slate-200'}`}
+                          >
+                            <div className="mb-1 flex items-center gap-2 text-[11px] opacity-80">
+                              <span className="font-semibold">{isMine ? 'You' : message.sender_name}</span>
+                              <span>{formatRelativeTime(message.created_at)}</span>
+                            </div>
+                            {replyPreview && (
+                              <>
+                                {replyPreview.is_available === false ? (
+                                  <div
+                                    className={`mb-3 rounded-2xl border px-3 py-2 text-left ${
+                                      isMine
+                                        ? 'border-white/15 bg-white/10 text-white/85'
+                                        : 'border-slate-200 bg-slate-50 text-slate-600'
+                                    }`}
+                                  >
+                                    <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">Original message unavailable</p>
+                                    <p className="mt-1 break-words text-sm leading-relaxed [overflow-wrap:anywhere]">{replyPreviewText}</p>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      jumpToOriginalMessage(replyPreview.message_id);
+                                    }}
+                                    className={`mb-3 block w-full rounded-2xl border px-3 py-2 text-left transition ${
+                                      isMine
+                                        ? 'border-white/15 bg-white/10 text-white/90 hover:bg-white/15'
+                                        : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-brand-blue/30 hover:bg-white'
+                                    }`}
+                                  >
+                                    <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">
+                                      Replying to {replySenderLabel(replyPreview)}
+                                    </p>
+                                    <p className="mt-1 break-words text-sm leading-relaxed [overflow-wrap:anywhere]">{replyPreviewText}</p>
+                                  </button>
+                                )}
+                              </>
+                            )}
+                            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.message}</p>
                           </div>
-                          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.message}</p>
-                        </div>
-                        <div className={`mt-2 flex flex-wrap items-center gap-2 ${isMine ? 'justify-end' : 'justify-start'}`}>
-                          {message.reactions.length > 0 && (
-                            <>
-                              {message.reactions.map((reaction) => (
-                                <button
-                                  key={`${message.id}:${reaction.emoji}`}
-                                  onClick={() => void handleToggleReaction(message, reaction.emoji)}
-                                  disabled={Boolean(reactionPendingIds[message.id])}
-                                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] transition ${
-                                    reaction.reacted_by_current_user
-                                      ? 'border-brand-blue bg-brand-blue/10 text-brand-blue'
-                                      : 'border-slate-200 bg-white text-slate-600 hover:border-brand-blue/30 hover:text-brand-blue'
-                                  } disabled:cursor-not-allowed disabled:opacity-60`}
-                                >
-                                  <span>{reaction.emoji}</span>
-                                  <span>{reaction.count}</span>
-                                </button>
-                              ))}
-                            </>
+                          {isActionOpen && isReactionPickerOpen && (
+                            <div className={`mt-2 flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+                              <div className="inline-flex flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 shadow-lg shadow-slate-900/10">
+                                {REACTION_OPTIONS.map((emoji) => (
+                                  <button
+                                    key={`${message.id}:picker:${emoji}`}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      void handleToggleReaction(message, emoji, { collapseAfter: true });
+                                    }}
+                                    disabled={Boolean(reactionPendingIds[message.id])}
+                                    className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-sm transition ${
+                                      message.current_user_reaction === emoji
+                                        ? 'bg-brand-blue/10'
+                                        : 'hover:bg-slate-100'
+                                    } disabled:cursor-not-allowed disabled:opacity-50`}
+                                    aria-label={`React with ${emoji}`}
+                                    title={`React with ${emoji}`}
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
                           )}
-                          {REACTION_OPTIONS.map((emoji) => (
-                            <button
-                              key={`${message.id}:picker:${emoji}`}
-                              onClick={() => void handleToggleReaction(message, emoji)}
-                              disabled={Boolean(reactionPendingIds[message.id])}
-                              className={`inline-flex h-7 w-7 items-center justify-center rounded-full border text-sm transition ${
-                                message.current_user_reaction === emoji
-                                  ? 'border-brand-blue bg-brand-blue/10'
-                                  : 'border-transparent bg-slate-100 hover:border-slate-200 hover:bg-white'
-                              } disabled:cursor-not-allowed disabled:opacity-50`}
-                              aria-label={`React with ${emoji}`}
-                              title={`React with ${emoji}`}
-                            >
-                              {emoji}
-                            </button>
-                          ))}
-                        </div>
-                        <div className={`mt-1 flex items-center gap-2 text-[11px] text-slate-400 ${isMine ? 'justify-end' : 'justify-start'}`}>
-                          {isMine && (
-                            <span className={message.delivery_status === 'read' && !message.is_pending ? 'text-brand-blue' : ''}>
-                              {formatDeliveryStatus(message)}
-                            </span>
-                          )}
-                          {Boolean(reactionPendingIds[message.id]) && <span>Updating reaction...</span>}
+                          <div className={`mt-2 flex flex-wrap items-center gap-2 ${isMine ? 'justify-end' : 'justify-start'}`}>
+                            {message.reactions.length > 0 && (
+                              <>
+                                {message.reactions.map((reaction) => (
+                                  <button
+                                    key={`${message.id}:${reaction.emoji}`}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      void handleToggleReaction(message, reaction.emoji);
+                                    }}
+                                    disabled={Boolean(reactionPendingIds[message.id])}
+                                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] transition ${
+                                      reaction.reacted_by_current_user
+                                        ? 'border-brand-blue bg-brand-blue/10 text-brand-blue'
+                                        : 'border-slate-200 bg-white text-slate-600 hover:border-brand-blue/30 hover:text-brand-blue'
+                                    } disabled:cursor-not-allowed disabled:opacity-60`}
+                                  >
+                                    <span>{reaction.emoji}</span>
+                                    <span>{reaction.count}</span>
+                                  </button>
+                                ))}
+                              </>
+                            )}
+                          </div>
+                          <div className={`mt-1 flex items-center gap-2 text-[11px] text-slate-400 ${isMine ? 'justify-end' : 'justify-start'}`}>
+                            {isMine && (
+                              <span className={message.delivery_status === 'read' && !message.is_pending ? 'text-brand-blue' : ''}>
+                                {formatDeliveryStatus(message)}
+                              </span>
+                            )}
+                            {Boolean(reactionPendingIds[message.id]) && <span>Updating reaction...</span>}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1123,6 +1392,24 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
             </div>
 
             <div className="border-t border-slate-200 bg-white px-5 py-4">
+              {replyTarget && (
+                <div className="mb-3 flex items-start justify-between gap-3 rounded-2xl border border-brand-blue/20 bg-brand-blue/5 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-blue">
+                      Replying to {replySenderLabel(replyTarget)}
+                    </p>
+                    <p className="mt-1 break-words text-sm text-slate-600 [overflow-wrap:anywhere]">{truncateReplyText(replyTarget.message)}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setReplyTarget(null)}
+                    className="rounded-full p-1 text-slate-400 transition hover:bg-white hover:text-slate-700"
+                    aria-label="Dismiss reply"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
               <div className="relative">
                 <textarea
                   ref={textareaRef}
@@ -1161,11 +1448,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
                           className="flex w-full items-start gap-3 px-3 py-2 text-left transition hover:bg-slate-50"
                         >
                           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-blue/10 text-xs font-semibold text-brand-blue">
-                            {participant.avatar_url ? (
-                              <img src={participant.avatar_url} alt={participantLabel(participant)} className="h-full w-full rounded-full object-cover" />
-                            ) : (
-                              avatarFallback(participantLabel(participant))
-                            )}
+                            {avatarFallback(participantLabel(participant))}
                           </div>
                           <div className="min-w-0">
                             <p className="truncate text-sm font-medium text-slate-900">{participantLabel(participant)}</p>

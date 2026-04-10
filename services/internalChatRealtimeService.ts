@@ -115,7 +115,14 @@ export const openInternalChatRealtimeStream = (
     }
 
     if (payload.type === 'message.created' && payload.message) {
-      onEvent(payload);
+      onEvent({
+        ...payload,
+        message: {
+          ...payload.message,
+          reply_to_message_id: payload.message.reply_to_message_id ?? null,
+          reply_preview: payload.message.reply_preview ?? null,
+        },
+      });
       return;
     }
 

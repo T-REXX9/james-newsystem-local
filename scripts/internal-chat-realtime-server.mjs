@@ -205,6 +205,8 @@ const broadcastInternalChatEvent = (payload) => {
         is_read_by_recipient: Boolean(item?.is_read_by_recipient),
         reactions: Array.isArray(item?.reactions) ? item.reactions : [],
         current_user_reaction: item?.current_user_reaction ?? null,
+        reply_to_message_id: item?.reply_to_message_id ?? null,
+        reply_preview: item?.reply_preview ?? null,
       };
 
       emitToUser(message.sender_id, { type: 'message.created', message });

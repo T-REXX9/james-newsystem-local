@@ -76,6 +76,15 @@ describe('internalChatRealtimeService', () => {
         recipient_name: 'Sales Agent',
         sender_avatar_url: '',
         recipient_avatar_url: '',
+        reply_to_message_id: '8',
+        reply_preview: {
+          message_id: '8',
+          sender_id: '2',
+          sender_name: 'Sales Agent',
+          message: 'Previous message',
+          is_from_current_user: false,
+          is_available: true,
+        },
       },
     });
 
@@ -85,6 +94,11 @@ describe('internalChatRealtimeService', () => {
         message: expect.objectContaining({
           id: '10',
           message: 'hello',
+          reply_to_message_id: '8',
+          reply_preview: expect.objectContaining({
+            message_id: '8',
+            message: 'Previous message',
+          }),
         }),
       })
     );
