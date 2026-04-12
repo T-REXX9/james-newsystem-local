@@ -38,6 +38,7 @@ describe('internalChatLocalApiService', () => {
             {
               id: '11',
               conversation_key: 'dm:73:74',
+              conversation_type: 'direct',
               sender_id: '73',
               recipient_id: '74',
               message: 'Replying now',

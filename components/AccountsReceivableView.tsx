@@ -7,9 +7,7 @@ import {
   ArResponse,
   ArRow,
 } from '../services/accountsReceivableService';
-import SearchableFilterSelect from './SearchableFilterSelect';
-import { getCustomerList } from '../services/salesReportService';
-import { CustomerOption } from '../types';
+import { LedgerCustomer, customerLedgerService } from '../services/customerLedgerService';
 import { BUTTON_BASE, BUTTON_PRIMARY } from '../utils/uiConstants';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
@@ -59,7 +57,10 @@ const flattenRows = (report: ArResponse | null): Array<ArRow & { customer: strin
 
 const AccountsReceivableView: React.FC = () => {
   const [selectedCustomer, setSelectedCustomer] = useState('');
-  const [customers, setCustomers] = useState<CustomerOption[]>([]);
+  const [customers, setCustomers] = useState<LedgerCustomer[]>([]);
+  const [selectedCustomerOption, setSelectedCustomerOption] = useState<LedgerCustomer | null>(null);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [debouncedCustomerSearch, setDebouncedCustomerSearch] = useState('');
   const [customersLoading, setCustomersLoading] = useState(true);
   const [debtType, setDebtType] = useState<ArDebtType>('All');
   const [dateType, setDateType] = useState<ArDateType>('all');
@@ -70,17 +71,42 @@ const AccountsReceivableView: React.FC = () => {
   const [report, setReport] = useState<ArResponse | null>(null);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedCustomerSearch(customerSearch.trim()), 220);
+    return () => window.clearTimeout(timer);
+  }, [customerSearch]);
+
+  useEffect(() => {
+    let active = true;
+
     const loadCustomers = async () => {
       setCustomersLoading(true);
       try {
-        setCustomers(await getCustomerList());
+        const rows = await customerLedgerService.getCustomers(debouncedCustomerSearch);
+        if (!active) return;
+
+        setCustomers(rows);
+        if (selectedCustomer) {
+          const matchedCustomer = rows.find((customer) => customer.sessionId === selectedCustomer) || null;
+          if (matchedCustomer) {
+            setSelectedCustomerOption(matchedCustomer);
+          }
+        }
+      } catch {
+        if (!active) return;
+        setCustomers([]);
       } finally {
-        setCustomersLoading(false);
+        if (active) {
+          setCustomersLoading(false);
+        }
       }
     };
 
     loadCustomers();
-  }, []);
+
+    return () => {
+      active = false;
+    };
+  }, [debouncedCustomerSearch, selectedCustomer]);
 
   const generate = async () => {
     if (dateType === 'custom' && (!dateFrom || !dateTo)) {
@@ -111,20 +137,19 @@ const AccountsReceivableView: React.FC = () => {
     generate();
   }, []);
 
-  const customerOptions = useMemo(
-    () =>
-      customers.map((customer) => ({
-        value: customer.id,
-        label: customer.company,
-        keywords: [customer.company, customer.id],
-      })),
-    [customers]
-  );
+  const customerOptions = useMemo(() => {
+    if (!selectedCustomerOption || customers.some((customer) => customer.sessionId === selectedCustomerOption.sessionId)) {
+      return customers;
+    }
+
+    return [selectedCustomerOption, ...customers].sort((a, b) => a.company.localeCompare(b.company));
+  }, [customers, selectedCustomerOption]);
   const flattenedRows = useMemo(() => flattenRows(report), [report]);
   const isSingleCustomer = !!selectedCustomer;
   const selectedCustomerName = useMemo(() => {
-    return customers.find((customer) => customer.id === selectedCustomer)?.company || '';
-  }, [customers, selectedCustomer]);
+    if (!selectedCustomer) return '';
+    return customerOptions.find((customer) => customer.sessionId === selectedCustomer)?.company || selectedCustomerOption?.company || '';
+  }, [customerOptions, selectedCustomer, selectedCustomerOption]);
 
   return (
     <div className="h-full bg-slate-100 dark:bg-slate-950 p-4">
@@ -138,20 +163,43 @@ const AccountsReceivableView: React.FC = () => {
 
             <label className="block text-sm text-slate-600 dark:text-slate-300">
               Customer
-              <div className="mt-1">
+              <div className="mt-1 space-y-2">
+                <input
+                  type="text"
+                  value={customerSearch}
+                  onChange={(e) => setCustomerSearch(e.target.value)}
+                  placeholder="Search customer..."
+                  className={INPUT_CLASS}
+                />
                 {customersLoading ? (
                   <div className="flex items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Loading customers...
                   </div>
                 ) : (
-                  <SearchableFilterSelect
-                    value={selectedCustomer || undefined}
-                    options={customerOptions}
-                    placeholder="Search customer..."
-                    allLabel="All Customers"
-                    onChange={(value) => setSelectedCustomer(value || '')}
-                  />
+                  <select
+                    value={selectedCustomer}
+                    onChange={(e) => {
+                      const nextCustomerId = e.target.value;
+                      setSelectedCustomer(nextCustomerId);
+
+                      if (!nextCustomerId) {
+                        setSelectedCustomerOption(null);
+                        return;
+                      }
+
+                      const matchedCustomer = customerOptions.find((customer) => customer.sessionId === nextCustomerId) || null;
+                      setSelectedCustomerOption(matchedCustomer);
+                    }}
+                    className={INPUT_CLASS}
+                  >
+                    <option value="">All Customers</option>
+                    {customerOptions.map((customer) => (
+                      <option key={customer.sessionId} value={customer.sessionId}>
+                        {customer.company || customer.customerCode || customer.sessionId}
+                      </option>
+                    ))}
+                  </select>
                 )}
               </div>
             </label>

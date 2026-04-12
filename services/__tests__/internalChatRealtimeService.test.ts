@@ -67,6 +67,7 @@ describe('internalChatRealtimeService', () => {
       message: {
         id: '10',
         conversation_key: 'dm:1:2',
+        conversation_type: 'direct',
         sender_id: '1',
         recipient_id: '2',
         message: 'hello',

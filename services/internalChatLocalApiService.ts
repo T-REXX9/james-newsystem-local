@@ -12,17 +12,40 @@ export interface InternalChatParticipant {
   is_owner: boolean;
 }
 
+export type InternalChatConversationType = 'direct' | 'group';
+
 export interface InternalChatConversationSummary {
   conversation_key: string;
-  other_participant: InternalChatParticipant;
+  conversation_type: InternalChatConversationType;
+  title: string;
+  subtitle: string;
+  avatar_label: string;
+  member_count: number;
+  can_manage: boolean;
+  other_participant: InternalChatParticipant | null;
   last_message_preview: string;
   last_message_at: string;
   unread_count: number;
 }
 
+export interface InternalChatGroupDetail {
+  id: string;
+  conversation_key: string;
+  conversation_type: 'group';
+  name: string;
+  title: string;
+  subtitle: string;
+  avatar_label: string;
+  member_count: number;
+  created_by_user_id: string;
+  can_manage: boolean;
+  members: InternalChatParticipant[];
+}
+
 export interface InternalChatMessage {
   id: string;
   conversation_key: string;
+  conversation_type: InternalChatConversationType;
   sender_id: string;
   recipient_id: string;
   message: string;
@@ -38,6 +61,7 @@ export interface InternalChatMessage {
   current_user_reaction: string | null;
   reply_to_message_id: string | null;
   reply_preview: InternalChatReplyPreview | null;
+  target_user_ids?: string[];
   is_pending?: boolean;
 }
 
@@ -152,6 +176,45 @@ export async function fetchInternalChatConversations(options?: InternalChatReque
     signal: options?.signal,
   });
   return Array.isArray(payload?.items) ? payload.items : [];
+}
+
+export async function createInternalChatGroup(name: string, memberIds: string[]): Promise<InternalChatGroupDetail> {
+  return await requestJson<InternalChatGroupDetail>(`${API_BASE_URL}/internal-chat/groups`, {
+    method: 'POST',
+    body: JSON.stringify({
+      name,
+      member_ids: memberIds,
+    }),
+  });
+}
+
+export async function fetchInternalChatGroup(groupId: string, options?: InternalChatRequestOptions): Promise<InternalChatGroupDetail> {
+  return await requestJson<InternalChatGroupDetail>(`${API_BASE_URL}/internal-chat/groups/${encodeURIComponent(groupId)}`, {
+    signal: options?.signal,
+  });
+}
+
+export async function renameInternalChatGroup(groupId: string, name: string): Promise<InternalChatGroupDetail> {
+  return await requestJson<InternalChatGroupDetail>(`${API_BASE_URL}/internal-chat/groups/${encodeURIComponent(groupId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function addInternalChatGroupMembers(groupId: string, memberIds: string[]): Promise<InternalChatGroupDetail> {
+  return await requestJson<InternalChatGroupDetail>(`${API_BASE_URL}/internal-chat/groups/${encodeURIComponent(groupId)}/members`, {
+    method: 'POST',
+    body: JSON.stringify({ member_ids: memberIds }),
+  });
+}
+
+export async function removeInternalChatGroupMember(groupId: string, userId: string): Promise<InternalChatGroupDetail> {
+  return await requestJson<InternalChatGroupDetail>(
+    `${API_BASE_URL}/internal-chat/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(userId)}`,
+    {
+      method: 'DELETE',
+    }
+  );
 }
 
 export async function fetchInternalChatMessages(

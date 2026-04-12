@@ -6,23 +6,32 @@ import {
   Loader2,
   MessageSquare,
   Minus,
+  Plus,
   Search,
   Send,
   SmilePlus,
+  Users,
   X,
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import {
   buildDirectConversationKey,
+  createInternalChatGroup,
+  fetchInternalChatGroup,
   fetchInternalChatConversations,
   fetchInternalChatMessages,
   fetchInternalChatParticipants,
   fetchInternalChatTypingState,
   fetchInternalChatUnreadCount,
+  type InternalChatConversationType,
   InternalChatConversationSummary,
+  type InternalChatGroupDetail,
   InternalChatMessage,
   InternalChatParticipant,
   markInternalChatConversationRead,
+  addInternalChatGroupMembers,
+  removeInternalChatGroupMember,
+  renameInternalChatGroup,
   sendInternalChatMessage,
   toggleInternalChatReaction,
   updateInternalChatTyping,
@@ -61,6 +70,25 @@ interface ComposerReplyTarget {
 interface DraftEntityMentionSelection {
   displayToken: string;
   encodedToken: string;
+}
+
+interface GroupComposerState {
+  name: string;
+  selectedMemberIds: string[];
+}
+
+interface SidebarRow {
+  key: string;
+  conversationKey: string;
+  kind: 'conversation' | 'participant';
+  title: string;
+  subtitle: string;
+  preview: string;
+  avatarLabel: string;
+  unreadCount: number;
+  timestamp: string;
+  conversation: InternalChatConversationSummary | null;
+  participant: InternalChatParticipant | null;
 }
 
 type MentionSuggestion =
@@ -115,6 +143,11 @@ const avatarFallback = (name: string) => {
   if (!trimmed) return 'U';
   const tokens = trimmed.split(/\s+/).filter(Boolean);
   return tokens.slice(0, 2).map((token) => token[0]?.toUpperCase() || '').join('') || 'U';
+};
+
+const parseGroupConversationId = (conversationKey: string | null | undefined): string | null => {
+  const match = String(conversationKey || '').trim().match(/^grp:(\d+)$/);
+  return match ? match[1] : null;
 };
 
 const compareMessages = (left: InternalChatMessage, right: InternalChatMessage) => {
@@ -352,6 +385,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   const [unreadCount, setUnreadCount] = useState(0);
   const [participants, setParticipants] = useState<InternalChatParticipant[]>([]);
   const [conversations, setConversations] = useState<InternalChatConversationSummary[]>([]);
+  const [groupDetailsById, setGroupDetailsById] = useState<Record<string, InternalChatGroupDetail>>({});
   const [selectedConversationKey, setSelectedConversationKey] = useState<string | null>(null);
   const [messagesByConversation, setMessagesByConversation] = useState<Record<string, InternalChatMessage[]>>({});
   const [typingByConversation, setTypingByConversation] = useState<Record<string, string[]>>({});
@@ -368,6 +402,13 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [showManageGroupModal, setShowManageGroupModal] = useState(false);
+  const [groupComposerState, setGroupComposerState] = useState<GroupComposerState>({
+    name: '',
+    selectedMemberIds: [],
+  });
+  const [isSavingGroup, setIsSavingGroup] = useState(false);
   const [reactionPendingIds, setReactionPendingIds] = useState<Record<string, boolean>>({});
   const messageViewportRef = useRef<HTMLDivElement | null>(null);
   const messageBottomRef = useRef<HTMLDivElement | null>(null);
@@ -481,7 +522,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   };
 
   const scheduleTypingUpdate = (nextDraft: string, conversationKey: string | null) => {
-    if (!conversationKey || !selectedOtherParticipant) {
+    if (!conversationKey) {
       stopTyping();
       return;
     }
@@ -566,6 +607,13 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
 
       setParticipants(participantRows);
       setConversations(conversationRows);
+      setGroupDetailsById((prev) =>
+        Object.fromEntries(
+          Object.entries(prev).filter(([groupId]) =>
+            conversationRows.some((conversation) => conversation.conversation_key === `grp:${groupId}`)
+          )
+        )
+      );
       setUnreadCount(nextUnreadCount);
       hasLoadedShellDataRef.current = true;
 
@@ -665,6 +713,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
       stopTyping();
       setParticipants([]);
       setConversations([]);
+      setGroupDetailsById({});
       setSelectedConversationKey(null);
       setMessagesByConversation({});
       setTypingByConversation({});
@@ -709,6 +758,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
 
         const incomingMessage: InternalChatMessage = {
           ...event.message,
+          conversation_type: event.message.conversation_type || 'direct',
           is_from_current_user: event.message.sender_id === user.id,
         };
 
@@ -778,58 +828,142 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     const map = new Map<string, InternalChatParticipant>();
     participants.forEach((participant) => map.set(participant.id, participant));
     conversations.forEach((conversation) => {
-      map.set(conversation.other_participant.id, conversation.other_participant);
+      if (conversation.other_participant) {
+        map.set(conversation.other_participant.id, conversation.other_participant);
+      }
+    });
+    Object.values(groupDetailsById).forEach((group) => {
+      group.members.forEach((member) => map.set(member.id, member));
     });
     return map;
-  }, [participants, conversations]);
+  }, [participants, conversations, groupDetailsById]);
 
   const selectedConversation = useMemo(
     () => conversations.find((item) => item.conversation_key === selectedConversationKey) || null,
     [conversations, selectedConversationKey]
   );
 
+  const selectedGroupId = useMemo(
+    () => parseGroupConversationId(selectedConversationKey),
+    [selectedConversationKey]
+  );
+
+  const selectedGroupDetail = useMemo(
+    () => (selectedGroupId ? groupDetailsById[selectedGroupId] || null : null),
+    [groupDetailsById, selectedGroupId]
+  );
+
+  useEffect(() => {
+    if (!isOpen || isMinimized || !selectedGroupId) return;
+    if (groupDetailsById[selectedGroupId]) return;
+
+    void loadGroupDetail(selectedGroupId).catch(() => {
+      // Group details are best-effort and can be retried from the manage flow.
+    });
+  }, [groupDetailsById, isMinimized, isOpen, selectedGroupId]);
+
   const selectedOtherParticipant = useMemo(() => {
     if (!user || !selectedConversationKey) return null;
-    if (selectedConversation) return selectedConversation.other_participant;
+    if (selectedConversation?.conversation_type === 'group') return null;
+    if (selectedConversation?.other_participant) return selectedConversation.other_participant;
 
     const ids = selectedConversationKey.split(':').slice(1);
     const otherId = ids.find((id) => id !== user.id);
     return otherId ? participantMap.get(otherId) || null : null;
   }, [participantMap, selectedConversation, selectedConversationKey, user]);
 
-  const filteredParticipants = useMemo(() => {
+  const sidebarRows = useMemo(() => {
     const needle = searchQuery.trim().toLowerCase();
-    const enriched = participants.map((participant) => {
-      const conversationKey = user ? buildDirectConversationKey(user.id, participant.id) : '';
-      const summary = conversations.find((item) => item.conversation_key === conversationKey) || null;
-      return {
-        participant,
-        conversationKey,
-        summary,
-      };
-    });
+    const directConversationKeys = new Set(
+      conversations
+        .filter((conversation) => conversation.conversation_type === 'direct')
+        .map((conversation) => conversation.conversation_key)
+    );
 
-    const matches = enriched.filter(({ participant }) => {
-      if (!needle) return true;
-      return (
-        participantLabel(participant).toLowerCase().includes(needle) ||
-        participant.email.toLowerCase().includes(needle) ||
-        participant.role.toLowerCase().includes(needle)
-      );
-    });
+    const conversationRows: SidebarRow[] = conversations
+      .filter((conversation) => {
+        if (!needle) return true;
 
-    return matches.sort((left, right) => {
-      const leftUnread = left.summary?.unread_count || 0;
-      const rightUnread = right.summary?.unread_count || 0;
-      if (leftUnread !== rightUnread) return rightUnread - leftUnread;
+        return (
+          conversation.title.toLowerCase().includes(needle) ||
+          conversation.subtitle.toLowerCase().includes(needle) ||
+          extractPlainTextFromChatMessage(conversation.last_message_preview || '').toLowerCase().includes(needle)
+        );
+      })
+      .map((conversation) => ({
+        key: `conversation:${conversation.conversation_key}`,
+        conversationKey: conversation.conversation_key,
+        kind: 'conversation',
+        title: conversation.title,
+        subtitle: conversation.subtitle,
+        preview:
+          extractPlainTextFromChatMessage(conversation.last_message_preview || '') ||
+          (conversation.conversation_type === 'group'
+            ? `Start chatting in ${conversation.title}`
+            : `Start a chat with ${conversation.title}`),
+        avatarLabel:
+          conversation.avatar_label ||
+          avatarFallback(conversation.title || conversation.other_participant?.full_name || 'Chat'),
+        unreadCount: conversation.unread_count || 0,
+        timestamp: conversation.last_message_at || '',
+        conversation,
+        participant: conversation.other_participant || null,
+      }));
 
-      const leftTimestamp = left.summary?.last_message_at ? Date.parse(left.summary.last_message_at) : 0;
-      const rightTimestamp = right.summary?.last_message_at ? Date.parse(right.summary.last_message_at) : 0;
-      if (leftTimestamp !== rightTimestamp) return rightTimestamp - leftTimestamp;
+    const participantRows: SidebarRow[] = participants
+      .map((participant) => {
+        const conversationKey = user ? buildDirectConversationKey(user.id, participant.id) : '';
+        if (directConversationKeys.has(conversationKey)) {
+          return null;
+        }
 
-      return participantLabel(left.participant).localeCompare(participantLabel(right.participant));
-    });
+        if (
+          needle &&
+          !participantLabel(participant).toLowerCase().includes(needle) &&
+          !participant.email.toLowerCase().includes(needle) &&
+          !participant.role.toLowerCase().includes(needle)
+        ) {
+          return null;
+        }
+
+        return {
+          key: `participant:${participant.id}`,
+          conversationKey,
+          kind: 'participant',
+          title: participantLabel(participant),
+          subtitle: participant.role,
+          preview: `Start a chat with ${participantLabel(participant)}`,
+          avatarLabel: avatarFallback(participantLabel(participant)),
+          unreadCount: 0,
+          timestamp: '',
+          conversation: null,
+          participant,
+        } satisfies SidebarRow;
+      })
+      .filter((row): row is SidebarRow => Boolean(row))
+      .sort((left, right) => left.title.localeCompare(right.title));
+
+    return [...conversationRows, ...participantRows];
   }, [conversations, participants, searchQuery, user]);
+
+  const selectedConversationTitle = selectedConversation?.title
+    || (selectedOtherParticipant ? participantLabel(selectedOtherParticipant) : 'Select a conversation');
+
+  const selectedConversationSubtitle = selectedConversation?.conversation_type === 'group'
+    ? selectedGroupDetail?.subtitle || selectedConversation?.subtitle || ''
+    : selectedOtherParticipant
+      ? `${selectedOtherParticipant.role}${selectedOtherParticipant.email ? ` • ${selectedOtherParticipant.email}` : ''}`
+      : 'Choose a chat from the list';
+
+  const selectedGroupMembers = useMemo(
+    () => selectedGroupDetail?.members || [],
+    [selectedGroupDetail]
+  );
+
+  const availableGroupMemberOptions = useMemo(() => {
+    const activeIds = new Set(selectedGroupMembers.map((member) => member.id));
+    return participants.filter((participant) => !activeIds.has(participant.id));
+  }, [participants, selectedGroupMembers]);
 
   const selectedMessages = selectedConversationKey ? messagesByConversation[selectedConversationKey] || [] : [];
   const selectedTypingUserIds = selectedConversationKey ? typingByConversation[selectedConversationKey] || [] : [];
@@ -1003,6 +1137,10 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   }, [selectedConversationKey]);
 
   useEffect(() => {
+    if (selectedConversation?.conversation_type === 'group') {
+      return;
+    }
+
     if (!replyTarget) return;
 
     const activeMentionRecipientIds = Object.entries(mentionSelections)
@@ -1013,7 +1151,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     if (activeMentionRecipientIds.length > 0) {
       setReplyTarget(null);
     }
-  }, [draft, mentionSelections, replyTarget, selectedOtherParticipant]);
+  }, [draft, mentionSelections, replyTarget, selectedConversation?.conversation_type, selectedOtherParticipant]);
 
   useEffect(() => {
     setEntityMentionSelections((previous) =>
@@ -1168,6 +1306,140 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     setIsMinimized(false);
   };
 
+  const resetGroupComposerState = () => {
+    setGroupComposerState({
+      name: '',
+      selectedMemberIds: [],
+    });
+  };
+
+  const upsertGroupDetail = (detail: InternalChatGroupDetail) => {
+    setGroupDetailsById((prev) => ({
+      ...prev,
+      [detail.id]: detail,
+    }));
+  };
+
+  const loadGroupDetail = async (groupId: string) => {
+    const detail = await fetchInternalChatGroup(groupId);
+    upsertGroupDetail(detail);
+    return detail;
+  };
+
+  const toggleGroupComposerMember = (memberId: string) => {
+    setGroupComposerState((prev) => ({
+      ...prev,
+      selectedMemberIds: prev.selectedMemberIds.includes(memberId)
+        ? prev.selectedMemberIds.filter((id) => id !== memberId)
+        : [...prev.selectedMemberIds, memberId],
+    }));
+  };
+
+  const handleCreateGroup = async () => {
+    if (isSavingGroup) return;
+
+    setIsSavingGroup(true);
+    try {
+      const detail = await createInternalChatGroup(
+        groupComposerState.name,
+        groupComposerState.selectedMemberIds
+      );
+      upsertGroupDetail(detail);
+      await loadShellData({ background: true, forceSelection: true });
+      setSelectedConversationKey(detail.conversation_key);
+      setShowCreateGroupModal(false);
+      resetGroupComposerState();
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: 'Unable to create group',
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    } finally {
+      setIsSavingGroup(false);
+    }
+  };
+
+  const handleOpenManageGroup = async () => {
+    if (!selectedGroupId) return;
+
+    try {
+      const detail = selectedGroupDetail || (await loadGroupDetail(selectedGroupId));
+      setGroupComposerState({
+        name: detail.name,
+        selectedMemberIds: [],
+      });
+      setShowManageGroupModal(true);
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: 'Unable to load group details',
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    }
+  };
+
+  const handleSaveGroupName = async () => {
+    if (!selectedGroupId || isSavingGroup) return;
+
+    setIsSavingGroup(true);
+    try {
+      const detail = await renameInternalChatGroup(selectedGroupId, groupComposerState.name);
+      upsertGroupDetail(detail);
+      await loadShellData({ background: true });
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: 'Unable to rename group',
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    } finally {
+      setIsSavingGroup(false);
+    }
+  };
+
+  const handleAddSelectedGroupMembers = async () => {
+    if (!selectedGroupId || isSavingGroup || groupComposerState.selectedMemberIds.length === 0) return;
+
+    setIsSavingGroup(true);
+    try {
+      const detail = await addInternalChatGroupMembers(selectedGroupId, groupComposerState.selectedMemberIds);
+      upsertGroupDetail(detail);
+      setGroupComposerState((prev) => ({
+        ...prev,
+        selectedMemberIds: [],
+      }));
+      await loadShellData({ background: true });
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: 'Unable to add members',
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    } finally {
+      setIsSavingGroup(false);
+    }
+  };
+
+  const handleRemoveSelectedGroupMember = async (memberId: string) => {
+    if (!selectedGroupId || isSavingGroup) return;
+
+    setIsSavingGroup(true);
+    try {
+      const detail = await removeInternalChatGroupMember(selectedGroupId, memberId);
+      upsertGroupDetail(detail);
+      await loadShellData({ background: true });
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: 'Unable to remove member',
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    } finally {
+      setIsSavingGroup(false);
+    }
+  };
+
   const handleDraftChange = (value: string, cursorPosition: number) => {
     setDraft(value);
     setMentionContext(getActiveChatMentionContext(value, cursorPosition));
@@ -1230,17 +1502,20 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     const trimmedMessage = draft.trim();
     if (!trimmedMessage) return;
     const serializedMessage = serializeDraftEntityMentions(trimmedMessage, entityMentionSelections);
+    const isGroupConversation = selectedConversation?.conversation_type === 'group';
 
     const selectedRecipientId = selectedOtherParticipant?.id;
     const mentionedRecipientIds = Object.entries(mentionSelections)
       .filter(([, token]) => trimmedMessage.includes(token))
       .map(([participantId]) => participantId);
 
-    const recipientIds = Array.from(
-      new Set([selectedRecipientId, ...mentionedRecipientIds].filter((value): value is string => Boolean(value)))
-    );
+    const recipientIds = isGroupConversation
+      ? []
+      : Array.from(
+          new Set([selectedRecipientId, ...mentionedRecipientIds].filter((value): value is string => Boolean(value)))
+        );
 
-    if (recipientIds.length === 0) {
+    if (!isGroupConversation && recipientIds.length === 0) {
       addToast({
         type: 'warning',
         title: 'Choose a recipient',
@@ -1252,8 +1527,11 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     const canAttachReply =
       Boolean(replyTarget) &&
       Boolean(selectedConversationKey) &&
-      recipientIds.length === 1 &&
-      selectedOtherParticipant?.id === recipientIds[0];
+      (
+        isGroupConversation
+          ? true
+          : recipientIds.length === 1 && selectedOtherParticipant?.id === recipientIds[0]
+      );
     const activeReplyTarget = canAttachReply ? replyTarget : null;
     if (replyTarget && !activeReplyTarget) {
       setReplyTarget(null);
@@ -1266,38 +1544,68 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     const previousDraft = draft;
     const previousEntityMentionSelections = entityMentionSelections;
     const pendingCreatedAt = new Date().toISOString();
-    const pendingMessages: InternalChatMessage[] = recipientIds.map((recipientId) => {
-      const conversationKey =
-        selectedConversationKey && selectedOtherParticipant?.id === recipientId
-          ? selectedConversationKey
-          : buildDirectConversationKey(user.id, recipientId);
+    const pendingMessages: InternalChatMessage[] = isGroupConversation
+      ? [
+          {
+            id: `pending:${selectedConversationKey}:${Date.now()}`,
+            conversation_key: selectedConversationKey || '',
+            conversation_type: 'group',
+            sender_id: user.id,
+            recipient_id: '',
+            message: serializedMessage,
+            created_at: pendingCreatedAt,
+            is_from_current_user: true,
+            sender_name: user.full_name || 'You',
+            recipient_name: '',
+            sender_avatar_url: user.avatar_url || '',
+            recipient_avatar_url: '',
+            delivery_status: 'sent',
+            is_read_by_recipient: false,
+            reactions: [],
+            current_user_reaction: null,
+            reply_to_message_id: activeReplyTarget?.message_id ?? null,
+            reply_preview: activeReplyTarget
+              ? {
+                  ...activeReplyTarget,
+                  is_available: true,
+                }
+              : null,
+            is_pending: true,
+          },
+        ]
+      : recipientIds.map((recipientId) => {
+          const conversationKey =
+            selectedConversationKey && selectedOtherParticipant?.id === recipientId
+              ? selectedConversationKey
+              : buildDirectConversationKey(user.id, recipientId);
 
-      return {
-        id: `pending:${conversationKey}:${recipientId}:${Date.now()}`,
-        conversation_key: conversationKey,
-        sender_id: user.id,
-        recipient_id: recipientId,
-        message: serializedMessage,
-        created_at: pendingCreatedAt,
-        is_from_current_user: true,
-        sender_name: user.full_name || 'You',
-        recipient_name: participantMap.get(recipientId)?.full_name || `User ${recipientId}`,
-        sender_avatar_url: user.avatar_url || '',
-        recipient_avatar_url: participantMap.get(recipientId)?.avatar_url || '',
-        delivery_status: 'sent',
-        is_read_by_recipient: false,
-        reactions: [],
-        current_user_reaction: null,
-        reply_to_message_id: activeReplyTarget?.message_id ?? null,
-        reply_preview: activeReplyTarget
-          ? {
-              ...activeReplyTarget,
-              is_available: true,
-            }
-          : null,
-        is_pending: true,
-      };
-    });
+          return {
+            id: `pending:${conversationKey}:${recipientId}:${Date.now()}`,
+            conversation_key: conversationKey,
+            conversation_type: 'direct',
+            sender_id: user.id,
+            recipient_id: recipientId,
+            message: serializedMessage,
+            created_at: pendingCreatedAt,
+            is_from_current_user: true,
+            sender_name: user.full_name || 'You',
+            recipient_name: participantMap.get(recipientId)?.full_name || `User ${recipientId}`,
+            sender_avatar_url: user.avatar_url || '',
+            recipient_avatar_url: participantMap.get(recipientId)?.avatar_url || '',
+            delivery_status: 'sent',
+            is_read_by_recipient: false,
+            reactions: [],
+            current_user_reaction: null,
+            reply_to_message_id: activeReplyTarget?.message_id ?? null,
+            reply_preview: activeReplyTarget
+              ? {
+                  ...activeReplyTarget,
+                  is_available: true,
+                }
+              : null,
+            is_pending: true,
+          };
+        });
 
     setMessagesByConversation((prev) => mergeConversationMessages(prev, pendingMessages));
     setDraft('');
@@ -1310,7 +1618,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
       const created = await sendInternalChatMessage({
         message: serializedMessage,
         conversationKey: selectedConversationKey || undefined,
-        recipientIds,
+        recipientIds: isGroupConversation ? undefined : recipientIds,
         replyToMessageId: activeReplyTarget?.message_id,
       });
 
@@ -1431,9 +1739,20 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
               <div>
                 <h2 className="text-sm font-semibold text-slate-900">Internal Chat</h2>
-                <p className="text-xs text-slate-500">Direct messages across active accounts</p>
+                <p className="text-xs text-slate-500">Direct messages and staff groups</p>
               </div>
               <div className="flex items-center gap-1">
+                <button
+                  onClick={() => {
+                    resetGroupComposerState();
+                    setShowCreateGroupModal(true);
+                  }}
+                  className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-900"
+                  aria-label="Create group chat"
+                  title="Create group chat"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
                 <button
                   onClick={() => {
                     stopTyping(selectedConversationKeyRef.current);
@@ -1463,7 +1782,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
                 <input
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Search accounts..."
+                  placeholder="Search chats or staff..."
                   className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 outline-none transition focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20"
                 />
               </div>
@@ -1472,37 +1791,49 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
             <div className="flex-1 overflow-y-auto">
               {isLoading ? (
                 <div className="px-4 py-6 text-sm text-slate-500">Loading conversations...</div>
-              ) : filteredParticipants.length === 0 ? (
-                <div className="px-4 py-6 text-sm text-slate-500">No active accounts found.</div>
+              ) : sidebarRows.length === 0 ? (
+                <div className="px-4 py-6 text-sm text-slate-500">No conversations or staff found.</div>
               ) : (
-                filteredParticipants.map(({ participant, conversationKey, summary }) => {
-                  const isSelected = selectedConversationKey === conversationKey;
-                  const preview = extractPlainTextFromChatMessage(summary?.last_message_preview || '') || `Start a chat with ${participantLabel(participant)}`;
+                sidebarRows.map((row) => {
+                  const isSelected = selectedConversationKey === row.conversationKey;
+                  const preview = extractPlainTextFromChatMessage(row.preview || '');
 
                   return (
                     <button
-                      key={participant.id}
-                      onClick={() => handleSelectConversation(conversationKey)}
+                      key={row.key}
+                      onClick={() => handleSelectConversation(row.conversationKey)}
                       className={`flex w-full items-start gap-3 border-b border-slate-100 px-4 py-3 text-left transition ${
                         isSelected ? 'bg-brand-blue/10' : 'hover:bg-white'
                       }`}
                     >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-blue/10 text-xs font-semibold text-brand-blue">
-                        {avatarFallback(participantLabel(participant))}
+                      <div className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full text-xs font-semibold ${
+                        row.conversation?.conversation_type === 'group'
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : 'bg-brand-blue/10 text-brand-blue'
+                      }`}>
+                        {row.avatarLabel}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="truncate text-sm font-semibold text-slate-900">{participantLabel(participant)}</p>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <p className="truncate text-sm font-semibold text-slate-900">{row.title}</p>
+                            {row.conversation?.conversation_type === 'group' && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+                                <Users className="h-3 w-3" />
+                                Group
+                              </span>
+                            )}
+                          </div>
                           <span className="shrink-0 text-[11px] text-slate-400">
-                            {summary?.last_message_at ? formatRelativeTime(summary.last_message_at) : ''}
+                            {row.timestamp ? formatRelativeTime(row.timestamp) : ''}
                           </span>
                         </div>
-                        <p className="truncate text-xs text-slate-500">{participant.role}</p>
+                        <p className="truncate text-xs text-slate-500">{row.subtitle}</p>
                         <div className="mt-1 flex items-center justify-between gap-2">
                           <p className="truncate text-xs text-slate-500">{preview}</p>
-                          {(summary?.unread_count || 0) > 0 && (
+                          {row.unreadCount > 0 && (
                             <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold text-white">
-                              {summary?.unread_count}
+                              {row.unreadCount}
                             </span>
                           )}
                         </div>
@@ -1518,27 +1849,41 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-brand-blue/10 text-sm font-semibold text-brand-blue">
-                  {avatarFallback(selectedOtherParticipant ? participantLabel(selectedOtherParticipant) : 'Chat')}
+                  {selectedConversation?.conversation_type === 'group'
+                    ? selectedConversation.avatar_label || avatarFallback(selectedConversationTitle)
+                    : avatarFallback(selectedOtherParticipant ? participantLabel(selectedOtherParticipant) : selectedConversationTitle)}
                 </div>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-slate-900">
-                    {selectedOtherParticipant ? participantLabel(selectedOtherParticipant) : 'Select a conversation'}
+                    {selectedConversationTitle}
                   </p>
                   <p className="truncate text-xs text-slate-500">
-                    {selectedOtherParticipant ? `${selectedOtherParticipant.role}${selectedOtherParticipant.email ? ` • ${selectedOtherParticipant.email}` : ''}` : 'Choose an account from the list'}
+                    {selectedConversationSubtitle}
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => {
-                  stopTyping(selectedConversationKeyRef.current);
-                  setIsMinimized(true);
-                }}
-                className="rounded-md p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
-                aria-label="Collapse chat"
-              >
-                <ChevronDown className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                {selectedConversation?.conversation_type === 'group' && selectedConversation.can_manage && (
+                  <button
+                    onClick={() => {
+                      void handleOpenManageGroup();
+                    }}
+                    className="rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                  >
+                    Manage Group
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    stopTyping(selectedConversationKeyRef.current);
+                    setIsMinimized(true);
+                  }}
+                  className="rounded-md p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
+                  aria-label="Collapse chat"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+              </div>
             </div>
 
             <div
@@ -1552,11 +1897,15 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
             >
               {!selectedConversationKey ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-10 text-center text-sm text-slate-500">
-                  Select an account to start chatting.
+                  Select a conversation or start a new group chat.
                 </div>
               ) : selectedMessages.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-10 text-center text-sm text-slate-500">
-                  {selectedOtherParticipant ? `No messages yet with ${participantLabel(selectedOtherParticipant)}.` : 'No messages yet.'}
+                  {selectedConversation?.conversation_type === 'group'
+                    ? `No messages yet in ${selectedConversation.title}.`
+                    : selectedOtherParticipant
+                      ? `No messages yet with ${participantLabel(selectedOtherParticipant)}.`
+                      : 'No messages yet.'}
                 </div>
               ) : (
                 selectedMessages.map((message) => {
@@ -1713,7 +2062,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
                             )}
                           </div>
                           <div className={`mt-1 flex items-center gap-2 text-[11px] text-slate-400 ${isMine ? 'justify-end' : 'justify-start'}`}>
-                            {isMine && (
+                            {isMine && message.conversation_type !== 'group' && (
                               <span className={message.delivery_status === 'read' && !message.is_pending ? 'text-brand-blue' : ''}>
                                 {formatDeliveryStatus(message)}
                               </span>
@@ -1774,7 +2123,9 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
                   onBlur={() => stopTyping(selectedConversationKeyRef.current)}
                   rows={3}
                   placeholder={
-                    selectedOtherParticipant
+                    selectedConversation?.conversation_type === 'group'
+                      ? `Message ${selectedConversation.title}. You can still mention records or products here.`
+                      : selectedOtherParticipant
                       ? `Message ${participantLabel(selectedOtherParticipant)}. Try @invoice INV-1001 or @product brake pad.`
                       : 'Select an account or try @invoice INV-1001, @salesorder SO-1001, or @product brake pad.'
                   }
@@ -1867,6 +2218,166 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
               </div>
             </div>
           </section>
+          {(showCreateGroupModal || showManageGroupModal) && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-900/35 px-4">
+              <div className="w-full max-w-xl rounded-3xl bg-white shadow-2xl">
+                <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-900">
+                      {showCreateGroupModal ? 'Create Group Chat' : 'Manage Group Chat'}
+                    </h3>
+                    <p className="text-sm text-slate-500">
+                      {showCreateGroupModal
+                        ? 'Pick at least 2 staff members and name the chat.'
+                        : 'Rename the group and manage its members.'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCreateGroupModal(false);
+                      setShowManageGroupModal(false);
+                      resetGroupComposerState();
+                    }}
+                    className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                    aria-label="Close group dialog"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="space-y-5 px-6 py-5">
+                  <div>
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Group Name
+                    </label>
+                    <input
+                      value={groupComposerState.name}
+                      onChange={(event) =>
+                        setGroupComposerState((prev) => ({
+                          ...prev,
+                          name: event.target.value,
+                        }))
+                      }
+                      placeholder="Enter group name"
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20"
+                    />
+                  </div>
+
+                  {showManageGroupModal && selectedGroupDetail && (
+                    <div>
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Current Members</p>
+                        <button
+                          type="button"
+                          onClick={() => void handleSaveGroupName()}
+                          disabled={isSavingGroup || groupComposerState.name.trim() === ''}
+                          className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Save Name
+                        </button>
+                      </div>
+                      <div className="max-h-44 space-y-2 overflow-y-auto rounded-2xl border border-slate-200 p-3">
+                        {selectedGroupMembers.map((member) => (
+                          <div key={member.id} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-3 py-2">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-slate-900">{participantLabel(member)}</p>
+                              <p className="truncate text-xs text-slate-500">
+                                {member.role}{member.email ? ` • ${member.email}` : ''}
+                              </p>
+                            </div>
+                            {member.id !== user.id && (
+                              <button
+                                type="button"
+                                onClick={() => void handleRemoveSelectedGroupMember(member.id)}
+                                disabled={isSavingGroup}
+                                className="rounded-xl border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        {showCreateGroupModal ? 'Select Members' : 'Add Members'}
+                      </p>
+                      {showManageGroupModal && (
+                        <button
+                          type="button"
+                          onClick={() => void handleAddSelectedGroupMembers()}
+                          disabled={isSavingGroup || groupComposerState.selectedMemberIds.length === 0}
+                          className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Add Selected
+                        </button>
+                      )}
+                    </div>
+                    <div className="max-h-60 space-y-2 overflow-y-auto rounded-2xl border border-slate-200 p-3">
+                      {(showCreateGroupModal ? participants : availableGroupMemberOptions).map((participant) => {
+                        const isChecked = groupComposerState.selectedMemberIds.includes(participant.id);
+                        return (
+                          <label
+                            key={participant.id}
+                            className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-3 py-3 transition ${
+                              isChecked ? 'border-brand-blue bg-brand-blue/5' : 'border-slate-200 hover:bg-slate-50'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => toggleGroupComposerMember(participant.id)}
+                              className="mt-1 h-4 w-4 rounded border-slate-300 text-brand-blue focus:ring-brand-blue"
+                            />
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-slate-900">{participantLabel(participant)}</p>
+                              <p className="truncate text-xs text-slate-500">
+                                {participant.role}{participant.email ? ` • ${participant.email}` : ''}
+                              </p>
+                            </div>
+                          </label>
+                        );
+                      })}
+                      {(showCreateGroupModal ? participants : availableGroupMemberOptions).length === 0 && (
+                        <div className="rounded-2xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                          No more staff available to add.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCreateGroupModal(false);
+                      setShowManageGroupModal(false);
+                      resetGroupComposerState();
+                    }}
+                    className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  {showCreateGroupModal && (
+                    <button
+                      type="button"
+                      onClick={() => void handleCreateGroup()}
+                      disabled={isSavingGroup || groupComposerState.name.trim() === '' || groupComposerState.selectedMemberIds.length < 2}
+                      className="rounded-2xl bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    >
+                      {isSavingGroup ? 'Creating...' : 'Create Group'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>,
         document.body
       )

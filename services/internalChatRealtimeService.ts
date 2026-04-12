@@ -119,6 +119,7 @@ export const openInternalChatRealtimeStream = (
         ...payload,
         message: {
           ...payload.message,
+          conversation_type: payload.message.conversation_type || 'direct',
           reply_to_message_id: payload.message.reply_to_message_id ?? null,
           reply_preview: payload.message.reply_preview ?? null,
         },

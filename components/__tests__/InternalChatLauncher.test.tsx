@@ -10,12 +10,17 @@ import type {
 import type { InternalChatRealtimeEvent } from '../../services/internalChatRealtimeService';
 
 const localApiMocks = vi.hoisted(() => ({
+  createInternalChatGroup: vi.fn(),
+  fetchInternalChatGroup: vi.fn(),
   fetchInternalChatParticipants: vi.fn(),
   fetchInternalChatConversations: vi.fn(),
   fetchInternalChatMessages: vi.fn(),
   fetchInternalChatTypingState: vi.fn(),
   fetchInternalChatUnreadCount: vi.fn(),
   markInternalChatConversationRead: vi.fn(),
+  addInternalChatGroupMembers: vi.fn(),
+  removeInternalChatGroupMember: vi.fn(),
+  renameInternalChatGroup: vi.fn(),
   sendInternalChatMessage: vi.fn(),
   toggleInternalChatReaction: vi.fn(),
   updateInternalChatTyping: vi.fn(),
@@ -76,6 +81,12 @@ const participant: InternalChatParticipant = {
 
 const conversation: InternalChatConversationSummary = {
   conversation_key: 'dm:1:2',
+  conversation_type: 'direct',
+  title: 'Teammate User',
+  subtitle: 'Sales Agent • teammate@example.com',
+  avatar_label: 'TU',
+  member_count: 2,
+  can_manage: false,
   other_participant: participant,
   last_message_preview: 'Hello from teammate',
   last_message_at: '2026-04-12T10:00:00.000Z',
@@ -85,6 +96,7 @@ const conversation: InternalChatConversationSummary = {
 const firstMessage: InternalChatMessage = {
   id: '101',
   conversation_key: 'dm:1:2',
+  conversation_type: 'direct',
   sender_id: '2',
   recipient_id: '1',
   message: 'Hello from teammate',
@@ -105,6 +117,7 @@ const firstMessage: InternalChatMessage = {
 const secondMessage: InternalChatMessage = {
   id: '102',
   conversation_key: 'dm:1:2',
+  conversation_type: 'direct',
   sender_id: '1',
   recipient_id: '2',
   message: 'Reply from owner',
@@ -180,12 +193,77 @@ describe('InternalChatLauncher', () => {
 
     localApiMocks.fetchInternalChatParticipants.mockResolvedValue([participant]);
     localApiMocks.fetchInternalChatConversations.mockResolvedValue([conversation]);
+    localApiMocks.fetchInternalChatGroup.mockResolvedValue({
+      id: '55',
+      conversation_key: 'grp:55',
+      conversation_type: 'group',
+      name: 'Support Squad',
+      title: 'Support Squad',
+      subtitle: '3 members',
+      avatar_label: 'SS',
+      member_count: 3,
+      created_by_user_id: '1',
+      can_manage: true,
+      members: [participant],
+    });
     localApiMocks.fetchInternalChatTypingState.mockResolvedValue({
       conversation_key: 'dm:1:2',
       typing_user_ids: [],
     });
     localApiMocks.fetchInternalChatUnreadCount.mockResolvedValue(0);
     localApiMocks.markInternalChatConversationRead.mockResolvedValue(undefined);
+    localApiMocks.createInternalChatGroup.mockResolvedValue({
+      id: '55',
+      conversation_key: 'grp:55',
+      conversation_type: 'group',
+      name: 'Support Squad',
+      title: 'Support Squad',
+      subtitle: '3 members',
+      avatar_label: 'SS',
+      member_count: 3,
+      created_by_user_id: '1',
+      can_manage: true,
+      members: [participant],
+    });
+    localApiMocks.renameInternalChatGroup.mockImplementation(async (_groupId: string, name: string) => ({
+      id: '55',
+      conversation_key: 'grp:55',
+      conversation_type: 'group',
+      name,
+      title: name,
+      subtitle: '3 members',
+      avatar_label: 'SS',
+      member_count: 3,
+      created_by_user_id: '1',
+      can_manage: true,
+      members: [participant],
+    }));
+    localApiMocks.addInternalChatGroupMembers.mockImplementation(async () => ({
+      id: '55',
+      conversation_key: 'grp:55',
+      conversation_type: 'group',
+      name: 'Support Squad',
+      title: 'Support Squad',
+      subtitle: '3 members',
+      avatar_label: 'SS',
+      member_count: 3,
+      created_by_user_id: '1',
+      can_manage: true,
+      members: [participant],
+    }));
+    localApiMocks.removeInternalChatGroupMember.mockImplementation(async () => ({
+      id: '55',
+      conversation_key: 'grp:55',
+      conversation_type: 'group',
+      name: 'Support Squad',
+      title: 'Support Squad',
+      subtitle: '2 members',
+      avatar_label: 'SS',
+      member_count: 2,
+      created_by_user_id: '1',
+      can_manage: true,
+      members: [participant],
+    }));
     localApiMocks.sendInternalChatMessage.mockResolvedValue([]);
     localApiMocks.toggleInternalChatReaction.mockResolvedValue({
       message_id: '101',
@@ -264,6 +342,7 @@ describe('InternalChatLauncher', () => {
     const liveMessage: InternalChatMessage = {
       id: '103',
       conversation_key: 'dm:1:2',
+      conversation_type: 'direct',
       sender_id: '2',
       recipient_id: '1',
       message: 'Newest update from teammate',

@@ -172,8 +172,23 @@ const participantsFromConversationKey = (conversationKey) => {
   return [match[1], match[2]];
 };
 
+const normalizeTargetUserIds = (payload) => {
+  const targetUserIds = Array.isArray(payload?.target_user_ids)
+    ? payload.target_user_ids.map((userId) => String(userId || '').trim()).filter(Boolean)
+    : [];
+
+  if (targetUserIds.length > 0) {
+    return [...new Set(targetUserIds)];
+  }
+
+  return participantsFromConversationKey(String(payload?.conversation_key || ''));
+};
+
 const emitToConversationParticipants = (conversationKey, payload) => {
-  const participants = participantsFromConversationKey(conversationKey);
+  const participants = normalizeTargetUserIds({
+    ...payload,
+    conversation_key: conversationKey,
+  });
   if (participants.length === 0) {
     return;
   }
@@ -192,6 +207,7 @@ const broadcastInternalChatEvent = (payload) => {
       const message = {
         id: String(item?.id || ''),
         conversation_key: String(item?.conversation_key || ''),
+        conversation_type: String(item?.conversation_type || 'direct'),
         sender_id: String(item?.sender_id || ''),
         recipient_id: String(item?.recipient_id || ''),
         message: String(item?.message || ''),
@@ -209,9 +225,9 @@ const broadcastInternalChatEvent = (payload) => {
         reply_preview: item?.reply_preview ?? null,
       };
 
-      emitToUser(message.sender_id, { type: 'message.created', message });
-      if (message.recipient_id !== message.sender_id) {
-        emitToUser(message.recipient_id, { type: 'message.created', message });
+      const targetUserIds = normalizeTargetUserIds(item);
+      for (const participantId of targetUserIds) {
+        emitToUser(participantId, { type: 'message.created', message });
       }
     }
     return;
