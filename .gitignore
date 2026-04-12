@@ -32,3 +32,6 @@ dist-ssr
 
 # Auto Claude data directory
 .auto-claude/
+
+# Local code intelligence index
+.gitnexus/

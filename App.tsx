@@ -71,6 +71,7 @@ import Staff from './components/Maintenance/Profile/Staff';
 import CustomerGroups from './components/Maintenance/Customer/CustomerGroups';
 import { CustomerData } from './components/Maintenance/Customer/CustomerData';
 import { Pipeline } from './components/Maintenance/Customer/Pipeline';
+import VipThresholdSettings from './components/Maintenance/Customer/VipThresholdSettings';
 import SpecialPrice from './components/Maintenance/Product/SpecialPrice';
 import ActivityLogs from './components/Maintenance/Profile/ActivityLogs';
 
@@ -391,7 +392,13 @@ const App: React.FC = () => {
       case 'warehouse-inventory-product-database':
         return (
           <div className="h-full overflow-y-auto">
-            <ProductDatabase currentUser={userProfile} />
+            <ProductDatabase
+              currentUser={userProfile}
+              initialProductId={
+                moduleContext['warehouse-inventory-product-database']?.productId ||
+                moduleContext.products?.productId
+              }
+            />
           </div>
         );
       case 'reorder':
@@ -729,6 +736,12 @@ const App: React.FC = () => {
 
       case 'maintenance-customer-customer-group':
         return <CustomerGroups />;
+      case 'maintenance-customer-vip-thresholds':
+        return (
+          <div className="h-full overflow-y-auto">
+            <VipThresholdSettings currentUser={userProfile} />
+          </div>
+        );
       case 'maintenance-customer-pipeline':
         return <Pipeline />;
       case 'maintenance-product-suppliers':

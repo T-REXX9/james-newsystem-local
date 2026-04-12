@@ -2116,6 +2116,13 @@ export interface ProfitThresholdConfig {
   allow_override: boolean;
 }
 
+export interface VipTierConfig {
+  silver_entry_threshold: number;
+  gold_entry_threshold: number;
+  silver_maintenance_threshold: number;
+  gold_maintenance_threshold: number;
+}
+
 export interface AISalesAgentConfig {
   default_language: 'tagalog' | 'english';
   fallback_language: 'tagalog' | 'english';

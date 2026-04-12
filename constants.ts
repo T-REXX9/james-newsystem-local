@@ -195,6 +195,7 @@ export const AVAILABLE_APP_MODULES = [
   { id: 'maintenance-customer-customer-data', label: 'Customer Data' },
 
   { id: 'maintenance-customer-customer-group', label: 'Customer Group' },
+  { id: 'maintenance-customer-vip-thresholds', label: 'VIP Thresholds' },
   { id: 'maintenance-customer-pipeline', label: 'Pipeline' },
   { id: 'maintenance-product-suppliers', label: 'Suppliers' },
   { id: 'maintenance-product-special-price', label: 'Special Price' },
@@ -248,6 +249,7 @@ export const MODULE_ID_ALIASES: Record<string, string> = {
   'maintenance-system-loyalty-discounts': 'maintenance-system-loyalty-discounts',
   'maintenance-system-profit-protection': 'maintenance-system-profit-protection',
   'maintenance-system-ai-templates': 'maintenance-system-ai-templates',
+  'maintenance-customer-vip-thresholds': 'maintenance-customer-vip-thresholds',
   'accounting-reports-overview': 'accounting-reports-accounting-overview',
 
   'accounting-reports-daily-calls-monitoring': 'sales-transaction-daily-call-monitoring',

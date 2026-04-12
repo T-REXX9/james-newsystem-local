@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ChevronDown,
   CornerUpLeft,
+  Loader2,
   MessageSquare,
   Minus,
   Search,
@@ -30,16 +31,23 @@ import {
   InternalChatRealtimeEvent,
   openInternalChatRealtimeStream,
 } from '../services/internalChatRealtimeService';
+import {
+  type InternalChatEntityMentionSuggestion,
+  preloadInternalChatMentionCaches,
+  searchInternalChatEntityMentions,
+} from '../services/internalChatMentionService';
+import {
+  createChatMentionToken,
+  extractPlainTextFromChatMessage,
+  getActiveChatMentionContext,
+  parseChatMessageSegments,
+  type ActiveChatMentionContext,
+  type ChatMentionEntityType,
+} from '../utils/internalChatMentionUtils';
 import { useToast } from './ToastProvider';
 
 interface InternalChatLauncherProps {
   user: UserProfile | null;
-}
-
-interface MentionContext {
-  start: number;
-  end: number;
-  query: string;
 }
 
 interface ComposerReplyTarget {
@@ -50,11 +58,27 @@ interface ComposerReplyTarget {
   is_from_current_user: boolean;
 }
 
+interface DraftEntityMentionSelection {
+  displayToken: string;
+  encodedToken: string;
+}
+
+type MentionSuggestion =
+  | {
+      kind: 'participant';
+      participant: InternalChatParticipant;
+    }
+  | {
+      kind: 'entity';
+      entity: InternalChatEntityMentionSuggestion;
+    };
+
 const INTERNAL_CHAT_REALTIME_ENABLED = true;
 const REACTION_OPTIONS = ['👍', '❤️', '😂', '😮', '😢', '👀'] as const;
 const TYPING_IDLE_MS = 3000;
 const TYPING_KEEPALIVE_MS = 2500;
 const MESSAGE_HIGHLIGHT_MS = 1800;
+const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 48;
 
 const formatRelativeTime = (value?: string) => {
   if (!value) return '';
@@ -75,7 +99,7 @@ const formatRelativeTime = (value?: string) => {
 };
 
 const truncateReplyText = (value: string, maxLength = 120) => {
-  const normalized = value.replace(/\s+/g, ' ').trim();
+  const normalized = extractPlainTextFromChatMessage(value).replace(/\s+/g, ' ').trim();
   if (normalized.length <= maxLength) return normalized;
   return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 };
@@ -217,24 +241,108 @@ const formatDeliveryStatus = (message: InternalChatMessage): string => {
   return 'Sent';
 };
 
-const getMentionContext = (value: string, cursorPosition: number): MentionContext | null => {
-  const safeCursor = Math.max(0, Math.min(cursorPosition, value.length));
-  const beforeCursor = value.slice(0, safeCursor);
-  const atIndex = beforeCursor.lastIndexOf('@');
+const groupMentionSuggestions = (suggestions: MentionSuggestion[]) => {
+  const groups: Array<{ key: string; label: string; items: MentionSuggestion[] }> = [];
+  const buckets = new Map<string, MentionSuggestion[]>();
 
-  if (atIndex < 0) return null;
+  suggestions.forEach((suggestion) => {
+    const groupKey = suggestion.kind === 'participant' ? 'accounts' : suggestion.entity.entityType;
+    const existing = buckets.get(groupKey) || [];
+    existing.push(suggestion);
+    buckets.set(groupKey, existing);
+  });
 
-  const prefix = atIndex === 0 ? ' ' : beforeCursor[atIndex - 1];
-  if (!/\s/.test(prefix)) return null;
-
-  const query = beforeCursor.slice(atIndex + 1);
-  if (/\s/.test(query)) return null;
-
-  return {
-    start: atIndex,
-    end: safeCursor,
-    query,
+  const orderedKeys = ['accounts', 'sales-inquiry', 'sales-order', 'order-slip', 'invoice', 'product'];
+  const groupLabels: Record<string, string> = {
+    accounts: 'Accounts',
+    'sales-inquiry': 'Sales Inquiries',
+    'sales-order': 'Sales Orders',
+    'order-slip': 'Order Slips',
+    invoice: 'Invoices',
+    product: 'Products',
   };
+
+  orderedKeys.forEach((key) => {
+    const items = buckets.get(key);
+    if (!items || items.length === 0) return;
+    groups.push({
+      key,
+      label: groupLabels[key] || key,
+      items,
+    });
+  });
+
+  return groups;
+};
+
+const mentionRouteForEntity = (entityType: ChatMentionEntityType, entityId: string) => {
+  switch (entityType) {
+    case 'sales-inquiry':
+      return {
+        tab: 'sales-transaction-sales-inquiry',
+        payload: { inquiryId: entityId },
+      };
+    case 'sales-order':
+      return {
+        tab: 'sales-transaction-sales-order',
+        payload: { orderId: entityId },
+      };
+    case 'order-slip':
+      return {
+        tab: 'sales-transaction-order-slip',
+        payload: { orderSlipId: entityId },
+      };
+    case 'invoice':
+      return {
+        tab: 'sales-transaction-invoice',
+        payload: { invoiceId: entityId },
+      };
+    case 'product':
+      return {
+        tab: 'warehouse-inventory-product-database',
+        payload: { productId: entityId },
+      };
+    default:
+      return null;
+  }
+};
+
+const mentionModeLabel = (scope: ActiveChatMentionContext['scope']) => {
+  switch (scope) {
+    case 'sales-inquiry':
+      return 'Sales Inquiry';
+    case 'sales-order':
+      return 'Sales Order';
+    case 'order-slip':
+      return 'Order Slip';
+    case 'invoice':
+      return 'Invoice';
+    case 'product':
+      return 'Product';
+    default:
+      return 'Anything';
+  }
+};
+
+const serializeDraftEntityMentions = (
+  message: string,
+  selections: DraftEntityMentionSelection[]
+) => {
+  const normalizedMessage = String(message || '');
+  if (!normalizedMessage || selections.length === 0) {
+    return normalizedMessage;
+  }
+
+  let serialized = normalizedMessage;
+  const activeSelections = selections
+    .filter((selection) => selection.displayToken && serialized.includes(selection.displayToken))
+    .sort((left, right) => right.displayToken.length - left.displayToken.length);
+
+  activeSelections.forEach((selection) => {
+    serialized = serialized.split(selection.displayToken).join(selection.encodedToken);
+  });
+
+  return serialized;
 };
 
 const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => {
@@ -249,7 +357,10 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   const [typingByConversation, setTypingByConversation] = useState<Record<string, string[]>>({});
   const [draft, setDraft] = useState('');
   const [mentionSelections, setMentionSelections] = useState<Record<string, string>>({});
-  const [mentionContext, setMentionContext] = useState<MentionContext | null>(null);
+  const [entityMentionSelections, setEntityMentionSelections] = useState<DraftEntityMentionSelection[]>([]);
+  const [mentionContext, setMentionContext] = useState<ActiveChatMentionContext | null>(null);
+  const [entityMentionSuggestions, setEntityMentionSuggestions] = useState<InternalChatEntityMentionSuggestion[]>([]);
+  const [isLoadingEntityMentionSuggestions, setIsLoadingEntityMentionSuggestions] = useState(false);
   const [openMessageActionId, setOpenMessageActionId] = useState<string | null>(null);
   const [openReactionPickerId, setOpenReactionPickerId] = useState<string | null>(null);
   const [replyTarget, setReplyTarget] = useState<ComposerReplyTarget | null>(null);
@@ -262,6 +373,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   const messageBottomRef = useRef<HTMLDivElement | null>(null);
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const messageActionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const composerContainerRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const selectedConversationKeyRef = useRef<string | null>(null);
   const latestShellRequestRef = useRef(0);
@@ -276,6 +388,41 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
   const typingKeepAliveTimeoutRef = useRef<number | null>(null);
   const activeTypingConversationKeyRef = useRef<string | null>(null);
   const highlightTimeoutRef = useRef<number | null>(null);
+  const scrollAnimationFrameRef = useRef<number | null>(null);
+  const shouldStickToBottomRef = useRef(true);
+
+  const isViewportNearBottom = (viewport: HTMLDivElement) =>
+    viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= AUTO_SCROLL_BOTTOM_THRESHOLD_PX;
+
+  const scrollViewportToBottom = (behavior: ScrollBehavior = 'auto') => {
+    const viewport = messageViewportRef.current;
+    if (!viewport) return;
+
+    if (messageBottomRef.current) {
+      messageBottomRef.current.scrollIntoView({
+        behavior,
+        block: 'end',
+      });
+    }
+
+    viewport.scrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+    shouldStickToBottomRef.current = true;
+  };
+
+  const scheduleScrollToBottom = (behavior: ScrollBehavior = 'auto') => {
+    if (typeof window === 'undefined') return;
+
+    if (scrollAnimationFrameRef.current !== null) {
+      window.cancelAnimationFrame(scrollAnimationFrameRef.current);
+    }
+
+    scrollAnimationFrameRef.current = window.requestAnimationFrame(() => {
+      scrollAnimationFrameRef.current = window.requestAnimationFrame(() => {
+        scrollAnimationFrameRef.current = null;
+        scrollViewportToBottom(behavior);
+      });
+    });
+  };
 
   const clearTypingTimers = () => {
     if (typingStartTimeoutRef.current !== null) {
@@ -580,7 +727,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
           addToast({
             type: 'info',
             title: incomingMessage.sender_name ? `New message from ${incomingMessage.sender_name}` : 'New internal message',
-            description: incomingMessage.message || 'Open chat to view the message.',
+            description: extractPlainTextFromChatMessage(incomingMessage.message) || 'Open chat to view the message.',
           });
         }
       },
@@ -604,6 +751,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     void loadShellData({
       background: hasLoadedShellDataRef.current,
     });
+    void preloadInternalChatMentionCaches();
   }, [user, isOpen, isMinimized]);
 
   useEffect(() => {
@@ -621,6 +769,9 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     stopTyping();
     shellAbortControllerRef.current?.abort();
     messageAbortControllerRef.current?.abort();
+    if (scrollAnimationFrameRef.current !== null) {
+      window.cancelAnimationFrame(scrollAnimationFrameRef.current);
+    }
   }, []);
 
   const participantMap = useMemo(() => {
@@ -686,6 +837,22 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     .map((userId) => participantMap.get(userId)?.full_name?.trim() || `User ${userId}`)
     .filter(Boolean)
     .join(', ');
+  const selectedMessageScrollSignature = useMemo(() => {
+    const lastMessage = selectedMessages[selectedMessages.length - 1];
+    const reactionSignature = (lastMessage?.reactions || [])
+      .map((reaction) => `${reaction.emoji}:${reaction.count}:${reaction.reacted_by_current_user ? '1' : '0'}`)
+      .join('|');
+
+    return [
+      selectedMessages.length,
+      lastMessage?.id || '',
+      lastMessage?.created_at || '',
+      lastMessage?.is_pending ? '1' : '0',
+      lastMessage?.delivery_status || '',
+      lastMessage?.current_user_reaction || '',
+      reactionSignature,
+    ].join(':');
+  }, [selectedMessages]);
 
   const setMessageRef = (messageId: string, node: HTMLDivElement | null) => {
     if (node) {
@@ -705,18 +872,66 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     delete messageActionRefs.current[messageId];
   };
 
+  const navigateToMention = (entityType: ChatMentionEntityType, entityId: string) => {
+    const route = mentionRouteForEntity(entityType, entityId);
+    if (!route) {
+      return;
+    }
+
+    window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: route }));
+  };
+
+  const renderMessageBody = (message: string, isMine: boolean) => {
+    const segments = parseChatMessageSegments(message);
+    if (segments.length === 0) {
+      return null;
+    }
+
+    const chipClassName = isMine
+      ? 'border-white/20 bg-white/10 text-white hover:bg-white/15'
+      : 'border-brand-blue/20 bg-brand-blue/5 text-brand-blue hover:bg-brand-blue/10';
+
+    return (
+      <span className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+        {segments.map((segment, index) => {
+          if (segment.kind === 'text') {
+            return <span key={`text:${index}`}>{segment.text}</span>;
+          }
+
+          return (
+            <button
+              key={`mention:${segment.mention.entityType}:${segment.mention.entityId}:${index}`}
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                navigateToMention(segment.mention.entityType, segment.mention.entityId);
+              }}
+              className={`mx-0.5 inline-flex max-w-full items-center rounded-full border px-2.5 py-1 text-left text-[12px] font-semibold transition ${chipClassName}`}
+            >
+              <span className="truncate">{segment.mention.label}</span>
+            </button>
+          );
+        })}
+      </span>
+    );
+  };
+
   const enterReplyMode = (message: InternalChatMessage) => {
+    shouldStickToBottomRef.current = true;
     setReplyTarget({
       message_id: message.id,
       sender_id: message.sender_id,
       sender_name: message.sender_name,
-      message: message.message,
+      message: extractPlainTextFromChatMessage(message.message),
       is_from_current_user: message.is_from_current_user,
     });
     setOpenMessageActionId(null);
     setOpenReactionPickerId(null);
 
     requestAnimationFrame(() => {
+      if (shouldStickToBottomRef.current) {
+        scheduleScrollToBottom();
+      }
       textareaRef.current?.focus();
     });
   };
@@ -741,25 +956,50 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     }, MESSAGE_HIGHLIGHT_MS);
   };
 
+  useLayoutEffect(() => {
+    if (!isOpen || isMinimized || !selectedConversationKey) return;
+    if (!shouldStickToBottomRef.current) return;
+
+    scheduleScrollToBottom();
+  }, [
+    isMinimized,
+    isOpen,
+    replyTarget?.message_id,
+    selectedConversationKey,
+    selectedMessageScrollSignature,
+    selectedTypingUserIds.length,
+  ]);
+
   useEffect(() => {
-    if (!selectedConversationKey) return;
-    requestAnimationFrame(() => {
-      if (messageBottomRef.current) {
-        messageBottomRef.current.scrollIntoView({ block: 'end' });
+    if (!isOpen || isMinimized || !selectedConversationKey) return;
+
+    const composer = composerContainerRef.current;
+    if (!composer || typeof ResizeObserver === 'undefined') {
+      return;
+    }
+
+    let previousHeight = composer.getBoundingClientRect().height;
+    const observer = new ResizeObserver((entries) => {
+      const nextHeight = entries[0]?.contentRect.height ?? composer.getBoundingClientRect().height;
+      if (Math.abs(nextHeight - previousHeight) < 1) {
         return;
       }
 
-      if (messageViewportRef.current) {
-        const viewport = messageViewportRef.current;
-        viewport.scrollTop = viewport.scrollHeight;
+      previousHeight = nextHeight;
+      if (shouldStickToBottomRef.current) {
+        scheduleScrollToBottom();
       }
     });
-  }, [selectedConversationKey, selectedMessages.length, selectedTypingUserIds.length]);
+
+    observer.observe(composer);
+    return () => observer.disconnect();
+  }, [isMinimized, isOpen, selectedConversationKey]);
 
   useEffect(() => {
     setOpenMessageActionId(null);
     setOpenReactionPickerId(null);
     setReplyTarget(null);
+    setEntityMentionSelections([]);
   }, [selectedConversationKey]);
 
   useEffect(() => {
@@ -774,6 +1014,12 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
       setReplyTarget(null);
     }
   }, [draft, mentionSelections, replyTarget, selectedOtherParticipant]);
+
+  useEffect(() => {
+    setEntityMentionSelections((previous) =>
+      previous.filter((selection) => selection.displayToken && draft.includes(selection.displayToken))
+    );
+  }, [draft]);
 
   useEffect(() => {
     if (!openMessageActionId || typeof document === 'undefined') return;
@@ -815,32 +1061,91 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     }
   }, [openMessageActionId]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const query = mentionContext?.query.trim() || '';
+    const scopedEntityTypes = mentionContext?.scope && mentionContext.scope !== 'all' ? [mentionContext.scope] : undefined;
+
+    if (!mentionContext || (mentionContext.scope === 'all' && !query)) {
+      setEntityMentionSuggestions([]);
+      setIsLoadingEntityMentionSuggestions(false);
+      return;
+    }
+
+    setIsLoadingEntityMentionSuggestions(true);
+    const delayMs = mentionContext.scope === 'all' ? 90 : 0;
+    const timeout = window.setTimeout(() => {
+      void searchInternalChatEntityMentions(query, { entityTypes: scopedEntityTypes })
+        .then((items) => {
+          if (!cancelled) {
+            setEntityMentionSuggestions(items);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setEntityMentionSuggestions([]);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setIsLoadingEntityMentionSuggestions(false);
+          }
+        });
+    }, delayMs);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [mentionContext]);
+
   const mentionSuggestions = useMemo(() => {
     if (!mentionContext) return [];
     const needle = mentionContext.query.trim().toLowerCase();
 
-    return participants
-      .filter((participant) => {
-        if (!needle) return true;
-        return (
-          participantLabel(participant).toLowerCase().includes(needle) ||
-          participant.email.toLowerCase().includes(needle) ||
-          participant.role.toLowerCase().includes(needle)
-        );
-      })
-      .slice(0, 8);
-  }, [mentionContext, participants]);
+    const participantSuggestions: MentionSuggestion[] =
+      mentionContext.scope !== 'all'
+        ? []
+        : participants
+            .filter((participant) => {
+              if (!needle) return true;
+              return (
+                participantLabel(participant).toLowerCase().includes(needle) ||
+                participant.email.toLowerCase().includes(needle) ||
+                participant.role.toLowerCase().includes(needle)
+              );
+            })
+            .slice(0, 8)
+            .map((participant) => ({
+              kind: 'participant',
+              participant,
+            }));
+
+    const entitySuggestions: MentionSuggestion[] = entityMentionSuggestions.map((entity) => ({
+      kind: 'entity',
+      entity,
+    }));
+
+    return [...participantSuggestions, ...entitySuggestions];
+  }, [entityMentionSuggestions, mentionContext, participants]);
+
+  const groupedMentionSuggestions = useMemo(
+    () => groupMentionSuggestions(mentionSuggestions),
+    [mentionSuggestions]
+  );
 
   const toggleLauncher = () => {
     if (!user) return;
 
     if (!isOpen) {
+      shouldStickToBottomRef.current = true;
       setIsOpen(true);
       setIsMinimized(false);
       return;
     }
 
     if (isMinimized) {
+      shouldStickToBottomRef.current = true;
       setIsMinimized(false);
       return;
     }
@@ -853,6 +1158,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     if (selectedConversationKeyRef.current && selectedConversationKeyRef.current !== conversationKey) {
       stopTyping(selectedConversationKeyRef.current);
     }
+    shouldStickToBottomRef.current = true;
     setOpenMessageActionId(null);
     setOpenReactionPickerId(null);
     setReplyTarget(null);
@@ -864,7 +1170,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
 
   const handleDraftChange = (value: string, cursorPosition: number) => {
     setDraft(value);
-    setMentionContext(getMentionContext(value, cursorPosition));
+    setMentionContext(getActiveChatMentionContext(value, cursorPosition));
     scheduleTypingUpdate(value, selectedConversationKeyRef.current);
   };
 
@@ -893,10 +1199,37 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     });
   };
 
+  const insertEntityMention = (entity: InternalChatEntityMentionSuggestion) => {
+    if (!textareaRef.current || !mentionContext) return;
+
+    const displayToken = `@${entity.label}`;
+    const encodedToken = createChatMentionToken(entity.label, entity.entityType, entity.entityId);
+    const nextValue = `${draft.slice(0, mentionContext.start)}${displayToken} ${draft.slice(mentionContext.end)}`;
+
+    setDraft(nextValue);
+    scheduleTypingUpdate(nextValue, selectedConversationKeyRef.current);
+    setEntityMentionSelections((previous) => {
+      const next = previous.filter((selection) => selection.displayToken !== displayToken);
+      next.push({
+        displayToken,
+        encodedToken,
+      });
+      return next;
+    });
+    setMentionContext(null);
+    requestAnimationFrame(() => {
+      if (!textareaRef.current) return;
+      const nextCursor = mentionContext.start + displayToken.length + 1;
+      textareaRef.current.focus();
+      textareaRef.current.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
+
   const handleSend = async () => {
     if (!user || isSending) return;
     const trimmedMessage = draft.trim();
     if (!trimmedMessage) return;
+    const serializedMessage = serializeDraftEntityMentions(trimmedMessage, entityMentionSelections);
 
     const selectedRecipientId = selectedOtherParticipant?.id;
     const mentionedRecipientIds = Object.entries(mentionSelections)
@@ -926,10 +1259,12 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
       setReplyTarget(null);
     }
 
+    shouldStickToBottomRef.current = true;
     setIsSending(true);
     setOpenMessageActionId(null);
     setOpenReactionPickerId(null);
     const previousDraft = draft;
+    const previousEntityMentionSelections = entityMentionSelections;
     const pendingCreatedAt = new Date().toISOString();
     const pendingMessages: InternalChatMessage[] = recipientIds.map((recipientId) => {
       const conversationKey =
@@ -942,7 +1277,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
         conversation_key: conversationKey,
         sender_id: user.id,
         recipient_id: recipientId,
-        message: trimmedMessage,
+        message: serializedMessage,
         created_at: pendingCreatedAt,
         is_from_current_user: true,
         sender_name: user.full_name || 'You',
@@ -967,12 +1302,13 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     setMessagesByConversation((prev) => mergeConversationMessages(prev, pendingMessages));
     setDraft('');
     setMentionSelections({});
+    setEntityMentionSelections([]);
     setMentionContext(null);
     stopTyping(selectedConversationKeyRef.current);
 
     try {
       const created = await sendInternalChatMessage({
-        message: trimmedMessage,
+        message: serializedMessage,
         conversationKey: selectedConversationKey || undefined,
         recipientIds,
         replyToMessageId: activeReplyTarget?.message_id,
@@ -992,6 +1328,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
     } catch (error) {
       setMessagesByConversation((prev) => removeConversationMessages(prev, pendingMessages.map((message) => message.id)));
       setDraft(previousDraft);
+      setEntityMentionSelections(previousEntityMentionSelections);
       addToast({
         type: 'error',
         title: 'Unable to send message',
@@ -1140,7 +1477,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
               ) : (
                 filteredParticipants.map(({ participant, conversationKey, summary }) => {
                   const isSelected = selectedConversationKey === conversationKey;
-                  const preview = summary?.last_message_preview || `Start a chat with ${participantLabel(participant)}`;
+                  const preview = extractPlainTextFromChatMessage(summary?.last_message_preview || '') || `Start a chat with ${participantLabel(participant)}`;
 
                   return (
                     <button
@@ -1204,7 +1541,15 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
               </button>
             </div>
 
-            <div ref={messageViewportRef} className="flex-1 space-y-4 overflow-y-auto bg-slate-50/50 px-5 py-4 pb-6">
+            <div
+              ref={messageViewportRef}
+              data-testid="internal-chat-message-viewport"
+              onScroll={(event) => {
+                const viewport = event.currentTarget;
+                shouldStickToBottomRef.current = isViewportNearBottom(viewport);
+              }}
+              className="flex-1 space-y-4 overflow-y-auto bg-slate-50/50 px-5 py-4 pb-6"
+            >
               {!selectedConversationKey ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-10 text-center text-sm text-slate-500">
                   Select an account to start chatting.
@@ -1316,7 +1661,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
                                 )}
                               </>
                             )}
-                            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.message}</p>
+                            {renderMessageBody(message.message, isMine)}
                           </div>
                           {isActionOpen && isReactionPickerOpen && (
                             <div className={`mt-2 flex ${isMine ? 'justify-end' : 'justify-start'}`}>
@@ -1391,7 +1736,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
               <div ref={messageBottomRef} aria-hidden="true" />
             </div>
 
-            <div className="border-t border-slate-200 bg-white px-5 py-4">
+            <div ref={composerContainerRef} className="border-t border-slate-200 bg-white px-5 py-4">
               {replyTarget && (
                 <div className="mb-3 flex items-start justify-between gap-3 rounded-2xl border border-brand-blue/20 bg-brand-blue/5 px-4 py-3">
                   <div className="min-w-0">
@@ -1418,7 +1763,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
                   onClick={(event) => handleDraftChange(draft, (event.target as HTMLTextAreaElement).selectionStart || draft.length)}
                   onKeyUp={(event) => handleDraftChange(draft, (event.currentTarget as HTMLTextAreaElement).selectionStart || draft.length)}
                   onKeyDown={(event) => {
-                    if (mentionSuggestions.length > 0 && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+                    if (groupedMentionSuggestions.length > 0 && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
                       event.preventDefault();
                     }
                     if (event.key === 'Enter' && !event.shiftKey) {
@@ -1428,36 +1773,85 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
                   }}
                   onBlur={() => stopTyping(selectedConversationKeyRef.current)}
                   rows={3}
-                  placeholder={selectedOtherParticipant ? `Message ${participantLabel(selectedOtherParticipant)}. Use @name to include other accounts.` : 'Select an account or type @name to mention recipients.'}
+                  placeholder={
+                    selectedOtherParticipant
+                      ? `Message ${participantLabel(selectedOtherParticipant)}. Try @invoice INV-1001 or @product brake pad.`
+                      : 'Select an account or try @invoice INV-1001, @salesorder SO-1001, or @product brake pad.'
+                  }
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 pr-14 text-sm text-slate-900 outline-none transition focus:border-brand-blue focus:bg-white focus:ring-2 focus:ring-brand-blue/20"
                 />
 
-                {mentionContext && mentionSuggestions.length > 0 && (
+                {mentionContext && (groupedMentionSuggestions.length > 0 || isLoadingEntityMentionSuggestions) && (
                   <div className="absolute bottom-[calc(100%+8px)] left-0 z-10 w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
                     <div className="border-b border-slate-100 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-slate-400">
-                      Mention Account
+                      {mentionContext.scope === 'all'
+                        ? 'Mention Something'
+                        : `Mention ${mentionModeLabel(mentionContext.scope)}`}
                     </div>
-                    <div className="max-h-56 overflow-y-auto py-1">
-                      {mentionSuggestions.map((participant) => (
-                        <button
-                          key={participant.id}
-                          onMouseDown={(event) => {
-                            event.preventDefault();
-                            insertMention(participant);
-                          }}
-                          className="flex w-full items-start gap-3 px-3 py-2 text-left transition hover:bg-slate-50"
-                        >
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-blue/10 text-xs font-semibold text-brand-blue">
-                            {avatarFallback(participantLabel(participant))}
+                    <div className="max-h-72 overflow-y-auto py-1">
+                      {groupedMentionSuggestions.map((group) => (
+                        <div key={group.key} className="border-b border-slate-100 last:border-b-0">
+                          <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                            {group.label}
                           </div>
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-slate-900">{participantLabel(participant)}</p>
-                            <p className="truncate text-xs text-slate-500">
-                              {participant.role}{participant.email ? ` • ${participant.email}` : ''}
-                            </p>
-                          </div>
-                        </button>
+                          {group.items.map((suggestion, index) => {
+                            if (suggestion.kind === 'participant') {
+                              const participant = suggestion.participant;
+                              return (
+                                <button
+                                  key={`${group.key}:${participant.id}:${index}`}
+                                  onMouseDown={(event) => {
+                                    event.preventDefault();
+                                    insertMention(participant);
+                                  }}
+                                  className="flex w-full items-start gap-3 px-3 py-2 text-left transition hover:bg-slate-50"
+                                >
+                                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-blue/10 text-xs font-semibold text-brand-blue">
+                                    {avatarFallback(participantLabel(participant))}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-medium text-slate-900">{participantLabel(participant)}</p>
+                                    <p className="truncate text-xs text-slate-500">
+                                      {participant.role}{participant.email ? ` • ${participant.email}` : ''}
+                                    </p>
+                                  </div>
+                                </button>
+                              );
+                            }
+
+                            return (
+                              <button
+                                key={`${group.key}:${suggestion.entity.entityId}:${index}`}
+                                onMouseDown={(event) => {
+                                  event.preventDefault();
+                                  insertEntityMention(suggestion.entity);
+                                }}
+                                className="flex w-full items-start gap-3 px-3 py-2 text-left transition hover:bg-slate-50"
+                              >
+                                <div className="flex h-9 min-w-9 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+                                  {suggestion.entity.entityType === 'sales-inquiry' && 'SI'}
+                                  {suggestion.entity.entityType === 'sales-order' && 'SO'}
+                                  {suggestion.entity.entityType === 'order-slip' && 'OS'}
+                                  {suggestion.entity.entityType === 'invoice' && 'INV'}
+                                  {suggestion.entity.entityType === 'product' && 'PRD'}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-medium text-slate-900">{suggestion.entity.label}</p>
+                                  <p className="truncate text-xs text-slate-500">{suggestion.entity.subtitle}</p>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
                       ))}
+                      {isLoadingEntityMentionSuggestions && (
+                        <div className="flex items-center gap-2 px-3 py-2 text-xs text-slate-500">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          {mentionContext.scope === 'all'
+                            ? 'Searching records and products...'
+                            : `Searching ${mentionModeLabel(mentionContext.scope).toLowerCase()} records...`}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

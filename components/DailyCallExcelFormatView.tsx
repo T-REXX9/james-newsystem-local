@@ -25,6 +25,7 @@ const statusFilters: Array<{ id: DailyCallCustomerFilterStatus; label: string }>
 
 const rowHeightPx = 42;
 const viewportHeightPx = 530;
+const vipBadgeIconUrl = new URL('../vip-svgrepo-com.svg', import.meta.url).href;
 
 const toCurrency = (value: number) =>
   new Intl.NumberFormat('en-PH', {
@@ -42,6 +43,8 @@ const resolveDealerPriceTier = (row: DailyCallCustomerRow) => {
   if (row.monthlyOrder >= 10000) return 'Silver';
   return 'Regular';
 };
+
+const isVipDealerTier = (tier: string) => tier === 'Silver' || tier === 'Gold';
 
 const pricingTargetLabel = (monthlySales: number) => {
   if (monthlySales >= 30000) {
@@ -375,7 +378,17 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
                         <div className="text-[9px] text-slate-500 truncate" title={row.assignedDate || '—'}>{row.assignedDate || '—'}</div>
                       </td>
                       <td className="px-1.5 py-1.5 text-slate-600">
-                        <div className="font-medium text-slate-700 dark:text-slate-200 truncate">{dealerPriceTier}</div>
+                        <div className="flex items-center gap-1 font-medium text-slate-700 dark:text-slate-200 truncate">
+                          {isVipDealerTier(dealerPriceTier) && (
+                            <img
+                              src={vipBadgeIconUrl}
+                              alt={`${dealerPriceTier} VIP badge`}
+                              className="flex-shrink-0"
+                              style={{ width: '16.8px', height: '16.8px' }}
+                            />
+                          )}
+                          <span className="truncate">{dealerPriceTier}</span>
+                        </div>
                         <div className="text-[9px] text-slate-500 truncate" title={row.dealerPriceDate || row.ishinomotoDealerSince || '—'}>{row.dealerPriceDate || row.ishinomotoDealerSince || '—'}</div>
                       </td>
                       <td className="px-1.5 py-1.5 text-slate-600">

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Search, Plus, Edit2, Trash2, Filter, Package, AlertCircle, X, Check, Loader2, Save, Eye, EyeOff, Archive, TrendingUp, TrendingDown, Settings, DollarSign, Percent
 } from 'lucide-react';
@@ -10,6 +10,7 @@ import {
   createProduct,
   updateProduct,
   deleteProduct,
+  fetchProductById,
 } from '../services/productLocalApiService';
 import { searchStockMovementProducts } from '../services/stockMovementLocalApiService';
 import { fetchProductMovementClassifications } from '../services/inventoryMovementService';
@@ -25,9 +26,10 @@ import { fetchCategories, type CategoryRecord } from '../services/categoryLocalA
 
 interface ProductDatabaseProps {
   currentUser: UserProfile | null;
+  initialProductId?: string;
 }
 
-const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
+const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialProductId }) => {
   const { addToast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -42,6 +44,9 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
   const [perPage] = useState(100);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [highlightedProductId, setHighlightedProductId] = useState<string | null>(null);
+  const productRowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
+  const pendingNavigationProductIdRef = useRef<string | null>(null);
 
   const isMasterAccess = currentUser?.role === 'Owner' || currentUser?.role === 'Developer';
 
@@ -136,6 +141,34 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
     };
   }, [searchQuery]);
 
+  useEffect(() => {
+    if (!initialProductId) {
+      pendingNavigationProductIdRef.current = null;
+      return;
+    }
+
+    let cancelled = false;
+    pendingNavigationProductIdRef.current = initialProductId;
+
+    void fetchProductById(initialProductId)
+      .then((product) => {
+        if (cancelled || !product) return;
+        const searchValue = product.part_no?.trim() || product.item_code?.trim() || product.description?.trim() || '';
+        setSearchQuery(searchValue);
+        setDebouncedSearch(searchValue);
+        setPage(1);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          pendingNavigationProductIdRef.current = null;
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialProductId]);
+
   const loadProducts = async (targetPage = page) => {
     setIsLoading(true);
     try {
@@ -167,6 +200,30 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
     loadProducts(page);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, debouncedSearch, statusFilter]);
+
+  useEffect(() => {
+    const targetProductId = pendingNavigationProductIdRef.current;
+    if (!targetProductId) {
+      return;
+    }
+
+    const row = productRowRefs.current[targetProductId];
+    if (!row || !products.some((product) => product.id === targetProductId)) {
+      return;
+    }
+
+    pendingNavigationProductIdRef.current = null;
+    setHighlightedProductId(targetProductId);
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    const timeout = window.setTimeout(() => {
+      setHighlightedProductId((current) => (current === targetProductId ? null : current));
+    }, 2200);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [products]);
 
   // Movement classification state
   type MovementCategory = 'fast' | 'slow' | 'normal';
@@ -563,7 +620,17 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
                   </td>
                 </tr>
               ) : filteredProducts.map((product) => (
-                <tr key={product.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                <tr
+                  key={product.id}
+                  ref={(node) => {
+                    productRowRefs.current[product.id] = node;
+                  }}
+                  className={`transition-colors ${
+                    highlightedProductId === product.id
+                      ? 'bg-brand-blue/10 ring-1 ring-inset ring-brand-blue/30'
+                      : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                  }`}
+                >
                   <td className="p-4 text-center align-top pt-5">
                     {product.status === 'Active' ? (
                       <Eye className="w-5 h-5 text-emerald-500 mx-auto" />

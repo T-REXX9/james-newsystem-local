@@ -1,23 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CheckCircle, Clock, FileSearch, FileText } from 'lucide-react';
 import { fetchDailyCallSalesReports } from '../services/dailyCallCustomerDetailService';
-
-interface SalesReportProductLine {
-  name: string;
-  quantity: number;
-  price: number;
-}
-
-interface SalesReportRecord {
-  id: string;
-  date: string;
-  time: string;
-  sales_agent: string;
-  notes?: string;
-  total_amount: number;
-  approval_status: 'approved' | 'pending' | 'rejected' | string;
-  products: SalesReportProductLine[];
-}
+import {
+  DailyCallSalesReportRecord,
+  normalizeDateValue,
+  normalizeProductName,
+  normalizeSalesReportRecords,
+  openDailyCallSalesInquiry,
+} from './dailyCallSalesReportUtils';
 
 interface SalesReportTabProps {
   contactId: string;
@@ -25,24 +15,8 @@ interface SalesReportTabProps {
   onApprove?: (reportId: string) => void;
 }
 
-const normalizeDateValue = (value: string): string => {
-  const trimmed = value.trim();
-  const directMatch = trimmed.match(/^\d{4}-\d{2}-\d{2}/);
-  if (directMatch) return directMatch[0];
-
-  const parsed = new Date(trimmed);
-  if (Number.isNaN(parsed.getTime())) return '';
-
-  const year = parsed.getFullYear();
-  const month = String(parsed.getMonth() + 1).padStart(2, '0');
-  const day = String(parsed.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-const normalizeProductName = (value: string): string => value.trim().toLowerCase();
-
 const SalesReportTab: React.FC<SalesReportTabProps> = ({ contactId, currentUserId, onApprove }) => {
-  const [reports, setReports] = useState<SalesReportRecord[]>([]);
+  const [reports, setReports] = useState<DailyCallSalesReportRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -57,26 +31,7 @@ const SalesReportTab: React.FC<SalesReportTabProps> = ({ contactId, currentUserI
 
       try {
         const data = await fetchDailyCallSalesReports(contactId);
-        const normalizedReports: SalesReportRecord[] = Array.isArray(data)
-          ? data.map((report: Partial<SalesReportRecord>) => ({
-              id: String(report.id || ''),
-              date: String(report.date || ''),
-              time: String(report.time || ''),
-              sales_agent: String(report.sales_agent || ''),
-              notes: typeof report.notes === 'string' ? report.notes : '',
-              total_amount: Number(report.total_amount || 0),
-              approval_status: String(report.approval_status || 'pending'),
-              products: Array.isArray(report.products)
-                ? report.products.map((product: Partial<SalesReportProductLine>) => ({
-                    name: String(product.name || ''),
-                    quantity: Number(product.quantity || 0),
-                    price: Number(product.price || 0),
-                  }))
-                : [],
-            }))
-          : [];
-
-        setReports(normalizedReports);
+        setReports(normalizeSalesReportRecords(data));
       } catch (err) {
         console.error('Error loading sales inquiry reports:', err);
         setReports([]);
@@ -126,22 +81,6 @@ const SalesReportTab: React.FC<SalesReportTabProps> = ({ contactId, currentUserI
   }, [fromDate, reports, selectedProduct, toDate]);
 
   const hasActiveFilters = fromDate !== '' || toDate !== '' || selectedProduct !== '';
-
-  const openInquiry = (inquiryId: string) => {
-    if (!inquiryId) return;
-
-    window.dispatchEvent(new CustomEvent('workflow:navigate', {
-      detail: {
-        tab: 'salesinquiry',
-        payload: {
-          inquiryId,
-          contactId,
-          prefillToken: Date.now().toString(),
-          openMode: 'existing',
-        },
-      },
-    }));
-  };
 
   if (loading) {
     return <div className="p-6 text-center text-slate-500">Loading sales inquiry reports...</div>;
@@ -241,7 +180,7 @@ const SalesReportTab: React.FC<SalesReportTabProps> = ({ contactId, currentUserI
           <button
             key={report.id}
             type="button"
-            onClick={() => openInquiry(report.id)}
+            onClick={() => openDailyCallSalesInquiry(contactId, report.id)}
             aria-label={`Open sales inquiry report ${report.id}`}
             className="block w-full rounded-lg border border-slate-200 bg-white p-4 text-left transition hover:border-blue-300 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-blue-500/50"
           >

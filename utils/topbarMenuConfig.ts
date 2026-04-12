@@ -356,6 +356,12 @@ export const TOPBAR_MENU_CONFIG: TopbarMainMenu[] = [
             route: 'maintenance-customer-customer-group',
             icon: Users,
           },
+          {
+            id: 'maintenance-customer-vip-thresholds',
+            label: 'VIP Thresholds',
+            route: 'maintenance-customer-vip-thresholds',
+            icon: Shield,
+          },
         ],
       },
       {

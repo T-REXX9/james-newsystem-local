@@ -141,6 +141,26 @@ cleanup() {
   fi
 }
 
+wait_for_http() {
+  local url="$1"
+  local label="$2"
+  local max_attempts="${3:-30}"
+  local attempt=1
+
+  while (( attempt <= max_attempts )); do
+    if curl --silent --fail --max-time 2 "${url}" >/dev/null 2>&1; then
+      echo "${label} is ready at ${url}"
+      return 0
+    fi
+
+    sleep 1
+    ((attempt+=1))
+  done
+
+  echo "Timed out waiting for ${label} at ${url}" >&2
+  return 1
+}
+
 trap cleanup EXIT INT TERM
 
 kill_port_processes "${NEWSYSTEM_PORT}" "new system"
@@ -155,6 +175,7 @@ echo "Starting API on http://${API_HOST}:${API_PORT}"
   PHP_CLI_SERVER_WORKERS="${PHP_CLI_SERVER_WORKERS:-4}" php -S "${API_HOST}:${API_PORT}" -t public
 ) &
 API_PID=$!
+wait_for_http "http://${API_HOST}:${API_PORT}/api/v1/health" "API"
 
 echo "Starting Internal Chat Realtime on http://${REALTIME_HOST}:${REALTIME_PORT}"
 (
@@ -165,6 +186,7 @@ echo "Starting Internal Chat Realtime on http://${REALTIME_HOST}:${REALTIME_PORT
     npm run realtime
 ) &
 REALTIME_PID=$!
+wait_for_http "http://${REALTIME_HOST}:${REALTIME_PORT}/health" "Internal Chat Realtime"
 
 echo "Starting New System (${WEB_MODE}) on http://localhost:${NEWSYSTEM_PORT}/james-newsystem/"
 (
