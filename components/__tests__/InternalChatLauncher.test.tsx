@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import InternalChatLauncher from '../InternalChatLauncher';
 import { ToastProvider } from '../ToastProvider';
@@ -79,6 +79,26 @@ const participant: InternalChatParticipant = {
   is_owner: false,
 };
 
+const secondParticipant: InternalChatParticipant = {
+  id: '3',
+  main_id: '101',
+  full_name: 'Analyst User',
+  email: 'analyst@example.com',
+  role: 'Inventory Analyst',
+  avatar_url: '',
+  is_owner: false,
+};
+
+const thirdParticipant: InternalChatParticipant = {
+  id: '4',
+  main_id: '102',
+  full_name: 'Closer User',
+  email: 'closer@example.com',
+  role: 'Finance Lead',
+  avatar_url: '',
+  is_owner: false,
+};
+
 const conversation: InternalChatConversationSummary = {
   conversation_key: 'dm:1:2',
   conversation_type: 'direct',
@@ -135,6 +155,44 @@ const secondMessage: InternalChatMessage = {
   reply_preview: null,
 };
 
+const buildGroupConversation = (
+  overrides: Partial<InternalChatConversationSummary> = {}
+): InternalChatConversationSummary => ({
+  conversation_key: 'grp:55',
+  conversation_type: 'group',
+  title: 'Support Squad',
+  subtitle: '2 members',
+  avatar_label: 'SS',
+  member_count: 2,
+  can_manage: true,
+  other_participant: null,
+  last_message_preview: 'Group created',
+  last_message_at: '2026-04-12T10:05:00.000Z',
+  unread_count: 0,
+  ...overrides,
+});
+
+const buildGroupDetail = (
+  overrides: Partial<{
+    name: string;
+    subtitle: string;
+    member_count: number;
+    members: InternalChatParticipant[];
+  }> = {}
+) => ({
+  id: '55',
+  conversation_key: 'grp:55',
+  conversation_type: 'group' as const,
+  name: overrides.name ?? 'Support Squad',
+  title: overrides.name ?? 'Support Squad',
+  subtitle: overrides.subtitle ?? '2 members',
+  avatar_label: 'SS',
+  member_count: overrides.member_count ?? 2,
+  created_by_user_id: '1',
+  can_manage: true,
+  members: overrides.members ?? [participant, secondParticipant],
+});
+
 const createDeferred = <T,>() => {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((res) => {
@@ -174,6 +232,24 @@ const installViewportMetrics = (viewport: HTMLDivElement) => {
   };
 };
 
+const renderLauncher = async () => {
+  render(
+    <ToastProvider>
+      <InternalChatLauncher user={currentUser} />
+    </ToastProvider>
+  );
+
+  fireEvent.click(screen.getByRole('button', { name: 'Open Internal Chat' }));
+  await screen.findByRole('dialog', { name: 'Internal chat' });
+};
+
+const getCurrentMembersContainer = (): HTMLElement => {
+  const heading = screen.getByText('Current Members');
+  const container = heading.parentElement?.nextElementSibling;
+  expect(container).toBeInstanceOf(HTMLElement);
+  return container as HTMLElement;
+};
+
 describe('InternalChatLauncher', () => {
   let realtimeHandler: ((event: InternalChatRealtimeEvent) => void) | null;
 
@@ -193,77 +269,44 @@ describe('InternalChatLauncher', () => {
 
     localApiMocks.fetchInternalChatParticipants.mockResolvedValue([participant]);
     localApiMocks.fetchInternalChatConversations.mockResolvedValue([conversation]);
-    localApiMocks.fetchInternalChatGroup.mockResolvedValue({
-      id: '55',
-      conversation_key: 'grp:55',
-      conversation_type: 'group',
-      name: 'Support Squad',
-      title: 'Support Squad',
+    localApiMocks.fetchInternalChatGroup.mockResolvedValue(buildGroupDetail({
       subtitle: '3 members',
-      avatar_label: 'SS',
       member_count: 3,
-      created_by_user_id: '1',
-      can_manage: true,
       members: [participant],
-    });
+    }));
     localApiMocks.fetchInternalChatTypingState.mockResolvedValue({
       conversation_key: 'dm:1:2',
       typing_user_ids: [],
     });
     localApiMocks.fetchInternalChatUnreadCount.mockResolvedValue(0);
     localApiMocks.markInternalChatConversationRead.mockResolvedValue(undefined);
-    localApiMocks.createInternalChatGroup.mockResolvedValue({
-      id: '55',
-      conversation_key: 'grp:55',
-      conversation_type: 'group',
-      name: 'Support Squad',
-      title: 'Support Squad',
+    localApiMocks.createInternalChatGroup.mockResolvedValue(buildGroupDetail({
       subtitle: '3 members',
-      avatar_label: 'SS',
       member_count: 3,
-      created_by_user_id: '1',
-      can_manage: true,
-      members: [participant],
-    });
-    localApiMocks.renameInternalChatGroup.mockImplementation(async (_groupId: string, name: string) => ({
-      id: '55',
-      conversation_key: 'grp:55',
-      conversation_type: 'group',
-      name,
-      title: name,
-      subtitle: '3 members',
-      avatar_label: 'SS',
-      member_count: 3,
-      created_by_user_id: '1',
-      can_manage: true,
       members: [participant],
     }));
-    localApiMocks.addInternalChatGroupMembers.mockImplementation(async () => ({
-      id: '55',
-      conversation_key: 'grp:55',
-      conversation_type: 'group',
-      name: 'Support Squad',
-      title: 'Support Squad',
-      subtitle: '3 members',
-      avatar_label: 'SS',
-      member_count: 3,
-      created_by_user_id: '1',
-      can_manage: true,
-      members: [participant],
-    }));
-    localApiMocks.removeInternalChatGroupMember.mockImplementation(async () => ({
-      id: '55',
-      conversation_key: 'grp:55',
-      conversation_type: 'group',
-      name: 'Support Squad',
-      title: 'Support Squad',
-      subtitle: '2 members',
-      avatar_label: 'SS',
-      member_count: 2,
-      created_by_user_id: '1',
-      can_manage: true,
-      members: [participant],
-    }));
+    localApiMocks.renameInternalChatGroup.mockImplementation(async (_groupId: string, name: string) =>
+      buildGroupDetail({
+        name,
+        subtitle: '3 members',
+        member_count: 3,
+        members: [participant],
+      })
+    );
+    localApiMocks.addInternalChatGroupMembers.mockImplementation(async () =>
+      buildGroupDetail({
+        subtitle: '3 members',
+        member_count: 3,
+        members: [participant],
+      })
+    );
+    localApiMocks.removeInternalChatGroupMember.mockImplementation(async () =>
+      buildGroupDetail({
+        subtitle: '2 members',
+        member_count: 2,
+        members: [participant],
+      })
+    );
     localApiMocks.sendInternalChatMessage.mockResolvedValue([]);
     localApiMocks.toggleInternalChatReaction.mockResolvedValue({
       message_id: '101',
@@ -498,6 +541,172 @@ describe('InternalChatLauncher', () => {
           message: '[Invoice T-12940](mention:invoice:2026032923434820095)',
         })
       );
+    });
+  });
+
+  it('creates a group chat and focuses the new conversation', async () => {
+    let created = false;
+
+    localApiMocks.fetchInternalChatParticipants.mockResolvedValue([participant, secondParticipant]);
+    localApiMocks.fetchInternalChatMessages.mockResolvedValue([]);
+    localApiMocks.fetchInternalChatTypingState.mockImplementation(async (conversationKey: string) => ({
+      conversation_key: conversationKey,
+      typing_user_ids: [],
+    }));
+    localApiMocks.fetchInternalChatConversations.mockImplementation(async () =>
+      created
+        ? [
+            buildGroupConversation({
+              title: 'Operations Squad',
+              subtitle: '2 members',
+              member_count: 2,
+              last_message_preview: 'Operations Squad',
+            }),
+            conversation,
+          ]
+        : [conversation]
+    );
+    localApiMocks.createInternalChatGroup.mockImplementation(async (name: string, memberIds: string[]) => {
+      created = true;
+      return buildGroupDetail({
+        name,
+        subtitle: `${memberIds.length} members`,
+        member_count: memberIds.length,
+        members: [participant, secondParticipant],
+      });
+    });
+
+    await renderLauncher();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create group chat' }));
+    fireEvent.change(screen.getByPlaceholderText('Enter group name'), {
+      target: { value: 'Operations Squad' },
+    });
+    fireEvent.click(screen.getByRole('checkbox', { name: /Teammate User/i }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Analyst User/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create Group' }));
+
+    await waitFor(() => {
+      expect(localApiMocks.createInternalChatGroup).toHaveBeenCalledWith('Operations Squad', ['2', '3']);
+    });
+    await screen.findByRole('button', { name: /Operations Squad/i });
+    await waitFor(() => {
+      expect(screen.queryByText('Create Group Chat')).not.toBeInTheDocument();
+    });
+  });
+
+  it('renames a managed group and refreshes the visible title', async () => {
+    let groupName = 'Support Squad';
+    let groupMembers = [participant, secondParticipant];
+
+    localApiMocks.fetchInternalChatParticipants.mockResolvedValue([participant, secondParticipant, thirdParticipant]);
+    localApiMocks.fetchInternalChatMessages.mockResolvedValue([]);
+    localApiMocks.fetchInternalChatTypingState.mockImplementation(async (conversationKey: string) => ({
+      conversation_key: conversationKey,
+      typing_user_ids: [],
+    }));
+    localApiMocks.fetchInternalChatConversations.mockImplementation(async () => [
+      buildGroupConversation({
+        title: groupName,
+        subtitle: `${groupMembers.length} members`,
+        member_count: groupMembers.length,
+        last_message_preview: groupName,
+      }),
+    ]);
+    localApiMocks.fetchInternalChatGroup.mockImplementation(async () =>
+      buildGroupDetail({
+        name: groupName,
+        subtitle: `${groupMembers.length} members`,
+        member_count: groupMembers.length,
+        members: groupMembers,
+      })
+    );
+    localApiMocks.renameInternalChatGroup.mockImplementation(async (_groupId: string, name: string) => {
+      groupName = name;
+      return buildGroupDetail({
+        name: groupName,
+        subtitle: `${groupMembers.length} members`,
+        member_count: groupMembers.length,
+        members: groupMembers,
+      });
+    });
+
+    await renderLauncher();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage Group' }));
+    await screen.findByText('Manage Group Chat');
+    fireEvent.change(screen.getByPlaceholderText('Enter group name'), {
+      target: { value: 'Escalations Desk' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Name' }));
+
+    await waitFor(() => {
+      expect(localApiMocks.renameInternalChatGroup).toHaveBeenCalledWith('55', 'Escalations Desk');
+    });
+    await screen.findByRole('button', { name: /Escalations Desk/i });
+  });
+
+  it('adds and removes members from the manage group dialog', async () => {
+    let groupMembers = [participant, secondParticipant];
+
+    localApiMocks.fetchInternalChatParticipants.mockResolvedValue([participant, secondParticipant, thirdParticipant]);
+    localApiMocks.fetchInternalChatMessages.mockResolvedValue([]);
+    localApiMocks.fetchInternalChatTypingState.mockImplementation(async (conversationKey: string) => ({
+      conversation_key: conversationKey,
+      typing_user_ids: [],
+    }));
+    localApiMocks.fetchInternalChatConversations.mockImplementation(async () => [
+      buildGroupConversation({
+        subtitle: `${groupMembers.length} members`,
+        member_count: groupMembers.length,
+      }),
+    ]);
+    localApiMocks.fetchInternalChatGroup.mockImplementation(async () =>
+      buildGroupDetail({
+        subtitle: `${groupMembers.length} members`,
+        member_count: groupMembers.length,
+        members: groupMembers,
+      })
+    );
+    localApiMocks.addInternalChatGroupMembers.mockImplementation(async (_groupId: string, memberIds: string[]) => {
+      groupMembers = [...groupMembers, ...[thirdParticipant].filter((member) => memberIds.includes(member.id))];
+      return buildGroupDetail({
+        subtitle: `${groupMembers.length} members`,
+        member_count: groupMembers.length,
+        members: groupMembers,
+      });
+    });
+    localApiMocks.removeInternalChatGroupMember.mockImplementation(async (_groupId: string, memberId: string) => {
+      groupMembers = groupMembers.filter((member) => member.id !== memberId);
+      return buildGroupDetail({
+        subtitle: `${groupMembers.length} members`,
+        member_count: groupMembers.length,
+        members: groupMembers,
+      });
+    });
+
+    await renderLauncher();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage Group' }));
+    await screen.findByText('Manage Group Chat');
+    fireEvent.click(screen.getByRole('checkbox', { name: /Closer User/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Selected' }));
+
+    await waitFor(() => {
+      expect(localApiMocks.addInternalChatGroupMembers).toHaveBeenCalledWith('55', ['4']);
+    });
+
+    await waitFor(() => {
+      expect(within(getCurrentMembersContainer()).getByText('Closer User')).toBeInTheDocument();
+    });
+
+    fireEvent.click(within(getCurrentMembersContainer()).getAllByRole('button', { name: 'Remove' })[0]);
+
+    await waitFor(() => {
+      expect(localApiMocks.removeInternalChatGroupMember).toHaveBeenCalledWith('55', '2');
+    });
+    await waitFor(() => {
+      expect(within(getCurrentMembersContainer()).queryByText('Teammate User')).not.toBeInTheDocument();
     });
   });
 });

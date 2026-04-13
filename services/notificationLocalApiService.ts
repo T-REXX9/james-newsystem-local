@@ -10,9 +10,13 @@ import { getLocalAuthSession } from './localAuthService';
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const PROFILES_CACHE_TTL_MS = 60 * 1000;
 const DEFAULT_NOTIFICATION_MAX_AGE_DAYS = 10;
+const NOTIFICATION_API_RETRY_BACKOFF_MS = 2 * 60 * 1000;
+const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
 
 let profilesCache: UserProfile[] | null = null;
 let profilesCachedAt = 0;
+let notificationApiRetryAt = 0;
+let notificationApiLastFailureAt = 0;
 
 export interface NotificationReadMetadataKey {
   entityType?: string;
@@ -46,6 +50,12 @@ export interface NotifyWorkflowEventInput {
 
 export interface NotificationRequestOptions {
   signal?: AbortSignal;
+}
+
+export interface NotificationApiAvailability {
+  isReachable: boolean;
+  retryAt: number | null;
+  lastFailureAt: number | null;
 }
 
 const parseApiErrorMessage = async (response: Response): Promise<string> => {
@@ -93,6 +103,48 @@ const getEffectiveUserId = (userId?: string): string => {
   return effectiveUserId;
 };
 
+const resolveErrorMessage = (error: unknown): string => {
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String((error as { message?: unknown }).message || '');
+  }
+
+  return '';
+};
+
+const isNotificationApiTransportError = (error: unknown): boolean => {
+  const message = resolveErrorMessage(error);
+  return /ECONNREFUSED|ERR_CONNECTION_REFUSED|Failed to fetch|fetch failed|Load failed|NetworkError/i.test(message);
+};
+
+const markNotificationApiReachable = (): void => {
+  notificationApiRetryAt = 0;
+  notificationApiLastFailureAt = 0;
+};
+
+const markNotificationApiTransportFailure = (error: unknown): boolean => {
+  if (!IS_DEV || !isNotificationApiTransportError(error)) {
+    return false;
+  }
+
+  const now = Date.now();
+  notificationApiLastFailureAt = now;
+  notificationApiRetryAt = now + NOTIFICATION_API_RETRY_BACKOFF_MS;
+  return true;
+};
+
+export const getNotificationApiAvailability = (): NotificationApiAvailability => {
+  const retryAt = notificationApiRetryAt > 0 ? notificationApiRetryAt : null;
+  return {
+    isReachable: retryAt === null || Date.now() >= retryAt,
+    retryAt,
+    lastFailureAt: notificationApiLastFailureAt > 0 ? notificationApiLastFailureAt : null,
+  };
+};
+
 const extractApiData = <T>(result: unknown): T | undefined => {
   if (!result || typeof result !== 'object') {
     return undefined;
@@ -124,6 +176,7 @@ export async function fetchNotifications(
       headers: getAuthHeaders(),
       signal: options?.signal,
     });
+    markNotificationApiReachable();
 
     if (!response.ok) {
       throw new Error(await parseApiErrorMessage(response));
@@ -136,6 +189,7 @@ export async function fetchNotifications(
     if ((error as Error)?.name === 'AbortError') {
       return [];
     }
+    markNotificationApiTransportFailure(error);
     console.error('Error fetching notifications:', error);
     return [];
   }
@@ -180,6 +234,7 @@ export async function getUnreadCount(
       headers: getAuthHeaders(),
       signal: options?.signal,
     });
+    markNotificationApiReachable();
 
     if (!response.ok) {
       throw new Error(await parseApiErrorMessage(response));
@@ -192,6 +247,7 @@ export async function getUnreadCount(
     if ((error as Error)?.name === 'AbortError') {
       return 0;
     }
+    markNotificationApiTransportFailure(error);
     console.error('Error fetching unread notification count:', error);
     return 0;
   }
@@ -390,6 +446,7 @@ export async function triggerInventoryAlertScan(): Promise<Notification[]> {
         main_id: mainId > 0 ? mainId : undefined,
       }),
     });
+    markNotificationApiReachable();
 
     if (!response.ok) {
       throw new Error(await parseApiErrorMessage(response));
@@ -405,6 +462,7 @@ export async function triggerInventoryAlertScan(): Promise<Notification[]> {
     const result = await response.json();
     return (result.data || result || []) as Notification[];
   } catch (error) {
+    markNotificationApiTransportFailure(error);
     console.error('Error scanning inventory alerts:', error);
     return [];
   }

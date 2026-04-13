@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { createHmac } from 'node:crypto';
 import { Server } from 'socket.io';
+import { INTERNAL_CHAT_SOCKET_EVENT, translateInternalChatNotification } from './internal-chat-realtime-contract.mjs';
 
 const HOST = process.env.INTERNAL_CHAT_SOCKET_HOST || '127.0.0.1';
 const PORT = Number(process.env.INTERNAL_CHAT_SOCKET_PORT || 8082);
@@ -160,110 +161,12 @@ const emitToUser = (userId, payload) => {
   if (normalized === '') {
     return;
   }
-  io.to(`user:${normalized}`).emit('chat:event', payload);
-};
-
-const participantsFromConversationKey = (conversationKey) => {
-  const match = String(conversationKey || '').trim().match(/^dm:(\d+):(\d+)$/);
-  if (!match) {
-    return [];
-  }
-
-  return [match[1], match[2]];
-};
-
-const normalizeTargetUserIds = (payload) => {
-  const targetUserIds = Array.isArray(payload?.target_user_ids)
-    ? payload.target_user_ids.map((userId) => String(userId || '').trim()).filter(Boolean)
-    : [];
-
-  if (targetUserIds.length > 0) {
-    return [...new Set(targetUserIds)];
-  }
-
-  return participantsFromConversationKey(String(payload?.conversation_key || ''));
-};
-
-const emitToConversationParticipants = (conversationKey, payload) => {
-  const participants = normalizeTargetUserIds({
-    ...payload,
-    conversation_key: conversationKey,
-  });
-  if (participants.length === 0) {
-    return;
-  }
-
-  for (const participantId of participants) {
-    emitToUser(participantId, payload);
-  }
+  io.to(`user:${normalized}`).emit(INTERNAL_CHAT_SOCKET_EVENT, payload);
 };
 
 const broadcastInternalChatEvent = (payload) => {
-  const type = String(payload?.type || '').trim();
-
-  if (type === 'messages.created') {
-    const items = Array.isArray(payload?.items) ? payload.items : [];
-    for (const item of items) {
-      const message = {
-        id: String(item?.id || ''),
-        conversation_key: String(item?.conversation_key || ''),
-        conversation_type: String(item?.conversation_type || 'direct'),
-        sender_id: String(item?.sender_id || ''),
-        recipient_id: String(item?.recipient_id || ''),
-        message: String(item?.message || ''),
-        created_at: String(item?.created_at || ''),
-        is_from_current_user: false,
-        sender_name: String(item?.sender_name || ''),
-        recipient_name: String(item?.recipient_name || ''),
-        sender_avatar_url: String(item?.sender_avatar_url || ''),
-        recipient_avatar_url: String(item?.recipient_avatar_url || ''),
-        delivery_status: String(item?.delivery_status || 'sent'),
-        is_read_by_recipient: Boolean(item?.is_read_by_recipient),
-        reactions: Array.isArray(item?.reactions) ? item.reactions : [],
-        current_user_reaction: item?.current_user_reaction ?? null,
-        reply_to_message_id: item?.reply_to_message_id ?? null,
-        reply_preview: item?.reply_preview ?? null,
-      };
-
-      const targetUserIds = normalizeTargetUserIds(item);
-      for (const participantId of targetUserIds) {
-        emitToUser(participantId, { type: 'message.created', message });
-      }
-    }
-    return;
-  }
-
-  if (type === 'conversation.read') {
-    emitToConversationParticipants(String(payload?.conversation_key || ''), {
-      type: 'conversation.read',
-      user_id: String(payload?.user_id || ''),
-      read_by_user_id: String(payload?.read_by_user_id || payload?.user_id || ''),
-      conversation_key: String(payload?.conversation_key || ''),
-      updated_count: Number(payload?.updated_count || 0),
-    });
-    return;
-  }
-
-  if (type === 'reaction.updated') {
-    emitToConversationParticipants(String(payload?.conversation_key || ''), {
-      type: 'reaction.updated',
-      conversation_key: String(payload?.conversation_key || ''),
-      message_id: String(payload?.message_id || ''),
-      reactions: Array.isArray(payload?.reactions) ? payload.reactions : [],
-      current_user_reaction: payload?.current_user_reaction ?? null,
-      actor_user_id: String(payload?.actor_user_id || ''),
-    });
-    return;
-  }
-
-  if (type === 'typing.updated') {
-    emitToConversationParticipants(String(payload?.conversation_key || ''), {
-      type: 'typing.updated',
-      conversation_key: String(payload?.conversation_key || ''),
-      user_id: String(payload?.user_id || ''),
-      is_typing: Boolean(payload?.is_typing),
-      typing_user_ids: Array.isArray(payload?.typing_user_ids) ? payload.typing_user_ids.map((id) => String(id || '')) : [],
-    });
+  for (const { userId, event } of translateInternalChatNotification(payload)) {
+    emitToUser(userId, event);
   }
 };
 

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "guard:recharts-pin": "node scripts/guard-recharts-pin.mjs",
     "preview": "vite preview",
     "realtime": "node scripts/internal-chat-realtime-server.mjs",
     "test": "vitest"
@@ -30,7 +31,7 @@
     "react-dom": "^19.2.0",
     "react-leaflet": "^5.0.0",
     "react-router-dom": "^7.11.0",
-    "recharts": "^3.4.1",
+    "recharts": "3.4.1",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
     "sonner": "^2.0.7"

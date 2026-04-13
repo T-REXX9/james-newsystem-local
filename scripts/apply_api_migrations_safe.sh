@@ -47,10 +47,14 @@ DB_HOST="${DB_HOST:-127.0.0.1}"
 DB_PORT="${DB_PORT:-3306}"
 DB_NAME="${DB_NAME:-topnotch}"
 DB_USER="${DB_USER:-james}"
-DB_PASS="${DB_PASS:-james123}"
+DB_PASS="${DB_PASS-james123}"
 DB_IMPORT_USER="${DB_IMPORT_USER:-}"
 
-MYSQL_CMD=(mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" "-p$DB_PASS" "$DB_NAME")
+MYSQL_CMD=(mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" "$DB_NAME")
+
+if [[ -n "$DB_PASS" ]]; then
+  MYSQL_CMD=(mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" "-p$DB_PASS" "$DB_NAME")
+fi
 
 if [[ -n "$DB_IMPORT_USER" ]]; then
   MYSQL_CMD=(mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_IMPORT_USER" "$DB_NAME")
@@ -332,6 +336,77 @@ DEALLOCATE PREPARE type_stmt;
 SQL
 )
 
+SQL_009=$(cat <<'SQL'
+CREATE TABLE IF NOT EXISTS internal_chat_groups (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  main_id INT NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  created_by_user_id INT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_internal_chat_groups_main_id (main_id),
+  KEY idx_internal_chat_groups_creator (created_by_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS internal_chat_group_members (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  group_id BIGINT UNSIGNED NOT NULL,
+  user_id INT NOT NULL,
+  added_by_user_id INT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  removed_at TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (id),
+  KEY idx_internal_chat_group_members_group (group_id),
+  KEY idx_internal_chat_group_members_user (user_id),
+  KEY idx_internal_chat_group_members_removed (removed_at),
+  KEY idx_internal_chat_group_members_group_user (group_id, user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+SQL
+)
+
+SQL_010=$(cat <<'SQL'
+CREATE TABLE IF NOT EXISTS internal_chat_message_reactions (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  conversation_key VARCHAR(64) NOT NULL,
+  message_id BIGINT UNSIGNED NOT NULL,
+  user_id INT NOT NULL,
+  emoji VARCHAR(16) NOT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_internal_chat_message_reactions_message_user (message_id, user_id),
+  KEY idx_internal_chat_message_reactions_conversation_message (conversation_key, message_id),
+  KEY idx_internal_chat_message_reactions_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS internal_chat_message_replies (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  conversation_key VARCHAR(64) NOT NULL,
+  message_id BIGINT UNSIGNED NOT NULL,
+  reply_to_message_id BIGINT UNSIGNED NOT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_internal_chat_message_replies_message (message_id),
+  KEY idx_internal_chat_message_replies_conversation_message (conversation_key, message_id),
+  KEY idx_internal_chat_message_replies_reply_target (reply_to_message_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS internal_chat_typing_states (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  conversation_key VARCHAR(64) NOT NULL,
+  user_id INT NOT NULL,
+  expires_at DATETIME(3) NOT NULL,
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_internal_chat_typing_states_conversation_user (conversation_key, user_id),
+  KEY idx_internal_chat_typing_states_conversation_expires (conversation_key, expires_at),
+  KEY idx_internal_chat_typing_states_expires (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+SQL
+)
+
 log "Using API dir: $API_DIR"
 log "Using DB: $DB_NAME on $DB_HOST:$DB_PORT"
 
@@ -339,6 +414,8 @@ run_sql "001_create_promotions_tables" "$SQL_001" || true
 run_sql "002_add_promotion_targeting" "$SQL_002" || true
 run_sql "003_create_ai_campaign_tables" "$SQL_003" || true
 run_sql "005_add_stock_adjustment_header_fields" "$SQL_005" || true
+run_sql "009_create_internal_chat_group_tables" "$SQL_009" || true
+run_sql "010_create_internal_chat_metadata_tables" "$SQL_010" || true
 log
 log "Skipping 004/006/007/008 because access control now uses legacy role tables directly."
 

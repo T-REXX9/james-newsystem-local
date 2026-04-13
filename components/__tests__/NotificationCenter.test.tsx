@@ -7,6 +7,7 @@ import NotificationCenter from '../NotificationCenter';
 import type { Notification } from '../../types';
 
 const fetchNotificationsMock = vi.fn();
+const getNotificationApiAvailabilityMock = vi.fn();
 const getUnreadCountMock = vi.fn();
 const markAsReadMock = vi.fn();
 const markNotificationsAsReadByEntityKeyMock = vi.fn();
@@ -16,6 +17,7 @@ const triggerInventoryAlertScanMock = vi.fn();
 
 vi.mock('../../services/notificationLocalApiService', () => ({
   fetchNotifications: (...args: unknown[]) => fetchNotificationsMock(...args),
+  getNotificationApiAvailability: (...args: unknown[]) => getNotificationApiAvailabilityMock(...args),
   getUnreadCount: (...args: unknown[]) => getUnreadCountMock(...args),
   markAsRead: (...args: unknown[]) => markAsReadMock(...args),
   markNotificationsAsReadByEntityKey: (...args: unknown[]) => markNotificationsAsReadByEntityKeyMock(...args),
@@ -59,6 +61,7 @@ const createDeferred = <T,>() => {
 describe('NotificationCenter', () => {
   beforeEach(() => {
     fetchNotificationsMock.mockReset();
+    getNotificationApiAvailabilityMock.mockReset();
     getUnreadCountMock.mockReset();
     markAsReadMock.mockReset();
     markNotificationsAsReadByEntityKeyMock.mockReset();
@@ -66,12 +69,18 @@ describe('NotificationCenter', () => {
     deleteNotificationMock.mockReset();
     triggerInventoryAlertScanMock.mockReset();
 
+    getNotificationApiAvailabilityMock.mockReturnValue({
+      isReachable: true,
+      retryAt: null,
+      lastFailureAt: null,
+    });
     triggerInventoryAlertScanMock.mockResolvedValue([]);
     deleteNotificationMock.mockResolvedValue(true);
     markAllAsReadMock.mockResolvedValue(true);
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     cleanup();
   });
 
@@ -270,5 +279,59 @@ describe('NotificationCenter', () => {
     await waitFor(() => {
       expect(within(bellButton).queryByText('1')).not.toBeInTheDocument();
     });
+  });
+
+  it('skips automatic polling and startup inventory scans while the notification API is in backoff', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-13T08:00:00.000Z'));
+    fetchNotificationsMock.mockResolvedValue([]);
+    getUnreadCountMock.mockResolvedValue(0);
+
+    renderNotificationCenter();
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(fetchNotificationsMock).toHaveBeenCalledTimes(1);
+    expect(getUnreadCountMock).toHaveBeenCalledTimes(1);
+
+    const retryAt = Date.parse('2026-04-13T08:02:00.000Z');
+    const lastFailureAt = Date.parse('2026-04-13T08:00:00.000Z');
+    getNotificationApiAvailabilityMock.mockImplementation(() => ({
+      isReachable: Date.now() >= retryAt,
+      retryAt,
+      lastFailureAt,
+    }));
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+    });
+    expect(triggerInventoryAlertScanMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(30000);
+      await Promise.resolve();
+    });
+    expect(fetchNotificationsMock).toHaveBeenCalledTimes(1);
+    expect(getUnreadCountMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+      await Promise.resolve();
+    });
+    expect(fetchNotificationsMock).toHaveBeenCalledTimes(1);
+    expect(getUnreadCountMock).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(new Date('2026-04-13T08:02:01.000Z'));
+    const fetchCallsBeforeRetry = fetchNotificationsMock.mock.calls.length;
+    const unreadCallsBeforeRetry = getUnreadCountMock.mock.calls.length;
+
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+      await Promise.resolve();
+    });
+    expect(fetchNotificationsMock).toHaveBeenCalledTimes(fetchCallsBeforeRetry + 1);
+    expect(getUnreadCountMock).toHaveBeenCalledTimes(unreadCallsBeforeRetry + 1);
   });
 });

@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { sendInternalChatMessage } from '../internalChatLocalApiService';
+import {
+  addInternalChatGroupMembers,
+  createInternalChatGroup,
+  removeInternalChatGroupMember,
+  renameInternalChatGroup,
+  sendInternalChatMessage,
+} from '../internalChatLocalApiService';
 
 const getLocalAuthSessionMock = vi.fn();
 
@@ -85,5 +91,70 @@ describe('internalChatLocalApiService', () => {
     );
     expect(items[0]?.reply_to_message_id).toBe('9');
     expect(items[0]?.reply_preview?.message_id).toBe('9');
+  });
+
+  it('sends the expected group management requests', async () => {
+    (global.fetch as any).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: {
+          id: '55',
+          conversation_key: 'grp:55',
+          conversation_type: 'group',
+          name: 'Ops',
+          title: 'Ops',
+          subtitle: '2 members',
+          avatar_label: 'OP',
+          member_count: 2,
+          created_by_user_id: '73',
+          can_manage: true,
+          members: [],
+        },
+      }),
+    });
+
+    await createInternalChatGroup('Ops', ['2', '3']);
+    await renameInternalChatGroup('55', 'Ops Updated');
+    await addInternalChatGroupMembers('55', ['4']);
+    await removeInternalChatGroupMember('55', '4');
+
+    const createCall = (global.fetch as any).mock.calls[0];
+    const renameCall = (global.fetch as any).mock.calls[1];
+    const addMembersCall = (global.fetch as any).mock.calls[2];
+    const removeMemberCall = (global.fetch as any).mock.calls[3];
+
+    expect(createCall[0]).toBe('/api/v1/internal-chat/groups');
+    expect(createCall[1]).toEqual(
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'Ops',
+          member_ids: ['2', '3'],
+        }),
+      })
+    );
+
+    expect(renameCall[0]).toBe('/api/v1/internal-chat/groups/55');
+    expect(renameCall[1]).toEqual(
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ name: 'Ops Updated' }),
+      })
+    );
+
+    expect(addMembersCall[0]).toBe('/api/v1/internal-chat/groups/55/members');
+    expect(addMembersCall[1]).toEqual(
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ member_ids: ['4'] }),
+      })
+    );
+
+    expect(removeMemberCall[0]).toBe('/api/v1/internal-chat/groups/55/members/4');
+    expect(removeMemberCall[1]).toEqual(
+      expect.objectContaining({
+        method: 'DELETE',
+      })
+    );
   });
 });

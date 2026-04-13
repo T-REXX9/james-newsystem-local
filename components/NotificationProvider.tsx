@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { Notification } from '../types';
 import {
   fetchNotifications,
+  getNotificationApiAvailability,
   getUnreadCount,
   markAsRead,
   markNotificationsAsReadByEntityKey,
@@ -165,7 +166,13 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
   }, []);
 
   // Fetch initial notifications
-  const refreshNotifications = useCallback(async () => {
+  const refreshNotifications = useCallback(async (options?: { force?: boolean }) => {
+    const shouldAttemptRequest = options?.force || getNotificationApiAvailability().isReachable;
+    if (!shouldAttemptRequest) {
+      setIsLoading(false);
+      return;
+    }
+
     const requestId = ++refreshRequestIdRef.current;
     refreshAbortControllerRef.current?.abort();
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -223,7 +230,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
 
   // Initial fetch on mount and when userId changes
   useEffect(() => {
-    refreshNotifications();
+    void refreshNotifications({ force: true });
   }, [userId, refreshNotifications]);
 
   // Enable inventory alert scanning with 10-minute intervals
@@ -244,6 +251,10 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
     };
 
     const runInventoryScan = () => {
+      if (!getNotificationApiAvailability().isReachable) {
+        return;
+      }
+
       if (!canStartInventoryScan()) {
         return;
       }
