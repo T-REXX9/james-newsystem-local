@@ -458,6 +458,7 @@ export interface Product {
   stock_wh4: number;
   stock_wh5: number;
   stock_wh6: number;
+  sales_by_year?: Record<string, number>;
 
   // Soft delete fields
   is_deleted?: boolean;

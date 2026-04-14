@@ -29,6 +29,9 @@ interface ProductDatabaseProps {
   initialProductId?: string;
 }
 
+const getSortedSalesByYearEntries = (salesByYear?: Record<string, number>) =>
+  Object.entries(salesByYear ?? {}).sort(([yearA], [yearB]) => Number(yearB) - Number(yearA));
+
 const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialProductId }) => {
   const { addToast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
@@ -608,6 +611,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialP
                 <th className="p-4">Details</th>
                 <th className="p-4 w-64">Price List</th>
                 <th className="p-4 w-64">Stock per Warehouse</th>
+                <th className="p-4 w-64">Qty Sold / Year</th>
                 <th className="p-4 text-center w-24">Specification</th>
                 <th className="p-4 text-right w-24">Actions</th>
               </tr>
@@ -615,11 +619,14 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialP
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-500 dark:text-slate-400 italic">
+                  <td colSpan={7} className="p-8 text-center text-slate-500 dark:text-slate-400 italic">
                     No products found for the selected filters.
                   </td>
                 </tr>
-              ) : filteredProducts.map((product) => (
+              ) : filteredProducts.map((product) => {
+                const yearlySales = getSortedSalesByYearEntries(product.sales_by_year);
+
+                return (
                 <tr
                   key={product.id}
                   ref={(node) => {
@@ -715,6 +722,31 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialP
                     </div>
                   </td>
 
+                  <td className="p-4 align-top">
+                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3 border border-slate-100 dark:border-slate-700/50 min-h-[88px]">
+                      {yearlySales.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {yearlySales.map(([year, quantity]) => (
+                            <div
+                              key={`${product.id}-${year}`}
+                              className="rounded-md border border-blue-100 bg-blue-50 px-2 py-1 text-xs dark:border-blue-900/40 dark:bg-blue-900/20"
+                            >
+                              <span className="font-semibold text-blue-700 dark:text-blue-300">{year}</span>
+                              <span className="mx-1 text-slate-300 dark:text-slate-600">:</span>
+                              <span className="font-mono font-bold text-slate-700 dark:text-slate-200">
+                                {quantity.toLocaleString()}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex h-full min-h-[60px] items-center text-xs italic text-slate-400 dark:text-slate-500">
+                          No sold quantity yet
+                        </div>
+                      )}
+                    </div>
+                  </td>
+
                   <td className="p-4 align-top text-center">
                     <div className="flex flex-col gap-2 pt-1">
                       <span className="inline-flex items-center justify-center px-2 py-1 bg-slate-100 dark:bg-slate-800 text-xs font-medium text-slate-600 dark:text-slate-300 rounded">
@@ -745,7 +777,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialP
                     </div>
                   </td>
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
         </div>

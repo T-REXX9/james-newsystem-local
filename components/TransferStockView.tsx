@@ -1008,6 +1008,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
                         >
                           <div className="font-medium text-sm text-gray-900 dark:text-white">
                             {product.part_no}
+                            {product.item_code ? ` (${product.item_code})` : ''}
                           </div>
                           <div className="text-xs text-gray-500 dark:text-gray-400">
                             {product.description} - {product.brand}
@@ -1039,12 +1040,15 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
                           const warehouseNum = item.from_warehouse_id.replace(/^WH/, '');
                           const stockColumn = `stock_wh${warehouseNum}` as keyof Product;
                           const availableStock = product?.[stockColumn] || 0;
-                          
+                          const partNoLabel = product?.part_no || item.part_no || 'Unknown';
+                          const itemCodeLabel = product?.item_code || item.item_code || '';
+
                           return (
                             <tr key={index}>
                               <td className="px-3 py-2">
                                 <div className="text-sm font-medium text-gray-900 dark:text-white">
-                                  {product?.part_no}
+                                  {partNoLabel}
+                                  {itemCodeLabel ? ` (${itemCodeLabel})` : ''}
                                 </div>
                                 <div className="text-xs text-gray-500 dark:text-gray-400">
                                   {product?.description}

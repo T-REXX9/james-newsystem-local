@@ -17,6 +17,19 @@ const toProductStatus = (value: unknown): Product['status'] => {
   return 'Active';
 };
 
+const toSalesByYear = (value: unknown): Record<string, number> => {
+  if (!value || Array.isArray(value) || typeof value !== 'object') {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .map(([year, qty]) => [String(year), toNumber(qty)])
+      .filter(([year]) => year.trim() !== '')
+      .sort(([a], [b]) => Number(b) - Number(a))
+  );
+};
+
 const normalizeApiProduct = (raw: any): Product => ({
   id: String(raw?.id ?? ''),
   part_no: String(raw?.part_no ?? ''),
@@ -49,6 +62,7 @@ const normalizeApiProduct = (raw: any): Product => ({
   stock_wh4: toNumber(raw?.stock_wh4),
   stock_wh5: toNumber(raw?.stock_wh5),
   stock_wh6: toNumber(raw?.stock_wh6),
+  sales_by_year: toSalesByYear(raw?.sales_by_year),
   is_deleted: toNumber(raw?.is_deleted) === 1,
 });
 
