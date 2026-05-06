@@ -7,6 +7,7 @@ import {
   RefreshCcw,
   Sun,
   Moon,
+  Printer,
 } from 'lucide-react';
 import {
   Contact,
@@ -32,6 +33,7 @@ import { getSalesOrderByInquiry, getSalesOrder } from '../services/salesOrderLoc
 import ProductSearchModal from './ProductSearchModal';
 import CustomerAutocomplete from './CustomerAutocomplete';
 import SearchableSelect from './SearchableSelect';
+import SalesInquiryPrintPreview from './SalesInquiryPrintPreview';
 import StatusBadge from './StatusBadge';
 import { useToast } from './ToastProvider';
 import ValidationSummary from './ValidationSummary';
@@ -151,6 +153,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   const [customers, setCustomers] = useState<Contact[]>([]);
   const [inquiries, setInquiries] = useState<SalesInquiry[]>([]);
   const [listLoading, setListLoading] = useState(false);
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   const sortByCreatedAt = (a: SalesInquiry, b: SalesInquiry) => {
     return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
@@ -762,6 +765,69 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
 
   // Calculate grand total
   const grandTotal = items.reduce((sum, item) => sum + (item.amount || 0), 0);
+  const printableInquiry = useMemo<SalesInquiry | null>(() => {
+    if (!selectedInquiry || isCreatingNew) return null;
+
+    const printableItems: SalesInquiryItem[] = items.map((item, index) => ({
+      id: item.tempId || `${selectedInquiry.id}-print-${index}`,
+      inquiry_id: selectedInquiry.id,
+      item_id: item.item_id || '',
+      qty: Number(item.qty || 0),
+      part_no: item.part_no || '',
+      item_code: item.item_code || '',
+      location: item.location || '',
+      description: item.description || '',
+      unit_price: Number(item.unit_price || 0),
+      amount: Number(item.amount || 0),
+      remark: item.remark || '',
+      approval_status: item.approval_status || 'approved',
+    }));
+
+    return {
+      ...selectedInquiry,
+      inquiry_no: inquiryNo || selectedInquiry.inquiry_no,
+      sales_date: salesDate || selectedInquiry.sales_date,
+      sales_person: salesPerson || selectedInquiry.sales_person,
+      delivery_address: deliveryAddress || selectedInquiry.delivery_address,
+      reference_no: referenceNo || selectedInquiry.reference_no,
+      customer_reference: customerReference || selectedInquiry.customer_reference,
+      send_by: sendBy || selectedInquiry.send_by,
+      price_group: priceGroup || selectedInquiry.price_group,
+      credit_limit: creditLimit,
+      terms: terms || selectedInquiry.terms,
+      promise_to_pay: promiseToPay || selectedInquiry.promise_to_pay,
+      po_number: poNumber || selectedInquiry.po_number,
+      remarks: remarks || selectedInquiry.remarks,
+      inquiry_type: showNewInquiryType ? (newInquiryType.trim() || inquiryType) : inquiryType,
+      urgency: urgency || selectedInquiry.urgency,
+      urgency_date: urgencyDate || selectedInquiry.urgency_date,
+      grand_total: grandTotal,
+      items: printableItems,
+    };
+  }, [
+    creditLimit,
+    customerReference,
+    deliveryAddress,
+    grandTotal,
+    inquiryNo,
+    inquiryType,
+    isCreatingNew,
+    items,
+    newInquiryType,
+    poNumber,
+    priceGroup,
+    promiseToPay,
+    referenceNo,
+    remarks,
+    salesDate,
+    salesPerson,
+    selectedInquiry,
+    sendBy,
+    showNewInquiryType,
+    terms,
+    urgency,
+    urgencyDate,
+  ]);
 
   // Handle submit
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1060,6 +1126,11 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   const activeInquiryNumberDisplay = formatInquiryDisplayNo(activeInquiryNumber);
   const isConversionLocked = Boolean(selectedInquiry && !isCreatingNew && selectedInquiry.is_editable === false);
   const isReadOnly = selectedInquiry?.status === SalesInquiryStatus.CANCELLED || isConversionLocked;
+  const handlePrint = () => {
+    if (!printableInquiry) return;
+    setShowPrintPreview(true);
+    window.setTimeout(() => window.print(), 150);
+  };
   const priceGroupDisplay = normalizePriceGroup(priceGroup);
   const canGenerateSO = Boolean(
     selectedInquiry &&
@@ -1829,6 +1900,16 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
           </button>
 
           <div className="flex items-center gap-2">
+            {printableInquiry && (
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="px-4 py-2 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 font-semibold hover:bg-emerald-100 transition-colors inline-flex items-center gap-2"
+              >
+                <Printer className="w-4 h-4" />
+                Print
+              </button>
+            )}
             <button
               type="button"
               onClick={handleDiscardChanges}
@@ -1848,6 +1929,16 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
         </div>
       </div>
 
+      {/* Delete Modal */}
+      {showPrintPreview && printableInquiry && (
+        <SalesInquiryPrintPreview
+          inquiry={printableInquiry}
+          customer={selectedCustomer}
+          inquiryNumberLabel={activeInquiryNumberDisplay}
+          preparedBy={String(getLocalAuthSession()?.userProfile?.full_name || '').trim()}
+          onClose={() => setShowPrintPreview(false)}
+        />
+      )}
 
       {/* Delete Modal */}
       {showDeleteModal && (

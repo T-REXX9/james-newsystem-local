@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshCw, ChevronLeft, ChevronRight, Search, Printer, Pencil } from 'lucide-react';
 import StatusBadge from './StatusBadge';
 import WorkflowStepper from './WorkflowStepper';
+import InvoicePrintPreview from './InvoicePrintPreview';
 import {
   getInvoice,
   getAllInvoices,
@@ -80,6 +81,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -325,7 +327,8 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
         setSelectedInvoice(updated);
       }
       await notifyInvoiceEvent('Invoice Printed', `Invoice ${selectedInvoice.invoice_no} printed.`, 'print', 'success', selectedInvoice.id);
-      window.print();
+      setShowPrintPreview(true);
+      window.setTimeout(() => window.print(), 150);
     } catch (err) {
       console.error('Error printing invoice:', err);
       await notifyInvoiceEvent(
@@ -610,8 +613,8 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
           <div className="overflow-x-auto">
             <table className="w-full table-fixed text-sm">
               <colgroup>
-                {INVOICE_LIST_COLUMN_WIDTHS.map((width) => (
-                  <col key={width} style={{ width }} />
+                {INVOICE_LIST_COLUMN_WIDTHS.map((width, index) => (
+                  <col key={`invoice-header-col-${index}`} style={{ width }} />
                 ))}
               </colgroup>
               <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
@@ -631,8 +634,8 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
             <div className="max-h-[220px] overflow-y-auto border border-t-0 border-slate-300 dark:border-slate-700">
               <table className="w-full table-fixed text-sm">
                 <colgroup>
-                  {INVOICE_LIST_COLUMN_WIDTHS.map((width) => (
-                    <col key={width} style={{ width }} />
+                  {INVOICE_LIST_COLUMN_WIDTHS.map((width, index) => (
+                    <col key={`invoice-body-col-${index}`} style={{ width }} />
                   ))}
                 </colgroup>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
@@ -765,10 +768,10 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                 )}
                 <button
                   type="button"
-                  onClick={() => window.print()}
+                  onClick={() => setShowPrintPreview(true)}
                   className="px-3 py-2 rounded bg-brand-blue text-white text-sm inline-flex items-center gap-2"
                 >
-                  <Printer className="w-4 h-4" /> Print PDF
+                  <Printer className="w-4 h-4" /> Preview Layout
                 </button>
               </div>
             </div>
@@ -955,6 +958,14 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
         <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 py-16 text-center text-slate-500">
           Select an invoice from the table above to view its full details.
         </div>
+      )}
+
+      {showPrintPreview && selectedInvoice && (
+        <InvoicePrintPreview
+          invoice={selectedInvoice}
+          customer={selectedCustomer}
+          onClose={() => setShowPrintPreview(false)}
+        />
       )}
 
       {/* Step 8: Search modal */}

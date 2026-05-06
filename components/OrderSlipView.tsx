@@ -23,6 +23,7 @@ import { Contact, OrderSlip, OrderSlipStatus } from '../types';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 import { getLocalAuthSession } from '../services/localAuthService';
 import { normalizePriceGroup } from '../constants/pricingGroups';
+import OrderSlipPrintPreview from './OrderSlipPrintPreview';
 import {
   dispatchWorkflowNotification,
   markNotificationsAsReadByEntityKey,
@@ -83,6 +84,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
   const [totalPages, setTotalPages] = useState(1);
   const [finalizing, setFinalizing] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [orderSlips, setOrderSlips] = useState<OrderSlip[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<Contact | null>(null);
@@ -431,7 +433,8 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
           targetUserIds: creatorUserId ? [creatorUserId] : [],
         }
       );
-      window.print();
+      setShowPrintPreview(true);
+      window.setTimeout(() => window.print(), 150);
     } catch (err) {
       console.error('Error printing order slip:', err);
       await notifyOrderSlipEvent(
@@ -632,8 +635,8 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
           <div className="overflow-x-auto">
             <table className="w-full table-fixed text-sm">
               <colgroup>
-                {ORDER_SLIP_LIST_COLUMN_WIDTHS.map((width) => (
-                  <col key={width} style={{ width }} />
+                {ORDER_SLIP_LIST_COLUMN_WIDTHS.map((width, index) => (
+                  <col key={`order-slip-header-col-${index}`} style={{ width }} />
                 ))}
               </colgroup>
               <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
@@ -652,8 +655,8 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
             <div className="max-h-[220px] overflow-y-auto border border-t-0 border-slate-300 dark:border-slate-700">
               <table className="w-full table-fixed text-sm">
                 <colgroup>
-                  {ORDER_SLIP_LIST_COLUMN_WIDTHS.map((width) => (
-                    <col key={width} style={{ width }} />
+                  {ORDER_SLIP_LIST_COLUMN_WIDTHS.map((width, index) => (
+                    <col key={`order-slip-body-col-${index}`} style={{ width }} />
                   ))}
                 </colgroup>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
@@ -980,6 +983,14 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
             </div>
           </div>
         </div>
+      )}
+
+      {showPrintPreview && selectedSlip && (
+        <OrderSlipPrintPreview
+          orderSlip={selectedSlip}
+          customer={selectedCustomer}
+          onClose={() => setShowPrintPreview(false)}
+        />
       )}
 
       {/* Unpost modal */}
