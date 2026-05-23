@@ -8,7 +8,9 @@ set -euo pipefail
 API_REPO_URL="${API_REPO_URL:-https://github.com/T-REXX9/james-newsystem-api.git}"
 WEB_REPO_URL="${WEB_REPO_URL:-https://github.com/T-REXX9/james-newsystem-local.git}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
-INSTALL_DIR="${INSTALL_DIR:-$HOME/james-system}"
+DEFAULT_OWNER_USER="${SUDO_USER:-$(id -un)}"
+DEFAULT_OWNER_HOME="$(eval echo "~${DEFAULT_OWNER_USER}")"
+INSTALL_DIR="${INSTALL_DIR:-$DEFAULT_OWNER_HOME/james-system}"
 API_DIR="$INSTALL_DIR/api"
 WEB_DIR="$INSTALL_DIR/james-newsystem"
 
@@ -22,6 +24,8 @@ API_HOST="${API_HOST:-0.0.0.0}"
 API_PORT="${API_PORT:-8081}"
 WEB_HOST="${WEB_HOST:-0.0.0.0}"
 WEB_PORT="${WEB_PORT:-8080}"
+REALTIME_HOST="${REALTIME_HOST:-127.0.0.1}"
+REALTIME_PORT="${REALTIME_PORT:-8082}"
 
 # Optional DB dump source:
 # 1) local file path passed via DB_DUMP_PATH
@@ -40,6 +44,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_DIR="$INSTALL_DIR/logs"
 API_LOG="$LOG_DIR/api.log"
 WEB_LOG="$LOG_DIR/web.log"
+REALTIME_LOG="$LOG_DIR/realtime.log"
 DB_DUMP_TMP="/tmp/topnotch_setup_dump.sql"
 DB_IMPORT_USER="${DB_IMPORT_USER:-root}"
 DB_COMPAT_TRANSFORM="${DB_COMPAT_TRANSFORM:-1}"
@@ -52,12 +57,14 @@ Usage:
   ./setup.sh install    # same as default
   ./setup.sh update     # update api + web repos, rebuild, restart services
   ./setup.sh restart    # restart api + web preview only
+  ./setup.sh chat-realtime-init  # start/fix internal chat realtime + preview proxy
+  ./setup.sh systemd-init  # create/enable persistent systemd services
 EOF
   exit 0
 fi
 
-if [[ "$MODE" != "install" && "$MODE" != "update" && "$MODE" != "restart" ]]; then
-  echo "ERROR: unknown mode '$MODE'. Use: install | update | restart"
+if [[ "$MODE" != "install" && "$MODE" != "update" && "$MODE" != "restart" && "$MODE" != "chat-realtime-init" && "$MODE" != "systemd-init" ]]; then
+  echo "ERROR: unknown mode '$MODE'. Use: install | update | restart | chat-realtime-init | systemd-init"
   exit 1
 fi
 
@@ -66,6 +73,10 @@ if [[ "$MODE" == "update" ]]; then
   TOTAL_STEPS=9
 elif [[ "$MODE" == "restart" ]]; then
   TOTAL_STEPS=4
+elif [[ "$MODE" == "chat-realtime-init" ]]; then
+  TOTAL_STEPS=6
+elif [[ "$MODE" == "systemd-init" ]]; then
+  TOTAL_STEPS=7
 fi
 CURRENT_STEP=0
 
@@ -93,6 +104,24 @@ need_cmd() {
     echo "ERROR: required command not found: $1"
     exit 1
   }
+}
+
+wait_for_http() {
+  local url="$1"
+  local label="$2"
+  local max_attempts="${3:-30}"
+  local attempt=1
+
+  while (( attempt <= max_attempts )); do
+    if curl -fsS "$url" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+    attempt=$((attempt + 1))
+  done
+
+  echo "ERROR: Timed out waiting for ${label} at ${url}" >&2
+  return 1
 }
 
 db_query_scalar() {
@@ -244,14 +273,43 @@ VITE_MAIN_ID=${VITE_MAIN_ID}
 EOF
 }
 
+read_api_runtime_value() {
+  local key="$1"
+  read_env_example_value "$API_DIR/.env" "$key" || true
+}
+
 restart_services() {
+  local runtime_auth_secret=""
+  local runtime_app_key=""
+  local runtime_socket_secret=""
+  local realtime_notify_url=""
+
+  runtime_auth_secret="$(read_api_runtime_value "AUTH_SECRET")"
+  runtime_app_key="$(read_api_runtime_value "APP_KEY")"
+
+  if [[ -z "$runtime_auth_secret" ]]; then
+    runtime_auth_secret="${AUTH_SECRET:-${runtime_app_key:-change-me-in-env}}"
+  fi
+  if [[ -z "$runtime_app_key" ]]; then
+    runtime_app_key="${APP_KEY:-$runtime_auth_secret}"
+  fi
+
+  runtime_socket_secret="${INTERNAL_CHAT_SOCKET_SECRET:-$runtime_auth_secret}"
+  realtime_notify_url="http://${REALTIME_HOST}:${REALTIME_PORT}/internal-chat/events"
+
   pkill -f "php -S ${API_HOST}:${API_PORT} -t public" >/dev/null 2>&1 || true
+  pkill -f "node scripts/internal-chat-realtime-server.mjs" >/dev/null 2>&1 || true
+  pkill -f "npm run realtime" >/dev/null 2>&1 || true
   pkill -f "vite preview --host ${WEB_HOST} --port ${WEB_PORT}" >/dev/null 2>&1 || true
 
-  nohup bash -lc "cd '$API_DIR' && php -S ${API_HOST}:${API_PORT} -t public" >"$API_LOG" 2>&1 &
-  sleep 2
-  nohup bash -lc "cd '$WEB_DIR' && npm run preview -- --host ${WEB_HOST} --port ${WEB_PORT}" >"$WEB_LOG" 2>&1 &
-  sleep 4
+  nohup bash -lc "cd '$API_DIR' && INTERNAL_CHAT_SOCKET_NOTIFY_URL='$realtime_notify_url' INTERNAL_CHAT_SOCKET_SECRET='$runtime_socket_secret' PHP_CLI_SERVER_WORKERS='${PHP_CLI_SERVER_WORKERS:-4}' php -S ${API_HOST}:${API_PORT} -t public" >"$API_LOG" 2>&1 &
+  wait_for_http "http://127.0.0.1:${API_PORT}/api/v1/health" "API health endpoint"
+
+  nohup bash -lc "cd '$WEB_DIR' && INTERNAL_CHAT_SOCKET_HOST='${REALTIME_HOST}' INTERNAL_CHAT_SOCKET_PORT='${REALTIME_PORT}' INTERNAL_CHAT_SOCKET_SECRET='${runtime_socket_secret}' AUTH_SECRET='${runtime_auth_secret}' APP_KEY='${runtime_app_key}' npm run realtime" >"$REALTIME_LOG" 2>&1 &
+  wait_for_http "http://${REALTIME_HOST}:${REALTIME_PORT}/health" "internal chat realtime"
+
+  nohup bash -lc "cd '$WEB_DIR' && REALTIME_HOST='${REALTIME_HOST}' REALTIME_PORT='${REALTIME_PORT}' npm run preview -- --host ${WEB_HOST} --port ${WEB_PORT}" >"$WEB_LOG" 2>&1 &
+  wait_for_http "http://127.0.0.1:${WEB_PORT}" "web preview"
 }
 
 print_service_urls() {
@@ -260,12 +318,99 @@ print_service_urls() {
 
   echo
   echo "API health endpoint: http://127.0.0.1:${API_PORT}/api/v1/health"
+  echo "Realtime health:     http://${REALTIME_HOST}:${REALTIME_PORT}/health"
   echo "Web app (local):     http://127.0.0.1:${WEB_PORT}"
   echo "Web app (LAN):       http://${host_ip}:${WEB_PORT}"
   echo
   echo "Logs:"
   echo "  API log: ${API_LOG}"
+  echo "  Realtime log: ${REALTIME_LOG}"
   echo "  Web log: ${WEB_LOG}"
+}
+
+install_systemd_services() {
+  local service_user service_group php_bin npm_bin bash_bin
+
+  service_user="${SERVICE_USER:-${SUDO_USER:-$(id -un)}}"
+  service_group="${SERVICE_GROUP:-$(id -gn "${service_user}")}"
+  php_bin="$(command -v php)"
+  npm_bin="$(command -v npm)"
+  bash_bin="$(command -v bash)"
+
+  sudo tee /etc/systemd/system/james-api.service >/dev/null <<EOF
+[Unit]
+Description=James API
+After=network.target
+
+[Service]
+Type=simple
+User=${service_user}
+Group=${service_group}
+WorkingDirectory=${API_DIR}
+Environment=PHP_CLI_SERVER_WORKERS=${PHP_CLI_SERVER_WORKERS:-4}
+Environment=INTERNAL_CHAT_SOCKET_NOTIFY_URL=http://${REALTIME_HOST}:${REALTIME_PORT}/internal-chat/events
+EnvironmentFile=${API_DIR}/.env
+ExecStart=${php_bin} -S ${API_HOST}:${API_PORT} -t public
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  sudo tee /etc/systemd/system/james-realtime.service >/dev/null <<EOF
+[Unit]
+Description=James Internal Chat Realtime
+After=network.target james-api.service
+Requires=james-api.service
+
+[Service]
+Type=simple
+User=${service_user}
+Group=${service_group}
+WorkingDirectory=${WEB_DIR}
+Environment=INTERNAL_CHAT_SOCKET_HOST=${REALTIME_HOST}
+Environment=INTERNAL_CHAT_SOCKET_PORT=${REALTIME_PORT}
+EnvironmentFile=${API_DIR}/.env
+ExecStart=${bash_bin} -lc 'export INTERNAL_CHAT_SOCKET_SECRET="\${INTERNAL_CHAT_SOCKET_SECRET:-\${AUTH_SECRET:-\${APP_KEY:-change-me-in-env}}}"; exec ${npm_bin} run realtime'
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  sudo tee /etc/systemd/system/james-web.service >/dev/null <<EOF
+[Unit]
+Description=James Web Preview
+After=network.target james-api.service james-realtime.service
+Requires=james-api.service james-realtime.service
+
+[Service]
+Type=simple
+User=${service_user}
+Group=${service_group}
+WorkingDirectory=${WEB_DIR}
+Environment=REALTIME_HOST=${REALTIME_HOST}
+Environment=REALTIME_PORT=${REALTIME_PORT}
+ExecStart=${npm_bin} run preview -- --host ${WEB_HOST} --port ${WEB_PORT}
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
+enable_and_restart_systemd_services() {
+  sudo systemctl daemon-reload
+  sudo systemctl enable james-api james-realtime james-web
+  sudo systemctl stop james-web james-realtime james-api >/dev/null 2>&1 || true
+  pkill -f "php -S ${API_HOST}:${API_PORT} -t public" >/dev/null 2>&1 || true
+  pkill -f "node scripts/internal-chat-realtime-server.mjs" >/dev/null 2>&1 || true
+  pkill -f "npm run realtime" >/dev/null 2>&1 || true
+  pkill -f "vite preview --host ${WEB_HOST} --port ${WEB_PORT}" >/dev/null 2>&1 || true
+  sudo systemctl restart james-api james-realtime james-web
 }
 
 build_auth_repo_url() {
@@ -378,7 +523,7 @@ step "Creating installation directories"
 mkdir -p "$INSTALL_DIR" "$LOG_DIR"
 
 if [[ "$MODE" == "restart" ]]; then
-  step "Restarting API server and web preview"
+  step "Restarting API server, internal chat realtime, and web preview"
   restart_services
 
   step "Verifying services and printing access URLs"
@@ -402,6 +547,109 @@ if [[ -z "$DB_NAME" ]]; then
 fi
 DB_NAME="${DB_NAME:-topnotch_migrate}"
 
+if [[ "$MODE" == "chat-realtime-init" ]]; then
+  step "Checking deployed API and web directories"
+  [[ -f "$API_DIR/public/index.php" ]] || {
+    echo "ERROR: API entry point not found at $API_DIR/public/index.php"
+    exit 1
+  }
+  [[ -f "$API_DIR/.env" ]] || {
+    echo "ERROR: API env file not found at $API_DIR/.env"
+    exit 1
+  }
+  [[ -f "$WEB_DIR/package.json" ]] || {
+    echo "ERROR: Web package.json not found at $WEB_DIR/package.json"
+    exit 1
+  }
+
+  step "Installing/updating frontend npm dependencies"
+  (cd "$WEB_DIR" && npm install)
+
+  step "Building frontend for preview"
+  (cd "$WEB_DIR" && npm run build)
+
+  step "Restarting API server, internal chat realtime, and web preview"
+  restart_services
+
+  step "Verifying API, realtime, and socket polling endpoints"
+  curl -fsS "http://127.0.0.1:${API_PORT}/api/v1/health" >/dev/null
+  curl -fsS "http://${REALTIME_HOST}:${REALTIME_PORT}/health" >/dev/null
+  socket_status="$(curl -sS -o /tmp/james_socketio_probe.txt -w "%{http_code}" "http://127.0.0.1:${WEB_PORT}/socket.io/?EIO=4&transport=polling" || true)"
+  if [[ "$socket_status" != "200" ]]; then
+    echo "ERROR: Socket.IO polling endpoint returned ${socket_status:-no-response}."
+    echo "Inspect logs:"
+    echo "  tail -n 100 ${REALTIME_LOG}"
+    echo "  tail -n 100 ${WEB_LOG}"
+    exit 1
+  fi
+
+  step "Printing access URLs"
+  echo
+  echo "Chat realtime initialization complete."
+  print_service_urls
+  exit 0
+fi
+
+if [[ "$MODE" == "systemd-init" ]]; then
+  step "Checking systemd, deployed API, and web directories"
+  need_cmd systemctl
+  need_cmd php
+  need_cmd npm
+  [[ -f "$API_DIR/public/index.php" ]] || {
+    echo "ERROR: API entry point not found at $API_DIR/public/index.php"
+    exit 1
+  }
+  [[ -f "$API_DIR/.env" ]] || {
+    echo "ERROR: API env file not found at $API_DIR/.env"
+    exit 1
+  }
+  [[ -f "$WEB_DIR/package.json" ]] || {
+    echo "ERROR: Web package.json not found at $WEB_DIR/package.json"
+    exit 1
+  }
+
+  step "Installing/updating frontend npm dependencies"
+  (cd "$WEB_DIR" && npm install)
+
+  step "Building frontend for preview"
+  (cd "$WEB_DIR" && npm run build)
+
+  step "Writing systemd service files"
+  install_systemd_services
+
+  step "Enabling and restarting systemd services"
+  enable_and_restart_systemd_services
+
+  step "Verifying API, realtime, and web endpoints"
+  wait_for_http "http://127.0.0.1:${API_PORT}/api/v1/health" "API health endpoint"
+  wait_for_http "http://${REALTIME_HOST}:${REALTIME_PORT}/health" "internal chat realtime"
+  wait_for_http "http://127.0.0.1:${WEB_PORT}" "web preview"
+
+  step "Verifying Socket.IO polling through the web preview"
+  socket_status="$(curl -sS -o /tmp/james_systemd_socketio_probe.txt -w "%{http_code}" "http://127.0.0.1:${WEB_PORT}/socket.io/?EIO=4&transport=polling" || true)"
+  if [[ "$socket_status" != "200" ]]; then
+    echo "ERROR: Socket.IO polling endpoint returned ${socket_status:-no-response}."
+    echo "Inspect service logs:"
+    echo "  sudo journalctl -u james-api -n 100 --no-pager"
+    echo "  sudo journalctl -u james-realtime -n 100 --no-pager"
+    echo "  sudo journalctl -u james-web -n 100 --no-pager"
+    exit 1
+  fi
+
+  step "Printing service management commands"
+  echo
+  echo "Systemd services installed and running."
+  print_service_urls
+  echo
+  echo "Service commands:"
+  echo "  sudo systemctl status james-api james-realtime james-web"
+  echo "  sudo systemctl restart james-api james-realtime james-web"
+  echo "  sudo journalctl -u james-api -f"
+  echo "  sudo journalctl -u james-realtime -f"
+  echo "  sudo journalctl -u james-web -f"
+  exit 0
+fi
+
 if [[ "$MODE" == "update" ]]; then
   step "Writing API and web environment files"
   write_api_env
@@ -413,7 +661,7 @@ if [[ "$MODE" == "update" ]]; then
   step "Building frontend for preview"
   (cd "$WEB_DIR" && npm run build)
 
-  step "Restarting API server and web preview"
+  step "Restarting API server, internal chat realtime, and web preview"
   restart_services
 
   step "Verifying services and printing access URLs"
@@ -566,7 +814,7 @@ step "Installing frontend npm dependencies"
 step "Building frontend for preview"
 (cd "$WEB_DIR" && npm run build)
 
-step "Starting API server and web preview in background"
+step "Starting API server, internal chat realtime, and web preview in background"
 restart_services
 
 step "Verifying services and printing access URLs"
