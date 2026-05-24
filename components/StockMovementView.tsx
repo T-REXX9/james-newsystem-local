@@ -204,6 +204,11 @@ const StockMovementView: React.FC = () => {
             display: none;
           }
 
+          .stock-movement-legacy-head th {
+            position: relative;
+            z-index: 20;
+          }
+
           @media print {
             @page {
               size: landscape;
@@ -375,6 +380,10 @@ const StockMovementView: React.FC = () => {
                         <div className="flex gap-2 mt-1 text-[10px] text-slate-400">
                           <span>Code: {product.item_code}</span>
                           <span>•</span>
+                          <span>Application: {product.application || '-'}</span>
+                          <span>•</span>
+                          <span>Reorder Qty: {product.reorder_quantity}</span>
+                          <span>•</span>
                           <span>Total Stock: {(
                             product.stock_wh1 + product.stock_wh2 + product.stock_wh3 +
                             product.stock_wh4 + product.stock_wh5 + product.stock_wh6
@@ -404,6 +413,10 @@ const StockMovementView: React.FC = () => {
                             <span className="text-slate-500">OEM: {selectedProduct.oem_no}</span>
                           </>
                         )}
+                      </div>
+                      <div className="mt-2 grid grid-cols-1 gap-1 text-xs text-slate-500">
+                        <span>Application: {selectedProduct.application || '-'}</span>
+                        <span>Reorder Qty: {selectedProduct.reorder_quantity}</span>
                       </div>
                     </div>
                     <div className="text-right ml-4">
@@ -616,24 +629,24 @@ const StockMovementView: React.FC = () => {
                     </table>
                   ) : (
                     <table className="w-full min-w-[1100px] text-left border-separate border-spacing-0">
-                      <thead className="sticky top-0 z-10 shadow-sm">
+                      <thead className="stock-movement-legacy-head sticky top-0 z-20 bg-white shadow-sm dark:bg-slate-900">
                         <tr className="text-xs uppercase text-slate-600 dark:text-slate-300 font-semibold border-b border-slate-200 dark:border-slate-700">
                           <th className="p-3 text-center bg-emerald-50 dark:bg-emerald-950/30 border-b border-slate-200 dark:border-slate-700" colSpan={5}>RECEIVED / RETURNED</th>
-                          <th className="p-3 text-center bg-rose-50 dark:bg-rose-950/30 border-l-4 border-l-slate-400 dark:border-l-slate-500 border-b border-slate-200 dark:border-slate-700" colSpan={6}>RELEASED</th>
+                          <th className="p-3 text-center bg-rose-50 dark:bg-rose-950 border-l-4 border-l-slate-400 dark:border-l-slate-500 border-b border-slate-200 dark:border-slate-700" colSpan={6}>RELEASED</th>
                           <th className="p-3 w-24 text-right bg-slate-100 dark:bg-slate-800 border-l-4 border-l-slate-400 dark:border-l-slate-500 border-b border-slate-200 dark:border-slate-700" rowSpan={2}>Bal</th>
                         </tr>
                         <tr className="text-xs uppercase text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-700">
-                          <th className="p-3 w-28 bg-emerald-50/60 dark:bg-emerald-950/20 border-b border-slate-200 dark:border-slate-700">Date</th>
-                          <th className="p-3 w-32 bg-emerald-50/60 dark:bg-emerald-950/20 border-b border-slate-200 dark:border-slate-700">Source</th>
-                          <th className="p-3 bg-emerald-50/60 dark:bg-emerald-950/20 border-b border-slate-200 dark:border-slate-700">Supplier/Customer</th>
-                          <th className="p-3 w-20 text-right bg-emerald-50/60 dark:bg-emerald-950/20 border-b border-slate-200 dark:border-slate-700">Qty</th>
-                          <th className="p-3 w-24 text-center bg-emerald-50/60 dark:bg-emerald-950/20 border-b border-slate-200 dark:border-slate-700">Warehouse</th>
-                          <th className="p-3 w-28 bg-rose-50/70 dark:bg-rose-950/20 border-l-4 border-l-slate-400 dark:border-l-slate-500 border-b border-slate-200 dark:border-slate-700">Date</th>
-                          <th className="p-3 w-32 bg-rose-50/70 dark:bg-rose-950/20 border-b border-slate-200 dark:border-slate-700">Source</th>
-                          <th className="p-3 bg-rose-50/70 dark:bg-rose-950/20 border-b border-slate-200 dark:border-slate-700">Customer</th>
-                          <th className="p-3 w-20 text-right bg-rose-50/70 dark:bg-rose-950/20 border-b border-slate-200 dark:border-slate-700">Qty</th>
-                          <th className="p-3 w-24 text-right bg-rose-50/70 dark:bg-rose-950/20 border-b border-slate-200 dark:border-slate-700">Unit Price</th>
-                          <th className="p-3 w-24 text-center bg-rose-50/70 dark:bg-rose-950/20 border-b border-slate-200 dark:border-slate-700">Warehouse</th>
+                          <th className="p-3 w-28 bg-emerald-50 dark:bg-emerald-950 border-b border-slate-200 dark:border-slate-700">Date</th>
+                          <th className="p-3 w-32 bg-emerald-50 dark:bg-emerald-950 border-b border-slate-200 dark:border-slate-700">Source</th>
+                          <th className="p-3 bg-emerald-50 dark:bg-emerald-950 border-b border-slate-200 dark:border-slate-700">Supplier/Customer</th>
+                          <th className="p-3 w-20 text-right bg-emerald-50 dark:bg-emerald-950 border-b border-slate-200 dark:border-slate-700">Qty</th>
+                          <th className="p-3 w-24 text-center bg-emerald-50 dark:bg-emerald-950 border-b border-slate-200 dark:border-slate-700">Warehouse</th>
+                          <th className="p-3 w-28 bg-rose-50 dark:bg-rose-950 border-l-4 border-l-slate-400 dark:border-l-slate-500 border-b border-slate-200 dark:border-slate-700">Date</th>
+                          <th className="p-3 w-32 bg-rose-50 dark:bg-rose-950 border-b border-slate-200 dark:border-slate-700">Source</th>
+                          <th className="p-3 bg-rose-50 dark:bg-rose-950 border-b border-slate-200 dark:border-slate-700">Customer</th>
+                          <th className="p-3 w-20 text-right bg-rose-50 dark:bg-rose-950 border-b border-slate-200 dark:border-slate-700">Qty</th>
+                          <th className="p-3 w-24 text-right bg-rose-50 dark:bg-rose-950 border-b border-slate-200 dark:border-slate-700">Unit Price</th>
+                          <th className="p-3 w-24 text-center bg-rose-50 dark:bg-rose-950 border-b border-slate-200 dark:border-slate-700">Warehouse</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -693,6 +706,8 @@ const StockMovementView: React.FC = () => {
               <h5>Part No: {selectedProduct.part_no}</h5>
               <h5>Brand: {selectedProduct.brand}</h5>
               <h5>Description: {selectedProduct.description}</h5>
+              <h5>Application: {selectedProduct.application || '-'}</h5>
+              <h5>Reorder Qty: {selectedProduct.reorder_quantity}</h5>
             </div>
             <div className="stock-movement-print-title">
               <h3>STOCK MOVEMENT</h3>

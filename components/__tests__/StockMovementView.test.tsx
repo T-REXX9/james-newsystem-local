@@ -18,14 +18,14 @@ const product = {
   item_code: 'IC-100',
   description: 'Brake pad',
   size: '',
-  reorder_quantity: 0,
+  reorder_quantity: 8,
   status: 'Active' as const,
   category: '',
   descriptive_inquiry: '',
   no_of_holes: '',
   replenish_quantity: 0,
   original_pn_no: '',
-  application: '',
+  application: 'ISUZU 4JA1 / 4JB1',
   no_of_cylinder: '',
   price_aa: 0,
   price_bb: 0,
@@ -160,8 +160,33 @@ describe('StockMovementView', () => {
     expect(within(printArea).getByText('Part No: PN-100')).toBeInTheDocument();
     expect(within(printArea).getByText('Brand: ACME')).toBeInTheDocument();
     expect(within(printArea).getByText('Description: Brake pad')).toBeInTheDocument();
+    expect(within(printArea).getByText('Application: ISUZU 4JA1 / 4JB1')).toBeInTheDocument();
+    expect(within(printArea).getByText('Reorder Qty: 8')).toBeInTheDocument();
     expect(within(printArea).getByText('RECEIVED / RETURNED')).toBeInTheDocument();
     expect(within(printArea).getByText('RELEASED')).toBeInTheDocument();
     expect(within(printArea).getByText('0.00')).toBeInTheDocument();
+  });
+
+  it('shows application details and reorder quantity for the selected product', async () => {
+    vi.mocked(searchStockMovementProducts).mockResolvedValue([product]);
+    vi.mocked(fetchStockMovementLogs).mockResolvedValue({
+      item: {},
+      logs,
+      meta: { page: 1, per_page: 1000, total: 2, total_pages: 1 },
+    });
+
+    render(<StockMovementView />);
+    fireEvent.focus(screen.getByPlaceholderText(/search by part no/i));
+
+    const option = await screen.findByText('PN-100');
+    expect(screen.getByText('Application: ISUZU 4JA1 / 4JB1')).toBeInTheDocument();
+    expect(screen.getByText('Reorder Qty: 8')).toBeInTheDocument();
+
+    fireEvent.click(option);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Application: ISUZU 4JA1 / 4JB1').length).toBeGreaterThanOrEqual(2);
+      expect(screen.getAllByText('Reorder Qty: 8').length).toBeGreaterThanOrEqual(2);
+    });
   });
 });

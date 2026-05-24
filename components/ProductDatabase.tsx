@@ -676,6 +676,8 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialP
                             <span className="font-mono">OEM No.: {product.oem_no}</span>
                           </>
                         )}
+                        <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                        <span>Application: {product.application || '-'}</span>
                       </div>
                     </div>
                   </td>
@@ -755,6 +757,9 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialP
                       {product.size && (
                         <span className="text-xs text-slate-500 dark:text-slate-400">{product.size}</span>
                       )}
+                      <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                        Reorder Qty: {product.reorder_quantity}
+                      </span>
                     </div>
                   </td>
 
