@@ -54,7 +54,7 @@ if [[ "$MODE" == "--help" || "$MODE" == "-h" || "$MODE" == "help" ]]; then
 Usage:
   ./setup.sh            # full fresh install (default)
   ./setup.sh install    # same as default
-  ./setup.sh update     # stop systemd services, pull api + web repos, rebuild, restart services
+  ./setup.sh update     # stop systemd services, pull this web repo, rebuild, restart services
   ./setup.sh restart    # restart api + web preview only
   ./setup.sh chat-realtime-init  # start/fix internal chat realtime + preview proxy
   ./setup.sh systemd-init  # create/enable persistent systemd services
@@ -504,9 +504,15 @@ run_systemd_update() {
   step "Stopping systemd services"
   sudo systemctl stop $SYSTEMD_SERVICES
 
-  step "Updating local repositories"
-  git_update_existing_repo "$API_DIR" "API repository"
+  step "Updating web repository"
   git_update_existing_repo "$WEB_DIR" "web repository"
+  if [[ -d "$API_DIR/.git" ]]; then
+    git_update_existing_repo "$API_DIR" "API repository"
+  elif [[ -d "$API_DIR" ]]; then
+    echo "Skipping API repository update: $API_DIR exists but is not a git repository."
+  else
+    echo "Skipping API repository update: $API_DIR does not exist."
+  fi
 
   step "Rebuilding web application"
   (cd "$WEB_DIR" && npm install && npm run build)
