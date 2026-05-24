@@ -8,10 +8,11 @@ set -euo pipefail
 API_REPO_URL="${API_REPO_URL:-https://github.com/T-REXX9/james-newsystem-api.git}"
 WEB_REPO_URL="${WEB_REPO_URL:-https://github.com/T-REXX9/james-newsystem-local.git}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INSTALL_DIR="${INSTALL_DIR:-/root/system-james}"
-API_DIR="${API_DIR:-$INSTALL_DIR/api}"
-WEB_DIR="${WEB_DIR:-$INSTALL_DIR}"
+DEFAULT_OWNER_USER="${SUDO_USER:-$(id -un)}"
+DEFAULT_OWNER_HOME="$(eval echo "~${DEFAULT_OWNER_USER}")"
+INSTALL_DIR="${INSTALL_DIR:-$DEFAULT_OWNER_HOME/james-system}"
+API_DIR="$INSTALL_DIR/api"
+WEB_DIR="$INSTALL_DIR/james-newsystem"
 
 DB_NAME="${DB_NAME:-}"
 DB_USER="${DB_USER:-james}"
@@ -39,6 +40,7 @@ VITE_SUPABASE_URL="${VITE_SUPABASE_URL:-$SUPABASE_URL_DEFAULT}"
 VITE_SUPABASE_ANON_KEY="${VITE_SUPABASE_ANON_KEY:-$SUPABASE_ANON_KEY_DEFAULT}"
 VITE_MAIN_ID="${VITE_MAIN_ID:-1}"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_DIR="$INSTALL_DIR/logs"
 API_LOG="$LOG_DIR/api.log"
 WEB_LOG="$LOG_DIR/web.log"
@@ -46,7 +48,6 @@ REALTIME_LOG="$LOG_DIR/realtime.log"
 DB_DUMP_TMP="/tmp/topnotch_setup_dump.sql"
 DB_IMPORT_USER="${DB_IMPORT_USER:-root}"
 DB_COMPAT_TRANSFORM="${DB_COMPAT_TRANSFORM:-1}"
-SYSTEMD_SERVICES="${SYSTEMD_SERVICES:-james-api james-realtime james-web}"
 
 MODE="${1:-install}"
 if [[ "$MODE" == "--help" || "$MODE" == "-h" || "$MODE" == "help" ]]; then
@@ -54,7 +55,7 @@ if [[ "$MODE" == "--help" || "$MODE" == "-h" || "$MODE" == "help" ]]; then
 Usage:
   ./setup.sh            # full fresh install (default)
   ./setup.sh install    # same as default
-  ./setup.sh update     # stop systemd services, pull this web repo, rebuild, restart services
+  ./setup.sh update     # update api + web repos, rebuild, restart services
   ./setup.sh restart    # restart api + web preview only
   ./setup.sh chat-realtime-init  # start/fix internal chat realtime + preview proxy
   ./setup.sh systemd-init  # create/enable persistent systemd services
@@ -69,7 +70,7 @@ fi
 
 TOTAL_STEPS=16
 if [[ "$MODE" == "update" ]]; then
-  TOTAL_STEPS=4
+  TOTAL_STEPS=9
 elif [[ "$MODE" == "restart" ]]; then
   TOTAL_STEPS=4
 elif [[ "$MODE" == "chat-realtime-init" ]]; then
@@ -471,61 +472,6 @@ git_safe_clone_or_pull() {
   fi
 }
 
-git_update_existing_repo() {
-  local target_dir="$1"
-  local repo_label="$2"
-
-  if [[ ! -d "$target_dir/.git" ]]; then
-    echo "ERROR: $repo_label repository not found at $target_dir"
-    exit 1
-  fi
-
-  GIT_TERMINAL_PROMPT=0 git -C "$target_dir" fetch --all --prune || {
-    echo "ERROR: Unable to fetch $repo_label."
-    echo "If repo is private, export GITHUB_TOKEN=<token-with-repo-scope> and re-run."
-    exit 1
-  }
-
-  local current_branch
-  current_branch="$(git -C "$target_dir" rev-parse --abbrev-ref HEAD)"
-  if [[ "$current_branch" == "HEAD" ]]; then
-    echo "ERROR: $repo_label is in detached HEAD state at $target_dir"
-    exit 1
-  fi
-
-  GIT_TERMINAL_PROMPT=0 git -C "$target_dir" pull --ff-only || {
-    echo "ERROR: Unable to pull latest changes for $repo_label."
-    echo "If repo is private, export GITHUB_TOKEN=<token-with-repo-scope> and re-run."
-    exit 1
-  }
-}
-
-run_systemd_update() {
-  step "Stopping systemd services"
-  sudo systemctl stop $SYSTEMD_SERVICES
-
-  step "Updating web repository"
-  git_update_existing_repo "$WEB_DIR" "web repository"
-  if [[ -d "$API_DIR/.git" ]]; then
-    git_update_existing_repo "$API_DIR" "API repository"
-  elif [[ -d "$API_DIR" ]]; then
-    echo "Skipping API repository update: $API_DIR exists but is not a git repository."
-  else
-    echo "Skipping API repository update: $API_DIR does not exist."
-  fi
-
-  step "Rebuilding web application"
-  (cd "$WEB_DIR" && npm install && npm run build)
-
-  step "Restarting systemd services"
-  sudo systemctl daemon-reload
-  sudo systemctl restart $SYSTEMD_SERVICES
-
-  echo
-  echo "Update complete."
-  echo "Restarted services: $SYSTEMD_SERVICES"
-}
-
 sudo_keepalive() {
   sudo -v
   while true; do sudo -n true; sleep 50; kill -0 "$$" || exit; done 2>/dev/null &
@@ -538,15 +484,6 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
-
-if [[ "$MODE" == "update" ]]; then
-  need_cmd git
-  need_cmd npm
-  need_cmd systemctl
-  sudo_keepalive
-  run_systemd_update
-  exit 0
-fi
 
 step "Checking prerequisites and sudo access"
 need_cmd bash
@@ -710,6 +647,39 @@ if [[ "$MODE" == "systemd-init" ]]; then
   echo "  sudo journalctl -u james-api -f"
   echo "  sudo journalctl -u james-realtime -f"
   echo "  sudo journalctl -u james-web -f"
+  exit 0
+fi
+
+if [[ "$MODE" == "update" ]]; then
+  step "Writing API and web environment files"
+  write_api_env
+  write_web_env
+
+  step "Installing/updating frontend npm dependencies"
+  (cd "$WEB_DIR" && npm install)
+
+  step "Building frontend for preview"
+  (cd "$WEB_DIR" && npm run build)
+
+  step "Restarting API server, internal chat realtime, and web preview"
+  restart_services
+
+  step "Verifying services and printing access URLs"
+  HOST_IP="$(hostname -I | awk '{print $1}')"
+  API_HEALTH_URL="http://127.0.0.1:${API_PORT}/api/v1/health"
+  WEB_URL_LOCAL="http://127.0.0.1:${WEB_PORT}"
+  WEB_URL_LAN="http://${HOST_IP}:${WEB_PORT}"
+  BENCHMARK_MAIN_ID="$(db_query_scalar "SELECT CAST(lmain_id AS UNSIGNED) FROM \`${DB_NAME}\`.tblpatient WHERE lmain_id IS NOT NULL AND lmain_id <> '' ORDER BY lid ASC LIMIT 1;" || true)"
+  if [[ -z "$BENCHMARK_MAIN_ID" ]]; then
+    BENCHMARK_MAIN_ID="$VITE_MAIN_ID"
+  fi
+  BENCHMARK_URL="http://127.0.0.1:${API_PORT}/api/v1/daily-call-monitoring/excel?main_id=${BENCHMARK_MAIN_ID}&status=all&search="
+
+  validate_stack "$API_HEALTH_URL" "$BENCHMARK_URL"
+
+  echo
+  echo "Update complete."
+  print_service_urls
   exit 0
 fi
 
