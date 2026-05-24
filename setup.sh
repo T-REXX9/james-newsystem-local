@@ -9,7 +9,7 @@ API_REPO_URL="${API_REPO_URL:-https://github.com/T-REXX9/james-newsystem-api.git
 WEB_REPO_URL="${WEB_REPO_URL:-https://github.com/T-REXX9/james-newsystem-local.git}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INSTALL_DIR="${INSTALL_DIR:-$SCRIPT_DIR}"
+INSTALL_DIR="${INSTALL_DIR:-/root/system-james}"
 API_DIR="${API_DIR:-$INSTALL_DIR/api}"
 WEB_DIR="${WEB_DIR:-$INSTALL_DIR}"
 
