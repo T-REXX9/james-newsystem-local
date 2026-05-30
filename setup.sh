@@ -48,6 +48,13 @@ REALTIME_LOG="$LOG_DIR/realtime.log"
 DB_DUMP_TMP="/tmp/topnotch_setup_dump.sql"
 DB_IMPORT_USER="${DB_IMPORT_USER:-root}"
 DB_COMPAT_TRANSFORM="${DB_COMPAT_TRANSFORM:-1}"
+PRODUCTION_ROOT="${PRODUCTION_ROOT:-/var/www/james-newsystem}"
+PRODUCTION_WEB_DIR="${PRODUCTION_WEB_DIR:-$PRODUCTION_ROOT/web}"
+PRODUCTION_API_DIR="${PRODUCTION_API_DIR:-$PRODUCTION_ROOT/api}"
+PRODUCTION_REALTIME_DIR="${PRODUCTION_REALTIME_DIR:-$PRODUCTION_ROOT/realtime}"
+PRODUCTION_NGINX_SITE="${PRODUCTION_NGINX_SITE:-james-newsystem}"
+PRODUCTION_PORT="${PRODUCTION_PORT:-80}"
+SERVER_NAME="${SERVER_NAME:-_}"
 
 MODE="${1:-install}"
 if [[ "$MODE" == "--help" || "$MODE" == "-h" || "$MODE" == "help" ]]; then
@@ -56,6 +63,8 @@ Usage:
   ./setup.sh            # full fresh install (default)
   ./setup.sh install    # same as default
   ./setup.sh update     # update api + web repos, rebuild, restart services
+  ./setup.sh -production  # configure a full production deployment without starting it
+  ./setup.sh -productionupdate  # update production files/config without restarting services
   ./setup.sh restart    # restart api + web preview only
   ./setup.sh chat-realtime-init  # start/fix internal chat realtime + preview proxy
   ./setup.sh systemd-init  # create/enable persistent systemd services
@@ -63,13 +72,17 @@ EOF
   exit 0
 fi
 
-if [[ "$MODE" != "install" && "$MODE" != "update" && "$MODE" != "restart" && "$MODE" != "chat-realtime-init" && "$MODE" != "systemd-init" ]]; then
-  echo "ERROR: unknown mode '$MODE'. Use: install | update | restart | chat-realtime-init | systemd-init"
+if [[ "$MODE" != "install" && "$MODE" != "update" && "$MODE" != "-production" && "$MODE" != "production" && "$MODE" != "-productionupdate" && "$MODE" != "productionupdate" && "$MODE" != "restart" && "$MODE" != "chat-realtime-init" && "$MODE" != "systemd-init" ]]; then
+  echo "ERROR: unknown mode '$MODE'. Use: install | update | -production | -productionupdate | restart | chat-realtime-init | systemd-init"
   exit 1
 fi
 
 TOTAL_STEPS=16
 if [[ "$MODE" == "update" ]]; then
+  TOTAL_STEPS=9
+elif [[ "$MODE" == "-production" || "$MODE" == "production" ]]; then
+  TOTAL_STEPS=15
+elif [[ "$MODE" == "-productionupdate" || "$MODE" == "productionupdate" ]]; then
   TOTAL_STEPS=9
 elif [[ "$MODE" == "restart" ]]; then
   TOTAL_STEPS=4
@@ -104,6 +117,19 @@ need_cmd() {
     echo "ERROR: required command not found: $1"
     exit 1
   }
+}
+
+need_running_systemd() {
+  need_cmd systemctl
+  if [[ "$(ps -p 1 -o comm= 2>/dev/null || true)" != "systemd" ]]; then
+    echo "ERROR: production modes require Ubuntu booted with systemd as PID 1." >&2
+    echo "Run this on the deployment server, not in a plain Docker shell/container." >&2
+    exit 1
+  fi
+  if ! systemctl list-unit-files >/dev/null 2>&1; then
+    echo "ERROR: systemd is installed but not responding to systemctl." >&2
+    exit 1
+  fi
 }
 
 wait_for_http() {
@@ -472,6 +498,485 @@ git_safe_clone_or_pull() {
   fi
 }
 
+ensure_node_runtime() {
+  if ! command -v node >/dev/null 2>&1 || [[ "$(node -v 2>/dev/null | cut -d. -f1 | tr -d 'v')" -lt 22 ]]; then
+    curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs
+  fi
+  need_cmd node
+  need_cmd npm
+}
+
+set_env_value() {
+  local file="$1"
+  local key="$2"
+  local value="$3"
+  local tmp
+  tmp="$(mktemp)"
+
+  if [[ -f "$file" ]] && grep -qE "^${key}=" "$file"; then
+    awk -v k="$key" -v v="$value" 'BEGIN { done=0 } $0 ~ "^" k "=" { print k "=" v; done=1; next } { print } END { if (!done) print k "=" v }' "$file" > "$tmp"
+  else
+    [[ -f "$file" ]] && cat "$file" > "$tmp"
+    printf '%s=%s\n' "$key" "$value" >> "$tmp"
+  fi
+
+  mv "$tmp" "$file"
+}
+
+detect_php_fpm_service() {
+  local version
+  version="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;' 2>/dev/null || true)"
+  if [[ -n "$version" ]] && systemctl list-unit-files "php${version}-fpm.service" --no-legend 2>/dev/null | awk '{ print $1 }' | grep -qx "php${version}-fpm.service"; then
+    echo "php${version}-fpm"
+    return 0
+  fi
+
+  systemctl list-unit-files 'php*-fpm.service' --no-legend 2>/dev/null | awk '{ sub(/\.service$/, "", $1); print $1; exit }'
+}
+
+detect_php_fpm_socket() {
+  local socket=""
+  socket="$(find /run/php -maxdepth 1 -name 'php*-fpm.sock' 2>/dev/null | sort -V | tail -n 1 || true)"
+  if [[ -n "$socket" ]]; then
+    echo "$socket"
+    return 0
+  fi
+
+  local version
+  version="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;' 2>/dev/null || true)"
+  if [[ -n "$version" ]]; then
+    echo "/run/php/php${version}-fpm.sock"
+    return 0
+  fi
+
+  echo "/run/php/php-fpm.sock"
+}
+
+generate_secret() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+    return 0
+  fi
+  od -An -N32 -tx1 /dev/urandom | tr -d ' \n'
+}
+
+resolve_production_auth_secret() {
+  local existing_secret=""
+  existing_secret="${AUTH_SECRET:-}"
+  if [[ -z "$existing_secret" ]]; then
+    existing_secret="$(read_env_example_value "$API_DIR/.env" "AUTH_SECRET" || true)"
+  fi
+  if [[ -z "$existing_secret" ]]; then
+    existing_secret="$(read_env_example_value "$API_DIR/.env.example" "AUTH_SECRET" || true)"
+  fi
+  if [[ -z "$existing_secret" ]]; then
+    existing_secret="$(read_env_example_value "$API_DIR/.env" "APP_KEY" || true)"
+  fi
+  if [[ -z "$existing_secret" ]]; then
+    existing_secret="$(read_env_example_value "$API_DIR/.env.example" "APP_KEY" || true)"
+  fi
+
+  case "$existing_secret" in
+    ""|"change-this-secret"|"change-me-in-env"|"local-dev-secret-change-me")
+      generate_secret
+      ;;
+    *)
+      echo "$existing_secret"
+      ;;
+  esac
+}
+
+write_production_api_env() {
+  local auth_secret socket_secret
+  auth_secret="$(resolve_production_auth_secret)"
+  socket_secret="${INTERNAL_CHAT_SOCKET_SECRET:-$auth_secret}"
+
+  write_api_env
+  set_env_value "$API_DIR/.env" "APP_ENV" "production"
+  set_env_value "$API_DIR/.env" "APP_DEBUG" "false"
+  set_env_value "$API_DIR/.env" "APP_URL" "/"
+  set_env_value "$API_DIR/.env" "AUTH_SECRET" "$auth_secret"
+  set_env_value "$API_DIR/.env" "APP_KEY" "$auth_secret"
+  set_env_value "$API_DIR/.env" "AUTH_TOKEN_TTL_SECONDS" "${AUTH_TOKEN_TTL_SECONDS:-28800}"
+  set_env_value "$API_DIR/.env" "INTERNAL_CHAT_SOCKET_NOTIFY_URL" "http://${REALTIME_HOST}:${REALTIME_PORT}/internal-chat/events"
+  set_env_value "$API_DIR/.env" "INTERNAL_CHAT_SOCKET_SECRET" "$socket_secret"
+}
+
+write_production_web_env() {
+  cat > "$WEB_DIR/.env.local" <<EOF
+VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+VITE_API_BASE_URL=/api/v1
+VITE_MAIN_ID=${VITE_MAIN_ID}
+EOF
+}
+
+production_transform_sql_stream() {
+  sed -E \
+    -e 's/DEFAULT[[:space:]]+CURRENT_DATE(\(\))?/DEFAULT NULL/gI' \
+    -e 's/ON[[:space:]]+UPDATE[[:space:]]+CURRENT_DATE(\(\))?//gI' \
+    -e 's/utf8mb4_0900_ai_ci/utf8mb4_unicode_ci/g' \
+    -e 's/DEFINER=`[^`]+`@`[^`]+`//g'
+}
+
+configure_mysql_database() {
+  sudo mysql <<SQL
+CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';
+CREATE USER IF NOT EXISTS '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASS}';
+GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';
+GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'127.0.0.1';
+FLUSH PRIVILEGES;
+SQL
+}
+
+import_mysql_dump_if_available() {
+  local found_dump=""
+  if [[ -n "$DB_DUMP_PATH" && -f "$DB_DUMP_PATH" ]]; then
+    found_dump="$DB_DUMP_PATH"
+  elif [[ -f "$SCRIPT_DIR/backup.sql" ]]; then
+    found_dump="$SCRIPT_DIR/backup.sql"
+  elif [[ -f "$SCRIPT_DIR/backup.sql.gz" ]]; then
+    found_dump="$SCRIPT_DIR/backup.sql.gz"
+  elif [[ -f "$SCRIPT_DIR/topnotch.sql" ]]; then
+    found_dump="$SCRIPT_DIR/topnotch.sql"
+  elif [[ -f "$SCRIPT_DIR/topnotch.sql.gz" ]]; then
+    found_dump="$SCRIPT_DIR/topnotch.sql.gz"
+  elif [[ -f "$INSTALL_DIR/topnotch.sql" ]]; then
+    found_dump="$INSTALL_DIR/topnotch.sql"
+  elif [[ -f "$INSTALL_DIR/topnotch.sql.gz" ]]; then
+    found_dump="$INSTALL_DIR/topnotch.sql.gz"
+  elif [[ -n "$DB_DUMP_URL" ]]; then
+    echo "Downloading DB dump from DB_DUMP_URL..."
+    if [[ "$DB_DUMP_URL" == *.gz ]]; then
+      curl -fL "$DB_DUMP_URL" -o "${DB_DUMP_TMP}.gz"
+      found_dump="${DB_DUMP_TMP}.gz"
+    else
+      curl -fL "$DB_DUMP_URL" -o "$DB_DUMP_TMP"
+      found_dump="$DB_DUMP_TMP"
+    fi
+  fi
+
+  if [[ -z "$found_dump" ]]; then
+    echo "WARNING: No DB dump provided."
+    echo "The app will run, but real data/login may not work until you import your topnotch SQL dump."
+    echo "Provide one via DB_DUMP_PATH=/path/to/topnotch.sql or DB_DUMP_URL=..."
+    return 0
+  fi
+
+  echo "Importing dump: $found_dump"
+  if [[ "$DB_IMPORT_USER" == "root" ]]; then
+    sudo mysql -u root -e "SET GLOBAL innodb_strict_mode=0;"
+    MYSQL_IMPORT_CMD=(
+      sudo mysql
+      -u root
+      --default-character-set=utf8mb4
+      --max_allowed_packet=1G
+      --net_buffer_length=1048576
+      --connect-timeout=30
+      --init-command="SET SESSION innodb_strict_mode=0; SET SESSION foreign_key_checks=0; SET SESSION unique_checks=0; SET SESSION sql_log_bin=0;"
+      "$DB_NAME"
+    )
+  else
+    MYSQL_IMPORT_CMD=(
+      mysql
+      -h "$DB_HOST"
+      -P "$DB_PORT"
+      -u "$DB_USER"
+      "-p$DB_PASS"
+      --default-character-set=utf8mb4
+      --max_allowed_packet=1G
+      --net_buffer_length=1048576
+      --connect-timeout=30
+      --init-command="SET SESSION innodb_strict_mode=0; SET SESSION foreign_key_checks=0; SET SESSION unique_checks=0; SET SESSION sql_log_bin=0;"
+      "$DB_NAME"
+    )
+  fi
+
+  if [[ "$found_dump" == *.gz ]]; then
+    if [[ "$DB_COMPAT_TRANSFORM" == "1" ]]; then
+      pv "$found_dump" | gzip -dc | production_transform_sql_stream | "${MYSQL_IMPORT_CMD[@]}"
+    else
+      pv "$found_dump" | gzip -dc | "${MYSQL_IMPORT_CMD[@]}"
+    fi
+  else
+    if [[ "$DB_COMPAT_TRANSFORM" == "1" ]]; then
+      pv "$found_dump" | production_transform_sql_stream | "${MYSQL_IMPORT_CMD[@]}"
+    else
+      pv "$found_dump" | "${MYSQL_IMPORT_CMD[@]}"
+    fi
+  fi
+}
+
+deploy_production_files() {
+  sudo install -d -m 0755 "$PRODUCTION_ROOT" "$PRODUCTION_WEB_DIR" "$PRODUCTION_API_DIR" "$PRODUCTION_REALTIME_DIR"
+  sudo rsync -a --delete "$WEB_DIR/dist/" "$PRODUCTION_WEB_DIR/"
+  sudo rsync -a --delete --exclude='.git' "$API_DIR/" "$PRODUCTION_API_DIR/"
+  sudo rsync -a --delete --exclude='.git' --exclude='dist' "$WEB_DIR/" "$PRODUCTION_REALTIME_DIR/"
+  sudo chown -R www-data:www-data "$PRODUCTION_WEB_DIR" "$PRODUCTION_API_DIR" "$PRODUCTION_REALTIME_DIR"
+}
+
+write_production_nginx_config() {
+  local php_fpm_socket="$1"
+  local site_path="/etc/nginx/sites-available/${PRODUCTION_NGINX_SITE}"
+
+  sudo tee "$site_path" >/dev/null <<EOF
+server {
+    listen ${PRODUCTION_PORT};
+    server_name ${SERVER_NAME};
+
+    client_max_body_size 100M;
+
+    location = / {
+        return 302 /james-newsystem/;
+    }
+
+    location = /james-newsystem {
+        return 301 /james-newsystem/;
+    }
+
+    location /james-newsystem/ {
+        alias ${PRODUCTION_WEB_DIR}/;
+        index index.html;
+        try_files \$uri \$uri/ /james-newsystem/index.html;
+    }
+
+    location /api/ {
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME ${PRODUCTION_API_DIR}/public/index.php;
+        fastcgi_param SCRIPT_NAME /index.php;
+        fastcgi_param DOCUMENT_ROOT ${PRODUCTION_API_DIR}/public;
+        fastcgi_param REQUEST_URI \$request_uri;
+        fastcgi_param QUERY_STRING \$query_string;
+        fastcgi_pass unix:${php_fpm_socket};
+    }
+
+    location /socket.io/ {
+        proxy_pass http://${REALTIME_HOST}:${REALTIME_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+EOF
+
+  sudo ln -sfn "$site_path" "/etc/nginx/sites-enabled/${PRODUCTION_NGINX_SITE}"
+  if [[ -L /etc/nginx/sites-enabled/default ]]; then
+    sudo rm -f /etc/nginx/sites-enabled/default
+  fi
+}
+
+write_production_systemd_units() {
+  local php_fpm_service="$1"
+  local service_user service_group npm_bin bash_bin
+  service_user="${SERVICE_USER:-www-data}"
+  service_group="${SERVICE_GROUP:-www-data}"
+  npm_bin="$(command -v npm)"
+  bash_bin="$(command -v bash)"
+
+  sudo tee /etc/systemd/system/james-realtime.service >/dev/null <<EOF
+[Unit]
+Description=James Internal Chat Realtime
+After=network.target ${php_fpm_service}.service
+Wants=${php_fpm_service}.service
+
+[Service]
+Type=simple
+User=${service_user}
+Group=${service_group}
+WorkingDirectory=${PRODUCTION_REALTIME_DIR}
+Environment=INTERNAL_CHAT_SOCKET_HOST=${REALTIME_HOST}
+Environment=INTERNAL_CHAT_SOCKET_PORT=${REALTIME_PORT}
+Environment=INTERNAL_CHAT_SOCKET_PATH=/socket.io
+Environment=NPM_CONFIG_CACHE=/tmp/james-realtime-npm-cache
+EnvironmentFile=${PRODUCTION_API_DIR}/.env
+ExecStart=${bash_bin} -lc 'export AUTH_SECRET="\${AUTH_SECRET:-\${APP_KEY:-change-me-in-env}}"; export APP_KEY="\${APP_KEY:-\$AUTH_SECRET}"; export INTERNAL_CHAT_SOCKET_SECRET="\${INTERNAL_CHAT_SOCKET_SECRET:-\$AUTH_SECRET}"; exec ${npm_bin} run realtime'
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  sudo tee /etc/systemd/system/james-production.target >/dev/null <<EOF
+[Unit]
+Description=James Production Stack
+Wants=nginx.service ${php_fpm_service}.service james-realtime.service
+After=nginx.service ${php_fpm_service}.service james-realtime.service
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  sudo systemctl daemon-reload
+}
+
+print_production_init_commands() {
+  local php_fpm_service="$1"
+  local host_ip
+  host_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+
+  echo
+  echo "Production files and service definitions are ready."
+  echo "The James production app stack was not started or restarted by this script."
+  echo
+  echo "Run this command when you are ready to initialize/reload the production system:"
+  echo "  sudo systemctl daemon-reload && sudo systemctl enable nginx ${php_fpm_service} james-realtime james-production.target && sudo systemctl restart ${php_fpm_service} nginx james-realtime"
+  echo
+  echo "Then verify:"
+  echo "  sudo systemctl status nginx ${php_fpm_service} james-realtime"
+  echo "  curl -fsS http://127.0.0.1/james-newsystem/"
+  echo "  curl -fsS http://127.0.0.1/api/v1/health"
+  echo "  curl -fsS http://${REALTIME_HOST}:${REALTIME_PORT}/health"
+  echo "  curl -fsS 'http://127.0.0.1/socket.io/?EIO=4&transport=polling'"
+  echo
+  echo "Production URLs:"
+  echo "  Local: http://127.0.0.1/james-newsystem/"
+  if [[ -n "$host_ip" ]]; then
+    echo "  LAN:   http://${host_ip}/james-newsystem/"
+  fi
+}
+
+run_production_mode() {
+  step "Checking production prerequisites and sudo access"
+  need_cmd bash
+  need_cmd curl
+  need_cmd awk
+  need_cmd sed
+  need_running_systemd
+  sudo_keepalive
+
+  step "Updating apt package index"
+  sudo apt-get update -y
+
+  step "Installing production packages"
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    ca-certificates \
+    curl \
+    git \
+    gnupg \
+    lsb-release \
+    build-essential \
+    mysql-server \
+    nginx \
+    php \
+    php-cli \
+    php-fpm \
+    php-mysql \
+    pv \
+    unzip \
+    jq \
+    rsync
+
+  step "Installing Node.js 22 + npm"
+  ensure_node_runtime
+
+  step "Creating installation and production directories"
+  mkdir -p "$INSTALL_DIR" "$LOG_DIR"
+  sudo install -d -m 0755 "$PRODUCTION_ROOT" "$PRODUCTION_WEB_DIR" "$PRODUCTION_API_DIR" "$PRODUCTION_REALTIME_DIR"
+
+  step "Cloning or updating API repository"
+  git_safe_clone_or_pull "$API_REPO_URL" "$API_DIR" "API repository"
+
+  step "Cloning or updating web repository"
+  git_safe_clone_or_pull "$WEB_REPO_URL" "$WEB_DIR" "web repository"
+
+  if [[ -z "$DB_NAME" ]]; then
+    DB_NAME="$(read_env_example_value "$API_DIR/.env.example" "DB_NAME" || true)"
+  fi
+  DB_NAME="${DB_NAME:-topnotch_migrate}"
+
+  step "Starting and configuring MySQL"
+  sudo systemctl enable --now mysql
+  configure_mysql_database
+
+  step "Importing MySQL data dump if provided"
+  import_mysql_dump_if_available
+
+  step "Writing production environment files"
+  write_production_api_env
+  write_production_web_env
+
+  step "Installing frontend and realtime npm dependencies"
+  (cd "$WEB_DIR" && npm install)
+
+  step "Building frontend production bundle"
+  (cd "$WEB_DIR" && npm run build)
+
+  step "Deploying production files under ${PRODUCTION_ROOT}"
+  deploy_production_files
+
+  local php_fpm_service php_fpm_socket
+  php_fpm_service="$(detect_php_fpm_service)"
+  php_fpm_socket="$(detect_php_fpm_socket)"
+  if [[ -z "$php_fpm_service" ]]; then
+    echo "ERROR: Could not detect php-fpm systemd service."
+    exit 1
+  fi
+
+  step "Writing Nginx and systemd production configuration"
+  write_production_nginx_config "$php_fpm_socket"
+  write_production_systemd_units "$php_fpm_service"
+  sudo nginx -t
+
+  step "Printing production initialization command"
+  print_production_init_commands "$php_fpm_service"
+}
+
+run_production_update_mode() {
+  step "Checking production update prerequisites and sudo access"
+  need_cmd git
+  need_cmd npm
+  need_cmd rsync
+  need_running_systemd
+  sudo_keepalive
+
+  step "Updating API repository"
+  git_safe_clone_or_pull "$API_REPO_URL" "$API_DIR" "API repository"
+
+  step "Updating web repository"
+  git_safe_clone_or_pull "$WEB_REPO_URL" "$WEB_DIR" "web repository"
+
+  if [[ -z "$DB_NAME" ]]; then
+    DB_NAME="$(read_env_example_value "$API_DIR/.env.example" "DB_NAME" || true)"
+  fi
+  DB_NAME="${DB_NAME:-topnotch_migrate}"
+
+  step "Refreshing production environment files"
+  write_production_api_env
+  write_production_web_env
+
+  step "Installing/updating npm dependencies"
+  (cd "$WEB_DIR" && npm install)
+
+  step "Rebuilding frontend production bundle"
+  (cd "$WEB_DIR" && npm run build)
+
+  step "Deploying updated production files under ${PRODUCTION_ROOT}"
+  deploy_production_files
+
+  local php_fpm_service php_fpm_socket
+  php_fpm_service="$(detect_php_fpm_service)"
+  php_fpm_socket="$(detect_php_fpm_socket)"
+  if [[ -z "$php_fpm_service" ]]; then
+    echo "ERROR: Could not detect php-fpm systemd service."
+    exit 1
+  fi
+
+  step "Refreshing Nginx and realtime systemd configuration"
+  write_production_nginx_config "$php_fpm_socket"
+  write_production_systemd_units "$php_fpm_service"
+  sudo nginx -t
+
+  step "Printing production update command"
+  print_production_init_commands "$php_fpm_service"
+}
+
 sudo_keepalive() {
   sudo -v
   while true; do sudo -n true; sleep 50; kill -0 "$$" || exit; done 2>/dev/null &
@@ -484,6 +989,16 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+
+if [[ "$MODE" == "-production" || "$MODE" == "production" ]]; then
+  run_production_mode
+  exit 0
+fi
+
+if [[ "$MODE" == "-productionupdate" || "$MODE" == "productionupdate" ]]; then
+  run_production_update_mode
+  exit 0
+fi
 
 step "Checking prerequisites and sudo access"
 need_cmd bash
