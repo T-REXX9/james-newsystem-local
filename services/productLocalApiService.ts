@@ -56,6 +56,10 @@ const normalizeApiProduct = (raw: any): Product => ({
   price_dd: toNumber(raw?.price_dd),
   price_vip1: toNumber(raw?.price_vip1),
   price_vip2: toNumber(raw?.price_vip2),
+  price_baa: toNumber(raw?.price_baa),
+  price_bbb: toNumber(raw?.price_bbb),
+  price_bcc: toNumber(raw?.price_bcc),
+  price_bdd: toNumber(raw?.price_bdd),
   stock_wh1: toNumber(raw?.stock_wh1),
   stock_wh2: toNumber(raw?.stock_wh2),
   stock_wh3: toNumber(raw?.stock_wh3),
@@ -93,6 +97,11 @@ export type ProductListStatus = 'all' | 'active' | 'inactive';
 
 export interface FetchProductsPageParams {
   search?: string;
+  partNo?: string;
+  itemCode?: string;
+  description?: string;
+  application?: string;
+  originalPn?: string;
   status?: ProductListStatus;
   page?: number;
   perPage?: number;
@@ -146,6 +155,11 @@ export const fetchProducts = async (): Promise<Product[]> => {
 export const fetchProductsPage = async (params: FetchProductsPageParams = {}): Promise<FetchProductsPageResult> => {
   const {
     search = '',
+    partNo = '',
+    itemCode = '',
+    description = '',
+    application = '',
+    originalPn = '',
     status = 'all',
     page = 1,
     perPage = 100,
@@ -154,6 +168,11 @@ export const fetchProductsPage = async (params: FetchProductsPageParams = {}): P
   const query = new URLSearchParams({
     main_id: String(API_MAIN_ID),
     search,
+    part_no: partNo,
+    item_code: itemCode,
+    description,
+    application,
+    original_pn: originalPn,
     status,
     page: String(Math.max(1, page)),
     per_page: String(Math.min(500, Math.max(1, perPage))),

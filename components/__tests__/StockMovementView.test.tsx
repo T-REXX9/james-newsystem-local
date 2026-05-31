@@ -33,6 +33,10 @@ const product = {
   price_dd: 0,
   price_vip1: 0,
   price_vip2: 0,
+  price_baa: 10,
+  price_bbb: 20,
+  price_bcc: 30,
+  price_bdd: 40,
   stock_wh1: 7,
   stock_wh2: 0,
   stock_wh3: 0,
@@ -85,6 +89,21 @@ describe('StockMovementView', () => {
     vi.unstubAllGlobals();
   });
 
+  it('starts with a blank legacy search grid until Search is submitted', async () => {
+    vi.mocked(searchStockMovementProducts).mockResolvedValue([product]);
+
+    render(<StockMovementView />);
+
+    expect(screen.queryByText('PN-100')).not.toBeInTheDocument();
+
+    await new Promise(resolve => window.setTimeout(resolve, 300));
+    expect(searchStockMovementProducts).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }));
+
+    expect(await screen.findByText('PN-100')).toBeInTheDocument();
+  });
+
   it('defaults selected product movement filtering to WH1', async () => {
     vi.mocked(searchStockMovementProducts).mockResolvedValue([product]);
     vi.mocked(fetchStockMovementLogs).mockResolvedValue({
@@ -94,14 +113,103 @@ describe('StockMovementView', () => {
     });
 
     render(<StockMovementView />);
-    fireEvent.focus(screen.getByPlaceholderText(/search by part no/i));
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }));
     fireEvent.click(await screen.findByText('PN-100'));
+    fireEvent.click(screen.getByRole('button', { name: /view movement/i }));
 
     await waitFor(() => {
       expect(fetchStockMovementLogs).toHaveBeenLastCalledWith(
         expect.objectContaining({ item_id: 'ITEM-1', warehouse_id: 'WH1' })
       );
     });
+  });
+
+  it('uses old-system separate search fields before viewing movement', async () => {
+    const secondProduct = {
+      ...product,
+      id: 'ITEM-2',
+      part_no: 'PN-200',
+      item_code: 'IC-200',
+      description: 'Clutch disc',
+      application: 'MITSUBISHI 4D56',
+      original_pn_no: 'OPN-200',
+    };
+
+    vi.mocked(searchStockMovementProducts).mockResolvedValue([product, secondProduct]);
+    vi.mocked(fetchStockMovementLogs).mockResolvedValue({
+      item: {},
+      logs,
+      meta: { page: 1, per_page: 1000, total: 2, total_pages: 1 },
+    });
+
+    render(<StockMovementView />);
+
+    expect(screen.getByPlaceholderText('Search Part No.')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Search Item Code')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Search Item Description')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Search Item Application')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Search Original P/N')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText('Search Part No.'), { target: { value: 'PN-100' } });
+    fireEvent.change(screen.getByPlaceholderText('Search Item Application'), { target: { value: '4JA1' } });
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }));
+
+    await waitFor(() => {
+      expect(searchStockMovementProducts).toHaveBeenLastCalledWith({
+        part_no: 'PN-100',
+        item_code: '',
+        description: '',
+        application: '4JA1',
+        original_pn: '',
+      }, 100);
+      expect(screen.getByText('PN-100')).toBeInTheDocument();
+      expect(screen.queryByText('PN-200')).not.toBeInTheDocument();
+    });
+
+    expect(screen.getByRole('button', { name: /view movement/i })).toBeDisabled();
+
+    fireEvent.click(await screen.findByText('PN-100'));
+    expect(screen.getByRole('button', { name: /view movement/i })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: /view movement/i }));
+
+    await waitFor(() => {
+      expect(fetchStockMovementLogs).toHaveBeenLastCalledWith(
+        expect.objectContaining({ item_id: 'ITEM-1', warehouse_id: 'WH1' })
+      );
+    });
+  });
+
+  it('smart-searches from each separate field as the user types', async () => {
+    vi.mocked(searchStockMovementProducts).mockResolvedValue([product]);
+
+    render(<StockMovementView />);
+
+    fireEvent.change(screen.getByPlaceholderText('Search Item Code'), { target: { value: 'IC-100' } });
+
+    await waitFor(() => {
+      expect(searchStockMovementProducts).toHaveBeenLastCalledWith({
+        part_no: '',
+        item_code: 'IC-100',
+        description: '',
+        application: '',
+        original_pn: '',
+      }, 100);
+      expect(screen.getByText('PN-100')).toBeInTheDocument();
+    });
+  });
+
+  it('renders old-system A and B regular price rows for each search result', async () => {
+    vi.mocked(searchStockMovementProducts).mockResolvedValue([product]);
+
+    render(<StockMovementView />);
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }));
+
+    expect(await screen.findByTestId('stock-product-row-ITEM-1-A')).toBeInTheDocument();
+    expect(screen.getByTestId('stock-product-row-ITEM-1-B')).toBeInTheDocument();
+    expect(within(screen.getByTestId('stock-product-row-ITEM-1-A')).getByText('A')).toBeInTheDocument();
+    expect(within(screen.getByTestId('stock-product-row-ITEM-1-B')).getByText('B')).toBeInTheDocument();
+    expect(within(screen.getByTestId('stock-product-row-ITEM-1-B')).getByText('10.00')).toBeInTheDocument();
+    expect(within(screen.getByTestId('stock-product-row-ITEM-1-B')).getByText('40.00')).toBeInTheDocument();
   });
 
   it('renders legacy report split columns and places movement rows on the correct side', async () => {
@@ -113,8 +221,9 @@ describe('StockMovementView', () => {
     });
 
     render(<StockMovementView />);
-    fireEvent.focus(screen.getByPlaceholderText(/search by part no/i));
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }));
     fireEvent.click(await screen.findByText('PN-100'));
+    fireEvent.click(screen.getByRole('button', { name: /view movement/i }));
     fireEvent.click(await screen.findByRole('button', { name: /legacy report/i }));
 
     expect(screen.getAllByText('RECEIVED / RETURNED')[0]).toBeInTheDocument();
@@ -146,8 +255,9 @@ describe('StockMovementView', () => {
     });
 
     render(<StockMovementView />);
-    fireEvent.focus(screen.getByPlaceholderText(/search by part no/i));
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }));
     fireEvent.click(await screen.findByText('PN-100'));
+    fireEvent.click(screen.getByRole('button', { name: /view movement/i }));
     fireEvent.click(await screen.findByRole('button', { name: /print/i }));
 
     expect(printMock).toHaveBeenCalledTimes(1);
@@ -176,17 +286,19 @@ describe('StockMovementView', () => {
     });
 
     render(<StockMovementView />);
-    fireEvent.focus(screen.getByPlaceholderText(/search by part no/i));
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }));
 
     const option = await screen.findByText('PN-100');
-    expect(screen.getByText('Application: ISUZU 4JA1 / 4JB1')).toBeInTheDocument();
-    expect(screen.getByText('Reorder Qty: 8')).toBeInTheDocument();
+    expect(screen.getByText('ISUZU 4JA1 / 4JB1')).toBeInTheDocument();
+    expect(screen.getByText('Reorder Qty')).toBeInTheDocument();
 
     fireEvent.click(option);
+    fireEvent.click(screen.getByRole('button', { name: /view movement/i }));
 
     await waitFor(() => {
-      expect(screen.getAllByText('Application: ISUZU 4JA1 / 4JB1').length).toBeGreaterThanOrEqual(2);
-      expect(screen.getAllByText('Reorder Qty: 8').length).toBeGreaterThanOrEqual(2);
+      const printArea = screen.getByTestId('stock-movement-print-area');
+      expect(within(printArea).getByText('Application: ISUZU 4JA1 / 4JB1')).toBeInTheDocument();
+      expect(within(printArea).getByText('Reorder Qty: 8')).toBeInTheDocument();
     });
   });
 });

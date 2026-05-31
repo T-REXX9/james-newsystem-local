@@ -15,6 +15,14 @@ export interface StockMovementFilterParams {
   per_page?: number;
 }
 
+export interface StockMovementProductSearchFilters {
+  part_no?: string;
+  item_code?: string;
+  description?: string;
+  application?: string;
+  original_pn?: string;
+}
+
 interface StockMovementListResponse {
   item: Record<string, unknown>;
   logs: InventoryLogWithProduct[];
@@ -67,9 +75,18 @@ const normalizeLog = (row: any): InventoryLogWithProduct => {
   };
 };
 
-export const searchStockMovementProducts = async (search = '', limit = 50) => {
+export const searchStockMovementProducts = async (
+  search: string | StockMovementProductSearchFilters = '',
+  limit = 50
+) => {
+  const filters = typeof search === 'string' ? null : search;
   const page = await fetchProductsPage({
-    search,
+    search: typeof search === 'string' ? search : '',
+    partNo: filters?.part_no || '',
+    itemCode: filters?.item_code || '',
+    description: filters?.description || '',
+    application: filters?.application || '',
+    originalPn: filters?.original_pn || '',
     status: 'all',
     page: 1,
     perPage: Math.max(1, Math.min(100, limit)),
