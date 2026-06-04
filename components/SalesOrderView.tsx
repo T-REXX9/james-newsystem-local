@@ -67,6 +67,21 @@ const SALES_ORDER_LIST_COLUMN_WIDTHS = [
 const normalizeStatus = (status: unknown): string => String(status || '').trim().toLowerCase();
 const isUuid = (value?: string | null): value is string => UUID_PATTERN.test(String(value || '').trim());
 
+const getOrderSortTime = (order: SalesOrder): number => {
+  const value = order.sales_date || order.created_at || '';
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? 0 : time;
+};
+
+const sortByLatestOrder = (a: SalesOrder, b: SalesOrder): number => {
+  const dateDiff = getOrderSortTime(b) - getOrderSortTime(a);
+  if (dateDiff !== 0) return dateDiff;
+  return (b.order_no || '').localeCompare(a.order_no || '', undefined, {
+    numeric: true,
+    sensitivity: 'base',
+  });
+};
+
 const formatDate = (value?: string | null): string => {
   if (!value) return '-';
   const parsed = new Date(value);
@@ -192,6 +207,8 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
           return false;
         });
       }
+
+      filtered = filtered.slice().sort(sortByLatestOrder);
 
       // Client-side pagination
       const perPage = 50;
@@ -333,7 +350,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
         if (!active || !detail) return;
 
         setSelectedOrder(detail);
-        setOrders((prev) => (prev.some((order) => order.id === detail.id) ? prev : [detail, ...prev]));
+        setOrders((prev) => (prev.some((order) => order.id === detail.id) ? prev : [detail, ...prev].sort(sortByLatestOrder)));
 
         const salesDate = new Date(detail.sales_date);
         if (!Number.isNaN(salesDate.getTime())) {

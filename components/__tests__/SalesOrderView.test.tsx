@@ -32,11 +32,70 @@ vi.mock('../../services/supabaseService', () => ({
   fetchProfiles: (...args: any[]) => fetchProfilesMock(...args),
 }));
 
+const makeOrder = (overrides: Record<string, any> = {}) => ({
+  id: overrides.id || 'order-1',
+  order_no: overrides.order_no || 'SO-1',
+  inquiry_id: '',
+  contact_id: overrides.contact_id || 'contact-1',
+  sales_date: overrides.sales_date || '2026-01-01',
+  sales_person: overrides.sales_person || 'Sales Rep',
+  delivery_address: '',
+  reference_no: overrides.reference_no || '',
+  customer_reference: '',
+  send_by: '',
+  price_group: 'gold',
+  credit_limit: 0,
+  terms: '',
+  promise_to_pay: '',
+  po_number: '',
+  remarks: '',
+  inquiry_type: '',
+  urgency: '',
+  urgency_date: '',
+  grand_total: 0,
+  status: overrides.status || 'Submitted',
+  approved_by: '',
+  approved_at: '',
+  created_by: '',
+  created_at: overrides.created_at || overrides.sales_date || '2026-01-01',
+  updated_at: '',
+  is_deleted: false,
+  items: [],
+  ...overrides,
+});
+
 describe('SalesOrderView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fetchProfilesMock.mockResolvedValue([]);
     fetchContactByIdMock.mockResolvedValue(null);
+    getSalesOrderMock.mockResolvedValue(null);
+  });
+
+  it('shows unfiltered sales orders newest to oldest by default', async () => {
+    getAllSalesOrdersMock.mockResolvedValue([
+      makeOrder({ id: 'old-order', order_no: 'SO-1', sales_date: '2026-01-05' }),
+      makeOrder({ id: 'new-order', order_no: 'SO-11', sales_date: '2026-04-08' }),
+      makeOrder({ id: 'middle-order', order_no: 'SO-7', sales_date: '2026-03-20' }),
+    ]);
+
+    fetchContactsMock.mockResolvedValue([
+      {
+        id: 'contact-1',
+        company: 'Acme Corp',
+        transactionType: 'Invoice',
+      },
+    ]);
+
+    render(<SalesOrderView />);
+
+    const newest = await screen.findByText('SO-11');
+    const middle = await screen.findByText('SO-7');
+    const oldest = await screen.findByText('SO-1');
+
+    expect(newest.compareDocumentPosition(middle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(middle.compareDocumentPosition(oldest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(getAllSalesOrdersMock).toHaveBeenCalledWith({});
   });
 
   it('loads the redirected sales order even when it is not present in the initial list page', async () => {

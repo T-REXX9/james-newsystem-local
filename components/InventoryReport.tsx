@@ -1,8 +1,4 @@
 import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
-
-// Module-level formatters — created once, never recreated
-const fmtCurrency = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 });
-const fmtCurrencyDecimal = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 2 });
 import {
   fetchInventoryReport,
   fetchInventoryReportOptions,
@@ -12,54 +8,52 @@ import {
   WarehouseOption,
 } from '../services/inventoryReportService';
 import {
-  Package,
   Printer,
   Loader2,
   Search,
-  Filter,
   Download,
-  RefreshCw,
-  X,
   AlertCircle,
 } from 'lucide-react';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
 
-const InventoryRow = memo(({ row, warehouses }: { row: InventoryReportRow; warehouses: WarehouseOption[] }) => (
-  <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors print:hover:bg-transparent">
-    <td className="p-3 text-sm font-mono text-slate-700 dark:text-slate-300 print:p-1 print:text-black">{row.partNo || '—'}</td>
-    <td className="p-3 text-sm font-mono text-slate-700 dark:text-slate-300 print:p-1 print:text-black">{row.itemCode || '—'}</td>
-    <td className="p-3 text-sm text-slate-800 dark:text-slate-200 print:p-1 print:text-black">{row.description}</td>
-    <td className="p-3 text-sm text-slate-600 dark:text-slate-400 print:p-1 print:text-black">{row.location || '—'}</td>
-    <td className="p-3 text-sm text-right font-mono text-slate-700 dark:text-slate-300 print:p-1 print:text-black">
-      {row.cost != null ? fmtCurrencyDecimal.format(row.cost) : '—'}
+const tableCellClass = 'border border-slate-300 dark:border-slate-700 px-2 py-1.5 text-xs text-slate-700 dark:text-slate-200 print:border-gray-500 print:text-black';
+const tableHeadClass = 'border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-2 py-1.5 text-xs font-semibold uppercase text-slate-700 dark:text-slate-200 print:border-gray-500 print:bg-gray-100 print:text-black';
+type DateCovered = 'All' | 'Today' | 'Week' | 'Month' | 'Year' | 'Custom';
+
+const InventoryRow = memo(({ row, warehouses, index }: { row: InventoryReportRow; warehouses: WarehouseOption[]; index: number }) => (
+  <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 print:hover:bg-transparent">
+    <td className={`${tableCellClass} text-center`}>{index + 1}</td>
+    <td className={tableCellClass}>{row.description || '—'}</td>
+    <td className={tableCellClass}>{row.partNo || '—'}</td>
+    <td className={tableCellClass}>{row.itemCode || '—'}</td>
+    <td className={`${tableCellClass} text-right font-mono`}>
+      {row.cost != null ? Number(row.cost).toFixed(2) : '—'}
     </td>
+    <td className={tableCellClass}>{row.location || '—'}</td>
+    <td className={`${tableCellClass} text-center font-mono`}>{row.totalStock}</td>
     {warehouses.map((wh) => {
       const qty = row.warehouseStock[wh.name] || row.warehouseStock[wh.id] || 0;
       return (
-        <td key={wh.id} className={`p-3 text-sm text-center font-mono print:p-1 print:text-black ${qty === 0 ? 'text-slate-400 dark:text-slate-600' : 'text-slate-800 dark:text-slate-200'}`}>
+        <td key={wh.id} className={`${tableCellClass} text-center font-mono ${qty === 0 ? 'text-slate-400 dark:text-slate-500' : ''}`}>
           {qty}
         </td>
       );
     })}
-    <td className={`p-3 text-sm text-center font-mono font-semibold print:p-1 print:text-black bg-slate-50 dark:bg-slate-800/50 ${row.totalStock === 0 ? 'text-rose-500' : 'text-slate-800 dark:text-slate-200'}`}>
-      {row.totalStock}
-    </td>
-    <td className="p-3 text-sm text-right font-mono text-emerald-700 dark:text-emerald-400 print:p-1 print:text-black bg-slate-50 dark:bg-slate-800/50">
-      {row.value != null ? fmtCurrency.format(row.value) : '—'}
+    <td className={`${tableCellClass} text-right font-mono`}>
+      {row.value != null ? Number(row.value).toFixed(2) : '—'}
     </td>
   </tr>
 ));
 
-const ProductRow = memo(({ row }: { row: InventoryReportRow }) => (
-  <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors print:hover:bg-transparent">
-    <td className="p-3 text-sm font-mono text-slate-700 dark:text-slate-300 print:p-1 print:text-black">{row.partNo || '—'}</td>
-    <td className="p-3 text-sm text-slate-600 dark:text-slate-400 print:p-1 print:text-black">{row.category || '—'}</td>
-    <td className="p-3 text-sm font-mono text-slate-700 dark:text-slate-300 print:p-1 print:text-black">{row.itemCode || '—'}</td>
-    <td className="p-3 text-sm text-slate-800 dark:text-slate-200 print:p-1 print:text-black">{row.description}</td>
-    <td className="p-3 text-sm text-slate-600 dark:text-slate-400 print:p-1 print:text-black">{row.location || '—'}</td>
-    <td className={`p-3 text-sm text-center font-mono font-semibold print:p-1 print:text-black bg-slate-50 dark:bg-slate-800/50 ${row.totalStock === 0 ? 'text-rose-500' : 'text-slate-800 dark:text-slate-200'}`}>
-      {row.totalStock}
-    </td>
+const ProductRow = memo(({ row, index }: { row: InventoryReportRow; index: number }) => (
+  <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 print:hover:bg-transparent">
+    <td className={`${tableCellClass} text-center`}>{index + 1}</td>
+    <td className={tableCellClass}>{row.description || '—'}</td>
+    <td className={tableCellClass}>{row.category || '—'}</td>
+    <td className={tableCellClass}>{row.partNo || '—'}</td>
+    <td className={tableCellClass}>{row.itemCode || '—'}</td>
+    <td className={tableCellClass}>{row.location || '—'}</td>
+    <td className={`${tableCellClass} text-center font-mono`}>{row.totalStock}</td>
   </tr>
 ));
 
@@ -72,8 +66,9 @@ const InventoryReport: React.FC = () => {
 
   const [categories, setCategories] = useState<string[]>([]);
   const [partNumbers, setPartNumbers] = useState<{ id: string; partNo: string }[]>([]);
-  const [itemCodes, setItemCodes] = useState<{ id: string; itemCode: string }[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>(WAREHOUSES);
+  const [dateCovered, setDateCovered] = useState<DateCovered>('All');
+  const [includeHidden, setIncludeHidden] = useState(false);
 
   const [filters, setFilters] = useState<InventoryReportFilters>({
     category: '',
@@ -86,9 +81,7 @@ const InventoryReport: React.FC = () => {
   });
 
   const [partNumberSearch, setPartNumberSearch] = useState('');
-  const [itemCodeSearch, setItemCodeSearch] = useState('');
   const [showPartNumberDropdown, setShowPartNumberDropdown] = useState(false);
-  const [showItemCodeDropdown, setShowItemCodeDropdown] = useState(false);
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -97,7 +90,6 @@ const InventoryReport: React.FC = () => {
         const options = await fetchInventoryReportOptions();
         setCategories(options.categories);
         setPartNumbers(options.partNumbers);
-        setItemCodes(options.itemCodes);
         if (options.warehouses.length > 0) {
           setWarehouses(options.warehouses);
         }
@@ -108,11 +100,45 @@ const InventoryReport: React.FC = () => {
     loadInitialData();
   }, []);
 
+  const getDateRange = useCallback((): Pick<InventoryReportFilters, 'dateFrom' | 'dateTo'> => {
+    const today = new Date();
+    const toDateInput = (date: Date) => date.toISOString().slice(0, 10);
+    const addDays = (days: number) => {
+      const next = new Date(today);
+      next.setDate(today.getDate() + days);
+      return next;
+    };
+    const addMonths = (months: number) => {
+      const next = new Date(today);
+      next.setMonth(today.getMonth() + months);
+      return next;
+    };
+    const addYears = (years: number) => {
+      const next = new Date(today);
+      next.setFullYear(today.getFullYear() + years);
+      return next;
+    };
+
+    if (dateCovered === 'Today') {
+      const value = toDateInput(today);
+      return { dateFrom: value, dateTo: value };
+    }
+    if (dateCovered === 'Week') return { dateFrom: toDateInput(addDays(-7)), dateTo: toDateInput(today) };
+    if (dateCovered === 'Month') return { dateFrom: toDateInput(addMonths(-1)), dateTo: toDateInput(today) };
+    if (dateCovered === 'Year') return { dateFrom: toDateInput(addYears(-1)), dateTo: toDateInput(today) };
+    if (dateCovered === 'Custom') return { dateFrom: filters.dateFrom, dateTo: filters.dateTo };
+    return { dateFrom: '', dateTo: '' };
+  }, [dateCovered, filters.dateFrom, filters.dateTo]);
+
   const handleGenerateReport = useCallback(async () => {
     setIsLoading(true);
     setDataWarning(null);
     try {
-      const data = await fetchInventoryReport(filters);
+      const requestFilters = {
+        ...filters,
+        ...getDateRange(),
+      };
+      const data = await fetchInventoryReport(requestFilters);
       setReportData(data.rows);
       if (data.warehouses.length > 0) {
         setWarehouses(data.warehouses);
@@ -137,7 +163,7 @@ const InventoryReport: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [filters, warehouses]);
+  }, [filters, getDateRange, warehouses]);
 
   const handleClearFilters = () => {
     setFilters({
@@ -150,7 +176,10 @@ const InventoryReport: React.FC = () => {
       reportType: 'inventory',
     });
     setPartNumberSearch('');
-    setItemCodeSearch('');
+    setDateCovered('All');
+    setIncludeHidden(false);
+    setGeneratedAt(null);
+    setReportData([]);
   };
 
   const handlePrint = () => {
@@ -158,6 +187,8 @@ const InventoryReport: React.FC = () => {
   };
 
   const isInventoryView = filters.reportType === 'inventory';
+  const reportTitle = isInventoryView ? 'Inventory Report' : 'Product Report';
+  const dateRange = getDateRange();
 
   const handleExportExcel = () => {
     if (reportData.length === 0) return;
@@ -221,13 +252,6 @@ const InventoryReport: React.FC = () => {
       .slice(0, 50);
   }, [partNumbers, partNumberSearch]);
 
-  const filteredItemCodes = useMemo(() => {
-    if (!itemCodeSearch) return itemCodes.slice(0, 50);
-    return itemCodes
-      .filter((c) => c.itemCode.toLowerCase().includes(itemCodeSearch.toLowerCase()))
-      .slice(0, 50);
-  }, [itemCodes, itemCodeSearch]);
-
   const summaryStats = useMemo(() => {
     const totalItems = reportData.length;
     const withStock = reportData.filter((r) => r.totalStock > 0).length;
@@ -237,15 +261,6 @@ const InventoryReport: React.FC = () => {
     return { totalItems, withStock, withoutStock, totalQuantity, totalValue };
   }, [reportData]);
 
-  // Pre-compute warehouse totals once — not per render
-  const warehouseTotals = useMemo(() => {
-    const totals: Record<string, number> = {};
-    for (const wh of warehouses) {
-      totals[wh.id] = reportData.reduce((sum, row) => sum + (row.warehouseStock[wh.name] || row.warehouseStock[wh.id] || 0), 0);
-    }
-    return totals;
-  }, [reportData, warehouses]);
-
   if (isInitializing) {
     return (
       <div className="flex h-full items-center justify-center bg-slate-50 dark:bg-slate-950">
@@ -254,395 +269,368 @@ const InventoryReport: React.FC = () => {
     );
   }
 
+  if (!generatedAt) {
+    return (
+      <div className="h-full overflow-auto bg-slate-100 dark:bg-slate-950 p-6 print:bg-white">
+        <div className="mx-auto max-w-6xl rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+          <div className="border-b border-slate-200 dark:border-slate-800 px-5 py-4">
+            <h1 className="text-base font-semibold uppercase text-slate-800 dark:text-slate-100">
+              Product and Inventory Report
+            </h1>
+          </div>
+
+          <div className="px-5 py-5">
+            <p className="mb-8 text-sm text-slate-600 dark:text-slate-400">
+              Field mark with (<span className="text-rose-600">*</span>) is required. Press generate after you select the sorting options
+            </p>
+
+            <div className="space-y-5 text-sm">
+              <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
+                <label className="pt-2 text-left font-medium text-slate-700 dark:text-slate-300 md:text-right">Report Type</label>
+                <div className="flex flex-wrap items-center gap-5 pt-2 text-slate-700 dark:text-slate-200">
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="reportType"
+                      checked={filters.reportType === 'inventory'}
+                      onChange={() => setFilters({ ...filters, reportType: 'inventory' })}
+                      className="h-4 w-4 accent-brand-blue"
+                    />
+                    Inventory
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="reportType"
+                      checked={filters.reportType === 'product'}
+                      onChange={() => setFilters({ ...filters, reportType: 'product' })}
+                      className="h-4 w-4 accent-brand-blue"
+                    />
+                    Products
+                  </label>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
+                <label className="pt-2 text-left font-medium text-slate-700 dark:text-slate-300 md:text-right">
+                  Date Covered <span className="text-rose-600">*</span>
+                </label>
+                <select
+                  value={dateCovered}
+                  onChange={(e) => setDateCovered(e.target.value as DateCovered)}
+                  className="w-full max-w-xl rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                >
+                  <option value="All">All</option>
+                  <option value="Today">Today</option>
+                  <option value="Week">This Week</option>
+                  <option value="Month">This Month</option>
+                  <option value="Year">This Year</option>
+                  <option value="Custom">Custom Date</option>
+                </select>
+              </div>
+
+              {dateCovered === 'Custom' && (
+                <>
+                  <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
+                    <label className="pt-2 text-left font-medium text-slate-700 dark:text-slate-300 md:text-right">
+                      Date From <span className="text-rose-600">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={filters.dateFrom || ''}
+                      max={filters.dateTo || undefined}
+                      onChange={(e) => {
+                        const newFrom = e.target.value;
+                        setFilters({
+                          ...filters,
+                          dateFrom: newFrom,
+                          dateTo: filters.dateTo && newFrom && filters.dateTo < newFrom ? newFrom : filters.dateTo,
+                        });
+                      }}
+                      className="w-full max-w-xl rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
+                    <label className="pt-2 text-left font-medium text-slate-700 dark:text-slate-300 md:text-right">
+                      Date To <span className="text-rose-600">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={filters.dateTo || ''}
+                      min={filters.dateFrom || undefined}
+                      onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+                      className="w-full max-w-xl rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                    />
+                  </div>
+                </>
+              )}
+
+              <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
+                <label className="pt-2 text-left font-medium text-slate-700 dark:text-slate-300 md:text-right">Product Category</label>
+                <select
+                  value={filters.category}
+                  onChange={(e) => setFilters({ ...filters, category: e.target.value })}
+                  className="w-full max-w-xl rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                >
+                  <option value="">Leave blank to display all</option>
+                  {categories.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
+                <label className="pt-2 text-left font-medium text-slate-700 dark:text-slate-300 md:text-right">Part Number</label>
+                <div className="relative w-full max-w-xl">
+                  <input
+                    type="text"
+                    value={partNumberSearch}
+                    onChange={(e) => {
+                      setPartNumberSearch(e.target.value);
+                      setFilters({ ...filters, partNumber: e.target.value });
+                    }}
+                    onFocus={() => setShowPartNumberDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowPartNumberDropdown(false), 200)}
+                    placeholder="All"
+                    className="w-full rounded border border-slate-300 bg-white px-3 py-2 pr-9 text-sm text-slate-700 outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                  />
+                  <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  {showPartNumberDropdown && filteredPartNumbers.length > 0 && (
+                    <div className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPartNumberSearch('');
+                          setFilters({ ...filters, partNumber: '' });
+                          setShowPartNumberDropdown(false);
+                        }}
+                        className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
+                      >
+                        All
+                      </button>
+                      {filteredPartNumbers.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => {
+                            setPartNumberSearch(p.partNo);
+                            setFilters({ ...filters, partNumber: p.partNo });
+                            setShowPartNumberDropdown(false);
+                          }}
+                          className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
+                        >
+                          {p.partNo}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
+                <label className="pt-1 text-left font-medium text-slate-700 dark:text-slate-300 md:text-right">Stock Option</label>
+                <div className="space-y-2 text-slate-700 dark:text-slate-200">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="stockStatus"
+                      checked={filters.stockStatus === 'all'}
+                      onChange={() => setFilters({ ...filters, stockStatus: 'all' })}
+                      className="h-4 w-4 accent-brand-blue"
+                    />
+                    All
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="stockStatus"
+                      checked={filters.stockStatus === 'with_stock'}
+                      onChange={() => setFilters({ ...filters, stockStatus: 'with_stock' })}
+                      className="h-4 w-4 accent-brand-blue"
+                    />
+                    With Stock Only
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="stockStatus"
+                      checked={filters.stockStatus === 'without_stock'}
+                      onChange={() => setFilters({ ...filters, stockStatus: 'without_stock' })}
+                      className="h-4 w-4 accent-brand-blue"
+                    />
+                    Without Stock Only
+                  </label>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
+                <label className="pt-1 text-left font-medium text-slate-700 dark:text-slate-300 md:text-right">Other Options</label>
+                <label className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={!includeHidden}
+                    onChange={(e) => setIncludeHidden(!e.target.checked)}
+                    className="h-4 w-4 accent-brand-blue"
+                  />
+                  Don't Include Hidden
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 pt-2 md:grid-cols-[220px_minmax(0,1fr)]">
+                <span />
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={handleGenerateReport}
+                    disabled={isLoading || (dateCovered === 'Custom' && (!filters.dateFrom || !filters.dateTo))}
+                    className="inline-flex items-center gap-2 rounded bg-brand-blue px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                  >
+                    {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                    Generate Report
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClearFilters}
+                    className="rounded border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950 p-8 animate-fadeIn print:p-0 print:bg-white">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 print:mb-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2 print:text-black">
-            <Package className="w-6 h-6 text-brand-blue print:text-black" />
-            Inventory Report
+    <div className="h-full overflow-auto bg-slate-100 p-6 dark:bg-slate-950 print:bg-white print:p-0">
+      <div className="mx-auto max-w-none rounded border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 print:border-none print:shadow-none">
+        <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800 print:hidden">
+          <h1 className="text-base font-semibold uppercase text-slate-800 dark:text-slate-100">
+            Inventory Report View
           </h1>
-          {generatedAt && (
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 print:text-gray-600">
-              Generated on: {generatedAt.toLocaleDateString()} {generatedAt.toLocaleTimeString()}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-2 print:hidden">
-          <button
-            onClick={handleExportExcel}
-            disabled={reportData.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-white rounded-lg shadow-sm font-medium transition-colors"
-          >
-            <Download className="w-4 h-4" /> Export CSV
-          </button>
-          <button
-            onClick={handlePrint}
-            disabled={reportData.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-brand-blue hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-white rounded-lg shadow-sm font-medium transition-colors"
-          >
-            <Printer className="w-4 h-4" /> Print
-          </button>
-        </div>
-      </div>
-
-      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 mb-6 print:hidden">
-        <div className="flex items-center gap-2 mb-4">
-          <Filter className="w-5 h-5 text-slate-500" />
-          <h2 className="font-semibold text-slate-700 dark:text-slate-200">Filter Options</h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">
-              Category
-            </label>
-            <select
-              value={filters.category}
-              onChange={(e) => setFilters({ ...filters, category: e.target.value })}
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none"
+        <div className="px-5 py-4">
+          <div className="mb-5 flex flex-wrap items-center gap-2 print:hidden">
+            <button
+              type="button"
+              onClick={() => setGeneratedAt(null)}
+              className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
             >
-              <option value="">All Categories</option>
-              {categories.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
+              Back to Option
+            </button>
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              disabled={reportData.length === 0}
+              className="inline-flex items-center gap-2 rounded bg-brand-blue px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+            >
+              <Download className="h-4 w-4" />
+              Export Excel
+            </button>
+            <button
+              type="button"
+              onClick={handlePrint}
+              disabled={reportData.length === 0}
+              className="ml-auto inline-flex items-center gap-2 rounded bg-slate-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+            >
+              <Printer className="h-4 w-4" />
+              Print Preview
+            </button>
           </div>
 
-          <div className="relative">
-            <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">
-              Part Number
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                value={partNumberSearch}
-                onChange={(e) => {
-                  setPartNumberSearch(e.target.value);
-                  setFilters({ ...filters, partNumber: e.target.value });
-                }}
-                onFocus={() => setShowPartNumberDropdown(true)}
-                onBlur={() => setTimeout(() => setShowPartNumberDropdown(false), 200)}
-                placeholder="Search part number..."
-                className="w-full px-3 py-2 pr-8 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none"
-              />
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <hr className="mb-5 border-slate-200 dark:border-slate-800 print:hidden" />
+
+          {dataWarning && (
+            <div className="mb-4 flex items-center gap-2 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-400 print:hidden">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              <span>{dataWarning}</span>
             </div>
-            {showPartNumberDropdown && filteredPartNumbers.length > 0 && (
-              <div className="absolute z-20 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                {filteredPartNumbers.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => {
-                      setPartNumberSearch(p.partNo);
-                      setFilters({ ...filters, partNumber: p.partNo });
-                      setShowPartNumberDropdown(false);
-                    }}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"
-                  >
-                    {p.partNo}
-                  </button>
-                ))}
+          )}
+
+          <div id="print_area">
+            <div className="mb-5 text-center text-slate-800 dark:text-slate-100 print:text-black">
+              <strong className="text-xl">{reportTitle}</strong>
+              {dateRange.dateFrom && dateRange.dateTo && (
+                <div className="mt-1 text-sm">
+                  Date from <strong>{dateRange.dateFrom}</strong> date to <strong>{dateRange.dateTo}</strong>
+                </div>
+              )}
+              <div className="mt-1 text-sm">
+                System generated <strong>{generatedAt.toLocaleString()}</strong>
+              </div>
+            </div>
+
+            {reportData.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <AlertCircle className="mb-3 h-8 w-8 text-amber-500" />
+                <h3 className="text-base font-semibold text-slate-700 dark:text-slate-200">No Products Found</h3>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  No products match the selected filter criteria.
+                </p>
+              </div>
+            ) : isInventoryView ? (
+              <div className="overflow-auto print:overflow-visible">
+                <table className="w-full min-w-[1050px] border-collapse text-left print:min-w-0">
+                  <thead>
+                    <tr>
+                      <th className={tableHeadClass} style={{ width: '1%' }}>#</th>
+                      <th className={tableHeadClass} style={{ width: '10%' }}>PRODUCT NAME</th>
+                      <th className={tableHeadClass} style={{ width: '10%' }}>PART NO</th>
+                      <th className={tableHeadClass} style={{ width: '10%' }}>CODE</th>
+                      <th className={tableHeadClass} style={{ width: '5%' }}>COST</th>
+                      <th className={tableHeadClass} style={{ width: '5%' }}>LOC</th>
+                      <th className={tableHeadClass} style={{ width: '5%' }}>BALANCE</th>
+                      {warehouses.map((wh) => (
+                        <th key={wh.id} className={tableHeadClass} style={{ width: '5%' }}>{wh.name}</th>
+                      ))}
+                      <th className={tableHeadClass} style={{ width: '5%' }}>Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportData.map((row, index) => (
+                      <InventoryRow key={row.id || `${row.partNo}-${index}`} row={row} warehouses={warehouses} index={index} />
+                    ))}
+                    <tr>
+                      <td colSpan={7 + warehouses.length} className={`${tableCellClass} text-right font-semibold`}>
+                        Total Value:
+                      </td>
+                      <td className={`${tableCellClass} text-right font-mono font-semibold`}>
+                        {summaryStats.totalValue.toFixed(2)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="overflow-auto print:overflow-visible">
+                <table className="w-full min-w-[760px] border-collapse text-left print:min-w-0">
+                  <thead>
+                    <tr>
+                      <th className={tableHeadClass} style={{ width: '1%' }}>#</th>
+                      <th className={tableHeadClass} style={{ width: '10%' }}>PRODUCT NAME</th>
+                      <th className={tableHeadClass} style={{ width: '10%' }}>CATEGORY</th>
+                      <th className={tableHeadClass} style={{ width: '10%' }}>PART NO</th>
+                      <th className={tableHeadClass} style={{ width: '10%' }}>CODE</th>
+                      <th className={tableHeadClass} style={{ width: '5%' }}>LOC</th>
+                      <th className={tableHeadClass} style={{ width: '5%' }}>STOCK</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportData.map((row, index) => (
+                      <ProductRow key={row.id || `${row.partNo}-${index}`} row={row} index={index} />
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
-
-          <div className="relative">
-            <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">
-              Item Code
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                value={itemCodeSearch}
-                onChange={(e) => {
-                  setItemCodeSearch(e.target.value);
-                  setFilters({ ...filters, itemCode: e.target.value });
-                }}
-                onFocus={() => setShowItemCodeDropdown(true)}
-                onBlur={() => setTimeout(() => setShowItemCodeDropdown(false), 200)}
-                placeholder="Search item code..."
-                className="w-full px-3 py-2 pr-8 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none"
-              />
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            </div>
-            {showItemCodeDropdown && filteredItemCodes.length > 0 && (
-              <div className="absolute z-20 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                {filteredItemCodes.map((c) => (
-                  <button
-                    key={c.id}
-                    onClick={() => {
-                      setItemCodeSearch(c.itemCode);
-                      setFilters({ ...filters, itemCode: c.itemCode });
-                      setShowItemCodeDropdown(false);
-                    }}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"
-                  >
-                    {c.itemCode}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">
-              Stock Status
-            </label>
-            <select
-              value={filters.stockStatus}
-              onChange={(e) =>
-                setFilters({ ...filters, stockStatus: e.target.value as 'all' | 'with_stock' | 'without_stock' })
-              }
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none"
-            >
-              <option value="all">All Items</option>
-              <option value="with_stock">With Stock</option>
-              <option value="without_stock">Without Stock</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">
-              Date From
-            </label>
-            <input
-              type="date"
-              value={filters.dateFrom || ''}
-              max={filters.dateTo || undefined}
-              onChange={(e) => {
-                const newFrom = e.target.value;
-                setFilters({
-                  ...filters,
-                  dateFrom: newFrom,
-                  dateTo: filters.dateTo && newFrom && filters.dateTo < newFrom ? newFrom : filters.dateTo,
-                });
-              }}
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">
-              Date To
-            </label>
-            <input
-              type="date"
-              value={filters.dateTo || ''}
-              min={filters.dateFrom || undefined}
-              onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none"
-            />
-          </div>
         </div>
-
-        <div className="flex items-center gap-4 mb-4">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Report Type:</span>
-            <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
-              <button
-                onClick={() => setFilters({ ...filters, reportType: 'inventory' })}
-                className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
-                  filters.reportType === 'inventory'
-                    ? 'bg-brand-blue text-white'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-                }`}
-              >
-                Inventory View
-              </button>
-              <button
-                onClick={() => setFilters({ ...filters, reportType: 'product' })}
-                className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
-                  filters.reportType === 'product'
-                    ? 'bg-brand-blue text-white'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-                }`}
-              >
-                Product View
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleGenerateReport}
-            disabled={isLoading}
-            className="flex items-center gap-2 px-6 py-2 bg-brand-blue hover:bg-blue-700 disabled:bg-slate-400 text-white rounded-lg shadow-sm font-medium transition-colors"
-          >
-            {isLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4" />
-            )}
-            Generate Report
-          </button>
-          <button
-            onClick={handleClearFilters}
-            className="flex items-center gap-2 px-4 py-2 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-lg font-medium transition-colors"
-          >
-            <X className="w-4 h-4" /> Clear Filters
-          </button>
-        </div>
-      </div>
-
-      {generatedAt && reportData.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 print:hidden">
-          <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Items</p>
-            <h4 className="text-2xl font-bold text-slate-800 dark:text-white">{summaryStats.totalItems}</h4>
-          </div>
-          <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">With Stock</p>
-            <h4 className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{summaryStats.withStock}</h4>
-          </div>
-          <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Without Stock</p>
-            <h4 className="text-2xl font-bold text-rose-600 dark:text-rose-400">{summaryStats.withoutStock}</h4>
-          </div>
-          {isInventoryView ? (
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Value</p>
-              <h4 className="text-2xl font-bold text-brand-blue">
-                {fmtCurrency.format(summaryStats.totalValue)}
-              </h4>
-            </div>
-          ) : (
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Quantity</p>
-              <h4 className="text-2xl font-bold text-brand-blue">{summaryStats.totalQuantity.toLocaleString()}</h4>
-            </div>
-          )}
-        </div>
-      )}
-
-      {dataWarning && (
-        <div className="flex items-center gap-2 mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-amber-700 dark:text-amber-400 text-sm print:hidden">
-          <AlertCircle className="w-4 h-4 flex-shrink-0" />
-          <span>{dataWarning}</span>
-        </div>
-      )}
-
-      {generatedAt && (
-        <div className="hidden print:block mb-4 p-4 bg-gray-100 border border-gray-300">
-          <div className="grid grid-cols-4 gap-4 text-sm">
-            <div>
-              <span className="font-semibold">Category:</span> {filters.category || 'All'}
-            </div>
-            <div>
-              <span className="font-semibold">Part Number:</span> {filters.partNumber || 'All'}
-            </div>
-            <div>
-              <span className="font-semibold">Item Code:</span> {filters.itemCode || 'All'}
-            </div>
-            <div>
-              <span className="font-semibold">Stock Status:</span>{' '}
-              {filters.stockStatus === 'all' ? 'All' : filters.stockStatus === 'with_stock' ? 'With Stock' : 'Without Stock'}
-            </div>
-            <div>
-              <span className="font-semibold">Date From:</span> {filters.dateFrom || 'All'}
-            </div>
-            <div>
-              <span className="font-semibold">Date To:</span> {filters.dateTo || 'All'}
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="flex-1 overflow-hidden bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm print:shadow-none print:border-none print:overflow-visible">
-        {!generatedAt ? (
-          <div className="flex flex-col items-center justify-center h-full text-center p-8">
-            <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-4">
-              <Package className="w-8 h-8 text-slate-400" />
-            </div>
-            <h3 className="text-lg font-semibold text-slate-600 dark:text-slate-300 mb-2">
-              No Report Generated
-            </h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md">
-              Select your filter criteria above and click "Generate Report" to view inventory data across all warehouses.
-            </p>
-          </div>
-        ) : reportData.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center p-8">
-            <div className="w-16 h-16 bg-amber-50 dark:bg-amber-900/20 rounded-full flex items-center justify-center mb-4">
-              <AlertCircle className="w-8 h-8 text-amber-500" />
-            </div>
-            <h3 className="text-lg font-semibold text-slate-600 dark:text-slate-300 mb-2">
-              No Products Found
-            </h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md">
-              No products match the selected filter criteria. Try adjusting your filters.
-            </p>
-          </div>
-        ) : (
-          <div className="h-full overflow-auto custom-scrollbar print:overflow-visible print:h-auto">
-            {isInventoryView ? (
-              /* ── INVENTORY VIEW ── */
-              <table className="w-full text-left border-collapse print:text-xs">
-                <thead className="bg-slate-50 dark:bg-slate-800 sticky top-0 z-10 print:static print:bg-gray-100">
-                  <tr className="text-xs uppercase text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-700 print:text-black print:border-gray-300">
-                    <th className="p-3 print:p-1">Part No</th>
-                    <th className="p-3 print:p-1">Item Code</th>
-                    <th className="p-3 print:p-1">Description</th>
-                    <th className="p-3 print:p-1">Location</th>
-                    <th className="p-3 text-right print:p-1">Cost</th>
-                    {warehouses.map((wh) => (
-                      <th key={wh.id} className="p-3 text-center print:p-1">{wh.name}</th>
-                    ))}
-                    <th className="p-3 text-center print:p-1 bg-slate-100 dark:bg-slate-700 print:bg-gray-200">Total</th>
-                    <th className="p-3 text-right print:p-1 bg-slate-100 dark:bg-slate-700 print:bg-gray-200">Value</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 print:divide-gray-200">
-                  {reportData.map((row) => (
-                    <InventoryRow key={row.id} row={row} warehouses={warehouses} />
-                  ))}
-                </tbody>
-                <tfoot className="bg-slate-100 dark:bg-slate-800 font-semibold print:bg-gray-200">
-                  <tr className="border-t-2 border-slate-300 dark:border-slate-600 print:border-gray-400">
-                    <td colSpan={5} className="p-3 text-slate-700 dark:text-slate-300 print:p-1 print:text-black">Total ({reportData.length} items)</td>
-                    {warehouses.map((wh) => (
-                      <td key={wh.id} className="p-3 text-center font-mono print:p-1 print:text-black">{warehouseTotals[wh.id].toLocaleString()}</td>
-                    ))}
-                    <td className="p-3 text-center font-mono font-bold text-brand-blue print:p-1 print:text-black">{summaryStats.totalQuantity.toLocaleString()}</td>
-                    <td className="p-3 text-right font-mono font-bold text-emerald-700 dark:text-emerald-400 print:p-1 print:text-black">{fmtCurrency.format(summaryStats.totalValue)}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            ) : (
-              /* ── PRODUCT VIEW ── */
-              <table className="w-full text-left border-collapse print:text-xs">
-                <thead className="bg-slate-50 dark:bg-slate-800 sticky top-0 z-10 print:static print:bg-gray-100">
-                  <tr className="text-xs uppercase text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-700 print:text-black print:border-gray-300">
-                    <th className="p-3 print:p-1">Part No</th>
-                    <th className="p-3 print:p-1">Category</th>
-                    <th className="p-3 print:p-1">Item Code</th>
-                    <th className="p-3 print:p-1">Description</th>
-                    <th className="p-3 print:p-1">Location</th>
-                    <th className="p-3 text-center print:p-1 bg-slate-100 dark:bg-slate-700 print:bg-gray-200">Stock</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 print:divide-gray-200">
-                  {reportData.map((row) => (
-                    <ProductRow key={row.id} row={row} />
-                  ))}
-                </tbody>
-                <tfoot className="bg-slate-100 dark:bg-slate-800 font-semibold print:bg-gray-200">
-                  <tr className="border-t-2 border-slate-300 dark:border-slate-600 print:border-gray-400">
-                    <td colSpan={5} className="p-3 text-slate-700 dark:text-slate-300 print:p-1 print:text-black">Total ({reportData.length} items)</td>
-                    <td className="p-3 text-center font-mono font-bold text-brand-blue print:p-1 print:text-black">{summaryStats.totalQuantity.toLocaleString()}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="hidden print:block mt-8 text-center text-xs text-gray-500">
-        <p>End of Report -- TND-OPC System</p>
       </div>
     </div>
   );

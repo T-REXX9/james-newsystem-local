@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, User, Eye, EyeOff, AlertCircle, CheckCircle, Loader2, Sun, Moon } from 'lucide-react';
+import { Lock, User, Eye, EyeOff, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
 import { loginWithLocalApi } from '../services/localAuthService';
@@ -10,7 +10,6 @@ export default function Login() {
   const [view, setView] = useState<'signin' | 'signup'>('signin');
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState<{ type: 'error' | 'success' | 'warning' | '', text: string }>({ type: '', text: '' });
-  const [isDark, setIsDark] = useState(true);
   
   const [formData, setFormData] = useState({
     email: '',
@@ -23,26 +22,11 @@ export default function Login() {
     const html = document.documentElement;
 
     if (savedTheme === 'light') {
-        setIsDark(false);
         html.classList.remove('dark');
     } else {
-        setIsDark(true);
         html.classList.add('dark');
     }
   }, []);
-
-  const toggleTheme = () => {
-    const html = document.documentElement;
-    if (isDark) {
-        html.classList.remove('dark');
-        localStorage.setItem('theme', 'light');
-        setIsDark(false);
-    } else {
-        html.classList.add('dark');
-        localStorage.setItem('theme', 'dark');
-        setIsDark(true);
-    }
-  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -148,15 +132,6 @@ export default function Login() {
        </div>
 
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-card p-8 w-full max-w-md border border-slate-200 dark:border-slate-800 relative transition-colors duration-200">
-        
-        <button
-           onClick={toggleTheme}
-           className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
-           title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
-        >
-            {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-        </button>
-
         <div className="text-center mb-8">
           <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-1">
             {view === 'signin' ? 'Sign In' : 'Create Account'}
@@ -272,12 +247,6 @@ export default function Login() {
            </p>
         </div>
         
-        {view === 'signin' && (
-          <div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-800 text-center">
-              <p className="text-xs text-slate-400 dark:text-slate-500 mb-2">Admin Demo Credentials</p>
-              <code className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-slate-600 dark:text-slate-300">User: main | Pass: 123456</code>
-          </div>
-        )}
       </div>
     </div>
   );

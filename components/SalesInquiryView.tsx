@@ -111,8 +111,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterDay, setFilterDay] = useState('');
-  const [filterMonth, setFilterMonth] = useState(String(new Date().getMonth() + 1));
-  const [filterYear, setFilterYear] = useState(String(new Date().getFullYear()));
+  const [filterMonth, setFilterMonth] = useState('');
+  const [filterYear, setFilterYear] = useState('');
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [loadedSnapshot, setLoadedSnapshot] = useState<LoadedFormSnapshot | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -155,8 +155,19 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   const [listLoading, setListLoading] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
 
-  const sortByCreatedAt = (a: SalesInquiry, b: SalesInquiry) => {
-    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+  const getInquirySortTime = (inquiry: SalesInquiry) => {
+    const value = inquiry.sales_date || inquiry.created_at || '';
+    const time = new Date(value).getTime();
+    return Number.isNaN(time) ? 0 : time;
+  };
+
+  const sortByLatestInquiry = (a: SalesInquiry, b: SalesInquiry) => {
+    const dateDiff = getInquirySortTime(b) - getInquirySortTime(a);
+    if (dateDiff !== 0) return dateDiff;
+    return (b.inquiry_no || '').localeCompare(a.inquiry_no || '', undefined, {
+      numeric: true,
+      sensitivity: 'base',
+    });
   };
 
   const loadCustomers = useCallback(async () => {
@@ -173,7 +184,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     setListLoading(true);
     try {
       const rows = await getAllSalesInquiries();
-      setInquiries((rows || []).slice().sort(sortByCreatedAt));
+      setInquiries((rows || []).slice().sort(sortByLatestInquiry));
     } catch (error) {
       console.error('Failed loading inquiries:', error);
       setInquiries([]);
@@ -453,7 +464,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
       const matchesMonth = !filterMonth || monthValue === String(Number(filterMonth));
       const matchesYear = !filterYear || yearValue === filterYear;
       return matchesStatus && matchesQuery && matchesDay && matchesMonth && matchesYear;
-    });
+    }).slice().sort(sortByLatestInquiry);
   }, [customerMap, filterDay, filterMonth, filterYear, inquiries, debouncedSearch, statusFilter]);
 
   // Generate initial inquiry number and preload data
@@ -689,7 +700,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
         setSelectedInquiry(detail);
         setIsCreatingNew(false);
         loadInquiryIntoForm(detail);
-        setInquiries((prev) => (prev.some((entry) => entry.id === detail.id) ? prev : [detail, ...prev].sort(sortByCreatedAt)));
+        setInquiries((prev) => (prev.some((entry) => entry.id === detail.id) ? prev : [detail, ...prev].sort(sortByLatestInquiry)));
       })
       .catch((err) => {
         console.error('Failed loading initial sales inquiry detail:', err);
@@ -1246,6 +1257,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                 onChange={(e) => setFilterMonth(e.target.value)}
                 className="w-36 px-2 py-2 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm text-slate-700 dark:text-slate-200"
               >
+                <option value="">Month</option>
                 {monthOptions.map((month, index) => (
                   <option key={month} value={String(index + 1)}>
                     {month}

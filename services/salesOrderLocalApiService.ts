@@ -179,14 +179,12 @@ export const getSalesOrdersPage = async (filters: SalesOrdersPageFilters): Promi
   };
 };
 
-export const getAllSalesOrders = async (): Promise<SalesOrder[]> => {
-  const now = new Date();
+export const getAllSalesOrders = async (filters: SalesOrdersPageFilters = {}): Promise<SalesOrder[]> => {
   const result = await getSalesOrdersPage({
-    month: now.getMonth() + 1,
-    year: now.getFullYear(),
-    status: 'all',
+    ...filters,
+    status: filters.status || 'all',
     page: 1,
-    perPage: 200,
+    perPage: filters.perPage || 200,
   });
   return result.items;
 };

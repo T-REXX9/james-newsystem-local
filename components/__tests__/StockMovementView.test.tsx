@@ -95,6 +95,11 @@ describe('StockMovementView', () => {
     render(<StockMovementView />);
 
     expect(screen.queryByText('PN-100')).not.toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Part No.' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Item Code' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Description' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'WH6' })).toBeInTheDocument();
+    expect(screen.getByRole('table')).toHaveClass('stock-product-grid');
 
     await new Promise(resolve => window.setTimeout(resolve, 300));
     expect(searchStockMovementProducts).not.toHaveBeenCalled();
@@ -116,6 +121,9 @@ describe('StockMovementView', () => {
     fireEvent.click(screen.getByRole('button', { name: /^search$/i }));
     fireEvent.click(await screen.findByText('PN-100'));
     fireEvent.click(screen.getByRole('button', { name: /view movement/i }));
+
+    expect(screen.queryByPlaceholderText('Search Part No.')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Search Item Code')).not.toBeInTheDocument();
 
     await waitFor(() => {
       expect(fetchStockMovementLogs).toHaveBeenLastCalledWith(
@@ -245,7 +253,9 @@ describe('StockMovementView', () => {
   });
 
   it('prints an old-system-style stock movement layout', async () => {
+    const focusMock = vi.fn();
     const printMock = vi.fn();
+    vi.stubGlobal('focus', focusMock);
     vi.stubGlobal('print', printMock);
     vi.mocked(searchStockMovementProducts).mockResolvedValue([product]);
     vi.mocked(fetchStockMovementLogs).mockResolvedValue({
@@ -260,6 +270,7 @@ describe('StockMovementView', () => {
     fireEvent.click(screen.getByRole('button', { name: /view movement/i }));
     fireEvent.click(await screen.findByRole('button', { name: /print/i }));
 
+    expect(focusMock).toHaveBeenCalledTimes(1);
     expect(printMock).toHaveBeenCalledTimes(1);
 
     const printArea = screen.getByTestId('stock-movement-print-area');

@@ -153,6 +153,35 @@ const baseContacts = [
   },
 ];
 
+const makeInquiry = (overrides: Record<string, any> = {}) => ({
+  id: 'inq-1',
+  inquiry_no: 'INQ26-1',
+  contact_id: 'c-1',
+  sales_date: '2026-01-01',
+  sales_person: 'Jane Doe',
+  delivery_address: '123 Main St',
+  reference_no: 'REF-1',
+  customer_reference: 'Alice',
+  send_by: '',
+  price_group: 'regular',
+  credit_limit: 10000,
+  terms: '30 days',
+  promise_to_pay: '',
+  po_number: '',
+  remarks: '',
+  inquiry_type: 'General',
+  urgency: 'N/A',
+  urgency_date: '',
+  grand_total: 0,
+  created_by: '1',
+  created_at: '2026-01-01',
+  updated_at: '',
+  status: 'Draft',
+  is_deleted: false,
+  items: [],
+  ...overrides,
+});
+
 describe('SalesInquiryView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -187,6 +216,23 @@ describe('SalesInquiryView', () => {
 
   afterEach(() => {
     cleanup();
+  });
+
+  it('shows unfiltered inquiries newest to oldest by default', async () => {
+    getAllSalesInquiriesMock.mockResolvedValue([
+      makeInquiry({ id: 'old', inquiry_no: 'INQ26-1', sales_date: '2026-01-05', created_at: '2026-01-05' }),
+      makeInquiry({ id: 'new', inquiry_no: 'INQ26-11', sales_date: '2026-04-08', created_at: '2026-04-08' }),
+      makeInquiry({ id: 'mid', inquiry_no: 'INQ26-7', sales_date: '2026-03-20', created_at: '2026-03-20' }),
+    ]);
+
+    render(<SalesInquiryView />);
+
+    const newest = await screen.findByText('INQ26-11');
+    const middle = await screen.findByText('INQ26-7');
+    const oldest = await screen.findByText('INQ26-1');
+
+    expect(newest.compareDocumentPosition(middle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(middle.compareDocumentPosition(oldest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('shows a validation toast when submitting without a customer', async () => {

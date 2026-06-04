@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Download, Eye, EyeOff, Loader2, Package, Printer, RotateCcw, Search, ShoppingCart } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Printer, RotateCcw, Search, ShoppingCart } from 'lucide-react';
 import { purchaseRequestService } from '../services/purchaseRequestService';
 import {
   fetchReorderReportEntries,
@@ -275,33 +275,42 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, onClose, onSaved }) 
   );
 };
 
+const tableCellClass = 'border border-slate-300 dark:border-slate-700 px-2 py-1.5 text-center text-xs text-slate-700 dark:text-slate-200 print:border-gray-500 print:text-black';
+const tableHeadClass = 'border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-2 py-1.5 text-center text-xs font-semibold uppercase text-slate-700 dark:text-slate-200 print:border-gray-500 print:bg-gray-100 print:text-black';
+const reorderOptionWarehouses = REORDER_WAREHOUSE_OPTIONS.filter((option) => option.id === 'total' || option.id === 'wh1');
+
+const formatShortDate = (value?: string) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const yy = String(date.getFullYear()).slice(-2);
+  return `${mm}/${dd}/${yy}`;
+};
+
 const ReorderReport: React.FC = () => {
   const { addToast } = useToast();
   const [rows, setRows] = useState<ReorderReportEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [warehouseType, setWarehouseType] = useState<ReorderWarehouseType>('total');
   const [hideZeroReorder, setHideZeroReorder] = useState(false);
   const [hideZeroReplenish, setHideZeroReplenish] = useState(false);
   const [showHiddenItems, setShowHiddenItems] = useState(false);
-  const [searchInput, setSearchInput] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showAddPrModal, setShowAddPrModal] = useState(false);
   const [confirmAction, setConfirmAction] = useState<'hide' | 'restore' | null>(null);
   const selectedWarehouseLabel = REORDER_WAREHOUSE_OPTIONS.find((option) => option.id === warehouseType)?.label || 'Total Company';
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), 250);
-    return () => window.clearTimeout(timer);
-  }, [searchInput]);
+  const isWh1Report = warehouseType === 'wh1';
 
   const loadReport = useCallback(async () => {
     setLoading(true);
     try {
       const data = await fetchReorderReportEntries({
         warehouseType,
-        search: debouncedSearch,
+        search: '',
         hideZeroReorder,
         hideZeroReplenish,
         showHidden: showHiddenItems,
@@ -321,11 +330,12 @@ const ReorderReport: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [addToast, warehouseType, debouncedSearch, hideZeroReorder, hideZeroReplenish, showHiddenItems]);
+  }, [addToast, warehouseType, hideZeroReorder, hideZeroReplenish, showHiddenItems]);
 
-  useEffect(() => {
-    loadReport();
-  }, [loadReport]);
+  const handleGenerateReport = async () => {
+    await loadReport();
+    setGeneratedAt(new Date());
+  };
 
   const selectedRows = useMemo(
     () => rows.filter((row) => selectedIds.has(row.id)),
@@ -412,290 +422,283 @@ const ReorderReport: React.FC = () => {
     window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab, payload } }));
   };
 
-  const exportCsv = () => {
-    const headers = [
-      'Item Code',
-      'Part No',
-      'Description',
-      'Last Date',
-      'Last Qty',
-      'Bal Qty',
-      'Total RR',
-      'Total Return',
-      warehouseType === 'total' ? 'Reorder Qty' : 'Replenish Qty',
-      'PR',
-      'PO',
-      'RR',
-    ];
-    const escape = (value: unknown) => {
-      const text = String(value ?? '');
-      return text.includes(',') || text.includes('"') || text.includes('\n')
-        ? `"${text.replace(/"/g, '""')}"`
-        : text;
-    };
-    const body = rows.map((row) =>
-      [
-        row.item_code,
-        row.part_no,
-        row.description,
-        row.last_arrival_date,
-        row.last_arrival_qty,
-        row.current_stock,
-        row.total_rr,
-        row.total_return,
-        row.target_quantity,
-        row.pr_no,
-        row.po_no,
-        row.rr_no,
-      ]
-        .map(escape)
-        .join(',')
-    );
-    const csv = [headers.join(','), ...body].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `reorder-report-${warehouseType}-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const reportTitle = `${selectedWarehouseLabel.toUpperCase()} REORDER REPORT`;
+  const dateLabel = generatedAt
+    ? generatedAt.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: '2-digit' }).toUpperCase()
+    : '';
 
-  return (
-    <div className="flex h-full flex-col bg-slate-50 p-6 dark:bg-slate-950">
-      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-800 dark:text-white">
-            <Package className="h-6 w-6 text-blue-600" />
-            Reorder Quantity Report
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {selectedWarehouseLabel} • {rows.length} item(s)
-          </p>
-        </div>
-        <div className="flex items-center gap-2 print:hidden">
-          <button
-            onClick={exportCsv}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-300"
-          >
-            <Download className="h-4 w-4" />
-            Export
-          </button>
-          <button
-            onClick={() => window.print()}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-300"
-          >
-            <Printer className="h-4 w-4" />
-            Print
-          </button>
-        </div>
-      </div>
+  const renderPrLink = (row: ReorderReportEntry) => row.pr_refno ? (
+    <button
+      type="button"
+      className="text-brand-blue hover:underline"
+      onClick={() => navigateToModule('warehouse-purchasing-purchase-request', { prId: row.pr_refno })}
+    >
+      {row.pr_no || row.pr_refno}
+    </button>
+  ) : null;
 
-      <div className="mb-4 grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 md:grid-cols-5">
-        <div>
-          <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Warehouse Type</label>
-          <select
-            value={warehouseType}
-            onChange={(e) => setWarehouseType(e.target.value as ReorderWarehouseType)}
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-          >
-            {REORDER_WAREHOUSE_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="md:col-span-2">
-          <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Search</label>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-            <input
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Item code, part no, description"
-              className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-10 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-            />
-            {loading ? (
-              <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-slate-400" size={16} />
-            ) : null}
+  const renderPoLink = (row: ReorderReportEntry) => row.po_refno ? (
+    <button
+      type="button"
+      className="text-brand-blue hover:underline"
+      onClick={() =>
+        navigateToModule('warehouse-purchasing-purchase-order', {
+          poId: row.po_refno,
+          poRefNo: row.po_no,
+        })
+      }
+    >
+      {row.po_no || row.po_refno}
+    </button>
+  ) : null;
+
+  const renderRrLink = (row: ReorderReportEntry) => row.rr_refno ? (
+    <button
+      type="button"
+      className="text-brand-blue hover:underline"
+      onClick={() =>
+        navigateToModule('warehouse-purchasing-receiving-stock', {
+          rrId: row.rr_refno,
+          rrRefNo: row.rr_no,
+        })
+      }
+    >
+      {row.rr_no || row.rr_refno}
+    </button>
+  ) : null;
+
+  if (!generatedAt) {
+    return (
+      <div className="h-full overflow-auto bg-slate-100 p-6 dark:bg-slate-950">
+        <div className="mx-auto max-w-6xl rounded border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+            <h1 className="text-base font-semibold uppercase text-slate-800 dark:text-slate-100">
+              Reorder Report
+            </h1>
           </div>
-        </div>
-        <label className="flex items-center gap-2 self-end text-sm text-slate-700 dark:text-slate-300">
-          <input
-            type="checkbox"
-            checked={hideZeroReorder}
-            onChange={(e) => setHideZeroReorder(e.target.checked)}
-          />
-          Hide zero reorder qty
-        </label>
-        <label className="flex items-center gap-2 self-end text-sm text-slate-700 dark:text-slate-300">
-          <input
-            type="checkbox"
-            checked={hideZeroReplenish}
-            onChange={(e) => setHideZeroReplenish(e.target.checked)}
-          />
-          Hide zero replenish qty
-        </label>
-        <label className="flex items-center gap-2 self-end text-sm text-slate-700 dark:text-slate-300">
-          <input
-            type="checkbox"
-            checked={showHiddenItems}
-            onChange={(e) => setShowHiddenItems(e.target.checked)}
-          />
-          Show hidden items
-        </label>
-      </div>
 
-      <div className="mb-3 flex items-center gap-2 print:hidden">
-        <button
-          onClick={() => setConfirmAction('hide')}
-          disabled={selectedVisibleCount === 0 || processing}
-          className="inline-flex items-center gap-2 rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-        >
-          {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <EyeOff className="h-4 w-4" />}
-          Mark as Hidden
-        </button>
-        <button
-          onClick={() => setConfirmAction('restore')}
-          disabled={selectedHiddenCount === 0 || processing}
-          className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-        >
-          {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-          Restore Hidden
-        </button>
-        <button
-          onClick={() => setShowAddPrModal(true)}
-          disabled={selectedVisibleCount === 0 || processing}
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-        >
-          <ShoppingCart className="h-4 w-4" />
-          Add to PO
-        </button>
-      </div>
+          <div className="px-5 py-5">
+            <p className="mb-8 text-sm text-slate-600 dark:text-slate-400">
+              Field mark with (<span className="text-rose-600">*</span>) is required. Press generate after you select the sorting options
+            </p>
 
-      <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <table className="w-full text-sm">
-          <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-800">
-            <tr className="text-xs uppercase text-slate-600 dark:text-slate-300">
-              <th className="px-3 py-2 text-left">
-                <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} />
-              </th>
-              <th className="px-3 py-2 text-left">Item Code</th>
-              <th className="px-3 py-2 text-left">Part No</th>
-              <th className="px-3 py-2 text-left">Description</th>
-              <th className="px-3 py-2 text-center">Last Date</th>
-              <th className="px-3 py-2 text-center">Last Qty</th>
-              <th className="px-3 py-2 text-center">Bal Qty</th>
-              <th className="px-3 py-2 text-center">RR Qty</th>
-              <th className="px-3 py-2 text-center">Return</th>
-              <th className="px-3 py-2 text-center">{warehouseType === 'total' ? 'Reorder Qty' : 'Replenish Qty'}</th>
-              <th className="px-3 py-2 text-center">PR</th>
-              <th className="px-3 py-2 text-center">PO</th>
-              <th className="px-3 py-2 text-center">RR</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={13} className="px-3 py-10 text-center text-slate-500">
-                  <div className="flex items-center justify-center gap-3">
-                    <CustomLoadingSpinner label="Loading" />
-                    <span>Refreshing reorder report...</span>
-                  </div>
-                </td>
-              </tr>
-            ) : rows.length === 0 ? (
-              <tr>
-                <td colSpan={13} className="px-3 py-10 text-center text-slate-500">
-                  No items matched the current reorder filter.
-                </td>
-              </tr>
-            ) : (
-              rows.map((row) => (
-                <tr
-                  key={row.id}
-                  className={`border-t border-slate-100 dark:border-slate-800 ${row.is_hidden ? 'bg-amber-50/60 dark:bg-amber-950/10' : ''}`}
+            <div className="space-y-5 text-sm">
+              <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
+                <label className="pt-2 text-left font-medium text-slate-700 dark:text-slate-300 md:text-right">
+                  Warehouse <span className="text-rose-600">*</span>
+                </label>
+                <select
+                  value={warehouseType}
+                  onChange={(event) => setWarehouseType(event.target.value as ReorderWarehouseType)}
+                  className="w-full max-w-xl rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
                 >
-                  <td className="px-3 py-2">
+                  {reorderOptionWarehouses.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
+                <span />
+                <div className="space-y-2 text-slate-700 dark:text-slate-200">
+                  <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
-                      checked={selectedIds.has(row.id)}
-                      onChange={() => toggleSelectRow(row.id)}
+                      checked={hideZeroReorder}
+                      onChange={(event) => setHideZeroReorder(event.target.checked)}
+                      className="h-4 w-4 accent-brand-blue"
                     />
-                  </td>
-                  <td className="px-3 py-2">{row.item_code}</td>
-                  <td className="px-3 py-2">{row.part_no}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <span>{row.description}</span>
-                      {row.is_hidden ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-                          <Eye className="h-3 w-3" />
-                          Hidden
-                        </span>
-                      ) : null}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 text-center">{row.last_arrival_date ? String(row.last_arrival_date).slice(0, 10) : ''}</td>
-                  <td className="px-3 py-2 text-center">{row.last_arrival_qty}</td>
-                  <td className="px-3 py-2 text-center">{row.current_stock}</td>
-                  <td className="px-3 py-2 text-center">{row.total_rr}</td>
-                  <td className="px-3 py-2 text-center">{row.total_return}</td>
-                  <td className="px-3 py-2 text-center font-semibold">{row.target_quantity}</td>
-                  <td className="px-3 py-2 text-center">
-                    {row.pr_refno ? (
-                      <button
-                        className="text-blue-600 hover:underline"
-                        onClick={() =>
-                          navigateToModule('warehouse-purchasing-purchase-request', { prId: row.pr_refno })
-                        }
-                      >
-                        {row.pr_no || row.pr_refno}
-                      </button>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    {row.po_refno ? (
-                      <button
-                        className="text-blue-600 hover:underline"
-                        onClick={() =>
-                          navigateToModule('warehouse-purchasing-purchase-order', {
-                            poId: row.po_refno,
-                            poRefNo: row.po_no,
-                          })
-                        }
-                      >
-                        {row.po_no || row.po_refno}
-                      </button>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    {row.rr_refno ? (
-                      <button
-                        className="text-blue-600 hover:underline"
-                        onClick={() =>
-                          navigateToModule('warehouse-purchasing-receiving-stock', {
-                            rrId: row.rr_refno,
-                            rrRefNo: row.rr_no,
-                          })
-                        }
-                      >
-                        {row.rr_no || row.rr_refno}
-                      </button>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+                    Don't show zero Re-Order QTY
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={hideZeroReplenish}
+                      onChange={(event) => setHideZeroReplenish(event.target.checked)}
+                      className="h-4 w-4 accent-brand-blue"
+                    />
+                    Don't show zero Replenish QTY
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={showHiddenItems}
+                      onChange={(event) => setShowHiddenItems(event.target.checked)}
+                      className="h-4 w-4 accent-brand-blue"
+                    />
+                    Show hidden items
+                  </label>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 pt-2 md:grid-cols-[220px_minmax(0,1fr)]">
+                <span />
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={handleGenerateReport}
+                    disabled={loading}
+                    className="inline-flex items-center gap-2 rounded bg-brand-blue px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                  >
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    Generate Report
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWarehouseType('total');
+                      setHideZeroReorder(false);
+                      setHideZeroReplenish(false);
+                      setShowHiddenItems(false);
+                    }}
+                    className="rounded border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full overflow-auto bg-slate-100 p-6 dark:bg-slate-950 print:bg-white print:p-0">
+      <div className="mx-auto max-w-none rounded border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 print:border-none print:shadow-none">
+        <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between print:hidden">
+          <h1 className="text-base font-semibold uppercase text-slate-800 dark:text-slate-100">
+            REORDER QUANTITY REPORT
+          </h1>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setGeneratedAt(null)}
+              className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
+            >
+              BACK
+            </button>
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-2 rounded bg-slate-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700"
+            >
+              <Printer className="h-4 w-4" />
+              PRINT
+            </button>
+          </div>
+        </div>
+
+        <div className="px-5 py-4">
+          <div className="mb-5 text-center text-slate-800 dark:text-slate-100 print:text-black">
+            <p className="text-lg font-semibold">{reportTitle}</p>
+            <p className="-mt-1 text-sm font-semibold">AS OF {dateLabel}</p>
+          </div>
+
+          {rows.length === 0 ? (
+            <div className="py-20 text-center">
+              <h3 className="text-lg font-semibold text-slate-500 dark:text-slate-400">Empty!</h3>
+            </div>
+          ) : (
+            <div className="overflow-auto print:overflow-visible">
+              <table className="w-full min-w-[1120px] border-collapse text-sm print:min-w-0">
+                <thead>
+                  <tr>
+                    <th className={tableHeadClass}>
+                      <label className="inline-flex items-center justify-center gap-1">
+                        <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} />
+                        ALL
+                      </label>
+                    </th>
+                    <th className={tableHeadClass}>ITEM CODE</th>
+                    <th className={tableHeadClass}>PART NO.</th>
+                    <th className={tableHeadClass}>DESCRIPTION</th>
+                    <th className={tableHeadClass}>{isWh1Report ? 'TRANS DATE' : 'RR DATE'}</th>
+                    <th className={tableHeadClass}>{isWh1Report ? 'TRANS QTY' : 'LAST ARRIVAL'}</th>
+                    <th className={tableHeadClass}>BAL QTY</th>
+                    <th className={tableHeadClass}>{isWh1Report ? 'RR QTY' : 'LAST RR'}</th>
+                    <th className={tableHeadClass}>RETURN</th>
+                    <th className={tableHeadClass}>{isWh1Report ? 'REPLENISH QTY' : 'RE-ORDER QTY'}</th>
+                    <th className={tableHeadClass}>PR</th>
+                    <th className={tableHeadClass}>PO</th>
+                    <th className={tableHeadClass}>RR</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr
+                      key={row.id}
+                      className={`${row.is_hidden ? 'bg-amber-50/60 dark:bg-amber-950/10' : ''}`}
+                    >
+                      <td className={tableCellClass}>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(row.id)}
+                          onChange={() => toggleSelectRow(row.id)}
+                        />
+                      </td>
+                      <td className={tableCellClass}>{row.item_code}</td>
+                      <td className={tableCellClass}>{row.part_no}</td>
+                      <td className={`${tableCellClass} text-left`}>
+                        <span>{row.description}</span>
+                        {row.is_hidden ? (
+                          <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                            <Eye className="h-3 w-3" />
+                            Hidden
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className={tableCellClass}>{formatShortDate(row.last_arrival_date)}</td>
+                      <td className={tableCellClass}>{row.last_arrival_qty}</td>
+                      <td className={tableCellClass}>{row.current_stock}</td>
+                      <td className={tableCellClass}>{row.total_rr}</td>
+                      <td className={tableCellClass}>{row.total_return}</td>
+                      <td className={`${tableCellClass} font-semibold`}>{isWh1Report ? row.replenish_qty : row.reorder_qty}</td>
+                      <td className={tableCellClass}>{renderPrLink(row)}</td>
+                      <td className={tableCellClass}>{renderPoLink(row)}</td>
+                      <td className={tableCellClass}>{renderRrLink(row)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="mt-4 flex flex-wrap gap-2 print:hidden">
+            <button
+              type="button"
+              onClick={() => setConfirmAction('hide')}
+              disabled={selectedVisibleCount === 0 || processing}
+              className="inline-flex items-center gap-2 rounded bg-rose-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <EyeOff className="h-4 w-4" />}
+              Mark as Hidden
+            </button>
+            {showHiddenItems ? (
+              <button
+                type="button"
+                onClick={() => setConfirmAction('restore')}
+                disabled={selectedHiddenCount === 0 || processing}
+                className="inline-flex items-center gap-2 rounded bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                Restore Hidden
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setShowAddPrModal(true)}
+              disabled={selectedVisibleCount === 0 || processing}
+              className="inline-flex items-center gap-2 rounded bg-rose-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              <ShoppingCart className="h-4 w-4" />
+              Add to PR
+            </button>
+          </div>
+        </div>
       </div>
 
       {showAddPrModal && selectedRows.length > 0 ? (

@@ -187,6 +187,7 @@ const StockMovementView: React.FC = () => {
   }, []);
 
   const handlePrint = () => {
+    window.focus();
     window.print();
   };
 
@@ -299,6 +300,22 @@ const StockMovementView: React.FC = () => {
           .stock-movement-legacy-head th {
             position: relative;
             z-index: 20;
+          }
+
+          .stock-product-grid {
+            table-layout: fixed;
+            width: 100%;
+            min-width: 0;
+          }
+
+          .stock-product-grid th,
+          .stock-product-grid td {
+            padding: clamp(0.18rem, 0.35vw, 0.45rem);
+            font-size: clamp(0.55rem, 0.72vw, 0.75rem);
+            line-height: 1.15;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            vertical-align: middle;
           }
 
           @media print {
@@ -415,7 +432,7 @@ const StockMovementView: React.FC = () => {
                   type="button"
                   onClick={handleViewMovement}
                   disabled={!highlightedProduct}
-                  className="inline-flex items-center gap-2 rounded px-4 py-2 text-sm font-medium text-white bg-[#8ca8b8] hover:bg-[#7898aa] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded px-4 py-2 text-sm font-medium text-white bg-[#416d8a] hover:bg-[#365d77] disabled:cursor-not-allowed disabled:bg-[#8ca8b8] disabled:hover:bg-[#8ca8b8] disabled:opacity-60"
                 >
                   <FileText className="h-4 w-4" />
                   View Movement
@@ -452,65 +469,67 @@ const StockMovementView: React.FC = () => {
               </div>
             </div>
 
-            <form onSubmit={handleProductSearch} className="px-4 py-6">
-              <div className="grid grid-cols-1 gap-x-12 gap-y-4 xl:grid-cols-2">
-                <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-3">
-                  <label htmlFor="stock-search-part-no" className="text-sm font-semibold text-slate-700 dark:text-slate-200">Part No.</label>
-                  <input
-                    id="stock-search-part-no"
-                    type="text"
-                    value={searchFilters.partNo}
-                    onChange={(event) => handleSearchFieldChange('partNo', event.target.value)}
-                    placeholder="Search Part No."
-                    className="h-11 rounded border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#416d8a] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                  />
+            {!selectedProduct && (
+              <form onSubmit={handleProductSearch} className="px-4 py-6">
+                <div className="grid grid-cols-1 gap-x-12 gap-y-4 xl:grid-cols-2">
+                  <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-3">
+                    <label htmlFor="stock-search-part-no" className="text-sm font-semibold text-slate-700 dark:text-slate-200">Part No.</label>
+                    <input
+                      id="stock-search-part-no"
+                      type="text"
+                      value={searchFilters.partNo}
+                      onChange={(event) => handleSearchFieldChange('partNo', event.target.value)}
+                      placeholder="Search Part No."
+                      className="h-11 rounded border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#416d8a] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                    />
+                  </div>
+                  <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-3">
+                    <label htmlFor="stock-search-item-code" className="text-sm font-semibold text-slate-700 dark:text-slate-200">Item Code</label>
+                    <input
+                      id="stock-search-item-code"
+                      type="text"
+                      value={searchFilters.itemCode}
+                      onChange={(event) => handleSearchFieldChange('itemCode', event.target.value)}
+                      placeholder="Search Item Code"
+                      className="h-11 rounded border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#416d8a] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                    />
+                  </div>
+                  <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-3">
+                    <label htmlFor="stock-search-description" className="text-sm font-semibold text-slate-700 dark:text-slate-200">Description</label>
+                    <input
+                      id="stock-search-description"
+                      type="text"
+                      value={searchFilters.description}
+                      onChange={(event) => handleSearchFieldChange('description', event.target.value)}
+                      placeholder="Search Item Description"
+                      className="h-11 rounded border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#416d8a] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                    />
+                  </div>
+                  <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-3">
+                    <label htmlFor="stock-search-application" className="text-sm font-semibold text-slate-700 dark:text-slate-200">Application</label>
+                    <input
+                      id="stock-search-application"
+                      type="text"
+                      value={searchFilters.application}
+                      onChange={(event) => handleSearchFieldChange('application', event.target.value)}
+                      placeholder="Search Item Application"
+                      className="h-11 rounded border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#416d8a] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                    />
+                  </div>
+                  <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-3">
+                    <label htmlFor="stock-search-original-pn" className="text-sm font-semibold text-slate-700 dark:text-slate-200">Original P/N</label>
+                    <input
+                      id="stock-search-original-pn"
+                      type="text"
+                      value={searchFilters.originalPn}
+                      onChange={(event) => handleSearchFieldChange('originalPn', event.target.value)}
+                      placeholder="Search Original P/N"
+                      className="h-11 rounded border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#416d8a] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                    />
+                  </div>
                 </div>
-                <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-3">
-                  <label htmlFor="stock-search-item-code" className="text-sm font-semibold text-slate-700 dark:text-slate-200">Item Code</label>
-                  <input
-                    id="stock-search-item-code"
-                    type="text"
-                    value={searchFilters.itemCode}
-                    onChange={(event) => handleSearchFieldChange('itemCode', event.target.value)}
-                    placeholder="Search Item Code"
-                    className="h-11 rounded border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#416d8a] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                  />
-                </div>
-                <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-3">
-                  <label htmlFor="stock-search-description" className="text-sm font-semibold text-slate-700 dark:text-slate-200">Description</label>
-                  <input
-                    id="stock-search-description"
-                    type="text"
-                    value={searchFilters.description}
-                    onChange={(event) => handleSearchFieldChange('description', event.target.value)}
-                    placeholder="Search Item Description"
-                    className="h-11 rounded border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#416d8a] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                  />
-                </div>
-                <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-3">
-                  <label htmlFor="stock-search-application" className="text-sm font-semibold text-slate-700 dark:text-slate-200">Application</label>
-                  <input
-                    id="stock-search-application"
-                    type="text"
-                    value={searchFilters.application}
-                    onChange={(event) => handleSearchFieldChange('application', event.target.value)}
-                    placeholder="Search Item Application"
-                    className="h-11 rounded border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#416d8a] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                  />
-                </div>
-                <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-3">
-                  <label htmlFor="stock-search-original-pn" className="text-sm font-semibold text-slate-700 dark:text-slate-200">Original P/N</label>
-                  <input
-                    id="stock-search-original-pn"
-                    type="text"
-                    value={searchFilters.originalPn}
-                    onChange={(event) => handleSearchFieldChange('originalPn', event.target.value)}
-                    placeholder="Search Original P/N"
-                    className="h-11 rounded border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#416d8a] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                  />
-                </div>
-              </div>
-            </form>
+              </form>
+            )}
           </div>
 
           {selectedProduct && (
@@ -624,107 +643,118 @@ const StockMovementView: React.FC = () => {
           <div className="flex-1 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col">
             {!selectedProduct ? (
               <div className="flex-1 overflow-auto">
-                {!hasSearchedProducts ? (
-                  <div className="min-h-64" />
-                ) : isLoadingProducts ? (
-                  <div className="flex h-full min-h-64 items-center justify-center">
-                    <div className="flex flex-col items-center gap-3 text-slate-500">
-                      <CustomLoadingSpinner label="Loading" />
-                      <span>Loading products...</span>
-                    </div>
-                  </div>
-                ) : productOptions.length === 0 ? (
-                  <div className="flex h-full min-h-64 flex-col items-center justify-center text-slate-500">
-                    <AlertCircle className="mb-3 h-12 w-12 text-slate-300" />
-                    <p className="text-lg font-medium">No products found</p>
-                    <p className="text-sm">Try adjusting the search fields above</p>
-                  </div>
-                ) : (
-                  <table className="w-full min-w-[1450px] border-collapse text-left text-sm">
-                    <thead className="sticky top-0 z-10 bg-white shadow-sm dark:bg-slate-900">
-                      <tr className="text-slate-600 dark:text-slate-300">
-                        <th className="border border-slate-200 px-3 py-3 font-semibold dark:border-slate-800">Part No.</th>
-                        <th className="border border-slate-200 px-3 py-3 font-semibold dark:border-slate-800">Item Code</th>
-                        <th className="border border-slate-200 px-3 py-3 font-semibold dark:border-slate-800">Description</th>
-                        <th className="border border-slate-200 px-3 py-3 font-semibold dark:border-slate-800">Brand</th>
-                        <th className="border border-slate-200 px-3 py-3 font-semibold dark:border-slate-800">Application</th>
-                        <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">Reorder Qty</th>
-                        <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">Regular Price</th>
-                        <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">AA</th>
-                        <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">BB</th>
-                        <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">CC</th>
-                        <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">DD</th>
-                        <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">VIP 1</th>
-                        <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">VIP2</th>
-                        {WAREHOUSES.map(warehouse => (
-                          <th key={warehouse} className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">{warehouse}</th>
-                        ))}
+                <table className="stock-product-grid w-full table-fixed border-collapse text-left">
+                  <colgroup>
+                    <col style={{ width: '6%' }} />
+                    <col style={{ width: '4.5%' }} />
+                    <col style={{ width: '7.5%' }} />
+                    <col style={{ width: '7%' }} />
+                    <col style={{ width: '11%' }} />
+                    <col style={{ width: '4.5%' }} />
+                    <col style={{ width: '4.5%' }} />
+                    <col style={{ width: '5%' }} />
+                    <col style={{ width: '5%' }} />
+                    <col style={{ width: '5%' }} />
+                    <col style={{ width: '5%' }} />
+                    <col style={{ width: '4.5%' }} />
+                    <col style={{ width: '4.5%' }} />
+                    {WAREHOUSES.map(warehouse => (
+                      <col key={warehouse} style={{ width: '3.4%' }} />
+                    ))}
+                  </colgroup>
+                  <thead className="sticky top-0 z-10 bg-white shadow-sm dark:bg-slate-900">
+                    <tr className="text-slate-600 dark:text-slate-300">
+                      <th className="border border-slate-200 px-3 py-3 font-semibold dark:border-slate-800">Part No.</th>
+                      <th className="border border-slate-200 px-3 py-3 font-semibold dark:border-slate-800">Item Code</th>
+                      <th className="border border-slate-200 px-3 py-3 font-semibold dark:border-slate-800">Description</th>
+                      <th className="border border-slate-200 px-3 py-3 font-semibold dark:border-slate-800">Brand</th>
+                      <th className="border border-slate-200 px-3 py-3 font-semibold dark:border-slate-800">Application</th>
+                      <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">Reorder Qty</th>
+                      <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">Regular Price</th>
+                      <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">AA</th>
+                      <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">BB</th>
+                      <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">CC</th>
+                      <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">DD</th>
+                      <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">VIP 1</th>
+                      <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">VIP2</th>
+                      {WAREHOUSES.map(warehouse => (
+                        <th key={warehouse} className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">{warehouse}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {isLoadingProducts && (
+                      <tr>
+                        <td colSpan={19} className="border border-slate-200 px-3 py-10 text-center text-slate-500 dark:border-slate-800">
+                          <div className="flex items-center justify-center gap-3">
+                            <CustomLoadingSpinner label="Loading" />
+                            <span>Loading products...</span>
+                          </div>
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {productOptions.map(product => {
-                        const isHighlighted = highlightedProduct?.id === product.id;
-                        const price = (value: number) => Number(value || 0).toLocaleString(undefined, {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        });
-                        return (
-                          <React.Fragment key={product.id}>
-                            <tr
-                              data-testid={`stock-product-row-${product.id}-A`}
-                              onClick={() => handleProductSelect(product)}
-                              className={`cursor-pointer text-slate-700 transition-colors dark:text-slate-200 ${
-                                isHighlighted
-                                  ? 'bg-blue-50 text-blue-700 underline dark:bg-blue-950/40 dark:text-blue-200'
-                                  : 'odd:bg-white even:bg-slate-50 hover:bg-slate-100 dark:odd:bg-slate-900 dark:even:bg-slate-900/70 dark:hover:bg-slate-800'
-                              }`}
-                            >
-                              <td rowSpan={2} className="border border-slate-200 px-3 py-3 font-semibold align-middle dark:border-slate-800">{product.part_no}</td>
-                              <td rowSpan={2} className="border border-slate-200 px-3 py-3 align-middle dark:border-slate-800">{product.item_code}</td>
-                              <td rowSpan={2} className="border border-slate-200 px-3 py-3 align-middle dark:border-slate-800">
-                                <div>{product.description}</div>
-                                {product.original_pn_no && (
-                                  <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">ORIG P/N No: {product.original_pn_no}</div>
-                                )}
-                              </td>
-                              <td rowSpan={2} className="border border-slate-200 px-3 py-3 align-middle dark:border-slate-800">{product.brand}</td>
-                              <td rowSpan={2} className="border border-slate-200 px-3 py-3 align-middle dark:border-slate-800">{product.application || '-'}</td>
-                              <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{product.reorder_quantity}</td>
-                              <td className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">A</td>
-                              <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_aa)}</td>
-                              <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_bb)}</td>
-                              <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_cc)}</td>
-                              <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_dd)}</td>
-                              <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{price(product.price_vip1)}</td>
-                              <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{price(product.price_vip2)}</td>
-                              <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{product.stock_wh1}</td>
-                              <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{product.stock_wh2}</td>
-                              <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{product.stock_wh3}</td>
-                              <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{product.stock_wh4}</td>
-                              <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{product.stock_wh5}</td>
-                              <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{product.stock_wh6}</td>
-                            </tr>
-                            <tr
-                              data-testid={`stock-product-row-${product.id}-B`}
-                              onClick={() => handleProductSelect(product)}
-                              className={`cursor-pointer text-slate-700 transition-colors dark:text-slate-200 ${
-                                isHighlighted
-                                  ? 'bg-blue-50 text-blue-700 underline dark:bg-blue-950/40 dark:text-blue-200'
-                                  : 'odd:bg-white even:bg-slate-50 hover:bg-slate-100 dark:odd:bg-slate-900 dark:even:bg-slate-900/70 dark:hover:bg-slate-800'
-                              }`}
-                            >
-                              <td className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">B</td>
-                              <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_baa || 0)}</td>
-                              <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_bbb || 0)}</td>
-                              <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_bcc || 0)}</td>
-                              <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_bdd || 0)}</td>
-                            </tr>
-                          </React.Fragment>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                )}
+                    )}
+                    {productOptions.map(product => {
+                      const isHighlighted = highlightedProduct?.id === product.id;
+                      const price = (value: number) => Number(value || 0).toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      });
+                      return (
+                        <React.Fragment key={product.id}>
+                          <tr
+                            data-testid={`stock-product-row-${product.id}-A`}
+                            onClick={() => handleProductSelect(product)}
+                            className={`cursor-pointer text-slate-700 transition-colors dark:text-slate-200 ${
+                              isHighlighted
+                                ? 'bg-blue-50 text-blue-700 underline dark:bg-blue-950/40 dark:text-blue-200'
+                                : 'odd:bg-white even:bg-slate-50 hover:bg-slate-100 dark:odd:bg-slate-900 dark:even:bg-slate-900/70 dark:hover:bg-slate-800'
+                            }`}
+                          >
+                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 font-semibold align-middle dark:border-slate-800">{product.part_no}</td>
+                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 align-middle dark:border-slate-800">{product.item_code}</td>
+                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 align-middle dark:border-slate-800">
+                              <div>{product.description}</div>
+                              {product.original_pn_no && (
+                                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">ORIG P/N No: {product.original_pn_no}</div>
+                              )}
+                            </td>
+                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 align-middle dark:border-slate-800">{product.brand}</td>
+                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 align-middle dark:border-slate-800">{product.application || '-'}</td>
+                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{product.reorder_quantity}</td>
+                            <td className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">A</td>
+                            <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_aa)}</td>
+                            <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_bb)}</td>
+                            <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_cc)}</td>
+                            <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_dd)}</td>
+                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{price(product.price_vip1)}</td>
+                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{price(product.price_vip2)}</td>
+                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{product.stock_wh1}</td>
+                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{product.stock_wh2}</td>
+                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{product.stock_wh3}</td>
+                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{product.stock_wh4}</td>
+                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{product.stock_wh5}</td>
+                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{product.stock_wh6}</td>
+                          </tr>
+                          <tr
+                            data-testid={`stock-product-row-${product.id}-B`}
+                            onClick={() => handleProductSelect(product)}
+                            className={`cursor-pointer text-slate-700 transition-colors dark:text-slate-200 ${
+                              isHighlighted
+                                ? 'bg-blue-50 text-blue-700 underline dark:bg-blue-950/40 dark:text-blue-200'
+                                : 'odd:bg-white even:bg-slate-50 hover:bg-slate-100 dark:odd:bg-slate-900 dark:even:bg-slate-900/70 dark:hover:bg-slate-800'
+                            }`}
+                          >
+                            <td className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">B</td>
+                            <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_baa || 0)}</td>
+                            <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_bbb || 0)}</td>
+                            <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_bcc || 0)}</td>
+                            <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_bdd || 0)}</td>
+                          </tr>
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             ) : isLoadingLogs ? (
               <div className="flex-1 flex items-center justify-center">
