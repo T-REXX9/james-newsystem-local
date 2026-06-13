@@ -147,4 +147,49 @@ describe('DailyCallExcelFormatView', () => {
     expect(screen.getByAltText('Silver VIP badge')).toBeInTheDocument();
     expect(screen.queryByAltText('Regular VIP badge')).not.toBeInTheDocument();
   });
+
+  it('shows customer since date when dealer dates are empty', async () => {
+    fetchCustomersForDailyCallMock.mockResolvedValue([
+      {
+        id: 'customer-since-row',
+        shopName: 'Customer Since Shop',
+        assignedTo: 'Jane Doe',
+        assignedDate: '2026-04-01',
+        province: 'Cebu',
+        city: 'Cebu City',
+        contactNumber: '09170000001',
+        source: 'Manual',
+        clientSince: 'Jan 17, 2019',
+        dealerPriceGroup: 'gold',
+        dealerPriceDate: '—',
+        ishinomotoDealerSince: '—',
+        ishinomotoSignageSince: '—',
+        quota: 0,
+        terms: 'COD',
+        modeOfPayment: 'COD',
+        courier: 'LBC',
+        status: 'Active',
+        statusDate: '2026-04-01',
+        outstandingBalance: 0,
+        averageMonthlyOrder: 12000,
+        monthlyOrder: 32000,
+        weeklyRangeTotals: [],
+        dailyActivity: [],
+      },
+    ]);
+
+    render(
+      <DailyCallExcelFormatView
+        currentUser={{
+          id: 'user-1',
+          full_name: 'Jane Doe',
+          email: 'jane@example.com',
+          role: 'Master User',
+          access_rights: [],
+        } as any}
+      />
+    );
+
+    expect(await screen.findByText('Jan 17, 2019')).toBeInTheDocument();
+  });
 });

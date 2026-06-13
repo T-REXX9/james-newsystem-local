@@ -46,6 +46,12 @@ const resolveDealerPriceTier = (row: DailyCallCustomerRow) => {
 
 const isVipDealerTier = (tier: string) => tier === 'Silver' || tier === 'Gold';
 
+const firstDisplayDate = (...values: Array<string | undefined>) =>
+  values.find((value) => {
+    const trimmed = String(value || '').trim();
+    return trimmed !== '' && trimmed !== '—';
+  }) || '—';
+
 const pricingTargetLabel = (monthlySales: number) => {
   if (monthlySales >= 30000) {
     return 'Gold';
@@ -350,6 +356,7 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
                   const location = row.province || row.city || row.courier || '—';
                   const statusDate = row.statusDate || row.clientSince || '—';
                   const terms = row.terms || row.modeOfPayment || '—';
+                  const dealerDate = firstDisplayDate(row.dealerPriceDate, row.ishinomotoDealerSince, row.clientSince);
                   return (
                     <tr
                       key={row.id}
@@ -389,7 +396,7 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
                           )}
                           <span className="truncate">{dealerPriceTier}</span>
                         </div>
-                        <div className="text-[9px] text-slate-500 truncate" title={row.dealerPriceDate || row.ishinomotoDealerSince || '—'}>{row.dealerPriceDate || row.ishinomotoDealerSince || '—'}</div>
+                        <div className="text-[9px] text-slate-500 truncate" title={dealerDate}>{dealerDate}</div>
                       </td>
                       <td className="px-1.5 py-1.5 text-slate-600">
                         <div className="font-medium text-slate-700 dark:text-slate-200 capitalize truncate">{row.status}</div>
