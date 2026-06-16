@@ -35,3 +35,7 @@ dist-ssr
 
 # Local code intelligence index
 .gitnexus/
+
+# Large local database dumps
+*.sql
+!*.sql.gz
