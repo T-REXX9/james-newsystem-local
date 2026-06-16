@@ -1,7 +1,7 @@
 import React from 'react';
 import { BarChart3, Table2 } from 'lucide-react';
 
-export type DailyCallOwnerViewMode = 'daily-call' | 'chart';
+export type DailyCallOwnerViewMode = 'master-list' | 'chart';
 
 interface DailyCallMonitoringMiniSidebarProps {
   activeView: DailyCallOwnerViewMode;
@@ -13,7 +13,7 @@ const navItems: Array<{
   label: string;
   icon: React.ComponentType<{ className?: string }>;
 }> = [
-  { id: 'daily-call', label: 'Daily Call', icon: Table2 },
+  { id: 'master-list', label: 'Master List', icon: Table2 },
   { id: 'chart', label: 'Chart', icon: BarChart3 },
 ];
 

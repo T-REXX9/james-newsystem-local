@@ -6,6 +6,8 @@ import {
   DailyActivityRecord,
   DailyCallCustomerFilterStatus,
   DailyCallCustomerRow,
+  DailyCallMasterCustomerRow,
+  DailyCallMasterListMeta,
   Inquiry,
   LBCRTORecord,
   Purchase,
@@ -38,6 +40,16 @@ export interface DailyCallAgentSnapshot {
   inquiries: Inquiry[];
   purchases: Purchase[];
   teamMessages: TeamMessage[];
+}
+
+export interface DailyCallMasterListParams {
+  fromDate?: string;
+  search?: string;
+}
+
+export interface DailyCallMasterListResult {
+  items: DailyCallMasterCustomerRow[];
+  meta: DailyCallMasterListMeta;
 }
 
 interface PurchaseHistoryRow {
@@ -342,6 +354,31 @@ const mapDailyCallCustomerRow = (row: any): DailyCallCustomerRow => ({
     : [],
 });
 
+const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => {
+  const purchaseAgeGroup = String(row?.purchaseAgeGroup ?? row?.purchase_age_group);
+  const normalizedPurchaseAgeGroup: DailyCallMasterCustomerRow['purchaseAgeGroup'] =
+    purchaseAgeGroup === 'recent' || purchaseAgeGroup === 'two_weeks_to_one_month' || purchaseAgeGroup === 'over_one_month'
+      ? purchaseAgeGroup
+      : 'over_one_month';
+
+  return {
+    id: String(row?.id || ''),
+    shopName: cleanNullableText(row?.shopName ?? row?.shop_name, 'Unnamed Shop'),
+    province: cleanNullableText(row?.province, '—'),
+    city: cleanNullableText(row?.city, '—'),
+    contactNumber: cleanNullableText(row?.contactNumber ?? row?.contact_number, '—'),
+    assignedTo: cleanNullableText(row?.assignedTo ?? row?.assigned_to, 'Unassigned'),
+    lastPurchaseDate: cleanNullableText(row?.lastPurchaseDate ?? row?.last_purchase_date, '—'),
+    lastPurchaseDateRaw: cleanNullableText(row?.lastPurchaseDateRaw ?? row?.last_purchase_date_raw),
+    purchaseCount: Number(row?.purchaseCount ?? row?.purchase_count ?? 0),
+    totalSales: Number(row?.totalSales ?? row?.total_sales ?? 0),
+    currentMonthSales: Number(row?.currentMonthSales ?? row?.current_month_sales ?? 0),
+    daysSinceLastPurchase: Number(row?.daysSinceLastPurchase ?? row?.days_since_last_purchase ?? 0),
+    monthsSinceLastPurchase: Number(row?.monthsSinceLastPurchase ?? row?.months_since_last_purchase ?? 0),
+    purchaseAgeGroup: normalizedPurchaseAgeGroup,
+  };
+};
+
 const matchesSearch = (contact: Contact, query: string) => {
   if (!query) return true;
   const normalizedQuery = normalizeText(query);
@@ -434,6 +471,29 @@ export const fetchCustomersForDailyCall = async (
     console.error('Error fetching daily call customers via local API:', error);
     return [];
   }
+};
+
+export const fetchDailyCallMasterList = async (
+  params: DailyCallMasterListParams = {}
+): Promise<DailyCallMasterListResult> => {
+  const mainId = resolveMainId();
+  const query = new URLSearchParams({
+    main_id: String(mainId),
+    from_date: params.fromDate || '2025-10-01',
+    search: params.search || '',
+  });
+
+  const payload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/master-list?${query.toString()}`);
+  const data = payload?.data || {};
+  const meta = data?.meta || {};
+  return {
+    items: Array.isArray(data?.items) ? data.items.map(mapDailyCallMasterCustomerRow) : [],
+    meta: {
+      fromDate: String(meta?.from_date || params.fromDate || '2025-10-01'),
+      toDate: String(meta?.to_date || ''),
+      count: Number(meta?.count || 0),
+    },
+  };
 };
 
 export const fetchAgentSnapshotForDailyCall = async (

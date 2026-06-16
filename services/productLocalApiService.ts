@@ -48,6 +48,7 @@ const normalizeApiProduct = (raw: any): Product => ({
   replenish_quantity: toNumber(raw?.replenish_quantity),
   original_pn_no: String(raw?.original_pn_no ?? ''),
   application: String(raw?.application ?? ''),
+  location: String(raw?.location ?? raw?.warehouse_location ?? raw?.storage_location ?? ''),
   no_of_cylinder: String(raw?.no_of_cylinder ?? ''),
   cost: toNumber(raw?.cost),
   price_aa: toNumber(raw?.price_aa),

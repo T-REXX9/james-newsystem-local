@@ -32,6 +32,10 @@ interface ProductDatabaseProps {
 const getSortedSalesByYearEntries = (salesByYear?: Record<string, number>) =>
   Object.entries(salesByYear ?? {}).sort(([yearA], [yearB]) => Number(yearB) - Number(yearA));
 
+const getConsolidatedStock = (product: Product): number =>
+  product.stock_wh1 + product.stock_wh2 + product.stock_wh3 +
+  product.stock_wh4 + product.stock_wh5 + product.stock_wh6;
+
 const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialProductId }) => {
   const { addToast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
@@ -39,7 +43,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialP
   const [searchOptions, setSearchOptions] = useState<Product[]>([]);
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const [isLoadingSearchOptions, setIsLoadingSearchOptions] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<ProductListStatus>('all');
+  const [statusFilter, setStatusFilter] = useState<ProductListStatus>('active');
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -603,28 +607,31 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialP
 
       {/* Product Table */}
       <div className="flex-1 overflow-hidden bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div className="h-full overflow-y-auto custom-scrollbar">
-          <table className="w-full text-left border-collapse">
+        <div className="h-full overflow-y-auto overflow-x-hidden custom-scrollbar">
+          <table className="w-full table-fixed text-left border-collapse">
             <thead className="bg-slate-50 dark:bg-slate-800 sticky top-0 z-10 shadow-sm">
               <tr className="text-xs uppercase text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-700">
-                <th className="p-4 w-12 text-center">Status</th>
-                <th className="p-4">Details</th>
-                <th className="p-4 w-64">Price List</th>
-                <th className="p-4 w-64">Stock per Warehouse</th>
-                <th className="p-4 w-64">Qty Sold / Year</th>
-                <th className="p-4 text-center w-24">Specification</th>
-                <th className="p-4 text-right w-24">Actions</th>
+                <th className="w-[5%] p-2 text-center md:p-3">Status</th>
+                <th className="w-[22%] p-2 md:p-3">Details</th>
+                <th className="w-[16%] p-2 md:p-3">Price List</th>
+                <th className="w-[10%] p-2 text-center md:p-3">Stock</th>
+                <th className="w-[13%] p-2 md:p-3">Location</th>
+                <th className="w-[16%] p-2 md:p-3">Qty Sold / Year</th>
+                <th className="w-[11%] p-2 text-center md:p-3">Specification</th>
+                <th className="w-[7%] p-2 text-right md:p-3">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-500 dark:text-slate-400 italic">
+                  <td colSpan={8} className="p-8 text-center text-slate-500 dark:text-slate-400 italic">
                     No products found for the selected filters.
                   </td>
                 </tr>
               ) : filteredProducts.map((product) => {
                 const yearlySales = getSortedSalesByYearEntries(product.sales_by_year);
+                const consolidatedStock = getConsolidatedStock(product);
+                const hasConsolidatedStock = consolidatedStock > 0;
 
                 return (
                 <tr
@@ -638,7 +645,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialP
                       : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
                   }`}
                 >
-                  <td className="p-4 text-center align-top pt-5">
+                  <td className="p-2 text-center align-top pt-4 md:p-3">
                     {product.status === 'Active' ? (
                       <Eye className="w-5 h-5 text-emerald-500 mx-auto" />
                     ) : (
@@ -646,12 +653,21 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialP
                     )}
                   </td>
 
-                  <td className="p-4 align-top">
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-slate-800 dark:text-white text-base">{product.part_no}</span>
-                        <span className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] rounded uppercase font-bold tracking-wider">{product.brand}</span>
-                        {/* Movement Classification Badge */}
+                  <td className="p-2 align-top md:p-3">
+                    <div className="space-y-1.5 text-xs xl:text-sm">
+                      {[
+                        ['Part No.:', product.part_no],
+                        ['Item Code:', product.item_code || '-'],
+                        ['Category:', product.category || '-'],
+                        ['Brand:', product.brand || '-'],
+                        ['Application:', product.application || '-'],
+                      ].map(([label, value]) => (
+                        <div key={label} className="grid grid-cols-[72px_minmax(0,1fr)] gap-1.5 leading-tight xl:grid-cols-[88px_minmax(0,1fr)] xl:gap-2">
+                          <span className="text-slate-500 dark:text-slate-400">{label}</span>
+                          <span className="whitespace-normal break-words font-semibold text-slate-800 dark:text-white">{value}</span>
+                        </div>
+                      ))}
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
                         {movementMap.get(product.id) === 'fast' && (
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[10px] rounded uppercase font-bold tracking-wider">
                             <TrendingUp className="w-3 h-3" />
@@ -665,25 +681,11 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialP
                           </span>
                         )}
                       </div>
-                      <p className="text-sm text-slate-600 dark:text-slate-300 font-medium">{product.description}</p>
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400 mt-1">
-                        <span>Category: {product.category}</span>
-                        <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-                        <span className="font-mono">Item Code: {product.item_code}</span>
-                        {product.oem_no && (
-                          <>
-                            <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-                            <span className="font-mono">OEM No.: {product.oem_no}</span>
-                          </>
-                        )}
-                        <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-                        <span>Application: {product.application || '-'}</span>
-                      </div>
                     </div>
                   </td>
 
-                  <td className="p-4 align-top">
-                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3 border border-slate-100 dark:border-slate-700/50">
+                  <td className="p-2 align-top md:p-3">
+                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-2 border border-slate-100 dark:border-slate-700/50 xl:p-3">
                       {/* New pricing group naming: AA=Regular, VIP1=Silver, VIP2=Gold, Platinum is computed by backend */}
                       <div className="space-y-2 text-xs">
                         <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-slate-700">
@@ -706,26 +708,28 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialP
                     </div>
                   </td>
 
-                  <td className="p-4 align-top">
-                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3 border border-slate-100 dark:border-slate-700/50">
-                      <div className="grid grid-cols-3 gap-2 text-xs">
-                        {[1, 2, 3, 4, 5, 6].map(i => {
-                          // @ts-ignore
-                          const stock = product[`stock_wh${i}`];
-                          const hasStock = stock > 0;
-                          return (
-                            <div key={i} className={`flex flex-col items-center p-1 rounded ${hasStock ? 'bg-emerald-50 dark:bg-emerald-900/20' : ''}`}>
-                              <span className="text-[10px] text-slate-400">WH{i}</span>
-                              <span className={`font-mono font-bold ${hasStock ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-300 dark:text-slate-600'}`}>{stock}</span>
-                            </div>
-                          )
-                        })}
+                  <td className="p-2 align-top md:p-3">
+                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-2 border border-slate-100 dark:border-slate-700/50 xl:p-3">
+                      <div className={`rounded-lg px-2 py-3 text-center ${hasConsolidatedStock ? 'bg-emerald-50 dark:bg-emerald-900/20' : ''}`}>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Total Stock</p>
+                        <p className={`mt-1 font-mono text-lg font-bold ${hasConsolidatedStock ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-300 dark:text-slate-600'}`}>
+                          {consolidatedStock.toLocaleString()}
+                        </p>
                       </div>
                     </div>
                   </td>
 
-                  <td className="p-4 align-top">
-                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3 border border-slate-100 dark:border-slate-700/50 min-h-[88px]">
+                  <td className="p-2 align-top md:p-3">
+                    <div className="rounded-lg border border-slate-100 bg-slate-50 p-2 text-xs text-slate-700 dark:border-slate-700/50 dark:bg-slate-800/50 dark:text-slate-200 xl:p-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Warehouse Location</p>
+                      <p className="mt-1 whitespace-normal break-words font-semibold">
+                        {product.location?.trim() || '—'}
+                      </p>
+                    </div>
+                  </td>
+
+                  <td className="p-2 align-top md:p-3">
+                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-2 border border-slate-100 dark:border-slate-700/50 min-h-[88px] xl:p-3">
                       {yearlySales.length > 0 ? (
                         <div className="flex flex-wrap gap-2">
                           {yearlySales.map(([year, quantity]) => (
@@ -749,7 +753,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialP
                     </div>
                   </td>
 
-                  <td className="p-4 align-top text-center">
+                  <td className="p-2 align-top text-center md:p-3">
                     <div className="flex flex-col gap-2 pt-1">
                       <span className="inline-flex items-center justify-center px-2 py-1 bg-slate-100 dark:bg-slate-800 text-xs font-medium text-slate-600 dark:text-slate-300 rounded">
                         {product.no_of_pieces_per_box} / box
@@ -763,8 +767,8 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialP
                     </div>
                   </td>
 
-                  <td className="p-4 align-top text-right pt-5">
-                    <div className="flex items-center justify-end gap-2">
+                  <td className="p-2 align-top text-right pt-4 md:p-3">
+                    <div className="flex items-center justify-end gap-1 xl:gap-2">
                       <button
                         onClick={() => handleOpenEdit(product)}
                         className="p-2 text-slate-400 hover:text-brand-blue hover:bg-blue-50 dark:hover:bg-slate-800 rounded transition-colors"
@@ -1090,7 +1094,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialP
                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-blue-500"></span> Price List
                   </h3>
-                  <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {isMasterAccess && (
                       <div className="col-span-2">
                         <label className="block text-xs font-bold text-rose-600 dark:text-rose-400 mb-1">COG</label>
@@ -1114,18 +1118,6 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialP
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 mb-1">Legacy: ABB</label>
-                      <input type="number" name="price_bb" value={formData.price_bb === 0 ? '' : formData.price_bb} onChange={handleInputChange} className="input-field bg-slate-50/50 dark:bg-slate-900/20 border-slate-100 dark:border-slate-700" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 mb-1">Legacy: ACC</label>
-                      <input type="number" name="price_cc" value={formData.price_cc === 0 ? '' : formData.price_cc} onChange={handleInputChange} className="input-field bg-slate-50/50 dark:bg-slate-900/20 border-slate-100 dark:border-slate-700" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 mb-1">Legacy: ADD</label>
-                      <input type="number" name="price_dd" value={formData.price_dd === 0 ? '' : formData.price_dd} onChange={handleInputChange} className="input-field bg-slate-50/50 dark:bg-slate-900/20 border-slate-100 dark:border-slate-700" />
-                    </div>
-                    <div>
                       <label className="block text-xs font-bold text-purple-600 dark:text-purple-400 mb-1">Silver</label>
                       <input type="number" name="price_vip1" value={formData.price_vip1 === 0 ? '' : formData.price_vip1} onChange={handleInputChange} className="input-field bg-purple-50/50 dark:bg-purple-900/20 border-purple-100 dark:border-purple-900" />
                     </div>
@@ -1136,25 +1128,28 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialP
                   </div>
                 </div>
 
-                {/* Warehouse Inventory */}
+                {/* Inventory */}
                 <div className="md:col-span-3 border-t border-slate-100 dark:border-slate-800 pt-4">
                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Stock per Warehouse
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Inventory
                   </h3>
-                  <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-                    {[1, 2, 3, 4, 5, 6].map(num => (
-                      <div key={num}>
-                        <label className="block text-xs font-bold text-emerald-700 dark:text-emerald-400 mb-1">WH {num}</label>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-emerald-700 dark:text-emerald-400 mb-1">Total Stock</label>
+                      {editingProduct ? (
+                        <div className="input-field flex items-center bg-slate-50 font-mono font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                          {getConsolidatedStock(formData as Product).toLocaleString()}
+                        </div>
+                      ) : (
                         <input
                           type="number"
-                          name={`stock_wh${num}`}
-                          // @ts-ignore
-                          value={formData[`stock_wh${num}`] === 0 ? '' : formData[`stock_wh${num}`]}
+                          name="stock_wh1"
+                          value={formData.stock_wh1 === 0 ? '' : formData.stock_wh1}
                           onChange={handleInputChange}
                           className="input-field bg-emerald-50/50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-900"
                         />
-                      </div>
-                    ))}
+                      )}
+                    </div>
                   </div>
                 </div>
 

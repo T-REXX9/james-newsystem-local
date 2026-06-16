@@ -2,7 +2,7 @@ import React, { Component, ReactNode, useState } from 'react';
 import { BarChart3, Table2 } from 'lucide-react';
 import OwnerLiveCallMonitoringView from './OwnerLiveCallMonitoringView';
 import DailyCallMonitoringMiniSidebar, { DailyCallOwnerViewMode } from './DailyCallMonitoringMiniSidebar';
-import DailyCallExcelFormatView from './DailyCallExcelFormatView';
+import DailyCallMasterListView from './DailyCallMasterListView';
 import { UserProfile } from '../types';
 
 interface OwnerDailyCallMonitoringUnifiedViewProps {
@@ -43,7 +43,7 @@ class LocalErrorBoundary extends Component<LocalErrorBoundaryProps, LocalErrorBo
 }
 
 const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnifiedViewProps> = ({ currentUser }) => {
-  const [activeView, setActiveView] = useState<DailyCallOwnerViewMode>('daily-call');
+  const [activeView, setActiveView] = useState<DailyCallOwnerViewMode>('master-list');
 
   return (
     <div className="h-full overflow-y-auto bg-slate-50 p-3 md:p-4 dark:bg-slate-950">
@@ -54,10 +54,10 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
           <header className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-700 dark:bg-slate-900">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Owner Daily Call Monitoring</p>
             <h2 className="mt-1 flex items-center gap-2 text-lg font-bold text-slate-900 dark:text-white">
-              {activeView === 'daily-call' ? (
+              {activeView === 'master-list' ? (
                 <>
                   <Table2 className="h-5 w-5 text-blue-600" />
-                  Daily Call
+                  Master List
                 </>
               ) : (
                 <>
@@ -69,8 +69,8 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
           </header>
 
           <LocalErrorBoundary>
-            {activeView === 'daily-call' ? (
-              <DailyCallExcelFormatView currentUser={currentUser} />
+            {activeView === 'master-list' ? (
+              <DailyCallMasterListView />
             ) : (
               <OwnerLiveCallMonitoringView currentUser={currentUser} />
             )}

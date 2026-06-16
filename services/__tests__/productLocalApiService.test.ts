@@ -62,4 +62,24 @@ describe('productLocalApiService', () => {
     expect(String(url)).toContain('status=inactive');
     expect(String(url)).toContain('per_page=25');
   });
+
+  it('normalizes product location from the API', async () => {
+    (global.fetch as any).mockImplementation(() =>
+      okResponse({
+        items: [
+          {
+            id: 'product-1',
+            part_no: 'P-001',
+            status: 'Active',
+            location: 'V1-008',
+          },
+        ],
+        meta: { page: 1, per_page: 25, total: 1, total_pages: 1 },
+      })
+    );
+
+    const result = await fetchProductsPage({ perPage: 25 });
+
+    expect(result.items[0].location).toBe('V1-008');
+  });
 });

@@ -50,6 +50,7 @@ const sampleProduct: Product = {
   replenish_quantity: 24,
   original_pn_no: 'P-P207',
   application: 'ISUZU 10PD1, 8PC, 8PD1, 8PC1',
+  location: 'V1-008',
   no_of_cylinder: '',
   cost: 390,
   price_aa: 450,
@@ -59,8 +60,8 @@ const sampleProduct: Product = {
   price_vip1: 430,
   price_vip2: 420,
   stock_wh1: 5,
-  stock_wh2: 0,
-  stock_wh3: 0,
+  stock_wh2: 2,
+  stock_wh3: 3,
   stock_wh4: 0,
   stock_wh5: 0,
   stock_wh6: 0,
@@ -86,11 +87,23 @@ describe('ProductDatabase', () => {
     cleanup();
   });
 
-  it('shows application details and reorder quantity in the product row', async () => {
+  it('shows product details as labeled rows with reorder quantity', async () => {
     render(<ProductDatabase currentUser={{ role: 'Owner' } as any} />);
 
     expect(await screen.findByText('QK2-001')).toBeInTheDocument();
-    expect(screen.getByText('Application: ISUZU 10PD1, 8PC, 8PD1, 8PC1')).toBeInTheDocument();
+    expect(fetchProductsPageMock).toHaveBeenCalledWith(expect.objectContaining({ status: 'active' }));
+    expect(screen.getByRole('combobox')).toHaveValue('active');
+    expect(screen.getByText('Part No.:')).toBeInTheDocument();
+    expect(screen.getByText('Item Code:')).toBeInTheDocument();
+    expect(screen.getByText('Category:')).toBeInTheDocument();
+    expect(screen.getByText('Brand:')).toBeInTheDocument();
+    expect(screen.getByText('Application:')).toBeInTheDocument();
+    expect(screen.getByText('ISUZU 10PD1, 8PC, 8PD1, 8PC1')).toBeInTheDocument();
+    expect(screen.getByText('Location')).toBeInTheDocument();
+    expect(screen.getByText('Warehouse Location')).toBeInTheDocument();
+    expect(screen.getByText('V1-008')).toBeInTheDocument();
+    expect(screen.getByText('Total Stock')).toBeInTheDocument();
+    expect(screen.getByText('10')).toBeInTheDocument();
     expect(screen.getByText('Reorder Qty: 8')).toBeInTheDocument();
   });
 });

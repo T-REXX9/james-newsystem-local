@@ -6,6 +6,7 @@ import {
   fetchAgentSnapshotForDailyCall,
   fetchContactCustomerLogsForDailyCall,
   fetchCustomersForDailyCall,
+  fetchDailyCallMasterList,
   subscribeToDailyCallMonitoringUpdates,
 } from '../dailyCallMonitoringService';
 
@@ -60,6 +61,36 @@ describe('dailyCallMonitoringService', () => {
     const result = await fetchCustomersForDailyCall({ status: 'inactive' });
 
     expect(result).toEqual([]);
+  });
+
+  it('fetchDailyCallMasterList calls local API with October 2025 start date', async () => {
+    const mockRows = [{
+      id: '1',
+      shopName: 'Priority Shop',
+      purchaseCount: 2,
+      days_since_last_purchase: 20,
+      purchase_age_group: 'two_weeks_to_one_month',
+    }];
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { items: mockRows, meta: { from_date: '2025-10-01' } } }),
+    } as Response);
+
+    const result = await fetchDailyCallMasterList({ search: 'priority' });
+
+    expect(result.items[0]).toMatchObject({
+      id: '1',
+      shopName: 'Priority Shop',
+      purchaseCount: 2,
+      daysSinceLastPurchase: 20,
+      purchaseAgeGroup: 'two_weeks_to_one_month',
+    });
+    expect(result.meta).toMatchObject({ fromDate: '2025-10-01' });
+    const requestUrl = String(fetchSpy.mock.calls[0][0]);
+    expect(requestUrl).toContain('/daily-call-monitoring/master-list?');
+    expect(requestUrl).toContain('main_id=1');
+    expect(requestUrl).toContain('from_date=2025-10-01');
+    expect(requestUrl).toContain('search=priority');
   });
 
   it('fetchAgentSnapshotForDailyCall maps aggregate payload into frontend shapes', async () => {

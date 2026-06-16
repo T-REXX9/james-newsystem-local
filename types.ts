@@ -440,6 +440,7 @@ export interface Product {
   replenish_quantity: number;
   original_pn_no: string;
   application: string;
+  location?: string;
   no_of_cylinder: string;
 
   // Price Groups
@@ -638,6 +639,29 @@ export interface DailyCallCustomerRow {
   monthlyOrder: number;
   weeklyRangeTotals: number[];
   dailyActivity: DailyActivityRecord[];
+}
+
+export interface DailyCallMasterCustomerRow {
+  id: string;
+  shopName: string;
+  province: string;
+  city: string;
+  contactNumber: string;
+  assignedTo: string;
+  lastPurchaseDate: string;
+  lastPurchaseDateRaw: string;
+  purchaseCount: number;
+  totalSales: number;
+  currentMonthSales: number;
+  daysSinceLastPurchase: number;
+  monthsSinceLastPurchase: number;
+  purchaseAgeGroup: 'recent' | 'two_weeks_to_one_month' | 'over_one_month';
+}
+
+export interface DailyCallMasterListMeta {
+  fromDate: string;
+  toDate: string;
+  count: number;
 }
 
 export interface CustomerDetailExpansionState {

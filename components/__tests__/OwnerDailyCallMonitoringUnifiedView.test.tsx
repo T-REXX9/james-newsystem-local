@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import OwnerDailyCallMonitoringUnifiedView from '../OwnerDailyCallMonitoringUnifiedView';
 
-vi.mock('../DailyCallExcelFormatView', () => ({
-  default: () => <div data-testid="daily-call-view">Daily Call View</div>,
+vi.mock('../DailyCallMasterListView', () => ({
+  default: () => <div data-testid="master-list-view">Master List View</div>,
 }));
 
 vi.mock('../OwnerLiveCallMonitoringView', () => ({
@@ -16,11 +16,12 @@ describe('OwnerDailyCallMonitoringUnifiedView', () => {
     cleanup();
   });
 
-  it('renders the Daily Call view by default', () => {
+  it('renders the Master List view by default', () => {
     render(<OwnerDailyCallMonitoringUnifiedView currentUser={null} />);
 
-    expect(screen.getByTestId('daily-call-view')).toBeInTheDocument();
+    expect(screen.getByTestId('master-list-view')).toBeInTheDocument();
     expect(screen.queryByTestId('chart-view')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /purchase follow-up/i })).not.toBeInTheDocument();
   });
 
   it('switches to chart view when Chart is clicked', () => {
@@ -29,15 +30,16 @@ describe('OwnerDailyCallMonitoringUnifiedView', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /chart/i })[0]);
 
     expect(screen.getByTestId('chart-view')).toBeInTheDocument();
-    expect(screen.queryByTestId('daily-call-view')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('master-list-view')).not.toBeInTheDocument();
   });
 
-  it('switches back to Daily Call view', () => {
+  it('switches back to Master List view', () => {
     render(<OwnerDailyCallMonitoringUnifiedView currentUser={null} />);
 
     fireEvent.click(screen.getAllByRole('button', { name: /chart/i })[0]);
-    fireEvent.click(screen.getAllByRole('button', { name: /daily call/i })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: /master list/i })[0]);
 
-    expect(screen.getByTestId('daily-call-view')).toBeInTheDocument();
+    expect(screen.getByTestId('master-list-view')).toBeInTheDocument();
+    expect(screen.queryByTestId('chart-view')).not.toBeInTheDocument();
   });
 });
