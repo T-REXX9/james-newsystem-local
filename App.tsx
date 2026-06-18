@@ -32,6 +32,7 @@ import FastSlowInventoryReport from './components/FastSlowInventoryReport';
 import InventoryAuditReport from './components/InventoryAuditReport';
 import InventoryReport from './components/InventoryReport';
 import SuggestedStockReport from './components/SuggestedStockReport';
+import IncidentItemsReport from './components/IncidentItemsReport';
 
 import AccessControlSettings from './components/AccessControlSettings';
 import TasksView from './components/TasksView';
@@ -511,6 +512,12 @@ const App: React.FC = () => {
         return (
           <div className="h-full overflow-y-auto">
             <FastSlowInventoryReport />
+          </div>
+        );
+      case 'warehouse-reports-incident-items-report':
+        return (
+          <div className="h-full overflow-y-auto">
+            <IncidentItemsReport />
           </div>
         );
       case 'customers':

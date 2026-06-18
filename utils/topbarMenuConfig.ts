@@ -141,6 +141,12 @@ export const TOPBAR_MENU_CONFIG: TopbarMainMenu[] = [
             route: 'warehouse-reports-fast-slow-inventory-report',
             icon: FileText,
           },
+          {
+            id: 'warehouse-reports-incident-items-report',
+            label: 'Incident Items Report',
+            route: 'warehouse-reports-incident-items-report',
+            icon: FileText,
+          },
         ],
       },
     ],

@@ -27,6 +27,7 @@ export const DEFAULT_STAFF_ACCESS_RIGHTS = [
   'warehouse-reports-reorder-report',
   'warehouse-reports-item-suggested-for-stock-report',
   'warehouse-reports-fast-slow-inventory-report',
+  'warehouse-reports-incident-items-report',
   'accounting-transactions-freight-charges-debit',
   'accounting-transactions-sales-return-credit',
   'accounting-transactions-adjustment-entry',
@@ -131,6 +132,7 @@ export const ROLE_DEFAULT_ACCESS_RIGHTS: Record<string, string[]> = {
     'warehouse-reports-reorder-report',
     'warehouse-reports-item-suggested-for-stock-report',
     'warehouse-reports-fast-slow-inventory-report',
+    'warehouse-reports-incident-items-report',
   ],
   Staff: [
     'home',
@@ -163,6 +165,7 @@ export const AVAILABLE_APP_MODULES = [
   { id: 'warehouse-reports-reorder-report', label: 'Reorder Report' },
   { id: 'warehouse-reports-item-suggested-for-stock-report', label: 'Item Suggested for Stock Report' },
   { id: 'warehouse-reports-fast-slow-inventory-report', label: 'Fast/Slow Inventory Report' },
+  { id: 'warehouse-reports-incident-items-report', label: 'Incident Items Report' },
   { id: 'sales-pipeline-board', label: 'Pipelines' },
   { id: 'sales-database-customer-database', label: 'Customer Database' },
   { id: 'sales-transaction-sales-inquiry', label: 'Sales Inquiry' },
