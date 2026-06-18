@@ -36,6 +36,9 @@ dist-ssr
 # Local code intelligence index
 .gitnexus/
 
+# Isolated development worktrees
+.worktrees/
+
 # Large local database dumps
 *.sql
 !*.sql.gz
