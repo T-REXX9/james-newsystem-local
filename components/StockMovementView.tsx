@@ -645,22 +645,16 @@ const StockMovementView: React.FC = () => {
               <div className="flex-1 overflow-auto">
                 <table className="stock-product-grid w-full table-fixed border-collapse text-left">
                   <colgroup>
-                    <col style={{ width: '6%' }} />
-                    <col style={{ width: '4.5%' }} />
-                    <col style={{ width: '7.5%' }} />
-                    <col style={{ width: '7%' }} />
                     <col style={{ width: '11%' }} />
-                    <col style={{ width: '4.5%' }} />
-                    <col style={{ width: '4.5%' }} />
-                    <col style={{ width: '5%' }} />
-                    <col style={{ width: '5%' }} />
-                    <col style={{ width: '5%' }} />
-                    <col style={{ width: '5%' }} />
-                    <col style={{ width: '4.5%' }} />
-                    <col style={{ width: '4.5%' }} />
-                    {WAREHOUSES.map(warehouse => (
-                      <col key={warehouse} style={{ width: '3.4%' }} />
-                    ))}
+                    <col style={{ width: '9%' }} />
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '10%' }} />
+                    <col style={{ width: '17%' }} />
+                    <col style={{ width: '8%' }} />
+                    <col style={{ width: '8%' }} />
+                    <col style={{ width: '7%' }} />
+                    <col style={{ width: '7%' }} />
+                    <col style={{ width: '7%' }} />
                   </colgroup>
                   <thead className="sticky top-0 z-10 bg-white shadow-sm dark:bg-slate-900">
                     <tr className="text-slate-600 dark:text-slate-300">
@@ -670,22 +664,16 @@ const StockMovementView: React.FC = () => {
                       <th className="border border-slate-200 px-3 py-3 font-semibold dark:border-slate-800">Brand</th>
                       <th className="border border-slate-200 px-3 py-3 font-semibold dark:border-slate-800">Application</th>
                       <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">Reorder Qty</th>
-                      <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">Regular Price</th>
-                      <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">AA</th>
-                      <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">BB</th>
-                      <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">CC</th>
-                      <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">DD</th>
-                      <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">VIP 1</th>
-                      <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">VIP2</th>
-                      {WAREHOUSES.map(warehouse => (
-                        <th key={warehouse} className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">{warehouse}</th>
-                      ))}
+                      <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">Regular</th>
+                      <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">Silver</th>
+                      <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">Gold</th>
+                      <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">Total Stock</th>
                     </tr>
                   </thead>
                   <tbody>
                     {isLoadingProducts && (
                       <tr>
-                        <td colSpan={19} className="border border-slate-200 px-3 py-10 text-center text-slate-500 dark:border-slate-800">
+                        <td colSpan={10} className="border border-slate-200 px-3 py-10 text-center text-slate-500 dark:border-slate-800">
                           <div className="flex items-center justify-center gap-3">
                             <CustomLoadingSpinner label="Loading" />
                             <span>Loading products...</span>
@@ -699,58 +687,35 @@ const StockMovementView: React.FC = () => {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
                       });
+                      const totalStock = product.stock_wh1 + product.stock_wh2 + product.stock_wh3
+                        + product.stock_wh4 + product.stock_wh5 + product.stock_wh6;
                       return (
-                        <React.Fragment key={product.id}>
-                          <tr
-                            data-testid={`stock-product-row-${product.id}-A`}
-                            onClick={() => handleProductSelect(product)}
-                            className={`cursor-pointer text-slate-700 transition-colors dark:text-slate-200 ${
-                              isHighlighted
-                                ? 'bg-blue-50 text-blue-700 underline dark:bg-blue-950/40 dark:text-blue-200'
-                                : 'odd:bg-white even:bg-slate-50 hover:bg-slate-100 dark:odd:bg-slate-900 dark:even:bg-slate-900/70 dark:hover:bg-slate-800'
-                            }`}
-                          >
-                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 font-semibold align-middle dark:border-slate-800">{product.part_no}</td>
-                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 align-middle dark:border-slate-800">{product.item_code}</td>
-                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 align-middle dark:border-slate-800">
-                              <div>{product.description}</div>
-                              {product.original_pn_no && (
-                                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">ORIG P/N No: {product.original_pn_no}</div>
-                              )}
-                            </td>
-                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 align-middle dark:border-slate-800">{product.brand}</td>
-                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 align-middle dark:border-slate-800">{product.application || '-'}</td>
-                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{product.reorder_quantity}</td>
-                            <td className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">A</td>
-                            <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_aa)}</td>
-                            <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_bb)}</td>
-                            <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_cc)}</td>
-                            <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_dd)}</td>
-                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{price(product.price_vip1)}</td>
-                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{price(product.price_vip2)}</td>
-                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{product.stock_wh1}</td>
-                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{product.stock_wh2}</td>
-                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{product.stock_wh3}</td>
-                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{product.stock_wh4}</td>
-                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{product.stock_wh5}</td>
-                            <td rowSpan={2} className="border border-slate-200 px-3 py-3 text-right align-middle dark:border-slate-800">{product.stock_wh6}</td>
-                          </tr>
-                          <tr
-                            data-testid={`stock-product-row-${product.id}-B`}
-                            onClick={() => handleProductSelect(product)}
-                            className={`cursor-pointer text-slate-700 transition-colors dark:text-slate-200 ${
-                              isHighlighted
-                                ? 'bg-blue-50 text-blue-700 underline dark:bg-blue-950/40 dark:text-blue-200'
-                                : 'odd:bg-white even:bg-slate-50 hover:bg-slate-100 dark:odd:bg-slate-900 dark:even:bg-slate-900/70 dark:hover:bg-slate-800'
-                            }`}
-                          >
-                            <td className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">B</td>
-                            <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_baa || 0)}</td>
-                            <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_bbb || 0)}</td>
-                            <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_bcc || 0)}</td>
-                            <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_bdd || 0)}</td>
-                          </tr>
-                        </React.Fragment>
+                        <tr
+                          key={product.id}
+                          data-testid={`stock-product-row-${product.id}`}
+                          onClick={() => handleProductSelect(product)}
+                          className={`cursor-pointer text-slate-700 transition-colors dark:text-slate-200 ${
+                            isHighlighted
+                              ? 'bg-blue-50 text-blue-700 underline dark:bg-blue-950/40 dark:text-blue-200'
+                              : 'odd:bg-white even:bg-slate-50 hover:bg-slate-100 dark:odd:bg-slate-900 dark:even:bg-slate-900/70 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <td className="border border-slate-200 px-3 py-3 font-semibold dark:border-slate-800">{product.part_no}</td>
+                          <td className="border border-slate-200 px-3 py-3 dark:border-slate-800">{product.item_code}</td>
+                          <td className="border border-slate-200 px-3 py-3 dark:border-slate-800">
+                            <div>{product.description}</div>
+                            {product.original_pn_no && (
+                              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">ORIG P/N No: {product.original_pn_no}</div>
+                            )}
+                          </td>
+                          <td className="border border-slate-200 px-3 py-3 dark:border-slate-800">{product.brand}</td>
+                          <td className="border border-slate-200 px-3 py-3 dark:border-slate-800">{product.application || '-'}</td>
+                          <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{product.reorder_quantity}</td>
+                          <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_aa)}</td>
+                          <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_vip1)}</td>
+                          <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_vip2)}</td>
+                          <td className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">{totalStock.toLocaleString()}</td>
+                        </tr>
                       );
                     })}
                   </tbody>

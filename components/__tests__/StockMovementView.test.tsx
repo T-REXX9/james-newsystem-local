@@ -98,7 +98,7 @@ describe('StockMovementView', () => {
     expect(screen.getByRole('columnheader', { name: 'Part No.' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Item Code' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Description' })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'WH6' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Total Stock' })).toBeInTheDocument();
     expect(screen.getByRole('table')).toHaveClass('stock-product-grid');
 
     await new Promise(resolve => window.setTimeout(resolve, 300));
@@ -206,18 +206,35 @@ describe('StockMovementView', () => {
     });
   });
 
-  it('renders old-system A and B regular price rows for each search result', async () => {
-    vi.mocked(searchStockMovementProducts).mockResolvedValue([product]);
+  it('renders current pricing tiers and one consolidated stock total per product', async () => {
+    vi.mocked(searchStockMovementProducts).mockResolvedValue([{
+      ...product,
+      price_aa: 100,
+      price_vip1: 90,
+      price_vip2: 80,
+      stock_wh1: 1,
+      stock_wh2: 2,
+      stock_wh3: 3,
+      stock_wh4: 4,
+      stock_wh5: 5,
+      stock_wh6: 6,
+    }]);
 
     render(<StockMovementView />);
     fireEvent.click(screen.getByRole('button', { name: /^search$/i }));
 
-    expect(await screen.findByTestId('stock-product-row-ITEM-1-A')).toBeInTheDocument();
-    expect(screen.getByTestId('stock-product-row-ITEM-1-B')).toBeInTheDocument();
-    expect(within(screen.getByTestId('stock-product-row-ITEM-1-A')).getByText('A')).toBeInTheDocument();
-    expect(within(screen.getByTestId('stock-product-row-ITEM-1-B')).getByText('B')).toBeInTheDocument();
-    expect(within(screen.getByTestId('stock-product-row-ITEM-1-B')).getByText('10.00')).toBeInTheDocument();
-    expect(within(screen.getByTestId('stock-product-row-ITEM-1-B')).getByText('40.00')).toBeInTheDocument();
+    const row = await screen.findByTestId('stock-product-row-ITEM-1');
+    expect(screen.getByRole('columnheader', { name: 'Regular' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Silver' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Gold' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Total Stock' })).toBeInTheDocument();
+    expect(within(row).getByText('100.00')).toBeInTheDocument();
+    expect(within(row).getByText('90.00')).toBeInTheDocument();
+    expect(within(row).getByText('80.00')).toBeInTheDocument();
+    expect(within(row).getByText('21')).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'AA' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'WH1' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('stock-product-row-ITEM-1-B')).not.toBeInTheDocument();
   });
 
   it('renders legacy report split columns and places movement rows on the correct side', async () => {
