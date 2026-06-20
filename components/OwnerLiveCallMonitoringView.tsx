@@ -1,33 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  AlertTriangle,
-  Bell,
-  Check,
-  Flag,
-  ChevronDown,
-  ChevronRight,
-  ClipboardList,
-  Clock,
-  MessageSquare,
-  Phone,
-  PhilippinePeso,
-  Search,
-  TrendingUp,
-  UserCheck,
-  Users,
-  X,
-} from 'lucide-react';
-import { BarChart as MuiBarChart, PieChart as MuiPieChart } from '@mui/x-charts';
-import { LineChartPro as MuiLineChartPro } from '@mui/x-charts-pro/LineChartPro';
+import { X } from 'lucide-react';
+import OwnerDashboardTemplate, {
+  CustomerCategoryId,
+  CustomerCategorySummary,
+} from './OwnerDashboardTemplate';
+import { buildOwnerDashboardMetrics } from './ownerDashboardMetrics';
+import DashboardViewportFit from './DashboardViewportFit';
 import {
   differenceInDays,
   format,
   getDate,
-  getDaysInMonth,
   isSameDay,
   parseISO,
   startOfMonth,
-  subMonths,
   subDays,
 } from 'date-fns';
 import {
@@ -36,7 +21,6 @@ import {
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import SalesMap from './SalesMap';
 import { UserProfile } from '../types';
 
 interface OwnerLiveCallMonitoringViewProps {
@@ -126,21 +110,6 @@ interface DealStatusRow {
   customerId: string;
 }
 
-const OUTCOME_COLORS: Record<Outcome, string> = {
-  Successful: '#16a34a',
-  'Follow-up': '#f59e0b',
-  'No Answer': '#0ea5e9',
-  Rejected: '#ef4444',
-  Pending: '#6b7280',
-};
-
-const DEAL_COLOR_BY_STATUS: Record<DealStatus, string> = {
-  Open: '#2563eb',
-  Won: '#16a34a',
-  Lost: '#ef4444',
-  'Follow-up': '#f59e0b',
-};
-
 const NOTES_KEY = 'owner-daily-call-notes';
 const REPORTS_KEY = 'owner-daily-call-reports-state';
 
@@ -151,19 +120,6 @@ const CATEGORY_LABEL: Record<CustomerCategory, string> = {
   'inactive-negatives': 'Inactive negative',
   blacklisted: 'Blacklisted',
   'negative-prospects': 'Negative prospect',
-};
-
-const STATUS_BADGE: Record<DealStatus, string> = {
-  Open: 'bg-blue-100 text-blue-700',
-  Won: 'bg-emerald-100 text-emerald-700',
-  Lost: 'bg-rose-100 text-rose-700',
-  'Follow-up': 'bg-amber-100 text-amber-700',
-};
-
-const parseProvinceFromMapText = (text?: string | null): string | null => {
-  if (!text) return null;
-  const match = text.match(/Showing data for\s+(.+?)\s+Region/i);
-  return match?.[1]?.trim() || null;
 };
 
 const toCurrency = (value: number) =>
@@ -331,50 +287,6 @@ const STORAGE_HELPER = {
   },
 };
 
-const BlackBoxMap = SalesMap as React.ComponentType<{
-  selectedArea?: string | null;
-  selectedAgentId?: string | null;
-  onAreaSelect?: (area: string | null) => void;
-}>;
-
-interface MapBridgeProps {
-  selectedArea: string | null;
-  selectedAgentId: string | null;
-  onAreaSelect: (area: string | null) => void;
-}
-
-const MapBridge: React.FC<MapBridgeProps> = ({ selectedArea, selectedAgentId, onAreaSelect }) => {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const target = containerRef.current;
-    if (!target) return;
-
-    let lastArea: string | null = null;
-
-    const detectArea = () => {
-      const text = target.textContent;
-      const parsed = parseProvinceFromMapText(text);
-      if (parsed !== lastArea) {
-        lastArea = parsed;
-        onAreaSelect(parsed);
-      }
-    };
-
-    const observer = new MutationObserver(detectArea);
-    observer.observe(target, { childList: true, subtree: true, characterData: true });
-    detectArea();
-
-    return () => observer.disconnect();
-  }, [onAreaSelect]);
-
-  return (
-    <div ref={containerRef} className="h-[430px] rounded-2xl overflow-hidden border border-slate-200 bg-white">
-      <BlackBoxMap selectedArea={selectedArea} selectedAgentId={selectedAgentId} onAreaSelect={onAreaSelect} />
-    </div>
-  );
-};
-
 const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = ({ currentUser }) => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [interactions, setInteractions] = useState<InteractionItem[]>([]);
@@ -384,10 +296,7 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
   const [agentFilter, setAgentFilter] = useState<string | null>(null);
   const [areaFilter, setAreaFilter] = useState<string | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
-  const [listTab, setListTab] = useState<'priority' | 'inactive' | 'prospective' | 'negative'>('priority');
   const [search, setSearch] = useState('');
-  const [showGarbage, setShowGarbage] = useState(false);
-  const [mobileTab, setMobileTab] = useState<'overview' | 'customers' | 'map' | 'reports'>('overview');
   const [showDealStatusDialog, setShowDealStatusDialog] = useState(false);
   const [selectedDealStatus, setSelectedDealStatus] = useState<DealStatus | null>(null);
   const [showOutcomeDialog, setShowOutcomeDialog] = useState(false);
@@ -699,159 +608,6 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
     };
   }, [agents, filteredInteractions, baseFilteredCustomers, monthStart]);
 
-  const quotaGauge = useMemo(() => {
-    const percent = kpis.quota > 0 ? Math.min(100, Math.round((kpis.actualSales / kpis.quota) * 100)) : 0;
-    const remaining = Math.max(0, kpis.quota - kpis.actualSales);
-    const daysRemaining = Math.max(1, getDaysInMonth(new Date()) - getDate(new Date()) + 1);
-    const weeksRemaining = Math.max(1, Math.ceil(daysRemaining / 7));
-
-    return {
-      percent,
-      remaining,
-      leftPercent: Math.max(0, 100 - percent),
-      dailyTarget: remaining > 0 ? Math.ceil(remaining / daysRemaining) : 0,
-      weeklyTarget: remaining > 0 ? Math.ceil(remaining / weeksRemaining) : 0,
-    };
-  }, [kpis.actualSales, kpis.quota]);
-
-  const revenueTrendData = useMemo(() => {
-    const today = new Date();
-    const currentMonthStart = startOfMonth(today);
-    const lastMonthStart = startOfMonth(subMonths(today, 1));
-    const currentDayOfMonth = getDate(today);
-    const currentMonthDays = getDaysInMonth(currentMonthStart);
-    const lastMonthDays = getDaysInMonth(lastMonthStart);
-    const points = Array.from({ length: Math.max(currentDayOfMonth, 1) }, (_v, i) => i + 1);
-
-    const purchaseRevenueByDate = filteredInteractions.reduce<Record<string, number>>((acc, item) => {
-      if (item.type !== 'purchase') return acc;
-      acc[item.date] = (acc[item.date] || 0) + (item.amount || 0);
-      return acc;
-    }, {});
-
-    const currentYear = currentMonthStart.getFullYear();
-    const currentMonth = currentMonthStart.getMonth();
-    const lastYear = lastMonthStart.getFullYear();
-    const lastMonth = lastMonthStart.getMonth();
-
-    const currentMonthSeries = points.map((day) => {
-      if (day > currentMonthDays) return 0;
-      const dateKey = format(new Date(currentYear, currentMonth, day), 'yyyy-MM-dd');
-      return purchaseRevenueByDate[dateKey] || 0;
-    });
-
-    const lastMonthSeries = points.map((day) => {
-      if (day > lastMonthDays) return 0;
-      const dateKey = format(new Date(lastYear, lastMonth, day), 'yyyy-MM-dd');
-      return purchaseRevenueByDate[dateKey] || 0;
-    });
-
-    return {
-      xAxis: points.map((_value, index) => index),
-      dayLabels: points,
-      series: [
-        {
-          id: 'last-month',
-          label: format(lastMonthStart, 'MMM yyyy'),
-          data: lastMonthSeries,
-          color: '#94a3b8',
-          curve: 'monotoneX' as const,
-        },
-        {
-          id: 'current-month',
-          label: format(currentMonthStart, 'MMM yyyy'),
-          data: currentMonthSeries,
-          color: '#16a34a',
-          curve: 'monotoneX' as const,
-        },
-      ],
-    };
-  }, [filteredInteractions]);
-
-  const dealStatusData = useMemo(() => {
-    const counts = baseFilteredCustomers.reduce<Record<DealStatus, number>>(
-      (acc, customer) => {
-        acc[customer.dealStatus] += 1;
-        return acc;
-      },
-      { Open: 0, Won: 0, Lost: 0, 'Follow-up': 0 }
-    );
-
-    return (Object.keys(counts) as DealStatus[]).map((status) => ({
-      name: status,
-      value: counts[status],
-    }));
-  }, [baseFilteredCustomers]);
-
-  const dealStatusPieData = useMemo(
-    () =>
-      dealStatusData.map((item) => ({
-        id: item.name,
-        value: item.value,
-        label: item.name,
-        color: DEAL_COLOR_BY_STATUS[item.name as DealStatus],
-      })),
-    [dealStatusData]
-  );
-
-  const geographicRevenueData = useMemo(() => {
-    const areaTotals = filteredInteractions.reduce<Record<string, number>>((acc, item) => {
-      if (item.type !== 'purchase') return acc;
-      const area = customerById[item.customerId]?.locationArea || 'Unknown';
-      acc[area] = (acc[area] || 0) + (item.amount || 0);
-      return acc;
-    }, {});
-
-    return Object.entries(areaTotals).map(([name, value]) => ({ name, value }));
-  }, [filteredInteractions, customerById]);
-
-  const perAgentSeries = useMemo(() => {
-    return agents
-      .filter((agent) => !agentFilter || agent.id === agentFilter)
-      .map((agent) => {
-        const calls = filteredInteractions.filter((item) => item.agentId === agent.id && item.type === 'call').length;
-        const texts = filteredInteractions.filter((item) => item.agentId === agent.id && item.type === 'text').length;
-        const callText = filteredInteractions.filter((item) => item.agentId === agent.id && (item.type === 'call' || item.type === 'text'));
-        const successful = callText.filter((item) => item.outcome === 'Successful').length;
-
-        return {
-          name: agent.name,
-          calls,
-          texts,
-          successRate: callText.length ? Math.round((successful / callText.length) * 100) : 0,
-          sales: agent.salesMTD,
-        };
-      });
-  }, [agents, filteredInteractions, agentFilter]);
-
-  const outcomeData = useMemo(() => {
-    const counts = filteredInteractions.reduce<Record<Outcome, number>>(
-      (acc, item) => {
-        if (item.type === 'call' || item.type === 'text' || item.type === 'inquiry') {
-          acc[item.outcome] += 1;
-        }
-        return acc;
-      },
-      { Successful: 0, 'Follow-up': 0, 'No Answer': 0, Rejected: 0, Pending: 0 }
-    );
-
-    return (Object.keys(counts) as Outcome[]).map((outcome) => ({
-      name: outcome,
-      value: counts[outcome],
-    }));
-  }, [filteredInteractions]);
-
-  const outcomePieData = useMemo(
-    () =>
-      outcomeData.map((item) => ({
-        id: item.name,
-        value: item.value,
-        label: item.name,
-        color: OUTCOME_COLORS[item.name as Outcome],
-      })),
-    [outcomeData]
-  );
-
   const categoryLists = useMemo(() => {
     const mapCategory = (category: CustomerCategory) => baseFilteredCustomers.filter((customer) => customer.category === category);
 
@@ -865,6 +621,74 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
     };
   }, [baseFilteredCustomers]);
 
+  const templateRevenueTrendData = useMemo(() => {
+    const today = new Date();
+    const days = Array.from({ length: 30 }, (_, index) => subDays(today, 29 - index));
+    const dayKeys = days.map((day) => format(day, 'yyyy-MM-dd'));
+    const dayLabels = days.map((day) => format(day, 'MMM d'));
+
+    const categoryIds = {
+      priority: new Set(categoryLists.activeNoPurchase.map((customer) => customer.id)),
+      recovery: new Set(categoryLists.inactivePositive.map((customer) => customer.id)),
+      verified: new Set(categoryLists.prospectivePositive.map((customer) => customer.id)),
+    };
+
+    const dailySum = (customerIds: Set<string>, dateKey: string) =>
+      filteredInteractions
+        .filter(
+          (item) =>
+            item.type === 'purchase' && item.date === dateKey && customerIds.has(item.customerId)
+        )
+        .reduce((sum, item) => sum + (item.amount || 0), 0);
+
+    const toCumulative = (values: number[]) => {
+      let running = 0;
+      return values.map((value) => {
+        running += value;
+        return running;
+      });
+    };
+
+    const priorityDaily = dayKeys.map((dateKey) => dailySum(categoryIds.priority, dateKey));
+    const recoveryDaily = dayKeys.map((dateKey) => dailySum(categoryIds.recovery, dateKey));
+    const verifiedDaily = dayKeys.map((dateKey) => dailySum(categoryIds.verified, dateKey));
+    const totalDaily = dayKeys.map((dateKey) =>
+      filteredInteractions
+        .filter((item) => item.type === 'purchase' && item.date === dateKey)
+        .reduce((sum, item) => sum + (item.amount || 0), 0)
+    );
+
+    return {
+      dayLabels,
+      series: [
+        {
+          id: 'priority',
+          label: 'Priority List Sales',
+          data: toCumulative(priorityDaily),
+          color: '#078b3e',
+        },
+        {
+          id: 'recovery',
+          label: 'Recovery List Sales',
+          data: toCumulative(recoveryDaily),
+          color: '#e31219',
+        },
+        {
+          id: 'verified',
+          label: 'Verified Prospects Converted',
+          data: toCumulative(verifiedDaily),
+          color: '#1262d6',
+        },
+        {
+          id: 'total',
+          label: 'Total Actual Sales',
+          data: toCumulative(totalDaily),
+          color: '#7c3aed',
+        },
+      ],
+    };
+  }, [filteredInteractions, categoryLists]);
+
   const selectedCustomer = selectedCustomerId ? customerById[selectedCustomerId] : null;
 
   const selectedCustomerInteractions = useMemo(() => {
@@ -877,8 +701,6 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
   const purchaseHistory = selectedCustomerInteractions.filter((item) => item.type === 'purchase');
   const returnHistory = selectedCustomerInteractions.filter((item) => item.type === 'return');
   const inquiryHistory = selectedCustomerInteractions.filter((item) => item.type === 'inquiry');
-
-  const unreadCount = reports.filter((report) => !report.read).length;
 
   const groupedReports = useMemo(() => {
     return {
@@ -931,6 +753,182 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
 
     return generated;
   }, [baseFilteredCustomers, interactions]);
+
+  const customerCategorySummaries = useMemo<CustomerCategorySummary[]>(() => {
+    const summarize = (
+      id: CustomerCategoryId,
+      label: string,
+      rows: Customer[],
+      tone: CustomerCategorySummary['tone'],
+      note: string
+    ): CustomerCategorySummary => {
+      const customerIds = new Set(rows.map((row) => row.id));
+      const sales = interactions
+        .filter(
+          (item) =>
+            item.type === 'purchase' && customerIds.has(item.customerId) && parseISO(item.date) >= monthStart
+        )
+        .reduce((sum, item) => sum + (item.amount || 0), 0);
+      const potential = rows.reduce(
+        (sum, row) => sum + Math.max(0, row.creditLimit - row.ledgerBalance),
+        0
+      );
+
+      return {
+        id,
+        label,
+        customers: rows.length,
+        currentSales: sales,
+        averageSales: rows.length ? Math.round(sales / rows.length) : 0,
+        potentialSales: potential,
+        note,
+        tone,
+      };
+    };
+
+    return [
+      summarize('priority', 'Priority List', categoryLists.activeNoPurchase, 'green', 'Current active buyers'),
+      summarize('recovery', 'Recovery List', categoryLists.inactivePositive, 'red', 'Needs recovery contact'),
+      summarize('verified', 'Verified Prospects', categoryLists.prospectivePositive, 'blue', 'By assigned agent'),
+      summarize('unverified', 'Unverified Prospects', categoryLists.inactiveNegative, 'orange', 'Needs call / verification'),
+    ];
+  }, [categoryLists, interactions, monthStart]);
+
+  const successfulOutcomes = filteredInteractions.filter((item) => item.outcome === 'Successful').length;
+
+  const templateMetrics = useMemo(
+    () =>
+      buildOwnerDashboardMetrics({
+        actualSales: kpis.actualSales,
+        monthlyTarget: kpis.quota,
+        categoryPotential: customerCategorySummaries.map((item) => item.potentialSales),
+        calls: kpis.callsMTD,
+        texts: kpis.textsMTD,
+        successfulOutcomes,
+      }),
+    [kpis, customerCategorySummaries, successfulOutcomes]
+  );
+
+  const interactionCount = (type: InteractionType, outcome?: Outcome) =>
+    filteredInteractions.filter(
+      (item) => item.type === type && (!outcome || item.outcome === outcome)
+    ).length;
+
+  const caseSummaries = useMemo(
+    () => [
+      {
+        label: 'Inquiry & Orders',
+        open: interactionCount('inquiry'),
+        pending: interactionCount('inquiry', 'Pending'),
+        tone: 'blue',
+      },
+      {
+        label: 'Delivery Issues',
+        open: interactionCount('return'),
+        pending: interactionCount('return', 'Pending'),
+        tone: 'green',
+      },
+      {
+        label: 'Quality Issues',
+        open: interactionCount('call', 'Rejected'),
+        pending: interactionCount('text', 'Rejected'),
+        tone: 'orange',
+      },
+      {
+        label: 'Incident Reports',
+        open: groupedReports['Incident Reports'].length,
+        pending: groupedReports['Incident Reports'].filter((item) => item.status === 'pending').length,
+        tone: 'violet',
+      },
+      {
+        label: 'Sales Returns',
+        open: groupedReports.Returns.length,
+        pending: groupedReports.Returns.filter((item) => item.status === 'pending').length,
+        tone: 'red',
+      },
+    ],
+    [filteredInteractions, groupedReports]
+  );
+
+  const notificationSummaries = useMemo(
+    () => [
+      {
+        label: 'Incident Reports Awaiting Approval',
+        count: groupedReports['Incident Reports'].filter((item) => item.status === 'pending').length,
+      },
+      {
+        label: 'Delivery Issues Awaiting Approval',
+        count: interactionCount('return', 'Pending'),
+      },
+      {
+        label: 'Sales Inquiries Awaiting Response',
+        count: interactionCount('inquiry', 'Pending'),
+      },
+      {
+        label: 'Sales Returns Awaiting Approval',
+        count: groupedReports.Returns.filter((item) => item.status === 'pending').length,
+      },
+      {
+        label: 'Sales Reports Awaiting Approval',
+        count: groupedReports['Sales Reports'].filter((item) => item.status === 'pending').length,
+      },
+    ],
+    [groupedReports, filteredInteractions]
+  );
+
+  const actionSummaries = useMemo(
+    () => [
+      {
+        label: 'Incident Reports Awaiting Approval',
+        count: groupedReports['Incident Reports'].filter((item) => item.status === 'pending').length,
+      },
+      {
+        label: 'Sales Returns Awaiting Approval',
+        count: groupedReports.Returns.filter((item) => item.status === 'pending').length,
+      },
+      {
+        label: 'Recovery Customers Not Contacted',
+        count: categoryLists.inactivePositive.length,
+      },
+      {
+        label: 'VIP Customers Near Qualification',
+        count: baseFilteredCustomers.filter((item) => item.creditLimit >= 500_000).length,
+      },
+      {
+        label: 'Customers Not Contacted This Month',
+        count: baseFilteredCustomers.filter(
+          (item) => differenceInDays(new Date(), parseISO(item.lastContactAt)) >= getDate(new Date())
+        ).length,
+      },
+      {
+        label: 'Verified Prospects Not Called',
+        count: categoryLists.prospectivePositive.length,
+      },
+      {
+        label: 'Unverified Prospects Pending Verification',
+        count: categoryLists.inactiveNegative.length,
+      },
+    ],
+    [groupedReports, categoryLists, baseFilteredCustomers]
+  );
+
+  const agentPerformanceSummaries = useMemo(
+    () =>
+      [...agents]
+        .sort((a, b) => b.salesMTD - a.salesMTD)
+        .slice(0, 3)
+        .map((agent) => ({
+          name: agent.name,
+          calls: filteredInteractions.filter(
+            (item) =>
+              item.agentId === agent.id && item.type === 'call' && parseISO(item.date) >= monthStart
+          ).length,
+          actualSales: agent.salesMTD,
+          target: agent.quota,
+          achievement: agent.quota > 0 ? Number(((agent.salesMTD / agent.quota) * 100).toFixed(1)) : 0,
+        })),
+    [agents, filteredInteractions, monthStart]
+  );
 
   const outcomeRows = useMemo<OutcomeRow[]>(() => {
     if (!selectedOutcome) return [];
@@ -1049,40 +1047,9 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
     );
   };
 
-  const renderListRows = (items: Customer[]) => {
-    return (
-      <div className="space-y-2">
-        {items.map((customer) => (
-          <button
-            key={customer.id}
-            onClick={() => setSelectedCustomerId(customer.id)}
-            className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-blue-400 hover:shadow-sm"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-sm font-semibold text-slate-800">{customer.name}</p>
-                <p className="text-xs text-slate-500">{customer.locationArea}</p>
-              </div>
-              <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_BADGE[customer.dealStatus]}`}>
-                {customer.dealStatus}
-              </span>
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-              <span>Agent: {agentById[customer.agentId]?.name || '—'}</span>
-              <span>Last contact: {format(parseISO(customer.lastContactAt), 'MMM d')}</span>
-              <span className="rounded-full bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-700">RTO:{customer.rtoCount}</span>
-            </div>
-          </button>
-        ))}
-      </div>
-    );
-  };
-
-  const isOwner = currentUser?.role === 'Owner' || currentUser?.role === 'Master';
-
   return (
-    <div className="h-full overflow-auto bg-slate-100 p-3.5 pt-1 lg:p-3.5 lg:pt-1">
-      <div className="mx-auto max-w-[1700px] space-y-2">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100 p-3.5 pt-1 lg:p-3.5 lg:pt-1">
+      <div className="mx-auto w-full max-w-[1700px] shrink-0 space-y-2">
         {isLoadingSnapshot && (
           <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
             Loading live dashboard data from local MySQL API...
@@ -1093,633 +1060,70 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
             {snapshotError}
           </div>
         )}
-        <div className="grid gap-3 lg:grid-cols-8">
-          <div className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm lg:col-span-5">
-            <div className="mb-1.5 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-700">Daily Call Monitoring — Owner Dashboard</h2>
-              <div className="flex items-center gap-2">
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-                  <input
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Search customer / area"
-                    className="w-52 rounded-lg border border-slate-200 py-2 pl-8 pr-2 text-xs focus:border-blue-500 focus:outline-none"
-                  />
-                </div>
-                <select
-                  value={agentFilter || 'all'}
-                  onChange={(event) => setAgentFilter(event.target.value === 'all' ? null : event.target.value)}
-                  className="rounded-lg border border-slate-200 px-2 py-2 text-xs"
-                >
-                  <option value="all">All agents</option>
-                  {agents.map((agent) => (
-                    <option key={agent.id} value={agent.id}>
-                      {agent.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  onClick={() => {
-                    setAgentFilter(null);
-                    setAreaFilter(null);
-                    setSearch('');
-                  }}
-                  className="rounded-lg border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-                >
-                  Reset filters
-                </button>
-              </div>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
-                <p className="text-[11px] text-slate-500">Quota vs Actual (MTD)</p>
-                <p className="mt-1 text-base font-bold text-slate-800">{toCurrency(kpis.actualSales)}</p>
-                <p className="text-[11px] text-slate-500">of {toCurrency(kpis.quota)}</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
-                <p className="text-[11px] text-slate-500">Total Revenue (MTD)</p>
-                <p className="mt-1 text-base font-bold text-slate-800">{toCurrency(kpis.totalRevenue)}</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
-                <p className="text-[11px] text-slate-500">Active Deals</p>
-                <p className="mt-1 text-base font-bold text-slate-800">{kpis.activeDeals}</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
-                <p className="text-[11px] text-slate-500">Successful Outcomes %</p>
-                <p className="mt-1 text-base font-bold text-slate-800">{kpis.successPercent}%</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
-                <p className="text-[11px] text-slate-500">Calls (Today / MTD)</p>
-                <p className="mt-1 text-base font-bold text-slate-800">
-                  {kpis.callsToday} / {kpis.callsMTD}
-                </p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
-                <p className="text-[11px] text-slate-500">Texts (Today / MTD)</p>
-                <p className="mt-1 text-base font-bold text-slate-800">
-                  {kpis.textsToday} / {kpis.textsMTD}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="self-start rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm lg:col-span-2">
-            <div className="mb-1.5 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-700">Notifications & Approvals</h3>
-              <button
-                onClick={() => {
-                  setSelectedQueueType(null);
-                  setShowQueueDialog(true);
-                }}
-                className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-200"
-              >
-                {unreadCount} unread
-              </button>
-            </div>
-            <div className="space-y-1.5">
-              {(Object.entries(groupedReports) as [ReportType, ReportItem[]][]).map(([group, items]) => (
-                <button
-                  key={group}
-                  onClick={() => {
-                    setSelectedQueueType(group);
-                    setShowQueueDialog(true);
-                  }}
-                  className="w-full rounded-lg border border-slate-200 p-1.5 text-left transition hover:border-blue-300 hover:bg-slate-50"
-                >
-                  <p className="text-[11px] font-semibold text-slate-500">{group}</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-800">{items.length} item(s)</p>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setShowAttendanceDialog(true)}
-            className="self-start rounded-2xl border border-slate-200 bg-white p-2.5 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/20 lg:col-span-1"
-          >
-            <h3 className="mb-1.5 text-sm font-semibold text-slate-700">Attendance</h3>
-            <p className="text-xs text-slate-500">
-              <span className="font-semibold text-emerald-600">{attendance.online.length}</span> online / {attendance.offline.length} offline
-            </p>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5">
-                <p className="text-[11px] font-semibold text-emerald-700">Present</p>
-                <p className="text-base font-bold text-emerald-700">{attendance.online.length}</p>
-              </div>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5">
-                <p className="text-[11px] font-semibold text-slate-600">Absent</p>
-                <p className="text-base font-bold text-slate-700">{attendance.offline.length}</p>
-              </div>
-            </div>
-            <p className="mt-2 text-[11px] font-medium text-blue-600">Click to view full attendance details</p>
-          </button>
-        </div>
-
-        <div className="lg:hidden">
-          <div className="grid grid-cols-4 gap-1 rounded-xl border border-slate-200 bg-white p-1">
-            {(['overview', 'customers', 'map', 'reports'] as const).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setMobileTab(tab)}
-                className={`rounded-lg px-2 py-2 text-xs font-semibold capitalize ${mobileTab === tab ? 'bg-blue-600 text-white' : 'text-slate-600'}`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="hidden lg:grid lg:grid-cols-[340px_1fr] lg:gap-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm">
-            <div className="mb-1.5 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-700">Customer Lists</h3>
-              {areaFilter && <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">{areaFilter}</span>}
-            </div>
-
-            <div className="mb-3 grid grid-cols-2 gap-1 text-xs">
-              <button
-                onClick={() => setListTab('priority')}
-                className={`rounded-lg px-2 py-1.5 font-semibold ${listTab === 'priority' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'}`}
-              >
-                Active buyers
-              </button>
-              <button
-                onClick={() => setListTab('inactive')}
-                className={`rounded-lg px-2 py-1.5 font-semibold ${listTab === 'inactive' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'}`}
-              >
-                Inactive +
-              </button>
-              <button
-                onClick={() => setListTab('prospective')}
-                className={`rounded-lg px-2 py-1.5 font-semibold ${listTab === 'prospective' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'}`}
-              >
-                Prospective +
-              </button>
-              {isOwner && (
-                <button
-                  onClick={() => setListTab('negative')}
-                  className={`rounded-lg px-2 py-1.5 font-semibold ${listTab === 'negative' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'}`}
-                >
-                  Inactive -
-                </button>
-              )}
-            </div>
-
-            <div className="max-h-[620px] overflow-auto pr-1">
-              {listTab === 'priority' && renderListRows(categoryLists.activeNoPurchase)}
-              {listTab === 'inactive' && renderListRows(categoryLists.inactivePositive)}
-              {listTab === 'prospective' && renderListRows(categoryLists.prospectivePositive)}
-              {listTab === 'negative' && isOwner && renderListRows(categoryLists.inactiveNegative)}
-
-              <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50">
-                <button
-                  onClick={() => setShowGarbage((prev) => !prev)}
-                  className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold text-slate-700"
-                >
-                  <span>Garbage Data</span>
-                  {showGarbage ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                </button>
-                {!showGarbage ? (
-                  <div className="border-t border-slate-200 px-3 py-2 text-[11px] text-slate-500">
-                    {categoryLists.blacklisted.length} Blacklisted · {categoryLists.negativeProspects.length} Negative Prospects
-                  </div>
-                ) : (
-                  <div className="space-y-2 border-t border-slate-200 px-2 py-2">
-                    <div>
-                      <p className="mb-1 text-[11px] font-semibold text-rose-600">Blacklisted</p>
-                      {renderListRows(categoryLists.blacklisted)}
-                    </div>
-                    <div>
-                      <p className="mb-1 text-[11px] font-semibold text-amber-600">Negative Prospects</p>
-                      {renderListRows(categoryLists.negativeProspects)}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <div className="grid gap-3 xl:grid-cols-2">
-              <div className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm">
-                <div className="mb-1.5 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-slate-700">Team Quota Progress</h3>
-                  <span className="text-xs text-slate-500">{quotaGauge.percent}% of goal</span>
-                </div>
-                <div className="rounded-2xl bg-gradient-to-b from-slate-50 via-slate-50 to-white p-3">
-                  <div className="relative mx-auto w-full max-w-[360px] pb-2">
-                    <svg viewBox="0 0 220 130" className="h-[170px] w-full" aria-hidden="true">
-                      <defs>
-                        <linearGradient id="ownerQuotaGaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                          <stop offset="0%" stopColor="#3b82f6" />
-                          <stop offset="100%" stopColor="#1d4ed8" />
-                        </linearGradient>
-                      </defs>
-                      <path
-                        d="M 20 110 A 90 90 0 0 1 200 110"
-                        fill="none"
-                        stroke="#e2e8f0"
-                        strokeWidth="16"
-                        strokeLinecap="round"
-                      />
-                      <path
-                        d="M 20 110 A 90 90 0 0 1 200 110"
-                        fill="none"
-                        stroke="url(#ownerQuotaGaugeGradient)"
-                        strokeWidth="16"
-                        strokeLinecap="round"
-                        pathLength={100}
-                        strokeDasharray={`${quotaGauge.percent} 100`}
-                      />
-                    </svg>
-
-                    <div className="absolute inset-x-0 top-[24px] px-4 text-center">
-                      <p className="text-xs font-medium text-slate-500">Total Sales</p>
-                      <p className="mx-auto mt-2 w-[82%] max-w-[260px] text-[clamp(1.65rem,2.5vw,2.45rem)] font-bold leading-none tracking-tight text-slate-800">
-                        {toCurrency(kpis.actualSales)}
-                      </p>
-                      <span className="mt-3 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
-                        {quotaGauge.percent}% of Goal
-                      </span>
-                    </div>
-                    <div className="relative -mt-1 text-center">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Target Quota</p>
-                      <p className="text-[1.85rem] font-bold leading-none text-blue-700">{toCurrency(kpis.quota)}</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-2 rounded-2xl border border-slate-200 bg-white">
-                    <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-slate-100 px-3 py-2.5">
-                      <div className="grid h-9 w-9 place-items-center rounded-full bg-blue-100 text-blue-600">
-                        <Flag className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium text-slate-500">Remaining to Goal</p>
-                        <p className="text-2xl font-bold text-slate-800">{toCurrency(quotaGauge.remaining)}</p>
-                      </div>
-                      <span className="rounded-md bg-rose-100 px-2 py-1 text-xs font-semibold text-rose-600">
-                        {quotaGauge.leftPercent}% Left
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-slate-100 px-3 py-2.5">
-                      <div className="grid h-9 w-9 place-items-center rounded-full bg-emerald-100 text-emerald-600">
-                        <Clock className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium text-slate-500">Daily Target to Hit</p>
-                        <p className="text-2xl font-bold text-slate-800">{toCurrency(quotaGauge.dailyTarget)}</p>
-                      </div>
-                      <span className="text-xs font-medium text-slate-500">/ day</span>
-                    </div>
-
-                    <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3 px-3 py-2.5">
-                      <div className="grid h-9 w-9 place-items-center rounded-full bg-violet-100 text-violet-600">
-                        <TrendingUp className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium text-slate-500">Weekly Target Quota</p>
-                        <p className="text-2xl font-bold text-slate-800">{toCurrency(quotaGauge.weeklyTarget)}</p>
-                      </div>
-                      <span className="text-xs font-medium text-slate-500">/ week</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm">
-                <h3 className="mb-1.5 text-sm font-semibold text-slate-700">Revenue Trend (Last Month vs Current Month)</h3>
-                <div className="h-[250px]">
-                  <MuiLineChartPro
-                    height={250}
-                    xAxis={[
-                      {
-                        zoom: true,
-                        scaleType: 'point',
-                        data: revenueTrendData.xAxis,
-                        tickLabelStyle: { fontSize: 11 },
-                        valueFormatter: (value) => `Day ${revenueTrendData.dayLabels[Number(value)] || Number(value) + 1}`,
-                      },
-                    ]}
-                    yAxis={[
-                      {
-                        valueFormatter: (value) => `${Math.round(Number(value) / 1000)}k`,
-                        tickLabelStyle: { fontSize: 11 },
-                      },
-                    ]}
-                    series={revenueTrendData.series.map((item) => ({
-                      ...item,
-                      valueFormatter: (value: number | null) => toCurrency(Number(value || 0)),
-                    }))}
-                    grid={{ horizontal: true }}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-3 xl:grid-cols-3">
-              <div className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm">
-                <div className="mb-1 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-slate-700">Deal Status Distribution</h3>
-                  <span className="text-[11px] text-slate-500">Click segment</span>
-                </div>
-                <div className="flex h-[230px] items-center justify-center">
-                  <MuiPieChart
-                    width={300}
-                    height={220}
-                    series={[
-                      {
-                        data: dealStatusPieData,
-                        innerRadius: 52,
-                        outerRadius: 82,
-                        paddingAngle: 2,
-                        cornerRadius: 4,
-                      },
-                    ]}
-                    onItemClick={(_event, itemIdentifier) => {
-                      if (itemIdentifier.dataIndex == null) return;
-                      const picked = dealStatusPieData[itemIdentifier.dataIndex];
-                      if (!picked?.label) return;
-                      setSelectedDealStatus(picked.label as DealStatus);
-                      setShowDealStatusDialog(true);
-                    }}
-                    hideLegend
-                  />
-                </div>
-                <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-600">
-                  {dealStatusPieData.map((item) => (
-                    <button
-                      key={String(item.id)}
-                      type="button"
-                      onClick={() => {
-                        setSelectedDealStatus(item.label as DealStatus);
-                        setShowDealStatusDialog(true);
-                      }}
-                      className="flex items-center gap-1.5 rounded-md px-1 py-0.5 hover:bg-slate-100"
-                    >
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-                      <span>{item.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm">
-                <h3 className="mb-1.5 text-sm font-semibold text-slate-700">Geographic Revenue Distribution</h3>
-                <div className="h-[230px]">
-                  <MuiBarChart
-                    height={230}
-                    xAxis={[
-                      {
-                        scaleType: 'band',
-                        data: geographicRevenueData.map((row) => row.name),
-                        tickLabelStyle: { fontSize: 11 },
-                      },
-                    ]}
-                    yAxis={[
-                      {
-                        valueFormatter: (value) => `${Math.round(Number(value) / 1000)}k`,
-                        tickLabelStyle: { fontSize: 11 },
-                      },
-                    ]}
-                    series={[
-                      {
-                        data: geographicRevenueData.map((row) => row.value),
-                        color: '#0ea5e9',
-                        label: 'Revenue',
-                        valueFormatter: (value) => toCurrency(Number(value || 0)),
-                      },
-                    ]}
-                    grid={{ horizontal: true }}
-                  />
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm">
-                <div className="mb-1 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-slate-700">Outcome Segments</h3>
-                  <span className="text-[11px] text-slate-500">Click segment</span>
-                </div>
-                <div className="flex h-[230px] items-center justify-center">
-                  <MuiPieChart
-                    width={300}
-                    height={220}
-                    series={[
-                      {
-                        data: outcomePieData,
-                        outerRadius: 82,
-                        paddingAngle: 2,
-                        cornerRadius: 4,
-                      },
-                    ]}
-                    onItemClick={(_event, itemIdentifier) => {
-                      if (itemIdentifier.dataIndex == null) return;
-                      const picked = outcomePieData[itemIdentifier.dataIndex];
-                      if (!picked?.label) return;
-                      setSelectedOutcome(picked.label as Outcome);
-                      setShowOutcomeDialog(true);
-                    }}
-                    hideLegend
-                  />
-                </div>
-                <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-600">
-                  {outcomePieData.map((item) => (
-                    <button
-                      key={String(item.id)}
-                      type="button"
-                      onClick={() => {
-                        setSelectedOutcome(item.label as Outcome);
-                        setShowOutcomeDialog(true);
-                      }}
-                      className="flex items-center gap-1.5 rounded-md px-1 py-0.5 hover:bg-slate-100"
-                    >
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-                      <span>{item.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-3 xl:grid-cols-3">
-              <div className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm xl:col-span-2">
-                <h3 className="mb-1.5 text-sm font-semibold text-slate-700">Calls / Text / Success Rate per Agent</h3>
-                <div className="h-[260px]">
-                  <MuiBarChart
-                    height={260}
-                    xAxis={[
-                      {
-                        scaleType: 'band',
-                        data: perAgentSeries.map((row) => row.name),
-                        tickLabelStyle: { fontSize: 11 },
-                      },
-                    ]}
-                    yAxis={[{ tickLabelStyle: { fontSize: 11 } }]}
-                    series={[
-                      {
-                        data: perAgentSeries.map((row) => row.calls),
-                        label: 'Calls',
-                        color: '#2563eb',
-                      },
-                      {
-                        data: perAgentSeries.map((row) => row.texts),
-                        label: 'Texts',
-                        color: '#10b981',
-                      },
-                      {
-                        data: perAgentSeries.map((row) => row.successRate),
-                        label: 'Success Rate %',
-                        color: '#f59e0b',
-                        valueFormatter: (value) => `${Number(value || 0)}%`,
-                      },
-                    ]}
-                    grid={{ horizontal: true }}
-                  />
-                </div>
-              </div>
-
-              <div className="self-start rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm">
-                <h3 className="mb-1.5 text-sm font-semibold text-slate-700">Management Alerts</h3>
-                <div className="space-y-2">
-                  {alerts.length === 0 ? (
-                    <p className="text-xs text-slate-500">No current recommendations.</p>
-                  ) : (
-                    alerts.map((alert) => (
-                      <div
-                        key={alert.id}
-                        className="w-full rounded-lg border border-amber-200 bg-amber-50 p-2 text-left"
-                      >
-                        <p className="text-xs font-semibold text-amber-700">{alert.title}</p>
-                        <div className="mt-1.5 space-y-1.5">
-                          {alert.customers.slice(0, 5).map((customer) => (
-                            <button
-                              key={customer.id}
-                              onClick={() => setSelectedCustomerId(customer.id)}
-                              className="w-full rounded-md border border-amber-200/70 bg-white/70 px-2 py-1 text-left text-[11px] text-amber-800 hover:bg-white"
-                            >
-                              {customer.name} · {customer.locationArea}
-                            </button>
-                          ))}
-                          {alert.customers.length > 5 && (
-                            <p className="text-[11px] text-amber-600">+{alert.customers.length - 5} more</p>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm">
-              <div className="mb-1.5 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-700">Philippine Territory Map</h3>
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">Area filter: {areaFilter || 'All'}</span>
-                  <button onClick={() => setAreaFilter(null)} className="rounded-md border border-slate-200 px-2 py-1 text-slate-600 hover:bg-slate-50">
-                    Clear area filter
-                  </button>
-                </div>
-              </div>
-              <MapBridge selectedArea={areaFilter} selectedAgentId={agentFilter} onAreaSelect={setAreaFilter} />
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-4 lg:hidden">
-          {mobileTab === 'overview' && (
-            <div className="space-y-3">
-              <div className="rounded-xl border border-slate-200 bg-white p-3">
-                <h3 className="mb-2 text-sm font-semibold text-slate-700">Team Quota Progress</h3>
-                <div className="rounded-2xl bg-gradient-to-b from-slate-50 via-slate-50 to-white p-3">
-                  <div className="relative mx-auto w-full max-w-[300px] pb-1">
-                    <svg viewBox="0 0 220 130" className="h-[160px] w-full" aria-hidden="true">
-                      <defs>
-                        <linearGradient id="ownerQuotaGaugeGradientMobile" x1="0%" y1="0%" x2="100%" y2="0%">
-                          <stop offset="0%" stopColor="#3b82f6" />
-                          <stop offset="100%" stopColor="#1d4ed8" />
-                        </linearGradient>
-                      </defs>
-                      <path
-                        d="M 20 110 A 90 90 0 0 1 200 110"
-                        fill="none"
-                        stroke="#e2e8f0"
-                        strokeWidth="16"
-                        strokeLinecap="round"
-                      />
-                      <path
-                        d="M 20 110 A 90 90 0 0 1 200 110"
-                        fill="none"
-                        stroke="url(#ownerQuotaGaugeGradientMobile)"
-                        strokeWidth="16"
-                        strokeLinecap="round"
-                        pathLength={100}
-                        strokeDasharray={`${quotaGauge.percent} 100`}
-                      />
-                    </svg>
-
-                    <div className="absolute inset-x-0 top-[24px] px-3 text-center">
-                      <p className="text-xs font-medium text-slate-500">Total Sales</p>
-                      <p className="mx-auto mt-2 w-[84%] max-w-[235px] text-[clamp(1.45rem,6vw,2.1rem)] font-bold leading-none tracking-tight text-slate-800">
-                        {toCurrency(kpis.actualSales)}
-                      </p>
-                      <span className="mt-3 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                        {quotaGauge.percent}% of Goal
-                      </span>
-                    </div>
-                    <div className="relative -mt-1 text-center">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Target Quota</p>
-                      <p className="text-xl font-bold leading-none text-blue-700">{toCurrency(kpis.quota)}</p>
-                    </div>
-                  </div>
-                  <div className="mt-2 grid grid-cols-1 gap-2 text-xs">
-                    <div className="rounded-lg border border-slate-200 bg-white px-2.5 py-2">
-                      <p className="text-slate-500">Remaining to Goal</p>
-                      <p className="text-base font-bold text-slate-800">{toCurrency(quotaGauge.remaining)}</p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="rounded-lg border border-slate-200 bg-white px-2.5 py-2">
-                        <p className="text-slate-500">Daily Target</p>
-                        <p className="text-base font-bold text-slate-800">{toCurrency(quotaGauge.dailyTarget)}</p>
-                      </div>
-                      <div className="rounded-lg border border-slate-200 bg-white px-2.5 py-2">
-                        <p className="text-slate-500">Weekly Target</p>
-                        <p className="text-base font-bold text-slate-800">{toCurrency(quotaGauge.weeklyTarget)}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-          {mobileTab === 'customers' && (
-            <div className="rounded-xl border border-slate-200 bg-white p-3">{renderListRows(baseFilteredCustomers.slice(0, 18))}</div>
-          )}
-          {mobileTab === 'map' && (
-            <div className="rounded-xl border border-slate-200 bg-white p-3">
-              <MapBridge selectedArea={areaFilter} selectedAgentId={agentFilter} onAreaSelect={setAreaFilter} />
-            </div>
-          )}
-          {mobileTab === 'reports' && (
-            <div className="rounded-xl border border-slate-200 bg-white p-3">
-              <div className="space-y-2">
-                {reports.map((report) => (
-                  <div
-                    key={report.id}
-                    className={`rounded-lg border p-2 ${report.read ? 'border-blue-200 bg-blue-50/40' : 'border-slate-300 bg-slate-100'}`}
-                  >
-                    <p className="text-xs font-semibold text-slate-700">{report.title}</p>
-                    <p className="text-[11px] text-slate-500">{report.submittedBy} · {format(parseISO(report.createdAt), 'MMM d')}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
       </div>
+      <DashboardViewportFit revision={isLoadingSnapshot}>
+        <OwnerDashboardTemplate
+          dateLabel={format(new Date(), 'MMMM d, yyyy')}
+          monthLabel={format(new Date(), 'MMMM yyyy')}
+          currentSales={kpis.actualSales}
+          monthlyTarget={kpis.quota}
+          remainingTarget={templateMetrics.remainingTarget}
+          totalPotential={templateMetrics.totalPotential}
+          targetAchieved={templateMetrics.targetAchieved}
+          pipelineVsTarget={templateMetrics.pipelineVsTarget}
+          customerCategories={customerCategorySummaries}
+          revenueSeries={templateRevenueTrendData.series}
+          revenueDays={templateRevenueTrendData.dayLabels}
+          monthlyTargetLine={kpis.quota}
+          cases={caseSummaries}
+          notifications={notificationSummaries}
+          actions={actionSummaries}
+          attendance={{ present: attendance.online.length, absent: attendance.offline.length }}
+          agents={agentPerformanceSummaries}
+          activity={{
+            calls: kpis.callsMTD,
+            texts: kpis.textsMTD,
+            aiSms: 0,
+            successfulOutcomes,
+            conversionRate: templateMetrics.conversionRate,
+          }}
+          search={search}
+          selectedAgentId={agentFilter}
+          agentOptions={agents.map(({ id, name }) => ({ id, name }))}
+          onSearchChange={setSearch}
+          onAgentChange={setAgentFilter}
+          onResetFilters={() => {
+            setSearch('');
+            setAgentFilter(null);
+            setAreaFilter(null);
+          }}
+          onOpenCategory={(id) => {
+            const categoryCustomers =
+              id === 'priority'
+                ? categoryLists.activeNoPurchase
+                : id === 'verified'
+                  ? categoryLists.prospectivePositive
+                  : id === 'recovery'
+                    ? categoryLists.inactivePositive
+                    : categoryLists.inactiveNegative;
+            if (categoryCustomers[0]) {
+              setSelectedCustomerId(categoryCustomers[0].id);
+            }
+          }}
+          onOpenNotifications={() => {
+            setSelectedQueueType(null);
+            setShowQueueDialog(true);
+          }}
+          onOpenAttendance={() => setShowAttendanceDialog(true)}
+          onOpenActionList={() => {
+            if (alerts[0]) {
+              setActiveAlert(alerts[0]);
+              setShowAlertDialog(true);
+            }
+          }}
+        />
+      </DashboardViewportFit>
+
 
       {selectedCustomer && (
         <div className="fixed inset-0 z-40">

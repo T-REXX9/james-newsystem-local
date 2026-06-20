@@ -1,5 +1,5 @@
 import React, { Component, ReactNode, useState } from 'react';
-import { BarChart3, Table2 } from 'lucide-react';
+import { Table2 } from 'lucide-react';
 import OwnerLiveCallMonitoringView from './OwnerLiveCallMonitoringView';
 import DailyCallMonitoringMiniSidebar, { DailyCallOwnerViewMode } from './DailyCallMonitoringMiniSidebar';
 import DailyCallMasterListView from './DailyCallMasterListView';
@@ -43,30 +43,23 @@ class LocalErrorBoundary extends Component<LocalErrorBoundaryProps, LocalErrorBo
 }
 
 const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnifiedViewProps> = ({ currentUser }) => {
-  const [activeView, setActiveView] = useState<DailyCallOwnerViewMode>('master-list');
+  const [activeView, setActiveView] = useState<DailyCallOwnerViewMode>('chart');
 
   return (
-    <div className="h-full overflow-y-auto bg-slate-50 p-3 md:p-4 dark:bg-slate-950">
-      <div className="mx-auto flex max-w-[1800px] flex-col gap-4 lg:flex-row">
+    <div className="h-full min-h-0 overflow-hidden bg-slate-50 p-3 md:p-4 dark:bg-slate-950">
+      <div className="mx-auto flex h-full min-h-0 max-w-[1800px] flex-col gap-4 lg:flex-row">
         <DailyCallMonitoringMiniSidebar activeView={activeView} onChangeView={setActiveView} />
 
-        <section className="min-w-0 flex-1 space-y-4">
-          <header className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Owner Daily Call Monitoring</p>
-            <h2 className="mt-1 flex items-center gap-2 text-lg font-bold text-slate-900 dark:text-white">
-              {activeView === 'master-list' ? (
-                <>
-                  <Table2 className="h-5 w-5 text-blue-600" />
-                  Master List
-                </>
-              ) : (
-                <>
-                  <BarChart3 className="h-5 w-5 text-blue-600" />
-                  Chart
-                </>
-              )}
-            </h2>
-          </header>
+        <section className={`min-h-0 min-w-0 flex-1 space-y-4 ${activeView === 'master-list' ? 'overflow-y-auto' : 'overflow-hidden'}`}>
+          {activeView === 'master-list' && (
+            <header className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Owner Daily Call Monitoring</p>
+              <h2 className="mt-1 flex items-center gap-2 text-lg font-bold text-slate-900 dark:text-white">
+                <Table2 className="h-5 w-5 text-blue-600" />
+                Master List
+              </h2>
+            </header>
+          )}
 
           <LocalErrorBoundary>
             {activeView === 'master-list' ? (

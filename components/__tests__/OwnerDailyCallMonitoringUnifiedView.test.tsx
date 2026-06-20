@@ -16,15 +16,15 @@ describe('OwnerDailyCallMonitoringUnifiedView', () => {
     cleanup();
   });
 
-  it('renders the Master List view by default', () => {
+  it('renders the Chart view by default', () => {
     render(<OwnerDailyCallMonitoringUnifiedView currentUser={null} />);
 
-    expect(screen.getByTestId('master-list-view')).toBeInTheDocument();
-    expect(screen.queryByTestId('chart-view')).not.toBeInTheDocument();
+    expect(screen.getByTestId('chart-view')).toBeInTheDocument();
+    expect(screen.queryByTestId('master-list-view')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /purchase follow-up/i })).not.toBeInTheDocument();
   });
 
-  it('switches to chart view when Chart is clicked', () => {
+  it('keeps the chart view active when Chart is clicked', () => {
     render(<OwnerDailyCallMonitoringUnifiedView currentUser={null} />);
 
     fireEvent.click(screen.getAllByRole('button', { name: /chart/i })[0]);
@@ -36,7 +36,6 @@ describe('OwnerDailyCallMonitoringUnifiedView', () => {
   it('switches back to Master List view', () => {
     render(<OwnerDailyCallMonitoringUnifiedView currentUser={null} />);
 
-    fireEvent.click(screen.getAllByRole('button', { name: /chart/i })[0]);
     fireEvent.click(screen.getAllByRole('button', { name: /master list/i })[0]);
 
     expect(screen.getByTestId('master-list-view')).toBeInTheDocument();

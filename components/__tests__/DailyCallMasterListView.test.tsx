@@ -14,7 +14,7 @@ describe('DailyCallMasterListView', () => {
     vi.clearAllMocks();
   });
 
-  it('groups customers by last purchase age', async () => {
+  it('renders the complete four-category master list dashboard', async () => {
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
       meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 3 },
       items: [
@@ -73,13 +73,17 @@ describe('DailyCallMasterListView', () => {
 
     await waitFor(() => expect(screen.getByText('Warm Follow Up Shop')).toBeInTheDocument());
 
-    expect(screen.getAllByText('2 weeks to 1 month').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('More than 1 month').length).toBeGreaterThan(0);
-    expect(screen.queryByText('Recent purchase')).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Priority List/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Recovery List/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Verified Prospects/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Unverified Prospects/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Customer Case Overview/i)).toBeInTheDocument();
+    expect(screen.getByText(/Incident Report Flow/i)).toBeInTheDocument();
+    expect(screen.getByText(/Quick Summary/i)).toBeInTheDocument();
+    expect(screen.getByText(/Quick Go To/i)).toBeInTheDocument();
+    expect(screen.getByTestId('dashboard-fit-viewport')).toBeInTheDocument();
+    expect(screen.getByText('Recent Buyer Shop')).toBeInTheDocument();
+    expect(screen.getByText('Warm Follow Up Shop')).toBeInTheDocument();
     expect(screen.getByText('Recovery Shop')).toBeInTheDocument();
-    expect(screen.queryByText('Recent Buyer Shop')).not.toBeInTheDocument();
-    expect(screen.getAllByText('High').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Recover').length).toBeGreaterThan(0);
-    expect(screen.queryByText('Monitor')).not.toBeInTheDocument();
   });
 });
