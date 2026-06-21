@@ -196,7 +196,7 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
 
   return (
     <nav className="flex items-center min-w-0 flex-1" aria-label="Topbar Navigation">
-      <div className="2xl:hidden ml-1 mr-2 sm:mr-3">
+      <div className="xl:hidden ml-1 mr-2 sm:mr-3">
         <button
           onClick={() => setIsMobileMenuOpen((prev) => !prev)}
           className="p-2 rounded-md hover:bg-white/10 transition-colors"
@@ -206,7 +206,7 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
         </button>
       </div>
 
-      <ul className="hidden 2xl:flex items-center space-x-3 text-sm font-semibold max-w-full pr-2">
+      <ul className="hidden xl:flex items-center gap-1.5 2xl:gap-3 text-sm font-semibold max-w-full min-w-0 pr-2">
         {filteredMenus.map((menu, index) => {
           const isActive = isMenuActive(menu);
           const isOpen = openMenuId === menu.id;
@@ -247,15 +247,15 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
                   onClick={() => (menu.route ? navigateTo(menu.route) : setOpenMenuId(menu.id))}
                   onKeyDown={(event) => handleTopMenuKeyDown(event, index, menu)}
                   className={`
-                    flex items-center gap-2 px-3 py-2 rounded-md transition-colors
+                    flex items-center gap-1.5 2xl:gap-2 px-2 py-2 2xl:px-3 rounded-md text-[12px] xl:text-[13px] 2xl:text-sm tracking-tight transition-colors whitespace-nowrap
                     ${isActive ? 'bg-white/15 text-white' : 'text-white/80 hover:text-white hover:bg-white/10'}
                   `}
                   aria-expanded={isOpen}
                   aria-haspopup={menu.submenus ? 'true' : undefined}
                 >
-                  <menu.icon className="w-4 h-4" />
+                  <menu.icon className="h-4 w-4 shrink-0" />
                   <span>{menu.label}</span>
-                  {menu.submenus && <ChevronDown className="w-4 h-4" />}
+                  {menu.submenus && <ChevronDown className="h-4 w-4 shrink-0" />}
                 </button>
 
                 {menu.submenus && isOpen && (
@@ -318,7 +318,7 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
       {isMobileMenuOpen && (
         <div
           data-responsive-nav="compact"
-          className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border-t border-slate-200 dark:border-slate-800 shadow-lg 2xl:hidden z-[60] backdrop-blur-sm"
+          className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border-t border-slate-200 dark:border-slate-800 shadow-lg xl:hidden z-[60] backdrop-blur-sm"
         >
           <div className="max-h-[calc(100vh-theme(spacing.20))] overflow-y-auto p-4 space-y-4 scrollbar-thin scroll-smooth">
             {filteredMenus.map((menu) => (

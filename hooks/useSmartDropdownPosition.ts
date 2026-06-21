@@ -60,6 +60,20 @@ export function useSmartDropdownPosition(
 
     const triggerRect = triggerElement.getBoundingClientRect();
     const dropdownRect = dropdownElement.getBoundingClientRect();
+    const positioningParent =
+      (dropdownElement.offsetParent as HTMLElement | null) ||
+      (triggerElement.offsetParent as HTMLElement | null);
+    const parentRect = positioningParent?.getBoundingClientRect() ?? {
+      left: 0,
+      right: window.innerWidth,
+      top: 0,
+      bottom: window.innerHeight,
+      width: window.innerWidth,
+      height: window.innerHeight,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    };
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
 
@@ -91,30 +105,33 @@ export function useSmartDropdownPosition(
         styles.transform = 'translateX(-50%)';
       } else if (centeredRight > viewportWidth - padding) {
         // Would overflow right - align to right edge
-        styles.right = `${Math.max(padding, viewportWidth - triggerRect.right)}px`;
+        const desiredRightEdge = Math.min(triggerRect.right, viewportWidth - padding);
+        styles.right = `${Math.max(0, parentRect.right - desiredRightEdge)}px`;
         styles.transform = 'none';
       } else {
         // Would overflow left - align to left edge
-        styles.left = `${Math.max(padding, triggerRect.left)}px`;
+        const desiredLeftEdge = Math.max(padding, triggerRect.left);
+        styles.left = `${Math.max(0, desiredLeftEdge - parentRect.left)}px`;
         styles.transform = 'none';
       }
     } else if (preferredAlignment === 'right') {
       const rightAlignedLeft = triggerRect.right - dropdownWidth;
       if (rightAlignedLeft >= padding) {
-        styles.right = `${viewportWidth - triggerRect.right}px`;
+        const desiredRightEdge = Math.min(triggerRect.right, viewportWidth - padding);
+        styles.right = `${Math.max(0, parentRect.right - desiredRightEdge)}px`;
         styles.transform = 'none';
       } else {
-        styles.left = `${padding}px`;
+        styles.left = `${Math.max(0, padding - parentRect.left)}px`;
         styles.transform = 'none';
       }
     } else {
       // Left alignment
       const leftAlignedRight = triggerRect.left + dropdownWidth;
       if (leftAlignedRight <= viewportWidth - padding) {
-        styles.left = `${triggerRect.left}px`;
+        styles.left = `${Math.max(0, triggerRect.left - parentRect.left)}px`;
         styles.transform = 'none';
       } else {
-        styles.right = `${padding}px`;
+        styles.right = `${Math.max(0, parentRect.right - (viewportWidth - padding))}px`;
         styles.transform = 'none';
       }
     }
@@ -208,4 +225,3 @@ export function useSmartDropdownPosition(
 
   return positionStyles;
 }
-

@@ -14,7 +14,7 @@ const owner = {
 describe('TopbarNavigation responsive layout', () => {
   afterEach(cleanup);
 
-  it('uses the compact menu until the screen is wide enough for every navigation item', async () => {
+  it('keeps the navigation inline on laptop-width screens and reserves the compact menu for narrower layouts', async () => {
     const user = userEvent.setup();
     render(
       <TopbarNavigation
@@ -25,14 +25,14 @@ describe('TopbarNavigation responsive layout', () => {
     );
 
     const toggle = screen.getByRole('button', { name: 'Toggle navigation' });
-    expect(toggle.parentElement).toHaveClass('2xl:hidden');
+    expect(toggle.parentElement).toHaveClass('xl:hidden');
 
     const desktopList = screen.getByRole('list');
-    expect(desktopList).toHaveClass('hidden', '2xl:flex');
+    expect(desktopList).toHaveClass('hidden', 'xl:flex');
 
     await user.click(toggle);
     const compactMenu = document.querySelector('[data-responsive-nav="compact"]');
-    expect(compactMenu).toHaveClass('2xl:hidden');
+    expect(compactMenu).toHaveClass('xl:hidden');
     expect(within(compactMenu as HTMLElement).getByRole('button', { name: 'HOME' })).toBeVisible();
   });
 });
