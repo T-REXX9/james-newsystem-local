@@ -48,6 +48,8 @@ import {
 } from './callMetricsUtils';
 import {
   createCallLogForDailyCall,
+  claimCustomerCallForDailyCall,
+  releaseCustomerCallForDailyCall,
   createCustomerLogForDailyCall,
   fetchAgentSnapshotForDailyCall,
   fetchContactCustomerLogsForDailyCall,
@@ -580,7 +582,13 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     return () => clearTimeout(handler);
   }, [searchValue]);
 
-  const handleOpenCallContact = useCallback((contact: Contact) => {
+  const handleOpenCallContact = useCallback(async (contact: Contact) => {
+    try {
+      await claimCustomerCallForDailyCall(contact.id);
+    } catch (error) {
+      addToast({ type: 'error', message: error instanceof Error ? error.message : 'This customer is unavailable for calling.' });
+      return;
+    }
     setCallContact(contact);
     setCallContactLoading(true);
     setCallReport('');
@@ -596,6 +604,27 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       })
       .finally(() => setCallContactLoading(false));
   }, [addToast]);
+
+  const handleCloseCallContact = useCallback(() => {
+    const contactId = callContact?.id;
+    setCallContact(null);
+    setCallReport('');
+    if (contactId) {
+      void releaseCustomerCallForDailyCall(contactId).catch((error) => {
+        console.error('Error releasing customer call claim:', error);
+      });
+    }
+  }, [callContact?.id]);
+
+  useEffect(() => {
+    if (!callContact) return;
+    const heartbeat = window.setInterval(() => {
+      void claimCustomerCallForDailyCall(callContact.id).catch((error) => {
+        console.error('Error refreshing customer call claim:', error);
+      });
+    }, 5 * 60 * 1000);
+    return () => window.clearInterval(heartbeat);
+  }, [callContact]);
 
   const handleSubmitCallReport = async () => {
     if (!callContact || !callReport.trim()) return;
@@ -1925,7 +1954,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               <button
                 type="button"
                 aria-label="Close contact window"
-                onClick={() => setCallContact(null)}
+                onClick={handleCloseCallContact}
                 className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-white"
               >
                 <X className="h-5 w-5" />
@@ -1959,7 +1988,12 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               </section>
 
               <section className="space-y-3 rounded-xl border border-blue-200 bg-blue-50/50 p-4 dark:border-blue-900 dark:bg-blue-950/20">
-                <h4 className="text-xs font-bold uppercase tracking-wide text-blue-700 dark:text-blue-300">Conversation report</h4>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wide text-blue-700 dark:text-blue-300">Conversation report</h4>
+                  <span className="rounded-full bg-blue-100 px-2 py-1 text-[10px] font-semibold text-blue-700 dark:bg-blue-900/60 dark:text-blue-200">
+                    Reporting as {agentDisplayName}
+                  </span>
+                </div>
                 <label className="block space-y-1">
                   <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Outcome</span>
                   <select
@@ -1996,7 +2030,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setCallContact(null)}
+                  onClick={handleCloseCallContact}
                   className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
                 >
                   Close

@@ -601,6 +601,7 @@ export interface DailyActivityRecord {
   activity_type: 'call' | 'text' | 'order' | 'none';
   activity_count: number;
   notes?: string;
+  agent_name?: string;
 }
 
 export interface LBCRTORecord {

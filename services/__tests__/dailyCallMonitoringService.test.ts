@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createCallLogForDailyCall,
+  claimCustomerCallForDailyCall,
+  releaseCustomerCallForDailyCall,
   createCustomerLogForDailyCall,
   fetchAgentSnapshotForDailyCall,
   fetchContactCustomerLogsForDailyCall,
@@ -194,6 +196,42 @@ describe('dailyCallMonitoringService', () => {
     expect(fetchSpy.mock.calls[0][0]).toContain('/daily-call-monitoring/call-logs');
     expect(fetchSpy.mock.calls[0][1]).toMatchObject({ method: 'POST' });
     expect(result).toMatchObject({ id: 'log-9', contact_id: '1', notes: 'hello' });
+  });
+
+  it('claims a customer with the authenticated account before a call starts', async () => {
+    window.localStorage.setItem('local_api_auth_session', JSON.stringify({
+      token: 'secure-token',
+      context: { main_userid: 1, user: { id: 63 } },
+      userProfile: { id: '63', full_name: 'Jane Doe', main_userid: 1 },
+    }));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { contact_id: '1', status: 'in_progress', agent_user_id: '63', agent_name: 'Jane Doe' } }),
+    } as Response);
+
+    const result = await claimCustomerCallForDailyCall('1');
+
+    expect(fetchSpy.mock.calls[0][0]).toContain('/daily-call-monitoring/call-claims');
+    expect(fetchSpy.mock.calls[0][1]).toMatchObject({ method: 'POST' });
+    expect(new Headers(fetchSpy.mock.calls[0][1]?.headers).get('Authorization')).toBe('Bearer secure-token');
+    expect(result).toMatchObject({ contact_id: '1', status: 'in_progress', agent_name: 'Jane Doe' });
+  });
+
+  it('releases an unfinished customer claim when the contact window closes', async () => {
+    window.localStorage.setItem('local_api_auth_session', JSON.stringify({
+      token: 'secure-token',
+      context: { main_userid: 1, user: { id: 63 } },
+      userProfile: { id: '63', full_name: 'Jane Doe', main_userid: 1 },
+    }));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { released: true } }),
+    } as Response);
+
+    await releaseCustomerCallForDailyCall('1');
+
+    expect(fetchSpy.mock.calls[0][0]).toContain('/daily-call-monitoring/call-claims/1/release');
+    expect(fetchSpy.mock.calls[0][1]).toMatchObject({ method: 'POST' });
   });
 
   it('fetchContactCustomerLogsForDailyCall returns legacy customer log entries', async () => {

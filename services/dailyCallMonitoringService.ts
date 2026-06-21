@@ -100,11 +100,50 @@ const resolveMainId = (): number => {
 };
 
 const requestJson = async (url: string, init?: RequestInit): Promise<any> => {
-  const response = await fetch(url, init);
+  const session = getLocalAuthSession();
+  const headers = new Headers(init?.headers);
+  if (session?.token) headers.set('Authorization', `Bearer ${session.token}`);
+  const response = await fetch(url, { ...init, headers });
   if (!response.ok) {
-    throw new Error(`API request failed (${response.status})`);
+    let message = `API request failed (${response.status})`;
+    try {
+      const payload = await response.json();
+      message = String(payload?.error || payload?.message || message);
+    } catch {
+      // Keep the status-based fallback.
+    }
+    throw new Error(message);
   }
   return response.json();
+};
+
+export interface DailyCallClaim {
+  contact_id: string;
+  status: 'in_progress' | 'completed';
+  agent_user_id: string;
+  agent_name: string;
+  expires_at?: string;
+}
+
+export const claimCustomerCallForDailyCall = async (contactId: string): Promise<DailyCallClaim> => {
+  const session = getLocalAuthSession();
+  const payload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/call-claims`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      main_id: resolveMainId(),
+      contact_id: contactId,
+    }),
+  });
+  return payload?.data as DailyCallClaim;
+};
+
+export const releaseCustomerCallForDailyCall = async (contactId: string): Promise<void> => {
+  await requestJson(`${API_BASE_URL}/daily-call-monitoring/call-claims/${encodeURIComponent(contactId)}/release`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ main_id: resolveMainId() }),
+  });
 };
 
 const cleanNullableText = (value: unknown, fallback = ''): string => {
@@ -230,7 +269,9 @@ const buildActivityByDay = (logs: CallLogRow[]): DailyActivityRecord[] => {
     const date = new Date(log.occurred_at);
     if (Number.isNaN(date.getTime())) return;
 
-    const key = date.toISOString().slice(0, 10);
+    const dateKey = date.toISOString().slice(0, 10);
+    const isSalesAgentReport = log.notes?.trim().startsWith('[Sales Agent Report]') ?? false;
+    const key = isSalesAgentReport ? `${dateKey}-report-${log.id}` : dateKey;
     const existing = map.get(key);
     const nextType = log.channel === 'text' ? 'text' : 'call';
 
@@ -238,10 +279,11 @@ const buildActivityByDay = (logs: CallLogRow[]): DailyActivityRecord[] => {
       map.set(key, {
         id: `${log.contact_id}-${key}`,
         contact_id: log.contact_id,
-        activity_date: key,
+        activity_date: dateKey,
         activity_type: nextType,
         activity_count: 1,
         notes: log.notes,
+        agent_name: log.agent_name,
       });
       return;
     }
@@ -251,6 +293,7 @@ const buildActivityByDay = (logs: CallLogRow[]): DailyActivityRecord[] => {
       activity_count: existing.activity_count + 1,
       activity_type: existing.activity_type === 'call' || nextType === 'call' ? 'call' : 'text',
       notes: existing.notes || log.notes,
+      agent_name: existing.agent_name || log.agent_name,
     });
   });
 

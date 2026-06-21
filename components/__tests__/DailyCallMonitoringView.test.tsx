@@ -9,6 +9,8 @@ const addToastMock = vi.fn();
 const fetchAgentSnapshotForDailyCallMock = vi.fn();
 const fetchContactCustomerLogsForDailyCallMock = vi.fn();
 const createCallLogForDailyCallMock = vi.fn();
+const claimCustomerCallForDailyCallMock = vi.fn();
+const releaseCustomerCallForDailyCallMock = vi.fn();
 const createCustomerLogForDailyCallMock = vi.fn();
 const subscribeToDailyCallMonitoringUpdatesMock = vi.fn(() => () => {});
 const createContactMock = vi.fn();
@@ -24,6 +26,8 @@ vi.mock('../../services/dailyCallMonitoringService', () => ({
   fetchAgentSnapshotForDailyCall: (...args: unknown[]) => fetchAgentSnapshotForDailyCallMock(...args),
   fetchContactCustomerLogsForDailyCall: (...args: unknown[]) => fetchContactCustomerLogsForDailyCallMock(...args),
   createCallLogForDailyCall: (...args: unknown[]) => createCallLogForDailyCallMock(...args),
+  claimCustomerCallForDailyCall: (...args: unknown[]) => claimCustomerCallForDailyCallMock(...args),
+  releaseCustomerCallForDailyCall: (...args: unknown[]) => releaseCustomerCallForDailyCallMock(...args),
   createCustomerLogForDailyCall: (...args: unknown[]) => createCustomerLogForDailyCallMock(...args),
   subscribeToDailyCallMonitoringUpdates: (...args: unknown[]) => subscribeToDailyCallMonitoringUpdatesMock(...args),
 }));
@@ -111,6 +115,8 @@ describe('DailyCallMonitoringView communication actions', () => {
     fetchAgentSnapshotForDailyCallMock.mockReset();
     fetchContactCustomerLogsForDailyCallMock.mockReset();
     createCallLogForDailyCallMock.mockReset();
+    claimCustomerCallForDailyCallMock.mockReset();
+    releaseCustomerCallForDailyCallMock.mockReset();
     createCustomerLogForDailyCallMock.mockReset();
     subscribeToDailyCallMonitoringUpdatesMock.mockClear();
     createContactMock.mockReset();
@@ -135,6 +141,10 @@ describe('DailyCallMonitoringView communication actions', () => {
         email: 'juan@example.com',
       }],
     });
+    claimCustomerCallForDailyCallMock.mockResolvedValue({
+      contact_id: 'contact-1', status: 'in_progress', agent_user_id: 'agent-1', agent_name: 'Jane Doe',
+    });
+    releaseCustomerCallForDailyCallMock.mockResolvedValue(undefined);
 
     if (!(globalThis as any).ResizeObserver) {
       (globalThis as any).ResizeObserver = class {
@@ -240,11 +250,13 @@ describe('DailyCallMonitoringView communication actions', () => {
     const callButton = await screen.findByRole('button', { name: 'Call Test Shop' });
     await user.click(callButton);
 
+    expect(claimCustomerCallForDailyCallMock).toHaveBeenCalledWith('contact-1');
     expect(await screen.findByRole('dialog', { name: 'Contact Test Shop' })).toBeInTheDocument();
     expect(screen.getByText('Juan Dela Cruz')).toBeInTheDocument();
     expect(screen.getByText('Purchasing Manager')).toBeInTheDocument();
     expect(screen.getByText('09987654321')).toBeInTheDocument();
     expect(screen.getByText('juan@example.com')).toBeInTheDocument();
+    expect(screen.getByText('Reporting as Jane Doe')).toBeInTheDocument();
     expect(createCallLogForDailyCallMock).not.toHaveBeenCalled();
     expect(openSpy).not.toHaveBeenCalled();
 
@@ -269,6 +281,30 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(openSpy).not.toHaveBeenCalled();
     expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
     expect(callButton).toBeInTheDocument();
+  });
+
+  it('blocks the contact window when another agent already claimed the customer', async () => {
+    claimCustomerCallForDailyCallMock.mockRejectedValue(new Error('Test Shop is already being called by John Smith.'));
+    const user = userEvent.setup();
+
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+    await user.click(await screen.findByRole('button', { name: 'Call Test Shop' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Contact Test Shop' })).not.toBeInTheDocument();
+    expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'error',
+      message: 'Test Shop is already being called by John Smith.',
+    }));
+  });
+
+  it('releases the claim when the agent closes without submitting a report', async () => {
+    const user = userEvent.setup();
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Call Test Shop' }));
+    await user.click(await screen.findByRole('button', { name: 'Close contact window' }));
+
+    await waitFor(() => expect(releaseCustomerCallForDailyCallMock).toHaveBeenCalledWith('contact-1'));
   });
 
   it('logs an outbound SMS and opens the messaging app with the composed body', async () => {

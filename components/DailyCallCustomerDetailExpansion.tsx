@@ -86,8 +86,11 @@ const formatDate = (value?: string) => {
 
 const vipBadgeIconUrl = new URL('../vip-svgrepo-com.svg', import.meta.url).href;
 
+const isSalesAgentReport = (activity: DailyActivityRecord) =>
+  activity.activity_type === 'call' && activity.notes?.startsWith('[Sales Agent Report]');
+
 const activityLabel = (activity: DailyActivityRecord) => {
-  if (activity.activity_type === 'call' && activity.notes?.startsWith('[Sales Agent Report]')) return 'Sales agent call report';
+  if (isSalesAgentReport(activity)) return 'Sales agent call report';
   if (activity.activity_type === 'call') return 'Customer call';
   if (activity.activity_type === 'text') return 'Customer message';
   if (activity.activity_type === 'order') return 'Customer order';
@@ -127,6 +130,9 @@ const ActivityList: React.FC<{
                 <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-700">Recorded</span>
               </div>
               <p className="mt-1 text-xs font-bold text-slate-900">{activityLabel(activity)}</p>
+              {isSalesAgentReport(activity) && activity.agent_name && (
+                <p className="mt-0.5 text-[10px] font-semibold text-blue-700">Contacted by {activity.agent_name}</p>
+              )}
               <p className="mt-0.5 line-clamp-2 text-[11px] text-slate-600">
                 {activityNotes(activity)}
               </p>

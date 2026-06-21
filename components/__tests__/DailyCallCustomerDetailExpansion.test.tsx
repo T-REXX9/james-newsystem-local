@@ -120,6 +120,7 @@ describe('DailyCallCustomerDetailExpansion', () => {
             activity_type: 'call',
             activity_count: 1,
             notes: '[Sales Agent Report] Customer requested updated quotation.',
+            agent_name: 'Jane Doe',
           }],
         }}
         currentUser={{ id: 'master-1', role: 'Master User', full_name: 'Master User' } as any}
@@ -129,5 +130,6 @@ describe('DailyCallCustomerDetailExpansion', () => {
     await user.click(screen.getByRole('tab', { name: 'Human Agent Activity' }));
     expect(screen.getByText('Sales agent call report')).toBeInTheDocument();
     expect(screen.getByText('Customer requested updated quotation.')).toBeInTheDocument();
+    expect(screen.getByText('Contacted by Jane Doe')).toBeInTheDocument();
   });
 });
