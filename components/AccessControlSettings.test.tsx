@@ -3,7 +3,7 @@ import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import AccessControlSettings from './AccessControlSettings';
-import { createStaffAccountLocal, fetchProfilesLocal } from '../services/accessLocalApiService';
+import { createStaffAccountLocal, fetchProfilesLocal, updateProfileLocal } from '../services/accessLocalApiService';
 import { fetchAccessGroups } from '../services/accessGroupApiService';
 import { fetchRoles } from '../services/staffLocalApiService';
 import { ROLE_DEFAULT_ACCESS_RIGHTS } from '../constants';
@@ -29,6 +29,7 @@ vi.mock('../services/staffLocalApiService', () => ({
 
 const fetchProfilesMock = fetchProfilesLocal as unknown as ReturnType<typeof vi.fn>;
 const createStaffAccountMock = createStaffAccountLocal as unknown as ReturnType<typeof vi.fn>;
+const updateProfileMock = updateProfileLocal as unknown as ReturnType<typeof vi.fn>;
 const fetchAccessGroupsMock = fetchAccessGroups as unknown as ReturnType<typeof vi.fn>;
 const fetchRolesMock = fetchRoles as unknown as ReturnType<typeof vi.fn>;
 
@@ -56,6 +57,48 @@ afterEach(() => {
 });
 
 describe('AccessControlSettings - create staff account', () => {
+  it('saves edited staff permissions through the profile update API', async () => {
+    const user = userEvent.setup();
+    fetchProfilesMock.mockResolvedValue({
+      items: [
+        {
+          id: '2',
+          full_name: 'melson',
+          email: 'melson@example.com',
+          role: 'Sales Agent',
+          access_rights: ['home'],
+          access_override: false,
+          group_id: '9',
+        },
+      ],
+      meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
+    });
+    updateProfileMock.mockResolvedValue({
+      id: '2',
+      full_name: 'melson',
+      email: 'melson@example.com',
+      role: 'Sales Agent',
+      access_rights: ['home', 'warehouse-inventory-product-database'],
+      access_override: true,
+      group_id: '9',
+    });
+
+    renderWithProviders(<AccessControlSettings />);
+
+    const permissionCheckboxes = await screen.findAllByRole('checkbox');
+    const productDatabaseCheckbox = permissionCheckboxes[1];
+    await user.click(productDatabaseCheckbox);
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(updateProfileMock).toHaveBeenCalledWith('2', {
+        group_id: '9',
+        access_rights: ['home', 'warehouse-inventory-product-database'],
+        access_override: true,
+      })
+    );
+  });
+
   it('creates a staff account and refreshes profiles on success', async () => {
     const user = userEvent.setup();
     const refreshedProfiles = [{ id: '1', full_name: 'Owner', email: 'owner@example.com', role: 'Owner', access_rights: ['*'] }];
