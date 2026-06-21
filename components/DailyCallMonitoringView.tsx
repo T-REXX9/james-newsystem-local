@@ -1586,8 +1586,13 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         </div>
       </section>
       {detailsPanelOpen && selectedClient && (
-        <div className="fixed inset-y-0 right-0 w-[35%] bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col z-50 animate-in slide-in-from-right-10 duration-300">
-          <div className="flex-shrink-0 p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+        <div
+          className="fixed inset-x-0 bottom-0 top-auto z-50 flex max-h-[calc(100dvh-1rem)] flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl animate-in slide-in-from-bottom-10 duration-300 dark:border-slate-800 dark:bg-slate-900 sm:inset-y-0 sm:left-auto sm:right-0 sm:h-full sm:max-h-none sm:w-full sm:max-w-2xl sm:rounded-none sm:rounded-l-2xl sm:border-l sm:border-t-0 sm:slide-in-from-right-10"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${selectedClient.company} details`}
+        >
+          <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 p-4 dark:border-slate-800">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
                 <Phone className="w-5 h-5 text-brand-blue" />
@@ -1621,7 +1626,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               </button>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
             <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
               <span className={`px-2 py-0.5 rounded-full font-semibold ${statusBadgeClasses(selectedClient.status)}`}>
                 {selectedClient.status}
@@ -1932,14 +1937,14 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
 
       {callContact && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-2 backdrop-blur-sm sm:p-4">
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="call-contact-title"
-            className="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900"
+            className="flex max-h-[calc(100dvh-1rem)] w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900 sm:max-h-[calc(100dvh-2rem)] sm:max-w-4xl"
           >
-            <div className="flex items-center justify-between border-b border-slate-200 p-5 dark:border-slate-800">
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-200 p-3 dark:border-slate-800 sm:p-5">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-brand-blue dark:bg-blue-950/40">
                   <Phone className="h-5 w-5" />
@@ -1961,7 +1966,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               </button>
             </div>
 
-            <div className="space-y-4 p-5">
+            <div data-testid="call-contact-scroll-area" className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3 sm:p-5">
+              <div className="grid gap-4 md:grid-cols-2">
               <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
                 <h4 className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">Customer contact</h4>
                 <div className="space-y-2 text-sm text-slate-700 dark:text-slate-200">
@@ -1986,6 +1992,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                   <p className="text-sm text-slate-500">No contact person is recorded for this customer.</p>
                 )}
               </section>
+              </div>
 
               <section className="space-y-3 rounded-xl border border-blue-200 bg-blue-50/50 p-4 dark:border-blue-900 dark:bg-blue-950/20">
                 <div className="flex flex-wrap items-center justify-between gap-2">

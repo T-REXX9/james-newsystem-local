@@ -252,6 +252,9 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     expect(claimCustomerCallForDailyCallMock).toHaveBeenCalledWith('contact-1');
     expect(await screen.findByRole('dialog', { name: 'Contact Test Shop' })).toBeInTheDocument();
+    const responsiveDialog = screen.getByRole('dialog', { name: 'Contact Test Shop' });
+    expect(responsiveDialog).toHaveClass('max-h-[calc(100dvh-1rem)]', 'sm:max-h-[calc(100dvh-2rem)]', 'sm:max-w-4xl');
+    expect(screen.getByTestId('call-contact-scroll-area')).toHaveClass('min-h-0', 'overflow-y-auto');
     expect(screen.getByText('Juan Dela Cruz')).toBeInTheDocument();
     expect(screen.getByText('Purchasing Manager')).toBeInTheDocument();
     expect(screen.getByText('09987654321')).toBeInTheDocument();
@@ -305,6 +308,37 @@ describe('DailyCallMonitoringView communication actions', () => {
     await user.click(await screen.findByRole('button', { name: 'Close contact window' }));
 
     await waitFor(() => expect(releaseCustomerCallForDailyCallMock).toHaveBeenCalledWith('contact-1'));
+  });
+
+  it('renders the customer details sheet responsively across screen sizes', async () => {
+    const user = userEvent.setup();
+
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    await user.click(await screen.findByText('Test Shop'));
+
+    const closeButton = await screen.findByRole('button', { name: 'Close details panel' });
+    const responsiveSheet = closeButton.closest('div.fixed');
+
+    expect(responsiveSheet).not.toBeNull();
+    expect(responsiveSheet).toHaveClass(
+      'inset-x-0',
+      'bottom-0',
+      'top-auto',
+      'max-h-[calc(100dvh-1rem)]',
+      'sm:inset-y-0',
+      'sm:left-auto',
+      'sm:h-full',
+      'sm:max-h-none',
+      'sm:w-full',
+      'sm:max-w-2xl'
+    );
+
+    const customerLogHeading = screen.getByText('Customer Log');
+    const scrollArea = customerLogHeading.closest('div.flex-1');
+
+    expect(scrollArea).not.toBeNull();
+    expect(scrollArea).toHaveClass('min-h-0', 'overflow-y-auto');
   });
 
   it('logs an outbound SMS and opens the messaging app with the composed body', async () => {
