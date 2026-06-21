@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   Bot,
@@ -18,12 +19,14 @@ import {
   UserRoundCheck,
   Users,
   Wrench,
+  X,
   XCircle,
 } from 'lucide-react';
 import { useDebounce } from '../hooks/useDebounce';
-import { fetchDailyCallMasterList } from '../services/dailyCallMonitoringService';
-import { DailyCallMasterCustomerRow, DailyCallMasterListMeta } from '../types';
+import { fetchCustomersForDailyCall, fetchDailyCallMasterList } from '../services/dailyCallMonitoringService';
+import { DailyCallCustomerRow, DailyCallMasterCustomerRow, DailyCallMasterListMeta } from '../types';
 import DashboardViewportFit from './DashboardViewportFit';
+import DailyCallCustomerDetailModal from './DailyCallCustomerDetailModal';
 
 const fromDate = '2025-10-01';
 const monthlyTarget = 3_000_000;
@@ -112,13 +115,73 @@ const sumBy = (rows: DailyCallMasterCustomerRow[], field: 'totalSales' | 'curren
 
 const ageLabel = (days: number) => days === 1 ? '1 day ago' : `${days} days ago`;
 
+const caseOverviewItems = [
+  { label: 'Inquiry & Orders', Icon: Users, open: 12, pending: 6, tone: 'text-blue-700 border-blue-200 bg-blue-50' },
+  { label: 'Delivery Issues', Icon: Truck, open: 3, pending: 1, tone: 'text-orange-600 border-orange-200 bg-orange-50' },
+  { label: 'Quality Issues', Icon: Wrench, open: 5, pending: 2, tone: 'text-rose-600 border-rose-200 bg-rose-50' },
+  { label: 'Incident Reports', Icon: ShieldAlert, open: 4, pending: 2, tone: 'text-violet-700 border-violet-200 bg-violet-50' },
+  { label: 'Sales Returns', Icon: RotateCcw, open: 3, pending: 2, tone: 'text-emerald-700 border-emerald-200 bg-emerald-50' },
+] as const;
+
+type CaseOverviewItem = typeof caseOverviewItems[number];
+
+const masterRowFallback = (row: DailyCallMasterCustomerRow): DailyCallCustomerRow => ({
+  id: row.id,
+  source: 'Master List',
+  assignedTo: row.assignedTo,
+  clientSince: '—',
+  province: row.province,
+  city: row.city,
+  shopName: row.shopName,
+  contactNumber: row.contactNumber,
+  codeDate: '—',
+  ishinomotoDealerSince: '—',
+  ishinomotoSignageSince: '—',
+  quota: 0,
+  modeOfPayment: '—',
+  courier: [row.city, row.province].filter((value) => value && value !== '—').join(', ') || '—',
+  status: (row.purchaseAgeGroup === 'recent' ? 'Active' : 'Inactive') as DailyCallCustomerRow['status'],
+  statusDate: row.lastPurchaseDate,
+  outstandingBalance: 0,
+  averageMonthlyOrder: row.purchaseCount ? row.totalSales / row.purchaseCount : 0,
+  monthlyOrder: row.currentMonthSales,
+  weeklyRangeTotals: [],
+  dailyActivity: [],
+});
+
 const DailyCallMasterListView: React.FC = () => {
   const [rows, setRows] = useState<DailyCallMasterCustomerRow[]>([]);
   const [meta, setMeta] = useState<DailyCallMasterListMeta>({ fromDate, toDate: '', count: 0 });
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const dashboardRef = useRef<HTMLDivElement>(null);
+  const categoryTableRefs = useRef<Partial<Record<CategoryId, HTMLElement>>>({});
+  const fullCustomerRowsRef = useRef<DailyCallCustomerRow[] | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<DailyCallCustomerRow | null>(null);
+  const [loadingCustomerId, setLoadingCustomerId] = useState<string | null>(null);
+  const [selectedCase, setSelectedCase] = useState<CaseOverviewItem | null>(null);
   const debouncedSearch = useDebounce(search, 400);
+
+  const scrollTo = useCallback((target: HTMLElement | null | undefined) => {
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    target.focus({ preventScroll: true });
+  }, []);
+
+  const openCustomerDetails = useCallback(async (row: DailyCallMasterCustomerRow) => {
+    setLoadingCustomerId(row.id);
+    try {
+      if (!fullCustomerRowsRef.current) {
+        fullCustomerRowsRef.current = await fetchCustomersForDailyCall({});
+      }
+      setSelectedCustomer(
+        fullCustomerRowsRef.current.find((customer) => customer.id === row.id) || masterRowFallback(row)
+      );
+    } finally {
+      setLoadingCustomerId(null);
+    }
+  }, []);
 
   const loadRows = useCallback(async (withLoading = true) => {
     if (withLoading) setLoading(true);
@@ -171,7 +234,12 @@ const DailyCallMasterListView: React.FC = () => {
 
   return (
     <DashboardViewportFit revision={rows.length}>
-    <div className="min-w-[1180px] space-y-4 bg-white text-[#0f1f46]" data-testid="master-list-dashboard">
+    <div
+      ref={dashboardRef}
+      tabIndex={-1}
+      className="min-w-[1180px] space-y-4 bg-white text-[#0f1f46] outline-none"
+      data-testid="master-list-dashboard"
+    >
       <header className="flex items-center justify-between gap-4">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Owner Daily Call Monitoring</p>
@@ -236,7 +304,15 @@ const DailyCallMasterListView: React.FC = () => {
 
       <section className="grid grid-cols-4 gap-3" aria-label="Customer category tables">
         {categoryData.map((category) => (
-          <article key={category.id} className="flex min-h-[370px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <article
+            key={category.id}
+            ref={(element) => {
+              if (element) categoryTableRefs.current[category.id] = element;
+            }}
+            tabIndex={-1}
+            data-testid={`category-table-${category.id}`}
+            className="flex min-h-[370px] scroll-mt-4 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          >
             <div className="flex items-center justify-between border-b border-slate-200 px-3 py-3">
               <h3 className={`text-sm font-bold uppercase ${category.accent}`}>
                 {category.label} <span className="text-[9px] normal-case">({category.note})</span>
@@ -260,7 +336,16 @@ const DailyCallMasterListView: React.FC = () => {
                     <tr key={row.id} className="border-t border-slate-100 align-top">
                       <td className="px-2 py-2.5 font-bold">{index + 1}</td>
                       <td className="px-1 py-2.5">
-                        <p className="line-clamp-2 font-bold leading-tight">{row.shopName}</p>
+                        <button
+                          type="button"
+                          onClick={() => openCustomerDetails(row)}
+                          disabled={loadingCustomerId === row.id}
+                          aria-label={`View details for ${row.shopName}`}
+                          className="line-clamp-2 text-left font-bold leading-tight text-blue-950 underline-offset-2 hover:text-blue-700 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-60"
+                        >
+                          {loadingCustomerId === row.id && <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />}
+                          {row.shopName}
+                        </button>
                         <p className="mt-1 truncate text-[8px] text-slate-500">{row.contactNumber}</p>
                       </td>
                       <td className="px-1 py-2.5">
@@ -295,18 +380,19 @@ const DailyCallMasterListView: React.FC = () => {
         <div className="border-r border-slate-200 p-4">
           <h3 className="text-sm font-bold uppercase">Customer Case Overview <span className="text-xs font-normal normal-case">(This Month)</span></h3>
           <div className="mt-3 grid grid-cols-5 gap-2">
-            {[
-              ['Inquiry & Orders', Users, 12, 6, 'text-blue-700 border-blue-200 bg-blue-50'],
-              ['Delivery Issues', Truck, 3, 1, 'text-orange-600 border-orange-200 bg-orange-50'],
-              ['Quality Issues', Wrench, 5, 2, 'text-rose-600 border-rose-200 bg-rose-50'],
-              ['Incident Reports', ShieldAlert, 4, 2, 'text-violet-700 border-violet-200 bg-violet-50'],
-              ['Sales Returns', RotateCcw, 3, 2, 'text-emerald-700 border-emerald-200 bg-emerald-50'],
-            ].map(([label, Icon, open, pending, tone]) => (
-              <div key={String(label)} className={`rounded-lg border p-2 text-center ${tone}`}>
-                {React.createElement(Icon as React.ComponentType<{ className?: string }>, { className: 'mx-auto h-5 w-5' })}
-                <p className="mt-2 min-h-8 text-[9px] font-bold uppercase">{String(label)}</p>
-                <div className="mt-2 flex justify-around text-[9px]"><span>Open<br/><b className="text-base">{String(open)}</b></span><span>Pending<br/><b className="text-base">{String(pending)}</b></span></div>
-                <button type="button" className="mt-2 text-[9px] font-bold text-blue-700">View Details</button>
+            {caseOverviewItems.map((item) => (
+              <div key={item.label} className={`rounded-lg border p-2 text-center ${item.tone}`}>
+                <item.Icon className="mx-auto h-5 w-5" />
+                <p className="mt-2 min-h-8 text-[9px] font-bold uppercase">{item.label}</p>
+                <div className="mt-2 flex justify-around text-[9px]"><span>Open<br/><b className="text-base">{item.open}</b></span><span>Pending<br/><b className="text-base">{item.pending}</b></span></div>
+                <button
+                  type="button"
+                  aria-label={`View ${item.label} details`}
+                  onClick={() => setSelectedCase(item)}
+                  className="mt-2 text-[9px] font-bold text-blue-700 hover:underline"
+                >
+                  View Details
+                </button>
               </div>
             ))}
           </div>
@@ -359,16 +445,74 @@ const DailyCallMasterListView: React.FC = () => {
       <nav className="flex items-center gap-3 rounded-lg bg-slate-50 px-5 py-3 text-xs" aria-label="Quick Go To">
         <strong className="uppercase">Quick Go To:</strong>
         {categoryData.map((category) => (
-          <button key={category.id} type="button" className={`rounded-md border ${category.border} ${category.softBg} px-5 py-2 font-bold ${category.accent}`}>
+          <button
+            key={category.id}
+            type="button"
+            onClick={() => scrollTo(categoryTableRefs.current[category.id])}
+            className={`rounded-md border ${category.border} ${category.softBg} px-5 py-2 font-bold ${category.accent}`}
+          >
             {category.label} ({category.rows.length})
           </button>
         ))}
-        <button type="button" className="rounded-md border border-slate-200 bg-white px-5 py-2 font-bold">All Customers ({meta.count || rows.length})</button>
+        <button
+          type="button"
+          onClick={() => scrollTo(dashboardRef.current)}
+          className="rounded-md border border-slate-200 bg-white px-5 py-2 font-bold"
+        >
+          All Customers ({meta.count || rows.length})
+        </button>
       </nav>
 
       <footer className="flex items-center justify-between px-2 pb-2 text-[10px] text-slate-500">
         <span>© 2026 TND-OPC. All rights reserved.</span><span>Version 1.0.0</span>
       </footer>
+
+      <DailyCallCustomerDetailModal
+        isOpen={Boolean(selectedCustomer)}
+        customer={selectedCustomer}
+        currentUser={null}
+        onClose={() => setSelectedCustomer(null)}
+      />
+
+      {selectedCase && createPortal((
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/55 p-4 backdrop-blur-sm" onClick={() => setSelectedCase(null)}>
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${selectedCase.label} Details`}
+            className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 text-[#0f1f46] shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Customer Case Overview</p>
+                <h2 className="mt-1 text-xl font-bold">{selectedCase.label} Details</h2>
+              </div>
+              <button type="button" aria-label="Close case details" onClick={() => setSelectedCase(null)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-4">
+              <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                <p className="text-xs font-bold uppercase text-blue-700">Open</p>
+                <p className="mt-1 text-3xl font-bold text-blue-950">{selectedCase.open}</p>
+                <p className="mt-1 text-sm text-slate-600">{selectedCase.open} open cases</p>
+              </div>
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <p className="text-xs font-bold uppercase text-amber-700">Pending</p>
+                <p className="mt-1 text-3xl font-bold text-amber-950">{selectedCase.pending}</p>
+                <p className="mt-1 text-sm text-slate-600">{selectedCase.pending} pending cases</p>
+              </div>
+            </div>
+            <p className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+              This summary covers the current month. Open and pending records are grouped under {selectedCase.label.toLowerCase()}.
+            </p>
+            <div className="mt-5 flex justify-end">
+              <button type="button" onClick={() => setSelectedCase(null)} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white hover:bg-blue-800">Close</button>
+            </div>
+          </section>
+        </div>
+      ), document.body)}
     </div>
     </DashboardViewportFit>
   );

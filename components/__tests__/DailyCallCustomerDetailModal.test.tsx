@@ -1,6 +1,6 @@
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
 
 import DailyCallCustomerDetailModal from '../DailyCallCustomerDetailModal';
 
@@ -36,6 +36,34 @@ const baseCustomer = {
 } as any;
 
 describe('DailyCallCustomerDetailModal', () => {
+  afterEach(cleanup);
+
+  it('renders at the document level so dashboard scaling cannot shrink the popup', () => {
+    render(
+      <DailyCallCustomerDetailModal
+        isOpen
+        customer={baseCustomer}
+        currentUser={null}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.getByRole('dialog').parentElement?.parentElement).toBe(document.body);
+  });
+
+  it('renders above the global navigation layer', () => {
+    render(
+      <DailyCallCustomerDetailModal
+        isOpen
+        customer={baseCustomer}
+        currentUser={null}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.getByTestId('customer-detail-backdrop')).toHaveClass('z-[2000]');
+  });
+
   it('shows a VIP badge beside the customer name for gold dealers', () => {
     render(
       <DailyCallCustomerDetailModal

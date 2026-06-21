@@ -12,6 +12,7 @@ const createCallLogForDailyCallMock = vi.fn();
 const createCustomerLogForDailyCallMock = vi.fn();
 const subscribeToDailyCallMonitoringUpdatesMock = vi.fn(() => () => {});
 const createContactMock = vi.fn();
+const fetchContactByIdMock = vi.fn();
 
 vi.mock('../ToastProvider', () => ({
   useToast: () => ({
@@ -29,6 +30,7 @@ vi.mock('../../services/dailyCallMonitoringService', () => ({
 
 vi.mock('../../services/customerDatabaseLocalApiService', () => ({
   createContact: (...args: unknown[]) => createContactMock(...args),
+  fetchContactById: (...args: unknown[]) => fetchContactByIdMock(...args),
 }));
 
 vi.mock('../CustomLoadingSpinner', () => ({
@@ -112,9 +114,27 @@ describe('DailyCallMonitoringView communication actions', () => {
     createCustomerLogForDailyCallMock.mockReset();
     subscribeToDailyCallMonitoringUpdatesMock.mockClear();
     createContactMock.mockReset();
+    fetchContactByIdMock.mockReset();
 
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue(baseSnapshot);
     fetchContactCustomerLogsForDailyCallMock.mockResolvedValue([]);
+    fetchContactByIdMock.mockResolvedValue({
+      id: 'contact-1',
+      company: 'Test Shop',
+      phone: '09123456789',
+      mobile: '09123456789',
+      email: 'shop@example.com',
+      contactPersons: [{
+        id: 'person-1',
+        enabled: true,
+        name: 'Juan Dela Cruz',
+        position: 'Purchasing Manager',
+        birthday: '',
+        telephone: '0281234567',
+        mobile: '09987654321',
+        email: 'juan@example.com',
+      }],
+    });
 
     if (!(globalThis as any).ResizeObserver) {
       (globalThis as any).ResizeObserver = class {
@@ -129,7 +149,48 @@ describe('DailyCallMonitoringView communication actions', () => {
     cleanup();
   });
 
-  it('logs an outbound call and opens the dialer when the call button is clicked', async () => {
+  it('shows one customer list ordered from highest to lowest priority', async () => {
+    fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
+      ...baseSnapshot,
+      contacts: [
+        {
+          ...baseSnapshot.contacts[0],
+          id: 'contact-low',
+          shopName: 'Lower Priority Shop',
+        },
+        {
+          ...baseSnapshot.contacts[0],
+          id: 'contact-high',
+          shopName: 'Higher Priority Shop',
+        },
+      ],
+      purchases: [
+        {
+          id: 'purchase-high',
+          contact_id: 'contact-high',
+          amount: 100_000,
+          status: 'paid',
+          purchased_at: '2026-04-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    expect(await screen.findByRole('heading', { name: 'Customer List' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'All Clients' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: "Today's List" })).not.toBeInTheDocument();
+    expect(screen.queryByText('Monthly Quota')).not.toBeInTheDocument();
+
+    const highPriorityRow = screen.getByText('Higher Priority Shop').closest('tr');
+    const lowPriorityRow = screen.getByText('Lower Priority Shop').closest('tr');
+
+    expect(highPriorityRow).not.toBeNull();
+    expect(lowPriorityRow).not.toBeNull();
+    expect(highPriorityRow!.compareDocumentPosition(lowPriorityRow!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it('submits a conversation report and keeps the customer in the list', async () => {
     createCallLogForDailyCallMock.mockResolvedValue({
       id: 'log-call-1',
       contact_id: 'contact-1',
@@ -137,8 +198,8 @@ describe('DailyCallMonitoringView communication actions', () => {
       channel: 'call',
       direction: 'outbound',
       duration_seconds: 0,
-      notes: 'Dialed 09123456789',
-      outcome: 'logged',
+      notes: '[Sales Agent Report] Customer requested updated quotation.',
+      outcome: 'follow_up',
       occurred_at: '2026-04-04T00:00:00.000Z',
       next_action: null,
       next_action_due: null,
@@ -152,6 +213,19 @@ describe('DailyCallMonitoringView communication actions', () => {
     const callButton = await screen.findByRole('button', { name: 'Call Test Shop' });
     await user.click(callButton);
 
+    expect(await screen.findByRole('dialog', { name: 'Contact Test Shop' })).toBeInTheDocument();
+    expect(screen.getByText('Juan Dela Cruz')).toBeInTheDocument();
+    expect(screen.getByText('Purchasing Manager')).toBeInTheDocument();
+    expect(screen.getByText('09987654321')).toBeInTheDocument();
+    expect(screen.getByText('juan@example.com')).toBeInTheDocument();
+    expect(createCallLogForDailyCallMock).not.toHaveBeenCalled();
+    expect(openSpy).not.toHaveBeenCalled();
+
+    const reportInput = screen.getByPlaceholderText('Write a report about the customer conversation...');
+    await user.type(reportInput, 'Customer requested updated quotation.');
+    await user.selectOptions(screen.getByLabelText('Conversation outcome'), 'follow_up');
+    await user.click(screen.getByRole('button', { name: 'Submit Report' }));
+
     await waitFor(() => {
       expect(createCallLogForDailyCallMock).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -159,14 +233,15 @@ describe('DailyCallMonitoringView communication actions', () => {
           agent_name: 'Jane Doe',
           channel: 'call',
           direction: 'outbound',
-          notes: 'Dialed 09123456789',
+          notes: '[Sales Agent Report] Customer requested updated quotation.',
+          outcome: 'follow_up',
         })
       );
     });
 
-    await waitFor(() => {
-      expect(openSpy).toHaveBeenCalledWith('tel:09123456789', '_self');
-    });
+    expect(openSpy).not.toHaveBeenCalled();
+    expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
+    expect(callButton).toBeInTheDocument();
   });
 
   it('logs an outbound SMS and opens the messaging app with the composed body', async () => {

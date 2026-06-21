@@ -53,9 +53,10 @@ import {
   fetchContactCustomerLogsForDailyCall,
   subscribeToDailyCallMonitoringUpdates
 } from '../services/dailyCallMonitoringService';
-import { createContact } from '../services/customerDatabaseLocalApiService';
+import { createContact, fetchContactById } from '../services/customerDatabaseLocalApiService';
 import {
   CallLogEntry,
+  CallOutcome,
   Contact,
   CustomerLogEntry,
   CustomerLogStatus,
@@ -336,9 +337,6 @@ const MasterTableRow = React.memo(({
         <p className={`font-bold text-slate-800 dark:text-white ${densityConfig.fontSize}`} title={`Total sales: ${formatCurrency(row.totalSales)}`}>
           {formatCurrency(row.totalSales)}
         </p>
-        <span className={`inline-block mt-0.5 rounded-full ${densityConfig.badgePadding} font-semibold ${priorityBadgeClasses(row.priority)} ${densityConfig.fontSize}`}>
-          {Math.round(row.priority)}
-        </span>
       </td>
       <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-center`}>
         <span className={`inline-block rounded-full ${densityConfig.badgePadding} font-semibold ${priorityBadgeClasses(row.priority)} ${densityConfig.fontSize}`}>
@@ -418,6 +416,11 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [historyTab, setHistoryTab] = useState<'all' | 'calls' | 'sms'>('all');
   const [showSMSModal, setShowSMSModal] = useState(false);
   const [smsRecipient, setSMSRecipient] = useState<Contact | null>(null);
+  const [callContact, setCallContact] = useState<Contact | null>(null);
+  const [callContactLoading, setCallContactLoading] = useState(false);
+  const [callReport, setCallReport] = useState('');
+  const [callReportOutcome, setCallReportOutcome] = useState<CallOutcome>('note');
+  const [submittingCallReport, setSubmittingCallReport] = useState(false);
   const [smsMessage, setSMSMessage] = useState('');
   const [sendingSMS, setSendingSMS] = useState(false);
   const [customerLogs, setCustomerLogs] = useState<CustomerLogEntry[]>([]);
@@ -564,41 +567,55 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     return () => clearTimeout(handler);
   }, [searchValue]);
 
-  const handleCallContact = (contact: Contact) => {
-    const phoneNumber = getPhoneNumber(contact);
-    if (!phoneNumber) {
-      addToast({ type: 'error', message: 'No phone number available for this contact' });
-      return;
+  const handleOpenCallContact = useCallback((contact: Contact) => {
+    setCallContact(contact);
+    setCallContactLoading(true);
+    setCallReport('');
+    setCallReportOutcome('note');
+
+    void fetchContactById(contact.id)
+      .then((fullContact) => {
+        if (fullContact) setCallContact(fullContact);
+      })
+      .catch((error) => {
+        console.error('Error loading contact details:', error);
+        addToast({ type: 'error', message: 'Full contact details could not be loaded.' });
+      })
+      .finally(() => setCallContactLoading(false));
+  }, [addToast]);
+
+  const handleSubmitCallReport = async () => {
+    if (!callContact || !callReport.trim()) return;
+
+    setSubmittingCallReport(true);
+    try {
+      await createCallLogForDailyCall({
+        contact_id: callContact.id,
+        agent_name: agentDataName || agentDisplayName,
+        channel: 'call',
+        direction: 'outbound',
+        duration_seconds: 0,
+        notes: `[Sales Agent Report] ${callReport.trim()}`,
+        outcome: callReportOutcome,
+        occurred_at: new Date().toISOString(),
+        next_action: null,
+        next_action_due: null,
+      });
+      addToast({
+        type: 'success',
+        title: 'Call report submitted',
+        description: 'The Master User can now view this report in the customer activity timeline.',
+        durationMs: 4000,
+      });
+      setCallContact(null);
+      setCallReport('');
+      setCallReportOutcome('note');
+    } catch (error) {
+      console.error('Error submitting call report:', error);
+      addToast({ type: 'error', message: 'The call report could not be submitted. Please try again.' });
+    } finally {
+      setSubmittingCallReport(false);
     }
-
-    const logCall = async () => {
-      try {
-        const createdLog = await createCallLogForDailyCall({
-          contact_id: contact.id,
-          agent_name: agentDataName || agentDisplayName,
-          channel: 'call',
-          direction: 'outbound',
-          duration_seconds: 0,
-          notes: `Dialed ${phoneNumber}`,
-          outcome: 'logged' as any,
-          occurred_at: new Date().toISOString(),
-          next_action: null,
-          next_action_due: null,
-        });
-
-        setCallLogs((previous) => [createdLog, ...previous]);
-      } catch (error) {
-        console.error('Error logging outbound call:', error);
-        addToast({
-          type: 'error',
-          message: 'Call opened, but the activity log could not be saved.',
-        });
-      } finally {
-        launchProtocolLink(buildProtocolLink('tel', phoneNumber));
-      }
-    };
-
-    void logCall();
   };
 
   const handleSMSContact = (contact: Contact) => {
@@ -823,6 +840,11 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     () => contacts.find((contact) => contact.id === selectedClientId) || null,
     [contacts, selectedClientId]
   );
+  const callContactPerson = useMemo(
+    () => callContact?.contactPersons?.find((person) => person.enabled !== false) || callContact?.contactPersons?.[0] || null,
+    [callContact]
+  );
+  const callPhoneNumber = useMemo(() => (callContact ? getPhoneNumber(callContact) : ''), [callContact]);
 
   const purchasesByContact = useMemo(() => {
     const map = new Map<string, Purchase[]>();
@@ -1046,43 +1068,13 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
   const masterRows = useMemo<MasterRow[]>(() => {
     const filtered = baseMasterRows.filter((row) => {
-      const matchesRep = repFilter === 'All' || row.contact.salesman === repFilter;
-      const matchesProvince = provinceFilter === 'All' || row.contact.province === provinceFilter;
-      const matchesStatus = statusMatchesFilter(row.contact.status);
-      const matchesPurchaseFilter = !noPurchaseOnly || noPurchaseSet.has(row.contact.id);
-      const matchesSearchQuery = matchesSearch(row.contact, debouncedSearch);
-      return matchesRep && matchesProvince && matchesStatus && matchesPurchaseFilter && matchesSearchQuery;
+      return matchesSearch(row.contact, debouncedSearch);
     });
 
-    const direction = sortDirection === 'asc' ? 1 : -1;
-    const sorted = filtered.sort((a, b) => {
-      if (sortField === 'priority') {
-        return (a.priority - b.priority) * direction * -1;
-      } else if (sortField === 'salesValue') {
-        return (a.totalSales - b.totalSales) * direction;
-      } else if (sortField === 'lastContact') {
-        const aTime = a.lastContact ? Date.parse(a.lastContact) : 0;
-        const bTime = b.lastContact ? Date.parse(b.lastContact) : 0;
-        return (aTime - bTime) * direction;
-      } else {
-        const aPurchase = a.lastPurchase ? Date.parse(a.lastPurchase) : 0;
-        const bPurchase = b.lastPurchase ? Date.parse(b.lastPurchase) : 0;
-        return (aPurchase - bPurchase) * direction;
-      }
-    });
-
-    return sorted;
-  }, [
-    baseMasterRows,
-    repFilter,
-    provinceFilter,
-    noPurchaseSet,
-    noPurchaseOnly,
-    statusMatchesFilter,
-    debouncedSearch,
-    sortField,
-    sortDirection
-  ]);
+    return filtered.sort((a, b) =>
+      (b.priority - a.priority) || a.contact.company.localeCompare(b.contact.company)
+    );
+  }, [baseMasterRows, debouncedSearch]);
 
   useEffect(() => {
     if (!masterRows.length) {
@@ -1284,8 +1276,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   }, []);
 
   const handleMasterRowCall = useCallback((contact: Contact) => {
-    handleCallContact(contact);
-  }, [handleCallContact]);
+    handleOpenCallContact(contact);
+  }, [handleOpenCallContact]);
 
   const handleMasterRowSMS = useCallback((contact: Contact) => {
     handleOpenSMSModal(contact);
@@ -1397,11 +1389,11 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       <header className="flex-shrink-0 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between px-4 lg:px-6 py-3">
         <div>
           <div className="flex items-center gap-2">
-            <Phone className="w-5 h-5 text-brand-blue" />
-            <h1 className="text-xl font-bold text-slate-800 dark:text-white">Daily Call Monitoring</h1>
+            <ClipboardList className="w-5 h-5 text-brand-blue" />
+            <h1 className="text-xl font-bold text-slate-800 dark:text-white">Customer List</h1>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Tracking every touchpoint for <span className="font-semibold">{agentDisplayName}</span>
+            All customers assigned to <span className="font-semibold">{agentDisplayName}</span>, ordered by priority
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -1414,150 +1406,14 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             New Customer
           </button>
           <button
-            onClick={() => setSummaryCollapsed(!summaryCollapsed)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
-            title={summaryCollapsed ? 'Expand Summary' : 'Collapse Summary'}
-          >
-            {summaryCollapsed ? <BarChart3 className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            Summary
-          </button>
-          <button
             onClick={loadAgentData}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
           >
             <RefreshCw className="w-4 h-4" />
             Refresh
           </button>
-          <button
-            onClick={() => handleOpenSalesInquiry()}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
-            title="Open Sales Inquiry"
-          >
-            <FileText className="w-4 h-4" />
-            Sales Inquiry
-          </button>
-          {callForwardingEnabled ? (
-            <button
-              onClick={handleDisableCallForwarding}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-900/20 text-xs font-semibold text-rose-600 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/30"
-              title="Disable Call Forwarding"
-            >
-              <PhoneForwarded className="w-4 h-4" />
-              Forwarding On
-            </button>
-          ) : showForwardingInput ? (
-            <div className="flex items-center gap-2">
-              <input
-                type="tel"
-                placeholder="09123456789"
-                className="px-2 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-blue w-36"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && e.currentTarget.value) {
-                    handleEnableCallForwarding(e.currentTarget.value);
-                  } else if (e.key === 'Escape') {
-                    setShowForwardingInput(false);
-                  }
-                }}
-                autoFocus
-              />
-              <button
-                onClick={() => setShowForwardingInput(false)}
-                className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowForwardingInput(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
-              title="Enable Call Forwarding"
-            >
-              <PhoneForwarded className="w-4 h-4" />
-              Forward
-            </button>
-          )}
-          <div className="relative">
-            <button
-              onClick={handleActivityReadAll}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-blue text-white text-xs font-semibold shadow-sm"
-            >
-              <Bell className="w-4 h-4" />
-              Activity
-              {unseenActivityCount > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-white/20">
-                  {unseenActivityCount}
-                </span>
-              )}
-            </button>
-          </div>
-          <div className="h-6 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
-          <button
-            onClick={() => {
-              const modes: DensityMode[] = ['comfortable', 'compact', 'ultra-compact'];
-              const currentIndex = modes.indexOf(density);
-              const nextIndex = (currentIndex + 1) % modes.length;
-              setDensity(modes[nextIndex]);
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
-            title={`Density: ${density.charAt(0).toUpperCase() + density.slice(1)}`}
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="3" y1="6" x2="21" y2="6" />
-              <line x1="3" y1="12" x2="21" y2="12" />
-              <line x1="3" y1="18" x2="21" y2="18" />
-            </svg>
-            <span className="capitalize">{density}</span>
-          </button>
         </div>
       </header>
-
-      {!summaryCollapsed && (
-        <section className="flex-shrink-0 px-4 lg:px-6 py-2">
-          <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm px-4 py-3">
-            <div className="flex items-center gap-3">
-              <PhilippinePeso className="w-4 h-4 text-brand-blue flex-shrink-0" />
-              <div>
-                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Monthly Quota</p>
-                <p className="text-sm font-bold text-slate-800 dark:text-white">{formatCurrency(quota)}</p>
-              </div>
-            </div>
-            <div className="h-8 w-px bg-slate-200 dark:bg-slate-800" />
-            <div className="flex items-center gap-3">
-              <TrendingUp className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-              <div>
-                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Achievement</p>
-                <p className="text-sm font-bold text-slate-800 dark:text-white">
-                  {achievementsValue !== null ? formatCurrency(achievementsValue) : '—'}
-                </p>
-                <p className={`text-[10px] font-semibold ${percentAchieved !== null && percentAchieved > 80 ? 'text-emerald-500' : 'text-slate-500 dark:text-slate-400'}`}>
-                  {percentAchieved !== null ? `${percentAchieved}%` : 'N/A'}
-                </p>
-              </div>
-            </div>
-            <div className="h-8 w-px bg-slate-200 dark:bg-slate-800" />
-            <div className="flex items-center gap-3">
-              <AlertCircle className={`w-4 h-4 flex-shrink-0 ${remainingQuota !== null && remainingQuota < quota * 0.2 ? 'text-rose-500' : 'text-slate-400 dark:text-slate-500'}`} />
-              <div>
-                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Remaining</p>
-                <p className={`text-sm font-bold ${remainingQuota !== null && remainingQuota < quota * 0.2 ? 'text-rose-500' : 'text-slate-800 dark:text-white'}`}>
-                  {remainingQuota !== null ? formatCurrency(remainingQuota) : '—'}
-                </p>
-              </div>
-            </div>
-            <div className="h-8 w-px bg-slate-200 dark:bg-slate-800" />
-            <div className="flex items-center gap-3">
-              <ClipboardList className="w-4 h-4 text-amber-500 flex-shrink-0" />
-              <div>
-                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Follow-ups Due</p>
-                <p className="text-sm font-bold text-slate-800 dark:text-white">
-                  {hasLoadedData ? followUpsDue : '—'}
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
 
       {loadError && (
         <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-900 rounded-xl p-4 shadow-sm flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
@@ -1581,31 +1437,9 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         </div>
       )}
 
-      {/* Master Call View - Main Focus */}
       <section className="flex-1 min-h-0 flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-brand-blue/70 rounded-xl shadow-sm mx-4 lg:mx-6 mb-4 overflow-hidden">
-        <div className="flex-shrink-0 p-3 border-b border-slate-100 dark:border-slate-800 flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
-              <Filter className="w-4 h-4" />
-              <span className="text-xs font-semibold text-slate-800 dark:text-white">Master Call View</span>
-            </div>
-            <div className="flex items-center gap-1">
-              {(['master', 'today', 'activity'] as const).map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors ${
-                    activeTab === tab
-                      ? 'bg-brand-blue text-white border-brand-blue'
-                      : 'bg-slate-50 dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 border-slate-100 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  {tab === 'master' ? 'All Clients' : tab === 'today' ? "Today's List" : 'Activity'}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="flex-shrink-0 border-b border-slate-100 p-3 dark:border-slate-800">
+          <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 px-2.5 py-1.5 rounded-lg flex-1 min-w-[180px]">
               <Search className="w-4 h-4 text-slate-400" />
               <input
@@ -1615,62 +1449,17 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 onChange={(event) => setSearchValue(event.target.value)}
               />
             </div>
-            <select
-              className={`${densityConfig.fontSize} bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 rounded-lg px-2 py-1`}
-              value={repFilter}
-              onChange={(event) => setRepFilter(event.target.value)}
-            >
-              {availableReps.map((rep) => (
-                <option key={rep} value={rep}>
-                  {rep === 'All' ? 'All Reps' : rep}
-                </option>
-              ))}
-            </select>
-            <select
-              className={`${densityConfig.fontSize} bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 rounded-lg px-2 py-1`}
-              value={provinceFilter}
-              onChange={(event) => setProvinceFilter(event.target.value)}
-            >
-              {availableProvinces.map((province) => (
-                <option key={province} value={province}>
-                  {province === 'All' ? 'All Areas' : province}
-                </option>
-              ))}
-            </select>
-            <button
-              onClick={() => setNoPurchaseOnly(!noPurchaseOnly)}
-              className={`flex items-center gap-1.5 ${densityConfig.fontSize} font-semibold border rounded-lg transition-colors ${
-                noPurchaseOnly
-                  ? 'bg-brand-blue text-white border-brand-blue'
-                  : 'bg-slate-50 dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 border-slate-100 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800'
-              } px-2.5 py-1`}
-            >
-              No purchase
-            </button>
-            <div className="flex items-center gap-1">
-              {statusOptions.map((status) => (
-                <button
-                  key={status}
-                  onClick={() => toggleStatusFilter(status)}
-                  className={`text-[10px] font-semibold ${densityConfig.badgePadding} rounded-full border transition-colors ${
-                    statusFilters.includes(status)
-                      ? 'bg-brand-blue text-white border-brand-blue'
-                      : 'bg-slate-50 dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 border-slate-100 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  {status}
-                </button>
-              ))}
-            </div>
+            <span className="shrink-0 text-xs font-semibold text-slate-500 dark:text-slate-400">
+              {masterRows.length} {masterRows.length === 1 ? 'customer' : 'customers'}
+            </span>
           </div>
         </div>
         <div className="flex-1 min-h-0 overflow-hidden" ref={masterViewportWrapperRef}>
-          {activeTab === 'master' && (
-            <div
-              ref={masterScrollRef}
-              className="h-full overflow-y-auto relative"
-              onScroll={handleMasterTableScroll}
-            >
+          <div
+            ref={masterScrollRef}
+            className="h-full overflow-y-auto relative"
+            onScroll={handleMasterTableScroll}
+          >
               {isFiltering && (
                 <div className="absolute inset-0 z-20 bg-white/40 dark:bg-slate-900/40 backdrop-blur-[1px] transition-opacity duration-200 pointer-events-none flex items-center justify-center">
                   <div className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/90 px-2 py-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
@@ -1689,45 +1478,13 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                       Status
                     </th>
                     <th className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-left text-[11px] font-semibold uppercase tracking-wide`} style={{ width: '15%' }}>
-                      <button
-                        className="flex items-center gap-1"
-                        onClick={() => {
-                          const newField = 'lastContact';
-                          if (sortField === newField) {
-                            setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
-                          } else {
-                            setSortField(newField);
-                            setSortDirection('desc');
-                          }
-                        }}
-                      >
-                        Last Contact
-                        {sortField === 'lastContact' && (
-                          <ArrowUpRight className={`w-3 h-3 ${sortDirection === 'desc' ? 'rotate-180' : ''}`} />
-                        )}
-                      </button>
+                      Last Contact
                     </th>
                     <th className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-left text-[11px] font-semibold uppercase tracking-wide`} style={{ width: '12%' }}>
                       Last Purchase
                     </th>
                     <th className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-left text-[11px] font-semibold uppercase tracking-wide`} style={{ width: '15%' }}>
-                      <button
-                        className="flex items-center gap-1"
-                        onClick={() => {
-                          const newField = 'salesValue';
-                          if (sortField === newField) {
-                            setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
-                          } else {
-                            setSortField(newField);
-                            setSortDirection('desc');
-                          }
-                        }}
-                      >
-                        Potential
-                        {sortField === 'salesValue' && (
-                          <ArrowUpRight className={`w-3 h-3 ${sortDirection === 'desc' ? 'rotate-180' : ''}`} />
-                        )}
-                      </button>
+                      Potential
                     </th>
                     <th className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-left text-[11px] font-semibold uppercase tracking-wide`} style={{ width: '10%' }}>
                       Priority
@@ -1783,69 +1540,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                   )}
                 </tbody>
               </table>
-            </div>
-          )}
-
-          {activeTab === 'today' && (
-            <div className="h-full overflow-y-auto p-4">
-              {hasLoadedData ? (
-                <AgentCallActivity
-                  callLogs={callLogs}
-                  inquiries={inquiries}
-                  contacts={contacts}
-                  maxItems={50}
-                  title="Today's Call List"
-                />
-              ) : (
-                <div className="text-sm text-rose-500 text-center py-6">Call activity unavailable</div>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'activity' && (
-            <div className="h-full overflow-y-auto p-4">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-slate-800 dark:text-white">Activity Highlights</h3>
-                <button
-                  onClick={handleActivityReadAll}
-                  className="text-xs font-semibold text-brand-blue hover:underline"
-                >
-                  Mark all seen
-                </button>
-              </div>
-              <div className="space-y-3">
-                {activityItems.map((activity) => (
-                  <div
-                    key={activity.id}
-                    className={`p-3 rounded-xl border ${activity.read ? 'border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60' : 'border-brand-blue/20 bg-blue-50/60 dark:bg-blue-900/30'}`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                        {activity.type === 'report' ? <ShieldAlert className="w-4 h-4" /> : <Package className="w-4 h-4" />}
-                        {activity.type === 'report' ? 'Owner' : 'Stock'}
-                      </span>
-                      {!activity.read && (
-                        <button
-                          onClick={() => handleActivityRead(activity.id)}
-                          className="text-[11px] font-semibold text-brand-blue hover:underline"
-                        >
-                          Mark seen
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-sm text-slate-700 dark:text-slate-200 font-semibold">{activity.title}</p>
-                    <p className="text-sm text-slate-700 dark:text-slate-200 mt-1">{activity.message}</p>
-                    <div className="mt-2 text-[11px] text-slate-400 dark:text-slate-500">
-                      {formatRelativeTime(activity.timestamp)}
-                    </div>
-                  </div>
-                ))}
-                {activityItems.length === 0 && (
-                  <div className="text-center text-sm text-slate-400 dark:text-slate-500 py-6">No recent activity</div>
-                )}
-              </div>
-            </div>
-           )}
+          </div>
         </div>
       </section>
       {detailsPanelOpen && selectedClient && (
@@ -1893,7 +1588,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             </div>
             <div className="flex flex-wrap gap-2">
               <button
-                onClick={() => handleCallContact(selectedClient)}
+                onClick={() => handleOpenCallContact(selectedClient)}
                 className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-brand-blue hover:text-white transition-colors"
               >
                 <Phone className="w-4 h-4" />
@@ -2191,6 +1886,121 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
           onClick={() => setDetailsPanelOpen(false)}
         />
+      )}
+
+
+      {callContact && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="call-contact-title"
+            className="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900"
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 p-5 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-brand-blue dark:bg-blue-950/40">
+                  <Phone className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 id="call-contact-title" className="text-lg font-bold text-slate-900 dark:text-white">
+                    Contact {callContact.company}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Review the details and submit your report after the conversation.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label="Close contact window"
+                onClick={() => setCallContact(null)}
+                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 p-5">
+              <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+                <h4 className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">Customer contact</h4>
+                <div className="space-y-2 text-sm text-slate-700 dark:text-slate-200">
+                  <p className="font-semibold text-slate-900 dark:text-white">{callContact.company}</p>
+                  <p className="flex items-center gap-2"><Phone className="h-4 w-4 text-slate-400" />{callPhoneNumber || 'No phone number on file'}</p>
+                  <p className="flex items-center gap-2"><Mail className="h-4 w-4 text-slate-400" />{callContact.email || 'No email address on file'}</p>
+                </div>
+              </section>
+
+              <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+                <h4 className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">Contact person</h4>
+                {callContactLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />Loading contact person…</div>
+                ) : callContactPerson ? (
+                  <div className="space-y-2 text-sm text-slate-700 dark:text-slate-200">
+                    <p className="font-semibold text-slate-900 dark:text-white">{callContactPerson.name}</p>
+                    <p className="text-slate-500 dark:text-slate-400">{callContactPerson.position || 'Contact person'}</p>
+                    <p className="flex items-center gap-2"><Phone className="h-4 w-4 text-slate-400" />{callContactPerson.mobile || callContactPerson.telephone || 'No phone number on file'}</p>
+                    <p className="flex items-center gap-2"><Mail className="h-4 w-4 text-slate-400" />{callContactPerson.email || 'No email address on file'}</p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">No contact person is recorded for this customer.</p>
+                )}
+              </section>
+
+              <section className="space-y-3 rounded-xl border border-blue-200 bg-blue-50/50 p-4 dark:border-blue-900 dark:bg-blue-950/20">
+                <h4 className="text-xs font-bold uppercase tracking-wide text-blue-700 dark:text-blue-300">Conversation report</h4>
+                <label className="block space-y-1">
+                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Outcome</span>
+                  <select
+                    aria-label="Conversation outcome"
+                    value={callReportOutcome}
+                    onChange={(event) => setCallReportOutcome(event.target.value as CallOutcome)}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                  >
+                    <option value="note">Conversation completed</option>
+                    <option value="positive">Positive / interested</option>
+                    <option value="follow_up">Follow-up required</option>
+                    <option value="negative">Not interested</option>
+                    <option value="other">Other outcome</option>
+                  </select>
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Report</span>
+                  <textarea
+                    value={callReport}
+                    onChange={(event) => setCallReport(event.target.value)}
+                    placeholder="Write a report about the customer conversation..."
+                    rows={4}
+                    maxLength={2000}
+                    className="w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-blue/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  />
+                  <span className="block text-right text-[11px] text-slate-400">{callReport.length}/2000</span>
+                </label>
+              </section>
+
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Calling does not remove this customer from the list. Only the Master User can remove customers.
+              </p>
+
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCallContact(null)}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  disabled={!callReport.trim() || callContactLoading || submittingCallReport}
+                  onClick={handleSubmitCallReport}
+                  className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {submittingCallReport ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardList className="h-4 w-4" />}
+                  {submittingCallReport ? 'Submitting...' : 'Submit Report'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
 

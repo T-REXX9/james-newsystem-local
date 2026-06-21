@@ -196,7 +196,7 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
 
   return (
     <nav className="flex items-center min-w-0 flex-1" aria-label="Topbar Navigation">
-      <div className="md:hidden mr-3">
+      <div className="2xl:hidden ml-1 mr-2 sm:mr-3">
         <button
           onClick={() => setIsMobileMenuOpen((prev) => !prev)}
           className="p-2 rounded-md hover:bg-white/10 transition-colors"
@@ -206,7 +206,7 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
         </button>
       </div>
 
-      <ul className="hidden md:flex items-center space-x-4 text-[12px] lg:text-sm font-semibold max-w-full pr-2">
+      <ul className="hidden 2xl:flex items-center space-x-3 text-sm font-semibold max-w-full pr-2">
         {filteredMenus.map((menu, index) => {
           const isActive = isMenuActive(menu);
           const isOpen = openMenuId === menu.id;
@@ -316,7 +316,10 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
       </ul>
 
       {isMobileMenuOpen && (
-        <div className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border-t border-slate-200 dark:border-slate-800 shadow-lg md:hidden z-[60] backdrop-blur-sm">
+        <div
+          data-responsive-nav="compact"
+          className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border-t border-slate-200 dark:border-slate-800 shadow-lg 2xl:hidden z-[60] backdrop-blur-sm"
+        >
           <div className="max-h-[calc(100vh-theme(spacing.20))] overflow-y-auto p-4 space-y-4 scrollbar-thin scroll-smooth">
             {filteredMenus.map((menu) => (
               <div key={menu.id}>

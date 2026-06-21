@@ -60,6 +60,16 @@ export interface StaffUpdateInput {
     branch_id?: number;
 }
 
+export interface StaffCreateInput {
+    full_name: string;
+    email: string;
+    password: string;
+    role: string;
+    mobile?: string;
+    birthday?: string;
+    access_rights?: string[];
+}
+
 const parseApiErrorMessage = async (response: Response): Promise<string> => {
     try {
         const payload = await response.json();
@@ -93,6 +103,15 @@ export const fetchStaff = async (search = '', page = 1, perPage = 100): Promise<
 export const fetchStaffById = async (staffId: string | number): Promise<StaffDetailRecord> => {
     const query = new URLSearchParams({ main_id: String(API_MAIN_ID) });
     const payload = await requestJson(`${API_BASE_URL}/staff/${staffId}?${query.toString()}`);
+    return payload?.data;
+};
+
+export const createStaff = async (data: StaffCreateInput): Promise<StaffRecord> => {
+    const payload = await requestJson(`${API_BASE_URL}/staff`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ main_id: API_MAIN_ID, ...data }),
+    });
     return payload?.data;
 };
 

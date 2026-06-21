@@ -1,4 +1,5 @@
 import React, { useEffect, useId, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { ClipboardList, X } from 'lucide-react';
 import { DailyCallCustomerRow, UserProfile } from '../types';
 import DailyCallCustomerDetailExpansion from './DailyCallCustomerDetailExpansion';
@@ -83,9 +84,10 @@ const DailyCallCustomerDetailModal: React.FC<DailyCallCustomerDetailModalProps> 
 
   if (!isOpen || !customer) return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-2 backdrop-blur-sm animate-fadeIn sm:p-4"
+      data-testid="customer-detail-backdrop"
+      className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/60 p-2 backdrop-blur-sm animate-fadeIn sm:p-4"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -95,7 +97,7 @@ const DailyCallCustomerDetailModal: React.FC<DailyCallCustomerDetailModalProps> 
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="mx-2 flex max-h-[85vh] w-full max-w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 sm:mx-4 md:max-w-[900px] lg:max-w-[1100px]"
+        className="flex max-h-[94vh] w-[96vw] max-w-[1600px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
       >
         <header className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900 sm:px-6">
           <div className="flex items-start justify-between gap-3">
@@ -144,7 +146,8 @@ const DailyCallCustomerDetailModal: React.FC<DailyCallCustomerDetailModalProps> 
           </div>
         </footer>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

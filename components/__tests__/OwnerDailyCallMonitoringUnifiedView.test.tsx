@@ -24,6 +24,14 @@ describe('OwnerDailyCallMonitoringUnifiedView', () => {
     expect(screen.queryByRole('button', { name: /purchase follow-up/i })).not.toBeInTheDocument();
   });
 
+  it('keeps the desktop view switcher compact beside the dashboard', () => {
+    render(<OwnerDailyCallMonitoringUnifiedView currentUser={null} />);
+
+    const sidebar = screen.getByRole('navigation', { name: /owner dashboard views/i });
+    expect(sidebar).toHaveClass('lg:w-40', 'lg:shrink-0', 'p-2');
+    expect(screen.getByRole('button', { name: /chart/i })).toHaveClass('text-xs');
+  });
+
   it('keeps the chart view active when Chart is clicked', () => {
     render(<OwnerDailyCallMonitoringUnifiedView currentUser={null} />);
 

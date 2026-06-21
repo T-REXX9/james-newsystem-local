@@ -76,18 +76,21 @@ describe('DailyCallCustomerDetailExpansion', () => {
     cleanup();
   });
 
-  it('renders the new item issue reports tab and switches to it', async () => {
+  it('matches the customer-detail template and switches to report tabs', async () => {
     const user = userEvent.setup();
 
     render(<DailyCallCustomerDetailExpansion customer={customer} currentUser={null} />);
 
-    expect(screen.getByText('Sales tab content')).toBeInTheDocument();
-    expect(screen.getByText('VIP Standing')).toBeInTheDocument();
-    expect(screen.getByText('Gold VIP')).toBeInTheDocument();
-    expect(screen.getByText(/Current month spend: ₱80,000/i)).toBeInTheDocument();
-    expect(screen.getByText(/Gold VIP maintenance guidance is at least ₱10,000/i)).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('Payment & Credit')).toBeInTheDocument();
+    expect(screen.getByText('Sales Snapshot (MTD)')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Management Instructions' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Human Agent Activity/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Communication Timeline/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Quick Actions' })).toBeInTheDocument();
+    expect(screen.getByText('VIP GOLD')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('tab', { name: /item issue reports/i }));
+    await user.click(screen.getByRole('tab', { name: 'Item Issues' }));
 
     expect(screen.getByText('Item issue tab content')).toBeInTheDocument();
   });
@@ -102,5 +105,29 @@ describe('DailyCallCustomerDetailExpansion', () => {
 
     expect(screen.getAllByText(/Managed in Maintenance > Customer > VIP Thresholds/i).length).toBeGreaterThan(0);
     expect(screen.queryByRole('button', { name: /edit vip rules/i })).not.toBeInTheDocument();
+  });
+
+  it('shows submitted sales-agent reports in the master customer activity view', async () => {
+    const user = userEvent.setup();
+    render(
+      <DailyCallCustomerDetailExpansion
+        customer={{
+          ...customer,
+          dailyActivity: [{
+            id: 'report-1',
+            contact_id: customer.id,
+            activity_date: '2026-06-21',
+            activity_type: 'call',
+            activity_count: 1,
+            notes: '[Sales Agent Report] Customer requested updated quotation.',
+          }],
+        }}
+        currentUser={{ id: 'master-1', role: 'Master User', full_name: 'Master User' } as any}
+      />
+    );
+
+    await user.click(screen.getByRole('tab', { name: 'Human Agent Activity' }));
+    expect(screen.getByText('Sales agent call report')).toBeInTheDocument();
+    expect(screen.getByText('Customer requested updated quotation.')).toBeInTheDocument();
   });
 });
