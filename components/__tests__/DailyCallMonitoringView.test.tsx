@@ -149,28 +149,53 @@ describe('DailyCallMonitoringView communication actions', () => {
     cleanup();
   });
 
-  it('shows one customer list ordered from highest to lowest priority', async () => {
+  it('prioritizes the 15-to-30-day cadence, overdue buyers, no-history customers, then very recent buyers', async () => {
+    const purchasedAt = (daysAgo: number) => new Date(Date.now() - (daysAgo * 86_400_000)).toISOString();
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
       ...baseSnapshot,
       contacts: [
         {
           ...baseSnapshot.contacts[0],
-          id: 'contact-low',
-          shopName: 'Lower Priority Shop',
+          id: 'contact-cadence',
+          shopName: 'Cadence Window Shop',
         },
         {
           ...baseSnapshot.contacts[0],
-          id: 'contact-high',
-          shopName: 'Higher Priority Shop',
+          id: 'contact-overdue',
+          shopName: 'Overdue Shop',
+        },
+        {
+          ...baseSnapshot.contacts[0],
+          id: 'contact-fresh',
+          shopName: 'Fresh Purchase Shop',
+        },
+        {
+          ...baseSnapshot.contacts[0],
+          id: 'contact-never',
+          shopName: 'No Purchase Shop',
         },
       ],
       purchases: [
         {
-          id: 'purchase-high',
-          contact_id: 'contact-high',
+          id: 'purchase-cadence',
+          contact_id: 'contact-cadence',
+          amount: 100,
+          status: 'paid',
+          purchased_at: purchasedAt(20),
+        },
+        {
+          id: 'purchase-overdue',
+          contact_id: 'contact-overdue',
           amount: 100_000,
           status: 'paid',
-          purchased_at: '2026-04-01T00:00:00.000Z',
+          purchased_at: purchasedAt(45),
+        },
+        {
+          id: 'purchase-fresh',
+          contact_id: 'contact-fresh',
+          amount: 200_000,
+          status: 'paid',
+          purchased_at: purchasedAt(5),
         },
       ],
     });
@@ -182,12 +207,14 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(screen.queryByRole('button', { name: "Today's List" })).not.toBeInTheDocument();
     expect(screen.queryByText('Monthly Quota')).not.toBeInTheDocument();
 
-    const highPriorityRow = screen.getByText('Higher Priority Shop').closest('tr');
-    const lowPriorityRow = screen.getByText('Lower Priority Shop').closest('tr');
+    const cadenceRow = screen.getByText('Cadence Window Shop').closest('tr')!;
+    const noPurchaseRow = screen.getByText('No Purchase Shop').closest('tr')!;
+    const overdueRow = screen.getByText('Overdue Shop').closest('tr')!;
+    const freshRow = screen.getByText('Fresh Purchase Shop').closest('tr')!;
 
-    expect(highPriorityRow).not.toBeNull();
-    expect(lowPriorityRow).not.toBeNull();
-    expect(highPriorityRow!.compareDocumentPosition(lowPriorityRow!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(cadenceRow.compareDocumentPosition(overdueRow)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(overdueRow.compareDocumentPosition(noPurchaseRow)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(noPurchaseRow.compareDocumentPosition(freshRow)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it('submits a conversation report and keeps the customer in the list', async () => {

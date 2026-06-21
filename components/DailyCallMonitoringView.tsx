@@ -136,8 +136,21 @@ const clientsNoPurchaseThisMonth = (contacts: Contact[], purchases: Purchase[]) 
   return contacts.filter((contact) => !currentIds.has(contact.id));
 };
 
-const calculatePriority = (contact: Contact, daysSinceContact: number, totalSales: number) => {
-  return (daysSinceContact * 2) + totalSales / 10000 + (contact.status === CustomerStatus.ACTIVE ? 50 : 0);
+const calculatePriority = (lastPurchase: string | undefined, daysSinceContact: number, totalSales: number) => {
+  const daysSincePurchase = getDaysSince(lastPurchase);
+  const hasPurchaseHistory = Boolean(lastPurchase && !Number.isNaN(Date.parse(lastPurchase)));
+  const purchaseCadenceTier = !hasPurchaseHistory
+    ? 2
+    : daysSincePurchase >= 15 && daysSincePurchase <= 30
+      ? 4
+      : daysSincePurchase > 30
+        ? 3
+        : 1;
+  const purchaseAgeScore = Math.min(daysSincePurchase, 999);
+  const contactAgeTieBreaker = Math.min(daysSinceContact, 999) / 1_000;
+  const salesTieBreaker = Math.min(Math.max(totalSales, 0), 99_999_999) / 100_000_000_000;
+
+  return (purchaseCadenceTier * 1_000) + purchaseAgeScore + contactAgeTieBreaker + salesTieBreaker;
 };
 
 const mapApiStatusToCustomerStatus = (status: string): CustomerStatus => {
@@ -937,7 +950,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         contact,
         lastContact,
         lastPurchase,
-        priority: calculatePriority(contact, getDaysSince(lastContact), totalSales)
+        priority: calculatePriority(lastPurchase, getDaysSince(lastContact), totalSales)
       };
     };
 
@@ -1052,7 +1065,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       const lastContact = lastContactMap.get(contact.id);
       const totalInteractions =
         (callLogsByContact.get(contact.id)?.length || 0) + (inquiriesByContact.get(contact.id)?.length || 0);
-      const priority = calculatePriority(contact, getDaysSince(lastContact), totalSales);
+      const priority = calculatePriority(lastPaid?.purchased_at, getDaysSince(lastContact), totalSales);
       return {
         contact,
         priority,
