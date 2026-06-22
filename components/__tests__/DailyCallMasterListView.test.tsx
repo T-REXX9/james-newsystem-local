@@ -22,7 +22,7 @@ describe('DailyCallMasterListView', () => {
     vi.clearAllMocks();
   });
 
-  it('renders the complete four-category master list dashboard', async () => {
+  it('renders the master list dashboard with the updated priority and recovery rules', async () => {
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
       meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 3 },
       items: [
@@ -79,7 +79,9 @@ describe('DailyCallMasterListView', () => {
 
     render(<DailyCallMasterListView />);
 
-    await waitFor(() => expect(screen.getByText('Warm Follow Up Shop')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Priority List (1)' })).toBeInTheDocument()
+    );
 
     expect(screen.getAllByText(/Priority List/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Recovery List/i).length).toBeGreaterThan(0);
@@ -90,29 +92,32 @@ describe('DailyCallMasterListView', () => {
     expect(screen.getByText(/Quick Summary/i)).toBeInTheDocument();
     expect(screen.getByText(/Quick Go To/i)).toBeInTheDocument();
     expect(screen.getByTestId('dashboard-fit-viewport')).toBeInTheDocument();
-    expect(screen.getByText('Recent Buyer Shop')).toBeInTheDocument();
-    expect(screen.getByText('Warm Follow Up Shop')).toBeInTheDocument();
-    expect(screen.getByText('Recovery Shop')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Priority List (1)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Recovery List (1)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Verified Prospects (0)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Unverified Prospects (0)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'All Customers (3)' })).toBeInTheDocument();
+    expect(screen.getAllByText(/Empty for now/i).length).toBeGreaterThanOrEqual(2);
   });
 
   it('uses the quick go to buttons to scroll to category tables and the full overview', async () => {
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
       meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 1 },
       items: [{
-        id: 'recent-1',
-        shopName: 'Recent Buyer Shop',
+        id: 'priority-1',
+        shopName: 'Priority Shop',
         province: 'Manila',
         city: 'Manila',
         contactNumber: '0930',
         assignedTo: 'Joan Jerusalem',
-        lastPurchaseDate: 'Jun 12, 2026',
-        lastPurchaseDateRaw: '2026-06-12',
+        lastPurchaseDate: 'Jun 1, 2026',
+        lastPurchaseDateRaw: '2026-06-01',
         purchaseCount: 1,
         totalSales: 5000,
-        currentMonthSales: 5000,
-        daysSinceLastPurchase: 3,
+        currentMonthSales: 0,
+        daysSinceLastPurchase: 20,
         monthsSinceLastPurchase: 0,
-        purchaseAgeGroup: 'recent',
+        purchaseAgeGroup: 'two_weeks_to_one_month',
       }],
     });
     const scrollIntoView = vi.fn();
@@ -120,9 +125,9 @@ describe('DailyCallMasterListView', () => {
 
     render(<DailyCallMasterListView />);
 
-    await screen.findByText('Recent Buyer Shop');
+    await screen.findByRole('navigation', { name: 'Quick Go To' });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Priority List (1)' }));
+    fireEvent.click(screen.getByRole('button', { name: /Priority List/i }));
     expect(scrollIntoView).toHaveBeenLastCalledWith({ behavior: 'smooth', block: 'start' });
     expect(document.activeElement).toBe(screen.getByTestId('category-table-priority'));
 

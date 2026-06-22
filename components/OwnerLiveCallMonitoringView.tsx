@@ -112,6 +112,7 @@ interface DealStatusRow {
 
 const NOTES_KEY = 'owner-daily-call-notes';
 const REPORTS_KEY = 'owner-daily-call-reports-state';
+const MONTHLY_TARGET_KEY_PREFIX = 'owner-dashboard-monthly-target';
 
 const CATEGORY_LABEL: Record<CustomerCategory, string> = {
   'active-buyers-no-purchase': 'Active buyer',
@@ -311,6 +312,18 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
 
   const [notesByCustomer, setNotesByCustomer] = useState<Record<string, string>>(() => STORAGE_HELPER.readNotes());
   const [reports, setReports] = useState<ReportItem[]>(() => STORAGE_HELPER.readReports(seedReports()));
+  const [monthlyTargetOverride, setMonthlyTargetOverride] = useState<number | null>(null);
+
+  const normalizedRole = String(currentUser?.role || '').trim().toLowerCase();
+  const hasGlobalAccess = Boolean(currentUser?.access_rights?.includes('*'));
+  const canEditMonthlyTarget =
+    !currentUser ||
+    !normalizedRole ||
+    hasGlobalAccess ||
+    normalizedRole === 'owner' ||
+    normalizedRole === 'master' ||
+    normalizedRole === 'master user';
+  const monthlyTargetStorageKey = `${MONTHLY_TARGET_KEY_PREFIX}:${(currentUser as any)?.main_id || (currentUser as any)?.main_userid || API_MAIN_ID}`;
 
   const loadSnapshot = useCallback(async () => {
     setIsLoadingSnapshot(true);
@@ -548,6 +561,20 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
     STORAGE_HELPER.saveReports(reports);
   }, [reports]);
 
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(monthlyTargetStorageKey);
+      if (!saved) {
+        setMonthlyTargetOverride(null);
+        return;
+      }
+      const parsed = Number(saved);
+      setMonthlyTargetOverride(Number.isFinite(parsed) && parsed >= 0 ? parsed : null);
+    } catch {
+      setMonthlyTargetOverride(null);
+    }
+  }, [monthlyTargetStorageKey]);
+
   const agentById = useMemo(() => {
     return agents.reduce<Record<string, Agent>>((acc, agent) => {
       acc[agent.id] = agent;
@@ -607,6 +634,8 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
       textsMTD,
     };
   }, [agents, filteredInteractions, baseFilteredCustomers, monthStart]);
+
+  const effectiveMonthlyTarget = monthlyTargetOverride ?? kpis.quota;
 
   const categoryLists = useMemo(() => {
     const mapCategory = (category: CustomerCategory) => baseFilteredCustomers.filter((customer) => customer.category === category);
@@ -800,13 +829,13 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
     () =>
       buildOwnerDashboardMetrics({
         actualSales: kpis.actualSales,
-        monthlyTarget: kpis.quota,
+        monthlyTarget: effectiveMonthlyTarget,
         categoryPotential: customerCategorySummaries.map((item) => item.potentialSales),
         calls: kpis.callsMTD,
         texts: kpis.textsMTD,
         successfulOutcomes,
       }),
-    [kpis, customerCategorySummaries, successfulOutcomes]
+    [kpis, customerCategorySummaries, successfulOutcomes, effectiveMonthlyTarget]
   );
 
   const interactionCount = (type: InteractionType, outcome?: Outcome) =>
@@ -1066,7 +1095,7 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
           dateLabel={format(new Date(), 'MMMM d, yyyy')}
           monthLabel={format(new Date(), 'MMMM yyyy')}
           currentSales={kpis.actualSales}
-          monthlyTarget={kpis.quota}
+          monthlyTarget={effectiveMonthlyTarget}
           remainingTarget={templateMetrics.remainingTarget}
           totalPotential={templateMetrics.totalPotential}
           targetAchieved={templateMetrics.targetAchieved}
@@ -1074,7 +1103,7 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
           customerCategories={customerCategorySummaries}
           revenueSeries={templateRevenueTrendData.series}
           revenueDays={templateRevenueTrendData.dayLabels}
-          monthlyTargetLine={kpis.quota}
+          monthlyTargetLine={effectiveMonthlyTarget}
           cases={caseSummaries}
           notifications={notificationSummaries}
           actions={actionSummaries}
@@ -1119,6 +1148,15 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
             if (alerts[0]) {
               setActiveAlert(alerts[0]);
               setShowAlertDialog(true);
+            }
+          }}
+          canEditMonthlyTarget={canEditMonthlyTarget}
+          onSaveMonthlyTarget={(value) => {
+            setMonthlyTargetOverride(value);
+            try {
+              localStorage.setItem(monthlyTargetStorageKey, String(value));
+            } catch {
+              // ignore local persistence errors
             }
           }}
         />

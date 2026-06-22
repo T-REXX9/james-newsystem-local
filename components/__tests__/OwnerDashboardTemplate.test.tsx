@@ -1,6 +1,7 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import OwnerDashboardTemplate, { OwnerDashboardTemplateProps } from '../OwnerDashboardTemplate';
 
 vi.mock('@mui/x-charts-pro/LineChartPro', () => ({
@@ -167,5 +168,26 @@ describe('OwnerDashboardTemplate', () => {
       '[&>*]:min-w-0'
     );
     expect(screen.getByTestId('sales-activity-panel')).toHaveClass('2xl:col-span-2');
+  });
+
+  it('lets a master user edit the monthly target inline', async () => {
+    const user = userEvent.setup();
+    const onSaveMonthlyTarget = vi.fn();
+
+    render(
+      <OwnerDashboardTemplate
+        {...fixture}
+        canEditMonthlyTarget
+        onSaveMonthlyTarget={onSaveMonthlyTarget}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /edit monthly target/i }));
+    const input = screen.getByLabelText(/monthly target/i);
+    await user.clear(input);
+    await user.type(input, '4500000');
+    await user.click(screen.getByRole('button', { name: /^save$/i }));
+
+    expect(onSaveMonthlyTarget).toHaveBeenCalledWith(4_500_000);
   });
 });

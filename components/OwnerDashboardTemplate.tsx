@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Calendar,
   ChevronRight,
@@ -72,6 +72,8 @@ export interface OwnerDashboardTemplateProps {
   onOpenNotifications: () => void;
   onOpenAttendance: () => void;
   onOpenActionList: () => void;
+  canEditMonthlyTarget?: boolean;
+  onSaveMonthlyTarget?: (value: number) => void;
 }
 
 const toCurrency = (value: number) =>
@@ -214,11 +216,28 @@ const OwnerDashboardTemplate: React.FC<OwnerDashboardTemplateProps> = ({
   onOpenNotifications,
   onOpenAttendance,
   onOpenActionList,
+  canEditMonthlyTarget = false,
+  onSaveMonthlyTarget,
 }) => {
   const attendanceTotal = attendance.present + attendance.absent;
   const leftPercent = monthlyTarget > 0 ? Number((100 - targetAchieved).toFixed(2)) : 0;
+  const [isEditingMonthlyTarget, setIsEditingMonthlyTarget] = useState(false);
+  const [monthlyTargetDraft, setMonthlyTargetDraft] = useState(String(Math.round(monthlyTarget)));
 
   const funnelWidths = [100, 82, 64, 46];
+
+  useEffect(() => {
+    if (!isEditingMonthlyTarget) {
+      setMonthlyTargetDraft(String(Math.round(monthlyTarget)));
+    }
+  }, [monthlyTarget, isEditingMonthlyTarget]);
+
+  const saveMonthlyTarget = () => {
+    const parsed = Number(monthlyTargetDraft.replace(/,/g, '').trim());
+    if (!Number.isFinite(parsed) || parsed < 0) return;
+    onSaveMonthlyTarget?.(Math.round(parsed));
+    setIsEditingMonthlyTarget(false);
+  };
 
   const chartSeries = [
     ...revenueSeries.map((item) => ({
@@ -290,13 +309,97 @@ const OwnerDashboardTemplate: React.FC<OwnerDashboardTemplateProps> = ({
           value={toCurrency(currentSales)}
           subtext={`${targetAchieved}% of ${toCurrency(monthlyTarget)}`}
         />
-        <KpiCard
-          icon={<Target className="h-4 w-4 text-violet-600" />}
-          iconBg="bg-violet-100"
-          label="Monthly Target"
-          value={toCurrency(monthlyTarget)}
-          subtext={monthLabel}
-        />
+        <div
+          className={`rounded-xl border border-slate-200 bg-white p-3 shadow-sm ${canEditMonthlyTarget && !isEditingMonthlyTarget ? 'cursor-pointer transition hover:border-violet-300 hover:bg-violet-50/30' : ''}`}
+          onClick={() => {
+            if (canEditMonthlyTarget && !isEditingMonthlyTarget) {
+              setIsEditingMonthlyTarget(true);
+            }
+          }}
+          onKeyDown={(event) => {
+            if (!canEditMonthlyTarget || isEditingMonthlyTarget) return;
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              setIsEditingMonthlyTarget(true);
+            }
+          }}
+          role={canEditMonthlyTarget && !isEditingMonthlyTarget ? 'button' : undefined}
+          tabIndex={canEditMonthlyTarget && !isEditingMonthlyTarget ? 0 : undefined}
+          aria-label={canEditMonthlyTarget && !isEditingMonthlyTarget ? 'Monthly target card' : undefined}
+        >
+          <div className="flex items-start gap-2.5">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-violet-100">
+              <Target className="h-4 w-4 text-violet-600" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[0.7rem] font-medium text-slate-500">Monthly Target</p>
+                  {isEditingMonthlyTarget ? (
+                    <div className="mt-1 space-y-2">
+                      <label className="sr-only" htmlFor="monthly-target-input">Monthly Target</label>
+                      <input
+                        id="monthly-target-input"
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={monthlyTargetDraft}
+                        onChange={(event) => setMonthlyTargetDraft(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') saveMonthlyTarget();
+                          if (event.key === 'Escape') {
+                            setMonthlyTargetDraft(String(Math.round(monthlyTarget)));
+                            setIsEditingMonthlyTarget(false);
+                          }
+                        }}
+                        className="w-full rounded-lg border border-violet-200 px-2.5 py-1.5 text-sm font-semibold text-slate-900 outline-none focus:border-violet-500"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={saveMonthlyTarget}
+                          className="rounded-lg bg-violet-600 px-2.5 py-1 text-[0.65rem] font-semibold text-white hover:bg-violet-700"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMonthlyTargetDraft(String(Math.round(monthlyTarget)));
+                            setIsEditingMonthlyTarget(false);
+                          }}
+                          className="rounded-lg border border-slate-200 px-2.5 py-1 text-[0.65rem] font-semibold text-slate-600 hover:bg-slate-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="mt-0.5 text-lg font-bold leading-tight text-slate-900">{toCurrency(monthlyTarget)}</p>
+                      <p className="mt-0.5 text-[0.65rem] text-slate-500">
+                        {canEditMonthlyTarget ? `${monthLabel} · Click to edit` : monthLabel}
+                      </p>
+                    </>
+                  )}
+                </div>
+                {canEditMonthlyTarget && !isEditingMonthlyTarget && (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setIsEditingMonthlyTarget(true);
+                    }}
+                    className="rounded-lg border border-violet-200 bg-violet-50 px-2 py-1 text-[0.65rem] font-semibold text-violet-700 hover:bg-violet-100"
+                    aria-label="Edit monthly target"
+                  >
+                    Edit
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
         <KpiCard
           icon={<TrendingUp className="h-4 w-4 text-amber-600" />}
           iconBg="bg-amber-100"
