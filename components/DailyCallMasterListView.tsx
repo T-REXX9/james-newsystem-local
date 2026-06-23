@@ -63,19 +63,19 @@ const categories: CategoryDefinition[] = [
   {
     id: 'priority',
     label: 'Priority List',
-    note: '15 days – 1 month',
+    note: 'Within 1 month',
     state: 'Active Buyers',
     accent: 'text-emerald-700',
     iconBg: 'bg-emerald-600',
     border: 'border-emerald-200',
     softBg: 'bg-emerald-50/60',
     dot: 'bg-emerald-500',
-    matches: (row) => row.purchaseAgeGroup === 'recent',
+    matches: (row) => row.purchaseAgeGroup === 'recent' || row.purchaseAgeGroup === 'two_weeks_to_one_month',
   },
   {
     id: 'recovery',
     label: 'Recovery List',
-    note: '1 month onwards',
+    note: '1 month onwards / no purchase yet',
     state: 'Recovery',
     accent: 'text-rose-700',
     iconBg: 'bg-rose-600',
@@ -113,7 +113,10 @@ const categories: CategoryDefinition[] = [
 const sumBy = (rows: DailyCallMasterCustomerRow[], field: 'totalSales' | 'currentMonthSales' | 'purchaseCount') =>
   rows.reduce((sum, row) => sum + row[field], 0);
 
-const ageLabel = (days: number) => days === 1 ? '1 day ago' : `${days} days ago`;
+const ageLabel = (row: DailyCallMasterCustomerRow) => {
+  if (!row.lastPurchaseDateRaw || row.purchaseCount === 0) return 'No purchase yet';
+  return row.daysSinceLastPurchase === 1 ? '1 day ago' : `${row.daysSinceLastPurchase} days ago`;
+};
 
 const caseOverviewItems = [
   { label: 'Inquiry & Orders', Icon: Users, open: 12, pending: 6, tone: 'text-blue-700 border-blue-200 bg-blue-50' },
@@ -350,7 +353,7 @@ const DailyCallMasterListView: React.FC = () => {
                       </td>
                       <td className="px-1 py-2.5">
                         <p className="font-medium">{row.lastPurchaseDate}</p>
-                        <p className="mt-1 text-[8px] text-slate-500">{ageLabel(row.daysSinceLastPurchase)}</p>
+                        <p className="mt-1 text-[8px] text-slate-500">{ageLabel(row)}</p>
                       </td>
                       <td className="px-1 py-2.5 font-bold">{compactPeso.format(row.currentMonthSales || row.totalSales)}</td>
                       <td className="break-words px-1 py-2.5">{row.assignedTo}</td>
