@@ -33,7 +33,7 @@ import { getVipStandingSummary } from '../utils/vipStanding';
 import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
 import { getVipTierConfig } from '../services/vipTierSettingsService';
 
-type DetailTabId =
+export type DetailTabId =
   | 'overview'
   | 'comments'
   | 'human'
@@ -49,6 +49,7 @@ type DetailTabId =
 interface DailyCallCustomerDetailExpansionProps {
   customer: DailyCallCustomerRow;
   currentUser: UserProfile | null;
+  initialTab?: DetailTabId;
 }
 
 const tabs: Array<{
@@ -165,9 +166,14 @@ const PanelCard: React.FC<{
 const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansionProps> = ({
   customer,
   currentUser,
+  initialTab = 'overview',
 }) => {
-  const [activeTab, setActiveTab] = useState<DetailTabId>('overview');
+  const [activeTab, setActiveTab] = useState<DetailTabId>(initialTab);
   const [vipConfig, setVipConfig] = useState<VipTierConfig>(DEFAULT_VIP_TIER_CONFIG);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab, customer.id]);
 
   useEffect(() => {
     let disposed = false;

@@ -55,10 +55,16 @@ const parseAccessRights = (value: AccessGroupRecord['access_rights']): string[] 
   }
 };
 
+const canonicalizeGroupName = (value: string): string => {
+  const normalized = value.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (normalized === 'sales person' || normalized === 'salesperson') return 'Sales Agent';
+  return value.trim();
+};
+
 const mapGroup = (group: AccessGroupRecord): AccessGroup => ({
   id: String(group.id),
   main_id: group.main_id,
-  name: group.name || '',
+  name: canonicalizeGroupName(group.name || ''),
   description: group.description || '',
   access_rights: parseAccessRights(group.access_rights),
   created_at: group.created_at,

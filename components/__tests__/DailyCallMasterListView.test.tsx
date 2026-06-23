@@ -138,11 +138,11 @@ describe('DailyCallMasterListView', () => {
   it('opens the full customer detail popup when a customer name is clicked', async () => {
     const user = userEvent.setup();
     const masterCustomer = {
-      id: 'recent-1', shopName: 'Recent Buyer Shop', province: 'Manila', city: 'Manila',
-      contactNumber: '0930', assignedTo: 'Joan Jerusalem', lastPurchaseDate: 'Jun 12, 2026',
-      lastPurchaseDateRaw: '2026-06-12', purchaseCount: 1, totalSales: 5000,
-      currentMonthSales: 5000, daysSinceLastPurchase: 3, monthsSinceLastPurchase: 0,
-      purchaseAgeGroup: 'recent' as const,
+      id: 'priority-1', shopName: 'Priority Buyer Shop', province: 'Manila', city: 'Manila',
+      contactNumber: '0930', assignedTo: 'Joan Jerusalem', lastPurchaseDate: 'May 26, 2026',
+      lastPurchaseDateRaw: '2026-05-26', purchaseCount: 1, totalSales: 5000,
+      currentMonthSales: 0, daysSinceLastPurchase: 20, monthsSinceLastPurchase: 0,
+      purchaseAgeGroup: 'two_weeks_to_one_month' as const,
     };
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
       meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 1 },
@@ -158,10 +158,61 @@ describe('DailyCallMasterListView', () => {
     } as any]);
 
     render(<DailyCallMasterListView />);
-    await user.click(await screen.findByRole('button', { name: 'View details for Recent Buyer Shop' }));
+    await user.click(await screen.findByRole('button', { name: 'View details for Priority Buyer Shop' }));
 
     expect(fetchCustomersForDailyCall).toHaveBeenCalledWith({});
-    expect(await screen.findByRole('dialog')).toHaveTextContent('Customer detail popup for Recent Buyer Shop');
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Customer detail popup for Priority Buyer Shop');
+  });
+
+  it('wires the call and message action buttons to the customer popup flow', async () => {
+    const user = userEvent.setup();
+    const masterCustomer = {
+      id: 'priority-1', shopName: 'Priority Buyer Shop', province: 'Manila', city: 'Manila',
+      contactNumber: '0930', assignedTo: 'Joan Jerusalem', lastPurchaseDate: 'May 26, 2026',
+      lastPurchaseDateRaw: '2026-05-26', purchaseCount: 1, totalSales: 5000,
+      currentMonthSales: 0, daysSinceLastPurchase: 20, monthsSinceLastPurchase: 0,
+      purchaseAgeGroup: 'two_weeks_to_one_month' as const,
+    };
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 1 },
+      items: [masterCustomer],
+    });
+    vi.mocked(fetchCustomersForDailyCall).mockResolvedValue([{
+      ...masterCustomer,
+      source: 'Customer Database', clientSince: '2024-01-15', codeDate: 'Gold',
+      ishinomotoDealerSince: '2024-01-15', ishinomotoSignageSince: '2024-02-01',
+      quota: 30000, modeOfPayment: '30 Days', courier: 'Manila', status: 'Active',
+      outstandingBalance: 1000, averageMonthlyOrder: 5000, monthlyOrder: 5000,
+      weeklyRangeTotals: [], dailyActivity: [],
+    } as any]);
+
+    render(<DailyCallMasterListView />);
+
+    await user.click(await screen.findByRole('button', { name: 'Call Priority Buyer Shop' }));
+    expect(fetchCustomersForDailyCall).toHaveBeenCalledWith({});
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Customer detail popup for Priority Buyer Shop');
+
+    cleanup();
+    vi.clearAllMocks();
+
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 1 },
+      items: [masterCustomer],
+    });
+    vi.mocked(fetchCustomersForDailyCall).mockResolvedValue([{
+      ...masterCustomer,
+      source: 'Customer Database', clientSince: '2024-01-15', codeDate: 'Gold',
+      ishinomotoDealerSince: '2024-01-15', ishinomotoSignageSince: '2024-02-01',
+      quota: 30000, modeOfPayment: '30 Days', courier: 'Manila', status: 'Active',
+      outstandingBalance: 1000, averageMonthlyOrder: 5000, monthlyOrder: 5000,
+      weeklyRangeTotals: [], dailyActivity: [],
+    } as any]);
+
+    render(<DailyCallMasterListView />);
+
+    await user.click(await screen.findByRole('button', { name: 'Message Priority Buyer Shop' }));
+    expect(fetchCustomersForDailyCall).toHaveBeenCalledWith({});
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Customer detail popup for Priority Buyer Shop');
   });
 
   it('opens case overview details from each View Details button', async () => {

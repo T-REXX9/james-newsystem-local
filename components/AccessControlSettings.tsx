@@ -53,11 +53,63 @@ const INITIAL_NEW_USER_FORM = {
   mobile: '',
 };
 
+const canonicalizeRoleLabel = (value: string): string => {
+  const normalized = value.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (normalized === 'sales person' || normalized === 'salesperson') return 'Sales Agent';
+  return value.trim();
+};
+
+const canonicalizeGroups = (groups: AccessGroup[]): AccessGroup[] => {
+  const merged = new Map<string, AccessGroup>();
+
+  groups.forEach((group) => {
+    const name = canonicalizeRoleLabel(group.name || '');
+    if (!name) return;
+
+    const key = name.toLowerCase();
+    const existing = merged.get(key);
+    const nextRights = Array.from(new Set([...(existing?.access_rights || []), ...(group.access_rights || [])]));
+
+    if (!existing) {
+      merged.set(key, {
+        ...group,
+        name,
+        access_rights: nextRights,
+      });
+      return;
+    }
+
+    merged.set(key, {
+      ...existing,
+      access_rights: nextRights,
+      assigned_staff_count: Math.max(existing.assigned_staff_count || 0, group.assigned_staff_count || 0),
+    });
+  });
+
+  return Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name));
+};
+
+const canonicalizeProfiles = (profiles: UserProfile[], groups: AccessGroup[]): UserProfile[] => {
+  const salesAgentGroup = groups.find((group) => canonicalizeRoleLabel(group.name || '') === 'Sales Agent');
+  const salesAgentGroupId = salesAgentGroup?.id || null;
+
+  return profiles.map((profile) => {
+    const nextRole = canonicalizeRoleLabel(String(profile.role || ''));
+    const shouldMapGroup = nextRole === 'Sales Agent' && salesAgentGroupId;
+
+    return {
+      ...profile,
+      role: nextRole,
+      group_id: shouldMapGroup ? salesAgentGroupId : profile.group_id,
+    };
+  });
+};
+
 const sanitizeAssignableRoles = (roles: Array<{ name?: string | null }>): string[] => {
   const seen = new Set<string>();
 
   return roles
-    .map((role) => String(role?.name || '').trim())
+    .map((role) => canonicalizeRoleLabel(String(role?.name || '')))
     .filter((role) => {
       if (!role) return false;
       const normalized = role.toLowerCase();
@@ -144,8 +196,9 @@ const AccessControlSettings: React.FC = () => {
     setIsLoading(true);
     try {
       const data = await fetchProfilesLocal({ page: targetPage, perPage: STAFF_PER_PAGE });
-      setProfiles(data.items);
-      setOriginalProfiles(data.items);
+      const nextProfiles = canonicalizeProfiles(data.items, groups);
+      setProfiles(nextProfiles);
+      setOriginalProfiles(nextProfiles);
       setPage(data.meta.page);
       setTotalPages(Math.max(1, data.meta.total_pages || 1));
       setTotalProfiles(Math.max(0, data.meta.total || 0));
@@ -170,7 +223,10 @@ const AccessControlSettings: React.FC = () => {
     setIsGroupsLoading(true);
     try {
       const data = await fetchAccessGroups();
-      setGroups(data);
+      const nextGroups = canonicalizeGroups(data);
+      setGroups(nextGroups);
+      setProfiles((prev) => canonicalizeProfiles(prev, nextGroups));
+      setOriginalProfiles((prev) => canonicalizeProfiles(prev, nextGroups));
     } catch (error) {
       console.error('Unable to load access groups:', error);
       setGroups([]);
@@ -310,7 +366,7 @@ const AccessControlSettings: React.FC = () => {
   const handleCreateGroup = async (data: { name: string; description: string; access_rights: string[] }) => {
     try {
       const created = await createAccessGroup(data.name, data.description, data.access_rights);
-      setGroups((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setGroups((prev) => canonicalizeGroups([...prev, created]));
       addToast({
         type: 'success',
         title: 'Group created',
@@ -334,7 +390,7 @@ const AccessControlSettings: React.FC = () => {
   ) => {
     try {
       const updated = await updateAccessGroup(id, data);
-      setGroups((prev) => prev.map((group) => (group.id === id ? updated : group)));
+      setGroups((prev) => canonicalizeGroups(prev.map((group) => (group.id === id ? updated : group))));
       await loadProfiles();
       addToast({
         type: 'success',

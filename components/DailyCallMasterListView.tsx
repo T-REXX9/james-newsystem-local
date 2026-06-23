@@ -27,6 +27,7 @@ import { fetchCustomersForDailyCall, fetchDailyCallMasterList } from '../service
 import { DailyCallCustomerRow, DailyCallMasterCustomerRow, DailyCallMasterListMeta } from '../types';
 import DashboardViewportFit from './DashboardViewportFit';
 import DailyCallCustomerDetailModal from './DailyCallCustomerDetailModal';
+import type { DetailTabId } from './DailyCallCustomerDetailExpansion';
 
 const fromDate = '2025-10-01';
 const monthlyTarget = 3_000_000;
@@ -63,19 +64,19 @@ const categories: CategoryDefinition[] = [
   {
     id: 'priority',
     label: 'Priority List',
-    note: 'Within 1 month',
+    note: '15-30 days since last purchase',
     state: 'Active Buyers',
     accent: 'text-emerald-700',
     iconBg: 'bg-emerald-600',
     border: 'border-emerald-200',
     softBg: 'bg-emerald-50/60',
     dot: 'bg-emerald-500',
-    matches: (row) => row.purchaseAgeGroup === 'recent' || row.purchaseAgeGroup === 'two_weeks_to_one_month',
+    matches: (row) => row.purchaseAgeGroup === 'two_weeks_to_one_month',
   },
   {
     id: 'recovery',
     label: 'Recovery List',
-    note: '1 month onwards / no purchase yet',
+    note: 'Over 1 month since last purchase',
     state: 'Recovery',
     accent: 'text-rose-700',
     iconBg: 'bg-rose-600',
@@ -143,7 +144,7 @@ const masterRowFallback = (row: DailyCallMasterCustomerRow): DailyCallCustomerRo
   quota: 0,
   modeOfPayment: '—',
   courier: [row.city, row.province].filter((value) => value && value !== '—').join(', ') || '—',
-  status: (row.purchaseAgeGroup === 'recent' ? 'Active' : 'Inactive') as DailyCallCustomerRow['status'],
+  status: (row.purchaseAgeGroup === 'over_one_month' ? 'Inactive' : 'Active') as DailyCallCustomerRow['status'],
   statusDate: row.lastPurchaseDate,
   outstandingBalance: 0,
   averageMonthlyOrder: row.purchaseCount ? row.totalSales / row.purchaseCount : 0,
@@ -162,6 +163,7 @@ const DailyCallMasterListView: React.FC = () => {
   const categoryTableRefs = useRef<Partial<Record<CategoryId, HTMLElement>>>({});
   const fullCustomerRowsRef = useRef<DailyCallCustomerRow[] | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<DailyCallCustomerRow | null>(null);
+  const [detailInitialTab, setDetailInitialTab] = useState<DetailTabId>('overview');
   const [loadingCustomerId, setLoadingCustomerId] = useState<string | null>(null);
   const [selectedCase, setSelectedCase] = useState<CaseOverviewItem | null>(null);
   const debouncedSearch = useDebounce(search, 400);
@@ -172,8 +174,9 @@ const DailyCallMasterListView: React.FC = () => {
     target.focus({ preventScroll: true });
   }, []);
 
-  const openCustomerDetails = useCallback(async (row: DailyCallMasterCustomerRow) => {
+  const openCustomerDetails = useCallback(async (row: DailyCallMasterCustomerRow, initialTab: DetailTabId = 'overview') => {
     setLoadingCustomerId(row.id);
+    setDetailInitialTab(initialTab);
     try {
       if (!fullCustomerRowsRef.current) {
         fullCustomerRowsRef.current = await fetchCustomersForDailyCall({});
@@ -359,8 +362,26 @@ const DailyCallMasterListView: React.FC = () => {
                       <td className="break-words px-1 py-2.5">{row.assignedTo}</td>
                       <td className="px-1 py-2.5">
                         <div className="flex justify-center gap-1">
-                          <button type="button" aria-label={`Call ${row.shopName}`} className="rounded-full border border-emerald-200 p-1 text-emerald-600"><Phone className="h-3 w-3" /></button>
-                          <button type="button" aria-label={`Message ${row.shopName}`} className="rounded-full border border-blue-200 p-1 text-blue-600"><MessageSquare className="h-3 w-3" /></button>
+                          <button
+                            type="button"
+                            aria-label={`Call ${row.shopName}`}
+                            title={`Open call details for ${row.shopName}`}
+                            onClick={() => openCustomerDetails(row, 'overview')}
+                            disabled={loadingCustomerId === row.id}
+                            className="rounded-full border border-emerald-200 p-1 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-60"
+                          >
+                            <Phone className="h-3 w-3" />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Message ${row.shopName}`}
+                            title={`Open communication history for ${row.shopName}`}
+                            onClick={() => openCustomerDetails(row, 'communication')}
+                            disabled={loadingCustomerId === row.id}
+                            className="rounded-full border border-blue-200 p-1 text-blue-600 transition hover:bg-blue-50 disabled:opacity-60"
+                          >
+                            <MessageSquare className="h-3 w-3" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -474,6 +495,7 @@ const DailyCallMasterListView: React.FC = () => {
         isOpen={Boolean(selectedCustomer)}
         customer={selectedCustomer}
         currentUser={null}
+        initialTab={detailInitialTab}
         onClose={() => setSelectedCustomer(null)}
       />
 

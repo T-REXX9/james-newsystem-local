@@ -2,6 +2,12 @@
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
 
+const canonicalizeRoleName = (value: string): string => {
+    const normalized = value.trim().toLowerCase().replace(/\s+/g, ' ');
+    if (normalized === 'sales person' || normalized === 'salesperson') return 'Sales Agent';
+    return value.trim();
+};
+
 export interface StaffRecord {
     id: string;
     full_name: string;
@@ -134,5 +140,19 @@ export const deleteStaff = async (staffId: string | number): Promise<void> => {
 export const fetchRoles = async (): Promise<RoleRecord[]> => {
     const query = new URLSearchParams({ main_id: String(API_MAIN_ID) });
     const payload = await requestJson(`${API_BASE_URL}/staff/roles?${query.toString()}`);
-    return payload?.data || [];
+    const roles = Array.isArray(payload?.data) ? payload.data : [];
+    const seen = new Set<string>();
+
+    return roles
+        .map((role) => ({
+            ...role,
+            name: canonicalizeRoleName(String(role?.name || '')),
+        }))
+        .filter((role) => {
+            if (!role.name) return false;
+            const key = role.name.toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
 };

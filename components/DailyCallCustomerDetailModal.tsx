@@ -4,12 +4,14 @@ import { ClipboardList, X } from 'lucide-react';
 import { DailyCallCustomerRow, UserProfile } from '../types';
 import DailyCallCustomerDetailExpansion from './DailyCallCustomerDetailExpansion';
 import { isKnownPriceGroup, normalizePriceGroup } from '../constants/pricingGroups';
+import type { DetailTabId } from './DailyCallCustomerDetailExpansion';
 
 interface DailyCallCustomerDetailModalProps {
   isOpen: boolean;
   customer: DailyCallCustomerRow | null;
   currentUser: UserProfile | null;
   onClose: () => void;
+  initialTab?: DetailTabId;
 }
 
 const focusableSelector =
@@ -31,6 +33,7 @@ const DailyCallCustomerDetailModal: React.FC<DailyCallCustomerDetailModalProps> 
   customer,
   currentUser,
   onClose,
+  initialTab = 'overview',
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -131,7 +134,7 @@ const DailyCallCustomerDetailModal: React.FC<DailyCallCustomerDetailModalProps> 
         </header>
 
         <div className="flex-1 overflow-y-auto p-2 sm:p-4">
-          <DailyCallCustomerDetailExpansion customer={customer} currentUser={currentUser} />
+          <DailyCallCustomerDetailExpansion customer={customer} currentUser={currentUser} initialTab={initialTab} />
         </div>
 
         <footer className="border-t border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/50 sm:px-6">

@@ -160,6 +160,20 @@ describe('AccessControlSettings - create staff account', () => {
     expect(createStaffAccountMock).not.toHaveBeenCalled();
   });
 
+  it('normalizes Sales Person into Sales Agent in the create account role selector', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AccessControlSettings />);
+
+    const addButtons = await screen.findAllByText('Add New Account');
+    await user.click(addButtons[0]);
+
+    const roleSelect = screen.getByRole('combobox');
+    const optionLabels = Array.from(roleSelect.querySelectorAll('option')).map((option) => option.textContent);
+
+    expect(optionLabels.filter((label) => label === 'Sales Agent')).toHaveLength(1);
+    expect(optionLabels).not.toContain('Sales Person');
+  });
+
   it('keeps the modal open and renders field errors when service validation fails', async () => {
     const user = userEvent.setup();
     createStaffAccountMock.mockResolvedValue({
