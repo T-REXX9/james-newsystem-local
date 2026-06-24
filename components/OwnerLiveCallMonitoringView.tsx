@@ -22,6 +22,8 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import { UserProfile } from '../types';
+import type { DailyCallMasterCustomerRow } from '../types';
+import { fetchDailyCallMasterList } from '../services/dailyCallMonitoringService';
 
 interface OwnerLiveCallMonitoringViewProps {
   currentUser: UserProfile | null;
@@ -290,6 +292,7 @@ const STORAGE_HELPER = {
 
 const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = ({ currentUser }) => {
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [masterListRows, setMasterListRows] = useState<DailyCallMasterCustomerRow[]>([]);
   const [interactions, setInteractions] = useState<InteractionItem[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [isLoadingSnapshot, setIsLoadingSnapshot] = useState(true);
@@ -333,7 +336,10 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
       const params = new URLSearchParams({
         main_id: String((currentUser as any)?.main_id || (currentUser as any)?.main_userid || API_MAIN_ID),
       });
-      const response = await fetch(`${API_BASE_URL}/daily-call-monitoring/owner-snapshot?${params.toString()}`);
+      const [response, masterListResult] = await Promise.all([
+        fetch(`${API_BASE_URL}/daily-call-monitoring/owner-snapshot?${params.toString()}`),
+        fetchDailyCallMasterList({ fromDate: '2025-10-01' }),
+      ]);
       if (!response.ok) throw new Error(`API request failed (${response.status})`);
 
       const payload = await response.json();
@@ -399,20 +405,24 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
       });
 
       const generatedInteractions: InteractionItem[] = [
-        ...callLogs.map((log) => {
+        ...callLogs.map((log): InteractionItem => {
           const contact = contactById.get(log.contact_id);
           const fallbackAgent = contact ? contactAgentId.get(contact.id) : undefined;
           const resolvedAgent = resolveAgent(log.agent_name, 'Unassigned');
+          const channelType: InteractionType =
+            (log.channel || '').toLowerCase().includes('text') || (log.channel || '').toLowerCase().includes('sms')
+              ? 'text'
+              : 'call';
           return {
             id: `call-${log.id}`,
             customerId: log.contact_id,
             agentId: log.agent_name ? resolvedAgent.id : fallbackAgent || resolvedAgent.id,
-            type: (log.channel || '').toLowerCase().includes('text') || (log.channel || '').toLowerCase().includes('sms') ? 'text' : 'call',
+            type: channelType,
             outcome: mapCallOutcome(log.outcome),
             date: toDateKey(log.occurred_at),
           };
         }),
-        ...inquiries.map((inquiry) => {
+        ...inquiries.map((inquiry): InteractionItem => {
           const fallbackAgent = contactAgentId.get(inquiry.contact_id);
           const resolvedAgent = resolveAgent(inquiry.sales_person, 'Unassigned');
           return {
@@ -424,7 +434,7 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
             date: toDateKey(inquiry.sales_date),
           };
         }),
-        ...purchases.map((purchase) => ({
+        ...purchases.map((purchase): InteractionItem => ({
           id: `purchase-${purchase.id}`,
           customerId: purchase.contact_id,
           agentId: contactAgentId.get(purchase.contact_id) || 'agent:unassigned',
@@ -433,7 +443,7 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
           date: toDateKey(purchase.purchase_date),
           amount: Number(purchase.total_amount || 0),
         })),
-        ...returns.map((item) => ({
+        ...returns.map((item): InteractionItem => ({
           id: `return-${item.id}`,
           customerId: item.contact_id,
           agentId: contactAgentId.get(item.contact_id) || 'agent:unassigned',
@@ -478,7 +488,7 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
                 : metrics.purchases === 0
                   ? 'active-buyers-no-purchase'
                   : 'active-buyers-no-purchase';
-        const dealStatus = customer.dealStatus === 'Open'
+        const dealStatus: DealStatus = customer.dealStatus === 'Open'
           ? metrics.purchases > 0
             ? 'Won'
             : metrics.inquiries > 0
@@ -536,11 +546,13 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
       });
 
       setCustomers(categorizedCustomers);
+      setMasterListRows(masterListResult.items);
       setInteractions(generatedInteractions);
       setAgents(derivedAgents.sort((a, b) => a.name.localeCompare(b.name)));
     } catch (error) {
       console.error('Error loading owner live call monitoring snapshot:', error);
       setCustomers([]);
+      setMasterListRows([]);
       setInteractions([]);
       setAgents([]);
       setSnapshotError('Unable to load live monitoring data from local MySQL API.');
@@ -597,6 +609,36 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
       return matchesAgent && matchesArea && matchesSearch;
     });
   }, [customers, agentFilter, areaFilter, search]);
+
+  const masterListCategoryRows = useMemo(() => {
+    const selectedAgentName = agentFilter ? agentById[agentFilter]?.name.toLowerCase() : '';
+    const normalizedArea = areaFilter?.toLowerCase() || '';
+    const normalizedSearch = search.trim().toLowerCase();
+
+    const rows = masterListRows.filter((row) => {
+      const haystack = [
+        row.shopName,
+        row.province,
+        row.city,
+        row.contactNumber,
+        row.assignedTo,
+      ].join(' ').toLowerCase();
+      const matchesSearch = !normalizedSearch || haystack.includes(normalizedSearch);
+      const matchesArea =
+        !normalizedArea ||
+        row.province.toLowerCase() === normalizedArea ||
+        row.city.toLowerCase() === normalizedArea;
+      const matchesAgent = !selectedAgentName || row.assignedTo.toLowerCase() === selectedAgentName;
+      return matchesSearch && matchesArea && matchesAgent;
+    });
+
+    return {
+      priority: rows.filter((row) => row.purchaseAgeGroup === 'two_weeks_to_one_month'),
+      recovery: rows.filter((row) => row.purchaseAgeGroup === 'over_one_month'),
+      verified: [],
+      unverified: [],
+    };
+  }, [masterListRows, agentById, agentFilter, areaFilter, search]);
 
   const filteredInteractions = useMemo(() => {
     const customerSet = new Set(baseFilteredCustomers.map((customer) => customer.id));
@@ -787,28 +829,19 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
     const summarize = (
       id: CustomerCategoryId,
       label: string,
-      rows: Customer[],
+      rows: DailyCallMasterCustomerRow[],
       tone: CustomerCategorySummary['tone'],
       note: string
     ): CustomerCategorySummary => {
-      const customerIds = new Set(rows.map((row) => row.id));
-      const sales = interactions
-        .filter(
-          (item) =>
-            item.type === 'purchase' && customerIds.has(item.customerId) && parseISO(item.date) >= monthStart
-        )
-        .reduce((sum, item) => sum + (item.amount || 0), 0);
-      const potential = rows.reduce(
-        (sum, row) => sum + Math.max(0, row.creditLimit - row.ledgerBalance),
-        0
-      );
+      const sales = rows.reduce((sum, row) => sum + row.currentMonthSales, 0);
+      const potential = rows.reduce((sum, row) => sum + row.totalSales, 0);
 
       return {
         id,
         label,
         customers: rows.length,
         currentSales: sales,
-        averageSales: rows.length ? Math.round(sales / rows.length) : 0,
+        averageSales: rows.length ? Math.round(potential / rows.length) : 0,
         potentialSales: potential,
         note,
         tone,
@@ -816,12 +849,12 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
     };
 
     return [
-      summarize('priority', 'Priority List', categoryLists.activeNoPurchase, 'green', 'Current active buyers'),
-      summarize('recovery', 'Recovery List', categoryLists.inactivePositive, 'red', 'Needs recovery contact'),
-      summarize('verified', 'Verified Prospects', categoryLists.prospectivePositive, 'blue', 'By assigned agent'),
-      summarize('unverified', 'Unverified Prospects', categoryLists.inactiveNegative, 'orange', 'Needs call / verification'),
+      summarize('priority', 'Priority List', masterListCategoryRows.priority, 'green', '15-30 days since last purchase'),
+      summarize('recovery', 'Recovery List', masterListCategoryRows.recovery, 'red', 'Over 1 month since last purchase'),
+      summarize('verified', 'Verified Prospects', masterListCategoryRows.verified, 'blue', 'Empty for now'),
+      summarize('unverified', 'Unverified Prospects', masterListCategoryRows.unverified, 'orange', 'Empty for now'),
     ];
-  }, [categoryLists, interactions, monthStart]);
+  }, [masterListCategoryRows]);
 
   const successfulOutcomes = filteredInteractions.filter((item) => item.outcome === 'Successful').length;
 

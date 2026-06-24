@@ -155,6 +155,22 @@ const calculatePriority = (lastPurchase: string | undefined, daysSinceContact: n
   return (purchaseCadenceTier * 1_000) + purchaseAgeScore + contactAgeTieBreaker + salesTieBreaker;
 };
 
+const getPurchaseAgeGroup = (lastPurchase?: string): 'priority' | 'recovery' | 'recent' | 'unverified' => {
+  if (!lastPurchase || Number.isNaN(Date.parse(lastPurchase))) return 'unverified';
+  const daysSincePurchase = getDaysSince(lastPurchase);
+  if (daysSincePurchase >= 15 && daysSincePurchase <= 30) return 'priority';
+  if (daysSincePurchase > 30) return 'recovery';
+  return 'recent';
+};
+
+const formatCompactCurrency = (value: number) =>
+  new Intl.NumberFormat('en-PH', {
+    style: 'currency',
+    currency: 'PHP',
+    notation: 'compact',
+    maximumFractionDigits: value >= 100_000 ? 2 : 0,
+  }).format(value);
+
 const mapApiStatusToCustomerStatus = (status: string): CustomerStatus => {
   const normalized = (status || '').trim().toLowerCase();
   if (normalized === 'inactive') return CustomerStatus.INACTIVE;
@@ -319,79 +335,79 @@ const MasterTableRow = React.memo(({
   const locationLabel = getContactLocationLabel(row.contact);
   return (
     <tr
-      className={`hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors cursor-pointer ${densityConfig.rowPadding} ${isSelected ? 'bg-brand-blue/5 dark:bg-brand-blue/10' : ''}`}
+      className={`cursor-pointer border-b border-slate-100 bg-white transition-colors hover:bg-blue-50/35 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800/70 ${densityConfig.rowPadding} ${isSelected ? 'bg-blue-50/70 dark:bg-brand-blue/10' : ''}`}
       style={{ height: `${tableRowHeight}px` }}
       onClick={() => onSelectClient(row.contact.id)}
     >
       <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} overflow-hidden`}>
-        <div className="flex items-center gap-2">
-          <p className={`font-semibold text-slate-800 dark:text-white truncate ${densityConfig.fontSize}`} title={row.contact.company}>
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="truncate text-[12px] font-extrabold uppercase leading-tight text-[#10244c] dark:text-white" title={row.contact.company}>
             {row.contact.company}
           </p>
         </div>
-        <p className={`text-slate-500 dark:text-slate-400 truncate ${densityConfig.fontSize}`} title={locationLabel}>
+        <p className="mt-0.5 truncate text-[11px] font-medium uppercase leading-tight text-slate-500 dark:text-slate-400" title={locationLabel}>
           {locationLabel}
         </p>
       </td>
       <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding}`}>
-        <span className={`font-semibold rounded-full ${densityConfig.badgePadding} ${statusBadgeClasses(row.contact.status)} ${densityConfig.fontSize}`}>
+        <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${statusBadgeClasses(row.contact.status)}`}>
           {row.contact.status}
         </span>
       </td>
       <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding}`}>
-        <p className={`font-semibold text-slate-700 dark:text-slate-200 ${densityConfig.fontSize}`} title={row.lastContact ? new Date(row.lastContact).toLocaleDateString() : 'No activity yet'}>
+        <p className="text-[12px] font-bold text-[#10244c] dark:text-slate-200" title={row.lastContact ? new Date(row.lastContact).toLocaleDateString() : 'No activity yet'}>
           {formatRelativeTime(row.lastContact)}
         </p>
       </td>
       <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding}`}>
-        <p className={`text-slate-600 dark:text-slate-300 ${densityConfig.fontSize}`} title={row.lastPurchase ? new Date(row.lastPurchase).toLocaleDateString() : 'No purchases'}>
+        <p className="text-[12px] font-medium text-slate-600 dark:text-slate-300" title={row.lastPurchase ? new Date(row.lastPurchase).toLocaleDateString() : 'No purchases'}>
           {formatDate(row.lastPurchase)}
         </p>
       </td>
       <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding}`}>
-        <p className={`font-bold text-slate-800 dark:text-white ${densityConfig.fontSize}`} title={`Total sales: ${formatCurrency(row.totalSales)}`}>
+        <p className="text-[12px] font-extrabold text-[#10244c] dark:text-white" title={`Total sales: ${formatCurrency(row.totalSales)}`}>
           {formatCurrency(row.totalSales)}
         </p>
       </td>
       <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-center`}>
-        <span className={`inline-block rounded-full ${densityConfig.badgePadding} font-semibold ${priorityBadgeClasses(row.priority)} ${densityConfig.fontSize}`}>
+        <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-extrabold ${priorityBadgeClasses(row.priority)}`}>
           {Math.round(row.priority)}
         </span>
       </td>
       <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} align-middle`}>
-        <div className="flex items-center justify-center gap-2.5">
+        <div className="flex items-center justify-center gap-2">
           <button
             onClick={(e) => {
               e.stopPropagation();
               onCallContact(row.contact);
             }}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-700 dark:bg-slate-800/80 dark:text-slate-200 transition-all duration-150 hover:bg-brand-blue/20 hover:text-brand-blue active:scale-95 active:bg-brand-blue/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 leading-none shrink-0"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-[#10244c] transition-all duration-150 hover:bg-brand-blue/15 hover:text-brand-blue active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 dark:bg-slate-800/80 dark:text-slate-200"
             title="Call"
             aria-label={`Call ${row.contact.company}`}
           >
-            <Phone className="w-5 h-5" />
+            <Phone className="h-4 w-4" />
           </button>
           <button
             onClick={(e) => {
               e.stopPropagation();
               onOpenSMSModal(row.contact);
             }}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-700 dark:bg-slate-800/80 dark:text-slate-200 transition-all duration-150 hover:bg-emerald-100 hover:text-emerald-700 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-300 active:scale-95 active:bg-emerald-200 dark:active:bg-emerald-500/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40 leading-none shrink-0"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-[#10244c] transition-all duration-150 hover:bg-blue-100 hover:text-brand-blue active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 dark:bg-slate-800/80 dark:text-slate-200"
             title="SMS"
             aria-label={`Send SMS to ${row.contact.company}`}
           >
-            <MessageSquare className="w-5 h-5" />
+            <MessageSquare className="h-4 w-4" />
           </button>
           <button
             onClick={(e) => {
               e.stopPropagation();
               onOpenPatientChart(row.contact.id);
             }}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-700 dark:bg-slate-800/80 dark:text-slate-200 transition-all duration-150 hover:bg-slate-200 hover:text-slate-900 dark:hover:bg-slate-700 dark:hover:text-white active:scale-95 active:bg-slate-300/80 dark:active:bg-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/40 leading-none shrink-0"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-[#10244c] transition-all duration-150 hover:bg-blue-100 hover:text-brand-blue active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 dark:bg-slate-800/80 dark:text-slate-200"
             title="Details"
             aria-label={`Open details for ${row.contact.company}`}
           >
-            <ClipboardList className="w-5 h-5" />
+            <ClipboardList className="h-4 w-4" />
           </button>
         </div>
       </td>
@@ -1118,6 +1134,33 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     );
   }, [baseMasterRows, debouncedSearch]);
 
+  const customerListSummaries = useMemo(() => {
+    const summarize = (
+      rows: MasterRow[],
+      id: 'priority' | 'recovery' | 'verified' | 'unverified',
+      label: string,
+      note: string,
+      tone: 'emerald' | 'rose' | 'blue' | 'orange',
+      metricLabel: string
+    ) => {
+      const sales = rows.reduce((sum, row) => sum + row.totalSales, 0);
+      const average = rows.length ? Math.round(sales / rows.length) : 0;
+      return { id, label, note, tone, rows, sales, average, metricLabel };
+    };
+
+    const priorityRows = masterRows.filter((row) => getPurchaseAgeGroup(row.lastPurchase) === 'priority');
+    const recoveryRows = masterRows.filter((row) => getPurchaseAgeGroup(row.lastPurchase) === 'recovery');
+    const verifiedRows = masterRows.filter((row) => getPurchaseAgeGroup(row.lastPurchase) === 'recent');
+    const unverifiedRows = masterRows.filter((row) => getPurchaseAgeGroup(row.lastPurchase) === 'unverified');
+
+    return [
+      summarize(priorityRows, 'priority', 'Priority List', '15-30 days since last purchase', 'emerald', 'Current Month Sales'),
+      summarize(recoveryRows, 'recovery', 'Recovery List', 'Over 1 month since last purchase', 'rose', 'Average Monthly Sales'),
+      summarize(unverifiedRows, 'unverified', 'Unverified Prospects', 'No purchase history', 'orange', 'Average Monthly Purchase'),
+      summarize(verifiedRows, 'verified', 'Verified Prospects', 'Recent purchase', 'blue', 'Average Monthly Purchase'),
+    ];
+  }, [masterRows]);
+
   useEffect(() => {
     if (!masterRows.length) {
       if (selectedClientId !== null) {
@@ -1419,8 +1462,35 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     );
   }
 
+  const summaryToneClasses = {
+    emerald: {
+      card: 'border-emerald-200 bg-emerald-50/60',
+      title: 'text-emerald-700',
+      icon: 'bg-emerald-600',
+      value: 'text-emerald-700',
+    },
+    rose: {
+      card: 'border-rose-200 bg-rose-50/60',
+      title: 'text-rose-700',
+      icon: 'bg-rose-600',
+      value: 'text-rose-700',
+    },
+    blue: {
+      card: 'border-blue-200 bg-blue-50/60',
+      title: 'text-blue-700',
+      icon: 'bg-blue-600',
+      value: 'text-blue-700',
+    },
+    orange: {
+      card: 'border-orange-200 bg-orange-50/60',
+      title: 'text-orange-600',
+      icon: 'bg-orange-500',
+      value: 'text-orange-600',
+    },
+  } as const;
+
   return (
-    <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950">
+    <div className="h-full min-h-0 overflow-y-auto bg-white text-[#10244c] dark:bg-slate-950 dark:text-white">
       <AddContactModal
         isOpen={showAddCustomerModal}
         onClose={() => setShowAddCustomerModal(false)}
@@ -1428,11 +1498,13 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         mode="create"
       />
 
-      <header className="flex-shrink-0 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between px-4 lg:px-6 py-3">
+      <div className="flex min-h-full flex-col gap-5 p-4 lg:p-6">
+      <header className="flex-shrink-0 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
+          <p className="text-[12px] font-extrabold uppercase tracking-wide text-slate-500 dark:text-slate-400">Daily Call Monitoring</p>
           <div className="flex items-center gap-2">
             <ClipboardList className="w-5 h-5 text-brand-blue" />
-            <h1 className="text-xl font-bold text-slate-800 dark:text-white">Customer List</h1>
+            <h1 className="text-3xl font-extrabold tracking-tight text-[#0f1f46] dark:text-white">Customer List</h1>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             All customers assigned to <span className="font-semibold">{agentDisplayName}</span>, ordered by priority
@@ -1479,112 +1551,163 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         </div>
       )}
 
-      <section className="flex-1 min-h-0 flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-brand-blue/70 rounded-xl shadow-sm mx-4 lg:mx-6 mb-4 overflow-hidden">
-        <div className="flex-shrink-0 border-b border-slate-100 p-3 dark:border-slate-800">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 px-2.5 py-1.5 rounded-lg flex-1 min-w-[180px]">
-              <Search className="w-4 h-4 text-slate-400" />
-              <input
-                className={`bg-transparent outline-none text-slate-800 dark:text-slate-200 placeholder:text-slate-400 flex-1 ${densityConfig.fontSize}`}
-                placeholder="Search clients"
-                value={searchValue}
-                onChange={(event) => setSearchValue(event.target.value)}
-              />
-            </div>
-            <span className="shrink-0 text-xs font-semibold text-slate-500 dark:text-slate-400">
-              {masterRows.length} {masterRows.length === 1 ? 'customer' : 'customers'}
-            </span>
-          </div>
-        </div>
-        <div className="flex-1 min-h-0 overflow-hidden" ref={masterViewportWrapperRef}>
-          <div
-            ref={masterScrollRef}
-            className="h-full overflow-y-auto relative"
-            onScroll={handleMasterTableScroll}
-          >
-              {isFiltering && (
-                <div className="absolute inset-0 z-20 bg-white/40 dark:bg-slate-900/40 backdrop-blur-[1px] transition-opacity duration-200 pointer-events-none flex items-center justify-center">
-                  <div className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/90 px-2 py-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    Filtering
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-4" aria-label="Customer category summaries">
+        {customerListSummaries.map((summary) => {
+          const tone = summaryToneClasses[summary.tone];
+          return (
+            <article key={summary.id} className={`h-36 overflow-hidden rounded-lg border p-3 shadow-sm ${tone.card}`}>
+              <h2 className={`text-[13px] font-extrabold uppercase leading-tight ${tone.title}`} title={`${summary.label} (${summary.note})`}>
+                <span className="block truncate">{summary.label}</span>
+                <span className="block truncate text-[10px] normal-case">{summary.note}</span>
+              </h2>
+              <div className="mt-3 grid grid-cols-[2.5rem_minmax(3rem,0.75fr)_minmax(0,1fr)] items-center gap-2">
+                <div className={`grid h-9 w-9 place-items-center rounded-full text-white ${tone.icon}`}>
+                  <Users className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 border-r border-slate-200 pr-2">
+                  <p className="truncate text-xl font-extrabold leading-none text-[#10244c] dark:text-white">{summary.rows.length}</p>
+                  <p className="mt-1 truncate text-[11px] font-semibold text-[#10244c] dark:text-slate-200">Customers</p>
+                </div>
+                <div className="min-w-0 space-y-1 text-right">
+                  <div>
+                    <p className="truncate text-[10px] font-semibold leading-tight text-[#10244c] dark:text-slate-300" title={summary.metricLabel}>{summary.metricLabel}</p>
+                    <p className={`truncate text-base font-extrabold leading-tight ${tone.value}`} title={formatCurrency(summary.id === 'priority' ? 0 : summary.average)}>
+                      {formatCompactCurrency(summary.id === 'priority' ? 0 : summary.average)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="truncate text-[10px] font-semibold leading-tight text-[#10244c] dark:text-slate-300">Potential Sales</p>
+                    <p className={`truncate text-base font-extrabold leading-tight ${tone.value}`} title={formatCurrency(summary.sales)}>
+                      {formatCompactCurrency(summary.sales)}
+                    </p>
                   </div>
                 </div>
-              )}
-              <table className="w-full divide-y divide-slate-200 dark:divide-slate-800" style={{ tableLayout: 'fixed' }}>
-                <thead className="bg-slate-50 dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 sticky top-0 z-10">
-                  <tr>
-                    <th className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-left text-[11px] font-semibold uppercase tracking-wide`} style={{ width: '30%' }}>
-                      Client
-                    </th>
-                    <th className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-left text-[11px] font-semibold uppercase tracking-wide`} style={{ width: '12%' }}>
-                      Status
-                    </th>
-                    <th className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-left text-[11px] font-semibold uppercase tracking-wide`} style={{ width: '15%' }}>
-                      Last Contact
-                    </th>
-                    <th className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-left text-[11px] font-semibold uppercase tracking-wide`} style={{ width: '12%' }}>
-                      Last Purchase
-                    </th>
-                    <th className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-left text-[11px] font-semibold uppercase tracking-wide`} style={{ width: '15%' }}>
-                      Potential
-                    </th>
-                    <th className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-left text-[11px] font-semibold uppercase tracking-wide`} style={{ width: '10%' }}>
-                      Priority
-                    </th>
-                    <th className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-center text-[11px] font-semibold uppercase tracking-wide`} style={{ width: '160px' }}>
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800" style={{ transform: `translateY(${masterVirtual.offsetTop}px)` }}>
-                  {masterVirtual.visibleItems.map((row) => (
-                    <MasterTableRow
-                      key={row.contact.id}
-                      row={row}
-                      densityConfig={densityConfig}
-                      tableRowHeight={tableRowHeight}
-                      selectedClientId={selectedClientId}
-                      onSelectClient={handleSelectClient}
-                      onCallContact={handleMasterRowCall}
-                      onOpenSMSModal={handleMasterRowSMS}
-                      onOpenPatientChart={handleMasterRowDetails}
-                    />
-                  ))}
-                  {masterRows.length > 0 && (
-                    <tr aria-hidden="true">
-                      <td
-                        colSpan={7}
-                        style={{
-                          height: `${Math.max(0, masterVirtual.totalHeight - (masterVirtual.visibleItems.length * tableRowHeight))}px`,
-                          padding: 0
-                        }}
-                      />
-                    </tr>
-                  )}
-                  {masterRows.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-center text-sm text-slate-500 dark:text-slate-400`}>
-                        <div className="flex flex-col items-center gap-3 py-4">
-                          <span>{dataUnavailable ? 'Client data is unavailable. Retry loading the dashboard.' : 'No clients match the current filters.'}</span>
-                          {!dataUnavailable && (
-                            <button
-                              type="button"
-                              onClick={() => setShowAddCustomerModal(true)}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                            >
-                              <UserPlus className="h-4 w-4" />
-                              Create New Customer
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+              </div>
+            </article>
+          );
+        })}
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex items-center gap-3">
+          <div className="flex min-w-[180px] flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            <Search className="w-5 h-5 text-slate-400" />
+            <input
+              className="flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-200"
+              placeholder="Search clients"
+              value={searchValue}
+              onChange={(event) => setSearchValue(event.target.value)}
+            />
           </div>
+          <span className="shrink-0 text-sm font-bold text-slate-500 dark:text-slate-400">
+            {masterRows.length} {masterRows.length === 1 ? 'customer' : 'customers'}
+          </span>
         </div>
       </section>
+
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-4" aria-label="Segregated customer category tables">
+        {customerListSummaries.map((summary) => {
+          const tone = summaryToneClasses[summary.tone];
+          return (
+            <article key={`${summary.id}-table`} className="flex h-[560px] min-w-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <header className="flex min-h-[58px] items-center justify-between gap-2 border-b border-slate-200 px-3 py-3 dark:border-slate-800">
+                <h2 className={`min-w-0 truncate text-sm font-extrabold uppercase leading-tight ${tone.title}`} title={`${summary.label} (${summary.note})`}>
+                  {summary.label} <span className="text-[10px] normal-case">({summary.note})</span>
+                </h2>
+                <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${tone.icon}`} aria-hidden="true" />
+              </header>
+
+              <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-slate-50/50 p-2 dark:bg-slate-950/30">
+                {summary.rows.length === 0 ? (
+                  <div className="flex h-full min-h-[220px] items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white px-4 text-center text-sm font-semibold text-slate-400 dark:border-slate-800 dark:bg-slate-900">
+                    {dataUnavailable ? 'Client data is unavailable. Retry loading the dashboard.' : 'No customers in this category.'}
+                  </div>
+                ) : (
+                  <table className="w-full table-fixed border-separate border-spacing-y-2">
+                    <tbody>
+                      {summary.rows.map((row, index) => (
+                        <tr
+                          key={row.contact.id}
+                          className="group cursor-pointer"
+                          onClick={() => handleSelectClient(row.contact.id)}
+                          tabIndex={0}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              handleSelectClient(row.contact.id);
+                            }
+                          }}
+                        >
+                          <td className="p-0">
+                            <div className={`grid w-full grid-cols-[1.25rem_minmax(0,1fr)_4.2rem_3.7rem] items-center gap-2 rounded-lg border border-slate-100 bg-white p-2 text-left shadow-sm transition-colors group-hover:border-blue-200 group-hover:bg-blue-50/50 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800 ${selectedClientId === row.contact.id ? 'border-blue-200 bg-blue-50/70 dark:bg-brand-blue/10' : ''}`}>
+                              <span className="text-[11px] font-extrabold text-slate-400">{index + 1}</span>
+                              <span className="min-w-0">
+                                <span className="block truncate text-[11px] font-extrabold uppercase leading-tight text-[#10244c] dark:text-white" title={row.contact.company}>
+                                  {row.contact.company}
+                                </span>
+                                <span className="mt-0.5 block truncate text-[10px] font-medium leading-tight text-slate-500 dark:text-slate-400" title={getPhoneNumber(row.contact) || getContactLocationLabel(row.contact)}>
+                                  {getPhoneNumber(row.contact) || getContactLocationLabel(row.contact)}
+                                </span>
+                                <span className="mt-0.5 block truncate text-[10px] leading-tight text-slate-400" title={`${formatDate(row.lastPurchase)} · ${formatRelativeTime(row.lastPurchase)}`}>
+                                  {formatDate(row.lastPurchase)} · {formatRelativeTime(row.lastPurchase)}
+                                </span>
+                              </span>
+                              <span className="min-w-0 text-right">
+                                <span className="block truncate text-[11px] font-extrabold text-[#10244c] dark:text-white" title={formatCurrency(row.totalSales)}>
+                                  {formatCompactCurrency(row.totalSales)}
+                                </span>
+                                <span className="mt-0.5 block truncate text-[9px] font-bold uppercase leading-tight text-slate-500 dark:text-slate-400" title={row.contact.salesman || agentDisplayName}>
+                                  {row.contact.salesman || agentDisplayName}
+                                </span>
+                              </span>
+                              <span className="flex justify-end gap-1">
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleMasterRowCall(row.contact);
+                                  }}
+                                  className="grid h-6 w-6 place-items-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                                  title="Call"
+                                  aria-label={`Call ${row.contact.company}`}
+                                >
+                                  <Phone className="h-3 w-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleMasterRowSMS(row.contact);
+                                  }}
+                                  className="grid h-6 w-6 place-items-center rounded-full border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
+                                  title="SMS"
+                                  aria-label={`Send SMS to ${row.contact.company}`}
+                                >
+                                  <MessageSquare className="h-3 w-3" />
+                                </button>
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              <footer className="mt-auto flex items-center justify-between gap-2 border-t border-slate-200 px-3 py-2.5 text-[10px] font-bold dark:border-slate-800">
+                <span className="min-w-0 truncate text-[#10244c] dark:text-slate-200">
+                  Showing {summary.rows.length ? 1 : 0} to {summary.rows.length} of {summary.rows.length} entries
+                </span>
+                <button type="button" className={`shrink-0 ${tone.title}`}>
+                  View all {summary.rows.length} customers ›
+                </button>
+              </footer>
+            </article>
+          );
+        })}
+      </section>
+      </div>
       {detailsPanelOpen && selectedClient && (
         <div
           className="fixed inset-x-0 bottom-0 top-auto z-50 flex max-h-[calc(100dvh-1rem)] flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl animate-in slide-in-from-bottom-10 duration-300 dark:border-slate-800 dark:bg-slate-900 sm:inset-y-0 sm:left-auto sm:right-0 sm:h-full sm:max-h-none sm:w-full sm:max-w-2xl sm:rounded-none sm:rounded-l-2xl sm:border-l sm:border-t-0 sm:slide-in-from-right-10"
