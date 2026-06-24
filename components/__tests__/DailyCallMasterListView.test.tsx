@@ -97,7 +97,8 @@ describe('DailyCallMasterListView', () => {
     expect(screen.getByRole('button', { name: 'Verified Prospects (0)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Unverified Prospects (0)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'All Customers (3)' })).toBeInTheDocument();
-    expect(screen.getAllByText(/Empty for now/i).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText(/No purchases yet/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/Verified, awaiting first purchase/i).length).toBeGreaterThanOrEqual(1);
   });
 
   it('uses the quick go to buttons to scroll to category tables and the full overview', async () => {

@@ -635,8 +635,8 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
     return {
       priority: rows.filter((row) => row.purchaseAgeGroup === 'two_weeks_to_one_month'),
       recovery: rows.filter((row) => row.purchaseAgeGroup === 'over_one_month'),
-      verified: [],
-      unverified: [],
+      verified: rows.filter((row) => row.purchaseAgeGroup === 'no_purchase' && row.verification === 'Verified'),
+      unverified: rows.filter((row) => row.purchaseAgeGroup === 'no_purchase' && row.verification !== 'Verified'),
     };
   }, [masterListRows, agentById, agentFilter, areaFilter, search]);
 

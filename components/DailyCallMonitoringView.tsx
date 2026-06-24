@@ -1513,6 +1513,14 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowAddCustomerModal(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-semibold shadow-sm hover:bg-amber-600"
+            title="Add New Prospect"
+          >
+            <UserPlus className="w-4 h-4" />
+            Add Prospect
+          </button>
+          <button
+            onClick={() => setShowAddCustomerModal(true)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-blue text-white text-xs font-semibold shadow-sm hover:bg-blue-700"
             title="Create New Customer"
           >

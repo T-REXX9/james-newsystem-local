@@ -649,6 +649,8 @@ export interface DailyCallMasterCustomerRow {
   city: string;
   contactNumber: string;
   assignedTo: string;
+  profileType?: string;
+  verification?: string;
   lastPurchaseDate: string;
   lastPurchaseDateRaw: string;
   purchaseCount: number;
@@ -656,7 +658,7 @@ export interface DailyCallMasterCustomerRow {
   currentMonthSales: number;
   daysSinceLastPurchase: number;
   monthsSinceLastPurchase: number;
-  purchaseAgeGroup: 'recent' | 'two_weeks_to_one_month' | 'over_one_month';
+  purchaseAgeGroup: 'recent' | 'two_weeks_to_one_month' | 'over_one_month' | 'no_purchase';
 }
 
 export interface DailyCallMasterListMeta {

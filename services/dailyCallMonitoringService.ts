@@ -400,7 +400,7 @@ const mapDailyCallCustomerRow = (row: any): DailyCallCustomerRow => ({
 const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => {
   const purchaseAgeGroup = String(row?.purchaseAgeGroup ?? row?.purchase_age_group);
   const normalizedPurchaseAgeGroup: DailyCallMasterCustomerRow['purchaseAgeGroup'] =
-    purchaseAgeGroup === 'recent' || purchaseAgeGroup === 'two_weeks_to_one_month' || purchaseAgeGroup === 'over_one_month'
+    purchaseAgeGroup === 'recent' || purchaseAgeGroup === 'two_weeks_to_one_month' || purchaseAgeGroup === 'over_one_month' || purchaseAgeGroup === 'no_purchase'
       ? purchaseAgeGroup
       : 'over_one_month';
 
@@ -411,6 +411,8 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
     city: cleanNullableText(row?.city, '—'),
     contactNumber: cleanNullableText(row?.contactNumber ?? row?.contact_number, '—'),
     assignedTo: cleanNullableText(row?.assignedTo ?? row?.assigned_to, 'Unassigned'),
+    profileType: cleanNullableText(row?.profileType ?? row?.profile_type),
+    verification: cleanNullableText(row?.verification),
     lastPurchaseDate: cleanNullableText(row?.lastPurchaseDate ?? row?.last_purchase_date, '—'),
     lastPurchaseDateRaw: cleanNullableText(row?.lastPurchaseDateRaw ?? row?.last_purchase_date_raw),
     purchaseCount: Number(row?.purchaseCount ?? row?.purchase_count ?? 0),

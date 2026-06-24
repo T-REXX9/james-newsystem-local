@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Loader2, Eye, EyeOff, Plus, Trash2 } from 'lucide-react';
 import { CustomerStatus, DealStage, Contact, ContactPerson, type CustomerVatType } from '../types';
 import ValidationSummary from './ValidationSummary';
@@ -355,8 +356,8 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
+  const modal = (
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
         
         {/* Header */}
@@ -522,12 +523,21 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                           <input type="number" className="input" value={formData.creditLimit} onChange={e => setFormData({...formData, creditLimit: Number(e.target.value)})} />
                       </div>
                       
-                      <div>
-                          <label className="label">Status</label>
-                          <select className="input" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as CustomerStatus})}>
-                             {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                          </select>
-                      </div>
+                      {isEditMode ? (
+                        <div>
+                            <label className="label">Status</label>
+                            <select className="input" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as CustomerStatus})}>
+                               {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                        </div>
+                      ) : (
+                        <div>
+                            <label className="label">Status</label>
+                            <div className="input flex items-center bg-slate-50 text-slate-600 text-sm cursor-not-allowed select-none">
+                              Prospective
+                            </div>
+                        </div>
+                      )}
                       <div>
                           <label className="label">Debt Type</label>
                           <select className="input" value={formData.debtType} onChange={e => setFormData({...formData, debtType: e.target.value as any})}>
@@ -695,6 +705,8 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
       </div>
     </div>
   );
+  if (typeof document === 'undefined' || !document.body) return null;
+  return createPortal(modal, document.body);
 };
 
 export default AddContactModal;

@@ -331,6 +331,7 @@ const mapContactPayloadToApi = (contact: ContactPayloadWithSalesPersonId) => {
     notes: String(contact?.comment || ''),
     debt_type: debtType,
     profile_type: status === 3 ? 'Prospect' : 'Old',
+    verification: status === 3 ? 'Unverified' : '',
   };
 };
 
