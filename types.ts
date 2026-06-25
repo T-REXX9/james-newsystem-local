@@ -14,6 +14,7 @@ export enum CustomerStatus {
   ACTIVE = 'Active',
   INACTIVE = 'Inactive',
   PROSPECTIVE = 'Prospective',
+  VERIFIED_PROSPECT = 'Verified Prospect',
   BLACKLISTED = 'Blacklisted'
 }
 
