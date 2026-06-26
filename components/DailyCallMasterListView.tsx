@@ -64,14 +64,14 @@ const categories: CategoryDefinition[] = [
   {
     id: 'priority',
     label: 'Priority List',
-    note: 'Last bought from October 2025 onwards',
+    note: 'Any ledger activity since October 2025 onwards',
     state: 'Active Buyers',
     accent: 'text-emerald-700',
     iconBg: 'bg-emerald-600',
     border: 'border-emerald-200',
     softBg: 'bg-emerald-50/60',
     dot: 'bg-emerald-500',
-    matches: (row) => row.purchaseAgeGroup === 'two_weeks_to_one_month',
+    matches: (row) => row.purchaseCount > 0,
   },
   {
     id: 'recovery',

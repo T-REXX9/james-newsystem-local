@@ -22,7 +22,7 @@ describe('DailyCallMasterListView', () => {
     vi.clearAllMocks();
   });
 
-  it('renders the master list dashboard with the updated priority and prospective rules', async () => {
+  it('counts every customer with ledger activity since October 2025 in the priority list', async () => {
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
       meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 5 },
       items: [
@@ -114,7 +114,7 @@ describe('DailyCallMasterListView', () => {
     render(<DailyCallMasterListView />);
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Priority List (1)' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Priority List (3)' })).toBeInTheDocument()
     );
 
     expect(screen.getAllByText(/Priority List/i).length).toBeGreaterThan(0);
@@ -126,13 +126,13 @@ describe('DailyCallMasterListView', () => {
     expect(screen.getByText(/Quick Summary/i)).toBeInTheDocument();
     expect(screen.getByText(/Quick Go To/i)).toBeInTheDocument();
     expect(screen.getByTestId('dashboard-fit-viewport')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Priority List (1)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Priority List (3)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Recovery List (1)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Verified Prospects (0)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Unverified Prospects (2)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'All Customers (5)' })).toBeInTheDocument();
     expect(screen.getAllByText(/No purchases yet/i).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText(/Last bought from October 2025 onwards/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/Any ledger activity since October 2025 onwards/i).length).toBeGreaterThanOrEqual(1);
   });
 
   it('uses the quick go to buttons to scroll to category tables and the full overview', async () => {
