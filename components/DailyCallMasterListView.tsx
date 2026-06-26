@@ -64,7 +64,7 @@ const categories: CategoryDefinition[] = [
   {
     id: 'priority',
     label: 'Priority List',
-    note: '15-30 days since last purchase',
+    note: 'Last bought from October 2025 onwards',
     state: 'Active Buyers',
     accent: 'text-emerald-700',
     iconBg: 'bg-emerald-600',
@@ -95,7 +95,7 @@ const categories: CategoryDefinition[] = [
     border: 'border-blue-200',
     softBg: 'bg-blue-50/60',
     dot: 'bg-blue-500',
-    matches: (row) => row.purchaseAgeGroup === 'no_purchase' && row.verification === 'Verified',
+    matches: () => false,
   },
   {
     id: 'unverified',
@@ -107,7 +107,7 @@ const categories: CategoryDefinition[] = [
     border: 'border-orange-200',
     softBg: 'bg-orange-50/60',
     dot: 'bg-orange-400',
-    matches: (row) => row.purchaseAgeGroup === 'no_purchase' && row.verification !== 'Verified',
+    matches: (row) => row.purchaseAgeGroup === 'no_purchase',
   },
 ];
 

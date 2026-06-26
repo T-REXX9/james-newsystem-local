@@ -22,9 +22,9 @@ describe('DailyCallMasterListView', () => {
     vi.clearAllMocks();
   });
 
-  it('renders the master list dashboard with the updated priority and recovery rules', async () => {
+  it('renders the master list dashboard with the updated priority and prospective rules', async () => {
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
-      meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 3 },
+      meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 5 },
       items: [
         {
           id: 'warm-1',
@@ -74,6 +74,40 @@ describe('DailyCallMasterListView', () => {
           monthsSinceLastPurchase: 0,
           purchaseAgeGroup: 'recent',
         },
+        {
+          id: 'prospect-verified-1',
+          shopName: 'Verified Prospect Shop',
+          province: 'Laguna',
+          city: 'Calamba',
+          contactNumber: '0940',
+          assignedTo: 'Apostol Ella',
+          verification: 'Verified',
+          lastPurchaseDate: '—',
+          lastPurchaseDateRaw: '',
+          purchaseCount: 0,
+          totalSales: 0,
+          currentMonthSales: 0,
+          daysSinceLastPurchase: 0,
+          monthsSinceLastPurchase: 0,
+          purchaseAgeGroup: 'no_purchase',
+        },
+        {
+          id: 'prospect-unverified-1',
+          shopName: 'Fresh Prospect Shop',
+          province: 'Batangas',
+          city: 'Lipa',
+          contactNumber: '0950',
+          assignedTo: 'Joan Jerusalem',
+          verification: '',
+          lastPurchaseDate: '—',
+          lastPurchaseDateRaw: '',
+          purchaseCount: 0,
+          totalSales: 0,
+          currentMonthSales: 0,
+          daysSinceLastPurchase: 0,
+          monthsSinceLastPurchase: 0,
+          purchaseAgeGroup: 'no_purchase',
+        },
       ],
     });
 
@@ -95,10 +129,10 @@ describe('DailyCallMasterListView', () => {
     expect(screen.getByRole('button', { name: 'Priority List (1)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Recovery List (1)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Verified Prospects (0)' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Unverified Prospects (0)' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'All Customers (3)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Unverified Prospects (2)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'All Customers (5)' })).toBeInTheDocument();
     expect(screen.getAllByText(/No purchases yet/i).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText(/Verified, awaiting first purchase/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/Last bought from October 2025 onwards/i).length).toBeGreaterThanOrEqual(1);
   });
 
   it('uses the quick go to buttons to scroll to category tables and the full overview', async () => {
