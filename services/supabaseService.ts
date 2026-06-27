@@ -963,13 +963,6 @@ const validateStaffAccountInput = (input: CreateStaffAccountInput): StaffAccount
 
   if (!input.password) {
     errors.password = 'Password is required';
-  } else {
-    const hasLength = input.password.length >= 8;
-    const hasLetter = /[a-zA-Z]/.test(input.password);
-    const hasNumber = /\d/.test(input.password);
-    if (!hasLength || !hasLetter || !hasNumber) {
-      errors.password = 'Password must be at least 8 characters and include letters and numbers';
-    }
   }
 
   if (input.role && !STAFF_ROLES.includes(input.role)) {

@@ -182,9 +182,11 @@ const getUserContext = () => {
 const mapApiStatusToUi = (row: ApiCustomerRow): CustomerStatus => {
   const debtType = String(row?.debt_type || '').trim().toLowerCase();
   const profileType = String(row?.profile_type || '').trim().toLowerCase();
+  const verification = String(row?.verification || '').trim().toLowerCase();
   const status = toNumber(row?.status, 1);
 
   if (debtType === 'bad') return CustomerStatus.BLACKLISTED;
+  if ((profileType === 'prospect' || status === 3) && verification === 'verified') return CustomerStatus.VERIFIED_PROSPECT;
   if (profileType === 'prospect' || status === 3) return CustomerStatus.PROSPECTIVE;
   if (status === 0) return CustomerStatus.INACTIVE;
   return CustomerStatus.ACTIVE;
@@ -193,6 +195,7 @@ const mapApiStatusToUi = (row: ApiCustomerRow): CustomerStatus => {
 const mapUiStatusToApi = (status: CustomerStatus | string | undefined): number => {
   const normalized = String(status || '').trim().toLowerCase();
   if (normalized === String(CustomerStatus.INACTIVE).toLowerCase()) return 0;
+  if (normalized === String(CustomerStatus.VERIFIED_PROSPECT).toLowerCase()) return 3;
   if (normalized === String(CustomerStatus.PROSPECTIVE).toLowerCase()) return 3;
   return 1;
 };
@@ -273,6 +276,7 @@ const mapApiCustomerToContact = (row: ApiCustomerRow): LocalContact => {
     dealershipQuota: toNumber(row?.dealer_quota, 0),
     creditLimit: toNumber(row?.credit_limit, 0),
     status,
+    verification: sanitizeLegacyString(row?.verification || ''),
     isHidden: toNumber(row?.status, 1) === 0,
     debtType: String(row?.debt_type || 'Good').toLowerCase() === 'bad' ? 'Bad' : 'Good',
     comment: sanitizeLegacyString(row?.notes || ''),
@@ -331,7 +335,7 @@ const mapContactPayloadToApi = (contact: ContactPayloadWithSalesPersonId) => {
     notes: String(contact?.comment || ''),
     debt_type: debtType,
     profile_type: status === 3 ? 'Prospect' : 'Old',
-    verification: status === 3 ? 'Unverified' : '',
+    verification: status === 3 ? String(contact?.verification || 'Unverified') : '',
   };
 };
 
@@ -367,6 +371,7 @@ const mapContactUpdatesToApi = (contact: Partial<ContactPayloadWithSalesPersonId
   if (hasOwn(contact, 'creditLimit')) payload.credit_limit = toNumber(contact.creditLimit, 0);
   if (hasOwn(contact, 'comment')) payload.notes = String(contact.comment || '');
   if (hasOwn(contact, 'debtType')) payload.debt_type = String(contact.debtType || 'Good');
+  if (hasOwn(contact, 'verification')) payload.verification = String(contact.verification || '');
 
   if (hasOwn(contact, 'status')) {
     const status = mapUiStatusToApi(contact.status as CustomerStatus | undefined);

@@ -55,7 +55,7 @@ import {
   fetchContactCustomerLogsForDailyCall,
   subscribeToDailyCallMonitoringUpdates
 } from '../services/dailyCallMonitoringService';
-import { createContact, fetchContactById } from '../services/customerDatabaseLocalApiService';
+import { createContact, fetchContactById, updateContact } from '../services/customerDatabaseLocalApiService';
 import {
   CallLogEntry,
   CallOutcome,
@@ -163,6 +163,12 @@ const getPurchaseAgeGroup = (lastPurchase?: string): 'priority' | 'recovery' | '
   return 'recent';
 };
 
+const hasPurchaseHistory = (lastPurchase?: string) =>
+  Boolean(lastPurchase && !Number.isNaN(Date.parse(lastPurchase)));
+
+const isProspectContact = (contact: Contact) =>
+  contact.status === CustomerStatus.PROSPECTIVE || contact.status === CustomerStatus.VERIFIED_PROSPECT;
+
 const formatCompactCurrency = (value: number) =>
   new Intl.NumberFormat('en-PH', {
     style: 'currency',
@@ -174,6 +180,7 @@ const formatCompactCurrency = (value: number) =>
 const mapApiStatusToCustomerStatus = (status: string): CustomerStatus => {
   const normalized = (status || '').trim().toLowerCase();
   if (normalized === 'inactive') return CustomerStatus.INACTIVE;
+  if (normalized === 'verified_prospect' || normalized === 'verified prospect') return CustomerStatus.VERIFIED_PROSPECT;
   if (normalized === 'prospective') return CustomerStatus.PROSPECTIVE;
   if (normalized === 'blacklisted') return CustomerStatus.BLACKLISTED;
   return CustomerStatus.ACTIVE;
@@ -207,6 +214,7 @@ const toContactModel = (row: any): Contact => ({
   codeText: String(row?.dealerPriceGroup || ''),
   codeDate: String(row?.dealerPriceDate || ''),
   status: mapApiStatusToCustomerStatus(String(row?.status || 'active')),
+  verification: String(row?.verification || ''),
   isHidden: false,
   debtType: Number(row?.outstandingBalance || 0) > 0 ? 'Bad' : 'Good',
   comment: '',
@@ -485,6 +493,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(false);
   const [showContactDetails, setShowContactDetails] = useState(false);
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
+  const [addCustomerKind, setAddCustomerKind] = useState<'customer' | 'prospect' | 'verifiedProspect'>('customer');
   const [isFiltering, setIsFiltering] = useState(false);
   const [masterViewportHeight, setMasterViewportHeight] = useState(420);
   const masterViewportWrapperRef = useRef<HTMLDivElement | null>(null);
@@ -1148,16 +1157,19 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       return { id, label, note, tone, rows, sales, average, metricLabel };
     };
 
-    const priorityRows = masterRows.filter((row) => getPurchaseAgeGroup(row.lastPurchase) === 'priority');
+    const priorityRows = masterRows.filter((row) => hasPurchaseHistory(row.lastPurchase));
     const recoveryRows = masterRows.filter((row) => getPurchaseAgeGroup(row.lastPurchase) === 'recovery');
-    const verifiedRows = masterRows.filter((row) => getPurchaseAgeGroup(row.lastPurchase) === 'recent');
-    const unverifiedRows = masterRows.filter((row) => getPurchaseAgeGroup(row.lastPurchase) === 'unverified');
+    const noPurchaseProspectRows = masterRows.filter((row) =>
+      getPurchaseAgeGroup(row.lastPurchase) === 'unverified' && isProspectContact(row.contact)
+    );
+    const verifiedRows = noPurchaseProspectRows.filter((row) => row.contact.verification === 'Verified');
+    const unverifiedRows = noPurchaseProspectRows.filter((row) => row.contact.verification !== 'Verified');
 
     return [
-      summarize(priorityRows, 'priority', 'Priority List', '15-30 days since last purchase', 'emerald', 'Current Month Sales'),
+      summarize(priorityRows, 'priority', 'Priority List', 'Any ledger activity since October 2025 onwards', 'emerald', 'Current Month Sales'),
       summarize(recoveryRows, 'recovery', 'Recovery List', 'Over 1 month since last purchase', 'rose', 'Average Monthly Sales'),
-      summarize(unverifiedRows, 'unverified', 'Unverified Prospects', 'No purchase history', 'orange', 'Average Monthly Purchase'),
-      summarize(verifiedRows, 'verified', 'Verified Prospects', 'Recent purchase', 'blue', 'Average Monthly Purchase'),
+      summarize(verifiedRows, 'verified', 'Verified Prospects', 'Verified, awaiting first purchase', 'blue', 'Average Monthly Purchase'),
+      summarize(unverifiedRows, 'unverified', 'Unverified Prospects', 'No purchases yet', 'orange', 'Average Monthly Purchase'),
     ];
   }, [masterRows]);
 
@@ -1373,6 +1385,34 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     setShowPatientChart(true);
   }, []);
 
+  const handleRequestProspectVerification = useCallback(async (contact: Contact) => {
+    try {
+      await updateContact(contact.id, {
+        status: CustomerStatus.PROSPECTIVE,
+        verification: 'Pending Verification',
+      });
+      setContacts((prev) => prev.map((item) =>
+        item.id === contact.id
+          ? { ...item, status: CustomerStatus.PROSPECTIVE, verification: 'Pending Verification' }
+          : item
+      ));
+      await loadAgentData();
+      addToast({
+        type: 'success',
+        title: 'Verification requested',
+        description: `${contact.company} was sent to Master User for verification.`,
+        durationMs: 4000,
+      });
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: 'Unable to request verification',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        durationMs: 6000,
+      });
+    }
+  }, [addToast, loadAgentData]);
+
   useEffect(() => {
     if (!isFiltering) return;
     const snapshot = pendingFilterSnapshotRef.current;
@@ -1496,6 +1536,9 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         onClose={() => setShowAddCustomerModal(false)}
         onSubmit={handleSubmitNewCustomer}
         mode="create"
+        defaultVerification={addCustomerKind === 'verifiedProspect' ? 'Pending Verification' : 'Unverified'}
+        title={addCustomerKind === 'verifiedProspect' ? 'Request Prospect Verification' : addCustomerKind === 'prospect' ? 'Add Prospect' : 'Add New Customer'}
+        submitLabel={addCustomerKind === 'verifiedProspect' ? 'Send Verification Request' : undefined}
       />
 
       <div className="flex min-h-full flex-col gap-5 p-4 lg:p-6">
@@ -1512,7 +1555,10 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowAddCustomerModal(true)}
+            onClick={() => {
+              setAddCustomerKind('prospect');
+              setShowAddCustomerModal(true);
+            }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-semibold shadow-sm hover:bg-amber-600"
             title="Add New Prospect"
           >
@@ -1520,7 +1566,21 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             Add Prospect
           </button>
           <button
-            onClick={() => setShowAddCustomerModal(true)}
+            onClick={() => {
+              setAddCustomerKind('verifiedProspect');
+              setShowAddCustomerModal(true);
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold shadow-sm hover:bg-blue-700"
+            title="Request Prospect Verification"
+          >
+            <UserCheck className="w-4 h-4" />
+            Request Verification
+          </button>
+          <button
+            onClick={() => {
+              setAddCustomerKind('customer');
+              setShowAddCustomerModal(true);
+            }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-blue text-white text-xs font-semibold shadow-sm hover:bg-blue-700"
             title="Create New Customer"
           >
@@ -1647,7 +1707,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                           }}
                         >
                           <td className="p-0">
-                            <div className={`grid w-full grid-cols-[1.25rem_minmax(0,1fr)_4.2rem_3.7rem] items-center gap-2 rounded-lg border border-slate-100 bg-white p-2 text-left shadow-sm transition-colors group-hover:border-blue-200 group-hover:bg-blue-50/50 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800 ${selectedClientId === row.contact.id ? 'border-blue-200 bg-blue-50/70 dark:bg-brand-blue/10' : ''}`}>
+                            <div className={`grid w-full grid-cols-[1.25rem_minmax(0,1fr)_4.2rem_5.7rem] items-center gap-2 rounded-lg border border-slate-100 bg-white p-2 text-left shadow-sm transition-colors group-hover:border-blue-200 group-hover:bg-blue-50/50 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800 ${selectedClientId === row.contact.id ? 'border-blue-200 bg-blue-50/70 dark:bg-brand-blue/10' : ''}`}>
                               <span className="text-[11px] font-extrabold text-slate-400">{index + 1}</span>
                               <span className="min-w-0">
                                 <span className="block truncate text-[11px] font-extrabold uppercase leading-tight text-[#10244c] dark:text-white" title={row.contact.company}>
@@ -1669,6 +1729,21 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                 </span>
                               </span>
                               <span className="flex justify-end gap-1">
+                                {summary.id === 'unverified' && (
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      handleRequestProspectVerification(row.contact);
+                                    }}
+                                    className="grid h-6 w-6 place-items-center rounded-full border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
+                                    title={row.contact.verification === 'Pending Verification' ? 'Verification already requested' : 'Request verification'}
+                                    aria-label={row.contact.verification === 'Pending Verification' ? `Verification already requested for ${row.contact.company}` : `Request verification for ${row.contact.company}`}
+                                    disabled={row.contact.verification === 'Pending Verification'}
+                                  >
+                                    <UserCheck className="h-3 w-3" />
+                                  </button>
+                                )}
                                 <button
                                   type="button"
                                   onClick={(event) => {

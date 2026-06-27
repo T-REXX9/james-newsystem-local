@@ -4,10 +4,16 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import userEvent from '@testing-library/user-event';
 import DailyCallMasterListView from '../DailyCallMasterListView';
 import { fetchCustomersForDailyCall, fetchDailyCallMasterList } from '../../services/dailyCallMonitoringService';
+import { updateContact } from '../../services/customerDatabaseLocalApiService';
 
 vi.mock('../../services/dailyCallMonitoringService', () => ({
   fetchDailyCallMasterList: vi.fn(),
   fetchCustomersForDailyCall: vi.fn(),
+}));
+
+vi.mock('../../services/customerDatabaseLocalApiService', () => ({
+  createContact: vi.fn(),
+  updateContact: vi.fn(),
 }));
 
 vi.mock('../DailyCallCustomerDetailModal', () => ({
@@ -16,15 +22,53 @@ vi.mock('../DailyCallCustomerDetailModal', () => ({
     : null,
 }));
 
+vi.mock('../ToastProvider', () => ({
+  useToast: () => ({
+    addToast: vi.fn(),
+  }),
+}));
+
 describe('DailyCallMasterListView', () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
   });
 
+  it('lets master user approve a pending verification request into verified prospects', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 1 },
+      items: [{
+        id: 'pending-verified-1',
+        shopName: 'Pending Prospect Shop',
+        province: 'Laguna',
+        city: 'Calamba',
+        contactNumber: '0940',
+        assignedTo: 'Apostol Ella',
+        profileType: 'Prospect',
+        verification: 'Pending Verification',
+        lastPurchaseDate: '—',
+        lastPurchaseDateRaw: '',
+        purchaseCount: 0,
+        totalSales: 0,
+        currentMonthSales: 0,
+        daysSinceLastPurchase: 0,
+        monthsSinceLastPurchase: 0,
+        purchaseAgeGroup: 'no_purchase',
+      }],
+    });
+    vi.mocked(updateContact).mockResolvedValue(undefined);
+
+    render(<DailyCallMasterListView />);
+
+    await user.click(await screen.findByRole('button', { name: 'Approve verification for Pending Prospect Shop' }));
+
+    expect(updateContact).toHaveBeenCalledWith('pending-verified-1', { verification: 'Verified' });
+  });
+
   it('counts every customer with ledger activity since October 2025 in the priority list', async () => {
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
-      meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 5 },
+      meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 6 },
       items: [
         {
           id: 'warm-1',
@@ -81,6 +125,25 @@ describe('DailyCallMasterListView', () => {
           city: 'Calamba',
           contactNumber: '0940',
           assignedTo: 'Apostol Ella',
+          profileType: 'Prospect',
+          verification: 'Verified',
+          lastPurchaseDate: '—',
+          lastPurchaseDateRaw: '',
+          purchaseCount: 0,
+          totalSales: 0,
+          currentMonthSales: 0,
+          daysSinceLastPurchase: 0,
+          monthsSinceLastPurchase: 0,
+          purchaseAgeGroup: 'no_purchase',
+        },
+        {
+          id: 'old-verified-no-purchase',
+          shopName: 'Old Verified No Purchase',
+          province: 'Laguna',
+          city: 'Calamba',
+          contactNumber: '0941',
+          assignedTo: 'Apostol Ella',
+          profileType: 'Old',
           verification: 'Verified',
           lastPurchaseDate: '—',
           lastPurchaseDateRaw: '',
@@ -98,6 +161,7 @@ describe('DailyCallMasterListView', () => {
           city: 'Lipa',
           contactNumber: '0950',
           assignedTo: 'Joan Jerusalem',
+          profileType: 'Prospect',
           verification: '',
           lastPurchaseDate: '—',
           lastPurchaseDateRaw: '',
@@ -128,9 +192,9 @@ describe('DailyCallMasterListView', () => {
     expect(screen.getByTestId('dashboard-fit-viewport')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Priority List (3)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Recovery List (1)' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Verified Prospects (0)' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Unverified Prospects (2)' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'All Customers (5)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Verified Prospects (1)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Unverified Prospects (1)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'All Customers (6)' })).toBeInTheDocument();
     expect(screen.getAllByText(/No purchases yet/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/Any ledger activity since October 2025 onwards/i).length).toBeGreaterThanOrEqual(1);
   });

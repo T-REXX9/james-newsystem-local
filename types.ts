@@ -325,6 +325,7 @@ export interface Contact {
 
   // Status & Logic
   status: CustomerStatus; // "status_filter"
+  verification?: string;
   isHidden: boolean; // "hide_unhide"
   debtType: 'Good' | 'Bad';
   comment: string; // General comment
@@ -635,6 +636,7 @@ export interface DailyCallCustomerRow {
   modeOfPayment: string;
   courier: string;
   status: CustomerStatus;
+  verification?: string;
   statusDate?: string;
   outstandingBalance: number;
   averageMonthlyOrder: number;

@@ -166,20 +166,6 @@ const AccessControlSettings: React.FC = () => {
     [groups]
   );
 
-  const passwordStrength = useMemo(() => {
-    const value = newUserForm.password;
-    if (!value) return { label: '', level: 0 };
-
-    let score = 0;
-    if (value.length >= 8) score += 1;
-    if (/[A-Z]/.test(value)) score += 1;
-    if (/\d/.test(value)) score += 1;
-    if (/[^A-Za-z0-9]/.test(value)) score += 1;
-
-    const levels = ['Weak', 'Fair', 'Good', 'Strong'];
-    return { label: levels[Math.min(score - 1, levels.length - 1)] || 'Weak', level: score };
-  }, [newUserForm.password]);
-
   useEffect(() => {
     loadProfiles();
   }, [page]);
@@ -449,8 +435,6 @@ const AccessControlSettings: React.FC = () => {
     }
     if (!newUserForm.password) {
       errors.password = 'Password is required';
-    } else if (newUserForm.password.length < 8) {
-      errors.password = 'Password must be at least 8 characters';
     }
     if (!newUserForm.role.trim()) {
       errors.role = 'Please select a role';
@@ -933,26 +917,7 @@ const AccessControlSettings: React.FC = () => {
                   value={newUserForm.password}
                   onChange={(event) => setNewUserForm({ ...newUserForm, password: event.target.value })}
                   placeholder="Set initial password"
-                  minLength={8}
                 />
-                {passwordStrength.label && (
-                  <p className="mt-1 flex items-center gap-2 text-xs text-slate-500">
-                    <span>Password strength:</span>
-                    <span
-                      className={
-                        passwordStrength.level >= 4
-                          ? 'font-semibold text-green-600'
-                          : passwordStrength.level >= 3
-                            ? 'font-semibold text-blue-600'
-                            : passwordStrength.level >= 2
-                              ? 'font-semibold text-amber-600'
-                              : 'font-semibold text-red-600'
-                      }
-                    >
-                      {passwordStrength.label}
-                    </span>
-                  </p>
-                )}
                 {formErrors.password && <p className="mt-1 text-xs text-red-500">{formErrors.password}</p>}
               </div>
 

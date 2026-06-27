@@ -24,8 +24,10 @@ import {
 } from 'lucide-react';
 import { useDebounce } from '../hooks/useDebounce';
 import { fetchCustomersForDailyCall, fetchDailyCallMasterList } from '../services/dailyCallMonitoringService';
-import { DailyCallCustomerRow, DailyCallMasterCustomerRow, DailyCallMasterListMeta } from '../types';
+import { createContact, updateContact } from '../services/customerDatabaseLocalApiService';
+import { Contact, DailyCallCustomerRow, DailyCallMasterCustomerRow, DailyCallMasterListMeta } from '../types';
 import DashboardViewportFit from './DashboardViewportFit';
+import AddContactModal from './AddContactModal';
 import DailyCallCustomerDetailModal from './DailyCallCustomerDetailModal';
 import type { DetailTabId } from './DailyCallCustomerDetailExpansion';
 
@@ -95,7 +97,7 @@ const categories: CategoryDefinition[] = [
     border: 'border-blue-200',
     softBg: 'bg-blue-50/60',
     dot: 'bg-blue-500',
-    matches: () => false,
+    matches: (row) => row.purchaseAgeGroup === 'no_purchase' && isProspectRow(row) && row.verification === 'Verified',
   },
   {
     id: 'unverified',
@@ -107,9 +109,14 @@ const categories: CategoryDefinition[] = [
     border: 'border-orange-200',
     softBg: 'bg-orange-50/60',
     dot: 'bg-orange-400',
-    matches: (row) => row.purchaseAgeGroup === 'no_purchase',
+    matches: (row) => row.purchaseAgeGroup === 'no_purchase' && isProspectRow(row) && row.verification !== 'Verified',
   },
 ];
+
+const isProspectRow = (row: DailyCallMasterCustomerRow) => {
+  const profileType = String(row.profileType || '').trim().toLowerCase();
+  return profileType.includes('prospect');
+};
 
 const sumBy = (rows: DailyCallMasterCustomerRow[], field: 'totalSales' | 'currentMonthSales' | 'purchaseCount') =>
   rows.reduce((sum, row) => sum + row[field], 0);
@@ -163,6 +170,7 @@ const DailyCallMasterListView: React.FC = () => {
   const categoryTableRefs = useRef<Partial<Record<CategoryId, HTMLElement>>>({});
   const fullCustomerRowsRef = useRef<DailyCallCustomerRow[] | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<DailyCallCustomerRow | null>(null);
+  const [showAddVerifiedProspectModal, setShowAddVerifiedProspectModal] = useState(false);
   const [detailInitialTab, setDetailInitialTab] = useState<DetailTabId>('overview');
   const [loadingCustomerId, setLoadingCustomerId] = useState<string | null>(null);
   const [selectedCase, setSelectedCase] = useState<CaseOverviewItem | null>(null);
@@ -202,6 +210,24 @@ const DailyCallMasterListView: React.FC = () => {
       if (withLoading) setLoading(false);
     }
   }, [debouncedSearch]);
+
+  const handleSubmitVerifiedProspect = useCallback(async (data: Omit<Contact, 'id'>) => {
+    const created = await createContact({
+      ...data,
+      verification: 'Verified',
+    });
+    await loadRows(false);
+    setShowAddVerifiedProspectModal(false);
+    return created;
+  }, [loadRows]);
+
+  const handleVerifyExistingProspect = useCallback(async (row: DailyCallMasterCustomerRow) => {
+    await updateContact(row.id, { verification: 'Verified' });
+    setRows((prev) => prev.map((item) =>
+      item.id === row.id ? { ...item, verification: 'Verified' } : item
+    ));
+    await loadRows(false);
+  }, [loadRows]);
 
   useEffect(() => {
     loadRows();
@@ -246,6 +272,15 @@ const DailyCallMasterListView: React.FC = () => {
       className="min-w-[1180px] space-y-4 bg-white text-[#0f1f46] outline-none"
       data-testid="master-list-dashboard"
     >
+      <AddContactModal
+        isOpen={showAddVerifiedProspectModal}
+        onClose={() => setShowAddVerifiedProspectModal(false)}
+        onSubmit={handleSubmitVerifiedProspect}
+        mode="create"
+        defaultVerification="Verified"
+        title="Add Verified Prospect"
+        submitLabel="Save Verified Prospect"
+      />
       <header className="flex items-center justify-between gap-4">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Owner Daily Call Monitoring</p>
@@ -262,6 +297,13 @@ const DailyCallMasterListView: React.FC = () => {
             className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-10 pr-3 text-sm outline-none focus:border-blue-500"
           />
         </label>
+        <button
+          type="button"
+          onClick={() => setShowAddVerifiedProspectModal(true)}
+          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700"
+        >
+          <UserRoundCheck className="h-4 w-4" /> Verified Prospect
+        </button>
       </header>
 
       {error && (
@@ -334,7 +376,7 @@ const DailyCallMasterListView: React.FC = () => {
                     <th className="w-[62px] px-1 py-2">Last Purchase</th>
                     <th className="w-[58px] px-1 py-2">Sales</th>
                     <th className="w-[62px] px-1 py-2">Agent</th>
-                    <th className="w-12 px-1 py-2 text-center">Action</th>
+                    <th className="w-16 px-1 py-2 text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -362,6 +404,18 @@ const DailyCallMasterListView: React.FC = () => {
                       <td className="break-words px-1 py-2.5">{row.assignedTo}</td>
                       <td className="px-1 py-2.5">
                         <div className="flex justify-center gap-1">
+                          {category.id === 'unverified' && (
+                            <button
+                              type="button"
+                              aria-label={`Approve verification for ${row.shopName}`}
+                              title={`Approve ${row.shopName} into Verified Prospects`}
+                              onClick={() => handleVerifyExistingProspect(row)}
+                              disabled={loadingCustomerId === row.id}
+                              className="rounded-full border border-blue-200 p-1 text-blue-600 transition hover:bg-blue-50 disabled:opacity-60"
+                            >
+                              <UserRoundCheck className="h-3 w-3" />
+                            </button>
+                          )}
                           <button
                             type="button"
                             aria-label={`Call ${row.shopName}`}

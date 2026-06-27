@@ -29,6 +29,9 @@ interface AddContactModalProps {
   onSubmit: (data: Omit<Contact, 'id'>) => Promise<Contact>;
   mode?: 'create' | 'edit';
   initialData?: Contact;
+  defaultVerification?: string;
+  title?: string;
+  submitLabel?: string;
   enableToasts?: boolean;
   toastOverrides?: ToastOverrides;
 }
@@ -39,6 +42,9 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
   onSubmit,
   mode = 'create',
   initialData,
+  defaultVerification = '',
+  title,
+  submitLabel,
   enableToasts = false,
   toastOverrides,
 }) => {
@@ -87,6 +93,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     dealershipQuota: 0,
     creditLimit: 0,
     status: ((CustomerStatus && CustomerStatus.PROSPECTIVE) || 'Prospective') as CustomerStatus,
+    verification: defaultVerification,
     isHidden: false,
     debtType: 'Good',
     comment: '',
@@ -125,6 +132,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     dealershipQuota: contact?.dealershipQuota ?? 0,
     creditLimit: contact?.creditLimit ?? 0,
     status: (contact?.status as CustomerStatus) || (((CustomerStatus && CustomerStatus.PROSPECTIVE) || 'Prospective') as CustomerStatus),
+    verification: contact?.verification || defaultVerification,
     isHidden: !!contact?.isHidden,
     debtType: contact?.debtType || 'Good',
     comment: contact?.comment || '',
@@ -248,6 +256,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
         status:
           (formData.status as CustomerStatus) ||
           (((CustomerStatus && CustomerStatus.PROSPECTIVE) || 'Prospective') as CustomerStatus),
+        verification: formData.verification || '',
         isHidden: !!formData.isHidden,
         debtType: (formData.debtType as any) || 'Good',
         comment: formData.comment || '',
@@ -363,7 +372,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-800 shrink-0">
           <h2 className="text-xl font-bold text-slate-800 dark:text-white">
-            {isEditMode ? 'Edit Customer' : 'Add New Customer'}
+            {title || (isEditMode ? 'Edit Customer' : 'Add New Customer')}
           </h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
             <X className="w-5 h-5" />
@@ -534,7 +543,11 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                         <div>
                             <label className="label">Status</label>
                             <div className="input flex items-center bg-slate-50 text-slate-600 text-sm cursor-not-allowed select-none">
-                              Prospective
+                              {formData.verification === 'Verified'
+                                ? 'Verified Prospect'
+                                : formData.verification === 'Pending Verification'
+                                  ? 'Pending Verification'
+                                  : 'Prospective'}
                             </div>
                         </div>
                       )}
@@ -697,7 +710,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                 disabled={loading}
                 className="w-full px-4 py-2.5 bg-brand-blue hover:bg-blue-700 text-white rounded-lg font-bold text-sm transition-colors flex items-center justify-center gap-2"
               >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (isEditMode ? 'Update Customer' : 'Save Customer')}
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (submitLabel || (isEditMode ? 'Update Customer' : 'Save Customer'))}
               </button>
             </div>
         </div>

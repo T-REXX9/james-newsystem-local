@@ -360,6 +360,7 @@ const mapTeamMessage = (row: any): TeamMessage => ({
 const mapApiStatusToCustomerStatus = (status: string): CustomerStatus => {
   const normalized = (status || '').trim().toLowerCase();
   if (normalized === 'inactive') return CustomerStatus.INACTIVE;
+  if (normalized === 'verified_prospect' || normalized === 'verified prospect') return CustomerStatus.VERIFIED_PROSPECT;
   if (normalized === 'prospective') return CustomerStatus.PROSPECTIVE;
   if (normalized === 'blacklisted') return CustomerStatus.BLACKLISTED;
   return CustomerStatus.ACTIVE;
@@ -385,6 +386,7 @@ const mapDailyCallCustomerRow = (row: any): DailyCallCustomerRow => ({
   modeOfPayment: cleanNullableText(row?.modeOfPayment ?? row?.mode_of_payment, '—'),
   courier: cleanNullableText(row?.courier, '—'),
   status: mapApiStatusToCustomerStatus(String(row?.status || row?.statusLabel || row?.status_label || 'active')),
+  verification: cleanNullableText(row?.verification),
   statusDate: cleanNullableText(row?.statusDate ?? row?.status_date),
   outstandingBalance: Number(row?.outstandingBalance ?? row?.outstanding_balance ?? 0),
   averageMonthlyOrder: Number(row?.averageMonthlyOrder ?? row?.average_monthly_purchase ?? 0),

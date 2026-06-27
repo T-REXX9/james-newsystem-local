@@ -156,7 +156,7 @@ describe('AccessControlSettings - create staff account', () => {
     await user.click(screen.getByRole('button', { name: 'Create Account' }));
 
     expect(await screen.findByText(/Enter a valid email address/i)).toBeInTheDocument();
-    expect(await screen.findByText(/Password must be at least 8 characters/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Password must be at least/i)).not.toBeInTheDocument();
     expect(createStaffAccountMock).not.toHaveBeenCalled();
   });
 

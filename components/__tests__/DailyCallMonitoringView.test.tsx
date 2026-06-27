@@ -14,6 +14,7 @@ const releaseCustomerCallForDailyCallMock = vi.fn();
 const createCustomerLogForDailyCallMock = vi.fn();
 const subscribeToDailyCallMonitoringUpdatesMock = vi.fn(() => () => {});
 const createContactMock = vi.fn();
+const updateContactMock = vi.fn();
 const fetchContactByIdMock = vi.fn();
 
 vi.mock('../ToastProvider', () => ({
@@ -34,6 +35,7 @@ vi.mock('../../services/dailyCallMonitoringService', () => ({
 
 vi.mock('../../services/customerDatabaseLocalApiService', () => ({
   createContact: (...args: unknown[]) => createContactMock(...args),
+  updateContact: (...args: unknown[]) => updateContactMock(...args),
   fetchContactById: (...args: unknown[]) => fetchContactByIdMock(...args),
 }));
 
@@ -93,7 +95,8 @@ const baseSnapshot = {
       terms: 'COD',
       modeOfPayment: 'COD',
       courier: 'LBC',
-      status: 'Active',
+      status: 'prospective',
+      verification: 'Unverified',
       statusDate: '2026-04-01',
       outstandingBalance: 0,
       averageMonthlyOrder: 0,
@@ -120,7 +123,9 @@ describe('DailyCallMonitoringView communication actions', () => {
     createCustomerLogForDailyCallMock.mockReset();
     subscribeToDailyCallMonitoringUpdatesMock.mockClear();
     createContactMock.mockReset();
+    updateContactMock.mockReset();
     fetchContactByIdMock.mockReset();
+    updateContactMock.mockResolvedValue(undefined);
 
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue(baseSnapshot);
     fetchContactCustomerLogsForDailyCallMock.mockResolvedValue([]);
@@ -217,14 +222,109 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(screen.queryByRole('button', { name: "Today's List" })).not.toBeInTheDocument();
     expect(screen.queryByText('Monthly Quota')).not.toBeInTheDocument();
 
-    const cadenceRow = screen.getByText('Cadence Window Shop').closest('tr')!;
-    const noPurchaseRow = screen.getByText('No Purchase Shop').closest('tr')!;
-    const overdueRow = screen.getByText('Overdue Shop').closest('tr')!;
-    const freshRow = screen.getByText('Fresh Purchase Shop').closest('tr')!;
+    const categorySummaries = screen.getByLabelText('Customer category summaries');
+    const prioritySummary = within(categorySummaries)
+      .getByTitle('Priority List (Any ledger activity since October 2025 onwards)')
+      .closest('article')!;
+    const recoverySummary = within(categorySummaries)
+      .getByTitle('Recovery List (Over 1 month since last purchase)')
+      .closest('article')!;
+    const verifiedSummary = within(categorySummaries)
+      .getByTitle('Verified Prospects (Verified, awaiting first purchase)')
+      .closest('article')!;
+    const unverifiedSummary = within(categorySummaries)
+      .getByTitle('Unverified Prospects (No purchases yet)')
+      .closest('article')!;
+
+    expect(within(prioritySummary).getByText('3')).toBeInTheDocument();
+    expect(within(recoverySummary).getByText('1')).toBeInTheDocument();
+    expect(within(verifiedSummary).getByText('0')).toBeInTheDocument();
+    expect(within(unverifiedSummary).getByText('1')).toBeInTheDocument();
+
+    const categoryTables = screen.getByLabelText('Segregated customer category tables');
+    const priorityTable = within(categoryTables)
+      .getByTitle('Priority List (Any ledger activity since October 2025 onwards)')
+      .closest('article')!;
+    const unverifiedTable = within(categoryTables)
+      .getByTitle('Unverified Prospects (No purchases yet)')
+      .closest('article')!;
+
+    const cadenceRow = within(priorityTable).getByText('Cadence Window Shop').closest('tr')!;
+    const overdueRow = within(priorityTable).getByText('Overdue Shop').closest('tr')!;
+    const freshRow = within(priorityTable).getByText('Fresh Purchase Shop').closest('tr')!;
 
     expect(cadenceRow.compareDocumentPosition(overdueRow)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(overdueRow.compareDocumentPosition(noPurchaseRow)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(noPurchaseRow.compareDocumentPosition(freshRow)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(overdueRow.compareDocumentPosition(freshRow)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(within(unverifiedTable).getByText('No Purchase Shop')).toBeInTheDocument();
+  });
+
+  it('keeps verified no-purchase prospects in the verified prospects list after refresh', async () => {
+    fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
+      ...baseSnapshot,
+      contacts: [
+        {
+          ...baseSnapshot.contacts[0],
+          id: 'verified-existing',
+          shopName: 'Existing Verified Prospect',
+          status: 'verified_prospect',
+          verification: 'Verified',
+        },
+        {
+          ...baseSnapshot.contacts[0],
+          id: 'unverified-existing',
+          shopName: 'Existing Unverified Prospect',
+          status: 'prospective',
+          verification: 'Unverified',
+        },
+        {
+          ...baseSnapshot.contacts[0],
+          id: 'old-verified-no-purchase',
+          shopName: 'Old Verified No Purchase',
+          status: 'active',
+          verification: 'Verified',
+        },
+      ],
+      purchases: [],
+    });
+
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    expect(await screen.findByRole('heading', { name: 'Customer List' })).toBeInTheDocument();
+
+    const categorySummaries = screen.getByLabelText('Customer category summaries');
+    const verifiedSummary = within(categorySummaries)
+      .getByTitle('Verified Prospects (Verified, awaiting first purchase)')
+      .closest('article')!;
+    const unverifiedSummary = within(categorySummaries)
+      .getByTitle('Unverified Prospects (No purchases yet)')
+      .closest('article')!;
+
+    expect(within(verifiedSummary).getByText('1')).toBeInTheDocument();
+    expect(within(unverifiedSummary).getByText('1')).toBeInTheDocument();
+  });
+
+  it('sales agents request verification instead of directly verifying an existing prospect', async () => {
+    const user = userEvent.setup();
+    fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
+      ...baseSnapshot,
+      contacts: [{
+        ...baseSnapshot.contacts[0],
+        id: 'unverified-existing',
+        shopName: 'Existing Unverified Prospect',
+        status: 'prospective',
+        verification: 'Unverified',
+      }],
+      purchases: [],
+    });
+
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Request verification for Existing Unverified Prospect' }));
+
+    expect(updateContactMock).toHaveBeenCalledWith('unverified-existing', {
+      status: 'Prospective',
+      verification: 'Pending Verification',
+    });
   });
 
   it('submits a conversation report and keeps the customer in the list', async () => {
