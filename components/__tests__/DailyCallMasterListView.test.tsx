@@ -61,6 +61,7 @@ describe('DailyCallMasterListView', () => {
 
     render(<DailyCallMasterListView />);
 
+    await user.click(await screen.findByRole('button', { name: 'Unverified Prospects (1)' }));
     await user.click(await screen.findByRole('button', { name: 'Approve verification for Pending Prospect Shop' }));
 
     expect(updateContact).toHaveBeenCalledWith('pending-verified-1', { verification: 'Verified' });
@@ -199,7 +200,7 @@ describe('DailyCallMasterListView', () => {
     expect(screen.getAllByText(/Any ledger activity since October 2025 onwards/i).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('uses the quick go to buttons to scroll to category tables and the full overview', async () => {
+  it('uses the quick go to buttons to switch category tables and jump to the full overview', async () => {
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
       meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 1 },
       items: [{
@@ -226,11 +227,14 @@ describe('DailyCallMasterListView', () => {
 
     await screen.findByRole('navigation', { name: 'Quick Go To' });
 
-    fireEvent.click(screen.getByRole('button', { name: /Priority List/i }));
-    expect(scrollIntoView).toHaveBeenLastCalledWith({ behavior: 'smooth', block: 'start' });
-    expect(document.activeElement).toBe(screen.getByTestId('category-table-priority'));
+    expect(screen.getByTestId('category-table-priority')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Recovery List (0)' }));
+    expect(screen.getByTestId('category-table-recovery')).toBeInTheDocument();
+    expect(screen.queryByTestId('category-table-priority')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'All Customers (1)' }));
+    expect(scrollIntoView).toHaveBeenLastCalledWith({ behavior: 'smooth', block: 'start' });
     expect(document.activeElement).toBe(screen.getByTestId('master-list-dashboard'));
   });
 

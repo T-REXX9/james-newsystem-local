@@ -654,11 +654,17 @@ export interface DailyCallMasterCustomerRow {
   assignedTo: string;
   profileType?: string;
   verification?: string;
+  priceGroup?: string;
   lastPurchaseDate: string;
   lastPurchaseDateRaw: string;
   purchaseCount: number;
   totalSales: number;
   currentMonthSales: number;
+  averageMonthlySales: number;
+  averageMonthlySalesMonthCount: number;
+  recentThreeMonthSales: number;
+  previousThreeMonthSales: number;
+  salesTrendPercent: number;
   daysSinceLastPurchase: number;
   monthsSinceLastPurchase: number;
   purchaseAgeGroup: 'recent' | 'two_weeks_to_one_month' | 'over_one_month' | 'no_purchase';

@@ -2,11 +2,16 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
+  ArrowDown,
+  ArrowRight,
+  ArrowUp,
   Bot,
   CheckCircle2,
   ClipboardList,
+  Crown,
   FileSearch,
   Headphones,
+  Info,
   Loader2,
   MessageSquare,
   PackageCheck,
@@ -15,6 +20,7 @@ import {
   RotateCcw,
   Search,
   ShieldAlert,
+  Star,
   Truck,
   UserRoundCheck,
   Users,
@@ -160,6 +166,43 @@ const masterRowFallback = (row: DailyCallMasterCustomerRow): DailyCallCustomerRo
   dailyActivity: [],
 });
 
+const vipDetails = (row: DailyCallMasterCustomerRow) => {
+  const group = String(row.priceGroup || '').trim().toLowerCase();
+  if (group === 'vip2') {
+    return {
+      label: 'VIP Gold',
+      sublabel: '(10% Discount)',
+      Icon: Crown,
+      className: 'border-amber-200 bg-amber-50 text-amber-700',
+    };
+  }
+  if (group === 'vip1') {
+    return {
+      label: 'VIP Silver',
+      sublabel: '(10% Discount)',
+      Icon: Star,
+      className: 'border-slate-200 bg-slate-50 text-slate-600',
+    };
+  }
+  return {
+    label: 'Regular',
+    sublabel: '(No Discount)',
+    Icon: null,
+    className: 'border-slate-200 bg-white text-slate-600',
+  };
+};
+
+const trendDetails = (row: DailyCallMasterCustomerRow) => {
+  const trend = row.salesTrendPercent || 0;
+  if (Math.abs(trend) < 1) {
+    return { Icon: ArrowRight, label: 'Stable', className: 'text-orange-500' };
+  }
+  if (trend > 0) {
+    return { Icon: ArrowUp, label: `${Math.round(Math.abs(trend))}% vs last 3 months`, className: 'text-emerald-600' };
+  }
+  return { Icon: ArrowDown, label: `${Math.round(Math.abs(trend))}% vs last 3 months`, className: 'text-rose-600' };
+};
+
 const DailyCallMasterListView: React.FC = () => {
   const [rows, setRows] = useState<DailyCallMasterCustomerRow[]>([]);
   const [meta, setMeta] = useState<DailyCallMasterListMeta>({ fromDate, toDate: '', count: 0 });
@@ -174,6 +217,7 @@ const DailyCallMasterListView: React.FC = () => {
   const [detailInitialTab, setDetailInitialTab] = useState<DetailTabId>('overview');
   const [loadingCustomerId, setLoadingCustomerId] = useState<string | null>(null);
   const [selectedCase, setSelectedCase] = useState<CaseOverviewItem | null>(null);
+  const [activeCategoryId, setActiveCategoryId] = useState<CategoryId>('priority');
   const debouncedSearch = useDebounce(search, 400);
 
   const scrollTo = useCallback((target: HTMLElement | null | undefined) => {
@@ -247,6 +291,7 @@ const DailyCallMasterListView: React.FC = () => {
     return { ...category, rows: categoryRows, currentSales, potentialSales, averageSales };
   }), [rows]);
 
+  const activeCategory = categoryData.find((category) => category.id === activeCategoryId) || categoryData[0];
   const totalPotential = categoryData.reduce((sum, category) => sum + category.potentialSales, 0);
 
   if (loading) {
@@ -350,108 +395,183 @@ const DailyCallMasterListView: React.FC = () => {
         ))}
       </section>
 
-      <section className="grid grid-cols-4 gap-3" aria-label="Customer category tables">
-        {categoryData.map((category) => (
+      <nav className="rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm" aria-label="Quick Go To">
+        <strong className="block text-xs font-bold uppercase text-slate-500">Quick Go To:</strong>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          {categoryData.map((category) => {
+            const isActive = category.id === activeCategory.id;
+            return (
+              <button
+                key={category.id}
+                type="button"
+                aria-label={`${category.label} (${category.rows.length})`}
+                aria-pressed={isActive}
+                onClick={() => setActiveCategoryId(category.id)}
+                className={`inline-flex h-11 items-center gap-3 rounded-lg border px-5 text-base font-bold transition ${
+                  isActive
+                    ? `${category.border} ${category.softBg} ${category.accent} shadow-sm ring-2 ring-blue-100`
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <span>{category.label}</span>
+                <span className={`rounded-full px-3 py-1 text-sm text-white ${isActive ? category.iconBg : 'bg-slate-500'}`}>
+                  {category.rows.length}
+                </span>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            aria-label={`All Customers (${meta.count || rows.length})`}
+            onClick={() => scrollTo(dashboardRef.current)}
+            className="inline-flex h-11 items-center gap-3 rounded-lg border border-slate-200 bg-white px-5 text-base font-bold text-slate-800 transition hover:bg-slate-50"
+          >
+            <span>All Customers</span>
+            <span className="rounded-full bg-slate-500 px-3 py-1 text-sm text-white">{meta.count || rows.length}</span>
+          </button>
+        </div>
+      </nav>
+
+      <section aria-label="Customer category table">
+        {activeCategory && (
           <article
-            key={category.id}
+            key={activeCategory.id}
             ref={(element) => {
-              if (element) categoryTableRefs.current[category.id] = element;
+              if (element) categoryTableRefs.current[activeCategory.id] = element;
             }}
             tabIndex={-1}
-            data-testid={`category-table-${category.id}`}
-            className="flex min-h-[370px] scroll-mt-4 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            data-testid={`category-table-${activeCategory.id}`}
+            className="flex min-h-[560px] scroll-mt-4 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
           >
-            <div className="flex items-center justify-between border-b border-slate-200 px-3 py-3">
-              <h3 className={`text-sm font-bold uppercase ${category.accent}`}>
-                {category.label} <span className="text-[9px] normal-case">({category.note})</span>
+            <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
+              <h3 className={`text-2xl font-bold uppercase ${activeCategory.accent}`}>
+                {activeCategory.label} <span className="ml-2 text-base normal-case">({activeCategory.note})</span>
               </h3>
-              <span className="flex items-center gap-1 text-[10px]"><i className={`h-2 w-2 rounded-full ${category.dot}`} />{category.state}</span>
+              <div className="flex items-center gap-3">
+                <span className="flex items-center gap-2 text-sm"><i className={`h-3 w-3 rounded-full ${activeCategory.dot}`} />{activeCategory.state}</span>
+                <button type="button" onClick={() => loadRows(false)} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold hover:bg-slate-50">
+                  <RefreshCw className="h-4 w-4" /> Refresh
+                </button>
+              </div>
             </div>
-            <div className="min-h-0 flex-1 overflow-hidden">
-              <table className="w-full table-fixed text-left text-[9px]">
-                <thead className="bg-slate-50 text-[8px] text-slate-600">
+            <div className="min-h-0 flex-1 overflow-x-auto">
+              <table className="w-full table-fixed text-left text-sm">
+                <thead className="bg-slate-50 text-xs text-slate-600">
                   <tr>
-                    <th className="w-6 px-2 py-2">#</th>
-                    <th className="px-1 py-2">Customer / Mobile</th>
-                    <th className="w-[62px] px-1 py-2">Last Purchase</th>
-                    <th className="w-[58px] px-1 py-2">Sales</th>
-                    <th className="w-[62px] px-1 py-2">Agent</th>
-                    <th className="w-16 px-1 py-2 text-center">Action</th>
+                    <th className="w-16 px-5 py-4">#</th>
+                    <th className="w-80 px-3 py-4">Customer / Mobile</th>
+                    <th className="w-48 px-3 py-4 text-center">VIP Status</th>
+                    <th className="w-64 px-3 py-4">
+                      <span className="inline-flex items-center gap-2">
+                        Avg. Purchase per Month (Ledger)
+                        <Info className="h-4 w-4 text-slate-400" />
+                      </span>
+                    </th>
+                    <th className="w-48 px-3 py-4 text-center">
+                      <span className="inline-flex items-center justify-center gap-2">
+                        Sales (Current Month)
+                        <Info className="h-4 w-4 text-slate-400" />
+                      </span>
+                    </th>
+                    <th className="w-44 px-3 py-4">Last Purchase</th>
+                    <th className="w-44 px-3 py-4">Agent</th>
+                    <th className="w-36 px-3 py-4 text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {category.rows.slice(0, 5).map((row, index) => (
-                    <tr key={row.id} className="border-t border-slate-100 align-top">
-                      <td className="px-2 py-2.5 font-bold">{index + 1}</td>
-                      <td className="px-1 py-2.5">
-                        <button
-                          type="button"
-                          onClick={() => openCustomerDetails(row)}
-                          disabled={loadingCustomerId === row.id}
-                          aria-label={`View details for ${row.shopName}`}
-                          className="line-clamp-2 text-left font-bold leading-tight text-blue-950 underline-offset-2 hover:text-blue-700 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-60"
-                        >
-                          {loadingCustomerId === row.id && <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />}
-                          {row.shopName}
-                        </button>
-                        <p className="mt-1 truncate text-[8px] text-slate-500">{row.contactNumber}</p>
-                      </td>
-                      <td className="px-1 py-2.5">
-                        <p className="font-medium">{row.lastPurchaseDate}</p>
-                        <p className="mt-1 text-[8px] text-slate-500">{ageLabel(row)}</p>
-                      </td>
-                      <td className="px-1 py-2.5 font-bold">{compactPeso.format(row.currentMonthSales || row.totalSales)}</td>
-                      <td className="break-words px-1 py-2.5">{row.assignedTo}</td>
-                      <td className="px-1 py-2.5">
-                        <div className="flex justify-center gap-1">
-                          {category.id === 'unverified' && (
+                  {activeCategory.rows.slice(0, 10).map((row, index) => {
+                    const vip = vipDetails(row);
+                    const trend = trendDetails(row);
+                    const VipIcon = vip.Icon;
+                    const TrendIcon = trend.Icon;
+                    return (
+                      <tr key={row.id} className="border-t border-slate-100 align-top">
+                        <td className="px-5 py-4 font-bold">{index + 1}</td>
+                        <td className="px-3 py-4">
+                          <button
+                            type="button"
+                            onClick={() => openCustomerDetails(row)}
+                            disabled={loadingCustomerId === row.id}
+                            aria-label={`View details for ${row.shopName}`}
+                            className="line-clamp-2 text-left font-bold leading-tight text-blue-950 underline-offset-2 hover:text-blue-700 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-60"
+                          >
+                            {loadingCustomerId === row.id && <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />}
+                            {row.shopName}
+                          </button>
+                          <p className="mt-1 truncate text-sm text-blue-700">{row.contactNumber}</p>
+                        </td>
+                        <td className="px-3 py-4 text-center">
+                          <div className={`mx-auto inline-flex min-w-28 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-bold uppercase ${vip.className}`}>
+                            {VipIcon && <VipIcon className="h-4 w-4" />}
+                            {vip.label}
+                          </div>
+                          <p className="mt-2 text-xs text-slate-500">{vip.sublabel}</p>
+                        </td>
+                        <td className="px-3 py-4">
+                          <p className="text-lg font-bold text-blue-950">{peso.format(row.averageMonthlySales)} <span className="text-sm font-medium text-slate-500">/ month</span></p>
+                          <p className="mt-1 text-sm text-slate-500">(Based on {row.averageMonthlySalesMonthCount} months)</p>
+                          <p className={`mt-1 inline-flex items-center gap-1 text-sm font-bold ${trend.className}`}>
+                            <TrendIcon className="h-4 w-4 fill-current" />
+                            {trend.label}
+                          </p>
+                        </td>
+                        <td className="px-3 py-4 text-center text-lg font-bold text-emerald-700">{peso.format(row.currentMonthSales)}</td>
+                        <td className="px-3 py-4">
+                          <p className="font-medium">{row.lastPurchaseDate}</p>
+                          <p className="mt-1 text-xs text-slate-500">{ageLabel(row)}</p>
+                        </td>
+                        <td className="break-words px-3 py-4 font-bold">{row.assignedTo}</td>
+                        <td className="px-3 py-4">
+                          <div className="flex justify-center gap-3">
+                            {activeCategory.id === 'unverified' && (
+                              <button
+                                type="button"
+                                aria-label={`Approve verification for ${row.shopName}`}
+                                title={`Approve ${row.shopName} into Verified Prospects`}
+                                onClick={() => handleVerifyExistingProspect(row)}
+                                disabled={loadingCustomerId === row.id}
+                                className="rounded-full border border-blue-200 p-2 text-blue-600 transition hover:bg-blue-50 disabled:opacity-60"
+                              >
+                                <UserRoundCheck className="h-5 w-5" />
+                              </button>
+                            )}
                             <button
                               type="button"
-                              aria-label={`Approve verification for ${row.shopName}`}
-                              title={`Approve ${row.shopName} into Verified Prospects`}
-                              onClick={() => handleVerifyExistingProspect(row)}
+                              aria-label={`Call ${row.shopName}`}
+                              title={`Open call details for ${row.shopName}`}
+                              onClick={() => openCustomerDetails(row, 'overview')}
                               disabled={loadingCustomerId === row.id}
-                              className="rounded-full border border-blue-200 p-1 text-blue-600 transition hover:bg-blue-50 disabled:opacity-60"
+                              className="rounded-full border border-emerald-200 p-2 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-60"
                             >
-                              <UserRoundCheck className="h-3 w-3" />
+                              <Phone className="h-5 w-5" />
                             </button>
-                          )}
-                          <button
-                            type="button"
-                            aria-label={`Call ${row.shopName}`}
-                            title={`Open call details for ${row.shopName}`}
-                            onClick={() => openCustomerDetails(row, 'overview')}
-                            disabled={loadingCustomerId === row.id}
-                            className="rounded-full border border-emerald-200 p-1 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-60"
-                          >
-                            <Phone className="h-3 w-3" />
-                          </button>
-                          <button
-                            type="button"
-                            aria-label={`Message ${row.shopName}`}
-                            title={`Open communication history for ${row.shopName}`}
-                            onClick={() => openCustomerDetails(row, 'communication')}
-                            disabled={loadingCustomerId === row.id}
-                            className="rounded-full border border-blue-200 p-1 text-blue-600 transition hover:bg-blue-50 disabled:opacity-60"
-                          >
-                            <MessageSquare className="h-3 w-3" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {category.rows.length === 0 && (
-                    <tr><td colSpan={6} className="px-3 py-12 text-center text-xs text-slate-400">No customers in this category.</td></tr>
+                            <button
+                              type="button"
+                              aria-label={`Message ${row.shopName}`}
+                              title={`Open communication history for ${row.shopName}`}
+                              onClick={() => openCustomerDetails(row, 'communication')}
+                              disabled={loadingCustomerId === row.id}
+                              className="rounded-full border border-blue-200 p-2 text-blue-600 transition hover:bg-blue-50 disabled:opacity-60"
+                            >
+                              <MessageSquare className="h-5 w-5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {activeCategory.rows.length === 0 && (
+                    <tr><td colSpan={8} className="px-3 py-12 text-center text-xs text-slate-400">No customers in this category.</td></tr>
                   )}
                 </tbody>
               </table>
             </div>
-            <div className="flex items-center justify-between border-t border-slate-200 px-3 py-2 text-[10px]">
-              <span>Showing 1 to {Math.min(5, category.rows.length)} of {category.rows.length} entries</span>
-              <button type="button" className={`font-bold ${category.accent}`}>View all {category.rows.length} customers ›</button>
+            <div className="flex items-center justify-between border-t border-slate-200 px-5 py-3 text-sm">
+              <span>Showing 1 to {Math.min(10, activeCategory.rows.length)} of {activeCategory.rows.length} entries</span>
+              <button type="button" className={`font-bold ${activeCategory.accent}`}>View all {activeCategory.rows.length} customers ›</button>
             </div>
           </article>
-        ))}
+        )}
       </section>
 
       <section className="grid grid-cols-[1.25fr_1.3fr_0.6fr] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -519,27 +639,6 @@ const DailyCallMasterListView: React.FC = () => {
           </dl>
         </div>
       </section>
-
-      <nav className="flex items-center gap-3 rounded-lg bg-slate-50 px-5 py-3 text-xs" aria-label="Quick Go To">
-        <strong className="uppercase">Quick Go To:</strong>
-        {categoryData.map((category) => (
-          <button
-            key={category.id}
-            type="button"
-            onClick={() => scrollTo(categoryTableRefs.current[category.id])}
-            className={`rounded-md border ${category.border} ${category.softBg} px-5 py-2 font-bold ${category.accent}`}
-          >
-            {category.label} ({category.rows.length})
-          </button>
-        ))}
-        <button
-          type="button"
-          onClick={() => scrollTo(dashboardRef.current)}
-          className="rounded-md border border-slate-200 bg-white px-5 py-2 font-bold"
-        >
-          All Customers ({meta.count || rows.length})
-        </button>
-      </nav>
 
       <footer className="flex items-center justify-between px-2 pb-2 text-[10px] text-slate-500">
         <span>© 2026 TND-OPC. All rights reserved.</span><span>Version 1.0.0</span>
