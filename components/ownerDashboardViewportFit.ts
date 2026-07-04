@@ -1,5 +1,25 @@
-export const calculateDashboardFitScale = (availableHeight: number, contentHeight: number): number => {
-  if (availableHeight <= 0 || contentHeight <= 0) return 1;
+interface DashboardFitScaleOptions {
+  availableWidth: number;
+  availableHeight: number;
+  contentWidth: number;
+  contentHeight: number;
+  maxScale?: number;
+}
+
+export const calculateDashboardFitScale = ({
+  availableWidth,
+  availableHeight,
+  contentWidth,
+  contentHeight,
+  maxScale = 1.35,
+}: DashboardFitScaleOptions): number => {
+  if (availableWidth <= 0 || availableHeight <= 0 || contentWidth <= 0 || contentHeight <= 0) return 1;
+
+  const widthScale = availableWidth / contentWidth;
+  if (widthScale > 1) {
+    return Math.min(widthScale, maxScale);
+  }
+
   return Math.min(1, availableHeight / contentHeight);
 };
 

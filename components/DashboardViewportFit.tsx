@@ -8,9 +8,16 @@ import {
 interface DashboardViewportFitProps {
   children: ReactNode;
   revision?: string | number | boolean;
+  maxScale?: number;
+  designWidth?: number;
 }
 
-const DashboardViewportFit: React.FC<DashboardViewportFitProps> = ({ children, revision = 0 }) => {
+const DashboardViewportFit: React.FC<DashboardViewportFitProps> = ({
+  children,
+  revision = 0,
+  maxScale = 1.35,
+  designWidth,
+}) => {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const viewportSizeRef = useRef<DashboardViewportSize | null>(null);
@@ -25,7 +32,14 @@ const DashboardViewportFit: React.FC<DashboardViewportFitProps> = ({ children, r
       const nextViewportSize = { width: viewport.clientWidth, height: viewport.clientHeight };
       if (!force && !shouldRecalculateDashboardFit(viewportSizeRef.current, nextViewportSize)) return;
       viewportSizeRef.current = nextViewportSize;
-      const nextScale = calculateDashboardFitScale(viewport.clientHeight, content.scrollHeight);
+      const measuredContentWidth = designWidth || Math.max(content.scrollWidth, content.firstElementChild?.scrollWidth || 0);
+      const nextScale = calculateDashboardFitScale({
+        availableWidth: viewport.clientWidth,
+        availableHeight: viewport.clientHeight,
+        contentWidth: measuredContentWidth,
+        contentHeight: content.scrollHeight,
+        maxScale,
+      });
       setScale((currentScale) => Math.abs(currentScale - nextScale) < 0.002 ? currentScale : nextScale);
     };
 
@@ -55,12 +69,12 @@ const DashboardViewportFit: React.FC<DashboardViewportFitProps> = ({ children, r
       resizeObserver?.disconnect();
       window.removeEventListener('resize', handleViewportResize);
     };
-  }, [revision]);
+  }, [designWidth, maxScale, revision]);
 
   return (
     <div
       ref={viewportRef}
-      className="h-full min-h-0 flex-1 overflow-hidden"
+      className="h-full min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
       data-dashboard-fit-viewport
       data-testid="dashboard-fit-viewport"
     >

@@ -32,13 +32,11 @@ import { useDebounce } from '../hooks/useDebounce';
 import { fetchCustomersForDailyCall, fetchDailyCallMasterList } from '../services/dailyCallMonitoringService';
 import { createContact, updateContact } from '../services/customerDatabaseLocalApiService';
 import { Contact, DailyCallCustomerRow, DailyCallMasterCustomerRow, DailyCallMasterListMeta } from '../types';
-import DashboardViewportFit from './DashboardViewportFit';
 import AddContactModal from './AddContactModal';
 import DailyCallCustomerDetailModal from './DailyCallCustomerDetailModal';
 import type { DetailTabId } from './DailyCallCustomerDetailExpansion';
 
 const fromDate = '2025-10-01';
-const monthlyTarget = 3_000_000;
 
 const peso = new Intl.NumberFormat('en-PH', {
   style: 'currency',
@@ -218,7 +216,13 @@ const DailyCallMasterListView: React.FC = () => {
   const [loadingCustomerId, setLoadingCustomerId] = useState<string | null>(null);
   const [selectedCase, setSelectedCase] = useState<CaseOverviewItem | null>(null);
   const [activeCategoryId, setActiveCategoryId] = useState<CategoryId>('priority');
+  const [expandedCategoryId, setExpandedCategoryId] = useState<CategoryId | null>(null);
   const debouncedSearch = useDebounce(search, 400);
+
+  const handleSelectCategory = useCallback((categoryId: CategoryId) => {
+    setActiveCategoryId(categoryId);
+    setExpandedCategoryId(null);
+  }, []);
 
   const scrollTo = useCallback((target: HTMLElement | null | undefined) => {
     if (!target) return;
@@ -277,12 +281,6 @@ const DailyCallMasterListView: React.FC = () => {
     loadRows();
   }, [loadRows]);
 
-  const totals = useMemo(() => ({
-    sales: sumBy(rows, 'totalSales'),
-    current: sumBy(rows, 'currentMonthSales'),
-    purchases: sumBy(rows, 'purchaseCount'),
-  }), [rows]);
-
   const categoryData = useMemo(() => categories.map((category) => {
     const categoryRows = rows.filter(category.matches);
     const currentSales = sumBy(categoryRows, 'currentMonthSales');
@@ -292,7 +290,16 @@ const DailyCallMasterListView: React.FC = () => {
   }), [rows]);
 
   const activeCategory = categoryData.find((category) => category.id === activeCategoryId) || categoryData[0];
-  const totalPotential = categoryData.reduce((sum, category) => sum + category.potentialSales, 0);
+  const isActiveCategoryExpanded = expandedCategoryId === activeCategory.id;
+  const visibleRows = isActiveCategoryExpanded ? activeCategory.rows : activeCategory.rows.slice(0, 10);
+  const visibleRowCount = visibleRows.length;
+  const handleToggleExpandedCategory = useCallback(() => {
+    const isExpanded = expandedCategoryId === activeCategory.id;
+    setExpandedCategoryId(isExpanded ? null : activeCategory.id);
+    if (isExpanded) {
+      requestAnimationFrame(() => scrollTo(categoryTableRefs.current[activeCategory.id]));
+    }
+  }, [activeCategory.id, expandedCategoryId, scrollTo]);
 
   if (loading) {
     return (
@@ -310,11 +317,12 @@ const DailyCallMasterListView: React.FC = () => {
   }
 
   return (
-    <DashboardViewportFit revision={rows.length}>
+    <div className="h-full min-h-0 overflow-y-auto overflow-x-hidden" data-testid="master-list-scroll-region">
     <div
       ref={dashboardRef}
       tabIndex={-1}
-      className="min-w-[1180px] space-y-4 bg-white text-[#0f1f46] outline-none"
+      style={{ zoom: 1.05, width: '95.2381%' } as React.CSSProperties}
+      className="w-full min-w-0 space-y-3 bg-white text-[#0f1f46] outline-none"
       data-testid="master-list-dashboard"
     >
       <AddContactModal
@@ -328,7 +336,7 @@ const DailyCallMasterListView: React.FC = () => {
       />
       <header className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Owner Daily Call Monitoring</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Owner Daily Call Monitoring</p>
           <h2 className="mt-1 flex items-center gap-2 text-2xl font-bold">
             <ClipboardList className="h-6 w-6 text-blue-700" /> Master List
           </h2>
@@ -345,7 +353,7 @@ const DailyCallMasterListView: React.FC = () => {
         <button
           type="button"
           onClick={() => setShowAddVerifiedProspectModal(true)}
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700"
+          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-blue-700"
         >
           <UserRoundCheck className="h-4 w-4" /> Verified Prospect
         </button>
@@ -360,44 +368,44 @@ const DailyCallMasterListView: React.FC = () => {
         </div>
       )}
 
-      <section className="grid grid-cols-4 gap-4" aria-label="Customer category summaries">
+      <section className="grid grid-cols-4 gap-3 2xl:gap-4" aria-label="Customer category summaries">
         {categoryData.map((category) => (
-          <article key={category.id} className={`rounded-xl border ${category.border} ${category.softBg} p-4 shadow-sm`}>
+          <article key={category.id} className={`rounded-xl border ${category.border} ${category.softBg} p-3 shadow-sm 2xl:p-4`}>
             <h3 className={`text-sm font-bold uppercase ${category.accent}`}>
-              {category.label} <span className="text-[10px] normal-case">({category.note})</span>
+              {category.label} <span className="text-xs normal-case">({category.note})</span>
             </h3>
-            <div className="mt-3 grid grid-cols-[3rem_1fr_1.2fr] items-center gap-3">
-              <div className={`grid h-11 w-11 place-items-center rounded-full text-white ${category.iconBg}`}>
-                <Users className="h-6 w-6" />
+            <div className="mt-2 grid grid-cols-[2.75rem_1fr_1.2fr] items-center gap-3">
+              <div className={`grid h-10 w-10 place-items-center rounded-full text-white ${category.iconBg}`}>
+                <Users className="h-5 w-5" />
               </div>
               <div className="border-r border-slate-200 pr-3">
-                <p className="text-2xl font-bold">{category.rows.length}</p>
+                <p className="text-xl font-bold">{category.rows.length}</p>
                 <p className="text-xs">Customers</p>
               </div>
-              <div className="space-y-2 text-right text-[10px]">
+              <div className="space-y-2 text-right text-xs">
                 <div>
                   <p>{category.id === 'priority' || category.id === 'recovery' ? 'Current Month Sales' : 'Average Monthly Purchase'}</p>
-                  <p className={`text-lg font-bold ${category.accent}`}>
+                  <p className={`text-base font-bold ${category.accent}`}>
                     {compactPeso.format(category.id === 'priority' || category.id === 'recovery' ? category.currentSales : category.averageSales)}
                   </p>
                 </div>
                 <div>
                   <p>{category.id === 'priority' || category.id === 'recovery' ? 'Average Monthly Sales' : 'Potential Sales'}</p>
-                  <p className={`text-lg font-bold ${category.accent}`}>{compactPeso.format(category.potentialSales)}</p>
+                  <p className={`text-base font-bold ${category.accent}`}>{compactPeso.format(category.potentialSales)}</p>
                 </div>
               </div>
             </div>
-            <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-2 text-xs">
+            <div className="mt-2 flex items-center justify-between border-t border-slate-200 pt-2 text-xs">
               <span>Potential Sales</span>
-              <strong className={`text-lg ${category.accent}`}>{compactPeso.format(category.potentialSales)}</strong>
+              <strong className={`text-base ${category.accent}`}>{compactPeso.format(category.potentialSales)}</strong>
             </div>
           </article>
         ))}
       </section>
 
-      <nav className="rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm" aria-label="Quick Go To">
+      <nav className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm" aria-label="Quick Go To">
         <strong className="block text-xs font-bold uppercase text-slate-500">Quick Go To:</strong>
-        <div className="mt-3 flex flex-wrap items-center gap-3">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           {categoryData.map((category) => {
             const isActive = category.id === activeCategory.id;
             return (
@@ -406,15 +414,15 @@ const DailyCallMasterListView: React.FC = () => {
                 type="button"
                 aria-label={`${category.label} (${category.rows.length})`}
                 aria-pressed={isActive}
-                onClick={() => setActiveCategoryId(category.id)}
-                className={`inline-flex h-11 items-center gap-3 rounded-lg border px-5 text-base font-bold transition ${
+                onClick={() => handleSelectCategory(category.id)}
+                className={`inline-flex h-10 items-center gap-2 rounded-lg border px-4 text-sm font-bold transition ${
                   isActive
                     ? `${category.border} ${category.softBg} ${category.accent} shadow-sm ring-2 ring-blue-100`
                     : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                 }`}
               >
                 <span>{category.label}</span>
-                <span className={`rounded-full px-3 py-1 text-sm text-white ${isActive ? category.iconBg : 'bg-slate-500'}`}>
+                <span className={`rounded-full px-2.5 py-0.5 text-xs text-white ${isActive ? category.iconBg : 'bg-slate-500'}`}>
                   {category.rows.length}
                 </span>
               </button>
@@ -424,10 +432,10 @@ const DailyCallMasterListView: React.FC = () => {
             type="button"
             aria-label={`All Customers (${meta.count || rows.length})`}
             onClick={() => scrollTo(dashboardRef.current)}
-            className="inline-flex h-11 items-center gap-3 rounded-lg border border-slate-200 bg-white px-5 text-base font-bold text-slate-800 transition hover:bg-slate-50"
+            className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-bold text-slate-800 transition hover:bg-slate-50 2xl:h-11 2xl:px-5"
           >
             <span>All Customers</span>
-            <span className="rounded-full bg-slate-500 px-3 py-1 text-sm text-white">{meta.count || rows.length}</span>
+            <span className="rounded-full bg-slate-500 px-2.5 py-0.5 text-xs text-white">{meta.count || rows.length}</span>
           </button>
         </div>
       </nav>
@@ -441,88 +449,88 @@ const DailyCallMasterListView: React.FC = () => {
             }}
             tabIndex={-1}
             data-testid={`category-table-${activeCategory.id}`}
-            className="flex min-h-[560px] scroll-mt-4 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            className="flex min-h-[430px] scroll-mt-4 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-blue-500 2xl:min-h-[500px]"
           >
-            <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
-              <h3 className={`text-2xl font-bold uppercase ${activeCategory.accent}`}>
-                {activeCategory.label} <span className="ml-2 text-base normal-case">({activeCategory.note})</span>
+            <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-4 py-3">
+              <h3 className={`text-xl font-bold uppercase ${activeCategory.accent}`}>
+                {activeCategory.label} <span className="ml-2 text-sm normal-case">({activeCategory.note})</span>
               </h3>
               <div className="flex items-center gap-3">
                 <span className="flex items-center gap-2 text-sm"><i className={`h-3 w-3 rounded-full ${activeCategory.dot}`} />{activeCategory.state}</span>
-                <button type="button" onClick={() => loadRows(false)} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold hover:bg-slate-50">
+                <button type="button" onClick={() => loadRows(false)} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-bold hover:bg-slate-50">
                   <RefreshCw className="h-4 w-4" /> Refresh
                 </button>
               </div>
             </div>
-            <div className="min-h-0 flex-1 overflow-x-auto">
-              <table className="w-full table-fixed text-left text-sm">
-                <thead className="bg-slate-50 text-xs text-slate-600">
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <table className="w-full table-fixed text-left text-[13px]">
+                <thead className="bg-slate-50 text-[11px] text-slate-600">
                   <tr>
-                    <th className="w-16 px-5 py-4">#</th>
-                    <th className="w-80 px-3 py-4">Customer / Mobile</th>
-                    <th className="w-48 px-3 py-4 text-center">VIP Status</th>
-                    <th className="w-64 px-3 py-4">
+                    <th className="w-12 px-3 py-2.5">#</th>
+                    <th className="w-[250px] px-2 py-2.5">Customer / Mobile</th>
+                    <th className="w-[135px] px-2 py-2.5 text-center">VIP Status</th>
+                    <th className="w-[220px] px-2 py-2.5">
                       <span className="inline-flex items-center gap-2">
                         Avg. Purchase per Month (Ledger)
                         <Info className="h-4 w-4 text-slate-400" />
                       </span>
                     </th>
-                    <th className="w-48 px-3 py-4 text-center">
+                    <th className="w-[150px] px-2 py-2.5 text-center">
                       <span className="inline-flex items-center justify-center gap-2">
                         Sales (Current Month)
                         <Info className="h-4 w-4 text-slate-400" />
                       </span>
                     </th>
-                    <th className="w-44 px-3 py-4">Last Purchase</th>
-                    <th className="w-44 px-3 py-4">Agent</th>
-                    <th className="w-36 px-3 py-4 text-center">Action</th>
+                    <th className="w-[135px] px-2 py-2.5">Last Purchase</th>
+                    <th className="w-[135px] px-2 py-2.5">Agent</th>
+                    <th className="w-[105px] px-2 py-2.5 text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {activeCategory.rows.slice(0, 10).map((row, index) => {
+                  {visibleRows.map((row, index) => {
                     const vip = vipDetails(row);
                     const trend = trendDetails(row);
                     const VipIcon = vip.Icon;
                     const TrendIcon = trend.Icon;
                     return (
                       <tr key={row.id} className="border-t border-slate-100 align-top">
-                        <td className="px-5 py-4 font-bold">{index + 1}</td>
-                        <td className="px-3 py-4">
+                        <td className="px-3 py-2.5 text-sm font-bold">{index + 1}</td>
+                        <td className="px-2 py-2.5">
                           <button
                             type="button"
                             onClick={() => openCustomerDetails(row)}
                             disabled={loadingCustomerId === row.id}
                             aria-label={`View details for ${row.shopName}`}
-                            className="line-clamp-2 text-left font-bold leading-tight text-blue-950 underline-offset-2 hover:text-blue-700 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-60"
+                            className="line-clamp-2 text-left text-[13px] font-bold leading-tight text-blue-950 underline-offset-2 hover:text-blue-700 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-60"
                           >
                             {loadingCustomerId === row.id && <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />}
                             {row.shopName}
                           </button>
-                          <p className="mt-1 truncate text-sm text-blue-700">{row.contactNumber}</p>
+                          <p className="mt-0.5 truncate text-[12px] font-semibold text-blue-700">{row.contactNumber}</p>
                         </td>
-                        <td className="px-3 py-4 text-center">
-                          <div className={`mx-auto inline-flex min-w-28 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-bold uppercase ${vip.className}`}>
-                            {VipIcon && <VipIcon className="h-4 w-4" />}
+                        <td className="px-2 py-2.5 text-center">
+                          <div className={`mx-auto inline-flex min-w-24 items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-[12px] font-bold uppercase ${vip.className}`}>
+                            {VipIcon && <VipIcon className="h-3.5 w-3.5" />}
                             {vip.label}
                           </div>
-                          <p className="mt-2 text-xs text-slate-500">{vip.sublabel}</p>
+                          <p className="mt-1 text-[10px] text-slate-500">{vip.sublabel}</p>
                         </td>
-                        <td className="px-3 py-4">
-                          <p className="text-lg font-bold text-blue-950">{peso.format(row.averageMonthlySales)} <span className="text-sm font-medium text-slate-500">/ month</span></p>
-                          <p className="mt-1 text-sm text-slate-500">(Based on {row.averageMonthlySalesMonthCount} months)</p>
-                          <p className={`mt-1 inline-flex items-center gap-1 text-sm font-bold ${trend.className}`}>
-                            <TrendIcon className="h-4 w-4 fill-current" />
+                        <td className="px-2 py-2.5">
+                          <p className="text-[15px] font-bold text-blue-950">{peso.format(row.averageMonthlySales)} <span className="text-[12px] font-medium text-slate-500">/ month</span></p>
+                          <p className="mt-0.5 text-[11px] text-slate-500">(Based on {row.averageMonthlySalesMonthCount} months)</p>
+                          <p className={`mt-0.5 inline-flex items-center gap-1 text-[11px] font-bold ${trend.className}`}>
+                            <TrendIcon className="h-3.5 w-3.5 fill-current" />
                             {trend.label}
                           </p>
                         </td>
-                        <td className="px-3 py-4 text-center text-lg font-bold text-emerald-700">{peso.format(row.currentMonthSales)}</td>
-                        <td className="px-3 py-4">
-                          <p className="font-medium">{row.lastPurchaseDate}</p>
-                          <p className="mt-1 text-xs text-slate-500">{ageLabel(row)}</p>
+                        <td className="px-2 py-2.5 text-center text-[15px] font-bold text-emerald-700">{peso.format(row.currentMonthSales)}</td>
+                        <td className="px-2 py-2.5">
+                          <p className="text-[13px] font-medium">{row.lastPurchaseDate}</p>
+                          <p className="mt-0.5 text-[11px] text-slate-500">{ageLabel(row)}</p>
                         </td>
-                        <td className="break-words px-3 py-4 font-bold">{row.assignedTo}</td>
-                        <td className="px-3 py-4">
-                          <div className="flex justify-center gap-3">
+                        <td className="break-words px-2 py-2.5 text-[12px] font-bold">{row.assignedTo}</td>
+                        <td className="px-2 py-2.5">
+                          <div className="flex justify-center gap-1.5">
                             {activeCategory.id === 'unverified' && (
                               <button
                                 type="button"
@@ -530,9 +538,9 @@ const DailyCallMasterListView: React.FC = () => {
                                 title={`Approve ${row.shopName} into Verified Prospects`}
                                 onClick={() => handleVerifyExistingProspect(row)}
                                 disabled={loadingCustomerId === row.id}
-                                className="rounded-full border border-blue-200 p-2 text-blue-600 transition hover:bg-blue-50 disabled:opacity-60"
+                                className="rounded-full border border-blue-200 p-1.5 text-blue-600 transition hover:bg-blue-50 disabled:opacity-60"
                               >
-                                <UserRoundCheck className="h-5 w-5" />
+                                <UserRoundCheck className="h-4 w-4" />
                               </button>
                             )}
                             <button
@@ -541,9 +549,9 @@ const DailyCallMasterListView: React.FC = () => {
                               title={`Open call details for ${row.shopName}`}
                               onClick={() => openCustomerDetails(row, 'overview')}
                               disabled={loadingCustomerId === row.id}
-                              className="rounded-full border border-emerald-200 p-2 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-60"
+                              className="rounded-full border border-emerald-200 p-1.5 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-60"
                             >
-                              <Phone className="h-5 w-5" />
+                              <Phone className="h-4 w-4" />
                             </button>
                             <button
                               type="button"
@@ -551,9 +559,9 @@ const DailyCallMasterListView: React.FC = () => {
                               title={`Open communication history for ${row.shopName}`}
                               onClick={() => openCustomerDetails(row, 'communication')}
                               disabled={loadingCustomerId === row.id}
-                              className="rounded-full border border-blue-200 p-2 text-blue-600 transition hover:bg-blue-50 disabled:opacity-60"
+                              className="rounded-full border border-blue-200 p-1.5 text-blue-600 transition hover:bg-blue-50 disabled:opacity-60"
                             >
-                              <MessageSquare className="h-5 w-5" />
+                              <MessageSquare className="h-4 w-4" />
                             </button>
                           </div>
                         </td>
@@ -566,28 +574,41 @@ const DailyCallMasterListView: React.FC = () => {
                 </tbody>
               </table>
             </div>
-            <div className="flex items-center justify-between border-t border-slate-200 px-5 py-3 text-sm">
-              <span>Showing 1 to {Math.min(10, activeCategory.rows.length)} of {activeCategory.rows.length} entries</span>
-              <button type="button" className={`font-bold ${activeCategory.accent}`}>View all {activeCategory.rows.length} customers ›</button>
+            <div className="flex items-center justify-between border-t border-slate-200 px-4 py-2 text-sm">
+              <span>
+                {visibleRowCount > 0
+                  ? `Showing 1 to ${visibleRowCount} of ${activeCategory.rows.length} entries`
+                  : `Showing 0 of ${activeCategory.rows.length} entries`}
+              </span>
+              {activeCategory.rows.length > 10 && (
+                <button
+                  type="button"
+                  onClick={handleToggleExpandedCategory}
+                  className={`font-bold ${activeCategory.accent}`}
+                  aria-expanded={isActiveCategoryExpanded}
+                >
+                  {isActiveCategoryExpanded ? 'Show first 10 customers ↑' : `View all ${activeCategory.rows.length} customers ›`}
+                </button>
+              )}
             </div>
           </article>
         )}
       </section>
 
-      <section className="grid grid-cols-[1.25fr_1.3fr_0.6fr] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <section className="grid grid-cols-[1fr_1.15fr] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="border-r border-slate-200 p-4">
           <h3 className="text-sm font-bold uppercase">Customer Case Overview <span className="text-xs font-normal normal-case">(This Month)</span></h3>
           <div className="mt-3 grid grid-cols-5 gap-2">
             {caseOverviewItems.map((item) => (
               <div key={item.label} className={`rounded-lg border p-2 text-center ${item.tone}`}>
                 <item.Icon className="mx-auto h-5 w-5" />
-                <p className="mt-2 min-h-8 text-[9px] font-bold uppercase">{item.label}</p>
-                <div className="mt-2 flex justify-around text-[9px]"><span>Open<br/><b className="text-base">{item.open}</b></span><span>Pending<br/><b className="text-base">{item.pending}</b></span></div>
+                <p className="mt-2 min-h-8 text-[10px] font-bold uppercase">{item.label}</p>
+                <div className="mt-2 flex justify-around text-[10px]"><span>Open<br/><b className="text-base">{item.open}</b></span><span>Pending<br/><b className="text-base">{item.pending}</b></span></div>
                 <button
                   type="button"
                   aria-label={`View ${item.label} details`}
                   onClick={() => setSelectedCase(item)}
-                  className="mt-2 text-[9px] font-bold text-blue-700 hover:underline"
+                  className="mt-2 text-[10px] font-bold text-blue-700 hover:underline"
                 >
                   View Details
                 </button>
@@ -596,7 +617,7 @@ const DailyCallMasterListView: React.FC = () => {
           </div>
         </div>
 
-        <div className="border-r border-slate-200 p-4">
+        <div className="p-4">
           <h3 className="text-sm font-bold uppercase">Incident Report Flow</h3>
           <div className="mt-7 flex items-start justify-between gap-1 text-center">
             {[
@@ -616,31 +637,16 @@ const DailyCallMasterListView: React.FC = () => {
                   <div className="mx-auto mt-3 grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-blue-900">
                     {React.createElement(Icon as React.ComponentType<{ className?: string }>, { className: 'h-5 w-5' })}
                   </div>
-                  <p className="mt-2 text-[8px] leading-tight">{String(label)}</p>
+                  <p className="mt-2 text-[9px] leading-tight">{String(label)}</p>
                 </div>
                 {index < 8 && <span className="mt-12 text-xs font-bold">→</span>}
               </React.Fragment>
             ))}
           </div>
         </div>
-
-        <div className="p-4">
-          <h3 className="text-sm font-bold uppercase">Quick Summary (MTD)</h3>
-          <dl className="mt-3 space-y-3 text-xs">
-            {[
-              ['Current Month Sales', totals.current],
-              ['Monthly Target', monthlyTarget],
-              ['Remaining to Target', Math.max(0, monthlyTarget - totals.current)],
-              ['Total Potential Sales', totalPotential],
-            ].map(([label, value]) => (
-              <div key={String(label)} className="flex justify-between gap-3 border-b border-slate-100 pb-2"><dt>{String(label)}</dt><dd className="font-bold">{peso.format(Number(value))}</dd></div>
-            ))}
-            <div className="flex justify-between"><dt>Pipeline vs Target</dt><dd className="font-bold text-emerald-700">{monthlyTarget ? ((totalPotential / monthlyTarget) * 100).toFixed(2) : '0'}%</dd></div>
-          </dl>
-        </div>
       </section>
 
-      <footer className="flex items-center justify-between px-2 pb-2 text-[10px] text-slate-500">
+      <footer className="flex items-center justify-between px-2 pb-2 text-[11px] text-slate-500">
         <span>© 2026 TND-OPC. All rights reserved.</span><span>Version 1.0.0</span>
       </footer>
 
@@ -692,7 +698,7 @@ const DailyCallMasterListView: React.FC = () => {
         </div>
       ), document.body)}
     </div>
-    </DashboardViewportFit>
+    </div>
   );
 };
 

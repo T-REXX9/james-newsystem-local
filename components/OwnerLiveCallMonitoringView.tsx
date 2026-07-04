@@ -1110,8 +1110,8 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100 p-3.5 pt-1 lg:p-3.5 lg:pt-1">
-      <div className="mx-auto w-full max-w-[1700px] shrink-0 space-y-2">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100 p-3.5 pt-1 lg:p-3.5 lg:pt-1 2xl:p-5 2xl:pt-2">
+      <div className="mx-auto w-full max-w-[min(100vw-1.5rem,2400px)] shrink-0 space-y-2">
         {isLoadingSnapshot && (
           <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
             Loading live dashboard data from local MySQL API...
@@ -1123,7 +1123,7 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
           </div>
         )}
       </div>
-      <DashboardViewportFit revision={isLoadingSnapshot}>
+      <DashboardViewportFit revision={isLoadingSnapshot} maxScale={1.42} designWidth={1700}>
         <OwnerDashboardTemplate
           dateLabel={format(new Date(), 'MMMM d, yyyy')}
           monthLabel={format(new Date(), 'MMMM yyyy')}
