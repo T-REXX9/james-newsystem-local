@@ -187,8 +187,148 @@ const StockMovementView: React.FC = () => {
   }, []);
 
   const handlePrint = () => {
-    window.focus();
-    window.print();
+    if (!selectedProduct) return;
+
+    const printArea = document.querySelector<HTMLElement>('[data-testid="stock-movement-print-area"]');
+    if (!printArea) {
+      window.focus();
+      window.print();
+      return;
+    }
+
+    const printFrame = document.createElement('iframe');
+    printFrame.title = 'Stock Movement Print Preview';
+    printFrame.style.position = 'fixed';
+    printFrame.style.right = '0';
+    printFrame.style.bottom = '0';
+    printFrame.style.width = '0';
+    printFrame.style.height = '0';
+    printFrame.style.border = '0';
+    printFrame.style.opacity = '0';
+    document.body.appendChild(printFrame);
+
+    const frameDocument = printFrame.contentDocument || printFrame.contentWindow?.document;
+    if (!frameDocument) {
+      printFrame.remove();
+      window.focus();
+      window.print();
+      return;
+    }
+
+    const reportTitle = `${selectedProduct.item_code || selectedProduct.part_no || 'Stock Movement'} - Stock Movement`;
+    const printStyles = `
+      @page { size: landscape; margin: 10mm; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        color: #263f4f;
+        background: #fff;
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 11px;
+        line-height: 1.25;
+      }
+      .inventory-print-title {
+        border-bottom: 1px solid #d8dde2;
+        margin-bottom: 22px;
+        padding-bottom: 18px;
+      }
+      .inventory-print-title h1 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+      .inventory-print-title div {
+        width: 150px;
+        height: 1px;
+        margin-top: 16px;
+        background: #8d9ca5;
+      }
+      .stock-movement-print-header {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 250px;
+        gap: 24px;
+        align-items: start;
+        margin-bottom: 18px;
+      }
+      .stock-movement-print-title {
+        text-align: left;
+      }
+      .stock-movement-print-title h3 {
+        margin: 0 0 26px;
+        font-size: 24px;
+        font-weight: 700;
+        text-align: left;
+      }
+      h5 {
+        margin: 0 0 7px;
+        font-size: 14px;
+        font-weight: 700;
+      }
+      hr {
+        border: 0;
+        border-top: 1px solid #e0e3e6;
+        margin: 18px 0;
+      }
+      .stock-movement-print-sections {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        margin-bottom: 8px;
+      }
+      .stock-movement-print-sections h5 {
+        text-align: center;
+        font-size: 17px;
+      }
+      .stock-movement-print-table {
+        width: 100%;
+        table-layout: fixed;
+        border-collapse: collapse;
+      }
+      .stock-movement-print-table th,
+      .stock-movement-print-table td {
+        border: 1px solid #cfd6dc;
+        padding: 5px;
+        vertical-align: top;
+        font-size: 9px;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+      .stock-movement-print-table th {
+        font-weight: 700;
+        text-align: left;
+      }
+    `;
+
+    frameDocument.open();
+    frameDocument.write(`<!doctype html>
+      <html>
+        <head>
+          <title>${reportTitle}</title>
+          <style>${printStyles}</style>
+        </head>
+        <body>
+          <div class="inventory-print-title">
+            <h1>INVENTORY LOGS</h1>
+            <div></div>
+          </div>
+          ${printArea.innerHTML}
+        </body>
+      </html>
+    `);
+    frameDocument.close();
+
+    let didPrint = false;
+    const cleanup = () => window.setTimeout(() => printFrame.remove(), 500);
+    const runPrint = () => {
+      if (didPrint) return;
+      didPrint = true;
+      printFrame.contentWindow?.focus();
+      printFrame.contentWindow?.print();
+      cleanup();
+    };
+
+    printFrame.onload = runPrint;
+    window.setTimeout(runPrint, 100);
   };
 
   // Handle product selection
@@ -198,6 +338,8 @@ const StockMovementView: React.FC = () => {
 
   const handleViewMovement = () => {
     if (!highlightedProduct) return;
+    setLogs([]);
+    setIsLoadingLogs(true);
     setSelectedProduct(highlightedProduct);
     // Reset filters when changing product
     setWarehouseFilter('WH1');
@@ -288,6 +430,317 @@ const StockMovementView: React.FC = () => {
       </tr>
     );
   };
+
+  const renderLegacyMovementRow = (log: InventoryLogWithProduct) => {
+    const isStockIn = log.status_indicator === '+';
+    const sourceText = log.processed_by || log.reference_no || '-';
+    const canNavigate = resolveStockMovementNavigationTarget(log) !== null;
+    const source = canNavigate ? (
+      <button
+        type="button"
+        onClick={() => handleReferenceClick(log)}
+        className="break-all text-left font-medium text-[#2c7da0] hover:underline"
+        title={`Navigate to ${log.transaction_type}`}
+      >
+        {sourceText}
+      </button>
+    ) : (
+      <span>{sourceText}</span>
+    );
+
+    return (
+      <tr key={log.id} data-testid={`legacy-stock-movement-row-${log.id}`} className="text-[12px] leading-snug text-[#334653] 2xl:text-[13px]">
+        <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{isStockIn ? formatLegacyDate(log.date) : ''}</td>
+        <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{isStockIn ? source : ''}</td>
+        <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{isStockIn ? log.partner : ''}</td>
+        <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{isStockIn ? log.qty_in : ''}</td>
+        <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{isStockIn ? log.warehouse_id : ''}</td>
+        <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{!isStockIn ? formatLegacyDate(log.date) : ''}</td>
+        <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{!isStockIn ? source : ''}</td>
+        <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{!isStockIn ? log.partner : ''}</td>
+        <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{!isStockIn ? log.qty_out : ''}</td>
+        <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{!isStockIn ? formatLegacyPrice(log) : ''}</td>
+        <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{!isStockIn ? log.warehouse_id : ''}</td>
+        <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{log.balance ?? ''}</td>
+      </tr>
+    );
+  };
+
+  const printReport = selectedProduct ? (
+    <div id="print_area" data-testid="stock-movement-print-area" className="stock-movement-print-area">
+      <div className="stock-movement-print-header">
+        <div>
+          <h5>Item Code: {selectedProduct.item_code}</h5>
+          <h5>Part No: {selectedProduct.part_no}</h5>
+          <h5>Brand: {selectedProduct.brand}</h5>
+          <h5>Description: {selectedProduct.description}</h5>
+          <h5>Application: {selectedProduct.application || '-'}</h5>
+          <h5>Reorder Qty: {selectedProduct.reorder_quantity}</h5>
+        </div>
+        <div className="stock-movement-print-title">
+          <h3>STOCK MOVEMENT</h3>
+          <h5>Warehouse:</h5>
+          <h5>{warehouseFilter === 'all' ? 'All' : warehouseFilter}</h5>
+        </div>
+      </div>
+
+      <hr />
+
+      <div className="stock-movement-print-sections">
+        <h5>RECEIVED / RETURNED</h5>
+        <h5>RELEASED</h5>
+      </div>
+
+      <table className="stock-movement-print-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Source</th>
+            <th>Supplier/Customer</th>
+            <th>Qty</th>
+            <th>Warehouse</th>
+            <th>Date</th>
+            <th>Source</th>
+            <th>Customer</th>
+            <th>Qty</th>
+            <th>Unit Price</th>
+            <th>Warehouse</th>
+            <th>Bal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {logs.map(renderLegacyPrintRow)}
+        </tbody>
+      </table>
+    </div>
+  ) : null;
+
+  if (selectedProduct) {
+    return (
+      <div className="h-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950">
+        <style>
+          {`
+            .stock-movement-print-area {
+              display: none;
+            }
+
+            .stock-movement-report-face {
+              font-family: "Arial Narrow", "Roboto Condensed", Arial, Helvetica, sans-serif;
+            }
+
+            @media print {
+              @page {
+                size: landscape;
+                margin: 10mm;
+              }
+
+              body * {
+                visibility: hidden !important;
+              }
+
+              .stock-movement-print-area,
+              .stock-movement-print-area * {
+                visibility: visible !important;
+              }
+
+              .stock-movement-print-area {
+                display: block !important;
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                padding: 0;
+                color: #111;
+                background: #fff;
+                font-family: Arial, Helvetica, sans-serif;
+                font-size: 11px;
+                line-height: 1.25;
+              }
+
+              .stock-movement-print-area h3 {
+                margin: 0 0 8px;
+                font-size: 20px;
+                font-weight: 700;
+                text-align: right;
+              }
+
+              .stock-movement-print-area h5 {
+                margin: 0 0 5px;
+                font-size: 12px;
+                font-weight: 600;
+              }
+
+              .stock-movement-print-area hr {
+                border: 0;
+                border-top: 1px solid #999;
+                margin: 10px 0 12px;
+              }
+
+              .stock-movement-print-header {
+                display: grid;
+                grid-template-columns: 1fr 240px;
+                gap: 24px;
+                align-items: start;
+              }
+
+              .stock-movement-print-title {
+                text-align: right;
+              }
+
+              .stock-movement-print-sections {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                margin-bottom: 6px;
+              }
+
+              .stock-movement-print-sections h5 {
+                text-align: center;
+              }
+
+              .stock-movement-print-table {
+                width: 100%;
+                border-collapse: collapse;
+              }
+
+              .stock-movement-print-table th,
+              .stock-movement-print-table td {
+                border: 1px solid #777;
+                padding: 5px 6px;
+                vertical-align: top;
+                font-size: 10px;
+              }
+
+              .stock-movement-print-table th {
+                font-weight: 700;
+                text-align: left;
+              }
+            }
+          `}
+        </style>
+
+        <div className="h-full overflow-auto p-6">
+          <section className="stock-movement-report-face min-h-full overflow-hidden rounded-sm border border-[#d8dde2] bg-white shadow-sm">
+            <header className="flex items-center justify-between border-b border-[#d8dde2] px-7 py-6">
+              <div>
+                <h1 className="text-[28px] font-semibold uppercase leading-none tracking-normal text-[#334653]">
+                  INVENTORY LOGS
+                </h1>
+                <div className="mt-7 h-px w-80 bg-[#8d9ca5]" />
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleBackToSearchResults}
+                  className="rounded bg-[#5e829a] px-7 py-4 text-[19px] font-medium leading-none text-white shadow-sm transition-colors hover:bg-[#4f7288]"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrint}
+                  className="rounded bg-[#5e829a] px-7 py-4 text-[19px] font-medium leading-none text-white shadow-sm transition-colors hover:bg-[#4f7288]"
+                >
+                  Print
+                </button>
+              </div>
+            </header>
+
+            <div className="px-9 py-10">
+              <div className="grid grid-cols-1 gap-10 lg:grid-cols-[1fr_360px]">
+                <div className="space-y-6 text-[28px] font-semibold leading-tight text-[#334653]">
+                  <div>Item Code: {selectedProduct.item_code}</div>
+                  <div>Part No: {selectedProduct.part_no}</div>
+                  <div>Brand: {selectedProduct.brand}</div>
+                  <div>Description: {selectedProduct.description}</div>
+                </div>
+
+                <div className="lg:justify-self-end">
+                  <h2 className="text-[36px] font-semibold uppercase leading-none tracking-normal text-[#334653]">
+                    STOCK MOVEMENT
+                  </h2>
+                  <label htmlFor="stock-movement-warehouse" className="mt-10 block text-[28px] font-semibold text-[#334653]">
+                    Warehouse:
+                  </label>
+                  <select
+                    id="stock-movement-warehouse"
+                    value={warehouseFilter}
+                    onChange={(event) => setWarehouseFilter(event.target.value)}
+                    className="mt-5 h-14 w-full rounded-none border border-[#d6d6d6] bg-white px-7 text-[20px] text-[#334653] outline-none focus:border-[#5e829a]"
+                  >
+                    {WAREHOUSES.map(warehouse => (
+                      <option key={warehouse} value={warehouse}>{warehouse}</option>
+                    ))}
+                    <option value="all">All Warehouses</option>
+                  </select>
+                </div>
+              </div>
+
+              <hr className="my-9 border-[#e0e3e6]" />
+
+              {isLoadingLogs ? (
+                <div className="flex min-h-[360px] items-center justify-center text-[#54616b]">
+                  <CustomLoadingSpinner label="Loading" />
+                  <span className="ml-3 text-lg">Loading movement logs...</span>
+                </div>
+              ) : logs.length === 0 ? (
+                <div className="flex min-h-[360px] flex-col items-center justify-center text-[#54616b]">
+                  <AlertCircle className="mb-3 h-12 w-12 text-slate-300" />
+                  <p className="text-lg font-medium">No movement logs found</p>
+                  <p className="text-sm">Try another warehouse.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 pb-5 text-center text-[28px] font-semibold uppercase leading-none text-[#334653]">
+                    <div>RECEIVED / RETURNED</div>
+                    <div>RELEASED</div>
+                  </div>
+                  <div className="overflow-hidden">
+                    <table className="w-full table-fixed border-collapse text-left">
+                      <colgroup>
+                        <col className="w-[7%]" />
+                        <col className="w-[8%]" />
+                        <col className="w-[17%]" />
+                        <col className="w-[4%]" />
+                        <col className="w-[7%]" />
+                        <col className="w-[7%]" />
+                        <col className="w-[8%]" />
+                        <col className="w-[20%]" />
+                        <col className="w-[4%]" />
+                        <col className="w-[7%]" />
+                        <col className="w-[7%]" />
+                        <col className="w-[4%]" />
+                      </colgroup>
+                      <thead>
+                        <tr className="text-[12px] font-semibold leading-tight text-[#334653] 2xl:text-[13px]">
+                          <th className="break-words border border-[#d9dee3] px-2 py-3">Date</th>
+                          <th className="break-words border border-[#d9dee3] px-2 py-3">Source</th>
+                          <th className="break-words border border-[#d9dee3] px-2 py-3">Supplier/Customer</th>
+                          <th className="break-words border border-[#d9dee3] px-2 py-3">Qty</th>
+                          <th className="break-words border border-[#d9dee3] px-2 py-3">Warehouse</th>
+                          <th className="break-words border border-[#d9dee3] px-2 py-3">Date</th>
+                          <th className="break-words border border-[#d9dee3] px-2 py-3">Source</th>
+                          <th className="break-words border border-[#d9dee3] px-2 py-3">Customer</th>
+                          <th className="break-words border border-[#d9dee3] px-2 py-3">Qty</th>
+                          <th className="break-words border border-[#d9dee3] px-2 py-3">Unit Price</th>
+                          <th className="break-words border border-[#d9dee3] px-2 py-3">Warehouse</th>
+                          <th className="break-words border border-[#d9dee3] px-2 py-3">Bal</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {logs.map(renderLegacyMovementRow)}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          </section>
+        </div>
+
+        {printReport}
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950">

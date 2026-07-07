@@ -6,6 +6,8 @@ import {
   ArrowRight,
   ArrowUp,
   Bot,
+  ChevronLeft,
+  ChevronRight,
   CheckCircle2,
   ClipboardList,
   Crown,
@@ -51,7 +53,7 @@ const compactPeso = new Intl.NumberFormat('en-PH', {
   maximumFractionDigits: 2,
 });
 
-type CategoryId = 'priority' | 'recovery' | 'verified' | 'unverified';
+type CategoryId = 'priority' | 'recovery' | 'verified' | 'unverified' | 'all';
 
 interface CategoryDefinition {
   id: CategoryId;
@@ -114,6 +116,18 @@ const categories: CategoryDefinition[] = [
     softBg: 'bg-orange-50/60',
     dot: 'bg-orange-400',
     matches: (row) => row.purchaseAgeGroup === 'no_purchase' && isProspectRow(row) && row.verification !== 'Verified',
+  },
+  {
+    id: 'all',
+    label: 'All Customers',
+    note: 'Complete master list',
+    state: 'All Customers',
+    accent: 'text-slate-800',
+    iconBg: 'bg-slate-600',
+    border: 'border-slate-200',
+    softBg: 'bg-slate-50',
+    dot: 'bg-slate-500',
+    matches: () => true,
   },
 ];
 
@@ -216,12 +230,13 @@ const DailyCallMasterListView: React.FC = () => {
   const [loadingCustomerId, setLoadingCustomerId] = useState<string | null>(null);
   const [selectedCase, setSelectedCase] = useState<CaseOverviewItem | null>(null);
   const [activeCategoryId, setActiveCategoryId] = useState<CategoryId>('priority');
-  const [expandedCategoryId, setExpandedCategoryId] = useState<CategoryId | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const debouncedSearch = useDebounce(search, 400);
 
   const handleSelectCategory = useCallback((categoryId: CategoryId) => {
     setActiveCategoryId(categoryId);
-    setExpandedCategoryId(null);
+    setPage(1);
   }, []);
 
   const scrollTo = useCallback((target: HTMLElement | null | undefined) => {
@@ -288,18 +303,34 @@ const DailyCallMasterListView: React.FC = () => {
     const averageSales = categoryRows.length ? potentialSales / categoryRows.length : 0;
     return { ...category, rows: categoryRows, currentSales, potentialSales, averageSales };
   }), [rows]);
+  const summaryCategoryData = categoryData.filter((category) => category.id !== 'all');
 
   const activeCategory = categoryData.find((category) => category.id === activeCategoryId) || categoryData[0];
-  const isActiveCategoryExpanded = expandedCategoryId === activeCategory.id;
-  const visibleRows = isActiveCategoryExpanded ? activeCategory.rows : activeCategory.rows.slice(0, 10);
+  const pageCount = Math.max(1, Math.ceil(activeCategory.rows.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const pageStartIndex = activeCategory.rows.length === 0 ? 0 : (safePage - 1) * pageSize;
+  const visibleRows = activeCategory.rows.slice(pageStartIndex, pageStartIndex + pageSize);
   const visibleRowCount = visibleRows.length;
-  const handleToggleExpandedCategory = useCallback(() => {
-    const isExpanded = expandedCategoryId === activeCategory.id;
-    setExpandedCategoryId(isExpanded ? null : activeCategory.id);
-    if (isExpanded) {
-      requestAnimationFrame(() => scrollTo(categoryTableRefs.current[activeCategory.id]));
+  const pageEndIndex = pageStartIndex + visibleRowCount;
+  const paginationPages = useMemo(() => {
+    if (pageCount <= 7) {
+      return Array.from({ length: pageCount }, (_, index) => index + 1);
     }
-  }, [activeCategory.id, expandedCategoryId, scrollTo]);
+
+    const pages = new Set([1, pageCount, safePage - 1, safePage, safePage + 1]);
+    return Array.from(pages)
+      .filter((pageNumber) => pageNumber >= 1 && pageNumber <= pageCount)
+      .sort((a, b) => a - b);
+  }, [pageCount, safePage]);
+
+  useEffect(() => {
+    if (page !== safePage) setPage(safePage);
+  }, [page, safePage]);
+
+  const goToPage = useCallback((nextPage: number) => {
+    setPage(Math.min(Math.max(1, nextPage), pageCount));
+    requestAnimationFrame(() => scrollTo(categoryTableRefs.current[activeCategory.id]));
+  }, [activeCategory.id, pageCount, scrollTo]);
 
   if (loading) {
     return (
@@ -369,7 +400,7 @@ const DailyCallMasterListView: React.FC = () => {
       )}
 
       <section className="grid grid-cols-4 gap-3 2xl:gap-4" aria-label="Customer category summaries">
-        {categoryData.map((category) => (
+        {summaryCategoryData.map((category) => (
           <article key={category.id} className={`rounded-xl border ${category.border} ${category.softBg} p-3 shadow-sm 2xl:p-4`}>
             <h3 className={`text-sm font-bold uppercase ${category.accent}`}>
               {category.label} <span className="text-xs normal-case">({category.note})</span>
@@ -428,15 +459,6 @@ const DailyCallMasterListView: React.FC = () => {
               </button>
             );
           })}
-          <button
-            type="button"
-            aria-label={`All Customers (${meta.count || rows.length})`}
-            onClick={() => scrollTo(dashboardRef.current)}
-            className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-bold text-slate-800 transition hover:bg-slate-50 2xl:h-11 2xl:px-5"
-          >
-            <span>All Customers</span>
-            <span className="rounded-full bg-slate-500 px-2.5 py-0.5 text-xs text-white">{meta.count || rows.length}</span>
-          </button>
         </div>
       </nav>
 
@@ -574,22 +596,72 @@ const DailyCallMasterListView: React.FC = () => {
                 </tbody>
               </table>
             </div>
-            <div className="flex items-center justify-between border-t border-slate-200 px-4 py-2 text-sm">
-              <span>
-                {visibleRowCount > 0
-                  ? `Showing 1 to ${visibleRowCount} of ${activeCategory.rows.length} entries`
-                  : `Showing 0 of ${activeCategory.rows.length} entries`}
-              </span>
-              {activeCategory.rows.length > 10 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-2 text-sm">
+              <div className="flex flex-wrap items-center gap-3">
+                <span>
+                  {visibleRowCount > 0
+                    ? `Showing ${pageStartIndex + 1} to ${pageEndIndex} of ${activeCategory.rows.length} entries`
+                    : `Showing 0 of ${activeCategory.rows.length} entries`}
+                </span>
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                  Rows
+                  <select
+                    value={pageSize}
+                    onChange={(event) => {
+                      setPageSize(Number(event.target.value));
+                      setPage(1);
+                    }}
+                    className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-700 outline-none focus:border-blue-400"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </label>
+              </div>
+
+              <nav className="flex items-center gap-1" aria-label={`${activeCategory.label} pagination`}>
                 <button
                   type="button"
-                  onClick={handleToggleExpandedCategory}
-                  className={`font-bold ${activeCategory.accent}`}
-                  aria-expanded={isActiveCategoryExpanded}
+                  onClick={() => goToPage(safePage - 1)}
+                  disabled={safePage <= 1}
+                  className="grid h-8 w-8 place-items-center rounded-md border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-label="Previous page"
                 >
-                  {isActiveCategoryExpanded ? 'Show first 10 customers ↑' : `View all ${activeCategory.rows.length} customers ›`}
+                  <ChevronLeft className="h-4 w-4" />
                 </button>
-              )}
+                {paginationPages.map((pageNumber, index) => {
+                  const previousPage = paginationPages[index - 1];
+                  const hasGap = previousPage && pageNumber - previousPage > 1;
+                  return (
+                    <React.Fragment key={pageNumber}>
+                      {hasGap && <span className="px-1 text-xs font-bold text-slate-400">...</span>}
+                      <button
+                        type="button"
+                        onClick={() => goToPage(pageNumber)}
+                        aria-current={safePage === pageNumber ? 'page' : undefined}
+                        className={`h-8 min-w-8 rounded-md border px-2 text-xs font-bold transition ${
+                          safePage === pageNumber
+                            ? `${activeCategory.border} ${activeCategory.softBg} ${activeCategory.accent}`
+                            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        {pageNumber}
+                      </button>
+                    </React.Fragment>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => goToPage(safePage + 1)}
+                  disabled={safePage >= pageCount}
+                  className="grid h-8 w-8 place-items-center rounded-md border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-label="Next page"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </nav>
             </div>
           </article>
         )}
