@@ -31,7 +31,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useDebounce } from '../hooks/useDebounce';
-import { fetchCustomersForDailyCall, fetchDailyCallMasterList } from '../services/dailyCallMonitoringService';
+import { fetchCustomersForDailyCall, fetchDailyCallMasterList, getCachedDailyCallMasterList } from '../services/dailyCallMonitoringService';
 import { createContact, updateContact } from '../services/customerDatabaseLocalApiService';
 import { Contact, DailyCallCustomerRow, DailyCallMasterCustomerRow, DailyCallMasterListMeta } from '../types';
 import AddContactModal from './AddContactModal';
@@ -216,10 +216,12 @@ const trendDetails = (row: DailyCallMasterCustomerRow) => {
 };
 
 const DailyCallMasterListView: React.FC = () => {
-  const [rows, setRows] = useState<DailyCallMasterCustomerRow[]>([]);
-  const [meta, setMeta] = useState<DailyCallMasterListMeta>({ fromDate, toDate: '', count: 0 });
+  const initialCachedResult = useMemo(() => getCachedDailyCallMasterList({ fromDate }), []);
+  const [rows, setRows] = useState<DailyCallMasterCustomerRow[]>(() => initialCachedResult?.items || []);
+  const [meta, setMeta] = useState<DailyCallMasterListMeta>(() => initialCachedResult?.meta || { fromDate, toDate: '', count: 0 });
+  const rowsRef = useRef<DailyCallMasterCustomerRow[]>(initialCachedResult?.items || []);
   const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialCachedResult);
   const [error, setError] = useState<string | null>(null);
   const dashboardRef = useRef<HTMLDivElement>(null);
   const categoryTableRefs = useRef<Partial<Record<CategoryId, HTMLElement>>>({});
@@ -260,11 +262,15 @@ const DailyCallMasterListView: React.FC = () => {
     }
   }, []);
 
-  const loadRows = useCallback(async (withLoading = true) => {
-    if (withLoading) setLoading(true);
+  useEffect(() => {
+    rowsRef.current = rows;
+  }, [rows]);
+
+  const loadRows = useCallback(async (withLoading = true, forceRefresh = false) => {
+    if (withLoading && (forceRefresh || rowsRef.current.length === 0)) setLoading(true);
     setError(null);
     try {
-      const result = await fetchDailyCallMasterList({ fromDate, search: debouncedSearch });
+      const result = await fetchDailyCallMasterList({ fromDate, search: debouncedSearch, forceRefresh });
       setRows(result.items);
       setMeta(result.meta);
     } catch {
@@ -279,7 +285,7 @@ const DailyCallMasterListView: React.FC = () => {
       ...data,
       verification: 'Verified',
     });
-    await loadRows(false);
+    await loadRows(false, true);
     setShowAddVerifiedProspectModal(false);
     return created;
   }, [loadRows]);
@@ -289,7 +295,7 @@ const DailyCallMasterListView: React.FC = () => {
     setRows((prev) => prev.map((item) =>
       item.id === row.id ? { ...item, verification: 'Verified' } : item
     ));
-    await loadRows(false);
+    await loadRows(false, true);
   }, [loadRows]);
 
   useEffect(() => {
@@ -479,7 +485,7 @@ const DailyCallMasterListView: React.FC = () => {
               </h3>
               <div className="flex items-center gap-3">
                 <span className="flex items-center gap-2 text-sm"><i className={`h-3 w-3 rounded-full ${activeCategory.dot}`} />{activeCategory.state}</span>
-                <button type="button" onClick={() => loadRows(false)} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-bold hover:bg-slate-50">
+                <button type="button" onClick={() => loadRows(false, true)} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-bold hover:bg-slate-50">
                   <RefreshCw className="h-4 w-4" /> Refresh
                 </button>
               </div>

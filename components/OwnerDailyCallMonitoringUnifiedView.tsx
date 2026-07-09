@@ -134,11 +134,11 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
   }, [summary]);
 
   return (
-    <div className="h-full min-h-0 overflow-hidden bg-slate-50 p-3 md:p-4 2xl:p-6 dark:bg-slate-950">
-      <div className="mx-auto flex h-full min-h-0 w-full max-w-[min(100vw-1.5rem,2400px)] flex-col gap-4 2xl:gap-6 lg:flex-row">
-        <DailyCallMonitoringMiniSidebar activeView={activeView} onChangeView={setActiveView} />
+    <div className="h-full min-h-0 overflow-hidden bg-slate-50 dark:bg-slate-950">
+      <div className="flex h-full min-h-0 w-full flex-col lg:flex-row">
+        <DailyCallMonitoringMiniSidebar activeView={activeView} onChangeView={setActiveView} currentUser={currentUser} />
 
-        <section className={`min-h-0 min-w-0 flex-1 ${activeView === 'master-list' ? 'flex flex-col gap-4 overflow-hidden' : 'overflow-hidden'}`}>
+        <section className={`min-h-0 min-w-0 flex-1 p-3 md:p-4 2xl:p-6 ${activeView === 'master-list' ? 'flex flex-col gap-4 overflow-hidden' : 'overflow-hidden'}`}>
           {activeView === 'master-list' && (
             <header
               className="shrink-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900"

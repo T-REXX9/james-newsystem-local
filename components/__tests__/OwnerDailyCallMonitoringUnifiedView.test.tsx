@@ -24,12 +24,12 @@ describe('OwnerDailyCallMonitoringUnifiedView', () => {
     expect(screen.queryByRole('button', { name: /purchase follow-up/i })).not.toBeInTheDocument();
   });
 
-  it('keeps the desktop view switcher compact beside the dashboard', () => {
+  it('renders the desktop view switcher as a sidebar', () => {
     render(<OwnerDailyCallMonitoringUnifiedView currentUser={null} />);
 
     const sidebar = screen.getByRole('navigation', { name: /owner dashboard views/i });
-    expect(sidebar).toHaveClass('lg:w-40', 'lg:shrink-0', 'p-2');
-    expect(screen.getByRole('button', { name: /chart/i })).toHaveClass('text-xs');
+    expect(sidebar).toHaveClass('lg:h-full', 'lg:w-56', 'lg:border-r');
+    expect(screen.getByRole('button', { name: /chart/i })).toHaveClass('text-sm');
   });
 
   it('keeps the chart view active when Chart is clicked', () => {
@@ -44,9 +44,21 @@ describe('OwnerDailyCallMonitoringUnifiedView', () => {
   it('switches back to Master List view', () => {
     render(<OwnerDailyCallMonitoringUnifiedView currentUser={null} />);
 
-    fireEvent.click(screen.getAllByRole('button', { name: /master list/i })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: /staff dashboard/i })[0]);
 
     expect(screen.getByTestId('master-list-view')).toBeInTheDocument();
     expect(screen.queryByTestId('chart-view')).not.toBeInTheDocument();
+  });
+
+  it('renames the first sidebar item for main users', () => {
+    render(<OwnerDailyCallMonitoringUnifiedView currentUser={{ id: '1', email: 'main@example.com', role: 'MAIN' }} />);
+
+    expect(screen.getByRole('button', { name: /management\/staff dashboard/i })).toBeInTheDocument();
+  });
+
+  it('renames the first sidebar item for staff users', () => {
+    render(<OwnerDailyCallMonitoringUnifiedView currentUser={{ id: '2', email: 'staff@example.com', role: 'Staff' }} />);
+
+    expect(screen.getByRole('button', { name: /^staff dashboard$/i })).toBeInTheDocument();
   });
 });

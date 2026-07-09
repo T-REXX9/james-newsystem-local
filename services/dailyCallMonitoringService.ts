@@ -45,6 +45,7 @@ export interface DailyCallAgentSnapshot {
 export interface DailyCallMasterListParams {
   fromDate?: string;
   search?: string;
+  forceRefresh?: boolean;
 }
 
 export interface DailyCallMasterListResult {
@@ -89,6 +90,15 @@ export interface WeeklyRangeBucket {
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
+const MASTER_LIST_CACHE_TTL_MS = 2 * 60 * 1000;
+
+type MasterListCacheEntry = {
+  expiresAt: number;
+  result: DailyCallMasterListResult;
+};
+
+const masterListCache = new Map<string, MasterListCacheEntry>();
+const masterListRequests = new Map<string, Promise<DailyCallMasterListResult>>();
 
 const resolveMainId = (): number => {
   const session = getLocalAuthSession();
@@ -97,6 +107,29 @@ const resolveMainId = (): number => {
   );
   if (Number.isFinite(dynamicMainId) && dynamicMainId > 0) return dynamicMainId;
   return API_MAIN_ID || 1;
+};
+
+const getDailyCallMasterListCacheKey = (mainId: number, params: DailyCallMasterListParams = {}) => {
+  const fromDate = params.fromDate || '2025-10-01';
+  const search = (params.search || '').trim().toLowerCase();
+  return `${mainId}|${fromDate}|${search}`;
+};
+
+export const getCachedDailyCallMasterList = (
+  params: DailyCallMasterListParams = {}
+): DailyCallMasterListResult | null => {
+  const key = getDailyCallMasterListCacheKey(resolveMainId(), params);
+  const cached = masterListCache.get(key);
+  if (!cached || cached.expiresAt <= Date.now()) {
+    if (cached) masterListCache.delete(key);
+    return null;
+  }
+  return cached.result;
+};
+
+export const invalidateDailyCallMasterListCache = () => {
+  masterListCache.clear();
+  masterListRequests.clear();
 };
 
 const requestJson = async (url: string, init?: RequestInit): Promise<any> => {
@@ -530,23 +563,46 @@ export const fetchDailyCallMasterList = async (
   params: DailyCallMasterListParams = {}
 ): Promise<DailyCallMasterListResult> => {
   const mainId = resolveMainId();
+  const cacheKey = getDailyCallMasterListCacheKey(mainId, params);
+
+  if (!params.forceRefresh) {
+    const cached = masterListCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.result;
+
+    const pendingRequest = masterListRequests.get(cacheKey);
+    if (pendingRequest) return pendingRequest;
+  }
+
   const query = new URLSearchParams({
     main_id: String(mainId),
     from_date: params.fromDate || '2025-10-01',
     search: params.search || '',
   });
 
-  const payload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/master-list?${query.toString()}`);
-  const data = payload?.data || {};
-  const meta = data?.meta || {};
-  return {
-    items: Array.isArray(data?.items) ? data.items.map(mapDailyCallMasterCustomerRow) : [],
-    meta: {
-      fromDate: String(meta?.from_date || params.fromDate || '2025-10-01'),
-      toDate: String(meta?.to_date || ''),
-      count: Number(meta?.count || 0),
-    },
-  };
+  const request = requestJson(`${API_BASE_URL}/daily-call-monitoring/master-list?${query.toString()}`)
+    .then((payload) => {
+      const data = payload?.data || {};
+      const meta = data?.meta || {};
+      const result = {
+        items: Array.isArray(data?.items) ? data.items.map(mapDailyCallMasterCustomerRow) : [],
+        meta: {
+          fromDate: String(meta?.from_date || params.fromDate || '2025-10-01'),
+          toDate: String(meta?.to_date || ''),
+          count: Number(meta?.count || 0),
+        },
+      };
+      masterListCache.set(cacheKey, {
+        expiresAt: Date.now() + MASTER_LIST_CACHE_TTL_MS,
+        result,
+      });
+      return result;
+    })
+    .finally(() => {
+      masterListRequests.delete(cacheKey);
+    });
+
+  masterListRequests.set(cacheKey, request);
+  return request;
 };
 
 export const fetchAgentSnapshotForDailyCall = async (
