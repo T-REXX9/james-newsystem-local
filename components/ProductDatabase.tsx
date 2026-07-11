@@ -403,7 +403,11 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialP
     });
 
     if (affectedProducts.length === 0) {
-      alert('No products match the criteria.');
+      addToast({
+        type: 'warning',
+        title: 'No matching products',
+        description: 'Adjust the filters or search term before running a bulk price update.',
+      });
       return;
     }
 

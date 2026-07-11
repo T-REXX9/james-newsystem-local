@@ -31,6 +31,7 @@ import WorkflowStepper from './WorkflowStepper';
 import ConfirmModal from './ConfirmModal';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 import { normalizePriceGroup } from '../constants/pricingGroups';
+import { useToast } from './ToastProvider';
 
 interface SalesOrderViewProps {
   initialOrderId?: string;
@@ -95,6 +96,7 @@ const formatCurrency = (value?: number | string | null): string => {
 };
 
 const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
+  const { addToast } = useToast();
   const userId = String(getLocalAuthSession()?.userProfile?.id || '').trim();
   const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | string>('all');
@@ -422,7 +424,11 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
     const currentStatus = normalizeStatus(selectedOrder.status);
     const isApprover = Boolean(selectedOrder.can_approve);
     if (currentStatus === 'submitted' && !isApprover) {
-      alert('Only approver accounts can approve this sales order.');
+      addToast({
+        type: 'warning',
+        title: 'Approval needed',
+        description: 'Only approver accounts can approve this sales order.',
+      });
       setConfirming(false);
       return;
     }
@@ -453,6 +459,14 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
           ? { targetRoles: ['Owner'] }
           : { targetUserIds: notificationTargetUserId ? [notificationTargetUserId] : [] }
       );
+      addToast({
+        type: 'success',
+        title: successLabel === 'submitted' ? 'Sales order submitted' : 'Sales order approved',
+        description:
+          successLabel === 'submitted'
+            ? 'This order is now waiting for approval.'
+            : 'You can now generate the next document for this order.',
+      });
     } catch (err) {
       console.error('Error confirming sales order:', err);
       await notifySalesOrderEvent(
@@ -464,7 +478,11 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
         { targetRoles: ['Owner'] },
         'error'
       );
-      alert('Failed to confirm order');
+      addToast({
+        type: 'error',
+        title: 'Unable to update sales order',
+        description: err instanceof Error ? err.message : 'Failed to confirm order.',
+      });
     } finally {
       setConfirming(false);
       await loadOrders();
@@ -483,6 +501,11 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
         const slip = document as OrderSlip;
         setDocumentMessage(`Created Order Slip ${slip.slip_no}`);
         setDocumentLink({ type: 'orderslip', id: slip.id, label: slip.slip_no });
+        addToast({
+          type: 'success',
+          title: 'Order slip created',
+          description: `${slip.slip_no} is now linked to this sales order.`,
+        });
         await notifySalesOrderEvent(
           'Order Slip Created',
           `Order ${selectedOrder.order_no} converted to ${slip.slip_no}.`,
@@ -495,6 +518,11 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
         const invoice = document as Invoice;
         setDocumentMessage(`Created Invoice ${invoice.invoice_no}`);
         setDocumentLink({ type: 'invoice', id: invoice.id, label: invoice.invoice_no });
+        addToast({
+          type: 'success',
+          title: 'Invoice created',
+          description: `${invoice.invoice_no} is now linked to this sales order.`,
+        });
         await notifySalesOrderEvent(
           'Invoice Created',
           `Order ${selectedOrder.order_no} converted to ${invoice.invoice_no}.`,
@@ -517,7 +545,11 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
         { targetUserIds: submitterProfileId ? [submitterProfileId] : [] },
         'error'
       );
-      alert('Failed to convert order to document');
+      addToast({
+        type: 'error',
+        title: 'Unable to create document',
+        description: err instanceof Error ? err.message : 'Failed to convert order to a document.',
+      });
     } finally {
       setConversionLoading(false);
       await loadOrders();
@@ -602,10 +634,19 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
       }
       setCancelModalOpen(false);
       setCancelReason('');
+      addToast({
+        type: 'success',
+        title: 'Sales order cancelled',
+        description: 'The record was cancelled and the list has been refreshed.',
+      });
       await loadOrders();
     } catch (err) {
       console.error('Failed to cancel sales order:', err);
-      alert('Failed to cancel sales order');
+      addToast({
+        type: 'error',
+        title: 'Unable to cancel sales order',
+        description: err instanceof Error ? err.message : 'Failed to cancel sales order.',
+      });
     } finally {
       setCancelLoading(false);
     }
@@ -637,10 +678,19 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
       setDocumentMessage('');
       setDocumentLink(null);
       setUnpostModalOpen(false);
+      addToast({
+        type: 'success',
+        title: 'Sales order unposted',
+        description: 'The order is available for correction again.',
+      });
       await loadOrders();
     } catch (err) {
       console.error('Failed to unpost sales order:', err);
-      alert(err instanceof Error ? err.message : 'Failed to unpost sales order');
+      addToast({
+        type: 'error',
+        title: 'Unable to unpost sales order',
+        description: err instanceof Error ? err.message : 'Failed to unpost sales order.',
+      });
     } finally {
       setUnpostLoading(false);
     }

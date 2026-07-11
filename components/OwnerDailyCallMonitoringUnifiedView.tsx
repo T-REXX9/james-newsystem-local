@@ -1,5 +1,5 @@
 import React, { Component, ReactNode, useEffect, useMemo, useState } from 'react';
-import { ArrowUp, BarChart3, Clock3, Table2, Target, Wallet } from 'lucide-react';
+import { ArrowUp, BarChart3, Clock3, FileText, PackageSearch, ReceiptText, Table2, Target, Users, Wallet } from 'lucide-react';
 import OwnerLiveCallMonitoringView from './OwnerLiveCallMonitoringView';
 import DailyCallMonitoringMiniSidebar, { DailyCallOwnerViewMode } from './DailyCallMonitoringMiniSidebar';
 import DailyCallMasterListView from './DailyCallMasterListView';
@@ -42,6 +42,10 @@ const calculateSummary = (rows: DailyCallMasterCustomerRow[]) => {
     .reduce((sum, categoryRows) => sum + categoryRows.reduce((categorySum, row) => categorySum + row.totalSales, 0), 0);
 
   return { current, totalPotential };
+};
+
+const navigateToModule = (tab: string) => {
+  window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab } }));
 };
 
 class LocalErrorBoundary extends Component<LocalErrorBoundaryProps, LocalErrorBoundaryState> {
@@ -133,12 +137,87 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
     ];
   }, [summary]);
 
+  const workQueueCards = useMemo(() => [
+    {
+      title: 'Follow up inquiries',
+      description: 'Review active customer calls and open inquiry work.',
+      action: 'Open follow-ups',
+      Icon: Users,
+      route: 'sales-transaction-daily-call-monitoring',
+    },
+    {
+      title: 'Pending sales orders',
+      description: 'Check orders waiting for approval or next documents.',
+      action: 'Review orders',
+      Icon: FileText,
+      route: 'sales-transaction-sales-order',
+    },
+    {
+      title: 'Unpaid invoices',
+      description: 'Open receivables and see customer balances.',
+      action: 'View AR',
+      Icon: ReceiptText,
+      route: 'accounting-accounting-accounts-receivable',
+    },
+    {
+      title: 'Collections to review',
+      description: 'Post, check, or reconcile daily collections.',
+      action: 'Open collections',
+      Icon: Wallet,
+      route: 'accounting-transactions-daily-collection-entry',
+    },
+    {
+      title: 'Low stock watch',
+      description: 'Review reorder and suggested stock reports.',
+      action: 'Check stock',
+      Icon: PackageSearch,
+      route: 'warehouse-reports-reorder-report',
+    },
+  ], []);
+
   return (
     <div className="h-full min-h-0 overflow-hidden bg-slate-50 dark:bg-slate-950">
       <div className="flex h-full min-h-0 w-full flex-col lg:flex-row">
         <DailyCallMonitoringMiniSidebar activeView={activeView} onChangeView={setActiveView} currentUser={currentUser} />
 
-        <section className={`min-h-0 min-w-0 flex-1 p-3 md:p-4 2xl:p-6 ${activeView === 'master-list' ? 'flex flex-col gap-4 overflow-hidden' : 'overflow-hidden'}`}>
+        <section className={`min-h-0 min-w-0 flex-1 p-3 md:p-4 2xl:p-6 ${activeView === 'master-list' ? 'flex flex-col gap-4 overflow-hidden' : 'flex flex-col gap-4 overflow-hidden'}`}>
+          {activeView !== 'master-list' && (
+            <header className="shrink-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+              <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Today&apos;s Work Queue</p>
+                  <h2 className="mt-1 text-lg font-bold text-slate-900 dark:text-white">What needs attention now</h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveView('master-list')}
+                  className="rounded-lg bg-brand-blue px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-[#0a3d74]"
+                >
+                  Open master list
+                </button>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                {workQueueCards.map(({ title, description, action, Icon, route }) => (
+                  <button
+                    key={title}
+                    type="button"
+                    onClick={() => navigateToModule(route)}
+                    className="group flex min-h-[112px] flex-col justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 text-left transition hover:border-brand-blue/40 hover:bg-blue-50 dark:border-slate-800 dark:bg-slate-950 dark:hover:bg-slate-900"
+                  >
+                    <span className="flex items-start justify-between gap-3">
+                      <span>
+                        <span className="block text-sm font-bold text-slate-900 dark:text-white">{title}</span>
+                        <span className="mt-1 block text-xs leading-5 text-slate-500 dark:text-slate-400">{description}</span>
+                      </span>
+                      <Icon className="h-5 w-5 shrink-0 text-brand-blue" />
+                    </span>
+                    <span className="mt-3 text-xs font-bold text-brand-blue group-hover:underline">{action}</span>
+                  </button>
+                ))}
+              </div>
+            </header>
+          )}
+
           {activeView === 'master-list' && (
             <header
               className="shrink-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900"

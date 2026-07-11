@@ -477,49 +477,6 @@ export const TOPBAR_MENU_CONFIG: TopbarMainMenu[] = [
     icon: MessageSquare,
     submenus: [
       {
-        id: 'communication-text-menu',
-        label: 'TEXT MENU',
-        icon: MessageSquare,
-        items: [
-          {
-            id: 'communication-text-menu-text-messages',
-            label: 'Text Messages',
-            route: 'communication-text-menu-text-messages',
-            icon: MessageSquare,
-          },
-          {
-            id: 'communication-text-menu-inbox',
-            label: 'Inbox',
-            route: 'communication-text-menu-inbox',
-            icon: MessageSquare,
-          },
-          {
-            id: 'communication-text-menu-sent',
-            label: 'Sent',
-            route: 'communication-text-menu-sent',
-            icon: MessageSquare,
-          },
-          {
-            id: 'communication-text-menu-pending',
-            label: 'Pending',
-            route: 'communication-text-menu-pending',
-            icon: MessageSquare,
-          },
-          {
-            id: 'communication-text-menu-failed',
-            label: 'Failed',
-            route: 'communication-text-menu-failed',
-            icon: MessageSquare,
-          },
-          {
-            id: 'communication-text-menu-operator',
-            label: 'Operator',
-            route: 'communication-text-menu-operator',
-            icon: MessageSquare,
-          },
-        ],
-      },
-      {
         id: 'ai-service',
         label: 'AI SERVICE',
         icon: Bot,

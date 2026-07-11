@@ -166,7 +166,7 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
     { key: '3', label: 'Sales', route: 'sales-transaction-sales-inquiry' },
     { key: '4', label: 'Accounting', route: 'accounting-transactions-freight-charges-debit' },
     { key: '5', label: 'Maintenance', route: 'maintenance-customer-customer-data' },
-    { key: '6', label: 'Communication', route: 'communication-text-menu-text-messages' },
+    { key: '6', label: 'Reports', route: 'sales-reports-sales-report' },
   ];
 
   const shortcuts = useMemo(
