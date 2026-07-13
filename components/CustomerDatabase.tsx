@@ -7,11 +7,11 @@ import CustomerDetailPanel from './CustomerDetailPanel';
 import BulkAssignAgentModal from './BulkAssignAgentModal';
 import BulkSetPriceGroupModal from './BulkSetPriceGroupModal';
 import { Users, UserPlus, EyeOff, Tag, CheckSquare, X } from 'lucide-react';
-import { Toaster, toast } from 'sonner';
 import AddContactModal from './AddContactModal';
 import { ACTIVE_PRICING_GROUP_OPTIONS } from '../constants/pricingGroups';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
+import { EmptyState, PageHeader } from './common/PageScaffold';
 
 const CustomerDatabase: React.FC = () => {
   const { addToast } = useToast();
@@ -69,11 +69,19 @@ const CustomerDatabase: React.FC = () => {
     if (selectedIds.size === 0) return;
     try {
       await bulkUpdateContacts(Array.from(selectedIds), { isHidden: hide });
-      toast.success(`Successfully ${hide ? 'hidden' : 'unhidden'} ${selectedIds.size} customers`);
+      addToast({
+        type: 'success',
+        title: hide ? 'Customers hidden' : 'Customers restored',
+        description: `${selectedIds.size} customer${selectedIds.size === 1 ? '' : 's'} updated successfully.`,
+      });
       reload();
       setSelectedIds(new Set());
     } catch (e) {
-      toast.error('Failed to update visibility');
+      addToast({
+        type: 'error',
+        title: 'Unable to update visibility',
+        description: e instanceof Error ? e.message : 'Failed to update visibility.',
+      });
     }
   };
 
@@ -82,13 +90,21 @@ const CustomerDatabase: React.FC = () => {
 
     try {
       await bulkUpdateContacts(Array.from(selectedIds), { assignedAgent: agentName, salesman: agentName });
-      toast.success(`Assigned ${agentName} to ${selectedIds.size} customers`);
+      addToast({
+        type: 'success',
+        title: 'Agent assigned',
+        description: `${agentName} was assigned to ${selectedIds.size} customer${selectedIds.size === 1 ? '' : 's'}.`,
+      });
       reload();
       setSelectedIds(new Set());
     } catch (e) {
       console.error('Bulk assign agent error:', e);
       const errorMessage = e instanceof Error ? e.message : 'Unknown error';
-      toast.error(`Failed to assign agent: ${errorMessage}`);
+      addToast({
+        type: 'error',
+        title: 'Unable to assign agent',
+        description: errorMessage,
+      });
     }
   };
 
@@ -100,12 +116,20 @@ const CustomerDatabase: React.FC = () => {
 
     try {
       await bulkUpdateContacts(Array.from(selectedIds), { priceGroup });
-      toast.success(`Set price group to ${selectedOption.label} for ${selectedIds.size} customers`);
+      addToast({
+        type: 'success',
+        title: 'Price group updated',
+        description: `${selectedOption.label} was applied to ${selectedIds.size} customer${selectedIds.size === 1 ? '' : 's'}.`,
+      });
       reload();
       setShowSetPriceGroupModal(false);
       setSelectedIds(new Set());
     } catch (e) {
-      toast.error('Failed to set price group');
+      addToast({
+        type: 'error',
+        title: 'Unable to set price group',
+        description: e instanceof Error ? e.message : 'Failed to set price group.',
+      });
     }
   };
 
@@ -173,9 +197,39 @@ const CustomerDatabase: React.FC = () => {
 
   // Layout
   return (
-    <div className="flex h-full w-full bg-slate-50 dark:bg-slate-950 overflow-hidden relative">
-      <Toaster position="top-right" richColors />
-
+    <div className="flex h-full w-full flex-col bg-slate-50 p-4 dark:bg-slate-950 overflow-hidden relative">
+      <PageHeader
+        eyebrow="Sales Database"
+        title="Customer Database"
+        subtitle="Search customers, maintain account details, assign agents, and review business history from one workspace."
+        icon={<Users className="h-6 w-6 text-brand-blue" />}
+        meta={
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              {customers.length.toLocaleString()} customers
+            </span>
+            <span className="rounded-full bg-blue-50 px-2.5 py-1 font-semibold text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
+              {filterVisibility}
+            </span>
+            {selectedIds.size > 0 && (
+              <span className="rounded-full bg-amber-50 px-2.5 py-1 font-semibold text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
+                {selectedIds.size} selected
+              </span>
+            )}
+          </div>
+        }
+        actions={
+          <button
+            type="button"
+            onClick={handleCreateNew}
+            className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
+          >
+            <UserPlus className="h-4 w-4" />
+            Add Customer
+          </button>
+        }
+      />
+      <div className="flex min-h-0 flex-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <AddContactModal
         isOpen={showAddCustomerModal}
         onClose={() => setShowAddCustomerModal(false)}
@@ -222,15 +276,11 @@ const CustomerDatabase: React.FC = () => {
             onEditContact={handleEditCustomer}
           />
         ) : (
-          <div className="h-full flex flex-col items-center justify-center text-slate-400">
-            <div className="w-24 h-24 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-6">
-              <Users className="w-10 h-10 text-slate-300 dark:text-slate-600" />
-            </div>
-            <h2 className="text-xl font-bold text-slate-600 dark:text-slate-300">Select a Customer</h2>
-            <p className="max-w-md text-center mt-2 text-slate-500">
-              Click on any customer from the list to view their comprehensive details, history, and financial status.
-            </p>
-          </div>
+          <EmptyState
+            title="Select a customer"
+            description="Choose a customer from the list to view account details, history, financial status, and related activity."
+            icon={<Users className="h-8 w-8 text-slate-300 dark:text-slate-600" />}
+          />
         )}
 
         {/* Floating Bulk Action Bar (Overlay) */}
@@ -274,6 +324,7 @@ const CustomerDatabase: React.FC = () => {
           selectedCount={selectedIds.size}
         />
       </main>
+      </div>
     </div>
   );
 };

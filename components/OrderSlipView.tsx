@@ -6,6 +6,7 @@ import {
   Search,
   Printer,
   CheckCircle2,
+  ClipboardList,
 } from 'lucide-react';
 import StatusBadge from './StatusBadge';
 import WorkflowStepper from './WorkflowStepper';
@@ -29,6 +30,8 @@ import {
   markNotificationsAsReadByEntityKey,
   resolveNotificationUserId,
 } from '../services/notificationLocalApiService';
+import { useToast } from './ToastProvider';
+import { PageHeader, RecordTrustStrip, WorkflowGuidance } from './common/PageScaffold';
 
 interface OrderSlipViewProps {
   initialSlipId?: string;
@@ -74,6 +77,7 @@ const formatCurrency = (value?: number | string | null): string => {
 };
 
 const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSlipRefNo }) => {
+  const { addToast } = useToast();
   const [selectedSlip, setSelectedSlip] = useState<OrderSlip | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | OrderSlipStatus>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -331,6 +335,49 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
     return 'text-slate-700 dark:text-slate-200';
   };
 
+  const orderSlipGuidance = (() => {
+    if (!selectedSlip) {
+      return {
+        title: 'Select an order slip',
+        description: 'Choose an order slip to review fulfillment details, print status, and linked sales order actions.',
+        tone: 'default' as const,
+      };
+    }
+    if (!canProcessOrderSlip && selectedCustomer) {
+      return {
+        title: 'Invoice-only customer policy',
+        description: 'This customer is configured for invoice processing, so order slip actions are disabled.',
+        tone: 'warning' as const,
+      };
+    }
+    if (selectedSlip.status === OrderSlipStatus.DRAFT) {
+      return {
+        title: 'Next step: finalize order slip',
+        description: 'Review items and customer details before marking this slip ready for warehouse handling.',
+        tone: 'info' as const,
+      };
+    }
+    if (selectedSlip.status === OrderSlipStatus.FINALIZED) {
+      return {
+        title: 'Next step: print or track fulfillment',
+        description: 'This order slip is finalized. Print the document or update tracking details when available.',
+        tone: 'success' as const,
+      };
+    }
+    if (selectedSlip.status === OrderSlipStatus.CANCELLED) {
+      return {
+        title: 'Cancelled order slip',
+        description: 'This record is preserved for reference. New fulfillment actions are disabled.',
+        tone: 'danger' as const,
+      };
+    }
+    return {
+      title: 'Review order slip',
+      description: 'Check the document details and continue with the next valid action.',
+      tone: 'info' as const,
+    };
+  })();
+
   const handleMonthChange = (monthValue: string) => {
     if (!monthValue) {
       setMonth(undefined);
@@ -389,6 +436,11 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
           targetUserIds: creatorUserId ? [creatorUserId] : [],
         }
       );
+      addToast({
+        type: 'success',
+        title: 'Order slip finalized',
+        description: `${selectedSlip.slip_no} is ready for warehouse handling.`,
+      });
     } catch (err) {
       console.error('Error finalizing order slip:', err);
       await notifyOrderSlipEvent(
@@ -400,7 +452,11 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
         { targetRoles: ['Owner', 'Manager'] },
         'error'
       );
-      alert('Failed to finalize order slip');
+      addToast({
+        type: 'error',
+        title: 'Unable to finalize order slip',
+        description: err instanceof Error ? err.message : 'Failed to finalize order slip.',
+      });
     } finally {
       setFinalizing(false);
       await loadOrderSlips();
@@ -434,6 +490,11 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
         }
       );
       setShowPrintPreview(true);
+      addToast({
+        type: 'success',
+        title: 'Order slip marked printed',
+        description: `${selectedSlip.slip_no} is ready to print.`,
+      });
       window.setTimeout(() => window.print(), 150);
     } catch (err) {
       console.error('Error printing order slip:', err);
@@ -446,7 +507,11 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
         { targetRoles: ['Owner', 'Manager'] },
         'error'
       );
-      alert('Failed to mark order slip as printed');
+      addToast({
+        type: 'error',
+        title: 'Unable to print order slip',
+        description: err instanceof Error ? err.message : 'Failed to mark order slip as printed.',
+      });
     } finally {
       setPrinting(false);
       await loadOrderSlips();
@@ -477,6 +542,11 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
       );
       setCancelModalOpen(false);
       setCancelReason('');
+      addToast({
+        type: 'success',
+        title: 'Order slip cancelled',
+        description: 'The document was cancelled and preserved for reference.',
+      });
       await loadOrderSlips();
     } catch (err) {
       console.error('Failed to cancel order slip:', err);
@@ -491,7 +561,11 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
       );
       setOrderSlips(prev => applyOptimisticUpdate(prev, selectedSlip.id, { status: previousStatus } as Partial<OrderSlip>));
       setSelectedSlip(prev => prev ? { ...prev, status: previousStatus } : null);
-      alert('Failed to cancel order slip');
+      addToast({
+        type: 'error',
+        title: 'Unable to cancel order slip',
+        description: err instanceof Error ? err.message : 'Failed to cancel order slip.',
+      });
     } finally {
       setCancelLoading(false);
     }
@@ -521,6 +595,11 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
         }
       );
       setUnpostModalOpen(false);
+      addToast({
+        type: 'success',
+        title: 'Order slip unposted',
+        description: 'Returning to the linked sales order for correction.',
+      });
       await loadOrderSlips();
       navigateToModule('salesorder', { orderId: salesOrderId });
     } catch (err) {
@@ -534,7 +613,11 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
         { targetRoles: ['Owner', 'Manager'] },
         'error'
       );
-      alert(err instanceof Error ? err.message : 'Failed to unpost order slip');
+      addToast({
+        type: 'error',
+        title: 'Unable to unpost order slip',
+        description: err instanceof Error ? err.message : 'Failed to unpost order slip.',
+      });
     } finally {
       setUnpostLoading(false);
     }
@@ -551,17 +634,42 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
         setSelectedSlip(updated);
         setOrderSlips(prev => prev.map(row => row.id === updated.id ? { ...row, tracking_no: updated.tracking_no } : row));
       }
+      addToast({
+        type: 'success',
+        title: 'Tracking updated',
+        description: 'The order slip tracking number was saved.',
+      });
       await loadOrderSlips();
     } catch (err) {
       console.error('Failed to update order slip tracking number:', err);
-      alert('Failed to update tracking number');
+      addToast({
+        type: 'error',
+        title: 'Unable to update tracking',
+        description: err instanceof Error ? err.message : 'Failed to update tracking number.',
+      });
     } finally {
       setTrackingSaveLoading(false);
     }
   };
 
   return (
-    <div className="w-full flex flex-col bg-white dark:bg-slate-900 p-3 gap-4">
+    <div className="w-full flex flex-col bg-slate-50 dark:bg-slate-950 p-3 gap-4">
+      <PageHeader
+        eyebrow="Sales Transaction"
+        title="Order Slip"
+        subtitle="Finalize, print, track, or unpost order slips tied to approved sales orders."
+        icon={<ClipboardList className="h-6 w-6 text-brand-blue" />}
+        meta={
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              {orderSlips.length.toLocaleString()} slips on page
+            </span>
+            <span className="rounded-full bg-blue-50 px-2.5 py-1 font-semibold text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
+              {activeFilterLabel}
+            </span>
+          </div>
+        }
+      />
       {/* Filter bar + List table card */}
       <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
         <div className="flex flex-col gap-3 px-4 py-3 border-b border-slate-200 dark:border-slate-800">
@@ -754,6 +862,19 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
           </div>
 
           <div className="p-4 text-sm space-y-4">
+            <WorkflowGuidance
+              title={orderSlipGuidance.title}
+              description={orderSlipGuidance.description}
+              tone={orderSlipGuidance.tone}
+            />
+            <RecordTrustStrip
+              items={[
+                { label: 'Document No.', value: selectedSlip.slip_no || selectedSlip.reference_no },
+                { label: 'Status', value: <StatusBadge status={selectedSlip.status} /> },
+                { label: 'Created By', value: selectedSlip.created_by || selectedSlip.sales_person },
+                { label: 'Created Date', value: formatDate(selectedSlip.created_at || selectedSlip.sales_date) },
+              ]}
+            />
             {/* Header info table */}
             <div className="overflow-x-auto">
               <table width="100%" cellPadding="8" className="tlbcustom text-sm text-slate-700 dark:text-slate-200">

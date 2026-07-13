@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Search,
+  FileText,
 } from 'lucide-react';
 import {
   Contact,
@@ -32,6 +33,7 @@ import ConfirmModal from './ConfirmModal';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 import { normalizePriceGroup } from '../constants/pricingGroups';
 import { useToast } from './ToastProvider';
+import { PageHeader, RecordTrustStrip, WorkflowGuidance } from './common/PageScaffold';
 
 interface SalesOrderViewProps {
   initialOrderId?: string;
@@ -701,6 +703,57 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
   const canConfirm = selectedOrderStatus === 'pending' || (selectedOrderStatus === 'submitted' && Boolean(selectedOrder?.can_approve));
   const confirmLabel = selectedOrderStatus === 'pending' ? 'Approve SO' : 'Approve SO';
   const canGenerate = selectedOrderStatus === 'approved';
+  const nextStepGuidance = (() => {
+    if (!selectedOrder) {
+      return {
+        title: 'Select a sales order',
+        description: 'Choose an order from the list to review status, customer details, line items, and next steps.',
+        tone: 'default' as const,
+      };
+    }
+    if (selectedOrderStatus === 'pending') {
+      return {
+        title: 'Next step: submit for approval',
+        description: 'Review customer, credit, and item details before moving this order forward.',
+        tone: 'warning' as const,
+      };
+    }
+    if (selectedOrderStatus === 'submitted') {
+      return {
+        title: selectedOrder?.can_approve ? 'Next step: approve sales order' : 'Waiting for assigned approver',
+        description: selectedOrder?.can_approve
+          ? 'This order is ready for approval.'
+          : 'Only assigned approver accounts can approve this sales order.',
+        tone: selectedOrder?.can_approve ? 'info' as const : 'warning' as const,
+      };
+    }
+    if (selectedOrderStatus === 'approved') {
+      return {
+        title: 'Next step: generate order slip or invoice',
+        description: `Customer policy suggests ${documentSuggestion}. Generate the next document when the order is ready.`,
+        tone: 'success' as const,
+      };
+    }
+    if (selectedOrderStatus === 'posted') {
+      return {
+        title: 'Document generated',
+        description: 'This sales order already has a linked order slip or invoice. Use related document links for the next action.',
+        tone: 'success' as const,
+      };
+    }
+    if (selectedOrderStatus === 'cancelled') {
+      return {
+        title: 'Cancelled sales order',
+        description: 'This record is preserved for reference. New actions are disabled.',
+        tone: 'danger' as const,
+      };
+    }
+    return {
+      title: 'Review sales order',
+      description: 'Check record details and continue with the next valid action.',
+      tone: 'info' as const,
+    };
+  })();
 
   const activeFilterLabel = useMemo(() => {
     if (!targetMonthYear.month || !targetMonthYear.year) return 'All Records';
@@ -731,7 +784,23 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
   };
 
   return (
-    <div className="w-full flex flex-col bg-white dark:bg-slate-900 p-3 gap-4">
+    <div className="w-full flex flex-col bg-slate-50 dark:bg-slate-950 p-3 gap-4">
+      <PageHeader
+        eyebrow="Sales Transaction"
+        title="Sales Order"
+        subtitle="Review approved customer orders, control status changes, and generate the next sales document."
+        icon={<FileText className="h-6 w-6 text-brand-blue" />}
+        meta={
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              {orders.length.toLocaleString()} orders on page
+            </span>
+            <span className="rounded-full bg-blue-50 px-2.5 py-1 font-semibold text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
+              {activeFilterLabel}
+            </span>
+          </div>
+        }
+      />
       <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
         <div className="flex flex-col gap-3 px-4 py-3 border-b border-slate-200 dark:border-slate-800">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between text-sm">
@@ -927,6 +996,19 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
             </div>
 
             <div className="p-4 text-sm space-y-4">
+              <WorkflowGuidance
+                title={nextStepGuidance.title}
+                description={nextStepGuidance.description}
+                tone={nextStepGuidance.tone}
+              />
+              <RecordTrustStrip
+                items={[
+                  { label: 'Document No.', value: selectedOrder.order_no || selectedOrder.reference_no },
+                  { label: 'Status', value: <StatusBadge status={selectedOrder.status} /> },
+                  { label: 'Created By', value: selectedOrder.created_by || selectedOrder.sales_person },
+                  { label: 'Created Date', value: formatDate(selectedOrder.created_at || selectedOrder.sales_date) },
+                ]}
+              />
               <div className="overflow-x-auto">
                 <table className="w-full table-fixed border border-slate-200 dark:border-slate-800 text-sm text-center">
                   <thead>

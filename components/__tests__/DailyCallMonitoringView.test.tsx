@@ -203,7 +203,7 @@ describe('DailyCallMonitoringView communication actions', () => {
           contact_id: 'contact-overdue',
           amount: 100_000,
           status: 'paid',
-          purchased_at: purchasedAt(45),
+          purchased_at: '2025-09-01T00:00:00.000Z',
         },
         {
           id: 'purchase-fresh',
@@ -227,7 +227,7 @@ describe('DailyCallMonitoringView communication actions', () => {
       .getByTitle('Priority List (Any ledger activity since October 2025 onwards)')
       .closest('article')!;
     const recoverySummary = within(categorySummaries)
-      .getByTitle('Recovery List (Over 1 month since last purchase)')
+      .getByTitle('Recovery List (Purchase history before October 2025, with none since)')
       .closest('article')!;
     const verifiedSummary = within(categorySummaries)
       .getByTitle('Verified Prospects (Verified, awaiting first purchase)')
@@ -236,7 +236,7 @@ describe('DailyCallMonitoringView communication actions', () => {
       .getByTitle('Unverified Prospects (No purchases yet)')
       .closest('article')!;
 
-    expect(within(prioritySummary).getByText('3')).toBeInTheDocument();
+    expect(within(prioritySummary).getByText('2')).toBeInTheDocument();
     expect(within(recoverySummary).getByText('1')).toBeInTheDocument();
     expect(within(verifiedSummary).getByText('0')).toBeInTheDocument();
     expect(within(unverifiedSummary).getByText('1')).toBeInTheDocument();
@@ -245,16 +245,18 @@ describe('DailyCallMonitoringView communication actions', () => {
     const priorityTable = within(categoryTables)
       .getByTitle('Priority List (Any ledger activity since October 2025 onwards)')
       .closest('article')!;
+    const recoveryTable = within(categoryTables)
+      .getByTitle('Recovery List (Purchase history before October 2025, with none since)')
+      .closest('article')!;
     const unverifiedTable = within(categoryTables)
       .getByTitle('Unverified Prospects (No purchases yet)')
       .closest('article')!;
 
     const cadenceRow = within(priorityTable).getByText('Cadence Window Shop').closest('tr')!;
-    const overdueRow = within(priorityTable).getByText('Overdue Shop').closest('tr')!;
     const freshRow = within(priorityTable).getByText('Fresh Purchase Shop').closest('tr')!;
 
-    expect(cadenceRow.compareDocumentPosition(overdueRow)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(overdueRow.compareDocumentPosition(freshRow)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(cadenceRow.compareDocumentPosition(freshRow)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(within(recoveryTable).getByText('Overdue Shop')).toBeInTheDocument();
     expect(within(unverifiedTable).getByText('No Purchase Shop')).toBeInTheDocument();
   });
 

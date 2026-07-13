@@ -166,6 +166,18 @@ const getPurchaseAgeGroup = (lastPurchase?: string): 'priority' | 'recovery' | '
 const hasPurchaseHistory = (lastPurchase?: string) =>
   Boolean(lastPurchase && !Number.isNaN(Date.parse(lastPurchase)));
 
+const priorityListStart = new Date('2025-10-01T00:00:00');
+
+const isPriorityListPurchase = (lastPurchase?: string) => {
+  if (!hasPurchaseHistory(lastPurchase)) return false;
+  return new Date(lastPurchase as string) >= priorityListStart;
+};
+
+const isRecoveryListPurchase = (lastPurchase?: string) => {
+  if (!hasPurchaseHistory(lastPurchase)) return false;
+  return new Date(lastPurchase as string) < priorityListStart;
+};
+
 const isProspectContact = (contact: Contact) =>
   contact.status === CustomerStatus.PROSPECTIVE || contact.status === CustomerStatus.VERIFIED_PROSPECT;
 
@@ -1157,8 +1169,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       return { id, label, note, tone, rows, sales, average, metricLabel };
     };
 
-    const priorityRows = masterRows.filter((row) => hasPurchaseHistory(row.lastPurchase));
-    const recoveryRows = masterRows.filter((row) => getPurchaseAgeGroup(row.lastPurchase) === 'recovery');
+    const priorityRows = masterRows.filter((row) => isPriorityListPurchase(row.lastPurchase));
+    const recoveryRows = masterRows.filter((row) => isRecoveryListPurchase(row.lastPurchase));
     const noPurchaseProspectRows = masterRows.filter((row) =>
       getPurchaseAgeGroup(row.lastPurchase) === 'unverified' && isProspectContact(row.contact)
     );
@@ -1167,7 +1179,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
     return [
       summarize(priorityRows, 'priority', 'Priority List', 'Any ledger activity since October 2025 onwards', 'emerald', 'Current Month Sales'),
-      summarize(recoveryRows, 'recovery', 'Recovery List', 'Over 1 month since last purchase', 'rose', 'Average Monthly Sales'),
+      summarize(recoveryRows, 'recovery', 'Recovery List', 'Purchase history before October 2025, with none since', 'rose', 'Average Monthly Sales'),
       summarize(verifiedRows, 'verified', 'Verified Prospects', 'Verified, awaiting first purchase', 'blue', 'Average Monthly Purchase'),
       summarize(unverifiedRows, 'unverified', 'Unverified Prospects', 'No purchases yet', 'orange', 'Average Monthly Purchase'),
     ];

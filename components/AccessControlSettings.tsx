@@ -13,10 +13,12 @@ import {
 } from 'lucide-react';
 import {
   AVAILABLE_APP_MODULES,
-  DEFAULT_STAFF_ACCESS_RIGHTS,
+  ASSIGNABLE_STAFF_ROLES,
+  canonicalizeRoleName,
   DEFAULT_STAFF_ROLE,
   MODULE_ID_ALIASES,
   ROLE_DEFAULT_ACCESS_RIGHTS,
+  isCompanyOwnerRole,
 } from '../constants';
 import {
   createStaffAccountLocal,
@@ -53,17 +55,11 @@ const INITIAL_NEW_USER_FORM = {
   mobile: '',
 };
 
-const canonicalizeRoleLabel = (value: string): string => {
-  const normalized = value.trim().toLowerCase().replace(/\s+/g, ' ');
-  if (normalized === 'sales person' || normalized === 'salesperson') return 'Sales Agent';
-  return value.trim();
-};
-
 const canonicalizeGroups = (groups: AccessGroup[]): AccessGroup[] => {
   const merged = new Map<string, AccessGroup>();
 
   groups.forEach((group) => {
-    const name = canonicalizeRoleLabel(group.name || '');
+    const name = canonicalizeRoleName(group.name || '');
     if (!name) return;
 
     const key = name.toLowerCase();
@@ -90,11 +86,11 @@ const canonicalizeGroups = (groups: AccessGroup[]): AccessGroup[] => {
 };
 
 const canonicalizeProfiles = (profiles: UserProfile[], groups: AccessGroup[]): UserProfile[] => {
-  const salesAgentGroup = groups.find((group) => canonicalizeRoleLabel(group.name || '') === 'Sales Agent');
+  const salesAgentGroup = groups.find((group) => canonicalizeRoleName(group.name || '') === 'Sales Agent');
   const salesAgentGroupId = salesAgentGroup?.id || null;
 
   return profiles.map((profile) => {
-    const nextRole = canonicalizeRoleLabel(String(profile.role || ''));
+    const nextRole = canonicalizeRoleName(String(profile.role || ''));
     const shouldMapGroup = nextRole === 'Sales Agent' && salesAgentGroupId;
 
     return {
@@ -107,17 +103,28 @@ const canonicalizeProfiles = (profiles: UserProfile[], groups: AccessGroup[]): U
 
 const sanitizeAssignableRoles = (roles: Array<{ name?: string | null }>): string[] => {
   const seen = new Set<string>();
+  const allowed = new Set(ASSIGNABLE_STAFF_ROLES.map((role) => role.toLowerCase()));
 
-  return roles
-    .map((role) => canonicalizeRoleLabel(String(role?.name || '')))
+  const apiRoles = roles
+    .map((role) => canonicalizeRoleName(String(role?.name || '')))
     .filter((role) => {
       if (!role) return false;
       const normalized = role.toLowerCase();
-      if (normalized === 'main' || normalized === 'owner') return false;
+      if (!allowed.has(normalized)) return false;
       if (seen.has(normalized)) return false;
       seen.add(normalized);
       return true;
     });
+
+  ASSIGNABLE_STAFF_ROLES.forEach((role) => {
+    const normalized = role.toLowerCase();
+    if (!seen.has(normalized)) {
+      apiRoles.push(role);
+      seen.add(normalized);
+    }
+  });
+
+  return apiRoles;
 };
 
 const getEffectiveCanonicalRights = (rights: string[] | null | undefined): Set<string> => {
@@ -675,7 +682,7 @@ const AccessControlSettings: React.FC = () => {
 
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {profiles.map((user) => {
-                    const isOwner = user.role === 'Owner';
+                    const isOwner = isCompanyOwnerRole(user.role);
                     const userRights = user.access_rights || [];
                     const hasFullAccess = userRights.includes('*');
                     const effectiveCanonicalRights = getEffectiveCanonicalRights(userRights);

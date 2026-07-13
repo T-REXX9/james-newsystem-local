@@ -12,6 +12,7 @@ import {
 } from '../../../services/staffLocalApiService';
 import { fetchTeams, TeamRecord } from '../../../services/teamLocalApiService';
 import { ROLE_DEFAULT_ACCESS_RIGHTS } from '../../../constants';
+import HighLevelDeleteModal from '../../HighLevelDeleteModal';
 
 interface StaffFormProps {
     initialData?: StaffRecord | null;
@@ -200,6 +201,7 @@ export default function Staff() {
     const debouncedSearch = useDebounce(searchTerm, 300);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<StaffRecord | null>(null);
+    const [deactivateTarget, setDeactivateTarget] = useState<StaffRecord | null>(null);
 
     const loadData = useCallback(async () => {
         setLoading(true);
@@ -223,17 +225,17 @@ export default function Staff() {
         loadData();
     }, [loadData]);
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to deactivate this staff member?')) return;
-
+    const handleDelete = async () => {
+        if (!deactivateTarget) return;
         try {
-            await deleteStaff(id);
+            await deleteStaff(deactivateTarget.id);
             addToast({
                 type: 'success',
                 title: 'Staff deactivated',
                 description: 'Staff member has been deactivated successfully.',
                 durationMs: 4000,
             });
+            setDeactivateTarget(null);
             loadData();
         } catch (error) {
             console.error('Error deactivating staff:', error);
@@ -360,7 +362,7 @@ export default function Staff() {
                                                         <Edit2 size={16} />
                                                     </button>
                                                     <button
-                                                        onClick={() => handleDelete(staff.id)}
+                                                        onClick={() => setDeactivateTarget(staff)}
                                                         className="p-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors"
                                                     >
                                                         <Trash2 size={16} />
@@ -410,6 +412,16 @@ export default function Staff() {
                     </div>
                 </div>
             )}
+
+            <HighLevelDeleteModal
+                isOpen={deactivateTarget !== null}
+                onClose={() => setDeactivateTarget(null)}
+                onConfirm={handleDelete}
+                title="Deactivate Staff Member"
+                message={`Deactivate ${deactivateTarget?.full_name || 'this staff member'}? They will no longer appear as an active staff account.`}
+                confirmLabel="Deactivate"
+                cancelLabel="Cancel"
+            />
         </div>
     );
 }

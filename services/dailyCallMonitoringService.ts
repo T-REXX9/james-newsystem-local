@@ -452,6 +452,14 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
     lastPurchaseDate: cleanNullableText(row?.lastPurchaseDate ?? row?.last_purchase_date, '—'),
     lastPurchaseDateRaw: cleanNullableText(row?.lastPurchaseDateRaw ?? row?.last_purchase_date_raw),
     purchaseCount: Number(row?.purchaseCount ?? row?.purchase_count ?? 0),
+    priorityTransactionCount: Number(row?.priorityTransactionCount ?? row?.priority_transaction_count ?? 0),
+    ledgerTransactionCount: Number(row?.ledgerTransactionCount ?? row?.ledger_transaction_count ?? 0),
+    historicalTransactionCount: Number(row?.historicalTransactionCount ?? row?.historical_transaction_count ?? 0),
+    listCategory: (() => {
+      const category = String(row?.listCategory ?? row?.list_category ?? '');
+      if (category === 'priority' || category === 'recovery' || category === 'no_purchase') return category;
+      return Number(row?.purchaseCount ?? row?.purchase_count ?? 0) > 0 ? 'priority' : 'no_purchase';
+    })(),
     totalSales: Number(row?.totalSales ?? row?.total_sales ?? 0),
     currentMonthSales: Number(row?.currentMonthSales ?? row?.current_month_sales ?? 0),
     averageMonthlySales: Number(row?.averageMonthlySales ?? row?.average_monthly_sales ?? 0),

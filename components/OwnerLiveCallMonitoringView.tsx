@@ -633,8 +633,8 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
     });
 
     return {
-      priority: rows.filter((row) => row.purchaseAgeGroup === 'two_weeks_to_one_month'),
-      recovery: rows.filter((row) => row.purchaseAgeGroup === 'over_one_month'),
+      priority: rows.filter((row) => row.listCategory === 'priority'),
+      recovery: rows.filter((row) => row.listCategory === 'recovery'),
       verified: rows.filter((row) => row.purchaseAgeGroup === 'no_purchase' && row.verification === 'Verified'),
       unverified: rows.filter((row) => row.purchaseAgeGroup === 'no_purchase' && row.verification !== 'Verified'),
     };
@@ -849,8 +849,8 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
     };
 
     return [
-      summarize('priority', 'Priority List', masterListCategoryRows.priority, 'green', '15-30 days since last purchase'),
-      summarize('recovery', 'Recovery List', masterListCategoryRows.recovery, 'red', 'Over 1 month since last purchase'),
+      summarize('priority', 'Priority List', masterListCategoryRows.priority, 'green', 'Ledger activity since October 2025'),
+      summarize('recovery', 'Recovery List', masterListCategoryRows.recovery, 'red', 'Historical ledger activity, none since October 2025'),
       summarize('verified', 'Verified Prospects', masterListCategoryRows.verified, 'blue', 'Empty for now'),
       summarize('unverified', 'Unverified Prospects', masterListCategoryRows.unverified, 'orange', 'Empty for now'),
     ];

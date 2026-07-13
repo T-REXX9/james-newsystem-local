@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshCw, ChevronLeft, ChevronRight, Search, Printer, Pencil } from 'lucide-react';
+import { RefreshCw, ChevronLeft, ChevronRight, Search, Printer, Pencil, ReceiptText } from 'lucide-react';
 import StatusBadge from './StatusBadge';
 import WorkflowStepper from './WorkflowStepper';
 import InvoicePrintPreview from './InvoicePrintPreview';
@@ -21,6 +21,7 @@ import {
   markNotificationsAsReadByEntityKey,
   resolveNotificationUserId,
 } from '../services/notificationLocalApiService';
+import { PageHeader, RecordTrustStrip, WorkflowGuidance } from './common/PageScaffold';
 
 interface InvoiceViewProps {
   initialInvoiceId?: string;
@@ -546,9 +547,74 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
 
   const isCancelled = selectedInvoice?.status === InvoiceStatus.CANCELLED;
   const isPostedOrSent = selectedInvoice?.status === InvoiceStatus.SENT || selectedInvoice?.status === InvoiceStatus.PAID;
+  const invoiceGuidance = (() => {
+    if (!selectedInvoice) {
+      return {
+        title: 'Select an invoice',
+        description: 'Choose an invoice to review customer details, payment status, and print/unpost actions.',
+        tone: 'default' as const,
+      };
+    }
+    if (!canProcessInvoice && selectedCustomer) {
+      return {
+        title: 'Invoice action disabled by customer policy',
+        description: 'This customer is not currently configured for invoice processing.',
+        tone: 'warning' as const,
+      };
+    }
+    if (selectedInvoice.status === InvoiceStatus.SENT) {
+      return {
+        title: 'Next step: collect payment',
+        description: 'This invoice is active. Review receivables or record collection when payment is received.',
+        tone: 'info' as const,
+      };
+    }
+    if (selectedInvoice.status === InvoiceStatus.PAID) {
+      return {
+        title: 'Paid invoice',
+        description: 'This invoice is complete and preserved for customer history.',
+        tone: 'success' as const,
+      };
+    }
+    if (selectedInvoice.status === InvoiceStatus.OVERDUE || isOverdue) {
+      return {
+        title: 'Needs collection follow-up',
+        description: 'This invoice is overdue. Review customer balance and collection status.',
+        tone: 'warning' as const,
+      };
+    }
+    if (selectedInvoice.status === InvoiceStatus.CANCELLED) {
+      return {
+        title: 'Cancelled invoice',
+        description: 'This record is preserved for reference. New actions are disabled.',
+        tone: 'danger' as const,
+      };
+    }
+    return {
+      title: 'Review invoice',
+      description: 'Check details and continue with the next valid billing action.',
+      tone: 'info' as const,
+    };
+  })();
 
   return (
-    <div className="w-full flex flex-col bg-white dark:bg-slate-900 p-3 gap-4">
+    <div className="w-full flex flex-col bg-slate-50 dark:bg-slate-950 p-3 gap-4">
+      <PageHeader
+        eyebrow="Sales Transaction"
+        title="Invoice"
+        subtitle="Review invoices, print documents, track payment status, and connect billing to collections."
+        icon={<ReceiptText className="h-6 w-6 text-brand-blue" />}
+        meta={
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              {invoices.length.toLocaleString()} invoices on page
+            </span>
+            <span className="rounded-full bg-blue-50 px-2.5 py-1 font-semibold text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
+              {activeFilterLabel}
+            </span>
+          </div>
+        }
+      />
       {/* Step 2: Top filter/action bar */}
       <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
         <div className="flex flex-col gap-3 px-4 py-3 border-b border-slate-200 dark:border-slate-800">
@@ -777,6 +843,19 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
             </div>
 
             <div className="p-4 text-sm space-y-4">
+              <WorkflowGuidance
+                title={invoiceGuidance.title}
+                description={invoiceGuidance.description}
+                tone={invoiceGuidance.tone}
+              />
+              <RecordTrustStrip
+                items={[
+                  { label: 'Document No.', value: selectedInvoice.invoice_no || selectedInvoice.reference_no },
+                  { label: 'Status', value: <StatusBadge status={selectedInvoice.status} /> },
+                  { label: 'Created By', value: selectedInvoice.created_by || selectedInvoice.sales_person },
+                  { label: 'Created Date', value: formatDate(selectedInvoice.created_at || selectedInvoice.sales_date) },
+                ]}
+              />
               {/* Step 5: Invoice header form */}
               {!canProcessInvoice && selectedCustomer && (
                 <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded p-2">

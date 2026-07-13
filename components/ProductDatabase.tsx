@@ -23,6 +23,7 @@ import { validateMinLength, validateRequired } from '../utils/formValidation';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
 import { fetchCategories, type CategoryRecord } from '../services/categoryLocalApiService';
+import { EmptyState, LoadingState, PageHeader } from './common/PageScaffold';
 
 interface ProductDatabaseProps {
   currentUser: UserProfile | null;
@@ -491,7 +492,10 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialP
   if (isLoading && !hasLoadedOnce) {
     return (
       <div className="flex h-full items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <CustomLoadingSpinner label="Loading" />
+        <div className="flex flex-col items-center gap-4">
+          <CustomLoadingSpinner label="Loading product database" />
+          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Loading product database...</p>
+        </div>
       </div>
     );
   }
@@ -499,18 +503,23 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialP
   return (
     <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950 p-6 animate-fadeIn">
 
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
-            <Package className="w-6 h-6 text-brand-blue" />
-            PRODUCT DATABASE
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Manage inventory catalog, pricing, and warehouse stocks.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
+      <PageHeader
+        eyebrow="Warehouse Inventory"
+        title="Product Database"
+        subtitle="Manage inventory catalog, pricing, status, warehouse stock, and movement signals."
+        icon={<Package className="h-6 w-6 text-brand-blue" />}
+        meta={
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              {totalItems.toLocaleString()} records
+            </span>
+            <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
+              {products.filter((product) => product.status === 'Active').length.toLocaleString()} active on page
+            </span>
+          </div>
+        }
+        actions={
+          <>
           {isMasterAccess && (
             <button
               onClick={() => setIsBulkUpdateModalOpen(true)}
@@ -526,8 +535,9 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialP
           >
             <Plus className="w-4 h-4" /> Add
           </button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Toolbar */}
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row gap-4 mb-6">
@@ -628,8 +638,26 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialP
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-500 dark:text-slate-400 italic">
-                    No products found for the selected filters.
+                  <td colSpan={8}>
+                    {isLoading ? (
+                      <LoadingState label="Updating product list" />
+                    ) : (
+                      <EmptyState
+                        title="No products found"
+                        description="Try a different search, clear the status filter, or add a new product."
+                        icon={<Package className="h-8 w-8 text-slate-300 dark:text-slate-600" />}
+                        action={
+                          <button
+                            type="button"
+                            onClick={handleOpenAdd}
+                            className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
+                          >
+                            <Plus className="h-4 w-4" />
+                            Add Product
+                          </button>
+                        }
+                      />
+                    )}
                   </td>
                 </tr>
               ) : filteredProducts.map((product) => {

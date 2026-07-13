@@ -9,6 +9,7 @@ import { updateContact } from '../../services/customerDatabaseLocalApiService';
 vi.mock('../../services/dailyCallMonitoringService', () => ({
   fetchDailyCallMasterList: vi.fn(),
   fetchCustomersForDailyCall: vi.fn(),
+  getCachedDailyCallMasterList: vi.fn(() => null),
 }));
 
 vi.mock('../../services/customerDatabaseLocalApiService', () => ({
@@ -67,7 +68,7 @@ describe('DailyCallMasterListView', () => {
     expect(updateContact).toHaveBeenCalledWith('pending-verified-1', { verification: 'Verified' });
   });
 
-  it('counts every customer with ledger activity since October 2025 in the priority list', async () => {
+  it('separates October 2025 activity from historical recovery customers', async () => {
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
       meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 6 },
       items: [
@@ -81,6 +82,7 @@ describe('DailyCallMasterListView', () => {
           lastPurchaseDate: 'May 30, 2026',
           lastPurchaseDateRaw: '2026-05-30',
           purchaseCount: 2,
+          listCategory: 'priority',
           totalSales: 12000,
           currentMonthSales: 0,
           daysSinceLastPurchase: 16,
@@ -94,9 +96,10 @@ describe('DailyCallMasterListView', () => {
           city: 'Davao City',
           contactNumber: '0920',
           assignedTo: 'Unassigned',
-          lastPurchaseDate: 'Apr 1, 2026',
-          lastPurchaseDateRaw: '2026-04-01',
+          lastPurchaseDate: 'Sep 1, 2025',
+          lastPurchaseDateRaw: '2025-09-01',
           purchaseCount: 4,
+          listCategory: 'recovery',
           totalSales: 44000,
           currentMonthSales: 0,
           daysSinceLastPurchase: 75,
@@ -113,6 +116,7 @@ describe('DailyCallMasterListView', () => {
           lastPurchaseDate: 'Jun 12, 2026',
           lastPurchaseDateRaw: '2026-06-12',
           purchaseCount: 1,
+          listCategory: 'priority',
           totalSales: 5000,
           currentMonthSales: 5000,
           daysSinceLastPurchase: 3,
@@ -131,6 +135,7 @@ describe('DailyCallMasterListView', () => {
           lastPurchaseDate: '—',
           lastPurchaseDateRaw: '',
           purchaseCount: 0,
+          listCategory: 'no_purchase',
           totalSales: 0,
           currentMonthSales: 0,
           daysSinceLastPurchase: 0,
@@ -149,6 +154,7 @@ describe('DailyCallMasterListView', () => {
           lastPurchaseDate: '—',
           lastPurchaseDateRaw: '',
           purchaseCount: 0,
+          listCategory: 'no_purchase',
           totalSales: 0,
           currentMonthSales: 0,
           daysSinceLastPurchase: 0,
@@ -167,6 +173,7 @@ describe('DailyCallMasterListView', () => {
           lastPurchaseDate: '—',
           lastPurchaseDateRaw: '',
           purchaseCount: 0,
+          listCategory: 'no_purchase',
           totalSales: 0,
           currentMonthSales: 0,
           daysSinceLastPurchase: 0,
@@ -179,7 +186,7 @@ describe('DailyCallMasterListView', () => {
     render(<DailyCallMasterListView />);
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Priority List (3)' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Priority List (2)' })).toBeInTheDocument()
     );
 
     expect(screen.getAllByText(/Priority List/i).length).toBeGreaterThan(0);
@@ -188,10 +195,8 @@ describe('DailyCallMasterListView', () => {
     expect(screen.getAllByText(/Unverified Prospects/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Customer Case Overview/i)).toBeInTheDocument();
     expect(screen.getByText(/Incident Report Flow/i)).toBeInTheDocument();
-    expect(screen.getByText(/Quick Summary/i)).toBeInTheDocument();
     expect(screen.getByText(/Quick Go To/i)).toBeInTheDocument();
-    expect(screen.getByTestId('dashboard-fit-viewport')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Priority List (3)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Priority List (2)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Recovery List (1)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Verified Prospects (1)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Unverified Prospects (1)' })).toBeInTheDocument();
@@ -200,7 +205,7 @@ describe('DailyCallMasterListView', () => {
     expect(screen.getAllByText(/Any ledger activity since October 2025 onwards/i).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('uses the quick go to buttons to switch category tables and jump to the full overview', async () => {
+  it('uses the quick go to buttons to switch category tables', async () => {
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
       meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 1 },
       items: [{
@@ -220,9 +225,6 @@ describe('DailyCallMasterListView', () => {
         purchaseAgeGroup: 'two_weeks_to_one_month',
       }],
     });
-    const scrollIntoView = vi.fn();
-    Element.prototype.scrollIntoView = scrollIntoView;
-
     render(<DailyCallMasterListView />);
 
     await screen.findByRole('navigation', { name: 'Quick Go To' });
@@ -234,8 +236,7 @@ describe('DailyCallMasterListView', () => {
     expect(screen.queryByTestId('category-table-priority')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'All Customers (1)' }));
-    expect(scrollIntoView).toHaveBeenLastCalledWith({ behavior: 'smooth', block: 'start' });
-    expect(document.activeElement).toBe(screen.getByTestId('master-list-dashboard'));
+    expect(screen.getByTestId('category-table-all')).toBeInTheDocument();
   });
 
   it('opens the full customer detail popup when a customer name is clicked', async () => {

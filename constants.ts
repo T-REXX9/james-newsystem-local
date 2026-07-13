@@ -78,7 +78,44 @@ export const DEFAULT_STAFF_ACCESS_RIGHTS = [
  * Maps role names to their minimal, role-specific default module access.
  * Owner gets all modules ('*'), other roles get only their relevant modules.
  */
+export const ROLE_NAMES = {
+  COMPANY_OWNER: 'Company Owner',
+  SALES_AGENT: 'Sales Agent',
+  WAREHOUSE_PERSONNEL: 'Warehouse Personnel',
+} as const;
+
+export const ASSIGNABLE_STAFF_ROLES = [
+  ROLE_NAMES.SALES_AGENT,
+  ROLE_NAMES.WAREHOUSE_PERSONNEL,
+  ROLE_NAMES.COMPANY_OWNER,
+];
+
+export const canonicalizeRoleName = (value?: string | null): string => {
+  const normalized = String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  if (!normalized) return '';
+  if (normalized === 'sales person' || normalized === 'salesperson' || normalized === 'sales_agent') {
+    return ROLE_NAMES.SALES_AGENT;
+  }
+  if (normalized === 'warehouse' || normalized === 'warehouse staff' || normalized === 'warehouse personnel') {
+    return ROLE_NAMES.WAREHOUSE_PERSONNEL;
+  }
+  if (normalized === 'owner' || normalized === 'company owner') {
+    return ROLE_NAMES.COMPANY_OWNER;
+  }
+  return String(value || '').trim();
+};
+
+export const isCompanyOwnerRole = (value?: string | null): boolean => {
+  const role = canonicalizeRoleName(value);
+  return role === ROLE_NAMES.COMPANY_OWNER || String(value || '').trim().toLowerCase() === 'developer';
+};
+
+/**
+ * Role-specific default permissions mapping.
+ * Owner gets all modules ('*'), staff roles get only their relevant modules.
+ */
 export const ROLE_DEFAULT_ACCESS_RIGHTS: Record<string, string[]> = {
+  [ROLE_NAMES.COMPANY_OWNER]: ['*'],
   Owner: ['*'],
   'Sales Agent': [
     'home',
@@ -117,7 +154,7 @@ export const ROLE_DEFAULT_ACCESS_RIGHTS: Record<string, string[]> = {
     'accounting-reports-old-new-customers',
     'sales-reports-sales-report',
   ],
-  Warehouse: [
+  [ROLE_NAMES.WAREHOUSE_PERSONNEL]: [
     'home',
     'warehouse-inventory-product-database',
     'warehouse-inventory-stock-movement',
@@ -139,8 +176,8 @@ export const ROLE_DEFAULT_ACCESS_RIGHTS: Record<string, string[]> = {
   ],
 };
 
-export const DEFAULT_STAFF_ROLE = 'Sales Agent';
-export const STAFF_ROLES = ['Sales Agent', 'Senior Agent', 'Manager', 'Support', 'Owner'];
+export const DEFAULT_STAFF_ROLE = ROLE_NAMES.SALES_AGENT;
+export const STAFF_ROLES = ASSIGNABLE_STAFF_ROLES;
 
 export const generateAvatarUrl = (fullName?: string, email?: string) => {
   const seedSource = fullName?.trim() || email?.trim() || 'Agent';

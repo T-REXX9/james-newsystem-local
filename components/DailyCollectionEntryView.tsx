@@ -17,6 +17,7 @@ import {
   markNotificationsAsReadByEntityKey,
 } from '../services/notificationLocalApiService';
 import DeleteCollectionReportModal from './DeleteCollectionReportModal';
+import ConfirmModal from './ConfirmModal';
 import { BUTTON_BASE, BUTTON_PRIMARY, BUTTON_SUCCESS } from '../utils/uiConstants';
 import { useDialogAccessibility } from '../hooks/useDialogAccessibility';
 
@@ -112,6 +113,11 @@ const DailyCollectionEntryView: React.FC = () => {
   const [savingItemStatusId, setSavingItemStatusId] = useState<number | null>(null);
   const [workingAction, setWorkingAction] = useState('');
   const [showDeleteReportModal, setShowDeleteReportModal] = useState(false);
+  const [lineDeleteConfirm, setLineDeleteConfirm] = useState<{
+    isOpen: boolean;
+    itemId: number | null;
+    mode: 'single' | 'bulk';
+  }>({ isOpen: false, itemId: null, mode: 'single' });
   const [error, setError] = useState('');
   const [showApproverLogsModal, setShowApproverLogsModal] = useState(false);
   const closeApproverLogsModal = useCallback(() => setShowApproverLogsModal(false), []);
@@ -537,8 +543,8 @@ const DailyCollectionEntryView: React.FC = () => {
     }
   };
 
-  const handleDeleteItem = async (itemId: number) => {
-    if (!selectedRefno || !window.confirm('Delete this payment line?')) return;
+  const performDeleteItem = async (itemId: number) => {
+    if (!selectedRefno) return;
     setWorkingAction(`delete-${itemId}`);
     setError('');
     try {
@@ -551,9 +557,13 @@ const DailyCollectionEntryView: React.FC = () => {
     }
   };
 
-  const handleDeleteSelectedItems = async () => {
+  const handleDeleteItem = (itemId: number) => {
+    if (!selectedRefno) return;
+    setLineDeleteConfirm({ isOpen: true, itemId, mode: 'single' });
+  };
+
+  const performDeleteSelectedItems = async () => {
     if (!selectedRefno || selectedItemIds.length === 0) return;
-    if (!window.confirm(`Delete ${selectedItemIds.length} selected payment line(s)?`)) return;
     setWorkingAction('delete-selected');
     setError('');
     try {
@@ -566,6 +576,19 @@ const DailyCollectionEntryView: React.FC = () => {
     } finally {
       setWorkingAction('');
     }
+  };
+
+  const handleDeleteSelectedItems = () => {
+    if (!selectedRefno || selectedItemIds.length === 0) return;
+    setLineDeleteConfirm({ isOpen: true, itemId: null, mode: 'bulk' });
+  };
+
+  const handleConfirmLineDelete = async () => {
+    if (lineDeleteConfirm.mode === 'single' && lineDeleteConfirm.itemId) {
+      await performDeleteItem(lineDeleteConfirm.itemId);
+      return;
+    }
+    await performDeleteSelectedItems();
   };
 
   const handleTypeChange = (newType: string) => {
@@ -1327,6 +1350,19 @@ const DailyCollectionEntryView: React.FC = () => {
           onConfirm={handleDeleteCollectionReport}
           refNo={selectedRefno}
           itemCount={items.length}
+        />
+        <ConfirmModal
+          isOpen={lineDeleteConfirm.isOpen}
+          onClose={() => setLineDeleteConfirm((prev) => ({ ...prev, isOpen: false }))}
+          onConfirm={handleConfirmLineDelete}
+          title={lineDeleteConfirm.mode === 'bulk' ? 'Delete selected payment lines?' : 'Delete payment line?'}
+          message={
+            lineDeleteConfirm.mode === 'bulk'
+              ? `This will remove ${selectedItemIds.length} selected payment line(s) from the collection report.`
+              : 'This will remove the selected payment line from the collection report.'
+          }
+          confirmLabel="Delete"
+          variant="danger"
         />
       </div>
       {transactionComboDropdown}

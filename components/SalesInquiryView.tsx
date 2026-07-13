@@ -8,6 +8,7 @@ import {
   Sun,
   Moon,
   Printer,
+  MessageSquareText,
 } from 'lucide-react';
 import {
   Contact,
@@ -51,6 +52,7 @@ import {
   markNotificationsAsReadByEntityKey,
   resolveNotificationUserId,
 } from '../services/notificationLocalApiService';
+import { PageHeader, RecordTrustStrip, WorkflowGuidance } from './common/PageScaffold';
 
 interface InquiryItemRow extends Omit<SalesInquiryItem, 'id' | 'inquiry_id' | 'qty' | 'unit_price'> {
   qty: number | '';
@@ -380,6 +382,12 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
       maximumFractionDigits: 2,
     }).format(normalized);
   }, []);
+  const formatDate = (value?: string | null) => {
+    if (!value) return '-';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return parsed.toLocaleDateString();
+  };
 
   const notifyInquiryEvent = useCallback(async (
     title: string,
@@ -1152,6 +1160,48 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
       selectedInquiry.status === SalesInquiryStatus.APPROVED
     )
   );
+  const inquiryGuidance = (() => {
+    if (isCreatingNew) {
+      return {
+        title: 'Create a clear inquiry',
+        description: 'Select the customer, add requested items, and save the inquiry before generating a sales order.',
+        tone: 'info' as const,
+      };
+    }
+    if (!selectedInquiry) {
+      return {
+        title: 'Select an inquiry',
+        description: 'Choose an inquiry from the list to review details, update follow-up information, or generate a sales order.',
+        tone: 'default' as const,
+      };
+    }
+    if (isConversionLocked) {
+      return {
+        title: 'Inquiry converted',
+        description: 'This inquiry is locked because it already has downstream sales documents.',
+        tone: 'success' as const,
+      };
+    }
+    if (selectedInquiry.status === SalesInquiryStatus.CANCELLED) {
+      return {
+        title: 'Cancelled inquiry',
+        description: 'This record is preserved for reference. Create a new inquiry for fresh work.',
+        tone: 'danger' as const,
+      };
+    }
+    if (canGenerateSO) {
+      return {
+        title: 'Next step: generate sales order',
+        description: 'Review customer terms and items, then generate the sales order when ready.',
+        tone: 'success' as const,
+      };
+    }
+    return {
+      title: 'Review inquiry',
+      description: 'Keep customer request details clear so the sales order handoff is clean.',
+      tone: 'info' as const,
+    };
+  })();
   const canOpenConvertedOrder = false;
   const currentMonthLabel = new Date(salesDate || Date.now()).toLocaleDateString('en-PH', { month: 'long' });
   const summaryCustomer = selectedCustomer as (Contact & {
@@ -1193,7 +1243,35 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   const isManualItem = (item: InquiryItemRow) => Boolean(item.isManual);
 
   return (
-    <div className="w-full flex flex-col bg-white dark:bg-slate-900 p-3 gap-4">
+    <div className="w-full flex flex-col bg-slate-50 dark:bg-slate-950 p-3 gap-4">
+      <PageHeader
+        eyebrow="Sales Transaction"
+        title="Sales Inquiry"
+        subtitle="Capture customer requests, validate item details, and move clean inquiries into sales orders."
+        icon={<MessageSquareText className="h-6 w-6 text-brand-blue" />}
+        meta={
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              {inquiries.length.toLocaleString()} inquiries on page
+            </span>
+            {!isCreatingNew && selectedInquiry?.status && (
+              <span className="rounded-full bg-blue-50 px-2.5 py-1 font-semibold text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
+                Selected: {selectedInquiry.status}
+              </span>
+            )}
+          </div>
+        }
+        actions={
+          <button
+            type="button"
+            onClick={startNewInquiry}
+            className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
+          >
+            <Plus className="h-4 w-4" />
+            New Inquiry
+          </button>
+        }
+      />
       <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 mb-4">
         <div className="flex flex-col gap-3 px-4 py-3 border-b border-slate-200 dark:border-slate-800">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -1408,6 +1486,21 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                 This inquiry is locked. Old-system behavior stops inquiry editing once the linked sales order has already been converted to an invoice or order slip.
               </div>
             )}
+            <div className="mb-4 space-y-3">
+              <WorkflowGuidance
+                title={inquiryGuidance.title}
+                description={inquiryGuidance.description}
+                tone={inquiryGuidance.tone}
+              />
+              <RecordTrustStrip
+                items={[
+                  { label: 'Document No.', value: activeInquiryNumberDisplay },
+                  { label: 'Status', value: !isCreatingNew && selectedInquiry?.status ? <StatusBadge status={selectedInquiry.status} /> : 'Draft' },
+                  { label: 'Created By', value: selectedInquiry?.created_by || salesPerson || '-' },
+                  { label: 'Created Date', value: selectedInquiry?.created_at ? formatDate(selectedInquiry.created_at) : salesDate || '-' },
+                ]}
+              />
+            </div>
 
             <form id="salesInquiryForm" onSubmit={handleSubmit} className="space-y-4">
               <table className="w-full table-fixed border border-slate-200 dark:border-slate-800 text-sm text-center mb-4">

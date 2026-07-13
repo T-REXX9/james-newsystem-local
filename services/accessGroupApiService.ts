@@ -1,4 +1,5 @@
 import { AccessGroup } from '../types';
+import { canonicalizeRoleName } from '../constants';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
@@ -55,16 +56,10 @@ const parseAccessRights = (value: AccessGroupRecord['access_rights']): string[] 
   }
 };
 
-const canonicalizeGroupName = (value: string): string => {
-  const normalized = value.trim().toLowerCase().replace(/\s+/g, ' ');
-  if (normalized === 'sales person' || normalized === 'salesperson') return 'Sales Agent';
-  return value.trim();
-};
-
 const mapGroup = (group: AccessGroupRecord): AccessGroup => ({
   id: String(group.id),
   main_id: group.main_id,
-  name: canonicalizeGroupName(group.name || ''),
+  name: canonicalizeRoleName(group.name || ''),
   description: group.description || '',
   access_rights: parseAccessRights(group.access_rights),
   created_at: group.created_at,

@@ -79,19 +79,19 @@ const categories: CategoryDefinition[] = [
     border: 'border-emerald-200',
     softBg: 'bg-emerald-50/60',
     dot: 'bg-emerald-500',
-    matches: (row) => row.purchaseCount > 0,
+    matches: (row) => row.listCategory ? row.listCategory === 'priority' : row.purchaseCount > 0,
   },
   {
     id: 'recovery',
     label: 'Recovery List',
-    note: 'Over 1 month since last purchase',
+    note: 'Ledger history before October 2025, with no activity since',
     state: 'Recovery',
     accent: 'text-rose-700',
     iconBg: 'bg-rose-600',
     border: 'border-rose-200',
     softBg: 'bg-rose-50/60',
     dot: 'bg-rose-500',
-    matches: (row) => row.purchaseAgeGroup === 'over_one_month',
+    matches: (row) => row.listCategory ? row.listCategory === 'recovery' : row.purchaseAgeGroup === 'over_one_month',
   },
   {
     id: 'verified',
@@ -140,7 +140,7 @@ const sumBy = (rows: DailyCallMasterCustomerRow[], field: 'totalSales' | 'curren
   rows.reduce((sum, row) => sum + row[field], 0);
 
 const ageLabel = (row: DailyCallMasterCustomerRow) => {
-  if (!row.lastPurchaseDateRaw || row.purchaseCount === 0) return 'No purchase yet';
+  if (!row.lastPurchaseDateRaw || (row.ledgerTransactionCount ?? row.purchaseCount) === 0) return 'No purchase yet';
   return row.daysSinceLastPurchase === 1 ? '1 day ago' : `${row.daysSinceLastPurchase} days ago`;
 };
 

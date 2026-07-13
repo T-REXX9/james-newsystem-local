@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, AlertTriangle, Loader2, CheckCircle, Info, AlertCircle } from 'lucide-react';
 
 type ConfirmVariant = 'danger' | 'warning' | 'info' | 'success';
@@ -12,6 +12,8 @@ interface ConfirmModalProps {
     confirmLabel?: string;
     cancelLabel?: string;
     variant?: ConfirmVariant;
+    requiredConfirmationText?: string;
+    confirmationInstruction?: string;
 }
 
 const variantStyles: Record<ConfirmVariant, { bg: string; icon: React.ElementType; iconColor: string; buttonBg: string }> = {
@@ -50,14 +52,23 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
     confirmLabel = 'Confirm',
     cancelLabel = 'Cancel',
     variant = 'danger',
+    requiredConfirmationText,
+    confirmationInstruction,
 }) => {
     const [isLoading, setIsLoading] = useState(false);
+    const [confirmationValue, setConfirmationValue] = useState('');
     const styles = variantStyles[variant];
     const IconComponent = styles.icon;
+    const isConfirmationValid = !requiredConfirmationText || confirmationValue === requiredConfirmationText;
+
+    useEffect(() => {
+        setConfirmationValue('');
+    }, [isOpen, requiredConfirmationText]);
 
     if (!isOpen) return null;
 
     const handleConfirm = async () => {
+        if (!isConfirmationValid) return;
         setIsLoading(true);
         try {
             await onConfirm();
@@ -90,6 +101,20 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
                             <p className="text-sm text-gray-600 dark:text-slate-400">{message}</p>
                         </div>
                     </div>
+                    {requiredConfirmationText && (
+                        <div>
+                            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                {confirmationInstruction || `Type ${requiredConfirmationText} to confirm`}
+                            </label>
+                            <input
+                                value={confirmationValue}
+                                onChange={(event) => setConfirmationValue(event.target.value)}
+                                disabled={isLoading}
+                                autoComplete="off"
+                                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold tracking-wide text-slate-900 outline-none transition focus:border-rose-500 focus:ring-2 focus:ring-rose-200 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-rose-400 dark:focus:ring-rose-900/50"
+                            />
+                        </div>
+                    )}
                 </div>
 
                 <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/50">
@@ -102,7 +127,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
                     </button>
                     <button
                         onClick={handleConfirm}
-                        disabled={isLoading}
+                        disabled={isLoading || !isConfirmationValid}
                         className={`px-4 py-2 ${styles.buttonBg} text-white text-sm font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
                         {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}

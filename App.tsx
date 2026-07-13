@@ -92,7 +92,7 @@ import { Filter, Lock } from 'lucide-react';
 import { ToastProvider } from './components/ToastProvider';
 import { NotificationProvider } from './components/NotificationProvider';
 import CustomLoadingSpinner from './components/CustomLoadingSpinner';
-import { AVAILABLE_APP_MODULES, MODULE_ID_ALIASES } from './constants';
+import { AVAILABLE_APP_MODULES, isCompanyOwnerRole, MODULE_ID_ALIASES, ROLE_NAMES } from './constants';
 import {
   getLocalAuthSession,
   LocalAuthSession,
@@ -307,13 +307,13 @@ const App: React.FC = () => {
 
     const canonical = normalizeModuleId(moduleId);
 
-    // Special case: Recycle Bin only for Owner or Developer
+    // Special case: Recycle Bin only for owner-level accounts
     if (canonical === 'maintenance-profile-server-maintenance' || moduleId === 'recyclebin') {
-      return userProfile.role === 'Owner' || userProfile.role === 'Developer';
+      return isCompanyOwnerRole(userProfile.role);
     }
 
     // Step 1: Check if the user's role grants access
-    if (userProfile.role === 'Owner') return true;
+    if (isCompanyOwnerRole(userProfile.role)) return true;
 
     const rights = userProfile.access_rights || [];
     const hasExplicitRights = rights.length > 0;
@@ -323,7 +323,7 @@ const App: React.FC = () => {
     // Sales Agents should always reach their home/dashboard even if access_rights is misconfigured.
     if (
       (canonical === 'home' || moduleId === 'dashboard') &&
-      (userProfile.role === 'Sales Agent' || userProfile.role === 'sales_agent')
+      (userProfile.role === ROLE_NAMES.SALES_AGENT || userProfile.role === 'sales_agent')
     ) {
       return true;
     }
@@ -344,7 +344,7 @@ const App: React.FC = () => {
    */
   const checkActionPermission = (moduleId: string, action: 'can_add' | 'can_edit' | 'can_delete'): boolean => {
     if (!userProfile) return false;
-    if (userProfile.role === 'Owner') return true;
+    if (isCompanyOwnerRole(userProfile.role)) return true;
 
     const canonical = normalizeModuleId(moduleId);
     const actionPerms = userProfile.action_permissions;
@@ -373,7 +373,7 @@ const App: React.FC = () => {
       // Role-based home/dashboard routing
       case 'home':
       case 'dashboard': {
-        const isSalesAgent = userProfile?.role === 'Sales Agent' || userProfile?.role === 'sales_agent';
+        const isSalesAgent = userProfile?.role === ROLE_NAMES.SALES_AGENT || userProfile?.role === 'sales_agent';
 
         return isSalesAgent ? (
           <div className="p-4 h-full overflow-y-auto bg-slate-100 dark:bg-slate-950">
@@ -593,7 +593,7 @@ const App: React.FC = () => {
         );
       case 'sales-transaction-product-promotions':
         // Owner sees management dashboard, others see list view
-        const isOwner = userProfile?.role === 'Owner';
+        const isOwner = isCompanyOwnerRole(userProfile?.role);
         return (
           <div className="h-full overflow-y-auto">
             {isOwner ? (
@@ -678,7 +678,7 @@ const App: React.FC = () => {
         );
 
       case 'sales-transaction-daily-call-monitoring': {
-        const isSalesAgent = userProfile?.role === 'Sales Agent' || userProfile?.role === 'sales_agent';
+        const isSalesAgent = userProfile?.role === ROLE_NAMES.SALES_AGENT || userProfile?.role === 'sales_agent';
         return isSalesAgent ? (
           <DailyCallMonitoringView currentUser={userProfile} />
         ) : (
@@ -810,7 +810,7 @@ const App: React.FC = () => {
         return renderComingSoon('Calendar');
       case 'calls':
       case 'communication-productivity-daily-call-monitoring': {
-        const isSalesAgent = userProfile?.role === 'Sales Agent' || userProfile?.role === 'sales_agent';
+        const isSalesAgent = userProfile?.role === ROLE_NAMES.SALES_AGENT || userProfile?.role === 'sales_agent';
         return isSalesAgent ? (
           <DailyCallMonitoringView currentUser={userProfile} />
         ) : (

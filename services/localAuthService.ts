@@ -1,5 +1,5 @@
 import { UserProfile } from '../types';
-import { MODULE_ID_ALIASES, ROLE_DEFAULT_ACCESS_RIGHTS } from '../constants';
+import { canonicalizeRoleName, MODULE_ID_ALIASES, ROLE_DEFAULT_ACCESS_RIGHTS, ROLE_NAMES } from '../constants';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const AUTH_STORAGE_KEY = 'local_api_auth_session';
@@ -89,11 +89,10 @@ const dispatchAuthChanged = (session: LocalAuthSession | null) => {
 };
 
 const mapRoleFromUserType = (userType?: string): string => {
-  if (userType === '1') return 'Owner';
-  if (userType === '2') return 'Sales Agent';
-  if (userType === '3') return 'Accountant';
-  if (userType === '4') return 'Warehouse';
-  return 'Staff';
+  if (userType === '1') return ROLE_NAMES.COMPANY_OWNER;
+  if (userType === '2') return ROLE_NAMES.SALES_AGENT;
+  if (userType === '4') return ROLE_NAMES.WAREHOUSE_PERSONNEL;
+  return ROLE_NAMES.SALES_AGENT;
 };
 
 const normalizeModuleId = (id: string): string => MODULE_ID_ALIASES[id] ?? id;
@@ -112,14 +111,14 @@ const mapAccessRights = (userType?: string, persisted?: string[] | null, roleNam
     return persisted.map(normalizeModuleId);
   }
   // Return role-specific defaults based on role_name
-  const role = roleName || mapRoleFromUserType(userType);
+  const role = canonicalizeRoleName(roleName || mapRoleFromUserType(userType));
   return getRoleDefaultRights(role);
 };
 
 const mapUserProfile = (context: ApiAuthPayload): UserProfile => {
   const user = context.user;
   const fullName = [user.first_name || '', user.last_name || ''].join(' ').trim();
-  const role = user.role_name || mapRoleFromUserType(context.user_type || user.type);
+  const role = canonicalizeRoleName(user.role_name || mapRoleFromUserType(context.user_type || user.type));
   const quota = Number(user.sales_quota || 0);
 
   return {

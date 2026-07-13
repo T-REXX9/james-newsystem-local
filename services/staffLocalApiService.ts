@@ -1,12 +1,8 @@
 // @ts-nocheck
+import { canonicalizeRoleName } from '../constants';
+
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
-
-const canonicalizeRoleName = (value: string): string => {
-    const normalized = value.trim().toLowerCase().replace(/\s+/g, ' ');
-    if (normalized === 'sales person' || normalized === 'salesperson') return 'Sales Agent';
-    return value.trim();
-};
 
 export interface StaffRecord {
     id: string;

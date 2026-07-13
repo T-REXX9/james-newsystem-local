@@ -658,6 +658,10 @@ export interface DailyCallMasterCustomerRow {
   lastPurchaseDate: string;
   lastPurchaseDateRaw: string;
   purchaseCount: number;
+  priorityTransactionCount?: number;
+  ledgerTransactionCount?: number;
+  historicalTransactionCount?: number;
+  listCategory?: 'priority' | 'recovery' | 'no_purchase';
   totalSales: number;
   currentMonthSales: number;
   averageMonthlySales: number;

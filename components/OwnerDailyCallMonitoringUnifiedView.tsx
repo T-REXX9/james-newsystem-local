@@ -4,6 +4,9 @@ import OwnerLiveCallMonitoringView from './OwnerLiveCallMonitoringView';
 import DailyCallMonitoringMiniSidebar, { DailyCallOwnerViewMode } from './DailyCallMonitoringMiniSidebar';
 import DailyCallMasterListView from './DailyCallMasterListView';
 import { fetchDailyCallMasterList } from '../services/dailyCallMonitoringService';
+import { getAllSalesOrders } from '../services/salesOrderLocalApiService';
+import { getAllInvoices } from '../services/invoiceLocalApiService';
+import { fetchProductsPage } from '../services/productLocalApiService';
 import { DailyCallMasterCustomerRow, UserProfile } from '../types';
 
 interface OwnerDailyCallMonitoringUnifiedViewProps {
@@ -34,8 +37,8 @@ const isProspectRow = (row: DailyCallMasterCustomerRow) => {
 
 const calculateSummary = (rows: DailyCallMasterCustomerRow[]) => {
   const current = rows.reduce((sum, row) => sum + row.currentMonthSales, 0);
-  const priority = rows.filter((row) => row.purchaseCount > 0);
-  const recovery = rows.filter((row) => row.purchaseAgeGroup === 'over_one_month');
+  const priority = rows.filter((row) => row.listCategory === 'priority');
+  const recovery = rows.filter((row) => row.listCategory === 'recovery');
   const verified = rows.filter((row) => row.purchaseAgeGroup === 'no_purchase' && isProspectRow(row) && row.verification === 'Verified');
   const unverified = rows.filter((row) => row.purchaseAgeGroup === 'no_purchase' && isProspectRow(row) && row.verification !== 'Verified');
   const totalPotential = [priority, recovery, verified, unverified]
@@ -76,6 +79,12 @@ class LocalErrorBoundary extends Component<LocalErrorBoundaryProps, LocalErrorBo
 const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnifiedViewProps> = ({ currentUser }) => {
   const [activeView, setActiveView] = useState<DailyCallOwnerViewMode>('chart');
   const [summary, setSummary] = useState({ current: 0, totalPotential: 0 });
+  const [workQueueCounts, setWorkQueueCounts] = useState({
+    followUps: 0,
+    pendingOrders: 0,
+    unpaidInvoices: 0,
+    lowStock: 0,
+  });
 
   useEffect(() => {
     if (activeView !== 'master-list') return;
@@ -94,6 +103,49 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
       isMounted = false;
     };
   }, [activeView]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadWorkQueueCounts = async () => {
+      const [callsResult, ordersResult, invoicesResult, productsResult] = await Promise.allSettled([
+        fetchDailyCallMasterList({ fromDate }),
+        getAllSalesOrders(),
+        getAllInvoices(),
+        fetchProductsPage({ status: 'active', page: 1, perPage: 100 }),
+      ]);
+
+      if (!isMounted) return;
+
+      const followUps = callsResult.status === 'fulfilled'
+        ? callsResult.value.items.filter((row) => row.purchaseAgeGroup !== 'current_month').length
+        : 0;
+      const pendingOrders = ordersResult.status === 'fulfilled'
+        ? ordersResult.value.filter((order) => ['pending', 'submitted'].includes(String(order.status || '').toLowerCase())).length
+        : 0;
+      const unpaidInvoices = invoicesResult.status === 'fulfilled'
+        ? invoicesResult.value.filter((invoice) => !['paid', 'cancelled'].includes(String(invoice.status || '').toLowerCase())).length
+        : 0;
+      const lowStock = productsResult.status === 'fulfilled'
+        ? productsResult.value.items.filter((product) => {
+            const totalStock =
+              Number(product.stock_wh1 || 0) +
+              Number(product.stock_wh2 || 0) +
+              Number(product.stock_wh3 || 0) +
+              Number(product.stock_wh4 || 0) +
+              Number(product.stock_wh5 || 0) +
+              Number(product.stock_wh6 || 0);
+            return Number(product.reorder_quantity || 0) > 0 && totalStock <= Number(product.reorder_quantity || 0);
+          }).length
+        : 0;
+
+      setWorkQueueCounts({ followUps, pendingOrders, unpaidInvoices, lowStock });
+    };
+
+    void loadWorkQueueCounts();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const quickSummaryItems = useMemo(() => {
     const pipelineVsTarget = monthlyTarget ? (summary.totalPotential / monthlyTarget) * 100 : 0;
@@ -140,6 +192,7 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
   const workQueueCards = useMemo(() => [
     {
       title: 'Follow up inquiries',
+      count: workQueueCounts.followUps,
       description: 'Review active customer calls and open inquiry work.',
       action: 'Open follow-ups',
       Icon: Users,
@@ -147,6 +200,7 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
     },
     {
       title: 'Pending sales orders',
+      count: workQueueCounts.pendingOrders,
       description: 'Check orders waiting for approval or next documents.',
       action: 'Review orders',
       Icon: FileText,
@@ -154,6 +208,7 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
     },
     {
       title: 'Unpaid invoices',
+      count: workQueueCounts.unpaidInvoices,
       description: 'Open receivables and see customer balances.',
       action: 'View AR',
       Icon: ReceiptText,
@@ -161,6 +216,7 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
     },
     {
       title: 'Collections to review',
+      count: null,
       description: 'Post, check, or reconcile daily collections.',
       action: 'Open collections',
       Icon: Wallet,
@@ -168,12 +224,13 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
     },
     {
       title: 'Low stock watch',
+      count: workQueueCounts.lowStock,
       description: 'Review reorder and suggested stock reports.',
       action: 'Check stock',
       Icon: PackageSearch,
       route: 'warehouse-reports-reorder-report',
     },
-  ], []);
+  ], [workQueueCounts.followUps, workQueueCounts.lowStock, workQueueCounts.pendingOrders, workQueueCounts.unpaidInvoices]);
 
   return (
     <div className="h-full min-h-0 overflow-hidden bg-slate-50 dark:bg-slate-950">
@@ -197,7 +254,7 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
                 </button>
               </div>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-                {workQueueCards.map(({ title, description, action, Icon, route }) => (
+                {workQueueCards.map(({ title, count, description, action, Icon, route }) => (
                   <button
                     key={title}
                     type="button"
@@ -207,6 +264,11 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
                     <span className="flex items-start justify-between gap-3">
                       <span>
                         <span className="block text-sm font-bold text-slate-900 dark:text-white">{title}</span>
+                        {typeof count === 'number' && (
+                          <span className="mt-1 inline-flex rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-brand-blue shadow-sm dark:bg-slate-800">
+                            {count.toLocaleString()} open
+                          </span>
+                        )}
                         <span className="mt-1 block text-xs leading-5 text-slate-500 dark:text-slate-400">{description}</span>
                       </span>
                       <Icon className="h-5 w-5 shrink-0 text-brand-blue" />
