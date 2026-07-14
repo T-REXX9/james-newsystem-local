@@ -203,8 +203,8 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
   }, [customer.dealerPriceGroup, customer.monthlyOrder]);
 
   const vipStanding = useMemo(
-    () => getVipStandingSummary(dealerPriceTier, customer.monthlyOrder, vipConfig),
-    [dealerPriceTier, customer.monthlyOrder, vipConfig]
+    () => getVipStandingSummary(dealerPriceTier, customer.lastMonthOrder, vipConfig),
+    [dealerPriceTier, customer.lastMonthOrder, vipConfig]
   );
   const activities = useMemo(() => customer.dailyActivity || [], [customer.dailyActivity]);
   const location = [customer.city, customer.province].filter((value) => value && value !== '—').join(', ') || customer.courier || '—';
@@ -234,7 +234,7 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
             <ul className="space-y-2 text-xs text-slate-700">
               <li className="flex gap-2"><CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" /> {isActive ? 'Customer account is active.' : 'Customer account needs re-engagement.'}</li>
               <li className="flex gap-2"><CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" /> {totalActivity} recent interactions recorded.</li>
-              <li className="flex gap-2"><CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" /> Current monthly sales: {formatCurrency(customer.monthlyOrder)}.</li>
+              <li className="flex gap-2"><CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" /> Last month sales: {formatCurrency(customer.lastMonthOrder)}.</li>
               <li className="flex gap-2"><CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" /> VIP standing: {vipStanding.tierLabel}.</li>
             </ul>
             <div className="mt-4 grid grid-cols-2 divide-x rounded-lg border border-slate-200 bg-white py-3 text-center">
@@ -306,7 +306,7 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="truncate text-2xl font-bold text-slate-950">{customer.shopName}</h2>
               <span className={`rounded px-2.5 py-1 text-[10px] font-bold ${isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>{customer.status}</span>
-              {vipStanding.badgeVisible && <span className="inline-flex items-center gap-1.5 rounded bg-amber-400 px-2.5 py-1 text-[10px] font-bold text-amber-950"><img src={vipBadgeIconUrl} alt={`${vipStanding.tierLabel} badge`} className="h-3.5 w-3.5" /> VIP {dealerPriceTier.toUpperCase()}</span>}
+              {vipStanding.badgeVisible && <span className="inline-flex items-center gap-1.5 rounded bg-amber-400 px-2.5 py-1 text-[10px] font-bold text-amber-950"><img src={vipBadgeIconUrl} alt={`${vipStanding.tierLabel} badge`} className="h-3.5 w-3.5" /> {vipStanding.tierLabel.toUpperCase()}</span>}
             </div>
             <div className="mt-5 grid grid-cols-3 divide-x divide-slate-200 text-xs">
               <dl className="space-y-4 pr-4"><div><dt className="text-slate-500">Contact</dt><dd className="mt-1 font-bold">{customer.contactNumber || '—'}</dd></div><div><dt className="text-slate-500">Source</dt><dd className="mt-1 font-bold">{customer.source || '—'}</dd></div></dl>
@@ -327,7 +327,7 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
 
           <section className="rounded-xl border border-slate-200 p-4">
             <h3 className="flex items-center gap-2 text-xs font-bold uppercase text-slate-800"><BarChart3 className="h-4 w-4 text-blue-700" /> Sales Snapshot (MTD)</h3>
-            <dl className="mt-5 grid grid-cols-2 gap-4 text-xs"><div><dt className="text-slate-500">Current Month Sales</dt><dd className="mt-2 text-xl font-bold">{formatCurrency(customer.monthlyOrder)}</dd></div><div><dt className="text-slate-500">Average Monthly Sales</dt><dd className="mt-2 text-xl font-bold">{formatCurrency(customer.averageMonthlyOrder)}</dd></div></dl>
+            <dl className="mt-5 grid grid-cols-3 gap-4 text-xs"><div><dt className="text-slate-500">Current Month Sales</dt><dd className="mt-2 text-xl font-bold">{formatCurrency(customer.monthlyOrder)}</dd></div><div><dt className="text-slate-500">Last Month Sales</dt><dd className="mt-2 text-xl font-bold">{formatCurrency(customer.lastMonthOrder)}</dd></div><div><dt className="text-slate-500">Average Monthly Sales</dt><dd className="mt-2 text-xl font-bold">{formatCurrency(customer.averageMonthlyOrder)}</dd></div></dl>
             <button type="button" onClick={() => setActiveTab('sales')} className="mt-5 w-full rounded-lg border border-slate-200 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50">View Full Sales Report</button>
           </section>
         </div>

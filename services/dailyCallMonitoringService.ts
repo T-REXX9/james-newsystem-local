@@ -424,6 +424,7 @@ const mapDailyCallCustomerRow = (row: any): DailyCallCustomerRow => ({
   outstandingBalance: Number(row?.outstandingBalance ?? row?.outstanding_balance ?? 0),
   averageMonthlyOrder: Number(row?.averageMonthlyOrder ?? row?.average_monthly_purchase ?? 0),
   monthlyOrder: Number(row?.monthlyOrder ?? row?.monthly_order ?? 0),
+  lastMonthOrder: Number(row?.lastMonthOrder ?? row?.last_month_order ?? 0),
   weeklyRangeTotals: Array.isArray(row?.weeklyRangeTotals ?? row?.weekly_range_totals)
     ? (row?.weeklyRangeTotals ?? row?.weekly_range_totals).map((value: unknown) => Number(value || 0))
     : [],
@@ -464,6 +465,7 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
     currentMonthSales: Number(row?.currentMonthSales ?? row?.current_month_sales ?? 0),
     averageMonthlySales: Number(row?.averageMonthlySales ?? row?.average_monthly_sales ?? 0),
     averageMonthlySalesMonthCount: Number(row?.averageMonthlySalesMonthCount ?? row?.average_monthly_sales_month_count ?? 0),
+    averageMonthlySalesYear: Number(row?.averageMonthlySalesYear ?? row?.average_monthly_sales_year ?? 0),
     recentThreeMonthSales: Number(row?.recentThreeMonthSales ?? row?.recent_three_month_sales ?? 0),
     previousThreeMonthSales: Number(row?.previousThreeMonthSales ?? row?.previous_three_month_sales ?? 0),
     salesTrendPercent: Number(row?.salesTrendPercent ?? row?.sales_trend_percent ?? 0),

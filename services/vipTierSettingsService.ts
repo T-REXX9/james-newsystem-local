@@ -50,11 +50,18 @@ const resolveUserId = (): number => {
   return Number.isFinite(userId) && userId > 0 ? userId : 1;
 };
 
+const authHeaders = (): Record<string, string> => {
+  const token = getLocalAuthSession()?.token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
 export async function getVipTierConfig(): Promise<VipTierConfig> {
   const query = new URLSearchParams({ main_id: String(resolveMainId()) });
 
   try {
-    const data = await requestApi(`${API_BASE_URL}/vip-tier-settings?${query.toString()}`);
+    const data = await requestApi(`${API_BASE_URL}/vip-tier-settings?${query.toString()}`, {
+      headers: authHeaders(),
+    });
     return normalizeVipTierConfig(data);
   } catch (error) {
     console.error('Error loading VIP tier settings:', error);
@@ -72,7 +79,7 @@ export async function setVipTierConfig(config: VipTierConfig): Promise<VipTierCo
   try {
     const data = await requestApi(`${API_BASE_URL}/vip-tier-settings`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(payload),
     });
     return normalizeVipTierConfig(data);

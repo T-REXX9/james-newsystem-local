@@ -174,6 +174,7 @@ const masterRowFallback = (row: DailyCallMasterCustomerRow): DailyCallCustomerRo
   outstandingBalance: 0,
   averageMonthlyOrder: row.purchaseCount ? row.totalSales / row.purchaseCount : 0,
   monthlyOrder: row.currentMonthSales,
+  lastMonthOrder: 0,
   weeklyRangeTotals: [],
   dailyActivity: [],
 });
@@ -306,7 +307,7 @@ const DailyCallMasterListView: React.FC = () => {
     const categoryRows = rows.filter(category.matches);
     const currentSales = sumBy(categoryRows, 'currentMonthSales');
     const potentialSales = sumBy(categoryRows, 'totalSales');
-    const averageSales = categoryRows.length ? potentialSales / categoryRows.length : 0;
+    const averageSales = sumBy(categoryRows, 'averageMonthlySales');
     return { ...category, rows: categoryRows, currentSales, potentialSales, averageSales };
   }), [rows]);
   const summaryCategoryData = categoryData.filter((category) => category.id !== 'all');
@@ -428,13 +429,15 @@ const DailyCallMasterListView: React.FC = () => {
                 </div>
                 <div>
                   <p>{category.id === 'priority' || category.id === 'recovery' ? 'Average Monthly Sales' : 'Potential Sales'}</p>
-                  <p className={`text-base font-bold ${category.accent}`}>{compactPeso.format(category.potentialSales)}</p>
+                  <p className={`text-base font-bold ${category.accent}`}>{compactPeso.format(category.id === 'priority' || category.id === 'recovery' ? category.averageSales : category.potentialSales)}</p>
                 </div>
               </div>
             </div>
             <div className="mt-2 flex items-center justify-between border-t border-slate-200 pt-2 text-xs">
-              <span>Potential Sales</span>
-              <strong className={`text-base ${category.accent}`}>{compactPeso.format(category.potentialSales)}</strong>
+              <span>{category.id === 'priority' || category.id === 'recovery' ? 'Monthly Sales Potential' : 'Potential Sales'}</span>
+              <strong className={`text-base ${category.accent}`}>
+                {compactPeso.format(category.id === 'priority' || category.id === 'recovery' ? category.averageSales : category.potentialSales)}
+              </strong>
             </div>
           </article>
         ))}
@@ -545,7 +548,7 @@ const DailyCallMasterListView: React.FC = () => {
                         </td>
                         <td className="px-2 py-2.5">
                           <p className="text-[15px] font-bold text-blue-950">{peso.format(row.averageMonthlySales)} <span className="text-[12px] font-medium text-slate-500">/ month</span></p>
-                          <p className="mt-0.5 text-[11px] text-slate-500">(Based on {row.averageMonthlySalesMonthCount} months)</p>
+                          <p className="mt-0.5 text-[11px] text-slate-500">(Based on {row.averageMonthlySalesMonthCount} months{row.averageMonthlySalesYear ? ` in ${row.averageMonthlySalesYear}` : ''})</p>
                           <p className={`mt-0.5 inline-flex items-center gap-1 text-[11px] font-bold ${trend.className}`}>
                             <TrendIcon className="h-3.5 w-3.5 fill-current" />
                             {trend.label}

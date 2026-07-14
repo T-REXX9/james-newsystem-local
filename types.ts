@@ -106,6 +106,8 @@ export interface UserProfile {
   full_name?: string;
   avatar_url?: string;
   role?: string;
+  /** Numeric account type from the API. 1 = owner/admin, 2 = sales, 4 = warehouse. */
+  user_type?: string | number;
   access_rights?: string[]; // List of module IDs allowed
   access_override?: boolean;
   group_id?: string | null;
@@ -641,6 +643,7 @@ export interface DailyCallCustomerRow {
   outstandingBalance: number;
   averageMonthlyOrder: number;
   monthlyOrder: number;
+  lastMonthOrder: number;
   weeklyRangeTotals: number[];
   dailyActivity: DailyActivityRecord[];
 }
@@ -666,6 +669,7 @@ export interface DailyCallMasterCustomerRow {
   currentMonthSales: number;
   averageMonthlySales: number;
   averageMonthlySalesMonthCount: number;
+  averageMonthlySalesYear?: number;
   recentThreeMonthSales: number;
   previousThreeMonthSales: number;
   salesTrendPercent: number;
@@ -2162,10 +2166,9 @@ export interface ProfitThresholdConfig {
 }
 
 export interface VipTierConfig {
-  silver_entry_threshold: number;
-  gold_entry_threshold: number;
-  silver_maintenance_threshold: number;
-  gold_maintenance_threshold: number;
+  one_time_discount_threshold: number;
+  unlimited_discount_threshold: number;
+  discount_percentage: number;
 }
 
 export interface AISalesAgentConfig {

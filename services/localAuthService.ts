@@ -128,6 +128,7 @@ const mapUserProfile = (context: ApiAuthPayload): UserProfile => {
     main_userid: Number(context.main_userid || user.main_userid || 0) || undefined,
     full_name: fullName || user.email || `User ${user.id}`,
     role,
+    user_type: String(context.user_type || user.type || ''),
     access_rights: mapAccessRights(context.user_type || user.type, user.access_rights, role),
     group_id: user.group_id || null,
     monthly_quota: Number.isFinite(quota) ? quota : 0,
