@@ -44,6 +44,18 @@ const WAREHOUSES = [
 
 const getTodayDateInputValue = (): string => new Date().toISOString().split('T')[0];
 
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+const formatLegacyDate = (value?: string | null): string => {
+  if (!value) return '';
+  const [datePart] = String(value).split('T');
+  const [year, month, day] = datePart.split('-');
+  return year && month && day ? `${month}/${day}/${year}` : value;
+};
+
 const normalizeWarehouseLabel = (value?: string | null): string => {
   const normalized = String(value || '').trim().toUpperCase();
   if (!normalized) return '';
@@ -82,6 +94,8 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
   const [showApproveConfirm, setShowApproveConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [filterMonth, setFilterMonth] = useState(() => new Date().getMonth());
+  const [filterYear, setFilterYear] = useState(() => new Date().getFullYear());
   
   // Form state
   const [transferNo, setTransferNo] = useState('');
@@ -174,10 +188,14 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
 
   // Auto-select first transfer when transfers change
   useEffect(() => {
-    if (transferStocks.length > 0 && !selectedTransfer) {
-      setSelectedTransfer(transferStocks[0]);
+    const firstInMonth = transferStocks.find((transfer) => {
+      const [year, month] = String(transfer.transfer_date || '').split('-').map(Number);
+      return year === filterYear && month === filterMonth + 1;
+    });
+    if (firstInMonth && !selectedTransfer && !showCreateForm) {
+      setSelectedTransfer(firstInMonth);
     }
-  }, [transferStocks, selectedTransfer]);
+  }, [transferStocks, selectedTransfer, showCreateForm, filterMonth, filterYear]);
 
   useEffect(() => {
     if (!transferStocks.length) return;
@@ -220,14 +238,25 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
   const filteredTransfers = useMemo(() => {
     const query = searchTerm.toLowerCase();
     return transferStocks.filter(transfer => {
+      const [transferYear, transferMonth] = String(transfer.transfer_date || '').split('-').map(Number);
+      const matchesMonth = transferYear === filterYear && transferMonth === filterMonth + 1;
       const matchesStatus = statusFilter === 'all' || transfer.status === statusFilter;
       const matchesSearch =
         !query ||
         transfer.transfer_no.toLowerCase().includes(query) ||
         (transfer.notes && transfer.notes.toLowerCase().includes(query));
-      return matchesStatus && matchesSearch;
+      return matchesMonth && matchesStatus && matchesSearch;
     });
-  }, [transferStocks, searchTerm, statusFilter]);
+  }, [transferStocks, searchTerm, statusFilter, filterMonth, filterYear]);
+
+  const filterYears = useMemo(() => {
+    const years = new Set<number>([new Date().getFullYear(), filterYear]);
+    transferStocks.forEach((transfer) => {
+      const year = Number(String(transfer.transfer_date || '').slice(0, 4));
+      if (Number.isFinite(year) && year > 0) years.add(year);
+    });
+    return Array.from(years).sort((a, b) => b - a);
+  }, [transferStocks, filterYear]);
 
   const resolveProcessedByProfileId = useCallback(async (transfer: TransferStock): Promise<string | null> => {
     if (isUuid(transfer.processed_by_profile_id)) {
@@ -692,6 +721,172 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
   };
 
   const canApprove = Boolean(currentUser);
+
+  const handleStartNewTransfer = () => {
+    resetForm();
+    setSelectedTransfer(null);
+    setShowCreateForm(true);
+    setTransferDate(getTodayDateInputValue());
+    void handleGenerateTransferNo();
+  };
+
+  const handleAddFromPartNumber = () => {
+    if (!showCreateForm) {
+      addToast({
+        type: 'info',
+        title: 'Create a new transfer first',
+        description: 'Click Create New before adding transfer products.',
+        durationMs: 3500,
+      });
+      return;
+    }
+    const product = filteredProducts[0];
+    if (!product) {
+      addToast({
+        type: 'warning',
+        title: 'Product not found',
+        description: 'Enter a valid part number or item code.',
+        durationMs: 3500,
+      });
+      return;
+    }
+    handleAddItem(product);
+  };
+
+  const displayedItems = showCreateForm ? items : (selectedTransfer?.items || []);
+  const displayedTransferNo = showCreateForm ? transferNo : (selectedTransfer?.transfer_no || '');
+
+  const legacyLayout = (
+    <div className="min-h-full overflow-y-auto bg-[#f4f4f4] px-5 py-10 text-[#202020] dark:bg-[#f4f4f4] dark:text-[#202020] print:bg-white" style={{ fontFamily: 'Arial, sans-serif' }}>
+      <div className="mx-auto w-full max-w-[1140px] space-y-[26px]">
+        <section className="overflow-hidden rounded-[5px] border border-[#d7d7d7] bg-white">
+          <div className="flex min-h-[82px] flex-col items-center gap-5 border-b border-[#d7d7d7] px-[35px] py-5 sm:flex-row sm:justify-between">
+            <button onClick={handleStartNewTransfer} className="rounded-[4px] bg-[#4caf50] px-[14px] py-[9px] text-[14px] text-white hover:bg-[#43a047]">
+              Create New
+            </button>
+            <div className="flex flex-wrap items-center justify-center gap-4">
+              <span className="mr-3 text-[20px] font-semibold text-[#263f55]">Filter by Month:</span>
+              <select value={filterMonth} onChange={(event) => { setFilterMonth(Number(event.target.value)); setSelectedTransfer(null); }} className="h-[34px] w-[200px] rounded-[3px] border border-[#cfcfcf] bg-white px-4 text-[13px] outline-none focus:border-[#7aa2c5]">
+                {MONTHS.map((month, index) => <option key={month} value={index}>{month}</option>)}
+              </select>
+              <select value={filterYear} onChange={(event) => { setFilterYear(Number(event.target.value)); setSelectedTransfer(null); }} className="h-[34px] w-[100px] rounded-[3px] border border-[#cfcfcf] bg-white px-4 text-[13px] outline-none focus:border-[#7aa2c5]">
+                {filterYears.map((year) => <option key={year} value={year}>{year}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="min-h-[188px] px-[25px] py-[31px]">
+            <div className="max-h-[112px] overflow-y-auto">
+              <table className="w-full table-fixed border-collapse text-[13px]">
+                <thead>
+                  <tr className="border-b-2 border-[#d5d5d5] text-left text-[14px] font-semibold">
+                    <th className="w-1/3 px-2 pb-2">Date</th>
+                    <th className="w-1/3 px-2 pb-2">TR No.</th>
+                    <th className="w-1/3 px-2 pb-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr><td colSpan={3} className="border border-[#d7d7d7] px-2 py-3 text-center text-[#777]">Loading...</td></tr>
+                  ) : filteredTransfers.length === 0 ? (
+                    <tr><td colSpan={3} className="border border-[#d7d7d7] px-2 py-5 text-center text-[#888]">No transfers found for this month.</td></tr>
+                  ) : filteredTransfers.map((transfer) => (
+                    <tr key={transfer.id} onClick={() => { setSelectedTransfer(transfer); setShowCreateForm(false); }} className={`cursor-pointer hover:bg-[#f7f7f7] ${selectedTransfer?.id === transfer.id && !showCreateForm ? 'bg-[#f7f7f7]' : ''}`}>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px]">{formatLegacyDate(transfer.transfer_date)}</td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px]"><span className="text-[#25445c] underline">{transfer.transfer_no}</span></td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px] capitalize">{statusMeta[transfer.status]?.label || transfer.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section className="min-h-[303px] overflow-visible rounded-[5px] border border-[#d7d7d7] bg-white">
+          <div className="flex h-[63px] items-center justify-between border-b border-[#d7d7d7] px-5">
+            <div className="relative flex h-full items-center text-[18px] font-semibold text-[#29475f] after:absolute after:bottom-[-1px] after:left-0 after:h-px after:w-[170px] after:bg-[#6a92b3]">TRANSFER PRODUCT</div>
+            <div className="text-[23px] font-semibold text-[#29475f]">TR No. : {displayedTransferNo.replace(/^TR-/, '')}</div>
+          </div>
+
+          <div className="px-[25px] pb-[45px] pt-[31px]">
+            <div className="ml-0 flex max-w-[700px] flex-col gap-[18px] sm:ml-[85px] sm:flex-row sm:items-start">
+              <label className="w-[160px] pt-[2px] text-[16px] font-semibold text-[#29475f]">Part Number:</label>
+              <div className="relative w-full max-w-[420px]">
+                <input value={itemSearch} onChange={(event) => { setItemSearch(event.target.value); setShowItemDropdown(true); }} onFocus={() => setShowItemDropdown(true)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); handleAddFromPartNumber(); } }} className="h-[35px] w-full rounded-[4px] border border-[#c9c9c9] bg-white px-3 text-[13px] outline-none focus:border-[#7599b7]" />
+                {showCreateForm && showItemDropdown && itemSearch && (
+                  <div className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-[3px] border border-[#cfcfcf] bg-white shadow-lg">
+                    {filteredProducts.slice(0, 8).map((product) => (
+                      <button key={product.id} type="button" onClick={() => { setItemSearch(product.part_no); setShowItemDropdown(false); }} className="block w-full border-b border-[#e5e5e5] px-3 py-2 text-left text-[12px] hover:bg-[#f5f5f5]">
+                        <span className="font-semibold">{product.part_no}</span>{product.item_code ? ` — ${product.item_code}` : ''}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button onClick={handleAddFromPartNumber} className="mt-[18px] rounded-[3px] bg-[#5d82a2] px-[12px] py-[7px] text-[12px] text-white hover:bg-[#50738f]">Add Transfer</button>
+              </div>
+            </div>
+
+            <div className="mt-[35px] overflow-x-auto border-t border-[#e5e5e5] pt-[28px]">
+              <table className="w-full min-w-[760px] table-fixed border-collapse text-[12px]">
+                <thead><tr className="border-b-2 border-[#d5d5d5] text-left text-[14px] font-semibold">
+                  <th className="w-[210px] px-2 pb-2">Item Code</th>
+                  {WAREHOUSES.map((warehouse) => <th key={warehouse.id} className="px-2 pb-2 text-center">{warehouse.name}</th>)}
+                </tr></thead>
+                <tbody>
+                  {displayedItems.map((item: any, index: number) => {
+                    const product = resolveTransferProduct(item);
+                    const fromWarehouse = normalizeWarehouseLabel(item.from_warehouse_id);
+                    const toWarehouse = normalizeWarehouseLabel(item.to_warehouse_id);
+                    return (
+                      <tr key={item.id || `${item.item_id}-${index}`} className="border-b border-[#e2e2e2]">
+                        <td className="px-2 py-3 align-top">
+                          <div className="font-semibold">{product?.item_code || item.item_code || product?.part_no || item.part_no || 'Unknown'}</div>
+                          {showCreateForm && <div className="mt-2 flex items-center gap-1">
+                            <select value={item.from_warehouse_id} onChange={(event) => handleUpdateItem(index, 'from_warehouse_id', event.target.value)} className="w-[52px] border border-[#ccc] bg-white p-1">{WAREHOUSES.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select>
+                            <span>→</span>
+                            <select value={item.to_warehouse_id} onChange={(event) => handleUpdateItem(index, 'to_warehouse_id', event.target.value)} className="w-[52px] border border-[#ccc] bg-white p-1">{WAREHOUSES.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select>
+                            <input type="number" min="1" value={item.transfer_qty} onChange={(event) => handleUpdateItem(index, 'transfer_qty', Number(event.target.value) || 0)} className="w-[42px] border border-[#ccc] p-1 text-center" />
+                            <button onClick={() => handleRemoveItem(index)} className="ml-1 text-[#c84848]" aria-label="Remove item"><X className="h-4 w-4" /></button>
+                          </div>}
+                        </td>
+                        {WAREHOUSES.map((warehouse) => <td key={warehouse.id} className="px-2 py-3 text-center align-top">{warehouse.id === fromWarehouse ? `-${item.transfer_qty}` : warehouse.id === toWarehouse ? `+${item.transfer_qty}` : ''}</td>)}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section className="flex min-h-[76px] items-center gap-1 rounded-t-[5px] border border-[#d7d7d7] bg-white px-5">
+          {showCreateForm ? <>
+            <button onClick={() => { resetForm(); setShowCreateForm(false); }} className="rounded-[4px] bg-[#d64b47] px-[25px] py-[9px] text-[14px] text-white hover:bg-[#c9433f]">Delete</button>
+            <button onClick={handleCreateTransfer} disabled={creating} className="rounded-[4px] bg-[#4caf50] px-[22px] py-[9px] text-[14px] text-white hover:bg-[#43a047] disabled:opacity-50">{creating ? 'Saving...' : 'Save'}</button>
+          </> : <>
+            {selectedTransfer && selectedTransfer.status !== 'approved' && <button onClick={() => setShowDeleteConfirm(true)} className="rounded-[4px] bg-[#d64b47] px-[25px] py-[9px] text-[14px] text-white hover:bg-[#c9433f]">Delete</button>}
+            <button onClick={() => window.print()} className="rounded-[4px] bg-[#55b457] px-[29px] py-[9px] text-[14px] text-white hover:bg-[#49a64c]">Print</button>
+            {selectedTransfer?.status === 'pending' && <button onClick={() => setShowSubmitConfirm(true)} className="ml-auto rounded-[4px] bg-[#5d82a2] px-[18px] py-[9px] text-[14px] text-white">Submit</button>}
+            {selectedTransfer?.status === 'submitted' && canApprove && <button onClick={() => setShowApproveConfirm(true)} className="ml-auto rounded-[4px] bg-[#4caf50] px-[18px] py-[9px] text-[14px] text-white">Approve</button>}
+          </>}
+        </section>
+      </div>
+
+      {(showSubmitConfirm || showApproveConfirm || showDeleteConfirm) && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+        <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+          <h3 className="mb-2 text-lg font-semibold text-[#222]">{showDeleteConfirm ? 'Delete Transfer?' : showApproveConfirm ? 'Approve Transfer?' : 'Submit Transfer?'}</h3>
+          <p className="mb-5 text-sm text-[#666]">{showDeleteConfirm ? 'This will permanently delete the transfer.' : showApproveConfirm ? 'This will approve the transfer and update inventory levels.' : 'This will submit the transfer for approval.'}</p>
+          <div className="flex justify-end gap-3">
+            <button onClick={() => { setShowSubmitConfirm(false); setShowApproveConfirm(false); setShowDeleteConfirm(false); }} className="rounded border border-[#ccc] px-4 py-2 text-sm">Cancel</button>
+            <button onClick={showDeleteConfirm ? handleDeleteTransfer : showApproveConfirm ? handleApproveTransfer : handleSubmitTransfer} className={`rounded px-4 py-2 text-sm text-white ${showDeleteConfirm ? 'bg-[#d64b47]' : showApproveConfirm ? 'bg-[#4caf50]' : 'bg-[#5d82a2]'}`}>Confirm</button>
+          </div>
+        </div>
+      </div>}
+    </div>
+  );
+
+  return legacyLayout;
 
   return (
     <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900">
