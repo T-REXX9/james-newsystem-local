@@ -109,10 +109,26 @@ const normalizeEntry = (raw: any): ReorderReportEntry => ({
 const getUserContext = () => {
   const session = getLocalAuthSession();
   const userId = Number(session?.context?.user?.id || 0);
+  const mainId = Number(
+    session?.context?.main_userid
+      || session?.context?.user?.main_userid
+      || session?.userProfile?.main_userid
+      || API_MAIN_ID
+  );
   return {
-    mainId: API_MAIN_ID,
+    mainId: Number.isFinite(mainId) && mainId > 0 ? mainId : API_MAIN_ID,
     userId: Number.isFinite(userId) && userId > 0 ? userId : 0,
   };
+};
+
+const dedupeEntries = (rows: ReorderReportEntry[]): ReorderReportEntry[] => {
+  const unique = new Map<string, ReorderReportEntry>();
+  rows.forEach((row) => {
+    const productKey = row.product_session.trim()
+      || `${row.item_code.trim().toLowerCase()}::${row.part_no.trim().toLowerCase()}`;
+    if (!unique.has(productKey)) unique.set(productKey, row);
+  });
+  return Array.from(unique.values());
 };
 
 export const fetchReorderReportEntries = async (filters: ReorderReportFilters): Promise<{
@@ -124,8 +140,9 @@ export const fetchReorderReportEntries = async (filters: ReorderReportFilters): 
     total_pages: number;
   };
 }> => {
+  const ctx = getUserContext();
   const query = new URLSearchParams({
-    main_id: String(API_MAIN_ID),
+    main_id: String(ctx.mainId),
     warehouse_type: filters.warehouseType,
     page: String(Math.max(1, filters.page || 1)),
     per_page: String(Math.max(1, Math.min(500, filters.perPage || 100))),
@@ -141,7 +158,7 @@ export const fetchReorderReportEntries = async (filters: ReorderReportFilters): 
   const meta = data?.meta || {};
 
   return {
-    items: rows.map(normalizeEntry),
+    items: dedupeEntries(rows.map(normalizeEntry)),
     meta: {
       page: toNumber(meta?.page) || 1,
       per_page: toNumber(meta?.per_page) || 100,

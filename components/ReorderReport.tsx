@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Eye, EyeOff, Loader2, Printer, RotateCcw, Search, ShoppingCart } from 'lucide-react';
+import { EyeOff, Loader2, Printer, Search, ShoppingCart } from 'lucide-react';
 import { purchaseRequestService } from '../services/purchaseRequestService';
 import {
   fetchReorderReportEntries,
   hideReorderReportItems,
-  restoreReorderReportItems,
   REORDER_WAREHOUSE_OPTIONS,
   ReorderReportEntry,
   ReorderWarehouseType,
@@ -275,8 +274,8 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, onClose, onSaved }) 
   );
 };
 
-const tableCellClass = 'border border-slate-300 dark:border-slate-700 px-2 py-1.5 text-center text-xs text-slate-700 dark:text-slate-200 print:border-gray-500 print:text-black';
-const tableHeadClass = 'border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-2 py-1.5 text-center text-xs font-semibold uppercase text-slate-700 dark:text-slate-200 print:border-gray-500 print:bg-gray-100 print:text-black';
+const tableCellClass = 'border border-[#d9d9d9] px-3 py-[26px] text-center text-[18px] leading-[27px] text-[#333]';
+const tableHeadClass = 'border border-[#d9d9d9] border-b-[3px] border-b-[#333] bg-white px-3 py-[18px] text-center text-[18px] font-semibold uppercase leading-[27px] text-[#333]';
 const reorderOptionWarehouses = REORDER_WAREHOUSE_OPTIONS.filter((option) => option.id === 'total' || option.id === 'wh1');
 
 const formatShortDate = (value?: string) => {
@@ -289,35 +288,48 @@ const formatShortDate = (value?: string) => {
   return `${mm}/${dd}/${yy}`;
 };
 
+const formatReportDate = (date: Date): string => {
+  const month = date.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+  const day = String(date.getDate()).padStart(2, '0');
+  const year = String(date.getFullYear()).slice(-2);
+  return `${month}-${day}-${year}`;
+};
+
 const ReorderReport: React.FC = () => {
   const { addToast } = useToast();
   const [rows, setRows] = useState<ReorderReportEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [preparingPrint, setPreparingPrint] = useState(false);
   const [warehouseType, setWarehouseType] = useState<ReorderWarehouseType>('total');
   const [hideZeroReorder, setHideZeroReorder] = useState(false);
   const [hideZeroReplenish, setHideZeroReplenish] = useState(false);
-  const [showHiddenItems, setShowHiddenItems] = useState(false);
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showAddPrModal, setShowAddPrModal] = useState(false);
-  const [confirmAction, setConfirmAction] = useState<'hide' | 'restore' | null>(null);
-  const selectedWarehouseLabel = REORDER_WAREHOUSE_OPTIONS.find((option) => option.id === warehouseType)?.label || 'Total Company';
+  const [confirmAction, setConfirmAction] = useState<'hide' | null>(null);
+  const [searchInput, setSearchInput] = useState('');
+  const [appliedSearch, setAppliedSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [meta, setMeta] = useState({ page: 1, per_page: 10, total: 0, total_pages: 1 });
+  const [printRows, setPrintRows] = useState<ReorderReportEntry[]>([]);
   const isWh1Report = warehouseType === 'wh1';
 
-  const loadReport = useCallback(async () => {
+  const loadReport = useCallback(async (targetPage = 1, targetSearch = '') => {
     setLoading(true);
     try {
       const data = await fetchReorderReportEntries({
         warehouseType,
-        search: '',
+        search: targetSearch,
         hideZeroReorder,
         hideZeroReplenish,
-        showHidden: showHiddenItems,
-        page: 1,
-        perPage: 200,
+        showHidden: false,
+        page: targetPage,
+        perPage: 10,
       });
       setRows(data.items);
+      setMeta(data.meta);
+      setPage(data.meta.page);
       setSelectedIds(new Set());
     } catch (err: any) {
       addToast({
@@ -330,11 +342,79 @@ const ReorderReport: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [addToast, warehouseType, hideZeroReorder, hideZeroReplenish, showHiddenItems]);
+  }, [addToast, warehouseType, hideZeroReorder, hideZeroReplenish]);
 
   const handleGenerateReport = async () => {
-    await loadReport();
+    setSearchInput('');
+    setAppliedSearch('');
+    await loadReport(1, '');
     setGeneratedAt(new Date());
+  };
+
+  const handleSearch = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const nextSearch = searchInput.trim();
+    setAppliedSearch(nextSearch);
+    await loadReport(1, nextSearch);
+  };
+
+  useEffect(() => {
+    if (!generatedAt) return;
+    const nextSearch = searchInput.trim();
+    if (nextSearch === appliedSearch) return;
+    const timer = window.setTimeout(() => {
+      setAppliedSearch(nextSearch);
+      void loadReport(1, nextSearch);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [appliedSearch, generatedAt, loadReport, searchInput]);
+
+  const changePage = async (nextPage: number) => {
+    if (nextPage < 1 || nextPage > meta.total_pages || loading) return;
+    await loadReport(nextPage, appliedSearch);
+  };
+
+  const handlePrint = async () => {
+    setPreparingPrint(true);
+    try {
+      const first = await fetchReorderReportEntries({
+        warehouseType,
+        search: appliedSearch,
+        hideZeroReorder,
+        hideZeroReplenish,
+        showHidden: false,
+        page: 1,
+        perPage: 500,
+      });
+      const remaining = first.meta.total_pages > 1
+        ? await Promise.all(Array.from({ length: first.meta.total_pages - 1 }, (_, index) =>
+            fetchReorderReportEntries({
+              warehouseType,
+              search: appliedSearch,
+              hideZeroReorder,
+              hideZeroReplenish,
+              showHidden: false,
+              page: index + 2,
+              perPage: 500,
+            })
+          ))
+        : [];
+      const unique = new Map<string, ReorderReportEntry>();
+      [first.items, ...remaining.map((result) => result.items)].flat().forEach((row) => {
+        const key = row.product_session || `${row.item_code}::${row.part_no}`;
+        if (!unique.has(key)) unique.set(key, row);
+      });
+      setPrintRows(Array.from(unique.values()));
+      window.setTimeout(() => window.print(), 100);
+    } catch (error: any) {
+      addToast({
+        type: 'error',
+        title: 'Unable to prepare report for printing',
+        description: String(error?.message || 'Request failed'),
+      });
+    } finally {
+      setPreparingPrint(false);
+    }
   };
 
   const selectedRows = useMemo(
@@ -361,12 +441,7 @@ const ReorderReport: React.FC = () => {
     });
   };
 
-  const selectedHiddenCount = useMemo(
-    () => selectedRows.filter((row) => row.is_hidden).length,
-    [selectedRows]
-  );
-
-  const selectedVisibleCount = selectedRows.length - selectedHiddenCount;
+  const selectedVisibleCount = selectedRows.length;
 
   const handleMarkHidden = async () => {
     if (selectedIds.size === 0) return;
@@ -380,7 +455,7 @@ const ReorderReport: React.FC = () => {
         description: `${hiddenCount} item(s) marked as hidden.`,
         durationMs: 4000,
       });
-      await loadReport();
+      await loadReport(page, appliedSearch);
     } catch (err: any) {
       addToast({
         type: 'error',
@@ -393,39 +468,12 @@ const ReorderReport: React.FC = () => {
     }
   };
 
-  const handleRestoreHidden = async () => {
-    if (selectedIds.size === 0) return;
-
-    setProcessing(true);
-    try {
-      const restoredCount = await restoreReorderReportItems(Array.from(selectedIds));
-      addToast({
-        type: 'success',
-        title: 'Items restored',
-        description: `${restoredCount} item(s) restored successfully.`,
-        durationMs: 4000,
-      });
-      await loadReport();
-    } catch (err: any) {
-      addToast({
-        type: 'error',
-        title: 'Failed to restore items',
-        description: String(err?.message || 'Unable to restore selected items.'),
-        durationMs: 6000,
-      });
-    } finally {
-      setProcessing(false);
-    }
-  };
-
   const navigateToModule = (tab: string, payload?: Record<string, string>) => {
     window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab, payload } }));
   };
 
-  const reportTitle = `${selectedWarehouseLabel.toUpperCase()} REORDER REPORT`;
-  const dateLabel = generatedAt
-    ? generatedAt.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: '2-digit' }).toUpperCase()
-    : '';
+  const reportTitle = 'TOTAL COMPANY REORDER REPORT';
+  const dateLabel = generatedAt ? formatReportDate(generatedAt) : '';
 
   const renderPrLink = (row: ReorderReportEntry) => row.pr_refno ? (
     <button
@@ -469,28 +517,28 @@ const ReorderReport: React.FC = () => {
 
   if (!generatedAt) {
     return (
-      <div className="h-full overflow-auto bg-slate-100 p-6 dark:bg-slate-950">
-        <div className="mx-auto max-w-6xl rounded border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
-            <h1 className="text-base font-semibold uppercase text-slate-800 dark:text-slate-100">
+      <div className="min-h-full overflow-auto bg-[#f4f4f4] px-5 py-10 text-[#222]" style={{ fontFamily: 'Arial, sans-serif' }}>
+        <div className="mx-auto min-h-[363px] w-full max-w-[1140px] rounded-[5px] border border-[#d7d7d7] bg-white">
+          <div className="relative flex h-[63px] items-center border-b border-[#d7d7d7] px-5">
+            <h1 className="text-[18px] font-semibold text-[#29475f] after:absolute after:bottom-[-1px] after:left-5 after:h-px after:w-[135px] after:bg-[#6a92b3]" style={{ fontFamily: 'Arial Narrow, Arial, sans-serif' }}>
               Reorder Report
             </h1>
           </div>
 
-          <div className="px-5 py-5">
-            <p className="mb-8 text-sm text-slate-600 dark:text-slate-400">
+          <div className="px-[25px] py-[33px]">
+            <p className="text-[13px] text-[#222]">
               Field mark with (<span className="text-rose-600">*</span>) is required. Press generate after you select the sorting options
             </p>
 
-            <div className="space-y-5 text-sm">
-              <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
-                <label className="pt-2 text-left font-medium text-slate-700 dark:text-slate-300 md:text-right">
+            <div className="ml-[96px] mt-[50px] w-full max-w-[620px] text-[13px] max-md:mx-auto">
+              <div className="grid grid-cols-[155px_435px] items-center gap-[30px] max-md:grid-cols-[135px_minmax(0,1fr)]">
+                <label className="text-right font-semibold text-[#222]">
                   Warehouse <span className="text-rose-600">*</span>
                 </label>
                 <select
                   value={warehouseType}
                   onChange={(event) => setWarehouseType(event.target.value as ReorderWarehouseType)}
-                  className="w-full max-w-xl rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                  className="h-[35px] w-full rounded-[3px] border border-[#c9c9c9] bg-white px-4 text-[13px] text-[#555] outline-none"
                 >
                   {reorderOptionWarehouses.map((option) => (
                     <option key={option.id} value={option.id}>
@@ -500,47 +548,38 @@ const ReorderReport: React.FC = () => {
                 </select>
               </div>
 
-              <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
+              <div className="mt-5 grid grid-cols-[155px_435px] gap-[30px] max-md:grid-cols-[135px_minmax(0,1fr)]">
                 <span />
-                <div className="space-y-2 text-slate-700 dark:text-slate-200">
-                  <label className="flex items-center gap-2">
+                <div className="space-y-[7px] text-[#222]">
+                  <label className="flex items-center gap-1">
                     <input
                       type="checkbox"
                       checked={hideZeroReorder}
                       onChange={(event) => setHideZeroReorder(event.target.checked)}
-                      className="h-4 w-4 accent-brand-blue"
+                      className="h-[13px] w-[13px] accent-[#555]"
                     />
                     Don't show zero Re-Order QTY
                   </label>
-                  <label className="flex items-center gap-2">
+                  <label className="flex items-center gap-1">
                     <input
                       type="checkbox"
                       checked={hideZeroReplenish}
                       onChange={(event) => setHideZeroReplenish(event.target.checked)}
-                      className="h-4 w-4 accent-brand-blue"
+                      className="h-[13px] w-[13px] accent-[#555]"
                     />
                     Don't show zero Replenish QTY
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={showHiddenItems}
-                      onChange={(event) => setShowHiddenItems(event.target.checked)}
-                      className="h-4 w-4 accent-brand-blue"
-                    />
-                    Show hidden items
                   </label>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-2 pt-2 md:grid-cols-[220px_minmax(0,1fr)]">
+              <div className="mt-[25px] grid grid-cols-[155px_435px] gap-[30px] max-md:grid-cols-[135px_minmax(0,1fr)]">
                 <span />
-                <div className="flex flex-wrap gap-2">
+                <div className="flex gap-3">
                   <button
                     type="button"
                     onClick={handleGenerateReport}
                     disabled={loading}
-                    className="inline-flex items-center gap-2 rounded bg-brand-blue px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                    className="inline-flex h-[35px] items-center gap-2 rounded-[4px] border border-[#d43f3a] bg-[#d9534f] px-[13px] text-[14px] text-white hover:bg-[#c9302c] disabled:opacity-60"
                   >
                     {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                     Generate Report
@@ -551,9 +590,8 @@ const ReorderReport: React.FC = () => {
                       setWarehouseType('total');
                       setHideZeroReorder(false);
                       setHideZeroReplenish(false);
-                      setShowHiddenItems(false);
                     }}
-                    className="rounded border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                    className="h-[35px] rounded-[4px] border border-[#ccc] bg-white px-[13px] text-[14px] text-[#333] hover:bg-[#eee]"
                   >
                     Cancel
                   </button>
@@ -567,44 +605,62 @@ const ReorderReport: React.FC = () => {
   }
 
   return (
-    <div className="h-full overflow-auto bg-slate-100 p-6 dark:bg-slate-950 print:bg-white print:p-0">
-      <div className="mx-auto max-w-none rounded border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 print:border-none print:shadow-none">
-        <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between print:hidden">
-          <h1 className="text-base font-semibold uppercase text-slate-800 dark:text-slate-100">
+    <div className="reorder-report-page min-h-full overflow-auto bg-[#f4f4f4] px-5 py-[62px] text-[#222]" style={{ fontFamily: 'Arial, sans-serif' }}>
+      <style>{`
+        .reorder-report-print { display: none; }
+        @media print {
+          @page { margin: 10mm; }
+          body * { visibility: hidden !important; }
+          .reorder-report-print, .reorder-report-print * { visibility: visible !important; }
+          .reorder-report-print { display: block !important; position: absolute; inset: 0; width: 100%; color: #000; background: #fff; font-family: Arial, sans-serif; }
+          .reorder-report-print table { width: 100%; border-collapse: collapse; font-size: 11px; }
+          .reorder-report-print th, .reorder-report-print td { border: 1px solid #777; padding: 5px; text-align: center; }
+          .reorder-report-print th { font-weight: 600; }
+        }
+      `}</style>
+      <div className="mx-auto w-[90%] max-w-[1800px] rounded-[5px] border border-[#d7d7d7] bg-white print:hidden">
+        <div className="flex min-h-[99px] items-center justify-between border-b border-[#d7d7d7] px-[32px]">
+          <h1 className="relative flex h-full min-h-[99px] items-center text-[24px] font-semibold text-[#29475f] after:absolute after:bottom-[-1px] after:left-0 after:h-px after:w-[350px] after:bg-[#6a92b3]" style={{ fontFamily: 'Arial Narrow, Arial, sans-serif' }}>
             REORDER QUANTITY REPORT
           </h1>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex gap-1">
             <button
               type="button"
               onClick={() => setGeneratedAt(null)}
-              className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
+              className="h-[48px] rounded-[4px] bg-[#4caf50] px-[18px] text-[18px] text-white hover:bg-[#43a047]"
             >
-              BACK
+              ↶ BACK
             </button>
             <button
               type="button"
-              onClick={() => window.print()}
-              className="inline-flex items-center gap-2 rounded bg-slate-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700"
+              onClick={() => void handlePrint()}
+              disabled={preparingPrint}
+              className="inline-flex h-[48px] items-center gap-2 rounded-[4px] bg-[#5d82a2] px-[18px] text-[18px] text-white hover:bg-[#4e7392]"
             >
-              <Printer className="h-4 w-4" />
-              PRINT
+              {preparingPrint ? <Loader2 className="h-5 w-5 animate-spin" /> : <Printer className="h-5 w-5" />}
+              {preparingPrint ? 'PREPARING' : 'PRINT'}
             </button>
           </div>
         </div>
 
-        <div className="px-5 py-4">
-          <div className="mb-5 text-center text-slate-800 dark:text-slate-100 print:text-black">
-            <p className="text-lg font-semibold">{reportTitle}</p>
-            <p className="-mt-1 text-sm font-semibold">AS OF {dateLabel}</p>
+        <div className="px-[40px] pb-[40px] pt-[50px]">
+          <div className="mb-[25px] text-center text-[#222]">
+            <p className="text-[26px] font-bold">{reportTitle}</p>
+            <p className="mt-2 text-[19px] font-bold">AS OF {dateLabel}</p>
           </div>
+
+          <form onSubmit={handleSearch} className="mb-[25px] flex items-center justify-end gap-3 text-[17px]">
+            <label htmlFor="reorder-search">Search:</label>
+            <input id="reorder-search" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} className="h-[48px] w-[320px] rounded-[4px] border border-[#ccc] px-3 outline-none focus:border-[#777]" />
+          </form>
 
           {rows.length === 0 ? (
             <div className="py-20 text-center">
               <h3 className="text-lg font-semibold text-slate-500 dark:text-slate-400">Empty!</h3>
             </div>
           ) : (
-            <div className="overflow-auto print:overflow-visible">
-              <table className="w-full min-w-[1120px] border-collapse text-sm print:min-w-0">
+            <div className="overflow-auto">
+              <table className="w-full min-w-[1120px] border-collapse">
                 <thead>
                   <tr>
                     <th className={tableHeadClass}>
@@ -631,7 +687,7 @@ const ReorderReport: React.FC = () => {
                   {rows.map((row) => (
                     <tr
                       key={row.id}
-                      className={`${row.is_hidden ? 'bg-amber-50/60 dark:bg-amber-950/10' : ''}`}
+                      className="odd:bg-white even:bg-[#f8f8f8] hover:bg-[#f5f5f5]"
                     >
                       <td className={tableCellClass}>
                         <input
@@ -644,12 +700,6 @@ const ReorderReport: React.FC = () => {
                       <td className={tableCellClass}>{row.part_no}</td>
                       <td className={`${tableCellClass} text-left`}>
                         <span>{row.description}</span>
-                        {row.is_hidden ? (
-                          <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-                            <Eye className="h-3 w-3" />
-                            Hidden
-                          </span>
-                        ) : null}
                       </td>
                       <td className={tableCellClass}>{formatShortDate(row.last_arrival_date)}</td>
                       <td className={tableCellClass}>{row.last_arrival_qty}</td>
@@ -667,7 +717,18 @@ const ReorderReport: React.FC = () => {
             </div>
           )}
 
-          <div className="mt-4 flex flex-wrap gap-2 print:hidden">
+          {meta.total > 0 ? (
+            <div className="mt-4 flex items-center justify-between text-[13px] text-[#555]">
+              <span>Showing {(meta.page - 1) * meta.per_page + 1} to {Math.min(meta.page * meta.per_page, meta.total)} of {meta.total} entries</span>
+              <div className="flex items-center gap-2">
+                <button type="button" disabled={page <= 1 || loading} onClick={() => void changePage(page - 1)} className="rounded border border-[#ccc] px-3 py-1.5 disabled:opacity-40">Previous</button>
+                <span>Page {page} of {Math.max(1, meta.total_pages)}</span>
+                <button type="button" disabled={page >= meta.total_pages || loading} onClick={() => void changePage(page + 1)} className="rounded border border-[#ccc] px-3 py-1.5 disabled:opacity-40">Next</button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mt-4 flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => setConfirmAction('hide')}
@@ -677,17 +738,6 @@ const ReorderReport: React.FC = () => {
               {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <EyeOff className="h-4 w-4" />}
               Mark as Hidden
             </button>
-            {showHiddenItems ? (
-              <button
-                type="button"
-                onClick={() => setConfirmAction('restore')}
-                disabled={selectedHiddenCount === 0 || processing}
-                className="inline-flex items-center gap-2 rounded bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-              >
-                {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-                Restore Hidden
-              </button>
-            ) : null}
             <button
               type="button"
               onClick={() => setShowAddPrModal(true)}
@@ -708,7 +758,7 @@ const ReorderReport: React.FC = () => {
           onSaved={() => {
             setShowAddPrModal(false);
             setSelectedIds(new Set());
-            void loadReport();
+            void loadReport(page, appliedSearch);
           }}
         />
       ) : null}
@@ -723,15 +773,19 @@ const ReorderReport: React.FC = () => {
         variant="warning"
       />
 
-      <ConfirmModal
-        isOpen={confirmAction === 'restore'}
-        onClose={() => setConfirmAction(null)}
-        onConfirm={handleRestoreHidden}
-        title="Restore Hidden Items"
-        message={`Restore ${selectedHiddenCount} selected hidden item(s) back into the active reorder report list?`}
-        confirmLabel="Restore"
-        variant="success"
-      />
+      <div className="reorder-report-print">
+        <div className="mb-5 text-center">
+          <p className="text-[17px] font-bold">{reportTitle}</p>
+          <p className="mt-[-4px] text-[13px] font-bold">AS OF {dateLabel}</p>
+        </div>
+        <table>
+          <thead>
+            <tr><th colSpan={3} /><th colSpan={2}>{isWh1Report ? 'LAST TRANSFER' : 'LAST ARRIVAL'}</th><th>BAL</th><th>TOTAL</th><th>TOTAL</th><th>{isWh1Report ? 'REPLENISH' : 'REORDER'}</th></tr>
+            <tr><th>ITEM CODE</th><th>PART NO.</th><th>DESCRIPTION</th><th>DATE</th><th>QTY</th><th>QTY</th><th>RR</th><th>RETURN</th><th>QTY</th></tr>
+          </thead>
+          <tbody>{(printRows.length > 0 ? printRows : rows).map((row) => <tr key={`print-${row.product_session}`}><td>{row.item_code}</td><td>{row.part_no}</td><td>{row.description}</td><td>{formatShortDate(row.last_arrival_date)}</td><td>{row.last_arrival_qty}</td><td>{row.current_stock}</td><td>{row.total_rr}</td><td>{row.total_return}</td><td>{isWh1Report ? row.replenish_qty : row.reorder_qty}</td></tr>)}</tbody>
+        </table>
+      </div>
     </div>
   );
 };
