@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EyeOff, Loader2, Printer, Search, ShoppingCart } from 'lucide-react';
 import { purchaseRequestService } from '../services/purchaseRequestService';
 import {
@@ -299,6 +299,8 @@ const ReorderReport: React.FC = () => {
   const { addToast } = useToast();
   const [rows, setRows] = useState<ReorderReportEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreFailed, setLoadMoreFailed] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [preparingPrint, setPreparingPrint] = useState(false);
   const [warehouseType, setWarehouseType] = useState<ReorderWarehouseType>('total');
@@ -311,12 +313,17 @@ const ReorderReport: React.FC = () => {
   const [searchInput, setSearchInput] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [meta, setMeta] = useState({ page: 1, per_page: 10, total: 0, total_pages: 1 });
+  const [meta, setMeta] = useState({ page: 1, per_page: 25, total: 0, total_pages: 1 });
   const [printRows, setPrintRows] = useState<ReorderReportEntry[]>([]);
+  const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const isWh1Report = warehouseType === 'wh1';
 
-  const loadReport = useCallback(async (targetPage = 1, targetSearch = '') => {
-    setLoading(true);
+  const loadReport = useCallback(async (targetPage = 1, targetSearch = '', append = false) => {
+    if (append) setLoadingMore(true);
+    else {
+      setLoading(true);
+      setLoadMoreFailed(false);
+    }
     try {
       const data = await fetchReorderReportEntries({
         warehouseType,
@@ -325,12 +332,21 @@ const ReorderReport: React.FC = () => {
         hideZeroReplenish,
         showHidden: false,
         page: targetPage,
-        perPage: 10,
+        perPage: 25,
       });
-      setRows(data.items);
+      setRows((current) => {
+        if (!append) return data.items;
+        const unique = new Map<string, ReorderReportEntry>();
+        [...current, ...data.items].forEach((row) => {
+          const key = row.product_session || `${row.item_code.trim().toLowerCase()}::${row.part_no.trim().toLowerCase()}`;
+          if (!unique.has(key)) unique.set(key, row);
+        });
+        return Array.from(unique.values());
+      });
       setMeta(data.meta);
       setPage(data.meta.page);
-      setSelectedIds(new Set());
+      setLoadMoreFailed(false);
+      if (!append) setSelectedIds(new Set());
     } catch (err: any) {
       addToast({
         type: 'error',
@@ -338,9 +354,11 @@ const ReorderReport: React.FC = () => {
         description: String(err?.message || 'Request failed'),
         durationMs: 6000,
       });
-      setRows([]);
+      if (append) setLoadMoreFailed(true);
+      else setRows([]);
     } finally {
-      setLoading(false);
+      if (append) setLoadingMore(false);
+      else setLoading(false);
     }
   }, [addToast, warehouseType, hideZeroReorder, hideZeroReplenish]);
 
@@ -369,10 +387,20 @@ const ReorderReport: React.FC = () => {
     return () => window.clearTimeout(timer);
   }, [appliedSearch, generatedAt, loadReport, searchInput]);
 
-  const changePage = async (nextPage: number) => {
-    if (nextPage < 1 || nextPage > meta.total_pages || loading) return;
-    await loadReport(nextPage, appliedSearch);
-  };
+  useEffect(() => {
+    const sentinel = loadMoreSentinelRef.current;
+    if (!generatedAt || !sentinel || loading || loadingMore || loadMoreFailed || page >= meta.total_pages) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting || loadingMore || page >= meta.total_pages) return;
+        void loadReport(page + 1, appliedSearch, true);
+      },
+      { rootMargin: '300px 0px' }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [appliedSearch, generatedAt, loadMoreFailed, loadReport, loading, loadingMore, meta.total_pages, page]);
 
   const handlePrint = async () => {
     setPreparingPrint(true);
@@ -455,7 +483,7 @@ const ReorderReport: React.FC = () => {
         description: `${hiddenCount} item(s) marked as hidden.`,
         durationMs: 4000,
       });
-      await loadReport(page, appliedSearch);
+      await loadReport(1, appliedSearch);
     } catch (err: any) {
       addToast({
         type: 'error',
@@ -718,15 +746,24 @@ const ReorderReport: React.FC = () => {
           )}
 
           {meta.total > 0 ? (
-            <div className="mt-4 flex items-center justify-between text-[13px] text-[#555]">
-              <span>Showing {(meta.page - 1) * meta.per_page + 1} to {Math.min(meta.page * meta.per_page, meta.total)} of {meta.total} entries</span>
-              <div className="flex items-center gap-2">
-                <button type="button" disabled={page <= 1 || loading} onClick={() => void changePage(page - 1)} className="rounded border border-[#ccc] px-3 py-1.5 disabled:opacity-40">Previous</button>
-                <span>Page {page} of {Math.max(1, meta.total_pages)}</span>
-                <button type="button" disabled={page >= meta.total_pages || loading} onClick={() => void changePage(page + 1)} className="rounded border border-[#ccc] px-3 py-1.5 disabled:opacity-40">Next</button>
-              </div>
+            <div className="mt-4 text-center text-[13px] text-[#777]">
+              {loadingMore ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading more items...
+                </span>
+              ) : loadMoreFailed ? (
+                <button type="button" onClick={() => void loadReport(page + 1, appliedSearch, true)} className="text-[#4e7392] underline">
+                  Unable to load more items. Retry
+                </button>
+              ) : page >= meta.total_pages ? (
+                <span>All {rows.length} entries loaded</span>
+              ) : (
+                <span>Showing {rows.length} of {meta.total} entries</span>
+              )}
             </div>
           ) : null}
+          <div ref={loadMoreSentinelRef} className="h-px w-full" aria-hidden="true" />
 
           <div className="mt-4 flex flex-wrap gap-2">
             <button
@@ -758,7 +795,7 @@ const ReorderReport: React.FC = () => {
           onSaved={() => {
             setShowAddPrModal(false);
             setSelectedIds(new Set());
-            void loadReport(page, appliedSearch);
+            void loadReport(1, appliedSearch);
           }}
         />
       ) : null}

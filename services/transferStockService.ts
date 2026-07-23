@@ -71,11 +71,19 @@ const requestApi = async (url: string, init?: RequestInit): Promise<any> => {
 const getUserContext = () => {
   const session = getLocalAuthSession();
   const userId = Number(session?.context?.user?.id || 1);
+  const mainId = Number(
+    session?.context?.user?.main_id
+    || session?.context?.user?.main_userid
+    || API_MAIN_ID
+    || 1
+  );
   return {
-    mainId: API_MAIN_ID,
+    mainId: Number.isFinite(mainId) && mainId > 0 ? mainId : 1,
     userId: Number.isFinite(userId) && userId > 0 ? userId : 1,
   };
 };
+
+const getMainId = (): number => getUserContext().mainId;
 
 const mapTransferItem = (raw: any): TransferStockItem => ({
   id: String(raw?.id ?? ''),
@@ -135,7 +143,7 @@ const mapTransferDetail = (payload: any): TransferStock => {
  */
 export async function generateTransferNo(): Promise<string> {
   const query = new URLSearchParams({
-    main_id: String(API_MAIN_ID),
+    main_id: String(getMainId()),
     page: '1',
     per_page: '1',
     status: 'all',
@@ -219,12 +227,51 @@ export async function createTransferStock(data: TransferStockDTO): Promise<Trans
 }
 
 /**
+ * Create the same draft record as the legacy "Add Transfer" action.
+ * The old screen only asks for part numbers at this stage; source/destination
+ * item codes, warehouses, and quantities are completed on the record screen.
+ */
+export async function createTransferStockFromPartNumbers(
+  partNumbers: string[],
+  transferDate?: string
+): Promise<TransferStock> {
+  const userContext = getUserContext();
+  const normalizedParts = Array.from(new Set(
+    partNumbers.map((value) => String(value || '').trim()).filter(Boolean)
+  ));
+
+  const created = await requestApi(`${API_BASE_URL}/transfer-stocks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      main_id: userContext.mainId,
+      user_id: userContext.userId,
+      transfer_date: transferDate || new Date().toISOString().slice(0, 10),
+      status: 'Pending',
+      part_numbers: normalizedParts,
+    }),
+  });
+
+  const result = mapTransferDetail(created);
+  logCreate(ENTITY_TYPES.TRANSFER_STOCK, result.id, {
+    transfer_no: result.transfer_no,
+    transfer_date: result.transfer_date,
+    transfer_refno: result.id,
+    status: result.status,
+    part_numbers: normalizedParts,
+    actor_legacy_user_id: userContext.userId,
+  }).catch(() => {});
+
+  return result;
+}
+
+/**
  * Get a Transfer Stock by ID
  */
 export async function getTransferStock(id: string): Promise<TransferStock | null> {
   try {
     const data = await requestApi(
-      `${API_BASE_URL}/transfer-stocks/${encodeURIComponent(id)}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`
+      `${API_BASE_URL}/transfer-stocks/${encodeURIComponent(id)}?main_id=${encodeURIComponent(String(getMainId()))}`
     );
     return mapTransferDetail(data);
   } catch {
@@ -241,7 +288,7 @@ export async function fetchTransferStocks(filters?: {
   endDate?: string;
 }): Promise<TransferStock[]> {
   const query = new URLSearchParams({
-    main_id: String(API_MAIN_ID),
+    main_id: String(getMainId()),
     status: String(filters?.status || 'all'),
     page: '1',
     per_page: '200',
@@ -263,7 +310,7 @@ export async function updateTransferStock(
   updates: Partial<Pick<TransferStock, 'transfer_date' | 'notes' | 'status'>>
 ): Promise<TransferStock | null> {
   const payload: Record<string, unknown> = {
-    main_id: API_MAIN_ID,
+    main_id: getMainId(),
   };
 
   if (typeof updates.transfer_date === 'string') payload.transfer_date = updates.transfer_date;
@@ -362,7 +409,7 @@ export async function approveTransferStock(id: string): Promise<TransferStock | 
  */
 export async function deleteTransferStock(id: string): Promise<void> {
   await requestApi(
-    `${API_BASE_URL}/transfer-stocks/${encodeURIComponent(id)}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`,
+    `${API_BASE_URL}/transfer-stocks/${encodeURIComponent(id)}?main_id=${encodeURIComponent(String(getMainId()))}`,
     { method: 'DELETE' }
   );
 
@@ -383,7 +430,7 @@ export async function addTransferStockItem(
   const isNumericId = /^\d+$/.test(maybeNumericId);
 
   const payload: Record<string, unknown> = {
-    main_id: API_MAIN_ID,
+    main_id: getMainId(),
     from_warehouse_id: normalizeWarehouseId(item?.from_warehouse_id),
     to_warehouse_id: normalizeWarehouseId(item?.to_warehouse_id),
     transfer_qty: toNumber(item?.transfer_qty, 0),
@@ -405,18 +452,59 @@ export async function addTransferStockItem(
 }
 
 /**
+ * Add legacy draft rows from part numbers. Item details remain editable until
+ * the transfer is submitted.
+ */
+export async function addTransferStockPartNumbers(
+  transferId: string,
+  partNumbers: string[]
+): Promise<TransferStock> {
+  const normalizedParts = partNumbers.map((value) => String(value || '').trim()).filter(Boolean);
+  for (const partNo of normalizedParts) {
+    await requestApi(`${API_BASE_URL}/transfer-stocks/${encodeURIComponent(transferId)}/items`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        main_id: getMainId(),
+        part_no: partNo,
+      }),
+    });
+  }
+
+  const refreshed = await getTransferStock(transferId);
+  if (!refreshed) {
+    throw new Error('Unable to reload transfer stock');
+  }
+  return refreshed;
+}
+
+/**
  * Update a Transfer Stock Item
  */
 export async function updateTransferStockItem(
   itemId: string,
-  updates: Partial<Pick<TransferStockItem, 'from_warehouse_id' | 'to_warehouse_id' | 'transfer_qty' | 'notes'>>
+  updates: Partial<Pick<
+    TransferStockItem,
+    | 'from_item_session'
+    | 'from_warehouse_id'
+    | 'from_original_qty'
+    | 'to_item_session'
+    | 'to_warehouse_id'
+    | 'to_original_qty'
+    | 'transfer_qty'
+    | 'notes'
+  >>
 ): Promise<TransferStockItem> {
   const payload: Record<string, unknown> = {
-    main_id: API_MAIN_ID,
+    main_id: getMainId(),
   };
 
   if (typeof updates.from_warehouse_id === 'string') payload.from_warehouse_id = updates.from_warehouse_id;
+  if (typeof updates.from_item_session === 'string') payload.from_item_session = updates.from_item_session;
+  if (typeof updates.from_original_qty !== 'undefined') payload.from_original_qty = toNumber(updates.from_original_qty, 0);
   if (typeof updates.to_warehouse_id === 'string') payload.to_warehouse_id = updates.to_warehouse_id;
+  if (typeof updates.to_item_session === 'string') payload.to_item_session = updates.to_item_session;
+  if (typeof updates.to_original_qty !== 'undefined') payload.to_original_qty = toNumber(updates.to_original_qty, 0);
   if (typeof updates.transfer_qty !== 'undefined') payload.transfer_qty = toNumber(updates.transfer_qty, 0);
   if (typeof updates.notes === 'string') payload.notes = updates.notes;
 
@@ -434,7 +522,7 @@ export async function updateTransferStockItem(
  */
 export async function deleteTransferStockItem(itemId: string): Promise<void> {
   await requestApi(
-    `${API_BASE_URL}/transfer-stock-items/${encodeURIComponent(itemId)}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`,
+    `${API_BASE_URL}/transfer-stock-items/${encodeURIComponent(itemId)}?main_id=${encodeURIComponent(String(getMainId()))}`,
     { method: 'DELETE' }
   );
 }
@@ -444,7 +532,7 @@ export async function deleteTransferStockItem(itemId: string): Promise<void> {
  */
 export async function getAvailableStock(itemId: string, warehouseId: string): Promise<number> {
   const response = await fetch(
-    `${API_BASE_URL}/products/${encodeURIComponent(String(itemId))}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`
+    `${API_BASE_URL}/products/${encodeURIComponent(String(itemId))}?main_id=${encodeURIComponent(String(getMainId()))}`
   );
 
   if (!response.ok) {

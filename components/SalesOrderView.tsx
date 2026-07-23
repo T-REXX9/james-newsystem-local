@@ -121,6 +121,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
   const [cancelLoading, setCancelLoading] = useState(false);
   const [unpostModalOpen, setUnpostModalOpen] = useState(false);
   const [unpostLoading, setUnpostLoading] = useState(false);
+  const [showSearchModal, setShowSearchModal] = useState(false);
 
   const targetMonthYear = useMemo(() => {
     if (!dateRange.from) {
@@ -332,12 +333,6 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
       console.error('Failed loading selected sales order detail:', err);
     }
   }, []);
-
-  useEffect(() => {
-    if (orders.length > 0 && !selectedOrder) {
-      void selectOrder(orders[0]);
-    }
-  }, [orders, selectOrder, selectedOrder]);
 
   useEffect(() => {
     if (!initialOrderId) return;
@@ -765,6 +760,8 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
     dealershipSales?: number;
     monthlySales?: number;
     since?: string;
+    classCode?: string;
+    quota?: number;
   }) | null;
   const selectedOrderCreditLimit = Number(selectedOrder?.credit_limit || selectedCustomer?.creditLimit || 0);
   const selectedOrderBalance = Number(summaryCustomer?.balance || 0);
@@ -782,6 +779,199 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
     if (selectedOrder?.id === order.id) return 'text-brand-blue';
     return 'text-slate-700 dark:text-slate-200';
   };
+
+  const legacyInputClass = 'h-[35px] w-full rounded-[4px] border border-[#c9c9c9] bg-white px-3 text-[13px] text-[#333] outline-none';
+  const legacyLabelClass = 'whitespace-nowrap text-right text-[16px] font-semibold text-[#29475f]';
+  const legacyToday = new Date();
+  const legacyMonth = targetMonthYear.month || legacyToday.getMonth() + 1;
+  const legacyYear = targetMonthYear.year || legacyToday.getFullYear();
+  const legacyOrder = selectedOrder as (SalesOrder & {
+    tracking_no?: string;
+    delivered_to?: string;
+    delivery_to?: string;
+    sales_type?: string;
+    product_type?: string;
+  }) | null;
+  const legacyItems = (selectedOrder?.items || []) as Array<SalesOrder['items'][number] & { brand?: string }>;
+  const totalQuantity = legacyItems.reduce((sum, item) => sum + Number(item.qty || 0), 0);
+  const legacyListDate = (value?: string | null) => {
+    if (!value) return '';
+    const normalized = String(value).split('T')[0];
+    const [year, month, day] = normalized.split('-');
+    return year && month && day ? `${month}/${day}/${year}` : formatDate(value);
+  };
+  const legacyStatus = (status?: string | null) => {
+    const normalized = normalizeStatus(status);
+    if (normalized === 'cancelled') return 'Cancelled';
+    if (normalized === 'posted') return 'Posted';
+    return 'Unposted';
+  };
+  const legacyMetric = (value: number | string | undefined | null, currency = false) => {
+    if (value === undefined || value === null || value === '') return '';
+    if (currency) return Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return String(value);
+  };
+  const filteredByLabel = targetMonthYear.month && targetMonthYear.year
+    ? `Year: ${targetMonthYear.year} Month: ${MONTH_OPTIONS[targetMonthYear.month - 1].slice(0, 3)},`
+    : 'All Records';
+  const nextOrderNumber = useMemo(() => {
+    const latestNumber = orders
+      .map((order) => order.order_no || '')
+      .map((orderNo) => {
+        const match = orderNo.match(/^(.*?)(\d+)$/);
+        return match ? { prefix: match[1], digits: match[2], value: Number(match[2]) } : null;
+      })
+      .filter((value): value is { prefix: string; digits: string; value: number } => Boolean(value))
+      .sort((a, b) => b.value - a.value)[0];
+    if (!latestNumber) return '';
+    return `${latestNumber.prefix}${String(latestNumber.value + 1).padStart(latestNumber.digits.length, '0')}`;
+  }, [orders]);
+
+  const legacyLayout = (
+    <div className="min-h-full overflow-y-auto bg-[#f4f4f4] px-5 py-10 text-[#202020] dark:bg-[#f4f4f4] dark:text-[#202020]" style={{ fontFamily: 'Arial, sans-serif' }}>
+      <div className="mx-auto w-full max-w-[1140px] space-y-[26px]">
+        <section className="overflow-hidden rounded-[5px] border border-[#d7d7d7] bg-white">
+          <div className="flex min-h-[83px] flex-col gap-5 border-b border-[#d7d7d7] px-[35px] py-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-[5px]">
+              <button type="button" onClick={() => setShowSearchModal(true)} className="rounded-[4px] bg-[#5d82a2] px-[13px] py-[9px] text-[14px] text-white hover:bg-[#50738f]">Search</button>
+              <button type="button" onClick={handleRefresh} className="rounded-[4px] bg-[#4caf50] px-[13px] py-[9px] text-[14px] text-white hover:bg-[#43a047]">Refresh</button>
+            </div>
+            <div className="flex flex-wrap items-center justify-end">
+              <span className="mr-[30px] text-[20px] font-semibold text-[#29475f]">Filter by Month:</span>
+              <select value={String(legacyMonth)} onChange={(event) => handleMonthChange(event.target.value)} className="h-[34px] w-[200px] rounded-l-[4px] border border-[#cfcfcf] bg-white px-4 text-[13px] outline-none" aria-label="Filter month">
+                {MONTH_OPTIONS.map((month, index) => <option key={month} value={String(index + 1)}>{month}</option>)}
+              </select>
+              <input type="number" value={legacyYear} onChange={(event) => handleYearChange(event.target.value)} className="ml-[16px] h-[34px] w-[87px] border border-[#cfcfcf] bg-white px-3 text-[13px] outline-none" aria-label="Filter year" />
+              <button type="button" onClick={() => void handleFilterApply()} className="h-[34px] rounded-r-[4px] bg-[#4caf50] px-[13px] text-[14px] text-white hover:bg-[#43a047]">Filter</button>
+            </div>
+          </div>
+
+          <div className="h-[207px] px-[25px] py-[25px]">
+            <div className="mb-[10px] text-[13px]"><strong>Filtered By:</strong> {filteredByLabel}</div>
+            <table className="w-full table-fixed border-collapse text-[12px]">
+              <colgroup>{SALES_ORDER_LIST_COLUMN_WIDTHS.map((width, index) => <col key={`${width}-${index}`} style={{ width }} />)}</colgroup>
+              <thead><tr className="border-b-2 border-[#d5d5d5] text-left text-[14px] font-semibold">
+                <th className="px-2 pb-2">Date</th><th className="px-2 pb-2">Customer</th><th className="px-2 pb-2">SI No.</th><th className="px-2 pb-2">SO No.</th><th className="px-2 pb-2">Transaction No.</th><th className="px-2 pb-2">Sales Person</th><th className="px-2 pb-2">Status</th>
+              </tr></thead>
+            </table>
+            <div className="max-h-[104px] overflow-y-auto">
+              <table className="w-full table-fixed border-collapse text-[13px]">
+                <colgroup>{SALES_ORDER_LIST_COLUMN_WIDTHS.map((width, index) => <col key={`${width}-${index}`} style={{ width }} />)}</colgroup>
+                <tbody>
+                  {loading ? <tr><td colSpan={7} className="border border-[#d7d7d7] px-2 py-4 text-center text-[#777]">Loading sales orders...</td></tr> : orders.length === 0 ? <tr><td colSpan={7} className="border border-[#d7d7d7] px-2 py-4 text-center text-[#777]">No sales orders found.</td></tr> : orders.map((order) => {
+                    const customer = customerMap.get(order.contact_id);
+                    const selected = selectedOrder?.id === order.id;
+                    const rowColor = normalizeStatus(order.status) === 'cancelled' ? 'text-[#d33]' : selected ? 'text-[#245d91]' : 'text-[#202020]';
+                    return <tr key={order.id} onClick={() => void selectOrder(order)} className={`cursor-pointer hover:bg-[#f7f7f7] ${rowColor}`}>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px]">{legacyListDate(order.sales_date)}</td>
+                      <td className="truncate border border-[#d7d7d7] px-2 py-[9px]" title={customer?.company || ''}>{customer?.company || ''}</td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{order.inquiry_no || ''}</td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{order.order_no || ''}</td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{order.invoice_no || order.order_slip_no || ''}</td>
+                      <td className="truncate border border-[#d7d7d7] px-2 py-[9px]">{order.sales_person || ''}</td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px]">{legacyStatus(order.status)}</td>
+                    </tr>;
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section className="min-h-[576px] overflow-hidden rounded-[5px] border border-[#d7d7d7] bg-white">
+          <div className="flex h-[64px] items-center justify-between border-b border-[#d7d7d7] px-5">
+            <div className="relative flex h-full items-center text-[18px] font-semibold text-[#29475f] after:absolute after:bottom-[-1px] after:left-0 after:h-px after:w-[135px] after:bg-[#6a92b3]">SALES ORDER</div>
+            <div className="text-[23px] font-semibold text-[#29475f]">SO No. : {selectedOrder?.order_no || nextOrderNumber}</div>
+            {selectedOrder && <input readOnly value={selectedOrder.order_no} aria-label="Sales order number" className="sr-only" />}
+          </div>
+
+          <div className="px-[25px] pb-[28px] pt-[31px]">
+            <div className="mb-[18px] overflow-x-auto">
+              <table className="w-full min-w-[800px] table-fixed border-collapse text-center text-[13px]">
+                <thead><tr>{['Since', 'Class Code', 'Quota', 'Terms', 'Balance'].map((label) => <th key={label} className="border border-[#d7d7d7] px-2 py-[9px] font-normal">{label}</th>)}</tr></thead>
+                <tbody><tr>
+                  <td className="border border-[#d7d7d7] px-2 py-2">{legacyMetric(summaryCustomer?.since || summaryCustomer?.customerSince)}</td>
+                  <td className="border border-[#d7d7d7] px-2 py-2">{legacyMetric(summaryCustomer?.classCode)}</td>
+                  <td className="border border-[#d7d7d7] px-2 py-2">{legacyMetric(summaryCustomer?.quota ?? summaryCustomer?.dealershipQuota)}</td>
+                  <td className="border border-[#d7d7d7] px-2 py-2">{legacyMetric(selectedOrder?.terms || selectedCustomer?.terms)}</td>
+                  <td className="border border-[#d7d7d7] px-2 py-2">{legacyMetric(summaryCustomer?.balance, true)}</td>
+                </tr></tbody>
+              </table>
+            </div>
+
+            {exceedsCreditLimit && <div className="mb-2 text-center text-[12px] text-[#b06b00]">Balance exceeds credit limit. This warning does not block the sales order flow.</div>}
+
+            <div className="space-y-[9px]">
+              <div className="grid grid-cols-[5%_38%_11%_18%_10%_18%] items-center">
+                <label className={legacyLabelClass}>Sold to :</label><div className="pl-3"><input readOnly value={selectedOrder ? selectedCustomerLabel : ''} placeholder="Select Customer" className={`${legacyInputClass} text-center`} /></div>
+                <label className={legacyLabelClass}>Date :</label><div className="pl-2"><input readOnly value={legacyListDate(selectedOrder?.sales_date)} className={legacyInputClass} /></div>
+                <label className={legacyLabelClass}>Terms Strictly:</label><div className="pl-2"><input readOnly value={selectedOrder?.terms || selectedCustomer?.terms || ''} className={legacyInputClass} /></div>
+              </div>
+              <div className="grid grid-cols-[7%_36%_11%_18%_10%_18%] items-center">
+                <label className={legacyLabelClass}>Address :</label><div className="pl-3"><input readOnly value={selectedOrder?.delivery_address || selectedCustomer?.deliveryAddress || ''} className={legacyInputClass} /></div>
+                <label className={legacyLabelClass}>Reference No.:</label><div className="pl-2"><input readOnly value={selectedOrder?.reference_no || ''} className={legacyInputClass} /></div>
+                <label className={legacyLabelClass}>Salesperson:</label><div className="pl-2"><input readOnly value={selectedOrder?.sales_person || ''} className={legacyInputClass} /></div>
+              </div>
+              <div className="grid grid-cols-[7%_36%_11%_18%_10%_18%] items-center">
+                <label className={legacyLabelClass}>Send By:</label><div className="pl-3"><input readOnly value={selectedOrder?.send_by || ''} className={`${legacyInputClass} text-center`} /></div>
+                <label className={legacyLabelClass}>Tracking No.:</label><div className="pl-2"><input readOnly value={legacyOrder?.tracking_no || ''} className={legacyInputClass} /></div>
+                <label className={legacyLabelClass}>Del. to:</label><div className="pl-2"><input readOnly value={legacyOrder?.delivered_to || legacyOrder?.delivery_to || ''} className={legacyInputClass} /></div>
+              </div>
+              <div className="grid grid-cols-[7%_36%_11%_18%_10%_18%] items-center">
+                <label className={legacyLabelClass}>PO No.:</label><div className="pl-3"><input readOnly value={selectedOrder?.po_number || ''} className={legacyInputClass} /></div>
+                <div></div><div></div><label className={legacyLabelClass}>Sales Type :</label><div className="pl-2 text-center text-[14px]">{legacyOrder?.sales_type || 'Regular SO'}</div>
+              </div>
+            </div>
+
+            <div className="mt-[75px] border-t border-[#e5e5e5] pt-[29px]">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[950px] border-collapse text-[12px]">
+                  <thead><tr className="border-b-2 border-[#d5d5d5] text-center text-[14px] font-semibold">
+                    <th className="px-2 pb-2">Item Code</th><th className="px-2 pb-2">Quantity</th><th className="px-2 pb-2">Location.</th><th className="px-2 pb-2">Part No.</th><th className="px-2 pb-2">Brand</th><th className="px-2 pb-2">Description</th><th className="px-2 pb-2">Unit price</th><th className="px-2 pb-2">Remark</th><th className="px-2 pb-2">Amount</th>
+                  </tr></thead>
+                  <tbody>{legacyItems.map((item, index) => <tr key={item.id || `${item.item_code}-${index}`} className="border-b border-[#e1e1e1] text-center">
+                    <td className="px-2 py-2">{item.item_code || ''}</td><td className="px-2 py-2">{item.qty}</td><td className="px-2 py-2">{item.location || ''}</td><td className="px-2 py-2">{item.part_no || ''}</td><td className="px-2 py-2">{item.brand || ''}</td><td className="px-2 py-2 text-left">{item.description || ''}</td><td className="px-2 py-2 text-right">{Number(item.unit_price || 0).toFixed(2)}</td><td className="px-2 py-2">{item.remark || item.approval_status || ''}</td><td className="px-2 py-2 text-right">{Number(item.amount || 0).toFixed(2)}</td>
+                  </tr>)}</tbody>
+                  <tfoot><tr>
+                    <td className="px-2 py-3 text-right font-bold">Total Qty:</td><td className="px-2 py-3"><span className="rounded-full bg-[#6f91af] px-2 py-[2px] font-bold text-white">{totalQuantity.toFixed(2)}</span></td><td colSpan={5}></td><td className="px-2 py-3 text-right font-bold">Grand Total:</td><td className="px-2 py-3"><span className="rounded-full bg-[#ef4b4b] px-2 py-[2px] font-bold text-white">{Number(selectedOrder?.grand_total || 0).toFixed(2)}</span></td>
+                  </tr></tfoot>
+                </table>
+              </div>
+
+              {selectedOrder && <div className="mt-3 flex flex-wrap justify-end gap-[5px] border-t border-[#e3e3e3] pt-4 print:hidden">
+                {canConfirm && <button type="button" onClick={() => void handleConfirmOrder()} disabled={confirming} className="rounded-[4px] bg-[#4caf50] px-[18px] py-[9px] text-[13px] text-white disabled:opacity-50">{confirming ? 'Processing...' : confirmLabel}</button>}
+                {canGenerate && <button type="button" onClick={() => setConversionModalOpen(true)} className="rounded-[4px] bg-[#4caf50] px-[18px] py-[9px] text-[13px] text-white">Generate Sales Transaction</button>}
+                {canGenerate && <button type="button" onClick={() => window.print()} className="rounded-[4px] bg-[#5d82a2] px-[18px] py-[9px] text-[13px] text-white">Print SO</button>}
+                {canGenerate && <button type="button" onClick={() => setCancelModalOpen(true)} className="rounded-[4px] bg-[#d64b47] px-[18px] py-[9px] text-[13px] text-white">Cancel SO</button>}
+                {selectedOrderStatus === 'posted' && <button type="button" onClick={() => setUnpostModalOpen(true)} disabled={unpostLoading} className="rounded-[4px] bg-[#d64b47] px-[18px] py-[9px] text-[13px] text-white disabled:opacity-50">{unpostLoading ? 'Unposting...' : 'Unpost'}</button>}
+              </div>}
+            </div>
+          </div>
+        </section>
+
+        {documentMessage && <div className="flex items-center justify-between rounded-[5px] border border-[#b7dfbf] bg-[#edf9ef] p-3 text-[13px] text-[#367342]"><span>{documentMessage}</span>{documentLink && <button type="button" onClick={() => openDocumentFromLink(documentLink)} className="rounded bg-[#4caf50] px-3 py-1 text-white">View {documentLink.type === 'orderslip' ? 'Order Slip' : 'Invoice'}</button>}</div>}
+      </div>
+
+      {showSearchModal && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+        <div className="w-full max-w-[560px] rounded-[5px] bg-white shadow-xl">
+          <div className="border-b border-[#ddd] px-5 py-4 text-[20px] font-semibold text-[#333]">Search Options</div>
+          <div className="space-y-4 px-6 py-5">
+            <label className="grid grid-cols-[130px_1fr] items-center gap-3 text-[14px]"><span className="text-right">Ref No.</span><input autoFocus value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Input Ref No." className={legacyInputClass} /></label>
+            <label className="grid grid-cols-[130px_1fr] items-center gap-3 text-[14px]"><span className="text-right">Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className={legacyInputClass}><option value="all">All Statuses</option><option value="pending">Pending</option><option value="submitted">Submitted</option><option value="approved">Approved</option><option value="posted">Posted</option><option value="cancelled">Cancelled</option></select></label>
+          </div>
+          <div className="flex justify-end gap-2 border-t border-[#ddd] px-5 py-4"><button type="button" onClick={() => setShowSearchModal(false)} className="rounded-[4px] border border-[#ccc] px-4 py-2 text-[13px]">Close</button><button type="button" onClick={() => setShowSearchModal(false)} className="rounded-[4px] bg-[#4caf50] px-4 py-2 text-[13px] text-white">Submit</button></div>
+        </div>
+      </div>}
+
+      {cancelModalOpen && selectedOrder && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"><div className="w-full max-w-lg rounded-[5px] bg-white p-5 shadow-xl"><h3 className="mb-3 text-[18px] font-semibold">Cancel Sales Order</h3><p className="mb-3 text-[13px] text-[#a33]">Are you sure you want to cancel this Sales Order? This cannot be undone.</p><label className="block text-[13px]"><span className="mb-1 block">Reason to Cancel:</span><input value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} className={legacyInputClass} /></label><div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => { setCancelModalOpen(false); setCancelReason(''); }} className="rounded border border-[#ccc] px-4 py-2 text-[13px]">Close</button><button type="button" onClick={() => void handleCancelOrder()} disabled={!cancelReason.trim() || cancelLoading} className="rounded bg-[#337ab7] px-4 py-2 text-[13px] text-white disabled:opacity-50">{cancelLoading ? 'Processing...' : 'Proceed'}</button></div></div></div>}
+
+      {conversionModalOpen && selectedOrder && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"><div className="w-full max-w-md rounded-[5px] bg-white p-5 shadow-xl"><h3 className="mb-3 text-[18px] font-semibold">Convert to Document</h3><p className="text-[13px] text-[#555]">This order will be converted based on the customer&apos;s transaction type. Suggested document: <strong>{documentSuggestion}</strong>.</p><div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setConversionModalOpen(false)} className="rounded border border-[#ccc] px-4 py-2 text-[13px]">Cancel</button><button type="button" onClick={() => void handleConversion()} disabled={conversionLoading} className="rounded bg-[#337ab7] px-4 py-2 text-[13px] text-white disabled:opacity-50">{conversionLoading ? 'Converting...' : 'Convert'}</button></div></div></div>}
+
+      <ConfirmModal isOpen={unpostModalOpen && Boolean(selectedOrder)} onClose={() => { if (!unpostLoading) setUnpostModalOpen(false); }} onConfirm={handleUnpost} title="Unpost Sales Order" message={`Unpost Sales Order ${selectedOrder?.order_no || selectedOrder?.reference_no || selectedOrder?.id || ''}? This will remove its linked invoice or order slip and return the sales order to pending.`} confirmLabel={unpostLoading ? 'Unposting...' : 'Unpost'} cancelLabel="Cancel" variant="warning" />
+    </div>
+  );
+
+  return legacyLayout;
 
   return (
     <div className="w-full flex flex-col bg-slate-50 dark:bg-slate-950 p-3 gap-4">
