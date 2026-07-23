@@ -53,14 +53,14 @@ const MONTH_OPTIONS = [
   'December',
 ];
 const ORDER_SLIP_LIST_COLUMN_WIDTHS = [
-  '8rem',
-  '26%',
-  '11rem',
-  '11rem',
-  '10rem',
-  '11rem',
-  '14%',
-  '10rem',
+  '10%',
+  '22%',
+  '11%',
+  '11%',
+  '11%',
+  '13%',
+  '12%',
+  '10%',
 ];
 const ORDER_SLIP_TAB_ID = 'sales-transaction-order-slip';
 
@@ -100,6 +100,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
   const [unpostLoading, setUnpostLoading] = useState(false);
   const [trackingNoDraft, setTrackingNoDraft] = useState('');
   const [trackingSaveLoading, setTrackingSaveLoading] = useState(false);
+  const [showSearchModal, setShowSearchModal] = useState(false);
 
   const isAdmin = useMemo(() => {
     const session = getLocalAuthSession();
@@ -260,12 +261,6 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
       console.error('Failed loading selected order slip detail:', err);
     }
   }, []);
-
-  useEffect(() => {
-    if (orderSlips.length > 0 && !selectedSlip) {
-      void selectSlip(orderSlips[0]);
-    }
-  }, [orderSlips, selectSlip, selectedSlip]);
 
   useEffect(() => {
     if (!orderSlips.length) return;
@@ -651,6 +646,141 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
       setTrackingSaveLoading(false);
     }
   };
+
+  const legacyInputClass = 'h-[35px] w-full rounded-[4px] border border-[#c9c9c9] bg-white px-3 text-[13px] text-[#333] outline-none';
+  const legacyLabelClass = 'whitespace-nowrap text-center text-[16px] font-semibold text-[#29475f]';
+  const legacyToday = new Date();
+  const legacyMonth = month || legacyToday.getMonth() + 1;
+  const legacyYear = year || legacyToday.getFullYear();
+  const legacyListDate = (value?: string | null, shortYear = false) => {
+    if (!value) return '';
+    const normalized = String(value).split('T')[0];
+    const [dateYear, dateMonth, dateDay] = normalized.split('-');
+    if (!dateYear || !dateMonth || !dateDay) return formatDate(value);
+    return `${dateMonth}/${dateDay}/${shortYear ? dateYear.slice(-2) : dateYear}`;
+  };
+  const filteredByLabel = month && year ? `Year: ${year} Month: ${MONTH_OPTIONS[month - 1].slice(0, 3)},` : 'All Records';
+  const displayOrderSlipStatus = (status: OrderSlipStatus) => {
+    if (status === OrderSlipStatus.CANCELLED) return 'Cancelled';
+    if (status === OrderSlipStatus.FINALIZED) return 'Posted';
+    return 'Unposted';
+  };
+  const selectedItems = selectedSlip?.items || [];
+
+  const legacyLayout = (
+    <div className="min-h-full overflow-y-auto bg-[#f4f4f4] px-5 py-10 text-[#202020] dark:bg-[#f4f4f4] dark:text-[#202020]" style={{ fontFamily: 'Arial, sans-serif' }}>
+      <div className="mx-auto w-full max-w-[1140px] space-y-[26px]">
+        <section className="overflow-hidden rounded-[5px] border border-[#d7d7d7] bg-white">
+          <div className="flex min-h-[83px] flex-col gap-5 border-b border-[#d7d7d7] px-[35px] py-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-[5px]">
+              <button type="button" onClick={() => setShowSearchModal(true)} className="rounded-[4px] bg-[#5d82a2] px-[13px] py-[9px] text-[14px] text-white hover:bg-[#50738f]">Search</button>
+              <button type="button" onClick={handleRefresh} className="rounded-[4px] bg-[#4caf50] px-[13px] py-[9px] text-[14px] text-white hover:bg-[#43a047]">Refresh</button>
+            </div>
+            <div className="flex flex-wrap items-center justify-end">
+              <span className="mr-[30px] text-[20px] font-semibold text-[#29475f]">Filter by Month:</span>
+              <select value={String(legacyMonth)} onChange={(event) => handleMonthChange(event.target.value)} className="h-[34px] w-[200px] rounded-l-[4px] border border-[#cfcfcf] bg-white px-4 text-[13px] outline-none" aria-label="Filter month">
+                {MONTH_OPTIONS.map((monthName, index) => <option key={monthName} value={String(index + 1)}>{monthName}</option>)}
+              </select>
+              <input type="number" value={legacyYear} onChange={(event) => handleYearChange(event.target.value)} className="ml-[16px] h-[34px] w-[87px] border border-[#cfcfcf] bg-white px-3 text-[13px] outline-none" aria-label="Filter year" />
+              <button type="button" onClick={() => void handleFilterApply()} className="h-[34px] rounded-r-[4px] bg-[#4caf50] px-[13px] text-[14px] text-white hover:bg-[#43a047]">Filter</button>
+            </div>
+          </div>
+
+          <div className="h-[207px] px-[25px] py-[25px]">
+            <div className="mb-[10px] text-[13px]"><strong>Filtered By:</strong> {filteredByLabel}</div>
+            <table className="w-full table-fixed border-collapse text-[12px]">
+              <colgroup>{ORDER_SLIP_LIST_COLUMN_WIDTHS.map((width, index) => <col key={`${width}-${index}`} style={{ width }} />)}</colgroup>
+              <thead><tr className="border-b-2 border-[#d5d5d5] text-left text-[14px] font-semibold">
+                <th className="px-2 pb-2">Date</th><th className="px-2 pb-2">Customer</th><th className="px-2 pb-2">SO No.</th><th className="px-2 pb-2">OS No.</th><th className="px-2 pb-2">DM No.</th><th className="px-2 pb-2">Tracking No.</th><th className="px-2 pb-2">Sales Person</th><th className="px-2 pb-2">Status</th>
+              </tr></thead>
+            </table>
+            <div className="max-h-[104px] overflow-y-auto">
+              <table className="w-full table-fixed border-collapse text-[13px]">
+                <colgroup>{ORDER_SLIP_LIST_COLUMN_WIDTHS.map((width, index) => <col key={`${width}-${index}`} style={{ width }} />)}</colgroup>
+                <tbody>
+                  {loading ? <tr><td colSpan={8} className="border border-[#d7d7d7] px-2 py-4 text-center text-[#777]">Loading order slips...</td></tr> : orderSlips.length === 0 ? <tr><td colSpan={8} className="border border-[#d7d7d7] px-2 py-4 text-center text-[#777]">No order slips found.</td></tr> : orderSlips.map((slip) => {
+                    const customer = customerMap.get(slip.contact_id);
+                    const selected = selectedSlip?.id === slip.id;
+                    const rowColor = slip.status === OrderSlipStatus.CANCELLED ? 'text-[#d33]' : selected ? 'text-[#245d91]' : 'text-[#202020]';
+                    return <tr key={slip.id} onClick={() => void selectSlip(slip)} className={`cursor-pointer hover:bg-[#f7f7f7] ${rowColor}`}>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px]">{legacyListDate(slip.sales_date)}</td>
+                      <td className="truncate border border-[#d7d7d7] px-2 py-[9px]" title={customer?.company || slip.customer_name || ''}>{customer?.company || slip.customer_name || ''}</td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{slip.sales_no || ''}</td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{slip.slip_no || ''}</td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px]">{slip.debit_memo_no || ''}</td>
+                      <td className="truncate border border-[#d7d7d7] px-2 py-[9px]">{slip.tracking_no || ''}</td>
+                      <td className="truncate border border-[#d7d7d7] px-2 py-[9px]">{slip.sales_person || ''}</td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px]">{displayOrderSlipStatus(slip.status)}</td>
+                    </tr>;
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section className="min-h-[456px] overflow-hidden rounded-[5px] border border-[#d7d7d7] bg-white">
+          <div className="flex h-[64px] items-center justify-between border-b border-[#d7d7d7] px-5">
+            <div className="relative flex h-full items-center text-[18px] font-semibold text-[#29475f] after:absolute after:bottom-[-1px] after:left-0 after:h-px after:w-[113px] after:bg-[#6a92b3]">ORDER SLIP</div>
+            <div className="flex items-center gap-[40px]"><span className="text-[21px] font-semibold text-[#29475f]">Order No. :</span><input readOnly value={selectedSlip?.slip_no || ''} aria-label="Order number" className="h-[35px] w-[100px] rounded-[4px] border border-[#c9c9c9] bg-white px-3 text-[12px] text-[#444]" /></div>
+          </div>
+
+          <div className="px-[25px] pb-[28px] pt-[29px]">
+            <div className="space-y-[17px]">
+              <div className="grid grid-cols-[7%_38%_10%_18%_9%_18%] items-center">
+                <label className={legacyLabelClass}>Sold to :</label><div><input readOnly value={selectedSlip ? selectedCustomerLabel : ''} placeholder="Select Customer" className={`${legacyInputClass} text-left`} /></div>
+                <label className={legacyLabelClass}>Date :</label><div className="text-center text-[16px] font-semibold text-[#29475f]">{legacyListDate(selectedSlip?.sales_date || legacyToday.toISOString(), true)}</div>
+                <label className={legacyLabelClass}>Terms Strictly:</label><div><input readOnly value={selectedSlip?.terms || ''} className={legacyInputClass} /></div>
+              </div>
+              <div className="grid grid-cols-[7%_38%_10%_18%_9%_18%] items-center">
+                <label className={legacyLabelClass}>Address :</label><div className="pl-[19px] pr-[3px]"><input readOnly value={selectedSlip?.delivery_address || ''} className={legacyInputClass} /></div>
+                <label className={legacyLabelClass}>Reference No.:</label><div className="pl-2"><input readOnly value={selectedSlip?.reference_no || ''} className={legacyInputClass} /></div>
+                <label className={legacyLabelClass}>Salesperson:</label><div><input readOnly value={selectedSlip?.sales_person || ''} className={legacyInputClass} /></div>
+              </div>
+              <div className="grid grid-cols-[7%_38%_10%_18%_9%_18%] items-center">
+                <label className={legacyLabelClass}>Shipped Via:</label><div className="pl-[19px] pr-[3px]"><input readOnly value={selectedSlip?.send_by || ''} className={legacyInputClass} /></div>
+                <div className="col-span-2"></div><label className={legacyLabelClass}>Prod Type:</label><div><input readOnly value={selectedSlip?.product_type || ''} className={legacyInputClass} /></div>
+              </div>
+              <div className="grid grid-cols-[7%_38%_10%_18%_9%_18%] items-center">
+                <div className="col-span-2"></div><label className={legacyLabelClass}>Del. to:</label><div className="pl-2"><input readOnly value={selectedSlip?.delivered_to || ''} className={legacyInputClass} /></div><label className={legacyLabelClass}>PO No.:</label><div><input readOnly value={selectedSlip?.po_number || ''} className={legacyInputClass} /></div>
+              </div>
+            </div>
+
+            <div className="mt-[9px] overflow-x-auto">
+              <table className="w-[97%] min-w-[900px] table-fixed border-collapse text-[12px]">
+                <colgroup><col className="w-[17.5%]" /><col className="w-[44.5%]" /><col className="w-[20.5%]" /><col className="w-[17.5%]" /></colgroup>
+                <thead><tr className="border-b-2 border-[#d5d5d5] text-left text-[14px] font-semibold"><th className="px-2 pb-2">Quantity</th><th className="px-2 pb-2">Description</th><th className="px-2 pb-2">Unit Price</th><th className="px-2 pb-2">Amount</th></tr></thead>
+                <tbody>{selectedItems.length > 0 ? selectedItems.map((item, index) => <tr key={item.id || `${item.item_code}-${index}`} className="bg-[#fafafa]">
+                  <td className="px-2 py-[9px]"><input readOnly value={item.qty} className="h-[35px] w-[70px] rounded border border-[#ccc] bg-white px-2" /></td><td className="px-2 py-[9px]"><input readOnly value={item.description || ''} className={legacyInputClass} /></td><td className="px-2 py-[9px]"><select disabled value={String(item.unit_price || 0)} className={`${legacyInputClass} disabled:bg-white disabled:text-[#333]`}><option value={String(item.unit_price || 0)}>{Number(item.unit_price || 0).toFixed(2)}</option></select></td><td className="px-2 py-[9px]"><input readOnly value={Number(item.amount || 0).toFixed(2)} className="h-[35px] w-[70px] rounded border border-[#ccc] bg-white px-2" /></td>
+                </tr>) : <tr className="bg-[#fafafa]"><td className="px-2 py-[9px]"><input readOnly className="h-[35px] w-[70px] rounded border border-[#ccc] bg-white px-2" /></td><td className="px-2 py-[9px]"><input readOnly className={legacyInputClass} /></td><td className="px-2 py-[9px]"><select disabled className={`${legacyInputClass} disabled:bg-white`}><option /></select></td><td className="px-2 py-[9px]"><input readOnly className="h-[35px] w-[70px] rounded border border-[#ccc] bg-white px-2" /></td></tr>}</tbody>
+                <tfoot><tr><td colSpan={4} className="px-2 py-[9px] text-right font-bold">Total: <span className="rounded-full bg-[#6f91af] px-2 py-[2px] font-bold text-white">{Number(selectedSlip?.grand_total || 0).toFixed(2)}</span></td></tr></tfoot>
+              </table>
+            </div>
+
+            {selectedSlip && <div className="mt-2 flex flex-wrap items-center justify-end gap-[5px] border-t border-[#e3e3e3] pt-3 print:hidden">
+              <select value={trackingNoDraft} onChange={(event) => setTrackingNoDraft(event.target.value)} aria-label="Tracking number" className="h-[34px] rounded border border-[#ccc] bg-white px-3 text-[13px]"><option value="">Select Tracking</option>{selectedSlip.tracking_no && !selectedSlip.tracking_options?.includes(selectedSlip.tracking_no) && <option value={selectedSlip.tracking_no}>{selectedSlip.tracking_no}</option>}{(selectedSlip.tracking_options || []).map((trackingNo) => <option key={trackingNo} value={trackingNo}>{trackingNo}</option>)}</select>
+              <button type="button" onClick={() => void handleSaveTrackingNo()} disabled={trackingSaveLoading || trackingNoDraft === (selectedSlip.tracking_no || '')} className="rounded-[4px] bg-[#5d82a2] px-[15px] py-[9px] text-[13px] text-white disabled:opacity-50">{trackingSaveLoading ? 'Saving...' : 'Update Tracking'}</button>
+              {selectedSlip.status === OrderSlipStatus.DRAFT && canProcessOrderSlip && <button type="button" onClick={() => void handleFinalize()} disabled={finalizing} className="rounded-[4px] bg-[#4caf50] px-[15px] py-[9px] text-[13px] text-white disabled:opacity-50">{finalizing ? 'Finalizing...' : 'Finalize'}</button>}
+              {(!selectedSlip.printed_at || isAdmin) && canProcessOrderSlip && <button type="button" onClick={() => void handlePrint()} disabled={printing} className="rounded-[4px] bg-[#5d82a2] px-[15px] py-[9px] text-[13px] text-white disabled:opacity-50">{printing ? 'Printing...' : 'Print'}</button>}
+              {selectedSlip.status !== OrderSlipStatus.CANCELLED && canProcessOrderSlip && <button type="button" onClick={() => setCancelModalOpen(true)} className="rounded-[4px] bg-[#d64b47] px-[15px] py-[9px] text-[13px] text-white">Cancel</button>}
+              {selectedSlip.status === OrderSlipStatus.FINALIZED && <button type="button" onClick={() => setUnpostModalOpen(true)} className="rounded-[4px] bg-[#d64b47] px-[15px] py-[9px] text-[13px] text-white">UNPOST</button>}
+              <button type="button" onClick={() => navigateToModule('salesorder', { orderId: selectedSlip.order_id })} className="rounded-[4px] border border-[#ccc] px-[15px] py-[8px] text-[13px]">View Sales Order</button>
+            </div>}
+          </div>
+        </section>
+      </div>
+
+      {showSearchModal && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+        <div className="w-full max-w-[560px] rounded-[5px] bg-white shadow-xl"><div className="border-b border-[#ddd] px-5 py-4 text-[20px] font-semibold text-[#333]">Search Options</div><div className="space-y-4 px-6 py-5"><label className="grid grid-cols-[130px_1fr] items-center gap-3 text-[14px]"><span className="text-right">Ref No.</span><input autoFocus value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Input Ref No." className={legacyInputClass} /></label><label className="grid grid-cols-[130px_1fr] items-center gap-3 text-[14px]"><span className="text-right">Customer</span><select onChange={(event) => setSearchTerm(event.target.value)} className={legacyInputClass} defaultValue=""><option value="">Select Customer</option>{sortedContacts.map((contact) => <option key={contact.id} value={contact.company}>{contact.company}</option>)}</select></label><label className="grid grid-cols-[130px_1fr] items-center gap-3 text-[14px]"><span className="text-right">Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | OrderSlipStatus)} className={legacyInputClass}><option value="all">All Statuses</option>{Object.values(OrderSlipStatus).map((status) => <option key={status} value={status}>{status}</option>)}</select></label></div><div className="flex justify-end gap-2 border-t border-[#ddd] px-5 py-4"><button type="button" onClick={() => setShowSearchModal(false)} className="rounded-[4px] border border-[#ccc] px-4 py-2 text-[13px]">Close</button><button type="button" onClick={() => setShowSearchModal(false)} className="rounded-[4px] bg-[#4caf50] px-4 py-2 text-[13px] text-white">Submit</button></div></div>
+      </div>}
+
+      {cancelModalOpen && selectedSlip && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"><div className="w-full max-w-lg rounded-[5px] bg-white p-5 shadow-xl"><h3 className="mb-3 text-[18px] font-semibold">Cancel Order Slip</h3><p className="mb-3 text-[13px] text-[#a33]">Are you sure you want to cancel this Order Slip? This cannot be undone.</p><label className="block text-[13px]"><span className="mb-1 block">Reason to Cancel:</span><input value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} className={legacyInputClass} /></label><div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => { setCancelModalOpen(false); setCancelReason(''); }} className="rounded border border-[#ccc] px-4 py-2 text-[13px]">Close</button><button type="button" onClick={() => void handleCancelOrderSlip()} disabled={!cancelReason.trim() || cancelLoading} className="rounded bg-[#337ab7] px-4 py-2 text-[13px] text-white disabled:opacity-50">{cancelLoading ? 'Processing...' : 'Proceed'}</button></div></div></div>}
+      {showPrintPreview && selectedSlip && <OrderSlipPrintPreview orderSlip={selectedSlip} customer={selectedCustomer} onClose={() => setShowPrintPreview(false)} />}
+      {unpostModalOpen && selectedSlip && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"><div className="w-full max-w-lg rounded-[5px] bg-white p-5 shadow-xl"><h3 className="mb-3 text-[18px] font-semibold">Unposting</h3><p className="mb-4 rounded border border-[#e7bbbb] bg-[#fff1f1] px-3 py-2 text-[13px] text-[#a33]">NOTE: Unposting will withdraw the Ledger entry, delete the DR/Invoice attached and open the sales inquiry.</p><div className="flex justify-end gap-2"><button type="button" onClick={() => setUnpostModalOpen(false)} className="rounded border border-[#ccc] px-4 py-2 text-[13px]">Close</button><button type="button" onClick={() => void handleUnpostOrderSlip()} disabled={unpostLoading} className="rounded bg-[#d64b47] px-4 py-2 text-[13px] text-white disabled:opacity-50">{unpostLoading ? 'Processing...' : 'Submit'}</button></div></div></div>}
+    </div>
+  );
+
+  return legacyLayout;
 
   return (
     <div className="w-full flex flex-col bg-slate-50 dark:bg-slate-950 p-3 gap-4">

@@ -113,8 +113,9 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterDay, setFilterDay] = useState('');
-  const [filterMonth, setFilterMonth] = useState('');
-  const [filterYear, setFilterYear] = useState('');
+  const [filterMonth, setFilterMonth] = useState(() => String(new Date().getMonth() + 1));
+  const [filterYear, setFilterYear] = useState(() => String(new Date().getFullYear()));
+  const [dateFilterApplied, setDateFilterApplied] = useState(false);
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [loadedSnapshot, setLoadedSnapshot] = useState<LoadedFormSnapshot | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -156,6 +157,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   const [inquiries, setInquiries] = useState<SalesInquiry[]>([]);
   const [listLoading, setListLoading] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
+  const [showSearchModal, setShowSearchModal] = useState(false);
 
   const getInquirySortTime = (inquiry: SalesInquiry) => {
     const value = inquiry.sales_date || inquiry.created_at || '';
@@ -468,12 +470,12 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
       const dayValue = parsedDate ? String(parsedDate.getDate()) : '';
       const monthValue = parsedDate ? String(parsedDate.getMonth() + 1) : '';
       const yearValue = parsedDate ? String(parsedDate.getFullYear()) : '';
-      const matchesDay = !filterDay || dayValue === String(Number(filterDay));
-      const matchesMonth = !filterMonth || monthValue === String(Number(filterMonth));
-      const matchesYear = !filterYear || yearValue === filterYear;
+      const matchesDay = !dateFilterApplied || !filterDay || dayValue === String(Number(filterDay));
+      const matchesMonth = !dateFilterApplied || !filterMonth || monthValue === String(Number(filterMonth));
+      const matchesYear = !dateFilterApplied || !filterYear || yearValue === filterYear;
       return matchesStatus && matchesQuery && matchesDay && matchesMonth && matchesYear;
     }).slice().sort(sortByLatestInquiry);
-  }, [customerMap, filterDay, filterMonth, filterYear, inquiries, debouncedSearch, statusFilter]);
+  }, [customerMap, dateFilterApplied, filterDay, filterMonth, filterYear, inquiries, debouncedSearch, statusFilter]);
 
   // Generate initial inquiry number and preload data
   useEffect(() => {
@@ -1241,6 +1243,185 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
     return 'text-slate-900 dark:text-slate-100';
   };
   const isManualItem = (item: InquiryItemRow) => Boolean(item.isManual);
+
+  const legacyInputClass = 'h-[34px] w-full rounded-[4px] border border-[#c9c9c9] bg-white px-3 text-[13px] text-[#333] outline-none focus:border-[#7a9ab5] disabled:bg-[#f2f2f2] disabled:text-[#777]';
+  const legacyLabelClass = 'whitespace-nowrap text-right text-[16px] font-semibold text-[#29475f]';
+  const formatLegacyListDate = (value?: string | null) => {
+    if (!value) return '';
+    const normalized = String(value).split('T')[0];
+    const [year, month, day] = normalized.split('-');
+    return year && month && day ? `${month}/${day}/${year}` : formatDate(value);
+  };
+  const clearInquiryFilters = () => {
+    const today = new Date();
+    setSearchTerm('');
+    setStatusFilter('all');
+    setFilterDay('');
+    setFilterMonth(String(today.getMonth() + 1));
+    setFilterYear(String(today.getFullYear()));
+    setDateFilterApplied(false);
+    void refetchInquiries();
+  };
+  const openProspectiveCustomer = () => {
+    window.dispatchEvent(new CustomEvent('workflow:navigate', {
+      detail: {
+        tab: 'maintenance-customer-customer-database',
+        payload: { action: 'create', status: 'Prospective' },
+      },
+    }));
+  };
+  const filteredByLabel = `Year: ${filterYear || 'All'} Month: ${filterMonth ? monthOptions[Number(filterMonth) - 1]?.slice(0, 3) : 'All'},${filterDay ? ` Day: ${filterDay}` : ''}`;
+
+  const legacyLayout = (
+    <div className="min-h-full overflow-y-auto bg-[#f4f4f4] px-5 py-10 text-[#202020] dark:bg-[#f4f4f4] dark:text-[#202020]" style={{ fontFamily: 'Arial, sans-serif' }}>
+      <div className="mx-auto w-full max-w-[1140px] space-y-[26px]">
+        <section className="overflow-hidden rounded-[5px] border border-[#d7d7d7] bg-white">
+          <div className="flex min-h-[83px] flex-col gap-5 border-b border-[#d7d7d7] px-[35px] py-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-[5px]">
+              <button type="button" onClick={() => setShowSearchModal(true)} className="rounded-[4px] bg-[#5d82a2] px-[13px] py-[9px] text-[14px] text-white hover:bg-[#50738f]">Search</button>
+              <button type="button" onClick={clearInquiryFilters} className="rounded-[4px] bg-[#4caf50] px-[13px] py-[9px] text-[14px] text-white hover:bg-[#43a047]">Refresh</button>
+              <button type="button" onClick={startNewInquiry} className="rounded-[4px] bg-[#4caf50] px-[13px] py-[9px] text-[14px] text-white hover:bg-[#43a047]">Create New</button>
+              <button type="button" onClick={openProspectiveCustomer} className="rounded-[4px] bg-[#5d82a2] px-[13px] py-[9px] text-[14px] text-white hover:bg-[#50738f]">Prospective</button>
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-0">
+              <span className="mr-[30px] text-[20px] font-semibold text-[#29475f]">By Month:</span>
+              <input type="number" min="1" max="31" value={filterDay} onChange={(event) => setFilterDay(event.target.value)} className="h-[34px] w-[44px] rounded-l-[3px] border border-[#cfcfcf] bg-white px-2 text-[13px] outline-none" aria-label="Filter day" />
+              <select value={filterMonth} onChange={(event) => setFilterMonth(event.target.value)} className="h-[34px] w-[174px] border-y border-[#cfcfcf] bg-white px-4 text-[13px] outline-none" aria-label="Filter month">
+                {monthOptions.map((month, index) => <option key={month} value={String(index + 1)}>{month}</option>)}
+              </select>
+              <input type="number" value={filterYear} onChange={(event) => setFilterYear(event.target.value)} className="h-[34px] w-[87px] border border-[#cfcfcf] bg-white px-3 text-[13px] outline-none" aria-label="Filter year" />
+              <button type="button" onClick={() => setDateFilterApplied(true)} className="ml-0 h-[34px] rounded-r-[4px] bg-[#4caf50] px-[13px] text-[14px] text-white hover:bg-[#43a047]">Filter</button>
+            </div>
+          </div>
+
+          <div className="h-[207px] px-[25px] py-[25px]">
+            <div className="mb-[10px] text-[13px]"><strong>Filtered By:</strong> {filteredByLabel}</div>
+            <table className="w-full table-fixed border-collapse text-[12px]">
+              <colgroup>{inquiryListColumnWidths.map((width, index) => <col key={`${width}-${index}`} style={{ width }} />)}</colgroup>
+              <thead><tr className="border-b-2 border-[#d5d5d5] text-left text-[14px] font-semibold">
+                <th className="px-2 pb-2">Date</th><th className="px-2 pb-2">Customer</th><th className="px-2 pb-2">SI No.</th><th className="px-2 pb-2">SO No.</th><th className="px-2 pb-2">Transaction No.</th><th className="px-2 pb-2">Sales Person</th><th className="px-2 pb-2">Status</th>
+              </tr></thead>
+            </table>
+            <div className="max-h-[104px] overflow-y-auto">
+              <table className="w-full table-fixed border-collapse text-[13px]">
+                <colgroup>{inquiryListColumnWidths.map((width, index) => <col key={`${width}-${index}`} style={{ width }} />)}</colgroup>
+                <tbody>
+                  {listLoading ? <tr><td colSpan={7} className="border border-[#d7d7d7] px-2 py-4 text-center text-[#777]">Loading inquiries...</td></tr> : filteredInquiries.length === 0 ? <tr><td colSpan={7} className="border border-[#d7d7d7] px-2 py-4 text-center text-[#777]">No inquiries found.</td></tr> : filteredInquiries.map((inquiry) => {
+                    const customer = customerMap.get(inquiry.contact_id);
+                    const isActive = selectedInquiry?.id === inquiry.id && !isCreatingNew;
+                    const rowColor = inquiry.status === SalesInquiryStatus.CANCELLED ? 'text-[#d33]' : isActive ? 'text-[#245d91]' : 'text-[#202020]';
+                    return <tr key={inquiry.id} onClick={() => void selectInquiry(inquiry)} className={`cursor-pointer hover:bg-[#f7f7f7] ${rowColor}`}>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px]">{formatLegacyListDate(inquiry.sales_date)}</td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px] truncate" title={customer?.company || ''}>{customer?.company || ''}</td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px]"><span className="underline">{formatInquiryDisplayNo(inquiry.inquiry_no)}</span> <Copy className="ml-1 inline h-3.5 w-3.5 text-[#337ab7]" /></td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{inquiry.so_no || ''}</td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{inquiry.invoice_no || inquiry.dr_no || ''}</td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px] truncate">{inquiry.sales_person || ''}</td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px]">{inquiry.status}</td>
+                    </tr>;
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section className="min-h-[695px] overflow-visible rounded-[5px] border border-[#d7d7d7] bg-white">
+          <div className="flex h-[64px] items-center justify-between border-b border-[#d7d7d7] px-5">
+            <div className="relative flex h-full items-center text-[18px] font-semibold text-[#29475f] after:absolute after:bottom-[-1px] after:left-0 after:h-px after:w-[135px] after:bg-[#6a92b3]">SALES INQUIRY</div>
+            <div className="flex items-center gap-[28px]">
+              <span className="text-[23px] font-semibold text-[#29475f]">INQ No. :</span>
+              <input readOnly value={activeInquiryNumberDisplay} className="h-[35px] w-[116px] rounded-[4px] border border-[#c9c9c9] bg-[#f2f2f2] px-3 text-[12px] text-[#444]" />
+            </div>
+          </div>
+
+          <form id="salesInquiryLegacyForm" onSubmit={handleSubmit} className="px-[25px] pb-[30px] pt-[38px]">
+            <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
+            {submitError && <div className="mb-3 rounded border border-[#e8b5b5] bg-[#fff3f3] px-3 py-2 text-[12px] text-[#a33]">{submitError}</div>}
+            {isConversionLocked && <div className="mb-3 rounded border border-[#e1c57b] bg-[#fff9e9] px-3 py-2 text-[12px] text-[#725b1b]">This inquiry is locked because it already has a sales document.</div>}
+
+            <div className="mb-[35px] overflow-x-auto">
+              <table className="w-full min-w-[900px] table-fixed border-collapse text-center text-[13px]">
+                <thead><tr>{['Dealership Since', 'Dealership Sales', 'Dealership Quota', `Total Sales for ${currentMonthLabel}`, 'Customer Since', 'Credit Limit', 'Terms', 'Balance'].map((label) => <th key={label} className="border border-[#d7d7d7] px-2 py-[10px] font-normal">{label}</th>)}</tr></thead>
+                <tbody><tr>
+                  <td className="border border-[#d7d7d7] px-2 py-2">{displayMetricValue(summaryCustomer?.dealershipSince)}</td>
+                  <td className="border border-[#d7d7d7] px-2 py-2">{displayMetricValue(summaryCustomer?.dealershipSales, true)}</td>
+                  <td className="border border-[#d7d7d7] px-2 py-2">{displayMetricValue(summaryCustomer?.dealershipQuota, true)}</td>
+                  <td className="border border-[#d7d7d7] px-2 py-2">{displayMetricValue(summaryCustomer?.monthlySales, true)}</td>
+                  <td className="border border-[#d7d7d7] px-2 py-2">{displayMetricValue(summaryCustomer?.since || summaryCustomer?.customerSince)}</td>
+                  <td className="border border-[#d7d7d7] px-2 py-2">{displayMetricValue(creditLimit, true)}</td>
+                  <td className="border border-[#d7d7d7] px-2 py-2">{displayMetricValue(terms)}</td>
+                  <td className="border border-[#d7d7d7] px-2 py-2">{displayMetricValue(summaryCustomer?.balance, true)}</td>
+                </tr></tbody>
+              </table>
+            </div>
+
+            {exceedsCreditLimit && <div className="mb-3 text-center text-[12px] text-[#b06b00]">Balance exceeds credit limit. The old system treats this as informational only, so inquiry creation can still proceed.</div>}
+
+            <table className="w-full border-separate border-spacing-y-[9px] text-[13px]">
+              <tbody>
+                <tr><td><div className="grid grid-cols-[17%_40%_10.5%_10.5%_9.5%_12.5%] items-center"><label className={legacyLabelClass}>Sold to :</label><div className="pl-3"><CustomerAutocomplete contacts={customers} selectedCustomer={selectedCustomer} disabled={isReadOnly} onSelect={(customer) => handleCustomerSelect(customer)} placeholder="Select Customer" inputClassName={`h-[34px] rounded-[4px] border-[#c9c9c9] bg-white text-center text-[13px] ${validationErrors.customer ? 'border-red-400' : ''}`} /></div><label className={legacyLabelClass}>Date :</label><div className="pl-2"><input type="date" required disabled={isReadOnly} value={salesDate} onChange={(event) => setSalesDate(event.target.value)} className={legacyInputClass} /></div><label className={legacyLabelClass}>Sales Person:</label><div className="pl-2"><input type="text" disabled={isReadOnly} value={salesPerson} onChange={(event) => setSalesPerson(event.target.value)} className={legacyInputClass} /></div></div></td></tr>
+                <tr><td><div className="grid grid-cols-[17%_40%_10.5%_10.5%_9.5%_12.5%] items-center"><label className={legacyLabelClass}>Delivery Address :</label><div className="pl-3"><input type="text" disabled={isReadOnly} value={deliveryAddress} onChange={(event) => setDeliveryAddress(event.target.value)} className={legacyInputClass} /></div><label className={legacyLabelClass}>Our Reference:</label><div className="pl-2"><input type="text" readOnly value={referenceNo} className={legacyInputClass} /></div><label className={legacyLabelClass}>Your Reference:</label><div className="pl-2"><select disabled={isReadOnly || !selectedCustomer} value={customerReference} onChange={(event) => setCustomerReference(event.target.value)} className={legacyInputClass}><option value="">Select reference</option>{customerReferenceOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div></div></td></tr>
+                <tr><td><div className="grid grid-cols-[12%_20%_10%_19%_10%_11%_9%_9%] items-center"><label className={legacyLabelClass}>Send By:</label><div className="pl-3"><SearchableSelect value={sendBy} options={courierOptions.map((option) => ({ value: option.name, label: option.name }))} onChange={setSendBy} placeholder="Select..." searchPlaceholder="Search courier..." disabled={isReadOnly} /></div><label className={legacyLabelClass}>Price Group:</label><div className="pl-2"><select disabled={isReadOnly || !selectedCustomer} value={priceGroup} onChange={(event) => void handlePriceGroupChange(event.target.value)} className={legacyInputClass}>{!selectedCustomer && <option value="">Select</option>}{WRITABLE_PRICING_GROUP_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div><label className={legacyLabelClass}>Credit Limit:</label><div className="pl-2"><input type="text" readOnly value={creditLimit ? creditLimit.toLocaleString('en-US', { minimumFractionDigits: 2 }) : ''} className={legacyInputClass} /></div><label className={legacyLabelClass}>Terms Strictly:</label><div className="pl-2"><input type="text" readOnly value={terms} className={legacyInputClass} /></div></div></td></tr>
+                <tr><td><div className="grid grid-cols-[17%_63%_10%_10%] items-center"><label className={legacyLabelClass}>Promise to Pay:</label><div className="pl-3"><input type="text" disabled={isReadOnly} value={promiseToPay} onChange={(event) => setPromiseToPay(event.target.value)} placeholder="if applicable" className={legacyInputClass} /></div><label className={legacyLabelClass}>PO No.:</label><div className="pl-2"><input type="text" disabled={isReadOnly} value={poNumber} onChange={(event) => setPoNumber(event.target.value)} placeholder="if applicable" className={legacyInputClass} /></div></div></td></tr>
+                <tr><td><div className="grid grid-cols-[17%_63%_10%_10%] items-center"><label className={legacyLabelClass}>Remarks:</label><div className="pl-3"><SearchableSelect value={remarks} options={remarkTemplateOptions.map((option) => ({ value: option.name, label: option.name }))} onChange={setRemarks} placeholder="No Remark" searchPlaceholder="Search remarks..." disabled={isReadOnly} /></div><label className={legacyLabelClass}>Inquiry Type:</label><div className="pl-2"><select disabled={isReadOnly} value={showNewInquiryType ? 'AddNew' : inquiryType} onChange={(event) => { if (event.target.value === 'AddNew') { setShowNewInquiryType(true); setInquiryType('General'); } else { setInquiryType(event.target.value); setShowNewInquiryType(false); } }} className={legacyInputClass}><option value="General">Phone Call</option><option value="Bulk Order">Bulk Order</option><option value="AddNew">Add New Type</option></select></div></div></td></tr>
+                {showNewInquiryType && <tr><td><div className="ml-[17%] w-[40%] pl-3"><input type="text" disabled={isReadOnly} value={newInquiryType} onChange={(event) => setNewInquiryType(event.target.value)} placeholder="Input Inquiry Type" className={legacyInputClass} /></div></td></tr>}
+                <tr><td><div className="grid grid-cols-[15%_45%_10%_11%_19%] items-center"><label className={legacyLabelClass}>Urgency/Type:</label><div className="pl-3"><select disabled={isReadOnly} value={urgency} onChange={(event) => setUrgency(event.target.value)} className={legacyInputClass}><option value="N/A">N/A</option><option value="Urgent">Urgent</option><option value="By Schedule">By Schedule</option></select></div><label className={legacyLabelClass}>Urgency/Date:</label><div className="pl-2"><input type="date" disabled={isReadOnly || urgency === 'N/A'} value={urgencyDate} onChange={(event) => setUrgencyDate(event.target.value)} className={legacyInputClass} /></div><div></div></div></td></tr>
+              </tbody>
+            </table>
+
+            <button type="button" aria-label="Add Item" onClick={addItemRow} disabled={isReadOnly} className="ml-[190px] mt-[9px] rounded-[3px] bg-[#91a9bd] px-[12px] py-[8px] text-[12px] text-white hover:bg-[#7e99b0] disabled:opacity-50">Add Inquiry</button>
+            <button type="submit" aria-label="Create Inquiry" className="sr-only">Create Inquiry</button>
+
+            <div className="mt-[24px] overflow-x-auto">
+              <table className="w-full min-w-[980px] border-collapse text-[12px]">
+                <thead><tr className="border-b-2 border-[#d5d5d5] text-center text-[14px] font-semibold">
+                  <th className="w-[70px] px-2 pb-2">Qty.</th><th className="w-[140px] px-2 pb-2">Part No.</th><th className="w-[140px] px-2 pb-2">Item Code</th><th className="w-[120px] px-2 pb-2">Location</th><th className="px-2 pb-2">Description</th><th className="w-[105px] px-2 pb-2">Unit price</th><th className="w-[105px] px-2 pb-2">Amount</th><th className="w-[120px] px-2 pb-2">Remark</th><th className="w-[100px] px-2 pb-2">Approval</th>
+                </tr></thead>
+                <tbody>{items.map((item) => <tr key={item.tempId} className="border-b border-[#e1e1e1]">
+                  <td className="px-1 py-2"><input type="number" min="1" disabled={isReadOnly} value={item.qty} onChange={(event) => updateItemRow(item.tempId, 'qty', event.target.value === '' ? '' : Number(event.target.value))} className="w-full border border-[#ccc] px-1 py-1 text-center" /></td>
+                  <td className="px-2 py-2 text-center">{isManualItem(item) ? <input value={item.part_no || ''} onChange={(event) => updateItemRow(item.tempId, 'part_no', event.target.value.toUpperCase())} className="w-full border border-[#ccc] px-1 py-1" /> : item.part_no || ''}</td>
+                  <td className="px-2 py-2 text-center">{isManualItem(item) ? <input value={item.item_code || ''} onChange={(event) => updateItemRow(item.tempId, 'item_code', event.target.value.toUpperCase())} className="w-full border border-[#ccc] px-1 py-1" /> : item.item_code || ''}</td>
+                  <td className="px-2 py-2 text-center">{item.location || ''}</td>
+                  <td className="px-2 py-2">{!item.item_id && !isManualItem(item) ? <button type="button" onClick={() => handleOpenProductModal(item.tempId!)} className="text-[#337ab7] underline">Click to search product</button> : isManualItem(item) ? <input value={item.description || ''} onChange={(event) => updateItemRow(item.tempId, 'description', event.target.value.toUpperCase())} className="w-full border border-[#ccc] px-1 py-1" /> : item.description || ''}</td>
+                  <td className="px-2 py-2 text-right"><input type="number" readOnly={!isManualItem(item)} value={item.unit_price} onChange={(event) => updateItemRow(item.tempId, 'unit_price', Number(event.target.value))} className="w-full border border-[#ccc] bg-white px-1 py-1 text-right read-only:bg-[#f5f5f5]" /></td>
+                  <td className="px-2 py-2 text-right">{Number(item.amount || 0).toFixed(2)}</td>
+                  <td className={`px-2 py-2 text-center ${remarkClassName(item.remark)}`}>{item.remark || ''}</td>
+                  <td className="px-2 py-2 text-center"><button type="button" onClick={() => removeItemRow(item.tempId)} disabled={isReadOnly} className="text-[#c84848] underline disabled:opacity-40">Remove</button></td>
+                </tr>)}</tbody>
+                <tfoot><tr><td colSpan={6} className="px-2 py-3 text-right font-bold">Grand Total:</td><td className="px-2 py-3"><span className="rounded-full bg-[#6f91af] px-2 py-[2px] font-bold text-white">{grandTotal.toFixed(2)}</span></td><td colSpan={2}></td></tr></tfoot>
+              </table>
+            </div>
+
+            {(items.length > 0 || (!isCreatingNew && selectedInquiry)) && <div className="mt-3 flex flex-wrap items-center gap-[5px] border-t border-[#e3e3e3] pt-4">
+              <button type="button" onClick={handleDeleteClick} className="rounded-[4px] bg-[#d64b47] px-[20px] py-[9px] text-[13px] text-white">{isCreatingNew ? 'Clear' : 'Cancel'}</button>
+              {printableInquiry && <button type="button" onClick={handlePrint} className="rounded-[4px] bg-[#4caf50] px-[20px] py-[9px] text-[13px] text-white">Print</button>}
+              <button type="submit" disabled={loading || isReadOnly} className="rounded-[4px] bg-[#4caf50] px-[20px] py-[9px] text-[13px] text-white disabled:opacity-50">{loading ? 'Saving...' : 'Save'}</button>
+              {canGenerateSO && <button type="button" onClick={handleFinalizeInquiry} disabled={loading} className="ml-auto rounded-[4px] bg-[#4caf50] px-[20px] py-[9px] text-[13px] text-white disabled:opacity-50">Generate SO</button>}
+              <button type="button" onClick={addManualItemRow} disabled={isReadOnly} className="rounded-[4px] bg-[#5d82a2] px-[16px] py-[9px] text-[13px] text-white disabled:opacity-50">Not Listed Product</button>
+            </div>}
+          </form>
+        </section>
+      </div>
+
+      {showSearchModal && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+        <div className="w-full max-w-[560px] rounded-[5px] bg-white shadow-xl">
+          <div className="border-b border-[#ddd] px-5 py-4 text-[20px] font-semibold text-[#333]">Search Options</div>
+          <div className="space-y-4 px-6 py-5">
+            <label className="grid grid-cols-[130px_1fr] items-center gap-3 text-[14px]"><span className="text-right">Ref No.</span><input autoFocus value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Input Ref No." className={legacyInputClass} /></label>
+            <label className="grid grid-cols-[130px_1fr] items-center gap-3 text-[14px]"><span className="text-right">Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | SalesInquiryStatus)} className={legacyInputClass}><option value="all">All Statuses</option>{oldSystemInquiryStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
+          </div>
+          <div className="flex justify-end gap-2 border-t border-[#ddd] px-5 py-4"><button type="button" onClick={() => setShowSearchModal(false)} className="rounded-[4px] border border-[#ccc] px-4 py-2 text-[13px]">Close</button><button type="button" onClick={() => setShowSearchModal(false)} className="rounded-[4px] bg-[#4caf50] px-4 py-2 text-[13px] text-white">Submit</button></div>
+        </div>
+      </div>}
+
+      {showPrintPreview && printableInquiry && <SalesInquiryPrintPreview inquiry={printableInquiry} customer={selectedCustomer} inquiryNumberLabel={activeInquiryNumberDisplay} preparedBy={String(getLocalAuthSession()?.userProfile?.full_name || '').trim()} onClose={() => setShowPrintPreview(false)} />}
+      {showDeleteModal && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"><div className="w-full max-w-sm rounded-[5px] bg-white p-5 shadow-xl"><h3 className="mb-3 text-[18px] font-semibold">{selectedInquiry && !isCreatingNew ? 'Cancel Sales Inquiry' : 'Clear Sales Inquiry'}</h3><p className="mb-5 text-[14px] text-[#555]">{selectedInquiry && !isCreatingNew ? 'Are you sure you want to cancel this Sales Inquiry?' : 'Are you sure you want to clear this draft?'}</p><div className="flex justify-end gap-2"><button type="button" onClick={() => setShowDeleteModal(false)} className="rounded border border-[#ccc] px-4 py-2 text-[13px]">Close</button><button type="button" onClick={handleDeleteConfirm} disabled={deleteConfirming} className="rounded bg-[#337ab7] px-4 py-2 text-[13px] text-white">{deleteConfirming ? 'Working...' : 'Proceed'}</button></div></div></div>}
+      <ProductSearchModal isOpen={showProductModal} onClose={() => setShowProductModal(false)} onSelect={handleProductSelect} />
+    </div>
+  );
+
+  return legacyLayout;
 
   return (
     <div className="w-full flex flex-col bg-slate-50 dark:bg-slate-950 p-3 gap-4">

@@ -85,8 +85,14 @@ const parseApiErrorMessage = async (response: Response): Promise<string> => {
 const getLocalProductContext = () => {
   const session = getLocalAuthSession();
   const userId = Number(session?.context?.user?.id || 1);
+  const mainId = Number(
+    session?.context?.user?.main_id
+    || session?.context?.user?.main_userid
+    || API_MAIN_ID
+    || 1
+  );
   return {
-    mainId: API_MAIN_ID,
+    mainId: Number.isFinite(mainId) && mainId > 0 ? mainId : 1,
     userId: Number.isFinite(userId) && userId > 0 ? userId : 1,
   };
 };
@@ -127,6 +133,7 @@ export interface FetchProductsPageResult {
 }
 
 export const fetchProducts = async (): Promise<Product[]> => {
+  const { mainId } = getLocalProductContext();
   const perPage = 500;
   let page = 1;
   let totalPages = 1;
@@ -134,7 +141,7 @@ export const fetchProducts = async (): Promise<Product[]> => {
 
   while (page <= totalPages) {
     const query = new URLSearchParams({
-      main_id: String(API_MAIN_ID),
+      main_id: String(mainId),
       page: String(page),
       per_page: String(perPage),
       status: 'all',
@@ -154,6 +161,7 @@ export const fetchProducts = async (): Promise<Product[]> => {
 };
 
 export const fetchProductsPage = async (params: FetchProductsPageParams = {}): Promise<FetchProductsPageResult> => {
+  const { mainId } = getLocalProductContext();
   const {
     search = '',
     partNo = '',
@@ -167,7 +175,7 @@ export const fetchProductsPage = async (params: FetchProductsPageParams = {}): P
   } = params;
 
   const query = new URLSearchParams({
-    main_id: String(API_MAIN_ID),
+    main_id: String(mainId),
     search,
     part_no: partNo,
     item_code: itemCode,
@@ -240,7 +248,7 @@ export const updateProduct = async (id: string, updates: Partial<Product>): Prom
 };
 
 export const fetchProductById = async (id: string): Promise<Product | null> => {
-  const query = new URLSearchParams({ main_id: String(API_MAIN_ID) });
+  const query = new URLSearchParams({ main_id: String(getLocalProductContext().mainId) });
   const response = await fetch(`${API_BASE_URL}/products/${encodeURIComponent(id)}?${query.toString()}`);
   if (!response.ok) return null;
   const payload = await response.json();
@@ -250,7 +258,7 @@ export const fetchProductById = async (id: string): Promise<Product | null> => {
 };
 
 export const deleteProduct = async (id: string): Promise<void> => {
-  const query = new URLSearchParams({ main_id: String(API_MAIN_ID) });
+  const query = new URLSearchParams({ main_id: String(getLocalProductContext().mainId) });
   const response = await fetch(`${API_BASE_URL}/products/${encodeURIComponent(id)}?${query.toString()}`, {
     method: 'DELETE',
   });
