@@ -132,7 +132,9 @@ export interface FetchProductsPageResult {
   };
 }
 
-export const fetchProducts = async (): Promise<Product[]> => {
+export const fetchProducts = async (
+  status: ProductListStatus = 'all',
+): Promise<Product[]> => {
   const { mainId } = getLocalProductContext();
   const perPage = 500;
   let page = 1;
@@ -144,7 +146,7 @@ export const fetchProducts = async (): Promise<Product[]> => {
       main_id: String(mainId),
       page: String(page),
       per_page: String(perPage),
-      status: 'all',
+      status,
     });
 
     const response = await fetch(`${API_BASE_URL}/products?${query.toString()}`);

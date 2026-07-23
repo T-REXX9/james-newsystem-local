@@ -157,7 +157,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
     setCurrentUser((session?.userProfile || null) as UserProfile | null);
     void Promise.all([
       refreshTransfers(),
-      fetchProducts().then(setProducts).catch((error) => {
+      fetchProducts('active').then(setProducts).catch((error) => {
         console.error('Unable to load transfer products:', error);
         setProducts([]);
       }),

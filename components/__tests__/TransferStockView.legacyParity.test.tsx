@@ -3,7 +3,23 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import TransferStockView from '../TransferStockView';
 
-const { addToastMock } = vi.hoisted(() => ({ addToastMock: vi.fn() }));
+const { addToastMock, fetchProductsMock } = vi.hoisted(() => ({
+  addToastMock: vi.fn(),
+  fetchProductsMock: vi.fn(async () => [{
+    id: 'item-session-1',
+    part_no: 'P-DLLA157SN725',
+    item_code: 'QK2-1850',
+    description: 'NOZZLE',
+    brand: 'ISHINOMOTO',
+    status: 'Active',
+    stock_wh1: 6,
+    stock_wh2: 2,
+    stock_wh3: 0,
+    stock_wh4: 0,
+    stock_wh5: 0,
+    stock_wh6: 0,
+  }]),
+}));
 
 const transfer = {
   id: 'transfer-ref-1',
@@ -46,20 +62,7 @@ vi.mock('../../services/transferStockService', () => ({
 }));
 
 vi.mock('../../services/productLocalApiService', () => ({
-  fetchProducts: vi.fn(async () => [{
-    id: 'item-session-1',
-    part_no: 'P-DLLA157SN725',
-    item_code: 'QK2-1850',
-    description: 'NOZZLE',
-    brand: 'ISHINOMOTO',
-    status: 'Active',
-    stock_wh1: 6,
-    stock_wh2: 2,
-    stock_wh3: 0,
-    stock_wh4: 0,
-    stock_wh5: 0,
-    stock_wh6: 0,
-  }]),
+  fetchProducts: fetchProductsMock,
 }));
 
 vi.mock('../../services/localAuthService', () => ({
@@ -89,6 +92,7 @@ describe('TransferStockView legacy parity', () => {
     render(<TransferStockView />);
 
     await waitFor(() => expect(screen.getByText('TR No. : TR-10321')).toBeInTheDocument());
+    expect(fetchProductsMock).toHaveBeenCalledWith('active');
     expect(screen.getAllByText('Transfer Date:').length).toBeGreaterThan(0);
     expect(screen.getByText('Source')).toBeInTheDocument();
     expect(screen.getByText('Destination')).toBeInTheDocument();
