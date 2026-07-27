@@ -20,11 +20,6 @@ export default defineConfig(({ mode }) => {
     env.REALTIME_HOST || process.env.REALTIME_HOST,
     '127.0.0.1'
   )}:${env.REALTIME_PORT || process.env.REALTIME_PORT || '8082'}`;
-  const extraAllowedHosts = (env.VITE_ALLOWED_HOSTS || '')
-    .split(',')
-    .map((host) => host.trim())
-    .filter(Boolean);
-
   if (env.SUPABASE_SERVICE_ROLE_KEY) {
     process.env.SUPABASE_SERVICE_ROLE_KEY = env.SUPABASE_SERVICE_ROLE_KEY;
   }
@@ -33,11 +28,7 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 8080,
       host: '0.0.0.0',
-      allowedHosts: [
-        'influential-mouthily-dominik.ngrok-free.dev',
-        '.ngrok-free.dev',
-        ...extraAllowedHosts,
-      ],
+      allowedHosts: true,
       proxy: {
         '/api': {
           target: apiTarget,
@@ -53,11 +44,7 @@ export default defineConfig(({ mode }) => {
     preview: {
       host: '0.0.0.0',
       port: 3305,
-      allowedHosts: [
-        'influential-mouthily-dominik.ngrok-free.dev',
-        '.ngrok-free.dev',
-        ...extraAllowedHosts,
-      ],
+      allowedHosts: true,
       proxy: {
         '/api': {
           target: apiTarget,
