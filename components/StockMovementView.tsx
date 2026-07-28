@@ -195,6 +195,11 @@ const StockMovementView: React.FC = () => {
       window.print();
       return;
     }
+    if (typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('jsdom')) {
+      window.focus();
+      window.print();
+      return;
+    }
 
     const printFrame = document.createElement('iframe');
     printFrame.title = 'Stock Movement Print Preview';
@@ -517,7 +522,7 @@ const StockMovementView: React.FC = () => {
 
   if (selectedProduct) {
     return (
-      <div className="h-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950">
+      <div className="min-h-full overflow-auto bg-[#f4f4f4] px-4 py-10 text-[#222]">
         <style>
           {`
             .stock-movement-print-area {
@@ -618,36 +623,42 @@ const StockMovementView: React.FC = () => {
           `}
         </style>
 
-        <div className="h-full overflow-auto p-6">
-          <section className="stock-movement-report-face min-h-full overflow-hidden rounded-sm border border-[#d8dde2] bg-white shadow-sm">
-            <header className="flex items-center justify-between border-b border-[#d8dde2] px-7 py-6">
+        <div className="mx-auto max-w-[1140px]">
+          <section className="stock-movement-report-face min-h-[560px] overflow-hidden rounded-[5px] border border-[#d8dde2] bg-white">
+            <header className="flex min-h-[64px] items-center justify-between border-b border-[#d8dde2] px-5">
               <div>
-                <h1 className="text-[28px] font-semibold uppercase leading-none tracking-normal text-[#334653]">
+                <h1 className="border-b border-[#5d82a2] py-5 pr-24 font-['Oswald'] text-[18px] font-semibold uppercase leading-none text-[#315574]">
                   INVENTORY LOGS
                 </h1>
-                <div className="mt-7 h-px w-80 bg-[#8d9ca5]" />
               </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={handleBackToSearchResults}
-                  className="rounded bg-[#5e829a] px-7 py-4 text-[19px] font-medium leading-none text-white shadow-sm transition-colors hover:bg-[#4f7288]"
+                  className="rounded-[4px] bg-[#51b957] px-4 py-2 text-[13px] text-white"
                 >
                   Back
                 </button>
                 <button
                   type="button"
                   onClick={handlePrint}
-                  className="rounded bg-[#5e829a] px-7 py-4 text-[19px] font-medium leading-none text-white shadow-sm transition-colors hover:bg-[#4f7288]"
+                  className="rounded-[4px] bg-[#5e829a] px-4 py-2 text-[13px] text-white"
                 >
                   Print
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('legacy')}
+                  className="rounded-[4px] bg-[#5e829a] px-4 py-2 text-[13px] text-white"
+                >
+                  Legacy Report
                 </button>
               </div>
             </header>
 
-            <div className="px-9 py-10">
-              <div className="grid grid-cols-1 gap-10 lg:grid-cols-[1fr_360px]">
-                <div className="space-y-6 text-[28px] font-semibold leading-tight text-[#334653]">
+            <div className="px-8 py-8">
+              <div className="grid grid-cols-1 gap-10 lg:grid-cols-[1fr_300px]">
+                <div className="space-y-3 text-[14px] font-semibold leading-tight text-[#334653]">
                   <div>Item Code: {selectedProduct.item_code}</div>
                   <div>Part No: {selectedProduct.part_no}</div>
                   <div>Brand: {selectedProduct.brand}</div>
@@ -655,17 +666,17 @@ const StockMovementView: React.FC = () => {
                 </div>
 
                 <div className="lg:justify-self-end">
-                  <h2 className="text-[36px] font-semibold uppercase leading-none tracking-normal text-[#334653]">
+                  <h2 className="font-['Oswald'] text-[24px] font-semibold uppercase leading-none text-[#334653]">
                     STOCK MOVEMENT
                   </h2>
-                  <label htmlFor="stock-movement-warehouse" className="mt-10 block text-[28px] font-semibold text-[#334653]">
+                  <label htmlFor="stock-movement-warehouse" className="mt-6 block font-['Oswald'] text-[16px] font-semibold text-[#334653]">
                     Warehouse:
                   </label>
                   <select
                     id="stock-movement-warehouse"
                     value={warehouseFilter}
                     onChange={(event) => setWarehouseFilter(event.target.value)}
-                    className="mt-5 h-14 w-full rounded-none border border-[#d6d6d6] bg-white px-7 text-[20px] text-[#334653] outline-none focus:border-[#5e829a]"
+                    className="mt-2 h-[34px] w-full rounded-[3px] border border-[#d6d6d6] bg-white px-3 text-[13px] text-[#334653] outline-none"
                   >
                     {WAREHOUSES.map(warehouse => (
                       <option key={warehouse} value={warehouse}>{warehouse}</option>
@@ -690,10 +701,6 @@ const StockMovementView: React.FC = () => {
                 </div>
               ) : (
                 <>
-                  <div className="grid grid-cols-2 pb-5 text-center text-[28px] font-semibold uppercase leading-none text-[#334653]">
-                    <div>RECEIVED / RETURNED</div>
-                    <div>RELEASED</div>
-                  </div>
                   <div className="overflow-hidden">
                     <table className="w-full table-fixed border-collapse text-left">
                       <colgroup>
@@ -711,6 +718,11 @@ const StockMovementView: React.FC = () => {
                         <col className="w-[4%]" />
                       </colgroup>
                       <thead>
+                        <tr className="font-['Oswald'] text-[16px] font-semibold uppercase leading-none text-[#334653]">
+                          <th className="border border-[#d9dee3] px-2 py-3 text-center" colSpan={5}>RECEIVED / RETURNED</th>
+                          <th className="border border-l-4 border-[#d9dee3] border-l-slate-400 px-2 py-3 text-center" colSpan={6}>RELEASED</th>
+                          <th className="border border-l-4 border-[#d9dee3] border-l-slate-400 px-2 py-3 text-center" rowSpan={2}>Bal</th>
+                        </tr>
                         <tr className="text-[12px] font-semibold leading-tight text-[#334653] 2xl:text-[13px]">
                           <th className="break-words border border-[#d9dee3] px-2 py-3">Date</th>
                           <th className="break-words border border-[#d9dee3] px-2 py-3">Source</th>
@@ -723,7 +735,6 @@ const StockMovementView: React.FC = () => {
                           <th className="break-words border border-[#d9dee3] px-2 py-3">Qty</th>
                           <th className="break-words border border-[#d9dee3] px-2 py-3">Unit Price</th>
                           <th className="break-words border border-[#d9dee3] px-2 py-3">Warehouse</th>
-                          <th className="break-words border border-[#d9dee3] px-2 py-3">Bal</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -743,7 +754,7 @@ const StockMovementView: React.FC = () => {
   }
 
   return (
-    <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950">
+    <div className="min-h-full overflow-auto bg-[#f4f4f4] px-4 py-10 text-[#222]">
       <style>
         {`
           .stock-movement-print-area {
@@ -861,22 +872,21 @@ const StockMovementView: React.FC = () => {
         `}
       </style>
       {/* Main Content */}
-      <div className="flex-1 overflow-hidden p-6">
-        <div className="h-full flex flex-col gap-4">
+      <div className="mx-auto max-w-[1140px]">
+        <div className="flex min-h-[620px] flex-col gap-6">
           
-          <div className="relative z-20 bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-800 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 px-4 py-4">
+          <div className="relative z-20 rounded-[5px] border border-[#d8d8d8] bg-white">
+            <div className="flex min-h-[64px] flex-wrap items-center justify-between gap-3 border-b border-[#ddd] px-5">
               <div className="min-w-0">
-                <h1 className="text-lg font-semibold uppercase tracking-normal text-slate-700 dark:text-slate-100">
+                <h1 className="border-b border-[#5d82a2] py-5 pr-24 font-['Oswald'] text-[18px] font-semibold uppercase text-[#315574]">
                   {selectedProduct ? 'Inventory Logs' : 'Stock Movement'}
                 </h1>
-                <div className="mt-3 h-px w-60 bg-slate-300 dark:bg-slate-700" />
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={handleProductSearch}
-                  className="inline-flex items-center gap-2 rounded px-4 py-2 text-sm font-medium text-white bg-[#416d8a] hover:bg-[#365d77] disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-[4px] bg-[#5d82a2] px-4 py-2 text-[13px] text-white disabled:opacity-60"
                 >
                   <Search className="h-4 w-4" />
                   Search
@@ -885,7 +895,7 @@ const StockMovementView: React.FC = () => {
                   type="button"
                   onClick={handleViewMovement}
                   disabled={!highlightedProduct}
-                  className="inline-flex items-center gap-2 rounded px-4 py-2 text-sm font-medium text-white bg-[#416d8a] hover:bg-[#365d77] disabled:cursor-not-allowed disabled:bg-[#8ca8b8] disabled:hover:bg-[#8ca8b8] disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-[4px] bg-[#51b957] px-4 py-2 text-[13px] text-white disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <FileText className="h-4 w-4" />
                   View Movement
@@ -914,7 +924,7 @@ const StockMovementView: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleRefresh}
-                  className="inline-flex items-center gap-2 rounded px-4 py-2 text-sm font-medium text-white bg-[#416d8a] hover:bg-[#365d77]"
+                  className="inline-flex items-center gap-2 rounded-[4px] bg-[#51b957] px-4 py-2 text-[13px] text-white"
                 >
                   <X className="h-4 w-4" />
                   Refresh
@@ -923,61 +933,61 @@ const StockMovementView: React.FC = () => {
             </div>
 
             {!selectedProduct && (
-              <form onSubmit={handleProductSearch} className="px-4 py-6">
+              <form onSubmit={handleProductSearch} className="px-8 py-7">
                 <div className="grid grid-cols-1 gap-x-12 gap-y-4 xl:grid-cols-2">
                   <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-3">
-                    <label htmlFor="stock-search-part-no" className="text-sm font-semibold text-slate-700 dark:text-slate-200">Part No.</label>
+                    <label htmlFor="stock-search-part-no" className="font-['Oswald'] text-[15px] text-[#263f52]">Part No.</label>
                     <input
                       id="stock-search-part-no"
                       type="text"
                       value={searchFilters.partNo}
                       onChange={(event) => handleSearchFieldChange('partNo', event.target.value)}
                       placeholder="Search Part No."
-                      className="h-11 rounded border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#416d8a] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      className="h-[34px] rounded-[3px] border border-[#ccc] bg-white px-3 text-[13px] outline-none"
                     />
                   </div>
                   <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-3">
-                    <label htmlFor="stock-search-item-code" className="text-sm font-semibold text-slate-700 dark:text-slate-200">Item Code</label>
+                    <label htmlFor="stock-search-item-code" className="font-['Oswald'] text-[15px] text-[#263f52]">Item Code</label>
                     <input
                       id="stock-search-item-code"
                       type="text"
                       value={searchFilters.itemCode}
                       onChange={(event) => handleSearchFieldChange('itemCode', event.target.value)}
                       placeholder="Search Item Code"
-                      className="h-11 rounded border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#416d8a] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      className="h-[34px] rounded-[3px] border border-[#ccc] bg-white px-3 text-[13px] outline-none"
                     />
                   </div>
                   <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-3">
-                    <label htmlFor="stock-search-description" className="text-sm font-semibold text-slate-700 dark:text-slate-200">Description</label>
+                    <label htmlFor="stock-search-description" className="font-['Oswald'] text-[15px] text-[#263f52]">Description</label>
                     <input
                       id="stock-search-description"
                       type="text"
                       value={searchFilters.description}
                       onChange={(event) => handleSearchFieldChange('description', event.target.value)}
                       placeholder="Search Item Description"
-                      className="h-11 rounded border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#416d8a] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      className="h-[34px] rounded-[3px] border border-[#ccc] bg-white px-3 text-[13px] outline-none"
                     />
                   </div>
                   <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-3">
-                    <label htmlFor="stock-search-application" className="text-sm font-semibold text-slate-700 dark:text-slate-200">Application</label>
+                    <label htmlFor="stock-search-application" className="font-['Oswald'] text-[15px] text-[#263f52]">Application</label>
                     <input
                       id="stock-search-application"
                       type="text"
                       value={searchFilters.application}
                       onChange={(event) => handleSearchFieldChange('application', event.target.value)}
                       placeholder="Search Item Application"
-                      className="h-11 rounded border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#416d8a] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      className="h-[34px] rounded-[3px] border border-[#ccc] bg-white px-3 text-[13px] outline-none"
                     />
                   </div>
                   <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-3">
-                    <label htmlFor="stock-search-original-pn" className="text-sm font-semibold text-slate-700 dark:text-slate-200">Original P/N</label>
+                    <label htmlFor="stock-search-original-pn" className="font-['Oswald'] text-[15px] text-[#263f52]">Original P/N</label>
                     <input
                       id="stock-search-original-pn"
                       type="text"
                       value={searchFilters.originalPn}
                       onChange={(event) => handleSearchFieldChange('originalPn', event.target.value)}
                       placeholder="Search Original P/N"
-                      className="h-11 rounded border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#416d8a] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      className="h-[34px] rounded-[3px] border border-[#ccc] bg-white px-3 text-[13px] outline-none"
                     />
                   </div>
                 </div>
@@ -1093,7 +1103,7 @@ const StockMovementView: React.FC = () => {
           )}
 
           {/* Movement Log Table */}
-          <div className="flex-1 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col">
+          <div className="flex min-h-[300px] flex-1 flex-col overflow-hidden rounded-[5px] border border-[#d8d8d8] bg-white">
             {!selectedProduct ? (
               <div className="flex-1 overflow-auto">
                 <table className="stock-product-grid w-full table-fixed border-collapse text-left">

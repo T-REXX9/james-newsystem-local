@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Calendar, Plus, RefreshCcw, Search, Trash2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import {
   adjustmentEntryService,
   AdjustmentEntry,
@@ -8,7 +8,10 @@ import {
   LedgerCustomer,
 } from '../services/adjustmentEntryService';
 
-const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
 
 const toDateInput = (value?: string): string => {
   if (!value) return '';
@@ -18,6 +21,13 @@ const toDateInput = (value?: string): string => {
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
+};
+
+const formatLegacyDate = (value?: string): string => {
+  const input = toDateInput(value);
+  if (!input) return '';
+  const [yyyy, mm, dd] = input.split('-');
+  return `${mm}/${dd}/${yyyy}`;
 };
 
 interface AdjustmentEntryViewProps {
@@ -44,6 +54,7 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
   const [customerSearch, setCustomerSearch] = useState('');
   const [customers, setCustomers] = useState<LedgerCustomer[]>([]);
   const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [showSearchModal, setShowSearchModal] = useState(false);
 
   const [isCreating, setIsCreating] = useState(false);
   const [form, setForm] = useState({
@@ -118,9 +129,6 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
     try {
       const list = await adjustmentEntryService.getCustomers(searchText);
       setCustomers(list);
-      if (isCreating && !form.customerId && list[0]?.sessionId) {
-        setForm((prev) => ({ ...prev, customerId: list[0].sessionId }));
-      }
     } catch {
       setCustomers([]);
     } finally {
@@ -165,7 +173,7 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
     setSelected(null);
     setError('');
     setForm({
-      customerId: customers[0]?.sessionId || '',
+      customerId: '',
       date: toDateInput(new Date().toISOString()),
       type: 'Debit',
       amount: '',
@@ -275,287 +283,149 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
   };
 
   return (
-    <div className="h-full bg-slate-100 dark:bg-slate-950 p-4">
-      <div className="h-full grid grid-cols-12 gap-4 overflow-hidden">
-        <aside className="col-span-12 lg:col-span-4 xl:col-span-3 h-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden flex flex-col">
-          <div className="p-4 border-b border-slate-200 dark:border-slate-800 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Adjustment Entry</h2>
-              <button
-                type="button"
-                onClick={handleCreateMode}
-                className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                New
-              </button>
+    <div className="min-h-full bg-[#f4f4f4] px-4 py-10 text-[13px] text-[#222]">
+      <div className="mx-auto max-w-[1140px] space-y-6">
+        <section className="overflow-hidden rounded-[5px] border border-[#d8d8d8] bg-white">
+          <div className="flex min-h-[82px] flex-wrap items-center justify-between gap-4 border-b border-[#ddd] px-9 py-5">
+            <div className="flex gap-1">
+              <button type="button" onClick={() => setShowSearchModal(true)} className="rounded-[4px] bg-[#5d82a2] px-4 py-2 text-white">Search</button>
+              <button type="button" onClick={handleCreateMode} className="rounded-[4px] bg-[#51b957] px-4 py-2 text-white">Create New</button>
             </div>
-
-            <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search ref/customer"
-                className="w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 py-2 text-sm dark:bg-slate-900 dark:border-slate-700"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <select value={month} onChange={(e) => setMonth(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-2 text-sm dark:bg-slate-900 dark:border-slate-700">
-                {Array.from({ length: 12 }, (_, idx) => String(idx + 1).padStart(2, '0')).map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
+            <div className="flex items-center gap-4">
+              <span className="font-['Oswald'] text-[20px] text-[#263f52]">Filter by Month:</span>
+              <select value={month} onChange={(e) => setMonth(e.target.value)} className="h-[34px] w-[200px] rounded-[3px] border border-[#ccc] bg-white px-3">
+                {MONTHS.map((label, index) => <option key={label} value={String(index + 1).padStart(2, '0')}>{label}</option>)}
               </select>
-              <input value={year} onChange={(e) => setYear(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-2 text-sm dark:bg-slate-900 dark:border-slate-700" />
+              <input type="number" value={year} onChange={(e) => setYear(e.target.value)} className="h-[34px] w-[100px] rounded-[3px] border border-[#ccc] px-3" />
             </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-2 text-sm dark:bg-slate-900 dark:border-slate-700">
-                <option>All</option>
-                <option>Pending</option>
-                <option>Posted</option>
-              </select>
-              <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-2 text-sm dark:bg-slate-900 dark:border-slate-700">
-                <option>All</option>
-                <option>Debit</option>
-                <option>Credit</option>
-                <option>Zero-Out</option>
-              </select>
-            </div>
-
-            <button
-              type="button"
-              onClick={fetchList}
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200"
-            >
-              <RefreshCcw className="w-3.5 h-3.5" />
-              Refresh
-            </button>
           </div>
-
-          <div className="flex-1 overflow-auto">
-            {loadingList ? (
-              <p className="p-4 text-sm text-slate-500">Loading entries...</p>
-            ) : rows.length === 0 ? (
-              <p className="p-4 text-sm text-slate-500">No records found.</p>
-            ) : (
-              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                {rows.map((row) => {
-                  const active = selectedRefno === row.lrefno && !isCreating;
-                  return (
-                    <li key={row.lrefno}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsCreating(false);
-                          setSelectedRefno(row.lrefno);
-                        }}
-                        className={`w-full text-left px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 ${active ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-600 pl-3' : ''}`}
+          <div className="px-6 py-7">
+            {error && <div className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-red-700">{error}</div>}
+            <div className="max-h-[150px] overflow-y-auto">
+              <table className="w-full table-fixed border-collapse text-left">
+                <thead className="sticky top-0 bg-white font-['Oswald'] text-[14px]">
+                  <tr className="border-b-2 border-[#ddd]">
+                    <th className="w-[12%] px-2 py-2">Date</th>
+                    <th className="w-[35%] px-2 py-2">Customer</th>
+                    <th className="w-[16%] px-2 py-2">Ref No.</th>
+                    <th className="w-[18%] px-2 py-2">Type</th>
+                    <th className="w-[18%] px-2 py-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingList && <tr><td colSpan={5} className="px-2 py-4 text-slate-500">Loading entries...</td></tr>}
+                  {!loadingList && rows.length === 0 && <tr><td colSpan={5} className="px-2 py-4 text-slate-500">No records found.</td></tr>}
+                  {!loadingList && rows.map((row) => {
+                    const active = selectedRefno === row.lrefno && !isCreating;
+                    return (
+                      <tr
+                        key={row.lrefno}
+                        onClick={() => { setIsCreating(false); setSelectedRefno(row.lrefno); }}
+                        className={`cursor-pointer border-b border-[#ddd] ${active ? 'text-blue-600' : ''}`}
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="font-semibold text-sm text-slate-900 dark:text-white">{row.lno || row.lrefno}</p>
-                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${row.lstatus === 'Posted' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                            {row.lstatus}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-500 mt-1 line-clamp-1">{row.lcustomername || '-'}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">{toDateInput(row.ldate)} • {row.ltype} • {peso.format(Number(row.lamount || 0))}</p>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+                        <td className="px-2 py-2">{formatLegacyDate(row.ldate)}</td>
+                        <td className="px-2 py-2">{row.lcustomername || '-'}</td>
+                        <td className="px-2 py-2 underline">{row.lno || row.lrefno}</td>
+                        <td className="px-2 py-2">{row.ltype}</td>
+                        <td className="px-2 py-2">{row.lstatus}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </aside>
+        </section>
 
-        <section className="col-span-12 lg:col-span-8 xl:col-span-9 h-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden flex flex-col">
-          <div className="p-4 border-b border-slate-200 dark:border-slate-800">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">{isCreating ? 'New Adjustment Entry' : 'Adjustment Details'}</h2>
-                <p className="text-sm text-slate-500">
-                  Ref No: {isCreating ? 'Auto-generated on save' : (selected?.lno || '-')}
-                </p>
-              </div>
-              {!isCreating && selected && (
-                <span className={`rounded-full px-3 py-1 text-xs font-semibold ${selected.lstatus === 'Posted' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                  {selected.lstatus}
-                </span>
+        <section className="overflow-hidden rounded-[5px] border border-[#d8d8d8] bg-white">
+          <div className="flex min-h-[64px] items-center justify-between border-b border-[#ddd] px-5">
+            <h2 className="border-b border-[#5d82a2] py-5 pr-24 font-['Oswald'] text-[18px] uppercase text-[#315574]">Adjustment Entry</h2>
+            <div className="flex items-center gap-2 font-['Oswald'] text-[18px] text-[#263f52]">
+              {!isCreating && selected?.lstatus === 'Pending' && (
+                <button type="button" onClick={() => handleAction('post')} disabled={saving} className="rounded-[4px] bg-[#51b957] px-4 py-2 text-[12px] font-bold text-white">
+                  POST <u>Adjustment</u>
+                </button>
               )}
+              <span>Ref No. :</span>
+              <input value={isCreating ? '' : (selected?.lno || '')} readOnly className="h-[34px] w-[130px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3 font-sans text-[13px]" />
             </div>
           </div>
-
-          <div className="p-4 space-y-4 overflow-auto flex-1">
-            {error && <p className="text-sm text-rose-600">{error}</p>}
+          <div className="min-h-[300px] px-10 py-8">
             {loadingDetail && !isCreating ? (
-              <p className="text-sm text-slate-500">Loading record...</p>
+              <p className="text-slate-500">Loading record...</p>
             ) : (!isCreating && !selected) ? (
-              <p className="text-sm text-slate-500">Select a record from the sidebar, or create a new one.</p>
+              <p className="text-slate-500">Select an adjustment record or click Create New.</p>
             ) : (
-              <>
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                  <label className="text-sm text-slate-600 dark:text-slate-300">
-                    Customer
-                    <div className="mt-1 space-y-2">
-                      <div className="relative">
-                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input
-                          value={customerSearch}
-                          onChange={(e) => setCustomerSearch(e.target.value)}
-                          placeholder="Search customer"
-                          disabled={!canEdit}
-                          className="w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 py-2 text-sm disabled:bg-slate-100 dark:bg-slate-900 dark:border-slate-700"
-                        />
-                      </div>
-                      <select
-                        value={form.customerId}
-                        onChange={(e) => setForm((prev) => ({ ...prev, customerId: e.target.value }))}
-                        disabled={!canEdit || loadingCustomers}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100 dark:bg-slate-900 dark:border-slate-700"
-                      >
-                        <option value="">Select customer</option>
-                        {customers.map((customer) => (
-                          <option key={customer.sessionId} value={customer.sessionId}>{customer.company}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </label>
+              <div className="mx-auto max-w-[920px]">
+                <div className="grid grid-cols-[110px_1fr_90px_240px] items-center gap-x-4 gap-y-5">
+                  <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Sold to :</label>
+                  <div>
+                    <input value={customerSearch} onChange={(e) => setCustomerSearch(e.target.value)} disabled={!canEdit} placeholder="Search customer" className="mb-2 h-[34px] w-full rounded-[3px] border border-[#ccc] px-3 disabled:bg-[#eee]" />
+                    <select value={form.customerId} onChange={(e) => setForm((prev) => ({ ...prev, customerId: e.target.value }))} disabled={!canEdit || loadingCustomers} className="h-[34px] w-full rounded-[3px] border border-[#ccc] bg-white px-3 disabled:bg-[#eee]">
+                      <option value="">Select Customer</option>
+                      {customers.map((customer) => <option key={customer.sessionId} value={customer.sessionId}>{customer.company}</option>)}
+                    </select>
+                  </div>
+                  <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Date :</label>
+                  <input type="date" value={form.date} onChange={(e) => setForm((prev) => ({ ...prev, date: e.target.value }))} disabled={!canEdit} className="h-[34px] rounded-[3px] border border-[#ccc] px-3 disabled:bg-[#eee]" />
 
-                  <label className="text-sm text-slate-600 dark:text-slate-300">
-                    Date
-                    <div className="relative mt-1">
-                      <Calendar className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                      <input
-                        type="date"
-                        value={form.date}
-                        onChange={(e) => setForm((prev) => ({ ...prev, date: e.target.value }))}
-                        disabled={!canEdit}
-                        className="w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 py-2 text-sm disabled:bg-slate-100 dark:bg-slate-900 dark:border-slate-700"
-                      />
-                    </div>
-                  </label>
-
-                  <label className="text-sm text-slate-600 dark:text-slate-300">
-                    Type
-                    <select
-                      value={form.type}
-                      onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value as AdjustmentType }))}
-                      disabled={!canEdit || !isCreating}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100 dark:bg-slate-900 dark:border-slate-700"
-                    >
+                  <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Remark :</label>
+                  <input value={form.remark} onChange={(e) => setForm((prev) => ({ ...prev, remark: e.target.value }))} disabled={!canEdit} className="h-[34px] rounded-[3px] border border-[#ccc] px-3 disabled:bg-[#eee]" />
+                  <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Type :</label>
+                  {isCreating ? (
+                    <select value={form.type} onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value as AdjustmentType }))} className="h-[34px] rounded-[3px] border border-[#ccc] bg-white px-3">
                       <option value="Debit">Debit</option>
                       <option value="Credit">Credit</option>
                       <option value="Zero-Out">Zero-Out</option>
                     </select>
-                  </label>
+                  ) : <span>{form.type}</span>}
 
-                  <label className="text-sm text-slate-600 dark:text-slate-300">
-                    Amount
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={form.amount}
-                      onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
-                      disabled={!canEdit || isZeroOut}
-                      placeholder={isZeroOut ? 'Auto-computed by API' : 'Input amount'}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100 dark:bg-slate-900 dark:border-slate-700"
-                    />
-                  </label>
+                  <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Amount :</label>
+                  <input type="number" step="0.01" value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} disabled={!canEdit || isZeroOut} placeholder={isZeroOut ? 'Auto-computed' : 'Input Amount'} className="h-[34px] rounded-[3px] border border-[#ccc] px-3 disabled:bg-[#eee]" />
+                  <span />
+                  <span className="text-xs text-slate-500">{selectedCustomerName ? `Selected: ${selectedCustomerName}` : ''}</span>
                 </div>
 
-                <label className="text-sm text-slate-600 dark:text-slate-300 block">
-                  Remark
-                  <input
-                    value={form.remark}
-                    onChange={(e) => setForm((prev) => ({ ...prev, remark: e.target.value }))}
-                    disabled={!canEdit}
-                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100 dark:bg-slate-900 dark:border-slate-700"
-                    placeholder="Input remark"
-                  />
-                </label>
-
-                <div className="text-xs text-slate-500">
-                  Selected customer: <span className="font-semibold text-slate-700 dark:text-slate-200">{selectedCustomerName || '-'}</span>
-                </div>
-              </>
-            )}
-          </div>
-
-          <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
-            <div className="text-xs text-slate-500">
-              {saving ? 'Processing...' : 'Actions follow old-system workflow (Pending/Posted).'}
-            </div>
-            <div className="flex items-center gap-2">
-              {isCreating ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsCreating(false);
-                      setSelectedRefno(rows[0]?.lrefno || '');
-                    }}
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCreate}
-                    disabled={saving}
-                    className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-                  >
-                    Create Record
-                  </button>
-                </>
-              ) : selected ? (
-                <>
-                  {selected.lstatus === 'Pending' && (
+                <div className="mt-7 ml-[126px] flex gap-2">
+                  {isCreating ? (
                     <>
-                      <button
-                        type="button"
-                        onClick={handleDelete}
-                        disabled={saving}
-                        className="inline-flex items-center gap-1 rounded-lg border border-rose-300 px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        Delete
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleSave}
-                        disabled={saving}
-                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
-                      >
-                        Save
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleAction('post')}
-                        disabled={saving}
-                        className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-                      >
-                        Post Adjustment
-                      </button>
+                      <button type="button" onClick={handleCreate} disabled={saving} className="rounded-[4px] bg-[#5d82a2] px-4 py-2 text-white disabled:opacity-50">Add Record</button>
+                      <button type="button" onClick={() => { setIsCreating(false); setSelectedRefno(rows[0]?.lrefno || ''); }} className="rounded-[4px] border border-[#ccc] bg-white px-4 py-2">Cancel</button>
                     </>
-                  )}
-                  {selected.lstatus === 'Posted' && (
-                    <button
-                      type="button"
-                      onClick={() => handleAction('unpost')}
-                      disabled={saving}
-                      className="rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-60"
-                    >
-                      Unpost
-                    </button>
-                  )}
-                </>
-              ) : null}
-            </div>
+                  ) : selected?.lstatus === 'Pending' ? (
+                    <>
+                      <button type="button" onClick={handleSave} disabled={saving} className="rounded-[4px] bg-[#5d82a2] px-4 py-2 text-white disabled:opacity-50">Save</button>
+                      <button type="button" onClick={handleDelete} disabled={saving} className="inline-flex items-center gap-1 rounded-[4px] bg-[#d9534f] px-4 py-2 text-white disabled:opacity-50"><Trash2 className="h-3.5 w-3.5" />Delete</button>
+                    </>
+                  ) : selected?.lstatus === 'Posted' ? (
+                    <button type="button" onClick={() => handleAction('unpost')} disabled={saving} className="rounded-[4px] bg-[#f0ad4e] px-4 py-2 text-white disabled:opacity-50">Unpost</button>
+                  ) : null}
+                </div>
+              </div>
+            )}
           </div>
         </section>
       </div>
+
+      {showSearchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-[600px] rounded-[5px] bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b px-5 py-4">
+              <h3 className="text-[20px] font-semibold">Search Adjustment</h3>
+              <button type="button" onClick={() => setShowSearchModal(false)} className="text-2xl text-slate-500">×</button>
+            </div>
+            <div className="space-y-4 px-8 py-6">
+              <label className="grid grid-cols-[130px_1fr] items-center gap-3"><span>DM No.</span><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Input DM No." className="h-[36px] rounded border border-[#ccc] px-3" /></label>
+              <label className="grid grid-cols-[130px_1fr] items-center gap-3"><span>Status</span><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-[36px] rounded border border-[#ccc] bg-white px-3"><option>All</option><option>Pending</option><option>Posted</option></select></label>
+              <label className="grid grid-cols-[130px_1fr] items-center gap-3"><span>Type</span><select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="h-[36px] rounded border border-[#ccc] bg-white px-3"><option>All</option><option>Debit</option><option>Credit</option><option>Zero-Out</option></select></label>
+            </div>
+            <div className="flex justify-end gap-2 border-t px-5 py-4">
+              <button type="button" onClick={async () => { await fetchList(); setShowSearchModal(false); }} className="rounded bg-[#51b957] px-4 py-2 text-white">Save</button>
+              <button type="button" onClick={() => setShowSearchModal(false)} className="rounded bg-[#5d82a2] px-4 py-2 text-white">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

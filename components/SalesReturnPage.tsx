@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import { RefreshCcw, Search, Plus, Trash2, CheckCircle, XCircle, FileText, Loader2 } from 'lucide-react';
+import { Search, Plus, Trash2, FileText, Loader2 } from 'lucide-react';
 import ReactDOM from 'react-dom';
 import {
   SalesReturnItem,
@@ -11,6 +11,7 @@ import { Contact, Invoice, OrderSlip } from '../types';
 import { fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { getAllInvoices } from '../services/invoiceLocalApiService';
 import { getAllOrderSlips } from '../services/orderSlipLocalApiService';
+import { fetchProducts } from '../services/productLocalApiService';
 import CustomerAutocomplete from './CustomerAutocomplete';
 import { useDebounce } from '../hooks/useDebounce';
 
@@ -31,8 +32,13 @@ const formatDate = (value?: string): string => {
   if (!value) return 'N/A';
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
+  return d.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
 };
+
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
 
 /* -------------------------------------------------------------------------- */
 /*  Confirmation Dialog                                                        */
@@ -81,24 +87,31 @@ const SourceItemsModal: React.FC<{
   onClose: () => void;
 }> = ({ open, sourceItems, loading, onAdd, onClose }) => {
   const [quantities, setQuantities] = useState<Record<number, number>>({});
+  const [itemSearch, setItemSearch] = useState('');
 
   useEffect(() => {
     if (open) {
+      setItemSearch('');
       const defaults: Record<number, number> = {};
       sourceItems.forEach((si) => {
-        defaults[si.source_item_id] = si.remaining_qty;
+        defaults[si.source_item_id] = si.is_catalog_item ? 1 : si.remaining_qty;
       });
       setQuantities(defaults);
     }
   }, [open, sourceItems]);
 
   if (!open) return null;
+  const searchNeedle = itemSearch.trim().toLowerCase();
+  const visibleSourceItems = sourceItems
+    .filter((item) => !searchNeedle || [item.item_code, item.part_no, item.description, item.brand]
+      .some((value) => String(value || '').toLowerCase().includes(searchNeedle)))
+    .slice(0, 150);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-3xl w-full mx-4 max-h-[80vh] flex flex-col">
         <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Add Items from Source Document</h3>
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Add Return Items</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl font-bold">×</button>
         </div>
         <div className="flex-1 overflow-auto p-4">
@@ -109,6 +122,13 @@ const SourceItemsModal: React.FC<{
               No available items to return. All items have been fully returned or no source document is linked.
             </div>
           ) : (
+            <>
+            <input
+              value={itemSearch}
+              onChange={(event) => setItemSearch(event.target.value)}
+              placeholder="Search item code, part number or description"
+              className="mb-3 h-[36px] w-full rounded border border-slate-300 px-3 text-sm"
+            />
             <table className="w-full text-sm">
               <thead className="bg-slate-100 dark:bg-slate-700">
                 <tr className="text-left text-xs uppercase tracking-wide">
@@ -121,17 +141,17 @@ const SourceItemsModal: React.FC<{
                 </tr>
               </thead>
               <tbody>
-                {sourceItems.map((si) => (
+                {visibleSourceItems.map((si) => (
                   <tr key={si.source_item_id} className="border-b border-slate-100 dark:border-slate-700">
                     <td className="px-3 py-2">{si.item_code}</td>
                     <td className="px-3 py-2">{si.description}</td>
-                    <td className="px-3 py-2 text-right">{si.remaining_qty}</td>
+                    <td className="px-3 py-2 text-right">{si.is_catalog_item ? '—' : si.remaining_qty}</td>
                     <td className="px-3 py-2 text-right">
                       <input
                         type="number"
                         min={1}
                         max={si.remaining_qty}
-                        value={quantities[si.source_item_id] ?? si.remaining_qty}
+                        value={quantities[si.source_item_id] ?? (si.is_catalog_item ? 1 : si.remaining_qty)}
                         onChange={(e) =>
                           setQuantities((prev) => ({
                             ...prev,
@@ -144,7 +164,7 @@ const SourceItemsModal: React.FC<{
                     <td className="px-3 py-2 text-right">{peso.format(si.unit_price)}</td>
                     <td className="px-3 py-2 text-right">
                       <button
-                        onClick={() => onAdd(si, quantities[si.source_item_id] ?? si.remaining_qty)}
+                        onClick={() => onAdd(si, quantities[si.source_item_id] ?? (si.is_catalog_item ? 1 : si.remaining_qty))}
                         className="px-3 py-1 rounded bg-blue-600 text-white text-xs hover:bg-blue-700"
                       >
                         Add
@@ -154,6 +174,7 @@ const SourceItemsModal: React.FC<{
                 ))}
               </tbody>
             </table>
+            </>
           )}
         </div>
         <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex justify-end">
@@ -394,6 +415,7 @@ const CreateModal: React.FC<{
   onCreated: (record: SalesReturnRecord) => void;
   onClose: () => void;
 }> = ({ open, onCreated, onClose }) => {
+  const [referenceMode, setReferenceMode] = useState<'with' | 'none'>('with');
   const [form, setForm] = useState({
     customer_id: '',
     invoice_refno: '',
@@ -412,6 +434,19 @@ const CreateModal: React.FC<{
 
   useEffect(() => {
     if (open) {
+      setReferenceMode('with');
+      setSelectedCustomer(null);
+      setSelectedDoc(null);
+      setPendingContactId(null);
+      setError('');
+      setForm({
+        customer_id: '',
+        invoice_refno: '',
+        type: 'Invoice',
+        salesman: '',
+        remark: '',
+        date: new Date().toISOString().slice(0, 10),
+      });
       fetchContacts().then(setCustomers).catch(() => setCustomers([]));
       // Load both invoices and order slips into a unified list (mirrors old system's tbl_invoice_or)
       Promise.all([
@@ -475,6 +510,17 @@ const CreateModal: React.FC<{
     }
   };
 
+  const handleReferenceMode = (mode: 'with' | 'none') => {
+    setReferenceMode(mode);
+    setSelectedDoc(null);
+    setPendingContactId(null);
+    setForm((current) => ({
+      ...current,
+      invoice_refno: '',
+      type: mode === 'none' ? 'No Reference' : 'Invoice',
+    }));
+  };
+
   const handleCreate = async () => {
     setBusy(true);
     setError('');
@@ -500,7 +546,18 @@ const CreateModal: React.FC<{
         )}
 
         <div className="grid grid-cols-1 gap-3 text-sm">
-          <div className="block">
+          <div className="flex items-center gap-5">
+            <span className="text-slate-600 dark:text-slate-300">Type</span>
+            <label className="inline-flex items-center gap-2">
+              <input type="radio" checked={referenceMode === 'with'} onChange={() => handleReferenceMode('with')} />
+              With Reference
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input type="radio" checked={referenceMode === 'none'} onChange={() => handleReferenceMode('none')} />
+              No Reference
+            </label>
+          </div>
+          {referenceMode === 'with' && <div className="block">
             <span className="text-slate-600 dark:text-slate-300 text-sm">Invoice / OR No.</span>
             <SourceDocAutocomplete
               documents={sourceDocs}
@@ -511,7 +568,7 @@ const CreateModal: React.FC<{
               inputClassName="border-slate-300 dark:border-slate-600"
             />
             <p className="text-[10px] text-slate-400 mt-0.5">Selecting a document auto-fills customer, type, and salesman.</p>
-          </div>
+          </div>}
           <div className="block">
             <span className="text-slate-600 dark:text-slate-300 text-sm">Customer</span>
             <CustomerAutocomplete
@@ -526,7 +583,7 @@ const CreateModal: React.FC<{
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <label className="block">
+            {referenceMode === 'with' && <label className="block">
               <span className="text-slate-600 dark:text-slate-300">Type</span>
               <select
                 value={form.type}
@@ -536,7 +593,7 @@ const CreateModal: React.FC<{
                 <option value="Invoice">Invoice</option>
                 <option value="OR">OR (Delivery Receipt)</option>
               </select>
-            </label>
+            </label>}
             <label className="block">
               <span className="text-slate-600 dark:text-slate-300">Date</span>
               <input
@@ -610,10 +667,10 @@ const SalesReturnPage: React.FC = () => {
 
   const [page, setPage] = useState(1);
   const [perPage] = useState(50);
-  const [totalPages, setTotalPages] = useState(1);
 
   // Modals
   const [showCreate, setShowCreate] = useState(false);
+  const [showSearchModal, setShowSearchModal] = useState(false);
   const [showSourceItems, setShowSourceItems] = useState(false);
   const [sourceItems, setSourceItems] = useState<SourceItem[]>([]);
   const [loadingSource, setLoadingSource] = useState(false);
@@ -636,7 +693,6 @@ const SalesReturnPage: React.FC = () => {
     try {
       const data = await salesReturnService.list({ search, status, month, year, page, perPage });
       setRows(data.items);
-      setTotalPages(Math.max(1, data.meta.total_pages || 1));
 
       if (!selectedRefno && data.items[0]?.lrefno) {
         setSelectedRefno(data.items[0].lrefno);
@@ -646,7 +702,6 @@ const SalesReturnPage: React.FC = () => {
     } catch (err: any) {
       setError(err?.message || 'Failed to load sales return records');
       setRows([]);
-      setTotalPages(1);
       setSelectedRefno('');
       setSelected(null);
       setItems([]);
@@ -698,17 +753,6 @@ const SalesReturnPage: React.FC = () => {
     loadDetail(selectedRefno);
   }, [selectedRefno]);
 
-  const totals = useMemo(() => {
-    return rows.reduce(
-      (acc, row) => {
-        acc.qty += Number(row.total_qty || 0);
-        acc.amount += Number(row.total_amount || 0);
-        return acc;
-      },
-      { qty: 0, amount: 0 }
-    );
-  }, [rows]);
-
   /* ---- Actions ---- */
   const handleCreated = (record: SalesReturnRecord) => {
     setShowCreate(false);
@@ -721,8 +765,28 @@ const SalesReturnPage: React.FC = () => {
     setShowSourceItems(true);
     setLoadingSource(true);
     try {
-      const items = await salesReturnService.sourceItems(selectedRefno);
-      setSourceItems(items);
+      if (selected?.ltype === 'No Reference') {
+        const products = await fetchProducts('active');
+        setSourceItems(products
+          .filter((product) => String(product.part_no || '').trim() || String(product.item_code || '').trim())
+          .map((product, index): SourceItem => ({
+            source_item_id: index + 1,
+            is_catalog_item: true,
+            linv_refno: String(product.id),
+            item_code: String(product.item_code || ''),
+            part_no: String(product.part_no || ''),
+            brand: String(product.brand || ''),
+            description: String(product.description || ''),
+            unit_price: Number(product.price_aa || 0),
+            original_qty: 0,
+            remaining_qty: 999999,
+            unit: '',
+            discount: 0,
+          })));
+      } else {
+        const sourceRows = await salesReturnService.sourceItems(selectedRefno);
+        setSourceItems(sourceRows);
+      }
     } catch (err: any) {
       setError(err?.message || 'Failed to load source items');
       setSourceItems([]);
@@ -747,12 +811,11 @@ const SalesReturnPage: React.FC = () => {
         discount: si.discount,
       });
       // Refresh items and source items
-      const [updatedItems, updatedSource] = await Promise.all([
-        salesReturnService.items(selectedRefno),
-        salesReturnService.sourceItems(selectedRefno),
-      ]);
+      const updatedItems = await salesReturnService.items(selectedRefno);
       setItems(updatedItems);
-      setSourceItems(updatedSource);
+      if (!si.is_catalog_item) {
+        setSourceItems(await salesReturnService.sourceItems(selectedRefno));
+      }
       // Also refresh the list to update totals
       loadList();
     } catch (err: any) {
@@ -833,321 +896,153 @@ const SalesReturnPage: React.FC = () => {
     setConfirmAction((prev) => ({ ...prev, open: false }));
   };
 
-  /* ---- Status badge ---- */
-  const statusColor = (s: string) => {
-    switch (s?.toLowerCase()) {
-      case 'posted':
-        return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400';
-      case 'canceled':
-        return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
-      default:
-        return 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300';
-    }
-  };
-
   return (
-    <div className="h-full overflow-hidden bg-slate-50 dark:bg-slate-950">
-      <div className="h-full grid grid-cols-1 xl:grid-cols-[460px_1fr] gap-4 p-4">
-        {/* ---- Left Panel: List ---- */}
-        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden flex flex-col">
-          <div className="p-4 border-b border-slate-200 dark:border-slate-700">
-            <div className="flex items-center justify-between mb-3">
-              <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Sales Return</h1>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowCreate(true)}
-                  className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  New
-                </button>
-                <button
-                  onClick={() => loadList()}
-                  className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800"
-                >
-                  <RefreshCcw className="w-3.5 h-3.5" />
-                  Refresh
-                </button>
-              </div>
+    <div className="min-h-full bg-[#f4f4f4] px-4 py-10 text-[13px] text-[#222]">
+      <div className="mx-auto max-w-[1140px] space-y-6">
+        <section className="overflow-hidden rounded-[5px] border border-[#d8d8d8] bg-white">
+          <div className="flex min-h-[82px] flex-wrap items-center justify-between gap-4 border-b border-[#ddd] px-9 py-5">
+            <div className="flex gap-1">
+              <button type="button" onClick={() => setShowSearchModal(true)} className="rounded-[4px] bg-[#5d82a2] px-4 py-2 text-white">Search</button>
+              <button type="button" onClick={() => setShowCreate(true)} className="rounded-[4px] bg-[#51b957] px-4 py-2 text-white">Create New</button>
+              <button type="button" onClick={() => { setSearchInput(''); setSearch(''); setStatus('All'); setPage(1); void loadList(); }} className="rounded-[4px] bg-[#51b957] px-4 py-2 text-white">Refresh</button>
             </div>
-
-            <div className="relative mb-2">
-              <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-slate-400" />
-              <input
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search CM no, invoice, customer..."
-                className="w-full pl-8 pr-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
-              />
-            </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              <select
-                value={status}
-                onChange={(e) => {
-                  setStatus(e.target.value);
-                  setPage(1);
-                }}
-                className="rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm px-2 py-2"
-              >
-                <option value="All">All Status</option>
-                <option value="Pending">Pending</option>
-                <option value="Posted">Posted</option>
-                <option value="Canceled">Canceled</option>
+            <div className="flex items-center gap-4">
+              <span className="font-['Oswald'] text-[20px] text-[#263f52]">Filter by Month:</span>
+              <select value={month} onChange={(e) => { setMonth(e.target.value); setPage(1); }} className="h-[34px] w-[200px] rounded-[3px] border border-[#ccc] bg-white px-3">
+                {MONTHS.map((label, idx) => <option key={label} value={String(idx + 1).padStart(2, '0')}>{label}</option>)}
               </select>
-              <select
-                value={month}
-                onChange={(e) => {
-                  setMonth(e.target.value);
-                  setPage(1);
-                }}
-                className="rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm px-2 py-2"
-              >
-                {Array.from({ length: 12 }).map((_, idx) => {
-                  const val = String(idx + 1).padStart(2, '0');
-                  return (
-                    <option key={val} value={val}>
-                      {val}
-                    </option>
-                  );
-                })}
-              </select>
-              <input
-                value={year}
-                onChange={(e) => {
-                  setYear(e.target.value.replace(/[^\d]/g, '').slice(0, 4));
-                  setPage(1);
-                }}
-                className="rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm px-2 py-2"
-                placeholder="Year"
-              />
+              <input value={year} onChange={(e) => { setYear(e.target.value.replace(/[^\d]/g, '').slice(0, 4)); setPage(1); }} className="h-[34px] w-[100px] rounded-[3px] border border-[#ccc] px-3" />
+              <button type="button" onClick={() => void loadList()} className="rounded-[4px] bg-[#51b957] px-4 py-2 text-white">Filter</button>
             </div>
           </div>
-
-          <div className="px-4 py-2 text-xs text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
-            {loadingList ? 'Loading...' : `${rows.length} record(s) on this page`} | Qty: {totals.qty.toFixed(2)} | Amount:{' '}
-            {peso.format(totals.amount)}
-          </div>
-
-          <div className="flex-1 overflow-y-auto">
-            {rows.length === 0 && !loadingList ? (
-              <div className="p-6 text-center text-sm text-slate-500 dark:text-slate-400">No sales return records found.</div>
-            ) : (
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-slate-100 dark:bg-slate-800 z-10">
-                  <tr className="text-left text-xs uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                    <th className="px-3 py-2">Date</th>
-                    <th className="px-3 py-2">CM No.</th>
-                    <th className="px-3 py-2">Customer</th>
-                    <th className="px-3 py-2 text-right">Amount</th>
+          <div className="px-6 py-6">
+            <div className="mb-2"><b>Filtered By:</b> Year: {year} Month: {MONTHS[Number(month) - 1]?.slice(0, 3)},</div>
+            <div className="max-h-[150px] overflow-y-auto">
+              <table className="w-full table-fixed border-collapse text-left">
+                <thead className="sticky top-0 bg-white font-['Oswald'] text-[14px]">
+                  <tr className="border-b-2 border-[#ddd]">
+                    <th className="w-[12%] px-2 py-2">Date</th>
+                    <th className="w-[42%] px-2 py-2">Customer</th>
+                    <th className="w-[15%] px-2 py-2">CM No.</th>
+                    <th className="w-[18%] px-2 py-2">Transaction No.</th>
+                    <th className="w-[13%] px-2 py-2">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row) => (
-                    <tr
-                      key={row.lrefno}
-                      onClick={() => setSelectedRefno(row.lrefno)}
-                      className={`cursor-pointer border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60 ${
-                        selectedRefno === row.lrefno ? 'bg-blue-50 dark:bg-blue-950/30' : ''
-                      }`}
-                    >
-                      <td className="px-3 py-2">{formatDate(row.ldate)}</td>
-                      <td className="px-3 py-2 font-semibold">{row.lcredit_no || 'N/A'}</td>
-                      <td className="px-3 py-2">{row.customer_name}</td>
-                      <td className="px-3 py-2 text-right">{peso.format(row.total_amount || 0)}</td>
-                    </tr>
-                  ))}
+                  {loadingList && <tr><td colSpan={5} className="px-2 py-4 text-slate-500">Loading...</td></tr>}
+                  {!loadingList && rows.length === 0 && <tr><td colSpan={5} className="px-2 py-4 text-slate-500">No sales return records found.</td></tr>}
+                  {!loadingList && rows.map((row) => {
+                    const active = selectedRefno === row.lrefno;
+                    return (
+                      <tr key={row.lrefno} onClick={() => setSelectedRefno(row.lrefno)} className={`cursor-pointer border-b border-[#ddd] ${active ? 'text-blue-600' : ''}`}>
+                        <td className="px-2 py-2">{formatDate(row.ldate)}</td>
+                        <td className="px-2 py-2">{row.customer_name || '-'}</td>
+                        <td className="px-2 py-2 underline">{row.lcredit_no || '-'}</td>
+                        <td className="px-2 py-2 underline">{row.linvoice_no || '-'}</td>
+                        <td className="px-2 py-2">{row.lstatus || 'Pending'}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
-            )}
-          </div>
-
-          <div className="p-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1 || loadingList}
-              className="px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-600 text-sm disabled:opacity-40"
-            >
-              Prev
-            </button>
-            <span className="text-xs text-slate-600 dark:text-slate-300">
-              Page {page} / {totalPages}
-            </span>
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages || loadingList}
-              className="px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-600 text-sm disabled:opacity-40"
-            >
-              Next
-            </button>
-          </div>
-        </div>
-
-        {/* ---- Right Panel: Detail ---- */}
-        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden flex flex-col">
-          <div className="p-4 border-b border-slate-200 dark:border-slate-700">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                {selected?.lcredit_no ? `CM ${selected.lcredit_no}` : 'Sales Return Details'}
-              </h2>
-              {selected && (
-                <div className="flex items-center gap-2">
-                  {/* Post / Unpost buttons */}
-                  {isPending && items.length > 0 && (
-                    <button
-                      onClick={handlePost}
-                      disabled={actionLoading}
-                      className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
-                    >
-                      <CheckCircle className="w-3.5 h-3.5" />
-                      Post
-                    </button>
-                  )}
-                  {isPosted && (
-                    <button
-                      onClick={handleUnpost}
-                      disabled={actionLoading}
-                      className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-md bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50"
-                    >
-                      <XCircle className="w-3.5 h-3.5" />
-                      Unpost
-                    </button>
-                  )}
-                  {/* Add Items button (only for Pending) */}
-                  {isPending && (
-                    <button
-                      onClick={openSourceItemsModal}
-                      disabled={actionLoading}
-                      className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Add Items
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
+          </div>
+        </section>
 
-            {selected ? (
-              <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
-                <div>
-                  <div className="text-slate-500 dark:text-slate-400">Customer</div>
-                  <div className="font-medium">{selected.customer_name}</div>
+        <section className="overflow-hidden rounded-[5px] border border-[#d8d8d8] bg-white">
+          <div className="flex min-h-[64px] items-center justify-between border-b border-[#ddd] px-5">
+            <h2 className="border-b border-[#5d82a2] py-5 pr-24 font-['Oswald'] text-[18px] uppercase text-[#315574]">Sales Return</h2>
+            <div className="flex items-center gap-2 font-['Oswald'] text-[18px] text-[#263f52]">
+              {selected && isPending && items.length > 0 && <button type="button" onClick={handlePost} disabled={actionLoading} className="rounded-[4px] bg-[#51b957] px-4 py-2 text-[12px] font-bold text-white">POST <u>Credit Memo</u></button>}
+              {selected && isPosted && <button type="button" onClick={handleUnpost} disabled={actionLoading} className="rounded-[4px] bg-[#f0ad4e] px-4 py-2 text-[12px] font-bold text-white">UNPOST</button>}
+              <span>CM No. :</span>
+              <input readOnly value={selected?.lcredit_no || ''} className="h-[34px] w-[130px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3 font-sans text-[13px]" />
+            </div>
+          </div>
+
+          {error && <div className="mx-6 mt-5 rounded border border-red-200 bg-red-50 px-3 py-2 text-red-700">{error}</div>}
+          <div className="px-8 py-8">
+            {!selected ? (
+              <p className="text-slate-500">Select a sales return record from the list or click Create New.</p>
+            ) : (
+              <>
+                <div className="mx-auto grid max-w-[1000px] grid-cols-[90px_1fr_80px_170px_100px_190px] items-center gap-x-3 gap-y-4">
+                  <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Type:</label>
+                  <span>{selected.ltype === 'OR' ? 'No Reference' : 'With Reference'}</span>
+                  <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Date :</label>
+                  <input readOnly value={formatDate(selected.ldate)} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
+                  <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Sales Person:</label>
+                  <input readOnly value={selected.sales_person || ''} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
+
+                  <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">DR/Invoice</label>
+                  <input readOnly value={selected.linvoice_no || ''} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
+                  <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Ship VIA :</label>
+                  <input readOnly value={selected.ship_via || ''} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
+                  <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Tracking No.:</label>
+                  <input readOnly value={selected.tracking_no || ''} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
+
+                  <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Customer:</label>
+                  <input readOnly value={selected.customer_name || ''} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
+                  <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Status:</label>
+                  <span>{selected.lstatus || 'Pending'}</span>
+                  <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Remark:</label>
+                  <input readOnly value={selected.lremark || ''} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
                 </div>
-                <div>
-                  <div className="text-slate-500 dark:text-slate-400">Date</div>
-                  <div className="font-medium">{formatDate(selected.ldate)}</div>
-                </div>
-                <div>
-                  <div className="text-slate-500 dark:text-slate-400">Status</div>
-                  <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${statusColor(selected.lstatus)}`}>
-                    {selected.lstatus || 'Pending'}
-                  </span>
-                </div>
-                <div>
-                  <div className="text-slate-500 dark:text-slate-400">Invoice</div>
-                  <div className="font-medium">{selected.linvoice_no || 'N/A'}</div>
-                </div>
-                <div>
-                  <div className="text-slate-500 dark:text-slate-400">Salesperson</div>
-                  <div className="font-medium">{selected.sales_person || 'N/A'}</div>
-                </div>
-                <div>
-                  <div className="text-slate-500 dark:text-slate-400">Ship/Tracking</div>
-                  <div className="font-medium">
-                    {selected.ship_via || 'N/A'} {selected.tracking_no ? `• ${selected.tracking_no}` : ''}
-                  </div>
-                </div>
-                {selected.lremark && (
-                  <div className="md:col-span-3">
-                    <div className="text-slate-500 dark:text-slate-400">Remark</div>
-                    <div className="font-medium">{selected.lremark}</div>
+
+                {isPending && (
+                  <div className="mt-5">
+                    <button type="button" onClick={openSourceItemsModal} disabled={actionLoading} className="rounded-[4px] bg-[#5d82a2] px-4 py-2 text-white">Add Record</button>
                   </div>
                 )}
-              </div>
-            ) : (
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">Select a sales return record from the list.</p>
+                <hr className="my-5 border-[#eee]" />
+                <div className="overflow-x-auto">
+                  <table className="min-w-[980px] w-full border-collapse text-left">
+                    <thead className="font-['Oswald'] text-[14px]">
+                      <tr className="border-b-2 border-[#ddd]">
+                        {isPending && <th className="w-8 px-2 py-2" />}
+                        <th className="px-2 py-2">Item Code</th>
+                        <th className="px-2 py-2 text-right">Quantity</th>
+                        <th className="px-2 py-2">Location.</th>
+                        <th className="px-2 py-2">Part No.</th>
+                        <th className="px-2 py-2">Brand</th>
+                        <th className="px-2 py-2">Description</th>
+                        <th className="px-2 py-2 text-right">Unit price</th>
+                        <th className="px-2 py-2">Remark</th>
+                        <th className="px-2 py-2 text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {loadingDetail && <tr><td colSpan={10} className="px-2 py-5 text-slate-500">Loading items...</td></tr>}
+                      {!loadingDetail && items.length === 0 && <tr><td colSpan={10} className="px-2 py-5 text-slate-500">No line items for this record.</td></tr>}
+                      {!loadingDetail && items.map((item) => (
+                        <tr key={item.id} className="border-b border-[#ddd]">
+                          {isPending && <td className="px-2 py-2"><button type="button" onClick={() => handleDeleteItem(item.id)} disabled={actionLoading} className="text-[#d9534f]" title="Remove item"><Trash2 className="h-4 w-4" /></button></td>}
+                          <td className="px-2 py-2">{item.item_code || '-'}</td>
+                          <td className="px-2 py-2 text-right">{item.qty.toFixed(2)}</td>
+                          <td className="px-2 py-2">{item.location || '-'}</td>
+                          <td className="px-2 py-2">{item.part_no || '-'}</td>
+                          <td className="px-2 py-2">{item.brand || '-'}</td>
+                          <td className="px-2 py-2">{item.description || '-'}</td>
+                          <td className="px-2 py-2 text-right">{peso.format(item.unit_price)}</td>
+                          <td className="px-2 py-2">{item.remark || '-'}</td>
+                          <td className="px-2 py-2 text-right">{peso.format(item.amount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="font-semibold">
+                      <tr>
+                        <td colSpan={isPending ? 2 : 1} className="px-2 py-3 text-right">Total Qty:</td>
+                        <td className="px-2 py-3 text-right"><span className="rounded-full bg-[#5d82a2] px-2 py-0.5 text-white">{items.reduce((sum, item) => sum + item.qty, 0).toFixed(2)}</span></td>
+                        <td colSpan={6} className="px-2 py-3 text-right">Grand Total:</td>
+                        <td className="px-2 py-3 text-right"><span className="rounded-full bg-[#5d82a2] px-2 py-0.5 text-white">{peso.format(items.reduce((sum, item) => sum + item.amount, 0))}</span></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </>
             )}
           </div>
-
-          {error ? (
-            <div className="mx-4 mt-4 rounded-md border border-red-200 bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>
-          ) : null}
-
-          <div className="flex-1 overflow-auto">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-slate-100 dark:bg-slate-800 z-10">
-                <tr className="text-left text-xs uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                  <th className="px-3 py-2">Item</th>
-                  <th className="px-3 py-2">Part No</th>
-                  <th className="px-3 py-2">Description</th>
-                  <th className="px-3 py-2 text-right">Qty</th>
-                  <th className="px-3 py-2 text-right">Price</th>
-                  <th className="px-3 py-2 text-right">Amount</th>
-                  {isPending && <th className="px-3 py-2 w-10"></th>}
-                </tr>
-              </thead>
-              <tbody>
-                {!selectedRefno || (!loadingDetail && items.length === 0) ? (
-                  <tr>
-                    <td colSpan={isPending ? 7 : 6} className="px-3 py-8 text-center text-slate-500 dark:text-slate-400">
-                      {loadingDetail ? 'Loading items...' : 'No line items for this record.'}
-                    </td>
-                  </tr>
-                ) : (
-                  items.map((item) => (
-                    <tr key={item.id} className="border-b border-slate-100 dark:border-slate-800">
-                      <td className="px-3 py-2">{item.item_code || 'N/A'}</td>
-                      <td className="px-3 py-2">{item.part_no || 'N/A'}</td>
-                      <td className="px-3 py-2">
-                        <div>{item.description || 'N/A'}</div>
-                        {item.brand || item.location || item.remark ? (
-                          <div className="text-xs text-slate-500 dark:text-slate-400">
-                            {[item.brand, item.location, item.remark].filter(Boolean).join(' • ')}
-                          </div>
-                        ) : null}
-                      </td>
-                      <td className="px-3 py-2 text-right">{item.qty.toFixed(2)}</td>
-                      <td className="px-3 py-2 text-right">{peso.format(item.unit_price)}</td>
-                      <td className="px-3 py-2 text-right font-semibold">{peso.format(item.amount)}</td>
-                      {isPending && (
-                        <td className="px-3 py-2 text-center">
-                          <button
-                            onClick={() => handleDeleteItem(item.id)}
-                            disabled={actionLoading}
-                            className="text-red-500 hover:text-red-700 disabled:opacity-40"
-                            title="Remove item"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
-                      )}
-                    </tr>
-                  ))
-                )}
-              </tbody>
-              {items.length > 0 && (
-                <tfoot className="bg-slate-50 dark:bg-slate-800/50 font-semibold">
-                  <tr>
-                    <td colSpan={3} className="px-3 py-2 text-right">
-                      Total
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      {items.reduce((sum, i) => sum + i.qty, 0).toFixed(2)}
-                    </td>
-                    <td className="px-3 py-2"></td>
-                    <td className="px-3 py-2 text-right">
-                      {peso.format(items.reduce((sum, i) => sum + i.amount, 0))}
-                    </td>
-                    {isPending && <td></td>}
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
-        </div>
+        </section>
       </div>
 
       {/* Modals */}
@@ -1169,6 +1064,24 @@ const SalesReturnPage: React.FC = () => {
         onConfirm={handleConfirmAction}
         onCancel={() => setConfirmAction((prev) => ({ ...prev, open: false }))}
       />
+      {showSearchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-[600px] rounded-[5px] bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b px-5 py-4">
+              <h3 className="text-[20px] font-semibold">Search Options</h3>
+              <button type="button" onClick={() => setShowSearchModal(false)} className="text-2xl text-slate-500">×</button>
+            </div>
+            <div className="space-y-4 px-8 py-6">
+              <label className="grid grid-cols-[130px_1fr] items-center gap-3"><span>Ref No.</span><input value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="Input Ref No." className="h-[36px] rounded border border-[#ccc] px-3" /></label>
+              <label className="grid grid-cols-[130px_1fr] items-center gap-3"><span>Status</span><select value={status} onChange={(e) => setStatus(e.target.value)} className="h-[36px] rounded border border-[#ccc] bg-white px-3"><option value="All">All Status</option><option value="Pending">Pending</option><option value="Posted">Posted</option><option value="Canceled">Canceled</option></select></label>
+            </div>
+            <div className="flex justify-end gap-2 border-t px-5 py-4">
+              <button type="button" onClick={() => { setSearch(searchInput.trim()); setPage(1); setShowSearchModal(false); }} className="rounded bg-[#51b957] px-4 py-2 text-white">Submit</button>
+              <button type="button" onClick={() => setShowSearchModal(false)} className="rounded bg-[#5d82a2] px-4 py-2 text-white">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

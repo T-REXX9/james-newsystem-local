@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Calendar, Search, X } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import {
   dailyCollectionService,
   DailyCollectionApproverLog,
@@ -816,22 +816,44 @@ const DailyCollectionEntryView: React.FC = () => {
 
   return (
     <>
-      <div className="h-full flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950">
-        <div className="flex-1 flex gap-3 overflow-hidden p-3">
-        {/* Left panel */}
-        <div className="w-[280px] shrink-0 flex flex-col rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
-          <div className="p-3">
-            <div className="flex flex-col gap-3 mb-3">
+      <div className="min-h-full overflow-auto bg-[#f4f4f4] px-4 py-10 text-[13px] text-[#222]">
+        <div className="mx-auto flex max-w-[1140px] flex-col gap-6">
+        {/* Old-system collection list */}
+        <div className="flex max-h-[275px] w-full shrink-0 flex-col overflow-hidden rounded-[5px] border border-[#d8d8d8] bg-white">
+          <div className="flex min-h-[82px] flex-wrap items-center justify-between gap-4 border-b border-[#ddd] px-9 py-5">
+            <div className="flex items-center gap-1">
               <button
-                className={`w-full px-4 py-2 rounded-lg bg-brand-blue text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed`}
+                type="button"
+                className="rounded-[4px] bg-[#5d82a2] px-4 py-2 text-white"
+                onClick={() => {
+                  const field = document.getElementById('daily-collection-search');
+                  field?.focus();
+                }}
+              >
+                Search Check
+              </button>
+              <button
+                className="rounded-[4px] bg-[#51b957] px-4 py-2 text-white disabled:opacity-50"
                 onClick={handleCreate}
                 disabled={workingAction === 'create'}
               >
                 Create New
               </button>
-              <div className="flex gap-2 bg-slate-50 dark:bg-slate-800/50 p-2 rounded border border-slate-200 dark:border-slate-800">
+              <div className="relative ml-3">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  id="daily-collection-search"
+                  className="h-[34px] w-[230px] rounded-[3px] border border-[#ccc] pl-9 pr-3"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search DCR no / refno"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="font-['Oswald'] text-[20px] text-[#263f52]">Filter by Month:</span>
                 <select
-                  className={`${SELECT_CLASS} min-w-[88px]`}
+                  className="h-[34px] w-[200px] rounded-[3px] border border-[#ccc] bg-white px-3"
                   value={filterMonth}
                   onChange={(e) => setFilterMonth(e.target.value)}
                 >
@@ -847,30 +869,16 @@ const DailyCollectionEntryView: React.FC = () => {
                 </select>
                 <input
                   type="number"
-                  className={`${INPUT_CLASS} w-[88px]`}
+                  className="h-[34px] w-[100px] rounded-[3px] border border-[#ccc] px-3"
                   value={filterYear}
                   onChange={(e) => setFilterYear(e.target.value)}
                   min={2000}
                   max={2099}
                 />
-              </div>
-            </div>
-
-            <div className="relative">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                className={`${INPUT_CLASS} pl-9`}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search DCR no / refno"
-              />
             </div>
           </div>
-
-          <hr className="border-slate-200 dark:border-slate-800" />
-
-          <div className="flex-1 overflow-y-auto">
-            <div className="grid grid-cols-[110px_1fr] px-3 py-2 bg-slate-100 dark:bg-slate-800 border-b-2 border-brand-blue text-xs font-bold text-slate-700 dark:text-slate-200">
+          <div className="flex-1 overflow-y-auto px-6 py-6">
+            <div className="grid grid-cols-[180px_1fr] border-b-2 border-[#ddd] px-2 py-2 font-['Oswald'] text-[14px]">
               <span>Date</span>
               <span>DCR No.</span>
             </div>
@@ -886,17 +894,12 @@ const DailyCollectionEntryView: React.FC = () => {
                 <div
                   key={row.lrefno}
                   onClick={() => setSelectedRefno(row.lrefno)}
-                  className={`grid grid-cols-[110px_1fr] px-3 py-2 mx-1 my-0.5 rounded-lg border cursor-pointer transition-colors ${
-                    active
-                      ? 'border-l-4 border-brand-blue bg-brand-blue/10 shadow-sm'
-                      : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
-                  }`}
+                  className={`grid cursor-pointer grid-cols-[180px_1fr] border-b border-[#ddd] px-2 py-2 ${active ? 'text-blue-600' : ''}`}
                 >
-                  <span className="flex items-center gap-1 text-sm text-slate-500 dark:text-slate-400">
-                    <Calendar size={12} />
+                  <span>
                     {toDisplayDate(row.ldatetime) || '-'}
                   </span>
-                  <span className={`text-sm font-bold ${active ? 'text-brand-blue' : 'text-slate-900 dark:text-slate-100'}`}>
+                  <span className="underline">
                     {row.lcolection_no || row.lrefno}
                   </span>
                 </div>
@@ -905,8 +908,8 @@ const DailyCollectionEntryView: React.FC = () => {
           </div>
         </div>
 
-        {/* Right panel */}
-        <div className="flex-1 min-w-0 flex flex-col rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden border-t-4 border-t-brand-blue">
+        {/* Old-system daily collection report */}
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[5px] border border-[#d8d8d8] bg-white">
           {!selectedRefno && (
             <div className="h-full grid place-items-center text-slate-500 dark:text-slate-400">
               <p>Select or create a DCR record</p>
@@ -916,7 +919,7 @@ const DailyCollectionEntryView: React.FC = () => {
           {selectedRefno && (
             <>
               {/* Action bar */}
-              <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b-2 border-brand-blue bg-slate-50 dark:bg-slate-800/50">
+              <div className="flex min-h-[64px] flex-wrap items-center justify-between gap-2 border-b border-[#ddd] px-5">
                 <div className="flex flex-wrap gap-2">
                   {statusButtons.primary}
                 </div>
@@ -926,24 +929,21 @@ const DailyCollectionEntryView: React.FC = () => {
               </div>
 
               {/* DCR header info */}
-              <div className="p-4 border-b border-slate-200 dark:border-slate-800">
+              <div className="border-b border-[#ddd] px-5 py-4">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                  <div className="border-l-4 border-brand-blue pl-3">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-brand-blue">Daily Collection Report</p>
-                    <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">DAILY COLLECTION REPORT</h2>
-                    <p className="text-base text-slate-900 dark:text-slate-100 mt-0.5">
+                  <div>
+                    <h2 className="border-b border-[#5d82a2] pb-4 pr-24 font-['Oswald'] text-[18px] uppercase text-[#315574]">Daily Collection Report</h2>
+                    <p className="mt-3 font-['Oswald'] text-[18px] text-[#263f52]">
                       {selectedHeader?.lcolection_no || selectedRefno}
                     </p>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                    <p>
                       Date: {toDisplayDate(selectedHeader?.ldatetime) || '-'}
                     </p>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                    <p>
                       Ref No.: {selectedRefno}
                     </p>
                   </div>
-                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${getStatusBadgeClasses(selectedHeader?.lstatus)}`}>
-                    {selectedHeader?.lstatus || 'Pending'}
-                  </span>
+                  <div className="font-['Oswald'] text-[18px] text-[#263f52]">Status: {selectedHeader?.lstatus || 'Pending'}</div>
                 </div>
                 {error && (
                   <div className="mt-2 p-2 rounded bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm">
@@ -953,7 +953,7 @@ const DailyCollectionEntryView: React.FC = () => {
               </div>
 
               {/* Content area */}
-              <div className="p-4 flex flex-col gap-4 min-h-0 overflow-auto">
+              <div className="flex min-h-0 flex-col gap-4 overflow-auto px-6 py-6">
                 {!detailLoading && canAddPayment && (
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
                     <div className="flex gap-2">
@@ -990,9 +990,9 @@ const DailyCollectionEntryView: React.FC = () => {
                 )}
 
                 {/* Payment lines table */}
-                <div className="overflow-x-auto border border-slate-300 dark:border-slate-700 rounded-lg max-h-[480px] overflow-y-auto">
+                <div className="max-h-[480px] overflow-x-auto overflow-y-auto">
                   <table className="w-full text-sm min-w-[1400px]">
-                    <thead className="bg-slate-800 text-white sticky top-0">
+                    <thead className="sticky top-0 border-b-2 border-[#ddd] bg-white font-['Oswald'] text-[#222]">
                       <tr>
                         <th className="px-3 py-2 text-left font-bold whitespace-nowrap w-10">
                           <input
@@ -1023,7 +1023,7 @@ const DailyCollectionEntryView: React.FC = () => {
                         <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Approval</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                    <tbody className="divide-y divide-[#ddd]">
                       {detailLoading && (
                         <tr>
                           <td colSpan={11} className="px-3 py-4 text-center text-slate-500 dark:text-slate-400">
@@ -1043,7 +1043,7 @@ const DailyCollectionEntryView: React.FC = () => {
                         return (
                           <tr
                             key={item.lid}
-                            className={`${index % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50 dark:bg-slate-800/30'} hover:bg-slate-100 dark:hover:bg-slate-800`}
+                            className={index % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'}
                           >
                             <td className="px-3 py-2">
                               <input
@@ -1066,9 +1066,7 @@ const DailyCollectionEntryView: React.FC = () => {
                             <td className="px-3 py-2">{item.lchk_date ? toDisplayDate(item.lchk_date) : '-'}</td>
                             <td className="px-3 py-2 text-right">{peso.format(item.lamt || 0)}</td>
                             <td className="px-3 py-2">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusBadgeClasses(item.lstatus || item.lcollection_status)}`}>
-                                {item.lstatus || item.lcollection_status || 'Pending'}
-                              </span>
+                              <span>{item.lstatus || item.lcollection_status || 'Pending'}</span>
                               {!posted && (
                                 <select
                                   className={`${SELECT_CLASS} w-full mt-2`}
@@ -1104,7 +1102,7 @@ const DailyCollectionEntryView: React.FC = () => {
                         );
                       })}
                       {!detailLoading && canAddPayment && (
-                        <tr className="bg-slate-50 dark:bg-slate-800/30">
+                        <tr className="bg-[#fafafa]">
                           <td className="px-3 py-2">
                             <input
                               type="checkbox"
@@ -1245,7 +1243,7 @@ const DailyCollectionEntryView: React.FC = () => {
                       )}
                     </tbody>
                     <tfoot>
-                      <tr className="bg-slate-100 dark:bg-slate-800 border-t-2 border-slate-300 dark:border-slate-700 font-bold text-sm">
+                      <tr className="border-t-2 border-[#ddd] bg-white text-sm font-bold">
                         <td className="px-3 py-3" />
                         <td colSpan={2} className="px-3 py-3 text-slate-900 dark:text-slate-100">
                           Total Check: {peso.format(totalCheck)}

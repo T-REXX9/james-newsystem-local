@@ -44,6 +44,7 @@ interface SalesReturnListResponse {
 
 export interface SourceItem {
   source_item_id: number;
+  is_catalog_item?: boolean;
   linv_refno: string;
   item_code: string;
   part_no: string;
@@ -251,4 +252,3 @@ export const salesReturnService = {
     return mapRecord(data);
   },
 };
-
