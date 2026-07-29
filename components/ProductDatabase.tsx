@@ -1,198 +1,224 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
-import {
-  Search, Plus, Edit2, Trash2, Filter, Package, AlertCircle, X, Check, Loader2, Save, Eye, EyeOff, Archive, TrendingUp, TrendingDown, Settings, DollarSign, Percent
-} from 'lucide-react';
-import CustomLoadingSpinner from './CustomLoadingSpinner';
-import { Product, UserProfile } from '../types';
-import {
-  fetchProductsPage,
-  type ProductListStatus,
-  createProduct,
-  updateProduct,
-  deleteProduct,
-  fetchProductById,
-} from '../services/productLocalApiService';
-import { searchStockMovementProducts } from '../services/stockMovementLocalApiService';
-import { fetchProductMovementClassifications } from '../services/inventoryMovementService';
-import { applyOptimisticUpdate, applyOptimisticDelete } from '../utils/optimisticUpdates';
-import SearchableSelect from './SearchableSelect';
+import React, { useEffect, useRef, useState } from 'react';
+import { Eye, Loader2 } from 'lucide-react';
+import type { Supplier } from '../maintenance.types';
+import type { Product, UserProfile } from '../types';
 import ConfirmModal from './ConfirmModal';
+import CustomLoadingSpinner from './CustomLoadingSpinner';
 import ValidationSummary from './ValidationSummary';
-import FieldHelp from './FieldHelp';
-import { validateMinLength, validateRequired } from '../utils/formValidation';
-import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
 import { fetchCategories, type CategoryRecord } from '../services/categoryLocalApiService';
-import { EmptyState, LoadingState, PageHeader } from './common/PageScaffold';
+import {
+  createProduct,
+  deleteProduct,
+  fetchProductById,
+  fetchProductsPage,
+  updateProduct,
+  type ProductListStatus,
+} from '../services/productLocalApiService';
+import { fetchSuppliers } from '../services/supplierService';
+import { parseSupabaseError } from '../utils/errorHandler';
+import { validateMinLength, validateRequired } from '../utils/formValidation';
 
 interface ProductDatabaseProps {
   currentUser: UserProfile | null;
   initialProductId?: string;
 }
 
-const getSortedSalesByYearEntries = (salesByYear?: Record<string, number>) =>
-  Object.entries(salesByYear ?? {}).sort(([yearA], [yearB]) => Number(yearB) - Number(yearA));
+type ProductForm = Omit<Product, 'id'>;
+type SupplierCost = NonNullable<Product['supplier_costs']>[number];
+
+interface LegacyFilters {
+  partNo: string;
+  itemCode: string;
+  category: string;
+  originalPn: string;
+  oemNo: string;
+  description: string;
+  descriptiveInquiry: string;
+  application: string;
+  brand: string;
+  size: string;
+  holes: string;
+  cylinder: string;
+  barcode: string;
+}
+
+const EMPTY_FILTERS: LegacyFilters = {
+  partNo: '',
+  itemCode: '',
+  category: '',
+  originalPn: '',
+  oemNo: '',
+  description: '',
+  descriptiveInquiry: '',
+  application: '',
+  brand: '',
+  size: '',
+  holes: '',
+  cylinder: '',
+  barcode: '',
+};
+
+const EMPTY_PRODUCT: ProductForm = {
+  part_no: '',
+  oem_no: '',
+  brand: '',
+  barcode: '',
+  no_of_pieces_per_box: 0,
+  item_code: '',
+  description: '',
+  size: '',
+  reorder_quantity: 0,
+  status: 'Active',
+  category: '',
+  descriptive_inquiry: '',
+  no_of_holes: '',
+  replenish_quantity: 0,
+  original_pn_no: '',
+  application: '',
+  location: '',
+  no_of_cylinder: '',
+  cost: 0,
+  price_aa: 0,
+  price_bb: 0,
+  price_cc: 0,
+  price_dd: 0,
+  price_vip1: 0,
+  price_vip2: 0,
+  price_baa: 0,
+  price_bbb: 0,
+  price_bcc: 0,
+  price_bdd: 0,
+  stock_wh1: 0,
+  stock_wh2: 0,
+  stock_wh3: 0,
+  stock_wh4: 0,
+  stock_wh5: 0,
+  stock_wh6: 0,
+  supplier_costs: [],
+  transaction_count: 0,
+};
+
+const inputClass = 'h-[34px] w-full rounded-[3px] border border-[#ccc] bg-white px-3 text-[13px] text-[#333] outline-none focus:border-[#5d82a2]';
+
+const money = (value?: number) => Number(value || 0).toLocaleString(undefined, {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
 const getConsolidatedStock = (product: Product): number =>
-  product.stock_wh1 + product.stock_wh2 + product.stock_wh3 +
-  product.stock_wh4 + product.stock_wh5 + product.stock_wh6;
+  Number(product.stock_wh1 || 0) + Number(product.stock_wh2 || 0) + Number(product.stock_wh3 || 0)
+  + Number(product.stock_wh4 || 0) + Number(product.stock_wh5 || 0) + Number(product.stock_wh6 || 0);
 
-const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialProductId }) => {
+const formatBlueprintDate = (value?: string): string => {
+  const text = String(value || '').trim();
+  if (!text) return '-';
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return text;
+  return parsed.toLocaleDateString('en-GB');
+};
+
+const compactQuantity = (value?: number): string => {
+  const amount = Number(value || 0);
+  return Number.isInteger(amount) ? amount.toLocaleString() : amount.toLocaleString(undefined, { maximumFractionDigits: 2 });
+};
+
+const getSpecificationRows = (product: Product) => {
+  const searchable = `${product.specifications || ''} ${product.application || ''}`;
+  const side = searchable.match(/\b(?:L|R)\s*\d+(?:\.\d+)?\s*mm(?:\s*\((?:Left|Right)\))?/i)?.[0]
+    || searchable.match(/\b(?:Left|Right)\b/i)?.[0]
+    || '-';
+  const profile = searchable.match(/\b(?:FLAT|LUBOG)\b/i)?.[0]?.toUpperCase() || '-';
+  return [
+    ['Measurement', product.size || product.specifications || '-'],
+    ['# Holes', product.no_of_holes ? `${product.no_of_holes}${/hole/i.test(product.no_of_holes) ? '' : ' Holes'}` : '-'],
+    ['# Cylinder', product.no_of_cylinder ? `${product.no_of_cylinder}${/cylinder/i.test(product.no_of_cylinder) ? '' : ' Cylinder'}` : '-'],
+    ['Left / Right', side],
+    ['Flat / Lubog', profile],
+  ];
+};
+
+const LegacyField: React.FC<{
+  label: string;
+  children: React.ReactNode;
+}> = ({ label, children }) => (
+  <div className="grid min-w-0 grid-cols-[118px_minmax(0,1fr)] items-center gap-2">
+    <label className="font-semibold text-[#263f52]">{label}</label>
+    {children}
+  </div>
+);
+
+const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser: _currentUser, initialProductId }) => {
   const { addToast } = useToast();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [searchOptions, setSearchOptions] = useState<Product[]>([]);
-  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
-  const [isLoadingSearchOptions, setIsLoadingSearchOptions] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<ProductListStatus>('active');
   const [products, setProducts] = useState<Product[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [page, setPage] = useState(1);
-  const [perPage] = useState(100);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [highlightedProductId, setHighlightedProductId] = useState<string | null>(null);
-  const productRowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
-  const pendingNavigationProductIdRef = useRef<string | null>(null);
-
-  const isMasterAccess = currentUser?.role === 'Owner' || currentUser?.role === 'Developer';
-
-  // Modal State
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isBulkUpdateModalOpen, setIsBulkUpdateModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [formData, setFormData] = useState<ProductForm>({ ...EMPTY_PRODUCT });
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+  const [appliedFilters, setAppliedFilters] = useState<LegacyFilters>({ ...EMPTY_FILTERS });
+  const [statusFilter, setStatusFilter] = useState<ProductListStatus>('active');
   const [categories, setCategories] = useState<CategoryRecord[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [selectedSupplierRows, setSelectedSupplierRows] = useState<number[]>([]);
+  const [applyCostToAll, setApplyCostToAll] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [submitCount, setSubmitCount] = useState(0);
   const [submitError, setSubmitError] = useState('');
+  const [highlightedProductId, setHighlightedProductId] = useState<string | null>(null);
+  const productRowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
+  const listViewportRef = useRef<HTMLDivElement | null>(null);
+  const loadingRef = useRef(false);
+  const requestSequenceRef = useRef(0);
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Confirm',
+    onConfirm: async () => {},
+  });
 
-  // Confirm Modal State
-  const [confirmModal, setConfirmModal] = useState<{
-    isOpen: boolean;
-    title: string;
-    message: string;
-    onConfirm: () => Promise<void> | void;
-    variant: 'danger' | 'warning' | 'info' | 'success';
-    confirmLabel: string;
-  }>({ isOpen: false, title: '', message: '', onConfirm: () => { }, variant: 'danger', confirmLabel: 'Confirm' });
-
-
-  // Form State
-  const initialFormState: Omit<Product, 'id'> = {
-    part_no: '',
-    oem_no: '',
-    brand: '',
-    barcode: '',
-    no_of_pieces_per_box: 0,
-    item_code: '',
-    description: '',
-    size: '',
-    reorder_quantity: 0,
-    status: 'Active',
-    category: '',
-    descriptive_inquiry: '',
-    no_of_holes: '',
-    replenish_quantity: 0,
-    original_pn_no: '',
-    application: '',
-    no_of_cylinder: '',
-
-    // Prices
-    cost: 0,
-    price_aa: 0,
-    price_bb: 0,
-    price_cc: 0,
-    price_dd: 0,
-    price_vip1: 0,
-    price_vip2: 0,
-
-    // Warehouse Stocks
-    stock_wh1: 0,
-    stock_wh2: 0,
-    stock_wh3: 0,
-    stock_wh4: 0,
-    stock_wh5: 0,
-    stock_wh6: 0
-  };
-
-  const [formData, setFormData] = useState<Omit<Product, 'id'>>(initialFormState);
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      setDebouncedSearch(searchQuery.trim());
-      setPage(1);
-    }, 250);
-    return () => window.clearTimeout(timeout);
-  }, [searchQuery]);
-
-  useEffect(() => {
-    let isMounted = true;
-    const timer = window.setTimeout(async () => {
-      try {
-        setIsLoadingSearchOptions(true);
-        const rows = await searchStockMovementProducts(searchQuery.trim(), 50);
-        if (isMounted) setSearchOptions(rows);
-      } catch (error) {
-        console.error('Error loading product search options:', error);
-        if (isMounted) setSearchOptions([]);
-      } finally {
-        if (isMounted) setIsLoadingSearchOptions(false);
-      }
-    }, 200);
-
-    return () => {
-      isMounted = false;
-      window.clearTimeout(timer);
-    };
-  }, [searchQuery]);
-
-  useEffect(() => {
-    if (!initialProductId) {
-      pendingNavigationProductIdRef.current = null;
-      return;
-    }
-
-    let cancelled = false;
-    pendingNavigationProductIdRef.current = initialProductId;
-
-    void fetchProductById(initialProductId)
-      .then((product) => {
-        if (cancelled || !product) return;
-        const searchValue = product.part_no?.trim() || product.item_code?.trim() || product.description?.trim() || '';
-        setSearchQuery(searchValue);
-        setDebouncedSearch(searchValue);
-        setPage(1);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          pendingNavigationProductIdRef.current = null;
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [initialProductId]);
-
-  const loadProducts = async (targetPage = page) => {
+  const loadProducts = async (targetPage = 1, append = false) => {
+    if (append && loadingRef.current) return;
+    loadingRef.current = true;
+    const requestId = ++requestSequenceRef.current;
     setIsLoading(true);
     try {
       const result = await fetchProductsPage({
-        search: debouncedSearch,
+        partNo: appliedFilters.partNo,
+        itemCode: appliedFilters.itemCode,
+        category: appliedFilters.category,
+        originalPn: appliedFilters.originalPn,
+        oemNo: appliedFilters.oemNo,
+        description: appliedFilters.description,
+        descriptiveInquiry: appliedFilters.descriptiveInquiry,
+        application: appliedFilters.application,
+        brand: appliedFilters.brand,
+        size: appliedFilters.size,
+        holes: appliedFilters.holes,
+        cylinder: appliedFilters.cylinder,
+        barcode: appliedFilters.barcode,
         status: statusFilter,
         page: targetPage,
-        perPage,
+        perPage: 100,
       });
-      setProducts(result.items);
+      if (requestId !== requestSequenceRef.current) return;
+      setProducts((current) => {
+        if (!append) return result.items;
+        const existingIds = new Set(current.map((product) => product.id));
+        return [...current, ...result.items.filter((product) => !existingIds.has(product.id))];
+      });
       setPage(result.meta.page);
       setTotalItems(result.meta.total);
       setTotalPages(Math.max(1, result.meta.total_pages));
       setHasLoadedOnce(true);
     } catch (error) {
-      console.error('Error loading product page:', error);
+      if (requestId !== requestSequenceRef.current) return;
       addToast({
         type: 'error',
         title: 'Unable to load products',
@@ -200,1135 +226,542 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser, initialP
         durationMs: 6000,
       });
     } finally {
-      setIsLoading(false);
+      if (requestId === requestSequenceRef.current) {
+        loadingRef.current = false;
+        setIsLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    loadProducts(page);
+    setPage(1);
+    if (listViewportRef.current) listViewportRef.current.scrollTop = 0;
+    void loadProducts(1, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, debouncedSearch, statusFilter]);
+  }, [appliedFilters, statusFilter]);
+
+  const handleListScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    const viewport = event.currentTarget;
+    const nearBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= 120;
+    if (nearBottom && !loadingRef.current && page < totalPages) {
+      void loadProducts(page + 1, true);
+    }
+  };
 
   useEffect(() => {
-    const targetProductId = pendingNavigationProductIdRef.current;
-    if (!targetProductId) {
-      return;
-    }
-
-    const row = productRowRefs.current[targetProductId];
-    if (!row || !products.some((product) => product.id === targetProductId)) {
-      return;
-    }
-
-    pendingNavigationProductIdRef.current = null;
-    setHighlightedProductId(targetProductId);
-    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-    const timeout = window.setTimeout(() => {
-      setHighlightedProductId((current) => (current === targetProductId ? null : current));
-    }, 2200);
-
-    return () => {
-      window.clearTimeout(timeout);
-    };
-  }, [products]);
-
-  // Movement classification state
-  type MovementCategory = 'fast' | 'slow' | 'normal';
-  const [movementMap, setMovementMap] = useState<Map<string, MovementCategory>>(new Map());
-
-  useEffect(() => {
-    const loadMovementData = async () => {
-      try {
-        const classifications = await fetchProductMovementClassifications();
-        setMovementMap(classifications);
-      } catch (error) {
-        console.error('Error loading movement classifications:', error);
-      }
-    };
-    loadMovementData();
+    void Promise.all([fetchCategories(), fetchSuppliers()])
+      .then(([categoryResult, supplierResult]) => {
+        setCategories(categoryResult.items);
+        setSuppliers(supplierResult);
+      })
+      .catch(() => {
+        setCategories([]);
+        setSuppliers([]);
+      });
   }, []);
 
-  const filteredProducts = products;
-
   useEffect(() => {
-    if (!isModalOpen) return;
-    fetchCategories().then((res) => setCategories(res.items)).catch(() => {});
-  }, [isModalOpen]);
-
-  const handleOpenAdd = () => {
-    setEditingProduct(null);
-    setFormData(initialFormState);
-    setIsModalOpen(true);
-  };
-
-  const handleOpenEdit = (product: Product) => {
-    setEditingProduct(product);
-    setFormData({ ...product });
-    setIsModalOpen(true);
-  };
-
-  const handleDelete = async (id: string) => {
-    setConfirmModal({
-      isOpen: true,
-      title: 'Delete Product',
-      message: 'Are you sure you want to delete this product? It will be moved to the recycle bin.',
-      variant: 'danger',
-      confirmLabel: 'Delete',
-      onConfirm: async () => {
-        setProducts(prev => applyOptimisticDelete(prev, id));
-        try {
-          await deleteProduct(id);
-          await loadProducts(page);
-          addToast({ 
-            type: 'success', 
-            title: 'Product deleted',
-            description: 'Product has been removed from the database.',
-            durationMs: 4000,
-          });
-        } catch (error) {
-          console.error('Error deleting product:', error);
-          addToast({ 
-            type: 'error', 
-            title: 'Unable to delete product',
-            description: parseSupabaseError(error, 'product'),
-            durationMs: 6000,
-          });
-        }
-      },
+    if (!initialProductId) return;
+    void fetchProductById(initialProductId).then((product) => {
+      if (!product) return;
+      setEditingProduct(product);
+      setFormData({ ...product, supplier_costs: product.supplier_costs || [] });
+      setHighlightedProductId(product.id);
+      window.setTimeout(() => productRowRefs.current[product.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
     });
+  }, [initialProductId]);
+
+  const updateField = (field: keyof ProductForm, value: string | number) => {
+    setFormData((current) => ({ ...current, [field]: value }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const fieldInput = (field: keyof ProductForm, placeholder: string, type: 'text' | 'number' = 'text') => (
+    <input
+      type={type}
+      value={type === 'number' && Number(formData[field] || 0) === 0 ? '' : String(formData[field] ?? '')}
+      onChange={(event) => updateField(field, type === 'number' ? Number(event.target.value || 0) : event.target.value)}
+      placeholder={placeholder}
+      className={inputClass}
+    />
+  );
+
+  const selectProduct = (product: Product) => {
+    setEditingProduct(product);
+    setFormData({ ...product, supplier_costs: product.supplier_costs || [] });
+    setSelectedSupplierRows([]);
+    setApplyCostToAll(false);
+    setSubmitError('');
+    setValidationErrors({});
+    setHighlightedProductId(product.id);
+  };
+
+  const clearEditor = () => {
+    setEditingProduct(null);
+    setFormData({ ...EMPTY_PRODUCT, supplier_costs: [] });
+    setSelectedSupplierRows([]);
+    setApplyCostToAll(false);
+    setSubmitError('');
+    setValidationErrors({});
+    setHighlightedProductId(null);
+  };
+
+  const validateForm = () => {
+    const errors: Record<string, string> = {};
+    const partNo = validateRequired(formData.part_no, 'a part number');
+    const description = validateRequired(formData.description, 'a description');
+    const descriptionLength = validateMinLength(formData.description, 'description', 3);
+    if (!partNo.isValid) errors.part_no = partNo.message;
+    if (!description.isValid) errors.description = description.message;
+    else if (!descriptionLength.isValid) errors.description = descriptionLength.message;
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const buildPayload = () => ({
+    ...formData,
+    part_no: String(formData.part_no || '').replace(/\s+/g, ''),
+    item_code: String(formData.item_code || '').trim(),
+    supplier_costs: formData.supplier_costs || [],
+    apply_cost_to_all_part_no: applyCostToAll,
+  });
+
+  const saveProduct = async (mode: 'add' | 'edit') => {
     if (!validateForm()) {
-      setSubmitCount((prev) => prev + 1);
+      setSubmitCount((count) => count + 1);
       return;
     }
+    if (mode === 'edit' && !editingProduct) return;
+
     setIsSaving(true);
     setSubmitError('');
     try {
-      if (editingProduct) {
-        // Optimistic update
-        setProducts(prev => applyOptimisticUpdate(prev, editingProduct.id, formData));
-        await updateProduct(editingProduct.id, formData);
-        await loadProducts(page);
-        addToast({ 
-          type: 'success', 
-          title: 'Product updated',
-          description: 'Product information has been updated successfully.',
-          durationMs: 4000,
-        });
-      } else {
-        await createProduct(formData);
-        await loadProducts(1);
-        addToast({ 
-          type: 'success', 
-          title: 'Product created',
-          description: 'New product has been added to the database.',
-          durationMs: 4000,
-        });
+      if (mode === 'add') {
+        await createProduct(buildPayload());
+        addToast({ type: 'success', title: 'Product added', description: 'Product record was added successfully.' });
+        clearEditor();
+        await loadProducts(1, false);
+      } else if (editingProduct) {
+        await updateProduct(editingProduct.id, buildPayload());
+        addToast({ type: 'success', title: 'Product saved', description: 'Product record was updated successfully.' });
+        const refreshed = await fetchProductById(editingProduct.id);
+        if (refreshed) {
+          selectProduct(refreshed);
+          setProducts((current) => current.map((product) => product.id === refreshed.id ? refreshed : product));
+        }
       }
-      setIsModalOpen(false);
     } catch (error) {
-      console.error(error);
-      setSubmitError(parseSupabaseError(error, 'product'));
-      addToast({ 
-        type: 'error', 
-        title: editingProduct ? 'Unable to update product' : 'Unable to create product',
-        description: parseSupabaseError(error, 'product'),
-        durationMs: 6000,
-      });
-      // Real-time subscription will correct the state
+      const message = parseSupabaseError(error, 'product');
+      setSubmitError(message);
+      addToast({ type: 'error', title: mode === 'add' ? 'Unable to add product' : 'Unable to save product', description: message, durationMs: 6000 });
     } finally {
       setIsSaving(false);
     }
   };
 
-  const validateForm = () => {
-    const errors: Record<string, string> = {};
-    const partNoCheck = validateRequired(formData.part_no, 'a part number');
-    if (!partNoCheck.isValid) errors.part_no = partNoCheck.message;
-    const descriptionCheck = validateRequired(formData.description, 'a description');
-    if (!descriptionCheck.isValid) errors.description = descriptionCheck.message;
-    const descriptionLength = validateMinLength(formData.description, 'description', 3);
-    if (!descriptionLength.isValid) errors.description = descriptionLength.message;
-    setValidationErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
-  const handleBlur = (field: keyof Product, value: unknown) => {
-    let message = '';
-    if (field === 'part_no') {
-      const result = validateRequired(value, 'a part number');
-      message = result.isValid ? '' : result.message;
-    }
-    if (field === 'description') {
-      const requiredCheck = validateRequired(value, 'a description');
-      message = requiredCheck.isValid ? '' : requiredCheck.message;
-      if (!message) {
-        const lengthCheck = validateMinLength(value, 'description', 3);
-        message = lengthCheck.isValid ? '' : lengthCheck.message;
-      }
-    }
-    setValidationErrors((prev) => ({ ...prev, [field]: message }));
-  };
-
-  const handleBulkUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!bulkFormData.targetPercentage) return;
-
-    const affectedProducts = filteredForBulk.map(p => {
-      const cost = p.cost || 0;
-      const updates: Partial<Product> = {};
-      const percent = bulkFormData.targetPercentage as number;
-
-      bulkFormData.selectedPriceGroups.forEach(group => {
-        const field = `price_${group.toLowerCase()}` as keyof Product;
-        let newPrice = 0;
-
-        if (bulkFormData.updateMethod === 'markup') {
-          // Markup: SP = Cost * (1 + Markup%)
-          newPrice = Math.round(cost * (1 + percent / 100));
-        } else {
-          // GP: SP = Cost / (1 - GP%)
-          const margin = 1 - (percent / 100);
-          newPrice = margin > 0 ? Math.round(cost / margin) : 0;
-        }
-
-        // @ts-ignore
-        updates[field] = newPrice;
-      });
-
-      return { id: p.id, updates };
+  const handleSearch = () => {
+    setAppliedFilters({
+      partNo: formData.part_no,
+      itemCode: formData.item_code,
+      category: formData.category,
+      originalPn: formData.original_pn_no,
+      oemNo: formData.oem_no,
+      description: formData.description,
+      descriptiveInquiry: formData.descriptive_inquiry,
+      application: formData.application,
+      brand: formData.brand,
+      size: formData.size,
+      holes: formData.no_of_holes,
+      cylinder: formData.no_of_cylinder,
+      barcode: formData.barcode,
     });
+  };
 
-    if (affectedProducts.length === 0) {
-      addToast({
-        type: 'warning',
-        title: 'No matching products',
-        description: 'Adjust the filters or search term before running a bulk price update.',
-      });
-      return;
-    }
+  const handleRefresh = () => {
+    clearEditor();
+    setAppliedFilters({ ...EMPTY_FILTERS });
+    setStatusFilter('active');
+  };
 
+  const handleDelete = () => {
+    if (!editingProduct || Number(editingProduct.transaction_count || 0) > 0) return;
     setConfirmModal({
       isOpen: true,
-      title: 'Update Prices',
-      message: `You are about to update prices for ${affectedProducts.length} products. This action cannot be undone.`,
-      variant: 'warning',
-      confirmLabel: `Update ${affectedProducts.length} Products`,
+      title: 'Delete Product',
+      message: 'Are you sure you want to delete this product record?',
+      confirmLabel: 'Delete',
       onConfirm: async () => {
-        setIsBulkUpdating(true);
         try {
-          await Promise.all(affectedProducts.map((item) => updateProduct(item.id, item.updates)));
-          await loadProducts(page);
-          setIsBulkUpdateModalOpen(false);
-          addToast({ 
-            type: 'success', 
-            title: 'Bulk update completed',
-            description: 'Product prices have been updated successfully.',
-            durationMs: 4000,
-          });
+          await deleteProduct(editingProduct.id);
+          addToast({ type: 'success', title: 'Product deleted', description: 'Product was removed from the database.' });
+          clearEditor();
+          await loadProducts(1, false);
         } catch (error) {
-          console.error(error);
-          addToast({ 
-            type: 'error', 
-            title: 'Unable to update products',
-            description: parseSupabaseError(error, 'product'),
-            durationMs: 6000,
-          });
-        } finally {
-          setIsBulkUpdating(false);
+          addToast({ type: 'error', title: 'Unable to delete product', description: parseSupabaseError(error, 'product'), durationMs: 6000 });
         }
       },
     });
   };
 
-  const [bulkFormData, setBulkFormData] = useState({
-    keyword: '',
-    minCost: 0,
-    maxCost: 1000000,
-    selectedPriceGroups: [] as string[],
-    updateMethod: 'markup' as 'markup' | 'gp',
-    targetPercentage: 0
-  });
-
-  const filteredForBulk = useMemo(() => {
-    // Normalize: lowercase + remove all whitespace for fuzzy matching
-    const normalize = (str: string) => str.toLowerCase().replace(/\s+/g, '');
-
-    return products.filter(p => {
-      const description = normalize(p.description || '');
-      const keyword = normalize(bulkFormData.keyword);
-      const matchesKeyword = !keyword || description.includes(keyword);
-
-      const cost = Number(p.cost) || 0;
-      const minCost = bulkFormData.minCost || 0;
-      const maxCost = bulkFormData.maxCost || 0;
-
-      // If maxCost is 0, match all products (no upper limit)
-      const matchesCost = cost >= minCost && (maxCost <= 0 || cost <= maxCost);
-
-      return matchesKeyword && matchesCost;
-    });
-  }, [products, bulkFormData.keyword, bulkFormData.minCost, bulkFormData.maxCost]);
-
-  // Count how many filtered products have zero cost (will result in zero price)
-  const zeroCostCount = useMemo(() => {
-    return filteredForBulk.filter(p => !p.cost || Number(p.cost) === 0).length;
-  }, [filteredForBulk]);
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value, type } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'number' ? (value === '' ? 0 : Number(value)) : value
+  const addSupplierCost = () => {
+    setFormData((current) => ({
+      ...current,
+      supplier_costs: [...(current.supplier_costs || []), { supplier_id: '', supplier_name: '', cost: 0 }],
     }));
   };
 
-  const formatPrice = (val: number | undefined) => val ? val.toLocaleString() : '0';
+  const updateSupplierCost = (index: number, updates: Partial<SupplierCost>) => {
+    setFormData((current) => ({
+      ...current,
+      supplier_costs: (current.supplier_costs || []).map((row, rowIndex) => rowIndex === index ? { ...row, ...updates } : row),
+    }));
+  };
+
+  const deleteSelectedSupplierCosts = () => {
+    setFormData((current) => ({
+      ...current,
+      supplier_costs: (current.supplier_costs || []).filter((_, index) => !selectedSupplierRows.includes(index)),
+    }));
+    setSelectedSupplierRows([]);
+  };
+
+  const activeFilterLabels = Object.entries(appliedFilters)
+    .filter(([, value]) => value.trim())
+    .map(([key, value]) => `${key.replace(/([A-Z])/g, ' $1')}: ${value}`);
 
   if (isLoading && !hasLoadedOnce) {
     return (
-      <div className="flex h-full items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <div className="flex flex-col items-center gap-4">
-          <CustomLoadingSpinner label="Loading product database" />
-          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Loading product database...</p>
-        </div>
+      <div className="flex h-full items-center justify-center bg-[#f4f4f4]">
+        <CustomLoadingSpinner label="Loading product database" />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950 p-6 animate-fadeIn">
-
-      <PageHeader
-        eyebrow="Warehouse Inventory"
-        title="Product Database"
-        subtitle="Manage inventory catalog, pricing, status, warehouse stock, and movement signals."
-        icon={<Package className="h-6 w-6 text-brand-blue" />}
-        meta={
-          <div className="flex flex-wrap gap-2 text-xs">
-            <span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-              {totalItems.toLocaleString()} records
-            </span>
-            <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
-              {products.filter((product) => product.status === 'Active').length.toLocaleString()} active on page
-            </span>
-          </div>
-        }
-        actions={
-          <>
-          {isMasterAccess && (
-            <button
-              onClick={() => setIsBulkUpdateModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-lg shadow-sm font-medium transition-colors"
-            >
-              <Settings className="w-4 h-4 text-slate-400" />
-              Bulk Price Update
-            </button>
-          )}
-          <button
-            onClick={handleOpenAdd}
-            className="flex items-center gap-2 px-4 py-2 bg-brand-blue hover:bg-blue-700 text-white rounded-lg shadow-sm font-medium transition-colors"
-          >
-            <Plus className="w-4 h-4" /> Add
-          </button>
-          </>
-        }
-      />
-
-      {/* Toolbar */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row gap-4 mb-6">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-          <input
-            type="text"
-            placeholder="Search part no, brand, description..."
-            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white text-sm rounded-lg pl-10 pr-4 py-2 focus:border-brand-blue outline-none transition-all"
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setShowSearchDropdown(true);
-            }}
-            onFocus={() => setShowSearchDropdown(true)}
-            onBlur={() => window.setTimeout(() => setShowSearchDropdown(false), 200)}
-          />
-          {showSearchDropdown && (
-            <div className="absolute z-20 w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-              {isLoadingSearchOptions ? (
-                <div className="p-3 text-xs text-slate-500">Loading products...</div>
-              ) : searchOptions.length === 0 ? (
-                <div className="p-3 text-xs text-slate-500">No products found</div>
-              ) : searchOptions.map((product) => (
-                <button
-                  key={product.id}
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery(product.part_no);
-                    setDebouncedSearch(product.part_no.trim());
-                    setPage(1);
-                    setShowSearchDropdown(false);
-                  }}
-                  className="w-full text-left p-3 hover:bg-slate-50 dark:hover:bg-slate-800 border-b border-slate-100 dark:border-slate-800 last:border-0"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-800 dark:text-white text-sm">{product.part_no}</span>
-                    <span className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] rounded uppercase font-bold">{product.brand}</span>
-                  </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{product.description}</p>
-                  <div className="flex gap-2 mt-1 text-[10px] text-slate-400">
-                    <span>Code: {product.item_code}</span>
-                    <span>•</span>
-                    <span>Total Stock: {(
-                      product.stock_wh1 + product.stock_wh2 + product.stock_wh3 +
-                      product.stock_wh4 + product.stock_wh5 + product.stock_wh6
-                    )}</span>
-                  </div>
-                </button>
-              ))}
+    <div className="min-h-full overflow-auto bg-[#f4f4f4] px-2 py-6 text-[13px] text-[#222] sm:px-3 lg:px-4">
+      <div className="w-full max-w-none">
+        <section className="overflow-hidden rounded-[5px] border border-[#d8d8d8] bg-white">
+          <header className="flex min-h-[64px] flex-wrap items-center justify-between gap-3 border-b border-[#ddd] px-5">
+            <h1 className="border-b border-[#5d82a2] py-5 pr-24 font-['Oswald'] text-[18px] font-semibold uppercase text-[#315574]">
+              Product Database
+            </h1>
+            <div className="flex flex-wrap items-center gap-1">
+              <button type="button" onClick={handleSearch} className="rounded-[4px] bg-[#5d82a2] px-4 py-2 text-white">Search</button>
+              <button type="button" onClick={() => void saveProduct('add')} disabled={isSaving} className="rounded-[4px] bg-[#51b957] px-4 py-2 text-white disabled:opacity-50">Add</button>
+              <button type="button" onClick={() => void saveProduct('edit')} disabled={!editingProduct || isSaving} className="rounded-[4px] bg-[#51b957] px-4 py-2 text-white disabled:opacity-50">Save</button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={!editingProduct || Number(editingProduct.transaction_count || 0) > 0 || isSaving}
+                title={editingProduct && Number(editingProduct.transaction_count || 0) > 0 ? 'Products with transactions cannot be deleted.' : 'Delete selected product'}
+                className="rounded-[4px] bg-[#d9534f] px-4 py-2 text-white disabled:opacity-50"
+              >
+                Delete
+              </button>
+              <button type="button" onClick={handleRefresh} className="rounded-[4px] bg-[#5d82a2] px-4 py-2 text-white">Refresh</button>
             </div>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          {isLoading && hasLoadedOnce && (
-            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              Updating...
+          </header>
+
+          <div className="px-6 py-6">
+            <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
+            {submitError && <div className="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-red-700">{submitError}</div>}
+            {editingProduct && (
+              <div className="mb-4 text-xs text-blue-700">
+                Selected product: <strong>{editingProduct.part_no}</strong>
+                {Number(editingProduct.transaction_count || 0) > 0 && <span className="ml-2 text-slate-500">(Delete disabled because this item has transaction history.)</span>}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-x-5 gap-y-3 lg:grid-cols-2 xl:grid-cols-4">
+              <LegacyField label="Part No.">{fieldInput('part_no', 'Input Part Number')}</LegacyField>
+              <LegacyField label="Item Code">{fieldInput('item_code', 'Input Item Code')}</LegacyField>
+              <LegacyField label="Category">
+                <select value={formData.category} onChange={(event) => updateField('category', event.target.value)} className={inputClass}>
+                  <option value="">Select Category</option>
+                  {categories.map((category) => <option key={category.id} value={category.name}>{category.name}</option>)}
+                </select>
+              </LegacyField>
+              <LegacyField label="Original P/N No.">{fieldInput('original_pn_no', 'Input P/N No.')}</LegacyField>
+              <LegacyField label="OEM No.">{fieldInput('oem_no', 'Input OEM No.')}</LegacyField>
+              <LegacyField label="Description">{fieldInput('description', 'Input Description')}</LegacyField>
+              <LegacyField label="Descriptive Inquiry">{fieldInput('descriptive_inquiry', 'Input Descriptive Inquiry')}</LegacyField>
+              <LegacyField label="Application">{fieldInput('application', 'Input Application')}</LegacyField>
+              <LegacyField label="Brand">{fieldInput('brand', 'Input Brand')}</LegacyField>
+              <LegacyField label="Size">{fieldInput('size', 'Input Size')}</LegacyField>
+              <LegacyField label="No. of Holes">{fieldInput('no_of_holes', 'Input No. of Holes')}</LegacyField>
+              <LegacyField label="No. of Cylinder">{fieldInput('no_of_cylinder', 'Input No. of Cylinder')}</LegacyField>
+              <LegacyField label="Barcode">{fieldInput('barcode', 'Input Barcode')}</LegacyField>
+              <LegacyField label="Reorder Quantity">{fieldInput('reorder_quantity', 'Input Reorder Qty', 'number')}</LegacyField>
+              <LegacyField label="Replenish Quantity">{fieldInput('replenish_quantity', 'Input Replenish Qty', 'number')}</LegacyField>
+              <LegacyField label="Pcs per Box">{fieldInput('no_of_pieces_per_box', 'Input Qty', 'number')}</LegacyField>
+              <LegacyField label="Status">
+                <select value={formData.status} onChange={(event) => updateField('status', event.target.value)} className={inputClass}>
+                  <option value="Active">Unhide</option>
+                  <option value="Inactive">Hide</option>
+                </select>
+              </LegacyField>
             </div>
-          )}
-          <div className="flex items-center gap-2 px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg">
-            <Filter className="w-4 h-4 text-slate-400" />
-            <select
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value as ProductListStatus);
-                setPage(1);
-              }}
-              className="bg-transparent text-sm text-slate-600 dark:text-slate-300 outline-none"
-            >
-              <option value="all">All</option>
-              <option value="active">Unhide</option>
-              <option value="inactive">Hide</option>
-            </select>
-          </div>
-          <div className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
-            {totalItems.toLocaleString()} records
-          </div>
-        </div>
-      </div>
 
-      {/* Product Table */}
-      <div className="flex-1 overflow-hidden bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div className="h-full overflow-y-auto overflow-x-hidden custom-scrollbar">
-          <table className="w-full table-fixed text-left border-collapse">
-            <thead className="bg-slate-50 dark:bg-slate-800 sticky top-0 z-10 shadow-sm">
-              <tr className="text-xs uppercase text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-700">
-                <th className="w-[5%] p-2 text-center md:p-3">Status</th>
-                <th className="w-[22%] p-2 md:p-3">Details</th>
-                <th className="w-[16%] p-2 md:p-3">Price List</th>
-                <th className="w-[10%] p-2 text-center md:p-3">Stock</th>
-                <th className="w-[13%] p-2 md:p-3">Location</th>
-                <th className="w-[16%] p-2 md:p-3">Qty Sold / Year</th>
-                <th className="w-[11%] p-2 text-center md:p-3">Specification</th>
-                <th className="w-[7%] p-2 text-right md:p-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filteredProducts.length === 0 ? (
-                <tr>
-                  <td colSpan={8}>
-                    {isLoading ? (
-                      <LoadingState label="Updating product list" />
-                    ) : (
-                      <EmptyState
-                        title="No products found"
-                        description="Try a different search, clear the status filter, or add a new product."
-                        icon={<Package className="h-8 w-8 text-slate-300 dark:text-slate-600" />}
-                        action={
-                          <button
-                            type="button"
-                            onClick={handleOpenAdd}
-                            className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
-                          >
-                            <Plus className="h-4 w-4" />
-                            Add Product
-                          </button>
-                        }
-                      />
-                    )}
-                  </td>
-                </tr>
-              ) : filteredProducts.map((product) => {
-                const yearlySales = getSortedSalesByYearEntries(product.sales_by_year);
-                const consolidatedStock = getConsolidatedStock(product);
-                const hasConsolidatedStock = consolidatedStock > 0;
+            <hr className="my-6 border-[#ddd]" />
 
-                return (
-                <tr
-                  key={product.id}
-                  ref={(node) => {
-                    productRowRefs.current[product.id] = node;
-                  }}
-                  className={`transition-colors ${
-                    highlightedProductId === product.id
-                      ? 'bg-brand-blue/10 ring-1 ring-inset ring-brand-blue/30'
-                      : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
-                  }`}
-                >
-                  <td className="p-2 text-center align-top pt-4 md:p-3">
-                    {product.status === 'Active' ? (
-                      <Eye className="w-5 h-5 text-emerald-500 mx-auto" />
-                    ) : (
-                      <EyeOff className="w-5 h-5 text-slate-400 mx-auto" />
-                    )}
-                  </td>
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold">Supplier COG</h2>
+              <div className="flex gap-1">
+                <button type="button" onClick={addSupplierCost} className="rounded-[4px] bg-[#51b957] px-3 py-2 text-white">Add Supplier</button>
+                <button type="button" onClick={deleteSelectedSupplierCosts} disabled={selectedSupplierRows.length === 0} className="rounded-[4px] bg-[#d9534f] px-3 py-2 text-white disabled:opacity-50">Delete Supplier</button>
+              </div>
+            </div>
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full border-collapse">
+                <tbody>
+                  {(formData.supplier_costs || []).length === 0 && (
+                    <tr>
+                      <td className="py-3 text-slate-500">No supplier costing added.</td>
+                    </tr>
+                  )}
+                  {(formData.supplier_costs || []).map((row, index) => (
+                    <tr key={`${row.supplier_id}-${index}`} className="border-t border-[#eee]">
+                      <td className="w-10 py-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedSupplierRows.includes(index)}
+                          onChange={(event) => setSelectedSupplierRows((current) => event.target.checked ? [...current, index] : current.filter((value) => value !== index))}
+                        />
+                      </td>
+                      <th className="w-[110px] text-left">Supplier #{index + 1}</th>
+                      <td className="px-2">
+                        <select
+                          value={row.supplier_id}
+                          onChange={(event) => {
+                            const supplier = suppliers.find((item) => item.id === event.target.value);
+                            updateSupplierCost(index, { supplier_id: event.target.value, supplier_name: supplier?.name || '' });
+                          }}
+                          className={inputClass}
+                        >
+                          <option value="">Select Supplier</option>
+                          {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+                        </select>
+                      </td>
+                      <th className="w-[90px] text-left">COG #{index + 1}</th>
+                      <td className="px-2">
+                        <input type="number" value={row.cost || ''} onChange={(event) => updateSupplierCost(index, { cost: Number(event.target.value || 0) })} placeholder="Input COG" className={inputClass} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <label className="mt-3 inline-flex items-center gap-2">
+              <input type="checkbox" checked={applyCostToAll} onChange={(event) => setApplyCostToAll(event.target.checked)} />
+              Apply this costing to all Part No.
+            </label>
 
-                  <td className="p-2 align-top md:p-3">
-                    <div className="space-y-1.5 text-xs xl:text-sm">
-                      {[
-                        ['Part No.:', product.part_no],
-                        ['Item Code:', product.item_code || '-'],
-                        ['Category:', product.category || '-'],
-                        ['Brand:', product.brand || '-'],
-                        ['Application:', product.application || '-'],
-                      ].map(([label, value]) => (
-                        <div key={label} className="grid grid-cols-[72px_minmax(0,1fr)] gap-1.5 leading-tight xl:grid-cols-[88px_minmax(0,1fr)] xl:gap-2">
-                          <span className="text-slate-500 dark:text-slate-400">{label}</span>
-                          <span className="whitespace-normal break-words font-semibold text-slate-800 dark:text-white">{value}</span>
-                        </div>
-                      ))}
-                      <div className="flex flex-wrap items-center gap-2 pt-1">
-                        {movementMap.get(product.id) === 'fast' && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[10px] rounded uppercase font-bold tracking-wider">
-                            <TrendingUp className="w-3 h-3" />
-                            Fast
-                          </span>
-                        )}
-                        {movementMap.get(product.id) === 'slow' && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400 text-[10px] rounded uppercase font-bold tracking-wider">
-                            <TrendingDown className="w-3 h-3" />
-                            Slow
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </td>
+            <hr className="my-6 border-[#ddd]" />
 
-                  <td className="p-2 align-top md:p-3">
-                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-2 border border-slate-100 dark:border-slate-700/50 xl:p-3">
-                      {/* New pricing group naming: AA=Regular, VIP1=Silver, VIP2=Gold, Platinum is computed by backend */}
-                      <div className="space-y-2 text-xs">
-                        <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-slate-700">
-                          <span className="font-semibold text-blue-600 dark:text-blue-400">Regular</span>
-                          <span className="font-mono font-medium text-slate-700 dark:text-slate-200">{formatPrice(product.price_aa)}</span>
-                        </div>
-                        <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-slate-700">
-                          <span className="font-semibold text-purple-600 dark:text-purple-400">Silver</span>
-                          <span className="font-mono font-bold text-purple-700 dark:text-purple-400">{formatPrice(product.price_vip1)}</span>
-                        </div>
-                        <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-slate-700">
-                          <span className="font-semibold text-amber-600 dark:text-amber-400">Gold</span>
-                          <span className="font-mono font-bold text-amber-700 dark:text-amber-400">{formatPrice(product.price_vip2)}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-slate-500">
-                          <span className="text-xs italic">Platinum</span>
-                          <span className="text-xs italic">(Computed)</span>
-                        </div>
-                      </div>
-                    </div>
-                  </td>
+            <h2 className="mb-3 font-semibold">Price List</h2>
+            <div className="grid grid-cols-1 gap-x-5 gap-y-3 md:grid-cols-2 xl:grid-cols-4">
+              <LegacyField label="Regular">{fieldInput('price_aa', 'Input Amount', 'number')}</LegacyField>
+              <LegacyField label="Silver">{fieldInput('price_vip1', 'Input Amount', 'number')}</LegacyField>
+              <LegacyField label="Gold">{fieldInput('price_vip2', 'Input Amount', 'number')}</LegacyField>
+              <LegacyField label="Platinum">
+                <input
+                  type="text"
+                  value={`${money(formData.price_vip2)} (Computed)`}
+                  readOnly
+                  className={`${inputClass} bg-[#eee] text-slate-500`}
+                />
+              </LegacyField>
+            </div>
 
-                  <td className="p-2 align-top md:p-3">
-                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-2 border border-slate-100 dark:border-slate-700/50 xl:p-3">
-                      <div className={`rounded-lg px-2 py-3 text-center ${hasConsolidatedStock ? 'bg-emerald-50 dark:bg-emerald-900/20' : ''}`}>
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Total Stock</p>
-                        <p className={`mt-1 font-mono text-lg font-bold ${hasConsolidatedStock ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-300 dark:text-slate-600'}`}>
-                          {consolidatedStock.toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                  </td>
+            <div className="mt-6 grid max-w-[260px] gap-1">
+              <span>Additional Filters:</span>
+              <label>Show Status</label>
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as ProductListStatus)}
+                className={inputClass}
+              >
+                <option value="active">All Unhidden</option>
+                <option value="inactive">All Hidden</option>
+                <option value="all">All</option>
+              </select>
+            </div>
 
-                  <td className="p-2 align-top md:p-3">
-                    <div className="rounded-lg border border-slate-100 bg-slate-50 p-2 text-xs text-slate-700 dark:border-slate-700/50 dark:bg-slate-800/50 dark:text-slate-200 xl:p-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Warehouse Location</p>
-                      <p className="mt-1 whitespace-normal break-words font-semibold">
-                        {product.location?.trim() || '—'}
-                      </p>
-                    </div>
-                  </td>
-
-                  <td className="p-2 align-top md:p-3">
-                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-2 border border-slate-100 dark:border-slate-700/50 min-h-[88px] xl:p-3">
-                      {yearlySales.length > 0 ? (
-                        <div className="flex flex-wrap gap-2">
-                          {yearlySales.map(([year, quantity]) => (
-                            <div
-                              key={`${product.id}-${year}`}
-                              className="rounded-md border border-blue-100 bg-blue-50 px-2 py-1 text-xs dark:border-blue-900/40 dark:bg-blue-900/20"
-                            >
-                              <span className="font-semibold text-blue-700 dark:text-blue-300">{year}</span>
-                              <span className="mx-1 text-slate-300 dark:text-slate-600">:</span>
-                              <span className="font-mono font-bold text-slate-700 dark:text-slate-200">
-                                {quantity.toLocaleString()}
-                              </span>
+            <div className="mt-5 border-t border-[#ddd] pt-4">
+              <div className="mb-2">
+                Filtered by keyword {activeFilterLabels.length ? <strong>{activeFilterLabels.join(' | ')}</strong> : <strong>Show Only: {statusFilter === 'active' ? 'Unhidden' : statusFilter === 'inactive' ? 'Hidden' : 'All'}</strong>}
+                {isLoading && <span className="ml-3 inline-flex items-center gap-1 text-slate-500"><Loader2 className="h-3 w-3 animate-spin" /> Updating...</span>}
+              </div>
+              <div
+                ref={listViewportRef}
+                onScroll={handleListScroll}
+                className="max-h-[520px] w-full overflow-x-hidden overflow-y-auto border border-[#ddd]"
+              >
+                <table className="w-full table-fixed border-collapse text-left text-[7.7px] leading-[1.25] min-[1450px]:text-[8.8px] min-[1750px]:text-[9.9px] [&_td]:break-words [&_th]:break-words">
+                  <colgroup>
+                    {[1.8, 5.4, 5.4, 4.4, 5, 4, 7, 4, 3.8, 5.4, 3.8, 6, 5.4, 4.4, 3.8, 4.2, 4.2, 4.2, 6, 3.4, 3.4, 5].map((width, index) => (
+                      <col key={index} style={{ width: `${width}%` }} />
+                    ))}
+                  </colgroup>
+                  <thead className="sticky top-0 z-10 bg-[#f7f7f7] font-['Oswald'] text-[7.7px] uppercase leading-tight min-[1450px]:text-[8.8px] min-[1750px]:text-[9.9px]">
+                    <tr>
+                      <th rowSpan={2} className="border border-[#ccc] px-0.5 py-2 text-center">#</th>
+                      <th rowSpan={2} className="border border-[#ccc] px-1 py-2 text-center">Part Number</th>
+                      <th rowSpan={2} className="border border-[#ccc] px-1 py-2 text-center">Original Part Number</th>
+                      <th rowSpan={2} className="border border-[#ccc] px-1 py-2 text-center">Item Code</th>
+                      <th rowSpan={2} className="border border-[#ccc] px-1 py-2 text-center">Description</th>
+                      <th rowSpan={2} className="border border-[#ccc] px-1 py-2 text-center">Brand</th>
+                      <th rowSpan={2} className="border border-[#ccc] px-1 py-2 text-center">Specifications</th>
+                      <th rowSpan={2} className="border border-[#ccc] px-1 py-2 text-center">Packing<br />(pcs / box)</th>
+                      <th colSpan={4} className="border border-[#ccc] bg-[#edf3f7] px-1 py-2 text-center text-[#315574]">Supplier (Cost of Goods)</th>
+                      <th rowSpan={2} className="border border-[#ccc] px-1 py-2 text-center">Last Receive Qty<br />(Date)</th>
+                      <th colSpan={2} className="border border-[#ccc] bg-[#eef6ee] px-1 py-2 text-center text-[#315b36]">Stock &amp; Reorder</th>
+                      <th colSpan={3} className="border border-[#ccc] bg-[#eef4fa] px-1 py-2 text-center text-[#315574]">Price List (Per Piece)</th>
+                      <th rowSpan={2} className="border border-[#ccc] px-1 py-2 text-center">Qty Sold Per Year<br />(pcs)</th>
+                      <th rowSpan={2} className="border border-[#ccc] px-0.5 py-2 text-center">Incident Report<br />(Last 12 Months)</th>
+                      <th rowSpan={2} className="border border-[#ccc] px-0.5 py-2 text-center">Return Report<br />(Last 12 Months)</th>
+                      <th rowSpan={2} className="border border-[#ccc] px-1 py-2 text-center">Last Price Update</th>
+                    </tr>
+                    <tr>
+                      <th className="border border-[#ccc] bg-[#edf3f7] px-0.5 py-1.5 text-center">Supplier Code</th>
+                      <th className="border border-[#ccc] bg-[#edf3f7] px-0.5 py-1.5 text-center">Supplier Name</th>
+                      <th className="border border-[#ccc] bg-[#edf3f7] px-0.5 py-1.5 text-center">Cost (₱)</th>
+                      <th className="border border-[#ccc] bg-[#edf3f7] px-0.5 py-1.5 text-center">Status</th>
+                      <th className="border border-[#ccc] bg-[#eef6ee] px-0.5 py-1.5 text-center">Current Stock</th>
+                      <th className="border border-[#ccc] bg-[#eef6ee] px-0.5 py-1.5 text-center">Reorder Qty</th>
+                      <th className="border border-[#ccc] bg-[#eef4fa] px-0.5 py-1.5 text-center">1st<br />(VIP 1)</th>
+                      <th className="border border-[#ccc] bg-[#eef4fa] px-0.5 py-1.5 text-center">2nd<br />(VIP 2)</th>
+                      <th className="border border-[#ccc] bg-[#eef4fa] px-0.5 py-1.5 text-center">3rd<br />(VIP 3)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {!isLoading && products.length === 0 && <tr><td colSpan={22} className="px-3 py-6 text-center text-slate-500">No products found.</td></tr>}
+                    {products.map((product, productIndex) => {
+                      const selected = highlightedProductId === product.id;
+                      const yearlySales = Object.entries(product.sales_by_year || {}).sort(([a], [b]) => Number(b) - Number(a));
+                      const background = product.status === 'Active' ? 'bg-white' : 'bg-[#e8e8e8]';
+                      const supplierCosts = (product.supplier_costs || []).slice(0, 3);
+                      const supplierRows = Array.from({ length: 3 }, (_, index) => supplierCosts[index] || null);
+                      const currentStock = getConsolidatedStock(product);
+                      const isLowStock = currentStock <= Number(product.reorder_quantity || 0);
+                      const specifications = getSpecificationRows(product);
+                      return (
+                        <tr
+                          key={product.id}
+                          ref={(node) => { productRowRefs.current[product.id] = node; }}
+                          onClick={() => selectProduct(product)}
+                          className={`cursor-pointer ${background} ${selected ? 'bg-blue-50 outline outline-1 outline-blue-300' : ''}`}
+                        >
+                          <td className="border border-[#ddd] px-0.5 py-2 text-center align-top font-semibold">
+                            {productIndex + 1}
+                            <button type="button" onClick={(event) => { event.stopPropagation(); selectProduct(product); }} className="mt-1 block w-full text-[#315574]" title="View full details"><Eye className="mx-auto h-3 w-3" /></button>
+                          </td>
+                          <td className="border border-[#ddd] px-1 py-2 align-top">
+                            <button type="button" onClick={(event) => { event.stopPropagation(); selectProduct(product); }} className="font-bold text-[#1675bd] underline">{product.part_no || '-'}</button>
+                          </td>
+                          <td className="border border-[#ddd] px-1 py-2 align-top font-semibold">
+                            {product.original_pn_no || '-'}
+                            <div className="mt-0.5 font-normal text-slate-500">({product.original_pn_no || '-'})</div>
+                          </td>
+                          <td className="border border-[#ddd] px-1 py-2 align-top">{product.item_code || '-'}</td>
+                          <td className="border border-[#ddd] px-1 py-2 align-top font-medium">{product.description || '-'}</td>
+                          <td className="border border-[#ddd] px-1 py-2 align-top">{product.brand || '-'}</td>
+                          <td className="border border-[#ddd] px-1 py-2 align-top">
+                            <div className="space-y-0.5">
+                              {specifications.map(([label, value]) => (
+                                <div key={label} className="grid grid-cols-[5px_minmax(0,1fr)] gap-0.5">
+                                  <span>▪</span>
+                                  <span><span className="font-semibold">{label}</span> : {value}</span>
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="flex h-full min-h-[60px] items-center text-xs italic text-slate-400 dark:text-slate-500">
-                          No sold quantity yet
-                        </div>
-                      )}
-                    </div>
-                  </td>
-
-                  <td className="p-2 align-top text-center md:p-3">
-                    <div className="flex flex-col gap-2 pt-1">
-                      <span className="inline-flex items-center justify-center px-2 py-1 bg-slate-100 dark:bg-slate-800 text-xs font-medium text-slate-600 dark:text-slate-300 rounded">
-                        {product.no_of_pieces_per_box} / box
-                      </span>
-                      {product.size && (
-                        <span className="text-xs text-slate-500 dark:text-slate-400">{product.size}</span>
-                      )}
-                      <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                        Reorder Qty: {product.reorder_quantity}
-                      </span>
-                    </div>
-                  </td>
-
-                  <td className="p-2 align-top text-right pt-4 md:p-3">
-                    <div className="flex items-center justify-end gap-1 xl:gap-2">
-                      <button
-                        onClick={() => handleOpenEdit(product)}
-                        className="p-2 text-slate-400 hover:text-brand-blue hover:bg-blue-50 dark:hover:bg-slate-800 rounded transition-colors"
-                        title="Edit"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(product.id)}
-                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 rounded transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )})}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="mt-4 flex items-center justify-between text-sm text-slate-600 dark:text-slate-300">
-        <div>
-          Page {page} of {Math.max(1, totalPages)}
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-            disabled={page <= 1 || isLoading}
-            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Previous
-          </button>
-          <button
-            onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-            disabled={page >= totalPages || isLoading}
-            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Next
-          </button>
-        </div>
-      </div>
-
-      {/* Bulk Price Update Modal */}
-      {isBulkUpdateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-2xl border border-slate-200 dark:border-slate-800 flex flex-col">
-            <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                  <Settings className="w-5 h-5 text-brand-blue" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-slate-800 dark:text-white">Bulk Price Update</h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Update multiple product prices based on cost and criteria.</p>
-                </div>
-              </div>
-              <button onClick={() => setIsBulkUpdateModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleBulkUpdate} className="p-6 space-y-6">
-              {/* Step 1: Filter */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                  <Filter className="w-4 h-4 text-brand-blue" />
-                  1. Filter Products
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
-                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Description Keyword (e.g. "nozzle")</label>
-                    <input
-                      type="text"
-                      className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white text-sm rounded-lg px-4 py-2.5 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none transition-all shadow-sm"
-                      placeholder="Leave empty to include all products in cost range"
-                      value={bulkFormData.keyword}
-                      onChange={(e) => setBulkFormData(prev => ({ ...prev, keyword: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Min Cost</label>
-                    <input
-                      type="number"
-                      className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white text-sm rounded-lg px-4 py-2.5 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none transition-all shadow-sm"
-                      value={bulkFormData.minCost === 0 ? '' : bulkFormData.minCost}
-                      onChange={(e) => setBulkFormData(prev => ({ ...prev, minCost: e.target.value === '' ? 0 : Number(e.target.value) }))}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Max Cost</label>
-                    <input
-                      type="number"
-                      className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white text-sm rounded-lg px-4 py-2.5 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none transition-all shadow-sm"
-                      value={bulkFormData.maxCost === 0 ? '' : bulkFormData.maxCost}
-                      onChange={(e) => setBulkFormData(prev => ({ ...prev, maxCost: e.target.value === '' ? 0 : Number(e.target.value) }))}
-                    />
-                  </div>
-                </div>
-                <div className="p-3 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-100 dark:border-blue-900/30">
-                  <p className="text-xs font-medium text-brand-blue flex items-center gap-2">
-                    <AlertCircle className="w-3 h-3" />
-                    Current page matches: <strong>{filteredForBulk.length} products</strong>
-                  </p>
-                </div>
-                {zeroCostCount > 0 && (
-                  <div className="p-3 bg-amber-50 dark:bg-amber-900/10 rounded-lg border border-amber-200 dark:border-amber-900/30">
-                    <p className="text-xs font-medium text-amber-700 dark:text-amber-400 flex items-center gap-2">
-                      <AlertCircle className="w-3 h-3" />
-                      <strong>Warning:</strong> {zeroCostCount} product(s) have no cost set. These will result in a price of 0. Please set the cost first.
-                    </p>
-                  </div>
-                )}
+                          </td>
+                          <td className="border border-[#ddd] px-1 py-2 text-center align-top">
+                            {product.packing || `${compactQuantity(product.no_of_pieces_per_box)} pcs`}
+                          </td>
+                          <td className="border border-[#ddd] p-0 align-top">
+                            {supplierRows.map((supplier, index) => (
+                              <div key={supplier?.supplier_id || index} className="min-h-[28px] border-b border-[#eee] px-0.5 py-1 last:border-b-0">
+                                {supplier && <><span className={index === 0 ? 'text-amber-500' : index === 1 ? 'text-slate-400' : 'text-orange-600'}>{index === 0 ? '⭐' : '🏆'}</span>{' '}</>}
+                                {supplier?.supplier_code || '-'}
+                              </div>
+                            ))}
+                          </td>
+                          <td className="border border-[#ddd] p-0 align-top">
+                            {supplierRows.map((supplier, index) => <div key={supplier?.supplier_id || index} className="min-h-[28px] border-b border-[#eee] px-0.5 py-1 last:border-b-0">{supplier?.supplier_name || '-'}</div>)}
+                          </td>
+                          <td className="border border-[#ddd] p-0 text-right align-top">
+                            {supplierRows.map((supplier, index) => <div key={supplier?.supplier_id || index} className="min-h-[28px] border-b border-[#eee] px-0.5 py-1 last:border-b-0">{supplier ? money(supplier.cost) : '-'}</div>)}
+                          </td>
+                          <td className="border border-[#ddd] p-0 text-center align-top">
+                            {supplierRows.map((supplier, index) => {
+                              const blacklisted = Boolean(supplier?.is_blacklisted);
+                              const status = blacklisted
+                                ? `Recommended for Blacklisted${supplier?.rank ? ` Supplier ${supplier.rank}` : ''}`
+                                : supplier?.status || '';
+                              return (
+                                <div key={supplier?.supplier_id || index} className="flex min-h-[28px] items-center justify-center border-b border-[#eee] px-0.5 py-1 last:border-b-0">
+                                  {status ? <span className={`rounded-full px-1 py-0.5 font-semibold leading-tight ${blacklisted ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-800'}`}>{status}</span> : <span>-</span>}
+                                </div>
+                              );
+                            })}
+                          </td>
+                          <td className="border border-[#ddd] px-1 py-2 text-center align-top">
+                            <strong className="text-[9.9px] min-[1450px]:text-[11px]">{compactQuantity(product.last_receive_quantity)}</strong>
+                            <div className="mt-0.5 text-slate-500">({formatBlueprintDate(product.last_receive_date)})</div>
+                          </td>
+                          <td className="border border-[#ddd] px-0.5 py-2 text-center align-top">
+                            {currentStock === 0
+                              ? <span className="inline-block rounded bg-rose-600 px-1 py-0.5 font-bold text-white">⚠ Out of Stock</span>
+                              : <span className={`font-bold ${isLowStock ? 'text-red-600' : 'text-emerald-700'}`}>{compactQuantity(currentStock)}</span>}
+                          </td>
+                          <td className="border border-[#ddd] px-0.5 py-2 text-center align-top">{compactQuantity(product.reorder_quantity)}</td>
+                          <td className="border border-[#ddd] px-0.5 py-2 text-right align-top font-bold text-[#1675bd]">{money(product.price_aa)}</td>
+                          <td className="border border-[#ddd] px-0.5 py-2 text-right align-top font-bold text-[#1675bd]">{money(product.price_vip1)}</td>
+                          <td className="border border-[#ddd] px-0.5 py-2 text-right align-top font-bold text-[#1675bd]">{money(product.price_vip2)}</td>
+                          <td className="border border-[#ddd] px-1 py-2 align-top text-slate-500">
+                            {yearlySales.map(([year, quantity]) => (
+                              <div key={year} className="grid grid-cols-[auto_1fr] gap-1">
+                                <span>{year} :</span>
+                                <span className="text-right">{compactQuantity(quantity)} pcs</span>
+                              </div>
+                            ))}
+                          </td>
+                          <td className={`border border-[#ddd] px-0.5 py-2 text-center align-top font-bold ${Number(product.incident_report_count || 0) > 0 ? 'text-red-600' : ''}`}>
+                            {Number(product.incident_report_count || 0)}
+                          </td>
+                          <td className={`border border-[#ddd] px-0.5 py-2 text-center align-top font-bold ${Number(product.return_report_count || 0) > 0 ? 'text-red-600' : ''}`}>
+                            {Number(product.return_report_count || 0)}
+                          </td>
+                          <td className="border border-[#ddd] px-1 py-2 text-center align-top">{formatBlueprintDate(product.last_price_update)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
 
-              {/* Step 2: Configuration */}
-              <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-                <h3 className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                  <DollarSign className="w-4 h-4 text-brand-blue" />
-                  2. Pricing Configuration
-                </h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-2">Select Price Groups to Update</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {['AA', 'BB', 'CC', 'DD', 'VIP1', 'VIP2'].map(group => {
-                        const displayLabels: Record<string, string> = {
-                          AA: 'Regular',
-                          VIP1: 'Silver',
-                          VIP2: 'Gold',
-                          BB: 'Legacy: BB',
-                          CC: 'Legacy: CC',
-                          DD: 'Legacy: DD'
-                        };
-                        const displayLabel = displayLabels[group] || group;
-                        return (
-                        <label key={group} className="flex items-center gap-2 p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors">
-                          <input
-                            type="checkbox"
-                            className="w-4 h-4 rounded text-brand-blue border-slate-300 focus:ring-brand-blue"
-                            checked={bulkFormData.selectedPriceGroups.includes(group)}
-                            onChange={(e) => {
-                              const checked = e.target.checked;
-                              setBulkFormData(prev => ({
-                                ...prev,
-                                selectedPriceGroups: checked
-                                  ? [...prev.selectedPriceGroups, group]
-                                  : prev.selectedPriceGroups.filter(g => g !== group)
-                              }));
-                            }}
-                          />
-                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{displayLabel}</span>
-                        </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-2">Calculation Method</label>
-                      <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
-                        <button
-                          type="button"
-                          onClick={() => setBulkFormData(prev => ({ ...prev, updateMethod: 'markup' }))}
-                          className={`flex-1 py-1.5 px-3 rounded-md text-xs font-bold transition-all ${bulkFormData.updateMethod === 'markup'
-                            ? 'bg-white dark:bg-slate-700 text-brand-blue shadow-sm'
-                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                        >
-                          Markup %
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setBulkFormData(prev => ({ ...prev, updateMethod: 'gp' }))}
-                          className={`flex-1 py-1.5 px-3 rounded-md text-xs font-bold transition-all ${bulkFormData.updateMethod === 'gp'
-                            ? 'bg-white dark:bg-slate-700 text-brand-blue shadow-sm'
-                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                        >
-                          Gross Profit %
-                        </button>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
-                        {bulkFormData.updateMethod === 'markup' ? 'Markup Percentage' : 'Gross Profit Percentage'}
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white text-sm rounded-lg px-4 py-2.5 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none transition-all shadow-sm pr-10"
-                          placeholder="e.g. 50"
-                          value={bulkFormData.targetPercentage === 0 ? '' : bulkFormData.targetPercentage}
-                          onChange={(e) => setBulkFormData(prev => ({ ...prev, targetPercentage: e.target.value === '' ? 0 : Number(e.target.value) }))}
-                        />
-                        <Percent className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      </div>
-                      <p className="mt-2 text-[10px] text-slate-400 italic">
-                        {bulkFormData.updateMethod === 'markup'
-                          ? 'Formula: Cost × (1 + Markup%)'
-                          : 'Formula: Cost / (1 - GP%) (e.g. 50% GP doubles the price)'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+              <div className="mt-4 flex min-h-[32px] items-center justify-between gap-3">
+                <span>Showing {products.length.toLocaleString()} of {totalItems.toLocaleString()} records</span>
+                <span className="inline-flex items-center gap-1 text-slate-500">
+                  {isLoading && hasLoadedOnce
+                    ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading more items...</>
+                    : page < totalPages
+                      ? 'Scroll to the bottom to load more'
+                      : 'All items loaded'}
+                </span>
               </div>
-            </form>
-
-            <div className="p-6 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3">
-              <button
-                onClick={() => setIsBulkUpdateModalOpen(false)}
-                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-                disabled={isBulkUpdating}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleBulkUpdate}
-                disabled={isBulkUpdating || filteredForBulk.length === 0 || bulkFormData.selectedPriceGroups.length === 0}
-                className="px-6 py-2 bg-brand-blue hover:bg-blue-700 text-white rounded-lg font-medium shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isBulkUpdating ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Updating...
-                  </>
-                ) : (
-                  <>
-                    Apply to {filteredForBulk.length} Products
-                  </>
-                )}
-              </button>
             </div>
           </div>
-        </div>
-      )}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-5xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
+        </section>
+      </div>
 
-            <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-800">
-              <h2 className="text-xl font-bold text-slate-800 dark:text-white">
-                {editingProduct ? 'Edit Item' : 'Add Item'}
-              </h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-              <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
-              {submitError && (
-                <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                  {submitError}
-                </div>
-              )}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-                {/* Core Identifiers */}
-                <div className="md:col-span-3">
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <Package className="w-3 h-3" /> Identification
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Part No. *</label>
-                      <input
-                        required
-                        name="part_no"
-                        value={formData.part_no}
-                        onChange={handleInputChange}
-                        onBlur={(e) => handleBlur('part_no', e.target.value)}
-                        className={`input-field ${validationErrors.part_no ? 'border-rose-400' : ''}`}
-                        placeholder="Input Part Number"
-                      />
-                      <FieldHelp text="Use the primary manufacturer part number for quick lookup." example="123-ABC" />
-                      {validationErrors.part_no && (
-                        <p className="mt-1 text-xs text-rose-600">{validationErrors.part_no}</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">OEM No.</label>
-                      <input name="oem_no" value={formData.oem_no} onChange={handleInputChange} className="input-field" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Original P/N No.</label>
-                      <input name="original_pn_no" value={formData.original_pn_no} onChange={handleInputChange} className="input-field" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Item Code</label>
-                      <input name="item_code" value={formData.item_code} onChange={handleInputChange} className="input-field" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Barcode</label>
-                      <input name="barcode" value={formData.barcode} onChange={handleInputChange} className="input-field" />
-                    </div>
-
-                    {/* Updated Status Toggle */}
-                    <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Status</label>
-                      <div className="flex items-center gap-2 h-[42px]">
-                        <button
-                          type="button"
-                          onClick={() => setFormData(prev => ({ ...prev, status: prev.status === 'Active' ? 'Inactive' : 'Active' }))}
-                          className={`flex-1 h-full rounded-lg border flex items-center justify-center gap-2 transition-colors ${formData.status === 'Active'
-                            ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-900 dark:text-emerald-400'
-                            : 'bg-slate-50 border-slate-200 text-slate-500 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400'
-                            }`}
-                        >
-                          {formData.status === 'Active' ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                          <span className="text-sm font-medium">{formData.status === 'Active' ? 'Unhide' : 'Hide'}</span>
-                        </button>
-                      </div>
-                    </div>
-
-                  </div>
-                </div>
-
-                {/* Pricing Configuration */}
-                <div className="md:col-span-3 border-t border-slate-100 dark:border-slate-800 pt-4">
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-blue-500"></span> Price List
-                  </h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {isMasterAccess && (
-                      <div className="col-span-2">
-                        <label className="block text-xs font-bold text-rose-600 dark:text-rose-400 mb-1">COG</label>
-                        <input
-                          type="number"
-                          name="cost"
-                          value={formData.cost === 0 ? '' : formData.cost}
-                          onChange={handleInputChange}
-                          className="input-field bg-rose-50/50 dark:bg-rose-900/20 border-rose-100 dark:border-rose-900"
-                        />
-                      </div>
-                    )}
-                    <div className={isMasterAccess ? 'md:col-span-1' : ''}>
-                      <label className="block text-xs font-bold text-blue-600 dark:text-blue-400 mb-1">Regular</label>
-                      <input
-                        type="number"
-                        name="price_aa"
-                        value={formData.price_aa === 0 ? '' : formData.price_aa}
-                        onChange={handleInputChange}
-                        className="input-field bg-blue-50/50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-900"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-purple-600 dark:text-purple-400 mb-1">Silver</label>
-                      <input type="number" name="price_vip1" value={formData.price_vip1 === 0 ? '' : formData.price_vip1} onChange={handleInputChange} className="input-field bg-purple-50/50 dark:bg-purple-900/20 border-purple-100 dark:border-purple-900" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-amber-600 dark:text-amber-400 mb-1">Gold</label>
-                      <input type="number" name="price_vip2" value={formData.price_vip2 === 0 ? '' : formData.price_vip2} onChange={handleInputChange} className="input-field bg-amber-50/50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-900" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Inventory */}
-                <div className="md:col-span-3 border-t border-slate-100 dark:border-slate-800 pt-4">
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Inventory
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-xs font-bold text-emerald-700 dark:text-emerald-400 mb-1">Total Stock</label>
-                      {editingProduct ? (
-                        <div className="input-field flex items-center bg-slate-50 font-mono font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                          {getConsolidatedStock(formData as Product).toLocaleString()}
-                        </div>
-                      ) : (
-                        <input
-                          type="number"
-                          name="stock_wh1"
-                          value={formData.stock_wh1 === 0 ? '' : formData.stock_wh1}
-                          onChange={handleInputChange}
-                          className="input-field bg-emerald-50/50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-900"
-                        />
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Details */}
-                <div className="md:col-span-3 border-t border-slate-100 dark:border-slate-800 pt-4">
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Product Details</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Description *</label>
-                      <input
-                        required
-                        name="description"
-                        value={formData.description}
-                        onChange={handleInputChange}
-                        onBlur={(e) => handleBlur('description', e.target.value)}
-                        className={`input-field ${validationErrors.description ? 'border-rose-400' : ''}`}
-                        placeholder="Input Description"
-                      />
-                      <FieldHelp text="Describe the product in plain language for easy scanning." example="Brake pad set for Honda Civic" />
-                      {validationErrors.description && (
-                        <p className="mt-1 text-xs text-rose-600">{validationErrors.description}</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Brand</label>
-                      <input name="brand" value={formData.brand} onChange={handleInputChange} className="input-field" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Category</label>
-                      <SearchableSelect
-                        value={formData.category}
-                        options={categories.map((cat) => ({ value: cat.name, label: cat.name }))}
-                        onChange={(val) => setFormData((prev) => ({ ...prev, category: val }))}
-                        placeholder="Select category"
-                        searchPlaceholder="Search categories..."
-                        buttonClassName="input-field"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Application</label>
-                      <input name="application" value={formData.application} onChange={handleInputChange} className="input-field" placeholder="Vehicle model, engine, etc." />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Descriptive Inquiry</label>
-                      <input name="descriptive_inquiry" value={formData.descriptive_inquiry} onChange={handleInputChange} className="input-field" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Specs */}
-                <div className="md:col-span-3 border-t border-slate-100 dark:border-slate-800 pt-4">
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Specification</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Size</label>
-                      <input name="size" value={formData.size} onChange={handleInputChange} className="input-field" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">No. of Holes</label>
-                      <input name="no_of_holes" value={formData.no_of_holes} onChange={handleInputChange} className="input-field" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">No. of Cylinder</label>
-                      <input name="no_of_cylinder" value={formData.no_of_cylinder} onChange={handleInputChange} className="input-field" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">No. of Pieces per Box</label>
-                      <input type="number" name="no_of_pieces_per_box" value={formData.no_of_pieces_per_box} onChange={handleInputChange} className="input-field" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Reorder Quantity</label>
-                      <input type="number" name="reorder_quantity" value={formData.reorder_quantity} onChange={handleInputChange} className="input-field" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Replenish Quantity</label>
-                      <input type="number" name="replenish_quantity" value={formData.replenish_quantity} onChange={handleInputChange} className="input-field" />
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-              <style>{`
-                .input-field {
-                  width: 100%;
-                  background-color: rgb(248 250 252);
-                  border: 1px solid rgb(226 232 240);
-                  border-radius: 0.5rem;
-                  padding: 0.5rem 0.75rem;
-                  font-size: 0.875rem;
-                  color: rgb(30 41 59);
-                  outline: none;
-                  transition: all 0.2s;
-                }
-                .dark .input-field {
-                  background-color: rgb(30 41 59);
-                  border-color: rgb(51 65 85);
-                  color: white;
-                }
-                .input-field:focus {
-                  border-color: #0F5298;
-                  box-shadow: 0 0 0 1px #0F5298;
-                }
-                
-                /* Custom Scrollbar for the table specifically */
-                .custom-scrollbar::-webkit-scrollbar {
-                  width: 6px;
-                  height: 6px;
-                }
-                .custom-scrollbar::-webkit-scrollbar-track {
-                  background: transparent;
-                }
-                .custom-scrollbar::-webkit-scrollbar-thumb {
-                  background-color: rgba(156, 163, 175, 0.5);
-                  border-radius: 20px;
-                }
-              `}</style>
-            </form>
-
-            <div className="p-6 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3">
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSubmit}
-                disabled={isSaving}
-                className="px-6 py-2 bg-brand-blue hover:bg-blue-700 text-white rounded-lg font-medium shadow-sm transition-colors flex items-center gap-2"
-              >
-                {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
-                Save
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* Confirmation Modal */}
       <ConfirmModal
         isOpen={confirmModal.isOpen}
-        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        onClose={() => setConfirmModal((current) => ({ ...current, isOpen: false }))}
         onConfirm={confirmModal.onConfirm}
         title={confirmModal.title}
         message={confirmModal.message}
-        variant={confirmModal.variant}
+        variant="danger"
         confirmLabel={confirmModal.confirmLabel}
       />
     </div>

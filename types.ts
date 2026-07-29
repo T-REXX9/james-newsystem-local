@@ -435,6 +435,8 @@ export interface Product {
   no_of_pieces_per_box: number;
   item_code: string;
   description: string;
+  packing?: string;
+  specifications?: string;
   size: string;
   reorder_quantity: number;
   status: 'Active' | 'Inactive' | 'Discontinued';
@@ -468,6 +470,22 @@ export interface Product {
   stock_wh5: number;
   stock_wh6: number;
   sales_by_year?: Record<string, number>;
+  supplier_costs?: Array<{
+    supplier_id: string;
+    supplier_code?: string;
+    supplier_name: string;
+    cost: number;
+    rank?: number;
+    status?: string;
+    is_blacklisted?: boolean;
+    cost_updated_at?: string;
+  }>;
+  last_receive_quantity?: number;
+  last_receive_date?: string;
+  incident_report_count?: number;
+  return_report_count?: number;
+  last_price_update?: string;
+  transaction_count?: number;
 
   // Soft delete fields
   is_deleted?: boolean;

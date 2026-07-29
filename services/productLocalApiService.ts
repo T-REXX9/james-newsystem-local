@@ -39,6 +39,8 @@ const normalizeApiProduct = (raw: any): Product => ({
   no_of_pieces_per_box: toNumber(raw?.no_of_pieces_per_box),
   item_code: String(raw?.item_code ?? ''),
   description: String(raw?.description ?? ''),
+  packing: String(raw?.packing ?? ''),
+  specifications: String(raw?.specifications ?? ''),
   size: String(raw?.size ?? ''),
   reorder_quantity: toNumber(raw?.reorder_quantity),
   status: toProductStatus(raw?.status),
@@ -68,6 +70,24 @@ const normalizeApiProduct = (raw: any): Product => ({
   stock_wh5: toNumber(raw?.stock_wh5),
   stock_wh6: toNumber(raw?.stock_wh6),
   sales_by_year: toSalesByYear(raw?.sales_by_year),
+  supplier_costs: Array.isArray(raw?.supplier_costs)
+    ? raw.supplier_costs.map((row: any) => ({
+        supplier_id: String(row?.supplier_id ?? ''),
+        supplier_code: String(row?.supplier_code ?? ''),
+        supplier_name: String(row?.supplier_name ?? ''),
+        cost: toNumber(row?.cost),
+        rank: toNumber(row?.rank),
+        status: String(row?.status ?? ''),
+        is_blacklisted: Boolean(row?.is_blacklisted),
+        cost_updated_at: String(row?.cost_updated_at ?? ''),
+      }))
+    : [],
+  last_receive_quantity: toNumber(raw?.last_receive_quantity),
+  last_receive_date: String(raw?.last_receive_date ?? ''),
+  incident_report_count: toNumber(raw?.incident_report_count),
+  return_report_count: toNumber(raw?.return_report_count),
+  last_price_update: String(raw?.last_price_update ?? ''),
+  transaction_count: toNumber(raw?.transaction_count),
   is_deleted: toNumber(raw?.is_deleted) === 1,
 });
 
@@ -109,6 +129,14 @@ export interface FetchProductsPageParams {
   description?: string;
   application?: string;
   originalPn?: string;
+  category?: string;
+  oemNo?: string;
+  descriptiveInquiry?: string;
+  brand?: string;
+  size?: string;
+  holes?: string;
+  cylinder?: string;
+  barcode?: string;
   status?: ProductListStatus;
   page?: number;
   perPage?: number;
@@ -171,6 +199,14 @@ export const fetchProductsPage = async (params: FetchProductsPageParams = {}): P
     description = '',
     application = '',
     originalPn = '',
+    category = '',
+    oemNo = '',
+    descriptiveInquiry = '',
+    brand = '',
+    size = '',
+    holes = '',
+    cylinder = '',
+    barcode = '',
     status = 'all',
     page = 1,
     perPage = 100,
@@ -184,6 +220,14 @@ export const fetchProductsPage = async (params: FetchProductsPageParams = {}): P
     description,
     application,
     original_pn: originalPn,
+    category,
+    oem_no: oemNo,
+    descriptive_inquiry: descriptiveInquiry,
+    brand,
+    size,
+    holes,
+    cylinder,
+    barcode,
     status,
     page: String(Math.max(1, page)),
     per_page: String(Math.min(500, Math.max(1, perPage))),
