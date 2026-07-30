@@ -14,6 +14,10 @@ export interface SuggestedStockItem {
   partNo: string;
   itemCode: string;
   description: string;
+  brand: string;
+  databaseItemCode: string;
+  databasePartNo: string;
+  isListed: boolean;
   inquiryCount: number;
   totalQty: number;
   customerCount: number;
@@ -110,6 +114,31 @@ const buildFilters = (filters: SuggestedStockFilters, extra: Record<string, stri
   return query;
 };
 
+const fetchAllReportPages = async (
+  endpoint: 'summary' | 'details',
+  filters: SuggestedStockFilters,
+  perPage: number
+): Promise<any[]> => {
+  const rows: any[] = [];
+  let page = 1;
+  let totalPages = 1;
+
+  do {
+    const query = buildFilters(filters, {
+      page: String(page),
+      per_page: String(perPage),
+    });
+    const data = await requestApi(
+      `${API_BASE_URL}/suggested-stock-report/${endpoint}?${query.toString()}`
+    );
+    if (Array.isArray(data?.items)) rows.push(...data.items);
+    totalPages = Math.max(1, toNumber(data?.meta?.total_pages, 1));
+    page += 1;
+  } while (page <= totalPages);
+
+  return rows;
+};
+
 export const fetchCustomersWithNotListedInquiries = async (
   dateFrom: string,
   dateTo: string
@@ -142,9 +171,7 @@ export const fetchSuggestedStockSummary = async (
   filters: SuggestedStockFilters
 ): Promise<SuggestedStockItem[]> => {
   try {
-    const query = buildFilters(filters, { page: '1', per_page: '200' });
-    const data = await requestApi(`${API_BASE_URL}/suggested-stock-report/summary?${query.toString()}`);
-    const rows = Array.isArray(data?.items) ? data.items : [];
+    const rows = await fetchAllReportPages('summary', filters, 200);
 
     return rows.map((item: any) => {
       const customerBlob = String(item?.customers || '');
@@ -161,6 +188,10 @@ export const fetchSuggestedStockSummary = async (
         partNo: String(item?.part_no || ''),
         itemCode: String(item?.item_code || ''),
         description: String(item?.description || ''),
+        brand: String(item?.brand || ''),
+        databaseItemCode: String(item?.database_item_code || ''),
+        databasePartNo: String(item?.database_part_no || ''),
+        isListed: String(item?.database_item_code || '') !== '' || String(item?.database_part_no || '') !== '',
         inquiryCount: toNumber(item?.inquiry_count),
         totalQty: toNumber(item?.total_qty),
         customerCount: toNumber(item?.customer_count),
@@ -179,9 +210,7 @@ export const fetchSuggestedStockDetails = async (
   filters: SuggestedStockFilters
 ): Promise<SuggestedStockDetail[]> => {
   try {
-    const query = buildFilters(filters, { page: '1', per_page: '400' });
-    const data = await requestApi(`${API_BASE_URL}/suggested-stock-report/details?${query.toString()}`);
-    const rows = Array.isArray(data?.items) ? data.items : [];
+    const rows = await fetchAllReportPages('details', filters, 300);
 
     return rows.map((item: any) => ({
       id: String(item?.id || ''),

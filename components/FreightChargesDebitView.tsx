@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { FileText, Loader2, Plus, RefreshCcw, Search, Trash2 } from 'lucide-react';
 import {
   freightChargesService,
   FreightCharge,
@@ -121,13 +120,6 @@ const SourceDocumentAutocomplete: React.FC<{
   return (
     <div className="relative" ref={wrapperRef}>
       <div className="relative">
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          {isSearching ? (
-            <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
-          ) : (
-            <FileText className="w-4 h-4 text-slate-400" />
-          )}
-        </div>
         <input
           value={query}
           disabled={disabled}
@@ -139,15 +131,16 @@ const SourceDocumentAutocomplete: React.FC<{
             if (!disabled) setShowDropdown(true);
           }}
           onKeyDown={handleKeyDown}
-          placeholder="Search invoice or order slip..."
-          className="w-full rounded-lg border border-slate-300 bg-white pl-10 pr-3 py-2 text-sm dark:bg-slate-900 dark:border-slate-700"
+          placeholder="*Input DR/INV Number*"
+          aria-busy={isSearching}
+          className="h-[34px] w-full rounded-[3px] border border-[#ccc] bg-white px-3 text-[13px] text-[#555] outline-none focus:border-[#66afe9] focus:shadow-[0_0_8px_rgba(102,175,233,.6)] disabled:bg-[#eee]"
         />
       </div>
 
       {showDropdown && (
-        <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
+        <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-[3px] border border-[#ccc] bg-white shadow-lg">
           {results.length === 0 ? (
-            <div className="px-3 py-3 text-sm text-slate-500">No invoice or order slip found.</div>
+            <div className="px-3 py-3 text-[13px] text-[#777]">No invoice or order slip found.</div>
           ) : (
             <ul className="max-h-72 overflow-auto divide-y divide-slate-100 dark:divide-slate-800">
               {results.map((doc, index) => (
@@ -158,16 +151,16 @@ const SourceDocumentAutocomplete: React.FC<{
                     handleSelect(doc);
                   }}
                   onMouseEnter={() => setSelectedIndex(index)}
-                  className={`cursor-pointer px-3 py-2 ${selectedIndex === index ? 'bg-blue-50 dark:bg-blue-950/30' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                  className={`cursor-pointer px-3 py-2 ${selectedIndex === index ? 'bg-[#ddd]' : 'hover:bg-[#eee]'}`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold text-sm text-slate-900 dark:text-white">{doc.doc_no || doc.id}</span>
+                    <span className="text-[13px] font-semibold text-[#333]">{doc.doc_no || doc.id}</span>
                     <span className={`rounded-full px-2 py-0.5 text-[10px] ${doc.type === 'Invoice' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
                       {doc.type}
                     </span>
                   </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{doc.customer_name || 'Unknown Customer'}</div>
-                  <div className="text-[11px] text-slate-400 dark:text-slate-500">
+                  <div className="truncate text-xs text-[#777]">{doc.customer_name || 'Unknown Customer'}</div>
+                  <div className="text-[11px] text-[#999]">
                     {doc.sales_date || '-'} | {doc.sales_person || '-'} | {peso.format(doc.grand_total || 0)}
                   </div>
                 </li>
@@ -202,6 +195,8 @@ const FreightChargesDebitView: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('All');
   const [month, setMonth] = useState(String(today.getMonth() + 1).padStart(2, '0'));
   const [year, setYear] = useState(String(today.getFullYear()));
+  const [appliedMonth, setAppliedMonth] = useState(String(today.getMonth() + 1).padStart(2, '0'));
+  const [appliedYear, setAppliedYear] = useState(String(today.getFullYear()));
 
   const [page, setPage] = useState(1);
   const [perPage] = useState(50);
@@ -234,8 +229,8 @@ const FreightChargesDebitView: React.FC = () => {
       const data = await freightChargesService.list({
         search,
         status: statusFilter,
-        month,
-        year,
+        month: appliedMonth,
+        year: appliedYear,
         page,
         perPage,
       });
@@ -376,7 +371,7 @@ const FreightChargesDebitView: React.FC = () => {
 
   useEffect(() => {
     fetchList();
-  }, [search, statusFilter, month, year, page]);
+  }, [search, statusFilter, appliedMonth, appliedYear, page]);
 
   useEffect(() => {
     if (!selectedRefno || isCreating) {
@@ -590,8 +585,9 @@ const FreightChargesDebitView: React.FC = () => {
     setStatusFilter('All');
     setMonth(String(today.getMonth() + 1).padStart(2, '0'));
     setYear(String(today.getFullYear()));
+    setAppliedMonth(String(today.getMonth() + 1).padStart(2, '0'));
+    setAppliedYear(String(today.getFullYear()));
     setPage(1);
-    fetchList();
   };
 
   const openSelectedRecord = (row: FreightCharge) => {
@@ -599,358 +595,250 @@ const FreightChargesDebitView: React.FC = () => {
     setSelectedRefno(row.lrefno);
   };
 
-  const fieldClass = 'h-9 w-full rounded border border-slate-300 bg-white px-2 text-sm text-slate-800 outline-none focus:border-blue-600 disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:disabled:bg-slate-800';
-  const labelCellClass = 'w-[15%] border-t-0 px-3 py-2 text-right align-middle text-sm font-semibold text-slate-700 dark:text-slate-200';
-  const valueCellClass = 'w-[35%] border-t-0 px-3 py-2 align-middle text-sm text-slate-800 dark:text-slate-100';
-  const buttonClass = 'inline-flex h-9 items-center justify-center gap-1.5 rounded bg-blue-700 px-4 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60';
+  const fieldClass = 'h-[34px] w-full rounded-[3px] border border-[#ccc] bg-white px-3 text-[13px] text-[#555] outline-none focus:border-[#66afe9] focus:shadow-[0_0_8px_rgba(102,175,233,.6)] disabled:bg-[#eee] disabled:text-[#777]';
+  const labelCellClass = 'w-[15%] border-0 px-2 py-2 text-right align-middle text-[13px] font-semibold text-[#444]';
+  const valueCellClass = 'w-[35%] border-0 px-2 py-2 align-middle text-[13px] text-[#444]';
+  const secondaryButton = 'inline-flex min-h-[34px] items-center justify-center rounded-[4px] border border-[#54718d] bg-[#6685a4] px-3 text-[13px] font-normal text-white shadow-sm hover:bg-[#516c87] disabled:cursor-not-allowed disabled:opacity-60';
+  const successButton = 'inline-flex min-h-[34px] items-center justify-center rounded-[4px] border border-[#4cae4c] bg-[#5cb85c] px-3 text-[13px] font-normal text-white shadow-sm hover:bg-[#449d44] disabled:cursor-not-allowed disabled:opacity-60';
+  const dangerButton = 'inline-flex min-h-[34px] items-center justify-center rounded-[4px] border border-[#d43f3a] bg-[#d9534f] px-3 text-[13px] font-normal text-white shadow-sm hover:bg-[#c9302c] disabled:cursor-not-allowed disabled:opacity-60';
+  const cellClass = 'border border-[#ddd] px-2 py-2 text-[13px] text-[#444]';
 
   return (
-    <div className="h-full overflow-auto bg-slate-100 p-4 text-slate-800 dark:bg-slate-950 dark:text-slate-100">
-      <div className="mx-auto flex max-w-[1480px] flex-col gap-4">
+    <div className="h-full overflow-auto bg-white px-[15px] py-5 font-sans text-[#444]">
+      <div className="relative mx-auto w-full max-w-[1170px]">
         {error && (
-          <div className="rounded border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-200">
+          <div className="mb-5 rounded-[4px] border border-[#ebccd1] bg-[#f2dede] px-[15px] py-[15px] text-[13px] text-[#a94442]">
             <strong>Ooops !</strong> {error}.
           </div>
         )}
 
-        <section className="rounded border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-            <div className="flex flex-wrap items-center gap-2">
-              <button type="button" onClick={() => setShowSearchModal(true)} className={buttonClass}>
-                <Search className="h-4 w-4" />
-                Search
-              </button>
-              <button type="button" onClick={handleCreateMode} className={buttonClass}>
-                <Plus className="h-4 w-4" />
-                Create New
-              </button>
-              <button type="button" onClick={clearFilters} className={buttonClass}>
-                <RefreshCcw className="h-4 w-4" />
-                Refresh
-              </button>
+        <section className="mb-8">
+          <div className="flex flex-wrap items-center justify-between gap-4 rounded-t-[5px] border border-[#ddd] px-5 py-5">
+            <div className="flex flex-wrap gap-[5px]">
+              <button type="button" onClick={() => setShowSearchModal(true)} className={secondaryButton}>Search</button>
+              <button type="button" onClick={handleCreateMode} className={successButton}>Create New</button>
+              <button type="button" onClick={clearFilters} className={successButton}>Refresh</button>
             </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="text-sm font-semibold">Filter by Month:</label>
-              <select
-                value={month}
-                onChange={(event) => {
-                  setMonth(event.target.value);
-                  setPage(1);
-                }}
-                className="h-9 w-52 rounded border border-slate-300 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-              >
-                {monthOptions.map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
+            <div className="flex flex-wrap items-center gap-[10px]">
+              <label className="text-[14px] font-semibold">Filter by Month:</label>
+              <select value={month} onChange={(event) => setMonth(event.target.value)} className={`${fieldClass} w-[200px]`}>
+                {monthOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
-              <input
-                value={year}
-                onChange={(event) => {
-                  setYear(event.target.value.replace(/[^0-9]/g, '').slice(0, 4));
+              <input value={year} onChange={(event) => setYear(event.target.value.replace(/[^0-9]/g, '').slice(0, 4))} className={`${fieldClass} w-[100px]`} />
+              <button
+                type="button"
+                onClick={() => {
+                  setAppliedMonth(month);
+                  setAppliedYear(year);
                   setPage(1);
                 }}
-                className="h-9 w-24 rounded border border-slate-300 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                placeholder="YYYY"
-              />
-              <select
-                value={statusFilter}
-                onChange={(event) => {
-                  setStatusFilter(event.target.value);
-                  setPage(1);
-                }}
-                className="h-9 w-28 rounded border border-slate-300 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                className={successButton}
               >
-                <option>All</option>
-                <option>Pending</option>
-                <option>Posted</option>
-              </select>
-              <button type="button" onClick={fetchList} className={buttonClass}>Filter</button>
+                Filter
+              </button>
             </div>
           </div>
 
-          <div className="p-4">
-            <div className="mb-2 text-sm">
-              <b>Filtered By:</b> {search || 'All Records'}
-            </div>
-            <div className="max-h-44 overflow-auto border border-slate-200 dark:border-slate-800">
-              <table id="tblrecordlist" className="w-full border-collapse text-sm">
-                <thead className="sticky top-0 z-10 bg-slate-100 text-left text-slate-700 shadow-sm dark:bg-slate-800 dark:text-slate-200">
+          <div className="rounded-b-[5px] border border-t-0 border-[#ddd] bg-white p-[25px] pt-[30px]">
+            <div className="mb-2 text-[13px]"><b>Filtered By:</b> {search || 'All Records'}</div>
+            <div className="max-h-[150px] overflow-auto">
+              <table id="tblrecordlist" className="w-full border-collapse">
+                <thead className="sticky top-0 z-10 bg-white">
                   <tr>
-                    <th className="w-[10%] border border-slate-200 px-3 py-2 dark:border-slate-700">Date</th>
-                    <th className="w-[25%] border border-slate-200 px-3 py-2 dark:border-slate-700">Customer</th>
-                    <th className="w-[10%] border border-slate-200 px-3 py-2 dark:border-slate-700">DM No.</th>
-                    <th className="w-[15%] border border-slate-200 px-3 py-2 dark:border-slate-700">Transaction No.</th>
-                    <th className="w-[20%] border border-slate-200 px-3 py-2 dark:border-slate-700">Tracking No.</th>
-                    <th className="w-[15%] border border-slate-200 px-3 py-2 dark:border-slate-700">Courier</th>
-                    <th className="w-[5%] border border-slate-200 px-3 py-2 dark:border-slate-700">Status</th>
+                    <th className={`${cellClass} w-[10%] text-left font-medium shadow-[2px_2px_2px_-1px_rgba(0,0,0,.4)]`}>Date</th>
+                    <th className={`${cellClass} w-[25%] text-left font-medium shadow-[2px_2px_2px_-1px_rgba(0,0,0,.4)]`}>Customer</th>
+                    <th className={`${cellClass} w-[10%] text-left font-medium shadow-[2px_2px_2px_-1px_rgba(0,0,0,.4)]`}>DM No.</th>
+                    <th className={`${cellClass} w-[10%] text-left font-medium shadow-[2px_2px_2px_-1px_rgba(0,0,0,.4)]`}>Transaction No.</th>
+                    <th className={`${cellClass} w-[15%] text-left font-medium shadow-[2px_2px_2px_-1px_rgba(0,0,0,.4)]`}>Tracking No.</th>
+                    <th className={`${cellClass} w-[15%] text-left font-medium shadow-[2px_2px_2px_-1px_rgba(0,0,0,.4)]`}>Courier</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {loadingList && (
-                    <tr>
-                      <td colSpan={7} className="border border-slate-200 px-3 py-4 text-center text-slate-500 dark:border-slate-800">
-                        Loading records...
-                      </td>
-                    </tr>
-                  )}
-                  {!loadingList && rows.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="border border-slate-200 px-3 py-4 text-center text-slate-500 dark:border-slate-800">
-                        No freight charges found.
-                      </td>
-                    </tr>
-                  )}
+                  {loadingList && <tr><td colSpan={6} className={`${cellClass} text-center`}>Loading records...</td></tr>}
+                  {!loadingList && rows.length === 0 && <tr><td colSpan={6} className={`${cellClass} text-center`}>No freight charges found.</td></tr>}
                   {!loadingList && rows.map((row) => {
                     const isSelected = selectedRefno === row.lrefno;
                     return (
-                      <tr
-                        key={row.lrefno}
-                        onClick={() => openSelectedRecord(row)}
-                        className={`cursor-pointer ${isSelected ? 'bg-blue-50 text-blue-700 underline dark:bg-blue-950/40 dark:text-blue-200' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}
-                      >
-                        <td className="border border-slate-200 px-3 py-2 dark:border-slate-800">{formatShortDate(row.ldate)}</td>
-                        <td className="border border-slate-200 px-3 py-2 dark:border-slate-800">{row.lcustomer_lname || '-'}</td>
-                        <td className="border border-slate-200 px-3 py-2 font-semibold dark:border-slate-800">{row.ldm_no || row.lrefno}</td>
-                        <td className="border border-slate-200 px-3 py-2 dark:border-slate-800">{getTransactionNo(row)}</td>
-                        <td className="border border-slate-200 px-3 py-2 dark:border-slate-800">{row.ltrackingno || '-'}</td>
-                        <td className="border border-slate-200 px-3 py-2 dark:border-slate-800">{row.lcurier_name || '-'}</td>
-                        <td className="border border-slate-200 px-3 py-2 dark:border-slate-800">{row.lstatus}</td>
+                      <tr key={row.lrefno} onClick={() => openSelectedRecord(row)} className={`cursor-pointer ${isSelected ? 'text-blue-600' : ''}`}>
+                        <td className={`${cellClass} ${isSelected ? 'text-blue-600' : ''}`}>{formatShortDate(row.ldate)}</td>
+                        <td className={`${cellClass} ${isSelected ? 'text-blue-600' : ''}`}>{row.lcustomer_lname || '-'}</td>
+                        <td className={`${cellClass} underline ${isSelected ? 'text-blue-600' : ''}`}>{row.ldm_no || row.lrefno}</td>
+                        <td className={`${cellClass} text-blue-600 underline`}>{getTransactionNo(row)}</td>
+                        <td className={`${cellClass} ${isSelected ? 'text-blue-600' : ''}`}>{row.ltrackingno || '-'}</td>
+                        <td className={`${cellClass} ${isSelected ? 'text-blue-600' : ''}`}>{row.lcurier_name || '-'}</td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
-            <div className="mt-3 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
-              <button type="button" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="rounded border border-slate-300 px-3 py-1 disabled:opacity-50 dark:border-slate-700">Prev</button>
-              <span>Page {page} / {totalPages}</span>
-              <button type="button" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="rounded border border-slate-300 px-3 py-1 disabled:opacity-50 dark:border-slate-700">Next</button>
-            </div>
           </div>
         </section>
 
-        <section className="rounded border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-            <h2 className="text-base font-bold">Freight Charges</h2>
-            <div className="flex items-center gap-3 text-sm">
+        <section className="mb-8">
+          <div className="flex min-h-[75px] flex-wrap items-center justify-between gap-4 rounded-t-[5px] border border-[#ddd] px-5 py-5">
+            <h2 className="relative m-0 text-[18px] font-medium after:absolute after:-bottom-[23px] after:left-0 after:h-px after:w-full after:bg-[#6685a4]">Freight Charges</h2>
+            <div className="flex items-center gap-2 text-[14px]">
               {!isCreating && selected?.lstatus === 'Pending' && (
-                <button type="button" disabled={saving} onClick={() => handleAction('post')} className="rounded bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-700 disabled:opacity-60">
-                  POST <u>Freight Charges</u>
+                <button type="button" disabled={saving} onClick={() => handleAction('post')} className={successButton}>
+                  <b>POST <u>Freight Charges</u></b>
                 </button>
               )}
-              <span className="font-semibold">DM No. :</span>
-              <input value={isCreating ? '' : selected?.ldm_no || ''} disabled className="h-9 w-44 rounded border border-slate-300 bg-slate-50 px-2 text-sm dark:border-slate-700 dark:bg-slate-800" />
+              {isCreating ? (
+                <>
+                  <span className="font-semibold">No. :</span>
+                  <input value="" disabled className={`${fieldClass} w-[165px]`} />
+                </>
+              ) : selected ? (
+                <span className="font-semibold">DM No. : {selected.ldm_no}</span>
+              ) : null}
             </div>
           </div>
 
-          {loadingDetail && <div className="px-4 py-3 text-sm text-slate-500">Loading details...</div>}
-
-          {!isCreating && !selected && !loadingDetail && (
-            <div className="px-4 py-8 text-center text-sm text-slate-500">
-              Select a freight charge from the list, or click Create New.
-            </div>
-          )}
-
-          {(isCreating || selected) && (
-            <div className="p-4">
+          <div className="rounded-b-[5px] border border-t-0 border-[#ddd] bg-white p-[25px] pt-[30px]">
+            {loadingDetail && <div className="py-3 text-[13px] text-[#777]">Loading details...</div>}
+            {!isCreating && !selected && !loadingDetail && (
+              <div className="py-6 text-center text-[13px] text-[#777]">Select a freight charge from the list, or click Create New.</div>
+            )}
+            {(isCreating || selected) && (
               <table className="w-full border-collapse">
                 <tbody>
                   <tr>
                     <td className={labelCellClass}>{isCreating ? 'Sold to :' : 'Customer:'}</td>
                     <td className={valueCellClass}>
                       {canEdit ? (
-                        <>
-                          <input value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} placeholder="Search customer" className={`${fieldClass} mb-2`} />
-                          <select value={form.customerId} onChange={(event) => setForm((prev) => ({ ...prev, customerId: event.target.value }))} className={fieldClass}>
-                            <option value="">Select Customer</option>
-                            {customers.map((customer) => (
-                              <option key={customer.sessionId} value={customer.sessionId}>{customer.company}</option>
-                            ))}
-                          </select>
-                          {selectedCustomerName && <div className="mt-1 text-xs text-slate-500">{selectedCustomerName}</div>}
-                        </>
+                        <select value={form.customerId} onChange={(event) => setForm((prev) => ({ ...prev, customerId: event.target.value }))} className={fieldClass}>
+                          <option value="">Select Customer</option>
+                          {customers.map((customer) => <option key={customer.sessionId} value={customer.sessionId}>{customer.company}</option>)}
+                        </select>
                       ) : selectedCustomerName || selected?.lcustomer_lname || '-'}
                     </td>
                     <td className={labelCellClass}>Date :</td>
                     <td className={valueCellClass}>
-                      {canEdit ? (
-                        <input type="date" value={form.date} onChange={(event) => setForm((prev) => ({ ...prev, date: event.target.value }))} className={fieldClass} />
-                      ) : formatShortDate(selected?.ldate)}
+                      {canEdit ? <input type="date" value={form.date} onChange={(event) => setForm((prev) => ({ ...prev, date: event.target.value }))} className={fieldClass} /> : formatShortDate(selected?.ldate)}
                     </td>
                   </tr>
-
                   <tr>
                     <td className={labelCellClass}>{isCreating ? 'Invoice/DR No. :' : 'Transaction No.:'}</td>
                     <td className={valueCellClass}>
-                      {canEdit ? (
-                        <SourceDocumentAutocomplete documents={sourceDocs} selectedDoc={selectedDoc} onSelect={applySourceDocument} disabled={!canEdit} />
-                      ) : getTransactionNo(selected)}
+                      {isCreating ? <SourceDocumentAutocomplete documents={sourceDocs} selectedDoc={selectedDoc} onSelect={applySourceDocument} /> : getTransactionNo(selected)}
                     </td>
-                    <td className={labelCellClass}>Tracking No. :</td>
+                    <td className={labelCellClass}>{isCreating ? '' : 'Tracking No. :'}</td>
                     <td className={valueCellClass}>
-                      {canEdit ? (
-                        <input value={form.trackingNo} onChange={(event) => setForm((prev) => ({ ...prev, trackingNo: event.target.value }))} placeholder="Input Tracking Number" className={fieldClass} />
-                      ) : selected?.ltrackingno || '-'}
+                      {!isCreating && (canEdit ? <input value={form.trackingNo} onChange={(event) => setForm((prev) => ({ ...prev, trackingNo: event.target.value }))} placeholder="Input Tracking Number" className={fieldClass} /> : selected?.ltrackingno || '-')}
                     </td>
                   </tr>
-
-                  <tr>
-                    <td className={labelCellClass}>Courier Name :</td>
-                    <td className={valueCellClass}>
-                      {canEdit ? (
-                        <input value={form.courierName} onChange={(event) => setForm((prev) => ({ ...prev, courierName: event.target.value }))} placeholder="Input Courier" className={fieldClass} />
-                      ) : selected?.lcurier_name || '-'}
-                    </td>
-                    <td className={labelCellClass}>Transaction Type :</td>
-                    <td className={valueCellClass}>
-                      {canEdit ? (
-                        <select
-                          value={form.transactionType}
-                          onChange={(event) => {
-                            const nextType = event.target.value as FreightTransactionType;
-                            setSelectedDoc((prev) => (prev?.type === nextType ? prev : null));
-                            setForm((prev) => ({
-                              ...prev,
-                              transactionType: nextType,
-                              ...(nextType === 'No Reference' ? { transactionRefNo: '', invoiceNo: '' } : {}),
-                            }));
-                          }}
-                          className={fieldClass}
-                        >
-                          <option value="No Reference">No Reference</option>
-                          <option value="Invoice">Invoice</option>
-                          <option value="Order Slip">Order Slip</option>
-                        </select>
-                      ) : selected?.ltransaction_type || '-'}
-                    </td>
-                  </tr>
-
+                  {isCreating && (
+                    <tr>
+                      <td className={labelCellClass}>Tracking No. :</td>
+                      <td className={valueCellClass}><input value={form.trackingNo} onChange={(event) => setForm((prev) => ({ ...prev, trackingNo: event.target.value }))} placeholder="Input Tracking Number" className={fieldClass} /></td>
+                      <td className={labelCellClass}>Courier Name :</td>
+                      <td className={valueCellClass}><input value={form.courierName} onChange={(event) => setForm((prev) => ({ ...prev, courierName: event.target.value }))} placeholder="Input Courier" className={fieldClass} /></td>
+                    </tr>
+                  )}
+                  {!isCreating && (
+                    <tr>
+                      <td className={labelCellClass}>Courier Name :</td>
+                      <td className={valueCellClass}>{canEdit ? <input value={form.courierName} onChange={(event) => setForm((prev) => ({ ...prev, courierName: event.target.value }))} placeholder="Input Courier" className={fieldClass} /> : selected?.lcurier_name || '-'}</td>
+                      <td className={labelCellClass}></td>
+                      <td className={valueCellClass}></td>
+                    </tr>
+                  )}
                   <tr>
                     <td className={labelCellClass}>{isCreating ? '' : 'Collection Type'}</td>
                     <td className={valueCellClass}>
                       {canEdit ? (
-                        <label className="inline-flex items-center gap-2">
+                        <label className="inline-flex items-center gap-1 text-[13px] font-semibold">
                           <input
                             type="checkbox"
                             checked={form.isFreightCollect}
                             onChange={(event) => setForm((prev) => ({
                               ...prev,
                               isFreightCollect: event.target.checked,
-                              amount: event.target.checked ? '0' : prev.amount,
-                              remarks: event.target.checked && !prev.remarks.startsWith('Freight Collect:') ? 'Freight Collect: ' : prev.remarks,
+                              amount: event.target.checked ? '0' : '',
+                              remarks: event.target.checked ? 'Freight Collect: ' : '',
                             }))}
                           />
                           {isCreating ? 'Freight Collection' : 'Freight Collection?'}
                         </label>
                       ) : Number(selected?.IsFreightCollect || 0) === 1 ? 'Freight Collection' : 'REGULAR'}
                     </td>
-                    <td className={labelCellClass}>Reference No :</td>
-                    <td className={valueCellClass}>
-                      {canEdit ? (
-                        <input
-                          value={form.transactionRefNo}
-                          onChange={(event) => {
-                            setSelectedDoc(null);
-                            setForm((prev) => ({ ...prev, transactionRefNo: event.target.value }));
-                          }}
-                          className={fieldClass}
-                        />
-                      ) : selected?.ltrans_refno || '-'}
-                    </td>
+                    <td className={labelCellClass}></td>
+                    <td className={valueCellClass}></td>
                   </tr>
-
                   <tr>
                     <td className={labelCellClass}>Amount :</td>
-                    <td className={valueCellClass}>
-                      {canEdit ? (
-                        <input type="number" min="0" step="0.01" value={form.amount} disabled={form.isFreightCollect} onChange={(event) => setForm((prev) => ({ ...prev, amount: event.target.value }))} placeholder="Input Amount" className={fieldClass} />
-                      ) : peso.format(Number(selected?.lamt || 0))}
-                    </td>
+                    <td className={valueCellClass}>{canEdit ? <input type="number" min="0" step="0.01" value={form.amount} readOnly={form.isFreightCollect} onChange={(event) => setForm((prev) => ({ ...prev, amount: event.target.value }))} placeholder="Input Amount" className={fieldClass} /> : String(Number(selected?.lamt || 0))}</td>
                     <td className={labelCellClass}>Remarks :</td>
-                    <td className={valueCellClass}>
-                      {canEdit ? (
-                        <input value={form.remarks} onChange={(event) => setForm((prev) => ({ ...prev, remarks: event.target.value }))} placeholder="Input Remarks" className={fieldClass} />
-                      ) : selected?.lremarks || '-'}
-                    </td>
+                    <td className={valueCellClass}>{canEdit ? <input value={form.remarks} onChange={(event) => setForm((prev) => ({ ...prev, remarks: event.target.value }))} placeholder="Input Remarks" className={fieldClass} /> : selected?.lremarks || '-'}</td>
                   </tr>
-
                   {isCreating && (
                     <tr>
                       <td className={labelCellClass}></td>
                       <td colSpan={3} className={valueCellClass}>
-                        <button type="button" disabled={saving} onClick={handleCreate} className={buttonClass}>
-                          {saving ? 'Saving...' : 'Add Record'}
-                        </button>
-                        <button type="button" onClick={() => setIsCreating(false)} className="ml-2 inline-flex h-9 items-center rounded border border-slate-300 px-4 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
-                          Cancel
-                        </button>
+                        <button type="button" disabled={saving} onClick={handleCreate} className={secondaryButton}>{saving ? 'Saving...' : 'Add Record'}</button>
                       </td>
                     </tr>
                   )}
                 </tbody>
               </table>
-            </div>
-          )}
-        </section>
-
-        <section className="rounded border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex flex-wrap gap-2 px-4 py-3">
-            {!isCreating && selected?.lstatus === 'Pending' && (
-              <>
-                <button type="button" disabled={saving} onClick={handleDelete} className="inline-flex h-9 w-24 items-center justify-center rounded bg-rose-600 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60">
-                  <Trash2 className="mr-1 h-4 w-4" />
-                  Delete
-                </button>
-                <button type="button" disabled={saving} onClick={handleSave} className={buttonClass}>
-                  {saving ? 'Saving...' : 'Save'}
-                </button>
-              </>
-            )}
-            {!isCreating && selected?.lstatus === 'Posted' && (
-              <>
-                <button type="button" disabled={saving} onClick={() => handleAction('unpost')} className="inline-flex h-9 w-24 items-center justify-center rounded bg-rose-600 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60">
-                  UnPost
-                </button>
-                <button type="button" onClick={() => window.print()} className={buttonClass}>
-                  Print
-                </button>
-              </>
-            )}
-            {!selected && !isCreating && (
-              <>
-                <button type="button" disabled className={`${buttonClass} opacity-60`}>Delete</button>
-                <button type="button" disabled className={`${buttonClass} opacity-60`}>Print</button>
-              </>
             )}
           </div>
         </section>
+
+        {!isCreating && (
+          <section className="mb-8 rounded-[5px] border border-[#ddd] bg-white">
+            <div className="flex min-h-[75px] flex-wrap items-center gap-[5px] px-5 py-5">
+              {selected?.lstatus === 'Pending' && (
+                <>
+                  <button type="button" disabled={saving} onClick={handleDelete} className={`${dangerButton} w-[90px]`}>Delete</button>
+                  <button type="button" disabled={saving} onClick={handleSave} className={`${successButton} w-[90px]`}>{saving ? 'Saving...' : 'Save'}</button>
+                </>
+              )}
+              {selected?.lstatus === 'Posted' && (
+                <>
+                  <button type="button" disabled={saving} onClick={() => handleAction('unpost')} className={`${dangerButton} w-[90px]`}>UnPost</button>
+                  <button type="button" onClick={() => window.print()} className={`${successButton} w-[90px]`}>Print</button>
+                </>
+              )}
+              {!selected && (
+                <>
+                  <button type="button" disabled className={`${successButton} w-[90px]`}>Delete</button>
+                  <button type="button" disabled className={`${successButton} w-[90px]`}>Print</button>
+                </>
+              )}
+            </div>
+          </section>
+        )}
       </div>
 
       {showSearchModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
-          <div className="w-full max-w-xl rounded border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-              <h3 className="text-lg font-semibold">Search Options</h3>
-              <button type="button" onClick={() => setShowSearchModal(false)} className="text-xl leading-none text-slate-500 hover:text-slate-800 dark:hover:text-slate-100">&times;</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-[600px] rounded-[6px] border border-black/20 bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-[#e5e5e5] px-[15px] py-[15px]">
+              <h3 className="m-0 text-[20px] font-medium">Search Options</h3>
+              <button type="button" onClick={() => setShowSearchModal(false)} className="text-[21px] font-bold leading-none text-black/30 hover:text-black/60">&times;</button>
             </div>
-            <div className="space-y-4 p-4">
-              <label className="grid grid-cols-[130px_minmax(0,1fr)] items-center gap-3 text-sm">
-                <span className="font-semibold">Ref No.</span>
+            <div className="space-y-5 px-[15px] py-[15px]">
+              <label className="grid grid-cols-[25%_58.333%] items-center text-[13px]">
+                <span className="text-right font-semibold pr-[15px]">Ref No.</span>
                 <input value={searchDraft.dmNo} onChange={(event) => setSearchDraft((prev) => ({ ...prev, dmNo: event.target.value }))} placeholder="Input DM No." className={fieldClass} />
               </label>
-              <label className="grid grid-cols-[130px_minmax(0,1fr)] items-center gap-3 text-sm">
-                <span className="font-semibold">Customer</span>
-                <input value={searchDraft.customer} onChange={(event) => setSearchDraft((prev) => ({ ...prev, customer: event.target.value }))} placeholder="Input Customer" className={fieldClass} />
+              <label className="grid grid-cols-[25%_58.333%] items-center text-[13px]">
+                <span className="text-right font-semibold pr-[15px]">Customer</span>
+                <select value={searchDraft.customer} onChange={(event) => setSearchDraft((prev) => ({ ...prev, customer: event.target.value }))} className={fieldClass}>
+                  <option value="">Select Customer</option>
+                  {customers.map((customer) => <option key={customer.sessionId} value={customer.company}>{customer.company}</option>)}
+                </select>
               </label>
-              <label className="grid grid-cols-[130px_minmax(0,1fr)] items-center gap-3 text-sm">
-                <span className="font-semibold">Tracking No.</span>
+              <label className="grid grid-cols-[25%_58.333%] items-center text-[13px]">
+                <span className="text-right font-semibold pr-[15px]">Tracking No.</span>
                 <input value={searchDraft.trackingNo} onChange={(event) => setSearchDraft((prev) => ({ ...prev, trackingNo: event.target.value }))} placeholder="Input Tracking No." className={fieldClass} />
               </label>
             </div>
-            <div className="flex justify-end gap-2 border-t border-slate-200 px-4 py-3 dark:border-slate-800">
-              <button type="button" onClick={applySearchModal} className={buttonClass}>Submit</button>
-              <button type="button" onClick={() => setShowSearchModal(false)} className="inline-flex h-9 items-center rounded border border-slate-300 px-4 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">Close</button>
+            <div className="flex justify-end gap-[5px] border-t border-[#e5e5e5] px-[15px] py-[15px]">
+              <button type="button" onClick={applySearchModal} className={successButton}>Submit</button>
+              <button type="button" onClick={() => setShowSearchModal(false)} className={secondaryButton}>Close</button>
             </div>
           </div>
         </div>
