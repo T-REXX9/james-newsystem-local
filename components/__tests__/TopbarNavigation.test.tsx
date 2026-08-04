@@ -34,5 +34,6 @@ describe('TopbarNavigation responsive layout', () => {
     const compactMenu = document.querySelector('[data-responsive-nav="compact"]');
     expect(compactMenu).toHaveClass('xl:hidden');
     expect(within(compactMenu as HTMLElement).getByRole('button', { name: 'HOME' })).toBeVisible();
+    expect(within(compactMenu as HTMLElement).queryByText('Transfer Stock')).not.toBeInTheDocument();
   });
 });

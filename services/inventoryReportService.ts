@@ -29,15 +29,6 @@ export interface InventoryReportRow {
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
 
-export const WAREHOUSES = [
-  { id: 'WH1', name: 'Warehouse 1' },
-  { id: 'WH2', name: 'Warehouse 2' },
-  { id: 'WH3', name: 'Warehouse 3' },
-  { id: 'WH4', name: 'Warehouse 4' },
-  { id: 'WH5', name: 'Warehouse 5' },
-  { id: 'WH6', name: 'Warehouse 6' },
-];
-
 const parseApiErrorMessage = async (response: Response): Promise<string> => {
   try {
     const payload = await response.json();

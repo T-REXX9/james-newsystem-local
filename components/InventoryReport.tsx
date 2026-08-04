@@ -2,10 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import {
   fetchInventoryReport,
   fetchInventoryReportOptions,
-  WAREHOUSES,
   InventoryReportRow,
   InventoryReportFilters,
-  WarehouseOption,
 } from '../services/inventoryReportService';
 import {
   Printer,
@@ -23,7 +21,7 @@ const formLabelClass = 'pt-2 text-left text-[13px] font-semibold text-[#333] md:
 const formControlClass = 'h-[34px] w-full max-w-[590px] rounded-[3px] border border-[#ccc] bg-white px-3 text-[13px] text-[#333] shadow-inner outline-none focus:border-[#66afe9] focus:ring-1 focus:ring-[#66afe9]';
 type DateCovered = 'All' | 'Today' | 'Week' | 'Month' | 'Year' | 'Custom';
 
-const InventoryRow = memo(({ row, warehouses, index }: { row: InventoryReportRow; warehouses: WarehouseOption[]; index: number }) => (
+const InventoryRow = memo(({ row, index }: { row: InventoryReportRow; index: number }) => (
   <tr>
     <td className={`${tableCellClass} text-center`}>{index + 1}</td>
     <td className={tableCellClass}>{row.description || '—'}</td>
@@ -34,14 +32,6 @@ const InventoryRow = memo(({ row, warehouses, index }: { row: InventoryReportRow
     </td>
     <td className={tableCellClass}>{row.location || '—'}</td>
     <td className={`${tableCellClass} text-center font-mono`}>{row.totalStock}</td>
-    {warehouses.map((wh) => {
-      const qty = row.warehouseStock[wh.name] || row.warehouseStock[wh.id] || 0;
-      return (
-        <td key={wh.id} className={`${tableCellClass} text-center font-mono ${qty === 0 ? 'text-[#999]' : ''}`}>
-          {qty}
-        </td>
-      );
-    })}
     <td className={`${tableCellClass} text-right font-mono`}>
       {row.value != null ? Number(row.value).toFixed(2) : '—'}
     </td>
@@ -65,11 +55,9 @@ const InventoryReport: React.FC = () => {
   const [isInitializing, setIsInitializing] = useState(true);
   const [reportData, setReportData] = useState<InventoryReportRow[]>([]);
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
-  const [dataWarning, setDataWarning] = useState<string | null>(null);
 
   const [categories, setCategories] = useState<string[]>([]);
   const [partNumbers, setPartNumbers] = useState<{ id: string; partNo: string }[]>([]);
-  const [warehouses, setWarehouses] = useState<WarehouseOption[]>(WAREHOUSES);
   const [dateCovered, setDateCovered] = useState<DateCovered>('All');
   const [includeHidden, setIncludeHidden] = useState(false);
 
@@ -93,9 +81,6 @@ const InventoryReport: React.FC = () => {
         const options = await fetchInventoryReportOptions();
         setCategories(options.categories);
         setPartNumbers(options.partNumbers);
-        if (options.warehouses.length > 0) {
-          setWarehouses(options.warehouses);
-        }
       } finally {
         setIsInitializing(false);
       }
@@ -135,7 +120,6 @@ const InventoryReport: React.FC = () => {
 
   const handleGenerateReport = useCallback(async () => {
     setIsLoading(true);
-    setDataWarning(null);
     try {
       const requestFilters = {
         ...filters,
@@ -143,30 +127,11 @@ const InventoryReport: React.FC = () => {
       };
       const data = await fetchInventoryReport(requestFilters);
       setReportData(data.rows);
-      if (data.warehouses.length > 0) {
-        setWarehouses(data.warehouses);
-      }
-
-      // Validate that each row has warehouse stock entries for all warehouses
-      const activeWarehouses = data.warehouses.length > 0 ? data.warehouses : warehouses;
-      const missingEntries: string[] = [];
-      for (const row of data.rows) {
-        for (const wh of activeWarehouses) {
-          if (!(wh.name in row.warehouseStock) && !(wh.id in row.warehouseStock)) {
-            missingEntries.push(`Item "${row.partNo || row.id}" missing warehouse "${wh.name}"`);
-          }
-        }
-      }
-      if (missingEntries.length > 0) {
-        console.warn('Incomplete warehouse stock data detected:', missingEntries);
-        setDataWarning(`${missingEntries.length} warehouse stock entries are missing from the report data.`);
-      }
-
       setGeneratedAt(new Date());
     } finally {
       setIsLoading(false);
     }
-  }, [filters, getDateRange, warehouses]);
+  }, [filters, getDateRange]);
 
   const handleClearFilters = () => {
     setFilters({
@@ -208,7 +173,7 @@ const InventoryReport: React.FC = () => {
     let csvRows: string[];
 
     if (isInventoryView) {
-      headers = ['Part No', 'Item Code', 'Description', 'Location', 'Cost', ...warehouses.map((wh) => wh.name), 'Total Stock', 'Value'];
+      headers = ['Part No', 'Item Code', 'Description', 'Location', 'Cost', 'Total Stock', 'Value'];
       csvRows = [
         headers.join(','),
         ...reportData.map((row) => {
@@ -218,7 +183,6 @@ const InventoryReport: React.FC = () => {
             row.description,
             row.location || '',
             row.cost ?? 0,
-            ...warehouses.map((wh) => row.warehouseStock[wh.name] || row.warehouseStock[wh.id] || 0),
             row.totalStock,
             row.value ?? 0,
           ];
@@ -549,13 +513,6 @@ const InventoryReport: React.FC = () => {
 
           <hr className="mb-5 border-[#eee] print:hidden" />
 
-          {dataWarning && (
-            <div className="mb-4 flex items-center gap-2 rounded-[3px] border border-[#faebcc] bg-[#fcf8e3] p-3 text-[13px] text-[#8a6d3b] print:hidden">
-              <AlertCircle className="h-4 w-4 flex-shrink-0" />
-              <span>{dataWarning}</span>
-            </div>
-          )}
-
           <div id="print_area">
             <div className="mb-5 text-center text-[#333] print:text-black">
               <strong className="text-xl">{reportTitle}</strong>
@@ -589,18 +546,15 @@ const InventoryReport: React.FC = () => {
                       <th className={tableHeadClass} style={{ width: '5%' }}>COST</th>
                       <th className={tableHeadClass} style={{ width: '5%' }}>LOC</th>
                       <th className={tableHeadClass} style={{ width: '5%' }}>BALANCE</th>
-                      {warehouses.map((wh) => (
-                        <th key={wh.id} className={tableHeadClass} style={{ width: '5%' }}>{wh.name}</th>
-                      ))}
                       <th className={tableHeadClass} style={{ width: '5%' }}>Value</th>
                     </tr>
                   </thead>
                   <tbody>
                     {reportData.map((row, index) => (
-                      <InventoryRow key={row.id || `${row.partNo}-${index}`} row={row} warehouses={warehouses} index={index} />
+                      <InventoryRow key={row.id || `${row.partNo}-${index}`} row={row} index={index} />
                     ))}
                     <tr>
-                      <td colSpan={7 + warehouses.length} className={`${tableCellClass} text-right font-semibold`}>
+                      <td colSpan={7} className={`${tableCellClass} text-right font-semibold`}>
                         Total Value:
                       </td>
                       <td className={`${tableCellClass} text-right font-mono font-semibold`}>

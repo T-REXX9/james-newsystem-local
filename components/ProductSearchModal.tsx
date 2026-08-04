@@ -4,6 +4,7 @@ import { Search, Loader2, Package, AlertCircle, X, Check } from 'lucide-react';
 import { Product } from '../types';
 import { searchProducts } from '../services/productLocalApiService';
 import { useDebounce } from '../hooks/useDebounce';
+import { getCentralStock } from '../utils/productStock';
 
 interface ProductSearchModalProps {
     isOpen: boolean;
@@ -194,8 +195,8 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({ isOpen, onClose
                                                     Code: <span className="font-mono text-slate-700 dark:text-slate-300">{highlightMatch(product.item_code, query)}</span>
                                                 </span>
                                                 <span className="flex items-center gap-1">
-                                                    Stock: <span className={`font-medium ${(product.stock_wh1 || 0) > 0 ? 'text-green-600' : 'text-red-500'}`}>
-                                                        {(product.stock_wh1 || 0) + (product.stock_wh2 || 0) + (product.stock_wh3 || 0)}
+                                                    Stock: <span className={`font-medium ${getCentralStock(product) > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                                        {getCentralStock(product)}
                                                     </span>
                                                 </span>
                                             </div>

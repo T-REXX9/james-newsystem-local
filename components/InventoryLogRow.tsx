@@ -87,11 +87,11 @@ const InventoryLogRow: React.FC<InventoryLogRowProps> = ({ log, showWarehouse, o
         {isStockIn ? '-' : `₱${Number(log.unit_price).toLocaleString()}`}
       </td>
 
-      {/* Warehouse */}
+      {/* Centralized inventory scope */}
       {showWarehouse && (
         <td className="p-3 text-xs text-center">
           <span className="inline-flex items-center justify-center px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded text-[10px] font-bold">
-            {log.warehouse_id}
+            Centralized
           </span>
         </td>
       )}

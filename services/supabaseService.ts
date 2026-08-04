@@ -154,6 +154,9 @@ const normalizeApiProduct = (raw: any): Product => ({
   stock_wh4: toNumber(raw?.stock_wh4),
   stock_wh5: toNumber(raw?.stock_wh5),
   stock_wh6: toNumber(raw?.stock_wh6),
+  total_stock: raw?.total_stock === undefined || raw?.total_stock === null
+    ? undefined
+    : toNumber(raw.total_stock),
   is_deleted: toNumber(raw?.is_deleted) === 1,
 });
 

@@ -6,30 +6,12 @@ import {
   Minus,
   Package,
   Search,
-  Warehouse,
   X,
 } from 'lucide-react';
 import type { Product } from '../types';
 import { fetchProductsPage } from '../services/productLocalApiService';
 import { useToast } from './ToastProvider';
-
-type WarehouseLabelMap = {
-  wh1: string;
-  wh2: string;
-  wh3: string;
-  wh4: string;
-  wh5: string;
-  wh6: string;
-};
-
-const DEFAULT_WAREHOUSE_LABELS: WarehouseLabelMap = {
-  wh1: 'WH1',
-  wh2: 'WH2',
-  wh3: 'WH3',
-  wh4: 'WH4',
-  wh5: 'WH5',
-  wh6: 'WH6',
-};
+import { getCentralStock } from '../utils/productStock';
 
 const PRODUCT_RESULT_LIMIT = 80;
 
@@ -55,14 +37,7 @@ const scoreField = (fieldValue: string, query: string, startsWithWeight: number,
 
 const getProductScore = (product: Product, query: string) => {
   if (!query) {
-    return (
-      (product.stock_wh1 || 0) +
-      (product.stock_wh2 || 0) +
-      (product.stock_wh3 || 0) +
-      (product.stock_wh4 || 0) +
-      (product.stock_wh5 || 0) +
-      (product.stock_wh6 || 0)
-    );
+    return getCentralStock(product);
   }
 
   const tokens = query.split(/\s+/).filter(Boolean);
@@ -108,7 +83,6 @@ const ProductQuickSearchLauncher: React.FC = () => {
   const [results, setResults] = useState<Product[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [warehouseLabels, setWarehouseLabels] = useState<WarehouseLabelMap>(DEFAULT_WAREHOUSE_LABELS);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const latestRequestRef = useRef(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -172,9 +146,6 @@ const ProductQuickSearchLauncher: React.FC = () => {
           return;
         }
 
-        const nextLabels = page.meta.warehouse_labels || DEFAULT_WAREHOUSE_LABELS;
-        setWarehouseLabels(nextLabels);
-
         const normalizedQuery = normalizeText(debouncedQuery);
         const ranked = [...page.items].sort((left, right) => {
           const scoreDiff = getProductScore(right, normalizedQuery) - getProductScore(left, normalizedQuery);
@@ -215,26 +186,9 @@ const ProductQuickSearchLauncher: React.FC = () => {
     [results, selectedProductId]
   );
 
-  const selectedWarehouseStocks = useMemo(() => {
-    if (!selectedProduct) return [];
-    return [
-      { key: 'wh1', label: warehouseLabels.wh1, quantity: selectedProduct.stock_wh1 || 0 },
-      { key: 'wh2', label: warehouseLabels.wh2, quantity: selectedProduct.stock_wh2 || 0 },
-      { key: 'wh3', label: warehouseLabels.wh3, quantity: selectedProduct.stock_wh3 || 0 },
-      { key: 'wh4', label: warehouseLabels.wh4, quantity: selectedProduct.stock_wh4 || 0 },
-      { key: 'wh5', label: warehouseLabels.wh5, quantity: selectedProduct.stock_wh5 || 0 },
-      { key: 'wh6', label: warehouseLabels.wh6, quantity: selectedProduct.stock_wh6 || 0 },
-    ];
-  }, [selectedProduct, warehouseLabels]);
-
   const totalStock = useMemo(
-    () => selectedWarehouseStocks.reduce((sum, warehouse) => sum + warehouse.quantity, 0),
-    [selectedWarehouseStocks]
-  );
-
-  const stockedLocations = useMemo(
-    () => selectedWarehouseStocks.filter((warehouse) => warehouse.quantity > 0),
-    [selectedWarehouseStocks]
+    () => selectedProduct ? getCentralStock(selectedProduct) : 0,
+    [selectedProduct]
   );
 
   const openFullProductDatabase = () => {
@@ -330,14 +284,7 @@ const ProductQuickSearchLauncher: React.FC = () => {
                 </div>
               ) : (
                 results.map((product) => {
-                  const total = (
-                    (product.stock_wh1 || 0) +
-                    (product.stock_wh2 || 0) +
-                    (product.stock_wh3 || 0) +
-                    (product.stock_wh4 || 0) +
-                    (product.stock_wh5 || 0) +
-                    (product.stock_wh6 || 0)
-                  );
+                  const total = getCentralStock(product);
                   const isSelected = selectedProductId === product.id;
 
                   return (
@@ -486,59 +433,22 @@ const ProductQuickSearchLauncher: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="grid gap-3 md:grid-cols-[0.95fr_1.05fr]">
-                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <div className="flex items-center gap-2">
-                        <Warehouse className="h-4 w-4 text-brand-blue" />
-                        <p className="text-sm font-semibold text-slate-900">Warehouse Locations</p>
-                      </div>
-                      <p className="mt-1 text-[11px] text-slate-500">
-                        Warehouses currently holding stock for this item.
-                      </p>
-
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {stockedLocations.length > 0 ? stockedLocations.map((warehouse) => (
-                          <div
-                            key={warehouse.key}
-                            className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
-                          >
-                            <div className="font-semibold leading-none">{warehouse.label}</div>
-                            <div className="mt-1 text-[11px] text-emerald-700">{warehouse.quantity} on hand</div>
-                          </div>
-                        )) : (
-                          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                            No warehouse stock available
-                          </div>
-                        )}
-                      </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="flex items-center gap-2">
+                      <Package className="h-4 w-4 text-brand-blue" />
+                      <p className="text-sm font-semibold text-slate-900">Centralized Inventory</p>
                     </div>
-
-                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">Stock by Warehouse</p>
-                          <p className="text-[11px] text-slate-500">Compact stock visibility across all warehouse locations.</p>
-                        </div>
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      One quantity is shared by inventory, sales, purchasing, and reports.
+                    </p>
+                    <div className="mt-3 flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                      <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700">Total Quantity</div>
+                        <div className="mt-1 text-2xl font-semibold text-emerald-900">{totalStock}</div>
                       </div>
-
-                      <div className="mt-3 grid gap-2 grid-cols-2 xl:grid-cols-3">
-                        {selectedWarehouseStocks.map((warehouse) => (
-                          <div
-                            key={warehouse.key}
-                            className={`rounded-2xl border px-3 py-2.5 ${
-                              warehouse.quantity > 0
-                                ? 'border-emerald-200 bg-emerald-50'
-                                : 'border-slate-200 bg-slate-50'
-                            }`}
-                          >
-                            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{warehouse.label}</div>
-                            <div className={`mt-1.5 text-xl font-semibold leading-none ${
-                              warehouse.quantity > 0 ? 'text-emerald-700' : 'text-slate-500'
-                            }`}>
-                              {warehouse.quantity}
-                            </div>
-                          </div>
-                        ))}
+                      <div className="text-right text-xs text-emerald-800">
+                        <div className="font-semibold">Storage Location</div>
+                        <div className="mt-1">{selectedProduct.location || '—'}</div>
                       </div>
                     </div>
                   </div>

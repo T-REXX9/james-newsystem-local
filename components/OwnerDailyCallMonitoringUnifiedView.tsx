@@ -8,6 +8,7 @@ import { getAllSalesOrders } from '../services/salesOrderLocalApiService';
 import { getAllInvoices } from '../services/invoiceLocalApiService';
 import { fetchProductsPage } from '../services/productLocalApiService';
 import { DailyCallMasterCustomerRow, UserProfile } from '../types';
+import { getCentralStock } from '../utils/productStock';
 
 interface OwnerDailyCallMonitoringUnifiedViewProps {
   currentUser: UserProfile | null;
@@ -127,13 +128,7 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
         : 0;
       const lowStock = productsResult.status === 'fulfilled'
         ? productsResult.value.items.filter((product) => {
-            const totalStock =
-              Number(product.stock_wh1 || 0) +
-              Number(product.stock_wh2 || 0) +
-              Number(product.stock_wh3 || 0) +
-              Number(product.stock_wh4 || 0) +
-              Number(product.stock_wh5 || 0) +
-              Number(product.stock_wh6 || 0);
+            const totalStock = getCentralStock(product);
             return Number(product.reorder_quantity || 0) > 0 && totalStock <= Number(product.reorder_quantity || 0);
           }).length
         : 0;

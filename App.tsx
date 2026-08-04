@@ -25,7 +25,6 @@ import InvoiceView from './components/InvoiceView';
 import InquiryReportFilter from './components/InquiryReportFilter';
 import SalesDevelopmentReport from './components/SalesDevelopmentReport';
 import StockMovementView from './components/StockMovementView';
-import TransferStockView from './components/TransferStockView';
 import StockAdjustmentView from './components/StockAdjustmentView';
 import SalesReport from './components/SalesReport';
 import FastSlowInventoryReport from './components/FastSlowInventoryReport';
@@ -417,17 +416,13 @@ const App: React.FC = () => {
         );
       case 'warehouse-inventory-transfer-stock':
         return (
-          <div className="h-full overflow-y-auto">
-            <TransferStockView
-              initialTransferId={
-                moduleContext['warehouse-inventory-transfer-stock']?.transferId ||
-                moduleContext.transferstock?.transferId
-              }
-              initialTransferNo={
-                moduleContext['warehouse-inventory-transfer-stock']?.transferNo ||
-                moduleContext.transferstock?.transferNo
-              }
-            />
+          <div className="flex h-full items-center justify-center bg-slate-100 p-6">
+            <div className="max-w-xl rounded-xl border border-amber-200 bg-white p-8 text-center shadow-sm">
+              <h2 className="text-xl font-bold text-slate-900">Transfer Product Disabled</h2>
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                The new system uses one centralized quantity per item code, so warehouse-to-warehouse product transfers are no longer required.
+              </p>
+            </div>
           </div>
         );
       case 'warehouse-inventory-stock-adjustment':

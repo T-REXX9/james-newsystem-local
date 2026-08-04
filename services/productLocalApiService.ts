@@ -69,6 +69,9 @@ const normalizeApiProduct = (raw: any): Product => ({
   stock_wh4: toNumber(raw?.stock_wh4),
   stock_wh5: toNumber(raw?.stock_wh5),
   stock_wh6: toNumber(raw?.stock_wh6),
+  total_stock: raw?.total_stock === undefined || raw?.total_stock === null
+    ? undefined
+    : toNumber(raw.total_stock),
   sales_by_year: toSalesByYear(raw?.sales_by_year),
   supplier_costs: Array.isArray(raw?.supplier_costs)
     ? raw.supplier_costs.map((row: any) => ({

@@ -11,8 +11,8 @@ import {
 } from '../services/stockMovementLocalApiService';
 import InventoryLogRow from './InventoryLogRow';
 import { resolveStockMovementNavigationTarget } from '../utils/stockMovementNavigation';
+import { getCentralStock } from '../utils/productStock';
 
-const WAREHOUSES = ['WH1', 'WH2', 'WH3', 'WH4', 'WH5', 'WH6'];
 const TRANSACTION_TYPES = ['Purchase Order', 'Invoice', 'Order Slip', 'Transfer Product', 'Transfer Receipt', 'Credit Memo', 'Stock Adjustment'];
 type MovementViewMode = 'audit' | 'legacy';
 type ProductSearchFilters = {
@@ -72,7 +72,7 @@ const StockMovementView: React.FC = () => {
   // State
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [highlightedProduct, setHighlightedProduct] = useState<Product | null>(null);
-  const [warehouseFilter, setWarehouseFilter] = useState<string>('WH1');
+  const [warehouseFilter, setWarehouseFilter] = useState<string>('all');
   const [transactionTypeFilter, setTransactionTypeFilter] = useState<string>('all');
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
@@ -347,7 +347,7 @@ const StockMovementView: React.FC = () => {
     setIsLoadingLogs(true);
     setSelectedProduct(highlightedProduct);
     // Reset filters when changing product
-    setWarehouseFilter('WH1');
+    setWarehouseFilter('all');
     setTransactionTypeFilter('all');
     setDateFrom('');
     setDateTo('');
@@ -360,7 +360,7 @@ const StockMovementView: React.FC = () => {
     setSelectedProduct(null);
     setHighlightedProduct(null);
     // Reset filters when clearing selection
-    setWarehouseFilter('WH1');
+    setWarehouseFilter('all');
     setTransactionTypeFilter('all');
     setDateFrom('');
     setDateTo('');
@@ -371,7 +371,7 @@ const StockMovementView: React.FC = () => {
   const handleBackToSearchResults = () => {
     setSelectedProduct(null);
     setLogs([]);
-    setWarehouseFilter('WH1');
+    setWarehouseFilter('all');
     setTransactionTypeFilter('all');
     setDateFrom('');
     setDateTo('');
@@ -424,13 +424,13 @@ const StockMovementView: React.FC = () => {
         <td>{isStockIn ? source : ''}</td>
         <td>{isStockIn ? log.partner : ''}</td>
         <td>{isStockIn ? log.qty_in : ''}</td>
-        <td>{isStockIn ? log.warehouse_id : ''}</td>
+        <td>{isStockIn ? 'Centralized' : ''}</td>
         <td>{!isStockIn ? formatLegacyDate(log.date) : ''}</td>
         <td>{!isStockIn ? source : ''}</td>
         <td>{!isStockIn ? log.partner : ''}</td>
         <td>{!isStockIn ? log.qty_out : ''}</td>
         <td>{!isStockIn ? formatLegacyPrice(log) : ''}</td>
-        <td>{!isStockIn ? log.warehouse_id : ''}</td>
+        <td>{!isStockIn ? 'Centralized' : ''}</td>
         <td>{log.balance ?? ''}</td>
       </tr>
     );
@@ -459,13 +459,13 @@ const StockMovementView: React.FC = () => {
         <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{isStockIn ? source : ''}</td>
         <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{isStockIn ? log.partner : ''}</td>
         <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{isStockIn ? log.qty_in : ''}</td>
-        <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{isStockIn ? log.warehouse_id : ''}</td>
+        <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{isStockIn ? 'Centralized' : ''}</td>
         <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{!isStockIn ? formatLegacyDate(log.date) : ''}</td>
         <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{!isStockIn ? source : ''}</td>
         <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{!isStockIn ? log.partner : ''}</td>
         <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{!isStockIn ? log.qty_out : ''}</td>
         <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{!isStockIn ? formatLegacyPrice(log) : ''}</td>
-        <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{!isStockIn ? log.warehouse_id : ''}</td>
+        <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{!isStockIn ? 'Centralized' : ''}</td>
         <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{log.balance ?? ''}</td>
       </tr>
     );
@@ -484,8 +484,8 @@ const StockMovementView: React.FC = () => {
         </div>
         <div className="stock-movement-print-title">
           <h3>STOCK MOVEMENT</h3>
-          <h5>Warehouse:</h5>
-          <h5>{warehouseFilter === 'all' ? 'All' : warehouseFilter}</h5>
+          <h5>Inventory:</h5>
+          <h5>Centralized</h5>
         </div>
       </div>
 
@@ -503,13 +503,13 @@ const StockMovementView: React.FC = () => {
             <th>Source</th>
             <th>Supplier/Customer</th>
             <th>Qty</th>
-            <th>Warehouse</th>
+            <th>Inventory</th>
             <th>Date</th>
             <th>Source</th>
             <th>Customer</th>
             <th>Qty</th>
             <th>Unit Price</th>
-            <th>Warehouse</th>
+            <th>Inventory</th>
             <th>Bal</th>
           </tr>
         </thead>
@@ -669,20 +669,12 @@ const StockMovementView: React.FC = () => {
                   <h2 className="font-['Oswald'] text-[24px] font-semibold uppercase leading-none text-[#334653]">
                     STOCK MOVEMENT
                   </h2>
-                  <label htmlFor="stock-movement-warehouse" className="mt-6 block font-['Oswald'] text-[16px] font-semibold text-[#334653]">
-                    Warehouse:
+                  <label className="mt-6 block font-['Oswald'] text-[16px] font-semibold text-[#334653]">
+                    Inventory:
                   </label>
-                  <select
-                    id="stock-movement-warehouse"
-                    value={warehouseFilter}
-                    onChange={(event) => setWarehouseFilter(event.target.value)}
-                    className="mt-2 h-[34px] w-full rounded-[3px] border border-[#d6d6d6] bg-white px-3 text-[13px] text-[#334653] outline-none"
-                  >
-                    {WAREHOUSES.map(warehouse => (
-                      <option key={warehouse} value={warehouse}>{warehouse}</option>
-                    ))}
-                    <option value="all">All Warehouses</option>
-                  </select>
+                  <div className="mt-2 h-[34px] w-full rounded-[3px] border border-[#d6d6d6] bg-slate-50 px-3 py-2 text-[13px] text-[#334653]">
+                    Centralized quantity
+                  </div>
                 </div>
               </div>
 
@@ -728,13 +720,13 @@ const StockMovementView: React.FC = () => {
                           <th className="break-words border border-[#d9dee3] px-2 py-3">Source</th>
                           <th className="break-words border border-[#d9dee3] px-2 py-3">Supplier/Customer</th>
                           <th className="break-words border border-[#d9dee3] px-2 py-3">Qty</th>
-                          <th className="break-words border border-[#d9dee3] px-2 py-3">Warehouse</th>
+                          <th className="break-words border border-[#d9dee3] px-2 py-3">Inventory</th>
                           <th className="break-words border border-[#d9dee3] px-2 py-3">Date</th>
                           <th className="break-words border border-[#d9dee3] px-2 py-3">Source</th>
                           <th className="break-words border border-[#d9dee3] px-2 py-3">Customer</th>
                           <th className="break-words border border-[#d9dee3] px-2 py-3">Qty</th>
                           <th className="break-words border border-[#d9dee3] px-2 py-3">Unit Price</th>
-                          <th className="break-words border border-[#d9dee3] px-2 py-3">Warehouse</th>
+                          <th className="break-words border border-[#d9dee3] px-2 py-3">Inventory</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1017,19 +1009,12 @@ const StockMovementView: React.FC = () => {
                   <span className="text-xs font-medium">Filters</span>
                 </div>
 
-                {/* Warehouse Filter */}
+                {/* Centralized inventory scope */}
                 <div className="flex items-center gap-2">
-                  <label className="text-xs text-slate-500">Warehouse:</label>
-                  <select
-                    value={warehouseFilter}
-                    onChange={(e) => setWarehouseFilter(e.target.value)}
-                    className="text-xs border border-slate-200 dark:border-slate-700 rounded px-2 py-1.5 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 outline-none focus:border-brand-blue"
-                  >
-                    {WAREHOUSES.map(wh => (
-                      <option key={wh} value={wh}>{wh}</option>
-                    ))}
-                    <option value="all">All Warehouses</option>
-                  </select>
+                  <label className="text-xs text-slate-500">Inventory:</label>
+                  <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                    Centralized quantity
+                  </span>
                 </div>
 
                 {/* Date From */}
@@ -1087,7 +1072,7 @@ const StockMovementView: React.FC = () => {
                 {(warehouseFilter !== 'all' || dateFrom || dateTo || transactionTypeFilter !== 'all' || referenceSearch) && (
                   <button
                     onClick={() => {
-                      setWarehouseFilter('WH1');
+                      setWarehouseFilter('all');
                       setDateFrom('');
                       setDateTo('');
                       setTransactionTypeFilter('all');
@@ -1150,8 +1135,7 @@ const StockMovementView: React.FC = () => {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
                       });
-                      const totalStock = product.stock_wh1 + product.stock_wh2 + product.stock_wh3
-                        + product.stock_wh4 + product.stock_wh5 + product.stock_wh6;
+                      const totalStock = getCentralStock(product);
                       return (
                         <tr
                           key={product.id}
@@ -1265,7 +1249,7 @@ const StockMovementView: React.FC = () => {
                           <th className="p-3 w-40">Supplier</th>
                           <th className="p-3 w-20 text-right">Qty</th>
                           <th className="p-3 w-24 text-right">Price</th>
-                          <th className="p-3 w-20 text-center">Warehouse</th>
+                          <th className="p-3 w-20 text-center">Inventory</th>
                           <th className="p-3 w-24 text-right">Balance</th>
                         </tr>
                       </thead>
@@ -1293,13 +1277,13 @@ const StockMovementView: React.FC = () => {
                           <th className="p-3 w-32 bg-emerald-50 dark:bg-emerald-950 border-b border-slate-200 dark:border-slate-700">Source</th>
                           <th className="p-3 bg-emerald-50 dark:bg-emerald-950 border-b border-slate-200 dark:border-slate-700">Supplier/Customer</th>
                           <th className="p-3 w-20 text-right bg-emerald-50 dark:bg-emerald-950 border-b border-slate-200 dark:border-slate-700">Qty</th>
-                          <th className="p-3 w-24 text-center bg-emerald-50 dark:bg-emerald-950 border-b border-slate-200 dark:border-slate-700">Warehouse</th>
+                          <th className="p-3 w-24 text-center bg-emerald-50 dark:bg-emerald-950 border-b border-slate-200 dark:border-slate-700">Inventory</th>
                           <th className="p-3 w-28 bg-rose-50 dark:bg-rose-950 border-l-4 border-l-slate-400 dark:border-l-slate-500 border-b border-slate-200 dark:border-slate-700">Date</th>
                           <th className="p-3 w-32 bg-rose-50 dark:bg-rose-950 border-b border-slate-200 dark:border-slate-700">Source</th>
                           <th className="p-3 bg-rose-50 dark:bg-rose-950 border-b border-slate-200 dark:border-slate-700">Customer</th>
                           <th className="p-3 w-20 text-right bg-rose-50 dark:bg-rose-950 border-b border-slate-200 dark:border-slate-700">Qty</th>
                           <th className="p-3 w-24 text-right bg-rose-50 dark:bg-rose-950 border-b border-slate-200 dark:border-slate-700">Unit Price</th>
-                          <th className="p-3 w-24 text-center bg-rose-50 dark:bg-rose-950 border-b border-slate-200 dark:border-slate-700">Warehouse</th>
+                          <th className="p-3 w-24 text-center bg-rose-50 dark:bg-rose-950 border-b border-slate-200 dark:border-slate-700">Inventory</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1330,13 +1314,13 @@ const StockMovementView: React.FC = () => {
                               <td className="p-3 text-slate-600 dark:text-slate-300">{isStockIn ? source : ''}</td>
                               <td className="p-3 text-slate-600 dark:text-slate-300">{isStockIn ? log.partner : ''}</td>
                               <td className="p-3 text-right font-bold text-emerald-600 dark:text-emerald-400">{isStockIn ? log.qty_in : ''}</td>
-                              <td className="p-3 text-center text-slate-600 dark:text-slate-300">{isStockIn ? log.warehouse_id : ''}</td>
+                              <td className="p-3 text-center text-slate-600 dark:text-slate-300">{isStockIn ? 'Centralized' : ''}</td>
                               <td className="p-3 text-slate-600 dark:text-slate-300 border-l-4 border-l-slate-300 dark:border-l-slate-600 bg-rose-50/20 dark:bg-rose-950/10">{!isStockIn ? formatLegacyDate(log.date) : ''}</td>
                               <td className="p-3 text-slate-600 dark:text-slate-300 bg-rose-50/20 dark:bg-rose-950/10">{!isStockIn ? source : ''}</td>
                               <td className="p-3 text-slate-600 dark:text-slate-300">{!isStockIn ? log.partner : ''}</td>
                               <td className="p-3 text-right font-bold text-rose-600 dark:text-rose-400">{!isStockIn ? log.qty_out : ''}</td>
                               <td className="p-3 text-right text-slate-600 dark:text-slate-300">{!isStockIn ? formatLegacyPrice(log) : ''}</td>
-                              <td className="p-3 text-center text-slate-600 dark:text-slate-300">{!isStockIn ? log.warehouse_id : ''}</td>
+                              <td className="p-3 text-center text-slate-600 dark:text-slate-300">{!isStockIn ? 'Centralized' : ''}</td>
                               <td className="p-3 text-right font-bold text-slate-700 dark:text-slate-200 border-l-4 border-l-slate-300 dark:border-l-slate-600 bg-slate-50 dark:bg-slate-800/60">{log.balance ?? ''}</td>
                             </tr>
                           );
@@ -1364,8 +1348,8 @@ const StockMovementView: React.FC = () => {
             </div>
             <div className="stock-movement-print-title">
               <h3>STOCK MOVEMENT</h3>
-              <h5>Warehouse:</h5>
-              <h5>{warehouseFilter === 'all' ? 'All' : warehouseFilter}</h5>
+              <h5>Inventory:</h5>
+              <h5>Centralized</h5>
             </div>
           </div>
 
@@ -1383,13 +1367,13 @@ const StockMovementView: React.FC = () => {
                 <th>Source</th>
                 <th>Supplier/Customer</th>
                 <th>Qty</th>
-                <th>Warehouse</th>
+                <th>Inventory</th>
                 <th>Date</th>
                 <th>Source</th>
                 <th>Customer</th>
                 <th>Qty</th>
                 <th>Unit Price</th>
-                <th>Warehouse</th>
+                <th>Inventory</th>
                 <th>Bal</th>
               </tr>
             </thead>

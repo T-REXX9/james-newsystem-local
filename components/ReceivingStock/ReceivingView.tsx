@@ -164,8 +164,8 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
                                     <span className="font-medium dark:text-slate-200">{rr.po_no || 'N/A'}</span>
                                 </div>
                                 <div className="flex justify-between text-sm">
-                                    <span className="text-slate-500">Warehouse:</span>
-                                    <span className="font-medium dark:text-slate-200">{rr.warehouse_id}</span>
+                                    <span className="text-slate-500">Inventory:</span>
+                                    <span className="font-medium dark:text-slate-200">Centralized quantity</span>
                                 </div>
                             </div>
                         </div>

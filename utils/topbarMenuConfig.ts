@@ -68,12 +68,6 @@ export const TOPBAR_MENU_CONFIG: TopbarMainMenu[] = [
             icon: Package,
           },
           {
-            id: 'warehouse-inventory-transfer-stock',
-            label: 'Transfer Stock',
-            route: 'warehouse-inventory-transfer-stock',
-            icon: ClipboardList,
-          },
-          {
             id: 'warehouse-inventory-inventory-audit',
             label: 'Inventory Audit',
             route: 'warehouse-inventory-inventory-audit',

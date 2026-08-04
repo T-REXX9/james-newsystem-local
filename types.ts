@@ -463,6 +463,7 @@ export interface Product {
   cost?: number;
 
   // Warehouse Stocks
+  total_stock?: number;
   stock_wh1: number;
   stock_wh2: number;
   stock_wh3: number;

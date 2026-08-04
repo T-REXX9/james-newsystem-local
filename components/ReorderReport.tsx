@@ -4,7 +4,6 @@ import { purchaseRequestService } from '../services/purchaseRequestService';
 import {
   fetchReorderReportEntries,
   hideReorderReportItems,
-  REORDER_WAREHOUSE_OPTIONS,
   ReorderReportEntry,
   ReorderWarehouseType,
 } from '../services/reorderReportService';
@@ -276,8 +275,6 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, onClose, onSaved }) 
 
 const tableCellClass = 'border border-[#d9d9d9] px-3 py-[26px] text-center text-[18px] leading-[27px] text-[#333]';
 const tableHeadClass = 'border border-[#d9d9d9] border-b-[3px] border-b-[#333] bg-white px-3 py-[18px] text-center text-[18px] font-semibold uppercase leading-[27px] text-[#333]';
-const reorderOptionWarehouses = REORDER_WAREHOUSE_OPTIONS.filter((option) => option.id === 'total' || option.id === 'wh1');
-
 const formatShortDate = (value?: string) => {
   if (!value) return '';
   const date = new Date(value);
@@ -303,7 +300,7 @@ const ReorderReport: React.FC = () => {
   const [loadMoreFailed, setLoadMoreFailed] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [preparingPrint, setPreparingPrint] = useState(false);
-  const [warehouseType, setWarehouseType] = useState<ReorderWarehouseType>('total');
+  const warehouseType: ReorderWarehouseType = 'total';
   const [hideZeroReorder, setHideZeroReorder] = useState(false);
   const [hideZeroReplenish, setHideZeroReplenish] = useState(false);
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
@@ -316,7 +313,7 @@ const ReorderReport: React.FC = () => {
   const [meta, setMeta] = useState({ page: 1, per_page: 25, total: 0, total_pages: 1 });
   const [printRows, setPrintRows] = useState<ReorderReportEntry[]>([]);
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
-  const isWh1Report = warehouseType === 'wh1';
+  const isWh1Report = false;
 
   const loadReport = useCallback(async (targetPage = 1, targetSearch = '', append = false) => {
     if (append) setLoadingMore(true);
@@ -560,20 +557,10 @@ const ReorderReport: React.FC = () => {
 
             <div className="ml-[96px] mt-[50px] w-full max-w-[620px] text-[13px] max-md:mx-auto">
               <div className="grid grid-cols-[155px_435px] items-center gap-[30px] max-md:grid-cols-[135px_minmax(0,1fr)]">
-                <label className="text-right font-semibold text-[#222]">
-                  Warehouse <span className="text-rose-600">*</span>
-                </label>
-                <select
-                  value={warehouseType}
-                  onChange={(event) => setWarehouseType(event.target.value as ReorderWarehouseType)}
-                  className="h-[35px] w-full rounded-[3px] border border-[#c9c9c9] bg-white px-4 text-[13px] text-[#555] outline-none"
-                >
-                  {reorderOptionWarehouses.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                <label className="text-right font-semibold text-[#222]">Inventory</label>
+                <div className="h-[35px] w-full rounded-[3px] border border-[#c9c9c9] bg-slate-50 px-4 py-2 text-[13px] text-[#555]">
+                  Centralized quantity
+                </div>
               </div>
 
               <div className="mt-5 grid grid-cols-[155px_435px] gap-[30px] max-md:grid-cols-[135px_minmax(0,1fr)]">
@@ -615,7 +602,6 @@ const ReorderReport: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      setWarehouseType('total');
                       setHideZeroReorder(false);
                       setHideZeroReplenish(false);
                     }}

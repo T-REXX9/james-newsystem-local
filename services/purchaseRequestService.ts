@@ -6,6 +6,7 @@ import {
   CreatePRItemPayload,
 } from '../purchaseRequest.types';
 import { getLocalAuthSession } from './localAuthService';
+import { getCentralStock } from '../utils/productStock';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
@@ -252,7 +253,7 @@ export const purchaseRequestService = {
       name: String(row?.description || ''),
       description: String(row?.description || ''),
       cost: toNumber(row?.cost, 0),
-      quantity: toNumber(row?.stock_wh1, 0),
+      quantity: getCentralStock(row),
     }));
   },
 
@@ -284,4 +285,3 @@ export const purchaseRequestService = {
     return String(data?.conversion?.po_refno || data?.conversion?.po_number || '');
   },
 };
-

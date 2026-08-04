@@ -4,13 +4,7 @@ const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
 
 export const REORDER_WAREHOUSE_OPTIONS = [
-  { id: 'total', label: 'Total Company' },
-  { id: 'wh1', label: 'WH1' },
-  { id: 'wh2', label: 'WH2' },
-  { id: 'wh3', label: 'WH3' },
-  { id: 'wh4', label: 'WH4' },
-  { id: 'wh5', label: 'WH5' },
-  { id: 'wh6', label: 'WH6' },
+  { id: 'total', label: 'Centralized Quantity' },
 ] as const;
 
 export type ReorderWarehouseType = (typeof REORDER_WAREHOUSE_OPTIONS)[number]['id'];

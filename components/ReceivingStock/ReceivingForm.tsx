@@ -33,7 +33,7 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
     const [supplierName, setSupplierName] = useState('');
     const [poNo, setPoNo] = useState('');
     const [remarks, setRemarks] = useState('');
-    const [warehouseId, setWarehouseId] = useState('WH1'); // Default to WH1
+    const warehouseId = 'CENTRALIZED';
 
     // Data Sources
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);

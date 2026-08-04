@@ -82,4 +82,17 @@ describe('productLocalApiService', () => {
 
     expect(result.items[0].location).toBe('V1-008');
   });
+
+  it('normalizes the centralized total quantity from the API', async () => {
+    (global.fetch as any).mockImplementation(() =>
+      okResponse({
+        items: [{ id: 'product-1', status: 'Active', total_stock: '42' }],
+        meta: { page: 1, per_page: 25, total: 1, total_pages: 1 },
+      })
+    );
+
+    const result = await fetchProductsPage({ perPage: 25 });
+
+    expect(result.items[0].total_stock).toBe(42);
+  });
 });

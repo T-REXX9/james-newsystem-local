@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Scale, ListFilter, Search, RefreshCw, Plus,
-  CheckCircle2, AlertTriangle, XCircle, Calendar, MapPin,
+  CheckCircle2, AlertTriangle, XCircle, Calendar,
   FileText, Trash2, Save, ArrowUp, ArrowDown
 } from 'lucide-react';
 import StatusBadge from './StatusBadge';
@@ -19,13 +19,12 @@ import {
   StockAdjustmentDTO,
   StockAdjustmentType
 } from '../types';
+import { getCentralStock } from '../utils/productStock';
 
 interface StockAdjustmentViewProps {
   initialAdjustmentId?: string;
   initialAdjustmentNo?: string;
 }
-
-const WAREHOUSES = ['WH1', 'WH2', 'WH3', 'WH4', 'WH5', 'WH6'];
 
 type StockAdjustmentStatus = 'draft' | 'finalized';
 
@@ -53,7 +52,7 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
   
   // Form state
   const [adjustmentNo, setAdjustmentNo] = useState('');
-  const [warehouseId, setWarehouseId] = useState('WH1');
+  const warehouseId = 'CENTRALIZED';
   const [adjustmentType, setAdjustmentType] = useState<StockAdjustmentType>(StockAdjustmentType.PHYSICAL_COUNT);
   const [adjustmentDate, setAdjustmentDate] = useState('');
   const [notes, setNotes] = useState('');
@@ -179,18 +178,10 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
     ).slice(0, 50);
   }, [products, itemSearch]);
 
-  const getProductStock = (productId: string, warehouse: string): number => {
+  const getProductStock = (productId: string): number => {
     const product = productMap.get(productId);
     if (!product) return 0;
-    switch (warehouse) {
-      case 'WH1': return product.stock_wh1;
-      case 'WH2': return product.stock_wh2;
-      case 'WH3': return product.stock_wh3;
-      case 'WH4': return product.stock_wh4;
-      case 'WH5': return product.stock_wh5;
-      case 'WH6': return product.stock_wh6;
-      default: return 0;
-    }
+    return getCentralStock(product);
   };
 
   const handleFinalize = async () => {
@@ -236,7 +227,6 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
       setShowCreateForm(false);
       // Reset form
       setAdjustmentNo('');
-      setWarehouseId('WH1');
       setAdjustmentType(StockAdjustmentType.PHYSICAL_COUNT);
       setAdjustmentDate('');
       setNotes('');
@@ -251,7 +241,7 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
   };
 
   const handleAddItem = (product: Product) => {
-    const systemQty = getProductStock(product.id, warehouseId);
+    const systemQty = getProductStock(product.id);
     const existingItemIndex = items.findIndex(item => item.item_id === product.id);
     if (existingItemIndex >= 0) {
       // Update existing item
@@ -378,10 +368,7 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
                     <span className="font-semibold text-sm text-slate-800 dark:text-slate-100">{adj.adjustment_no}</span>
                     <StatusBadge status={adj.status} />
                   </div>
-                  <p className="text-xs text-slate-500 flex items-center gap-1">
-                    <MapPin className="w-3 h-3" />
-                    {adj.warehouse_id}
-                  </p>
+                  <p className="text-xs text-slate-500">Centralized inventory</p>
                   <p className="text-[11px] text-slate-400">{new Date(adj.adjustment_date).toLocaleDateString()}</p>
                 </button>
               );
@@ -407,7 +394,7 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
                   <div>
                     <p className="text-xs text-slate-500">Stock Adjustment</p>
                     <h2 className="text-2xl font-semibold text-slate-800 dark:text-white">{selectedAdjustment.adjustment_no}</h2>
-                    <p className="text-xs text-slate-500">{new Date(selectedAdjustment.adjustment_date).toLocaleDateString()} · {selectedAdjustment.warehouse_id}</p>
+                    <p className="text-xs text-slate-500">{new Date(selectedAdjustment.adjustment_date).toLocaleDateString()} · Centralized inventory</p>
                   </div>
                   <StatusBadge status={selectedAdjustment.status} />
                 </div>
@@ -418,11 +405,8 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
                     <p className="capitalize">{selectedAdjustment.adjustment_type.replace('_', ' ')}</p>
                   </div>
                   <div>
-                    <p className="font-semibold text-slate-500">Warehouse</p>
-                    <p className="flex items-center gap-1">
-                      <MapPin className="w-3 h-3" />
-                      {selectedAdjustment.warehouse_id}
-                    </p>
+                    <p className="font-semibold text-slate-500">Inventory</p>
+                    <p>Centralized quantity</p>
                   </div>
                   <div>
                     <p className="font-semibold text-slate-500">Date</p>
@@ -635,16 +619,10 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Warehouse *</label>
-                  <select
-                    value={warehouseId}
-                    onChange={(e) => setWarehouseId(e.target.value)}
-                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded px-3 py-2 bg-white dark:bg-slate-800"
-                  >
-                    {WAREHOUSES.map(wh => (
-                      <option key={wh} value={wh}>{wh}</option>
-                    ))}
-                  </select>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Inventory</label>
+                  <div className="w-full rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                    Centralized quantity
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-500 mb-1">Adjustment Date *</label>

@@ -120,16 +120,12 @@ const mapHeader = (row: Record<string, unknown>): InventoryAuditHeader => ({
   adjustmentCount: Number(row.adjustment_count || 0),
 });
 
-const mapStockItem = (row: Record<string, unknown>): InventoryAuditStockItem => ({
-  inventoryId: Number(row.inventory_id || 0),
-  itemSession: String(row.item_session || ''),
-  partNo: String(row.part_no || ''),
-  itemCode: String(row.item_code || ''),
-  description: String(row.description || ''),
-  brand: String(row.brand || ''),
-  cost: Number(row.cost || 0),
-  warehouses: (Array.isArray(row.warehouses) ? row.warehouses : []).map((warehouse) => ({
-    warehouse: String(warehouse?.warehouse || ''),
+export const centralizeInventoryAuditWarehouses = (
+  warehouses: unknown
+): InventoryAuditWarehouseCount[] => {
+  const rows = Array.isArray(warehouses) ? warehouses : [];
+  const parsed = rows.map((warehouse: any) => ({
+    warehouse: 'CENTRALIZED',
     stock: Number(warehouse?.stock || 0),
     location: String(warehouse?.location || ''),
     physicalCount: warehouse?.physical_count === null || warehouse?.physical_count === undefined
@@ -142,7 +138,39 @@ const mapStockItem = (row: Record<string, unknown>): InventoryAuditStockItem => 
     adjustmentItemId: warehouse?.adjustment_item_id === null || warehouse?.adjustment_item_id === undefined
       ? null
       : Number(warehouse.adjustment_item_id),
-  })),
+  }));
+
+  if (parsed.length === 0) return [];
+
+  const allPhysicalCountsPresent = parsed.every((row) => row.physicalCount !== null);
+  const allDiscrepanciesPresent = parsed.every((row) => row.discrepancy !== null);
+  const locations = [...new Set(parsed.map((row) => row.location.trim()).filter(Boolean))];
+  const remarks = [...new Set(parsed.map((row) => row.remarks.trim()).filter(Boolean))];
+
+  return [{
+    warehouse: 'CENTRALIZED',
+    stock: parsed.reduce((total, row) => total + row.stock, 0),
+    location: locations.join(', '),
+    physicalCount: allPhysicalCountsPresent
+      ? parsed.reduce((total, row) => total + Number(row.physicalCount), 0)
+      : null,
+    discrepancy: allDiscrepanciesPresent
+      ? parsed.reduce((total, row) => total + Number(row.discrepancy), 0)
+      : null,
+    remarks: remarks.join('; '),
+    adjustmentItemId: parsed.length === 1 ? parsed[0].adjustmentItemId : null,
+  }];
+};
+
+const mapStockItem = (row: Record<string, unknown>): InventoryAuditStockItem => ({
+  inventoryId: Number(row.inventory_id || 0),
+  itemSession: String(row.item_session || ''),
+  partNo: String(row.part_no || ''),
+  itemCode: String(row.item_code || ''),
+  description: String(row.description || ''),
+  brand: String(row.brand || ''),
+  cost: Number(row.cost || 0),
+  warehouses: centralizeInventoryAuditWarehouses(row.warehouses),
   totalInventory: Number(row.total_inventory || 0),
   inventoryValue: Number(row.inventory_value || 0),
   totalMissing: Number(row.total_missing || 0),
@@ -264,10 +292,9 @@ export async function fetchInventoryAuditStockDetail(
   const data = await requestApi(
     `${API_BASE_URL}/inventory-audits/stock-adjustments/${encodeURIComponent(refno)}?${params.toString()}`
   );
-  const warehouseRows = Array.isArray(data?.warehouses) ? data.warehouses : [];
   return {
     header: mapHeader(data?.header || {}),
-    warehouses: warehouseRows.map((warehouse: { name?: unknown }) => String(warehouse?.name || '')),
+    warehouses: ['CENTRALIZED'],
     items: (Array.isArray(data?.items) ? data.items : []).map((row: Record<string, unknown>) => mapStockItem(row)),
     meta: {
       page: Number(data?.meta?.page || 1),

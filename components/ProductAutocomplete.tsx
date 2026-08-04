@@ -4,6 +4,7 @@ import { Search, Loader2, Package, AlertCircle, X } from 'lucide-react';
 import { Product } from '../types';
 import { searchProducts } from '../services/productLocalApiService';
 import { useDebounce } from '../hooks/useDebounce';
+import { getCentralStock } from '../utils/productStock';
 
 interface ProductAutocompleteProps {
     onSelect: (product: Product) => void;
@@ -324,12 +325,7 @@ const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
                                                     </span>
                                                     <span>•</span>
                                                     <span>Stock: {
-                                                        (product.stock_wh1 || 0) +
-                                                        (product.stock_wh2 || 0) +
-                                                        (product.stock_wh3 || 0) +
-                                                        (product.stock_wh4 || 0) +
-                                                        (product.stock_wh5 || 0) +
-                                                        (product.stock_wh6 || 0)
+                                                        getCentralStock(product)
                                                     }</span>
                                                     <span>•</span>
                                                     <span>Base Price: ₱{product.price_aa?.toFixed(2)}</span>

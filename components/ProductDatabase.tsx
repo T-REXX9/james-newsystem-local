@@ -18,6 +18,7 @@ import {
 import { fetchSuppliers } from '../services/supplierService';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { validateMinLength, validateRequired } from '../utils/formValidation';
+import { getCentralStock } from '../utils/productStock';
 
 interface ProductDatabaseProps {
   currentUser: UserProfile | null;
@@ -106,9 +107,7 @@ const money = (value?: number) => Number(value || 0).toLocaleString(undefined, {
   maximumFractionDigits: 2,
 });
 
-const getConsolidatedStock = (product: Product): number =>
-  Number(product.stock_wh1 || 0) + Number(product.stock_wh2 || 0) + Number(product.stock_wh3 || 0)
-  + Number(product.stock_wh4 || 0) + Number(product.stock_wh5 || 0) + Number(product.stock_wh6 || 0);
+const getConsolidatedStock = getCentralStock;
 
 const formatBlueprintDate = (value?: string): string => {
   const text = String(value || '').trim();

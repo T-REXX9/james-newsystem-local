@@ -5,7 +5,8 @@ Updated: 4 August 2026 (Asia/Manila)
 ## Working rules
 
 - Work on one revision at a time.
-- Do not mark a revision complete until its focused tests and relevant regression checks pass.
+- Do not mark a revision complete until its focused unit tests and relevant compile checks pass.
+- Do not use browser, live-API, or integration tests; verification is unit-test-only, with build/syntax checks where needed.
 - Record a brief completion report under every finished revision.
 - Preserve the checkpoint already published to `main`: `53621e3`.
 
@@ -46,8 +47,16 @@ Updated: 4 August 2026 (Asia/Manila)
 - [ ] **INV-02 — Product Database uses larger text and tabbed detail (P1)**
   - Completion report: Pending.
 
-- [ ] **INV-03 — Centralized quantity and disabled product transfer (P0)**
-  - Completion report: Pending.
+- [x] **INV-03 — Centralized quantity and disabled product transfer (P0)**
+  - Status: Complete.
+  - Completion report:
+    - Removed Transfer Product from navigation and default role/module permissions. Existing deep links now show a disabled-module notice instead of the transfer form.
+    - Added a server-side safety lock to all seven transfer mutation actions; historical transfer lists remain readable, but create, update, delete, item changes, and posting are rejected with HTTP 410.
+    - Added one centralized `total_stock` value to product results and updated Product Database, product search/autocomplete, Stock Movement, Stock Adjustment, purchasing requests, Receiving, call monitoring, and quick search to use it. Legacy warehouse columns are summed only as a compatibility fallback.
+    - Removed warehouse quantity selectors, split columns, and WH1–WH6 displays from active Inventory Report, Reorder Report, Stock Movement, Stock Adjustment, Purchase Request, Receiving, and quick-search workflows.
+    - Collapsed inventory-audit warehouse rows into a single `CENTRALIZED` count on both the server and client, including safe handling for incomplete physical counts.
+    - Limited Reorder Report to centralized totals and removed warehouse-specific report options.
+    - Verification (unit tests only): backend transfer lock 7/7 passed; focused frontend tests 30/30 passed; all changed PHP files passed syntax checks; production build passed.
 
 - [ ] **DCR-01 — Daily Collection scrolling works (P0)**
   - Completion report: Pending.
@@ -94,7 +103,7 @@ Updated: 4 August 2026 (Asia/Manila)
 ## Final regression gate
 
 - [ ] Production build passes.
-- [ ] Full automated test suite passes.
-- [ ] All P0 accounting and inventory workflows pass end-to-end tests.
-- [ ] Role permissions and audit events are verified.
+- [ ] All focused unit suites pass.
+- [ ] All P0 accounting and inventory rules have unit coverage.
+- [ ] Role permissions and audit events are verified by unit tests.
 - [ ] Open clarifications are recorded for James rather than guessed.

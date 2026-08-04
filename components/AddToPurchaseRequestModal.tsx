@@ -24,15 +24,6 @@ interface AddToPurchaseRequestModalProps {
   currentUser?: UserProfile | null;
 }
 
-const WAREHOUSES = [
-  { id: 'WH1', name: 'Warehouse 1' },
-  { id: 'WH2', name: 'Warehouse 2' },
-  { id: 'WH3', name: 'Warehouse 3' },
-  { id: 'WH4', name: 'Warehouse 4' },
-  { id: 'WH5', name: 'Warehouse 5' },
-  { id: 'WH6', name: 'Warehouse 6' },
-];
-
 const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
   item,
   onClose,
@@ -51,7 +42,7 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
 
   const [selectedPO, setSelectedPO] = useState<string>('');
   const [selectedSupplier, setSelectedSupplier] = useState<string>('');
-  const [selectedWarehouse, setSelectedWarehouse] = useState<string>('WH1');
+  const selectedWarehouse = 'CENTRALIZED';
   const [qty, setQty] = useState<string>(item.totalQty > 0 ? String(item.totalQty) : '');
   const [unitPrice, setUnitPrice] = useState<string>('');
 
@@ -65,12 +56,6 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
     value: supplier.id,
     label: supplier.company,
     keywords: [supplier.company],
-  }));
-
-  const warehouseOptions: SearchableSelectOption[] = WAREHOUSES.map((warehouse) => ({
-    value: warehouse.id,
-    label: warehouse.name,
-    keywords: [warehouse.id, warehouse.name],
   }));
 
   useEffect(() => {
@@ -335,17 +320,10 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
                     )}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                      Destination Warehouse
-                    </label>
-                    <SearchableSelect
-                      value={selectedWarehouse}
-                      options={warehouseOptions}
-                      onChange={setSelectedWarehouse}
-                      placeholder="Select a warehouse"
-                      searchPlaceholder="Search warehouse..."
-                      buttonClassName="w-full rounded-xl px-4 py-2.5 bg-slate-100 dark:bg-slate-800/50 font-medium border-slate-200 dark:border-slate-700"
-                    />
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Inventory</label>
+                    <div className="w-full rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-200">
+                      Centralized quantity
+                    </div>
                   </div>
                 </div>
               )}
