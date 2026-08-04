@@ -32,8 +32,16 @@ Updated: 4 August 2026 (Asia/Manila)
 - [ ] **NAV-01 — Records can open in a new browser tab (P1)**
   - Completion report: Pending.
 
-- [ ] **INV-01 — Product visibility and changes synchronize across modules (P0)**
-  - Completion report: Pending.
+- [x] **INV-01 — Product visibility and changes synchronize across modules (P0)**
+  - Status: Complete.
+  - Completion report:
+    - Confirmed Product Database changes update the shared `tblinventory_item` record used by all inventory modules; no duplicate Stock Movement product store exists.
+    - Corrected Stock Movement, Purchase Order, and Receiving product pickers to request active products only.
+    - Kept Stock Adjustment's complete product map for historical document labels, while limiting its new-item autocomplete to active products.
+    - Preserved historical access: hidden item `VV-026` is excluded from active product search, while its 2013 receiving movement remains retrievable by item ID.
+    - Added regression coverage for Stock Movement filtering, Stock Adjustment history versus new choices, and Purchase Order/Receiving picker status.
+    - Verification: focused tests 19/19 passed; production build passed.
+    - Full-suite baseline: 274 tests passed, 15 failed, and 1 skipped. The same 15 pre-existing failures remain outside INV-01; all product visibility, Stock Movement, Stock Adjustment, Purchase Order, and Receiving tests passed.
 
 - [ ] **INV-02 — Product Database uses larger text and tabbed detail (P1)**
   - Completion report: Pending.

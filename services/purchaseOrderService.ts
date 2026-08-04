@@ -317,7 +317,7 @@ export const purchaseOrderService = {
     while (page <= totalPages) {
       const result = await fetchProductsPage({
         search: '',
-        status: 'all',
+        status: 'active',
         page,
         perPage: 200,
       });

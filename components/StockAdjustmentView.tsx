@@ -168,9 +168,10 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
 
   // Filter products for autocomplete
   const filteredProducts = useMemo(() => {
-    if (!itemSearch) return products.slice(0, 50);
+    const activeProducts = products.filter(product => product.status === 'Active');
+    if (!itemSearch) return activeProducts.slice(0, 50);
     const query = itemSearch.toLowerCase();
-    return products.filter(p =>
+    return activeProducts.filter(p =>
       p.part_no.toLowerCase().includes(query) ||
       p.description.toLowerCase().includes(query) ||
       p.brand.toLowerCase().includes(query) ||

@@ -414,7 +414,7 @@ export const receivingService = {
         while (page <= totalPages) {
             const result = await fetchProductsPage({
                 search: '',
-                status: 'all',
+                status: 'active',
                 page,
                 perPage: 200,
             });

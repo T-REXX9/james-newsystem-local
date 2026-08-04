@@ -87,7 +87,7 @@ export const searchStockMovementProducts = async (
     description: filters?.description || '',
     application: filters?.application || '',
     originalPn: filters?.original_pn || '',
-    status: 'all',
+    status: 'active',
     page: 1,
     perPage: Math.max(1, Math.min(100, limit)),
   });

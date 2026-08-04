@@ -129,5 +129,15 @@ describe('purchaseOrderService (local API)', () => {
     const [, init] = (global.fetch as any).mock.calls[0];
     expect(init.method).toBe('DELETE');
   });
-});
 
+  it('loads only active products for new purchase-order item choices', async () => {
+    (global.fetch as any).mockImplementation(() =>
+      okResponse({ items: [], meta: { page: 1, total_pages: 1 } })
+    );
+
+    const { purchaseOrderService } = await import('../purchaseOrderService');
+    await purchaseOrderService.getProducts();
+
+    expect(String((global.fetch as any).mock.calls[0][0])).toContain('status=active');
+  });
+});

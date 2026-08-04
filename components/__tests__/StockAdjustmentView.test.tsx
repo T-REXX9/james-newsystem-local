@@ -227,4 +227,66 @@ describe('StockAdjustmentView', () => {
     await waitFor(() => expect(getAllStockAdjustmentsMock).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.queryByText('Confirm Finalization')).not.toBeInTheDocument());
   });
+
+  it('keeps hidden products readable in history but excludes them from new adjustment choices', async () => {
+    const user = userEvent.setup();
+    fetchProductsMock.mockResolvedValue([
+      {
+        id: 'prod-1',
+        part_no: 'P-100',
+        item_code: 'ITEM-100',
+        description: 'Brake Pad',
+        brand: 'TND',
+        status: 'Active',
+        stock_wh1: 5,
+        stock_wh2: 0,
+        stock_wh3: 0,
+        stock_wh4: 0,
+        stock_wh5: 0,
+        stock_wh6: 0,
+      },
+      {
+        id: 'prod-hidden',
+        part_no: 'HIDDEN-100',
+        item_code: 'HIDDEN-ITEM',
+        description: 'Hidden historical product',
+        brand: 'TND',
+        status: 'Inactive',
+        stock_wh1: 0,
+        stock_wh2: 0,
+        stock_wh3: 0,
+        stock_wh4: 0,
+        stock_wh5: 0,
+        stock_wh6: 0,
+      },
+    ] as any);
+    getAllStockAdjustmentsMock.mockResolvedValue([
+      {
+        id: 'ref-hidden',
+        adjustment_no: 'SA26-HIDDEN',
+        adjustment_date: '2026-08-04',
+        warehouse_id: 'WH1',
+        adjustment_type: 'physical_count',
+        status: 'finalized',
+        items: [],
+      },
+    ] as any);
+    getStockAdjustmentMock.mockResolvedValue({
+      id: 'ref-hidden',
+      adjustment_no: 'SA26-HIDDEN',
+      adjustment_date: '2026-08-04',
+      warehouse_id: 'WH1',
+      adjustment_type: 'physical_count',
+      status: 'finalized',
+      items: [{ id: 'hidden-row', item_id: 'prod-hidden', system_qty: 1, physical_qty: 1, difference: 0 }],
+    } as any);
+
+    render(<StockAdjustmentView />);
+
+    expect(await screen.findByText('Hidden historical product')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /New Adjustment/i }));
+    const search = screen.getByPlaceholderText('Search products...');
+    await user.type(search, 'HIDDEN');
+    expect(screen.queryByRole('button', { name: /HIDDEN-100/ })).not.toBeInTheDocument();
+  });
 });
