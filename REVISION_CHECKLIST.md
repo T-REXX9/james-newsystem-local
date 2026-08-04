@@ -58,8 +58,14 @@ Updated: 4 August 2026 (Asia/Manila)
     - Limited Reorder Report to centralized totals and removed warehouse-specific report options.
     - Verification (unit tests only): backend transfer lock 7/7 passed; focused frontend tests 30/30 passed; all changed PHP files passed syntax checks; production build passed.
 
-- [ ] **DCR-01 — Daily Collection scrolling works (P0)**
-  - Completion report: Pending.
+- [x] **DCR-01 — Daily Collection scrolling works (P0)**
+  - Status: Complete.
+  - Completion report:
+    - Removed the route-level overflow trap that clipped Daily Collection content inside the fixed application frame.
+    - Added explicit full-height vertical scrolling to the Daily Collection page, while retaining separate scroll areas for the record list and wide detail table.
+    - Kept the detail header sticky only inside its own table scroller so it does not cover page-level action controls.
+    - Added a component unit test with 20 collection headers and 30 detail rows, verifying the last header and last transaction/action row remain rendered within the correct scroll containers.
+    - Verification (unit tests only): focused component test 1/1 passed; production build passed.
 
 - [ ] **DCR-02 — Daily Collection disapproval reverses ledger effect (P0)**
   - Completion report: Pending.

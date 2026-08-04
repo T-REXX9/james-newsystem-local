@@ -816,7 +816,10 @@ const DailyCollectionEntryView: React.FC = () => {
 
   return (
     <>
-      <div className="min-h-full overflow-auto bg-[#f4f4f4] px-4 py-10 text-[13px] text-[#222]">
+      <div
+        data-testid="daily-collection-scroll-container"
+        className="h-full min-h-0 overflow-y-auto overscroll-contain bg-[#f4f4f4] px-4 py-10 text-[13px] text-[#222]"
+      >
         <div className="mx-auto flex max-w-[1140px] flex-col gap-6">
         {/* Old-system collection list */}
         <div className="flex max-h-[275px] w-full shrink-0 flex-col overflow-hidden rounded-[5px] border border-[#d8d8d8] bg-white">
@@ -877,7 +880,7 @@ const DailyCollectionEntryView: React.FC = () => {
                 />
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto px-6 py-6">
+          <div data-testid="daily-collection-list-scroll" className="flex-1 overflow-y-auto px-6 py-6">
             <div className="grid grid-cols-[180px_1fr] border-b-2 border-[#ddd] px-2 py-2 font-['Oswald'] text-[14px]">
               <span>Date</span>
               <span>DCR No.</span>
@@ -990,7 +993,7 @@ const DailyCollectionEntryView: React.FC = () => {
                 )}
 
                 {/* Payment lines table */}
-                <div className="max-h-[480px] overflow-x-auto overflow-y-auto">
+                <div data-testid="daily-collection-detail-scroll" className="max-h-[480px] overflow-x-auto overflow-y-auto">
                   <table className="w-full text-sm min-w-[1400px]">
                     <thead className="sticky top-0 border-b-2 border-[#ddd] bg-white font-['Oswald'] text-[#222]">
                       <tr>
