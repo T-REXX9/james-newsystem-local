@@ -128,6 +128,7 @@ const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
         if (!showDropdown || selectedIndex < 0) return;
         const activeItem = itemRefs.current[selectedIndex];
         if (!activeItem) return;
+        if (typeof activeItem.scrollIntoView !== 'function') return;
         activeItem.scrollIntoView({
             block: 'nearest',
         });

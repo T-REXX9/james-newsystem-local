@@ -2,6 +2,7 @@ import React from 'react';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import SalesOrderView from '../SalesOrderView';
+import { ToastProvider } from '../ToastProvider';
 
 const getAllSalesOrdersMock = vi.fn();
 const getSalesOrderMock = vi.fn();
@@ -30,6 +31,10 @@ vi.mock('../../services/localAuthService', () => ({
 vi.mock('../../services/supabaseService', () => ({
   dispatchWorkflowNotification: vi.fn(),
   fetchProfiles: (...args: any[]) => fetchProfilesMock(...args),
+}));
+
+vi.mock('../../services/notificationLocalApiService', () => ({
+  markNotificationsAsReadByEntityKey: vi.fn(),
 }));
 
 const makeOrder = (overrides: Record<string, any> = {}) => ({
@@ -65,6 +70,13 @@ const makeOrder = (overrides: Record<string, any> = {}) => ({
 });
 
 describe('SalesOrderView', () => {
+  const renderView = (props: React.ComponentProps<typeof SalesOrderView> = {}) =>
+    render(
+      <ToastProvider>
+        <SalesOrderView {...props} />
+      </ToastProvider>
+    );
+
   beforeEach(() => {
     vi.clearAllMocks();
     fetchProfilesMock.mockResolvedValue([]);
@@ -87,7 +99,7 @@ describe('SalesOrderView', () => {
       },
     ]);
 
-    render(<SalesOrderView />);
+    renderView();
 
     const newest = await screen.findByText('SO-11');
     const middle = await screen.findByText('SO-7');
@@ -176,7 +188,7 @@ describe('SalesOrderView', () => {
       transactionType: 'Invoice',
     });
 
-    render(<SalesOrderView initialOrderId="target-order" />);
+    renderView({ initialOrderId: 'target-order' });
 
     await waitFor(() => {
       expect(getSalesOrderMock).toHaveBeenCalledWith('target-order');
@@ -269,7 +281,7 @@ describe('SalesOrderView', () => {
       creditLimit: 10000,
     });
 
-    render(<SalesOrderView initialOrderId="target-order" />);
+    renderView({ initialOrderId: 'target-order' });
 
     expect(await screen.findByText(/balance exceeds credit limit\./i)).toHaveTextContent(/does not block the sales order flow/i);
   });

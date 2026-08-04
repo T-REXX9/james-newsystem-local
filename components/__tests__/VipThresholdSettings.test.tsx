@@ -22,16 +22,14 @@ describe('VipThresholdSettings', () => {
   beforeEach(() => {
     addToastMock.mockReset();
     getVipTierConfigMock.mockResolvedValue({
-      silver_entry_threshold: 10000,
-      gold_entry_threshold: 30000,
-      silver_maintenance_threshold: 5000,
-      gold_maintenance_threshold: 10000,
+      one_time_discount_threshold: 10000,
+      unlimited_discount_threshold: 30000,
+      discount_percentage: 10,
     });
     setVipTierConfigMock.mockResolvedValue({
-      silver_entry_threshold: 12000,
-      gold_entry_threshold: 35000,
-      silver_maintenance_threshold: 6000,
-      gold_maintenance_threshold: 12000,
+      one_time_discount_threshold: 12000,
+      unlimited_discount_threshold: 30000,
+      discount_percentage: 10,
     });
   });
 
@@ -44,25 +42,24 @@ describe('VipThresholdSettings', () => {
 
     render(
       <VipThresholdSettings
-        currentUser={{ id: '1', role: 'Master User', full_name: 'Master User' } as any}
+        currentUser={{ id: '1', role: 'Master User', full_name: 'Master User', user_type: '1' } as any}
       />
     );
 
     expect(await screen.findByText('VIP Thresholds')).toBeInTheDocument();
 
-    const silverQualificationInput = screen.getByLabelText(/silver qualification threshold/i);
-    expect(silverQualificationInput).toHaveValue(10000);
-    await user.clear(silverQualificationInput);
-    await user.type(silverQualificationInput, '12000');
+    const oneTimeDiscountInput = screen.getByLabelText(/one-time discount threshold/i);
+    expect(oneTimeDiscountInput).toHaveValue(10000);
+    await user.clear(oneTimeDiscountInput);
+    await user.type(oneTimeDiscountInput, '12000');
 
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => {
       expect(setVipTierConfigMock).toHaveBeenCalledWith({
-        silver_entry_threshold: 12000,
-        gold_entry_threshold: 30000,
-        silver_maintenance_threshold: 5000,
-        gold_maintenance_threshold: 10000,
+        one_time_discount_threshold: 12000,
+        unlimited_discount_threshold: 30000,
+        discount_percentage: 10,
       });
     });
 
@@ -81,8 +78,8 @@ describe('VipThresholdSettings', () => {
     );
 
     expect(await screen.findByText('VIP Thresholds')).toBeInTheDocument();
-    expect(screen.getByText(/only Master User or Owner can update them/i)).toBeInTheDocument();
+    expect(screen.getByText(/only an owner-level user can update them/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument();
-    expect(screen.getByLabelText(/silver qualification threshold/i)).toBeDisabled();
+    expect(screen.getByLabelText(/one-time discount threshold/i)).toBeDisabled();
   });
 });

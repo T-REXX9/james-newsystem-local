@@ -204,7 +204,7 @@ describe('SpecialPrice', () => {
     fireEvent.change(amountInput, { target: { value: '50' } });
     await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
 
-    await waitFor(() => expect(createSpecialPriceMock).toHaveBeenCalledWith('prod-1', 'Fix Amount', 50));
+    await waitFor(() => expect(createSpecialPriceMock).toHaveBeenCalledWith('prod-1', 'Fixed Amount Deduction', 50));
 
     const updatedAmountInput = await screen.findByDisplayValue('50');
     fireEvent.change(updatedAmountInput, { target: { value: '75' } });

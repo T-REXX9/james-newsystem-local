@@ -82,10 +82,15 @@ vi.mock('../ToastProvider', () => ({
 }));
 
 describe('TransferStockView legacy parity', () => {
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-07-23T10:00:00'));
   });
 
   it('shows the legacy editable record workflow for a pending transfer', async () => {

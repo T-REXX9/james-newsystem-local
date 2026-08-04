@@ -67,6 +67,7 @@ const customer = {
   outstandingBalance: 1115072,
   averageMonthlyOrder: 48666,
   monthlyOrder: 80000,
+  lastMonthOrder: 80000,
   weeklyRangeTotals: [],
   dailyActivity: [],
 } as any;
@@ -88,7 +89,7 @@ describe('DailyCallCustomerDetailExpansion', () => {
     expect(screen.getByRole('heading', { name: /Human Agent Activity/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /Communication Timeline/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Quick Actions' })).toBeInTheDocument();
-    expect(screen.getByText('VIP GOLD')).toBeInTheDocument();
+    expect(await screen.findByText('UNLIMITED VIP')).toBeInTheDocument();
 
     await user.click(screen.getByRole('tab', { name: 'Item Issues' }));
 

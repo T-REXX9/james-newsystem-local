@@ -61,7 +61,7 @@ describe('useRealtimeSubscription', () => {
     mockState.state.subscribeStatusHandler = null;
   });
 
-  it('creates a realtime channel and routes insert/update/delete callbacks', async () => {
+  it('keeps Supabase realtime disabled while the system uses the local API', async () => {
     const onInsert = vi.fn();
     const onUpdate = vi.fn();
     const onDelete = vi.fn();
@@ -79,38 +79,15 @@ describe('useRealtimeSubscription', () => {
       })
     );
 
-    await waitFor(() => {
-      expect(mockState.channelMock).toHaveBeenCalledTimes(1);
-    });
-
-    expect(mockState.channelMock.mock.calls[0]?.[0]).toMatch(/^test_table-realtime-/);
-    expect(mockState.channel.on).toHaveBeenCalledTimes(1);
-    expect(mockState.channel.subscribe).toHaveBeenCalledTimes(1);
-
-    mockState.state.subscribeStatusHandler?.('SUBSCRIBED');
-
-    mockState.state.postgresChangesHandler?.({
-      eventType: 'INSERT',
-      new: { id: '1', name: 'Created' },
-      old: { id: '1' },
-    });
-    mockState.state.postgresChangesHandler?.({
-      eventType: 'UPDATE',
-      new: { id: '1', name: 'Updated' },
-      old: { id: '1' },
-    });
-    mockState.state.postgresChangesHandler?.({
-      eventType: 'DELETE',
-      new: { id: '1' },
-      old: { id: '1' },
-    });
-
-    expect(onInsert).toHaveBeenCalledWith({ id: '1', name: 'Created' });
-    expect(onUpdate).toHaveBeenCalledWith({ id: '1', name: 'Updated' });
-    expect(onDelete).toHaveBeenCalledWith({ id: '1' });
+    await waitFor(() => expect(mockState.channelMock).not.toHaveBeenCalled());
+    expect(mockState.channel.on).not.toHaveBeenCalled();
+    expect(mockState.channel.subscribe).not.toHaveBeenCalled();
+    expect(onInsert).not.toHaveBeenCalled();
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(onDelete).not.toHaveBeenCalled();
     expect(onError).not.toHaveBeenCalled();
 
     unmount();
-    expect(mockState.removeChannelMock).toHaveBeenCalledTimes(1);
+    expect(mockState.removeChannelMock).not.toHaveBeenCalled();
   });
 });

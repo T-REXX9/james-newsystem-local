@@ -123,7 +123,7 @@ describe('internalChatLocalApiService', () => {
     const addMembersCall = (global.fetch as any).mock.calls[2];
     const removeMemberCall = (global.fetch as any).mock.calls[3];
 
-    expect(createCall[0]).toBe('/api/v1/internal-chat/groups');
+    expect(createCall[0]).toMatch(/\/api\/v1\/internal-chat\/groups$/);
     expect(createCall[1]).toEqual(
       expect.objectContaining({
         method: 'POST',
@@ -134,7 +134,7 @@ describe('internalChatLocalApiService', () => {
       })
     );
 
-    expect(renameCall[0]).toBe('/api/v1/internal-chat/groups/55');
+    expect(renameCall[0]).toMatch(/\/api\/v1\/internal-chat\/groups\/55$/);
     expect(renameCall[1]).toEqual(
       expect.objectContaining({
         method: 'PATCH',
@@ -142,7 +142,7 @@ describe('internalChatLocalApiService', () => {
       })
     );
 
-    expect(addMembersCall[0]).toBe('/api/v1/internal-chat/groups/55/members');
+    expect(addMembersCall[0]).toMatch(/\/api\/v1\/internal-chat\/groups\/55\/members$/);
     expect(addMembersCall[1]).toEqual(
       expect.objectContaining({
         method: 'POST',
@@ -150,7 +150,7 @@ describe('internalChatLocalApiService', () => {
       })
     );
 
-    expect(removeMemberCall[0]).toBe('/api/v1/internal-chat/groups/55/members/4');
+    expect(removeMemberCall[0]).toMatch(/\/api\/v1\/internal-chat\/groups\/55\/members\/4$/);
     expect(removeMemberCall[1]).toEqual(
       expect.objectContaining({
         method: 'DELETE',

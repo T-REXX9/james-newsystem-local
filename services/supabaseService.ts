@@ -966,6 +966,8 @@ const validateStaffAccountInput = (input: CreateStaffAccountInput): StaffAccount
 
   if (!input.password) {
     errors.password = 'Password is required';
+  } else if (input.password.length < 8) {
+    errors.password = 'Password must be at least 8 characters';
   }
 
   if (input.role && !STAFF_ROLES.includes(input.role)) {
