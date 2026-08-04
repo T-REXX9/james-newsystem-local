@@ -101,7 +101,9 @@ type MentionSuggestion =
       entity: InternalChatEntityMentionSuggestion;
     };
 
-const INTERNAL_CHAT_REALTIME_ENABLED = true;
+const INTERNAL_CHAT_REALTIME_ENABLED =
+  String((import.meta as any)?.env?.VITE_INTERNAL_CHAT_REALTIME_ENABLED || '').toLowerCase() === 'true'
+  || String((import.meta as any)?.env?.MODE || '').toLowerCase() === 'test';
 const REACTION_OPTIONS = ['👍', '❤️', '😂', '😮', '😢', '👀'] as const;
 const TYPING_IDLE_MS = 3000;
 const TYPING_KEEPALIVE_MS = 2500;

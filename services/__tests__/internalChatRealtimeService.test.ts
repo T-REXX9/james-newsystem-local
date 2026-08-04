@@ -56,6 +56,7 @@ describe('internalChatRealtimeService', () => {
       expect.objectContaining({
         path: '/socket.io',
         auth: { token: 'abc123' },
+        reconnectionAttempts: 3,
       })
     );
 

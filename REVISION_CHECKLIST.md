@@ -122,8 +122,14 @@ Updated: 4 August 2026 (Asia/Manila)
 
 ## Final regression gate
 
+- [x] Console errors reported after the revisions were corrected.
+  - Expired cached sessions are cleared before notification and chat providers mount, preventing repeated unauthorized requests.
+  - Internal-chat realtime is opt-in unless its companion server is configured, and reconnect attempts are capped.
+  - Reorder Report's Receiving status is included in its grouped SQL query, removing the reported server error.
+  - Added an inline favicon so the application no longer requests a missing file.
+  - Verification (unit tests only): frontend 282/282 passed with 1 intentional skip; backend 13/13 passed.
 - [ ] Production build passes.
-- [ ] All focused unit suites pass.
+- [x] All focused unit suites pass.
 - [ ] All P0 accounting and inventory rules have unit coverage.
 - [ ] Role permissions and audit events are verified by unit tests.
 - [ ] Open clarifications are recorded for James rather than guessed.

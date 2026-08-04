@@ -164,7 +164,10 @@ const App: React.FC = () => {
     user: { id: initialStoredSession.userProfile.id },
   } : null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(() => initialStoredSession?.userProfile || null);
-  const [appLoading, setAppLoading] = useState(() => !initialStoredSession);
+  // A cached session is only a candidate until /auth/me validates it. Keep
+  // authenticated providers unmounted so stale tokens cannot trigger a burst
+  // of notification and chat requests during startup.
+  const [appLoading, setAppLoading] = useState(true);
 
   const [activeTab, setActiveTab] = useState(initialRouteState.tab);
   const [moduleContext, setModuleContext] = useState<Record<string, Record<string, string>>>(
@@ -843,7 +846,7 @@ const App: React.FC = () => {
 
   return (
     <ToastProvider>
-      {session && userProfile && (
+      {!appLoading && session && userProfile && (
         <NotificationProvider userId={userProfile.id}>
           <div className="h-screen overflow-hidden bg-slate-100 dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-100 flex flex-col">
             <TopNav

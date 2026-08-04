@@ -74,6 +74,20 @@ const getStoredSession = (): LocalAuthSession | null => {
   }
 };
 
+const tokenHasUsableExpiry = (token: string): boolean => {
+  try {
+    const [payloadPart, signaturePart] = String(token || '').split('.');
+    if (!payloadPart || !signaturePart) return false;
+    const normalized = payloadPart.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+    const payload = JSON.parse(window.atob(padded)) as { exp?: unknown };
+    const expiresAt = Number(payload?.exp || 0);
+    return Number.isFinite(expiresAt) && expiresAt > Math.floor(Date.now() / 1000);
+  } catch {
+    return false;
+  }
+};
+
 const persistSession = (session: LocalAuthSession | null) => {
   if (!isBrowser) return;
   if (!session) {
@@ -185,6 +199,11 @@ export const loginWithLocalApi = async (email: string, password: string): Promis
 export const restoreLocalAuthSession = async (): Promise<LocalAuthSession | null> => {
   const existing = getStoredSession();
   if (!existing?.token) return null;
+  if (!tokenHasUsableExpiry(existing.token)) {
+    persistSession(null);
+    dispatchAuthChanged(null);
+    return null;
+  }
 
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timeoutId = controller

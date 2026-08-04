@@ -114,7 +114,7 @@ describe('App authentication flow', () => {
     await waitFor(() => expect(mockedLogoutFromLocalApi).toHaveBeenCalled());
   });
 
-  it('boots immediately from cached local auth session while restore runs in background', async () => {
+  it('does not mount authenticated pages until a cached session is validated', async () => {
     mockedGetLocalAuthSession.mockReturnValue({
       token: 'cached-token',
       context: {
@@ -145,8 +145,8 @@ describe('App authentication flow', () => {
 
     render(<App />);
 
-    expect(await screen.findByTestId('topnav')).toBeInTheDocument();
-    expect(screen.queryByText('Loading application')).not.toBeInTheDocument();
+    expect(await screen.findByRole('status', { name: 'Loading application' })).toBeInTheDocument();
+    expect(screen.queryByTestId('topnav')).not.toBeInTheDocument();
   });
 
   it('restores the current module from the URL hash on refresh', async () => {
