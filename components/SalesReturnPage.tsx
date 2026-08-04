@@ -4,48 +4,17 @@ import ReactDOM from 'react-dom';
 import {
   SalesReturnItem,
   SalesReturnRecord,
+  SalesReturnSourceDocument,
   SourceItem,
   salesReturnService,
 } from '../services/salesReturnLocalApiService';
-import { Contact, Invoice, OrderSlip } from '../types';
+import { Contact } from '../types';
 import { fetchContacts } from '../services/customerDatabaseLocalApiService';
-import { getAllInvoices, getInvoicesPage } from '../services/invoiceLocalApiService';
-import { getAllOrderSlips, getOrderSlipsPage } from '../services/orderSlipLocalApiService';
 import { fetchProducts } from '../services/productLocalApiService';
 import CustomerAutocomplete from './CustomerAutocomplete';
 import { useDebounce } from '../hooks/useDebounce';
 
-/** Unified source document type — mirrors old system's tbl_invoice_or */
-interface SourceDocument {
-  id: string;
-  doc_no: string;
-  type: 'Invoice' | 'OR';
-  contact_id: string;
-  sales_person: string;
-  sales_date: string;
-  grand_total: number;
-}
-
-const toSourceDocuments = (invoices: Invoice[], orderSlips: OrderSlip[]): SourceDocument[] => [
-  ...invoices.map((inv): SourceDocument => ({
-    id: inv.id,
-    doc_no: inv.invoice_no,
-    type: 'Invoice',
-    contact_id: inv.contact_id,
-    sales_person: inv.sales_person,
-    sales_date: inv.sales_date,
-    grand_total: inv.grand_total,
-  })),
-  ...orderSlips.map((os): SourceDocument => ({
-    id: os.id,
-    doc_no: os.slip_no,
-    type: 'OR',
-    contact_id: os.contact_id,
-    sales_person: os.sales_person,
-    sales_date: os.sales_date,
-    grand_total: os.grand_total,
-  })),
-];
+type SourceDocument = SalesReturnSourceDocument;
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
@@ -216,7 +185,7 @@ const SourceItemsModal: React.FC<{
 /*  Unified search for Invoices + Order Slips — mirrors old system's           */
 /*  tbl_invoice_or search that returns both types in one dropdown.             */
 /* -------------------------------------------------------------------------- */
-const SourceDocAutocomplete: React.FC<{
+export const SourceDocAutocomplete: React.FC<{
   documents: SourceDocument[];
   customers: Contact[];
   selectedDoc: SourceDocument | null;
@@ -486,13 +455,7 @@ const CreateModal: React.FC<{
   const [pendingContactId, setPendingContactId] = useState<string | null>(null);
 
   const searchSourceDocs = useCallback(async (query: string): Promise<SourceDocument[]> => {
-    const [invoiceResult, orderSlipResult] = await Promise.all([
-      getInvoicesPage({ status: 'all', search: query, page: 1, perPage: 50 })
-        .catch(() => ({ items: [] as Invoice[], meta: { page: 1, per_page: 50, total: 0, total_pages: 0 } })),
-      getOrderSlipsPage({ status: 'all', search: query, page: 1, perPage: 50 })
-        .catch(() => ({ items: [] as OrderSlip[], meta: { page: 1, per_page: 50, total: 0, total_pages: 0 } })),
-    ]);
-    return toSourceDocuments(invoiceResult.items, orderSlipResult.items);
+    return salesReturnService.sourceDocuments(query, 50);
   }, []);
 
   useEffect(() => {
@@ -511,13 +474,7 @@ const CreateModal: React.FC<{
         date: new Date().toISOString().slice(0, 10),
       });
       fetchContacts().then(setCustomers).catch(() => setCustomers([]));
-      // Load both invoices and order slips into a unified list (mirrors old system's tbl_invoice_or)
-      Promise.all([
-        getAllInvoices().catch(() => [] as Invoice[]),
-        getAllOrderSlips().catch(() => [] as OrderSlip[]),
-      ]).then(([invoices, orderSlips]) => {
-        setSourceDocs(toSourceDocuments(invoices, orderSlips));
-      });
+      salesReturnService.sourceDocuments('', 50).then(setSourceDocs).catch(() => setSourceDocs([]));
     }
   }, [open]);
 

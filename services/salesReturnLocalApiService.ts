@@ -57,6 +57,19 @@ export interface SourceItem {
   discount: number;
 }
 
+export interface SalesReturnSourceDocument {
+  id: string;
+  doc_no: string;
+  type: 'Invoice' | 'OR';
+  contact_id: string;
+  customer_name: string;
+  sales_person: string;
+  sales_date: string;
+  status: string;
+  grand_total: number;
+  item_count: number;
+}
+
 interface SalesReturnListParams {
   search?: string;
   status?: string;
@@ -140,7 +153,33 @@ const mapItem = (row: any): SalesReturnItem => ({
   remark: String(row?.remark || ''),
 });
 
+const mapSourceDocument = (row: any): SalesReturnSourceDocument => ({
+  id: String(row?.id || ''),
+  doc_no: String(row?.doc_no || ''),
+  type: String(row?.type || '').toUpperCase() === 'OR' ? 'OR' : 'Invoice',
+  contact_id: String(row?.contact_id || ''),
+  customer_name: String(row?.customer_name || ''),
+  sales_person: String(row?.sales_person || ''),
+  sales_date: String(row?.sales_date || ''),
+  status: String(row?.status || ''),
+  grand_total: toNumber(row?.grand_total),
+  item_count: toNumber(row?.item_count),
+});
+
 export const salesReturnService = {
+  async sourceDocuments(search = '', limit = 50): Promise<SalesReturnSourceDocument[]> {
+    const query = new URLSearchParams({
+      main_id: String(getMainId()),
+      limit: String(Math.max(1, Math.min(100, limit))),
+    });
+    if (search.trim()) query.set('search', search.trim());
+
+    const data = await requestApi<any>(
+      `${API_BASE_URL}/sales-returns/source-documents?${query.toString()}`
+    );
+    return Array.isArray(data?.items) ? data.items.map(mapSourceDocument) : [];
+  },
+
   async list(params: SalesReturnListParams = {}): Promise<SalesReturnListResponse> {
     const query = new URLSearchParams({
       main_id: String(getMainId()),
