@@ -3,7 +3,9 @@ import { EyeOff, Loader2, Printer, Search, ShoppingCart } from 'lucide-react';
 import { purchaseRequestService } from '../services/purchaseRequestService';
 import {
   fetchReorderReportEntries,
+  getReorderWorkflowStages,
   hideReorderReportItems,
+  isReorderWorkflowActive,
   ReorderReportEntry,
   ReorderWarehouseType,
 } from '../services/reorderReportService';
@@ -14,7 +16,7 @@ import ConfirmModal from './ConfirmModal';
 interface AddToPrModalProps {
   items: ReorderReportEntry[];
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (created: { id: string; number: string }) => void;
 }
 
 const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, onClose, onSaved }) => {
@@ -104,12 +106,14 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, onClose, onSaved }) 
     setSaving(true);
     try {
       let targetPrId = existingPrId;
+      let targetPrNumber = pendingPRs.find((row) => row.id === existingPrId)?.pr_number || existingPrId;
       const selectedSupplier = suppliers.find((row) => row.id === supplierId);
       const supplierName = selectedSupplier?.company || '';
       const prItems = mapItemsForPR(supplierId, supplierName);
 
       if (mode === 'new') {
         const prNumber = await purchaseRequestService.generatePRNumber();
+        targetPrNumber = prNumber;
         const created = await purchaseRequestService.createPurchaseRequest({
           pr_number: prNumber,
           request_date: new Date().toISOString().slice(0, 10),
@@ -132,7 +136,7 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, onClose, onSaved }) 
       });
 
       if (openAfterSave && targetPrId) navigateToPR(targetPrId);
-      onSaved();
+      onSaved({ id: targetPrId, number: targetPrNumber });
     } catch (err: any) {
       addToast({
         type: 'error',
@@ -312,6 +316,7 @@ const ReorderReport: React.FC = () => {
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ page: 1, per_page: 25, total: 0, total_pages: 1 });
   const [printRows, setPrintRows] = useState<ReorderReportEntry[]>([]);
+  const [latestCreatedPr, setLatestCreatedPr] = useState<{ id: string; number: string } | null>(null);
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const isWh1Report = false;
 
@@ -442,22 +447,36 @@ const ReorderReport: React.FC = () => {
     }
   };
 
+  const eligibleRows = useMemo(
+    () => rows.filter((row) => !isReorderWorkflowActive(row)),
+    [rows]
+  );
+
   const selectedRows = useMemo(
-    () => rows.filter((row) => selectedIds.has(row.id)),
+    () => eligibleRows.filter((row) => selectedIds.has(row.id)),
+    [eligibleRows, selectedIds]
+  );
+
+  const workflowRows = useMemo(
+    () => Array.from(new Map(
+      rows.filter((row) => row.pr_refno).map((row) => [row.pr_refno, row])
+    ).values()),
     [rows, selectedIds]
   );
 
-  const allSelected = rows.length > 0 && rows.every((row) => selectedIds.has(row.id));
+  const allSelected = eligibleRows.length > 0 && eligibleRows.every((row) => selectedIds.has(row.id));
 
   const toggleSelectAll = () => {
     if (allSelected) {
       setSelectedIds(new Set());
       return;
     }
-    setSelectedIds(new Set(rows.map((row) => row.id)));
+    setSelectedIds(new Set(eligibleRows.map((row) => row.id)));
   };
 
   const toggleSelectRow = (id: string) => {
+    const row = rows.find((candidate) => candidate.id === id);
+    if (!row || isReorderWorkflowActive(row)) return;
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -668,6 +687,38 @@ const ReorderReport: React.FC = () => {
             <input id="reorder-search" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} className="h-[48px] w-[320px] rounded-[4px] border border-[#ccc] px-3 outline-none focus:border-[#777]" />
           </form>
 
+          <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
+          <aside className="rounded border border-[#d9d9d9] bg-[#fafafa] p-4 text-sm">
+            <h2 className="border-b border-[#ccc] pb-3 text-base font-bold text-[#29475f]">PURCHASE ACTIVITY</h2>
+            {latestCreatedPr ? (
+              <button
+                type="button"
+                className="mt-4 block w-full rounded bg-blue-50 p-3 text-left text-brand-blue hover:underline"
+                onClick={() => navigateToModule('warehouse-purchasing-purchase-request', { prId: latestCreatedPr.id })}
+              >
+                <span className="block text-xs font-bold uppercase text-[#666]">New PR Number</span>
+                <span className="mt-1 block text-lg font-bold">{latestCreatedPr.number}</span>
+              </button>
+            ) : null}
+            <div className="mt-4 space-y-3">
+              {workflowRows.length === 0 ? (
+                <p className="text-[#777]">No active purchase activity.</p>
+              ) : workflowRows.slice(0, 10).map((row) => {
+                const stages = getReorderWorkflowStages(row);
+                return (
+                  <div key={row.pr_refno} className="rounded border border-[#ddd] bg-white p-3">
+                    <button type="button" className="font-bold text-brand-blue hover:underline" onClick={() => navigateToModule('warehouse-purchasing-purchase-request', { prId: row.pr_refno })}>
+                      {row.pr_no || row.pr_refno}
+                    </button>
+                    <p className="mt-2">Stage 1 · PR: <strong>{stages.pr}</strong></p>
+                    <p>Stage 2 · PO: <strong>{stages.po}</strong></p>
+                    <p>Stage 3 · Receiving: <strong>{stages.receiving}</strong></p>
+                  </div>
+                );
+              })}
+            </div>
+          </aside>
+          <div className="min-w-0">
           {rows.length === 0 ? (
             <div className="py-20 text-center">
               <h3 className="text-lg font-semibold text-slate-500 dark:text-slate-400">Empty!</h3>
@@ -707,6 +758,8 @@ const ReorderReport: React.FC = () => {
                         <input
                           type="checkbox"
                           checked={selectedIds.has(row.id)}
+                          disabled={isReorderWorkflowActive(row)}
+                          title={isReorderWorkflowActive(row) ? 'This item already has an active purchasing workflow' : 'Select item'}
                           onChange={() => toggleSelectRow(row.id)}
                         />
                       </td>
@@ -721,9 +774,9 @@ const ReorderReport: React.FC = () => {
                       <td className={tableCellClass}>{row.total_rr}</td>
                       <td className={tableCellClass}>{row.total_return}</td>
                       <td className={`${tableCellClass} font-semibold`}>{isWh1Report ? row.replenish_qty : row.reorder_qty}</td>
-                      <td className={tableCellClass}>{renderPrLink(row)}</td>
-                      <td className={tableCellClass}>{renderPoLink(row)}</td>
-                      <td className={tableCellClass}>{renderRrLink(row)}</td>
+                      <td className={tableCellClass}>{renderPrLink(row)}{row.pr_refno ? <small className="mt-1 block">{row.pr_status || 'Active'}</small> : null}</td>
+                      <td className={tableCellClass}>{renderPoLink(row)}{row.po_refno ? <small className="mt-1 block">{row.po_status || 'Active'}</small> : null}</td>
+                      <td className={tableCellClass}>{renderRrLink(row)}{row.rr_refno ? <small className="mt-1 block">{row.rr_status || 'Active'}</small> : null}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -771,6 +824,8 @@ const ReorderReport: React.FC = () => {
               Add to PR
             </button>
           </div>
+          </div>
+          </div>
         </div>
       </div>
 
@@ -778,7 +833,8 @@ const ReorderReport: React.FC = () => {
         <AddToPrModal
           items={selectedRows}
           onClose={() => setShowAddPrModal(false)}
-          onSaved={() => {
+          onSaved={(created) => {
+            setLatestCreatedPr(created);
             setShowAddPrModal(false);
             setSelectedIds(new Set());
             void loadReport(1, appliedSearch);

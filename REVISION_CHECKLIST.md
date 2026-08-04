@@ -97,8 +97,16 @@ Updated: 4 August 2026 (Asia/Manila)
 - [ ] **PUR-01 — Newest simplified Purchase Request template (P1)**
   - Completion report: Pending.
 
-- [ ] **PUR-02 — Reorder Report creates PR and tracks PR/PO/RR stages (P0)**
-  - Completion report: Pending.
+- [x] **PUR-02 — Reorder Report creates PR and tracks PR/PO/RR stages (P0)**
+  - Status: Complete.
+  - Completion report:
+    - Kept multi-item selection and verified that one generated PR contains every selected eligible item.
+    - Added a left-side Purchase Activity panel that immediately displays the newly generated PR number and shows Stage 1 PR, Stage 2 PO, and Stage 3 Receiving statuses for existing workflows.
+    - Added explicit PR, PO, and Receiving status values to each report row while retaining clickable document numbers.
+    - Disabled selection for items already in an active purchasing workflow; select-all now selects eligible items only.
+    - Added a server-side workflow guard that rejects duplicate PR creation/addition for items in active PR or PO activity and releases the item after Receiving is posted.
+    - Cleared Reorder Report cache after PR creation/item addition, PR-to-PO conversion, and Receiving creation so stage numbers refresh immediately.
+    - Verification (unit tests only): frontend workflow/component tests 5/5 passed; backend workflow-guard tests 3/3 passed; changed PHP files passed syntax checks; production build passed.
 
 - [ ] **PUR-03 — Newest Item Suggested for Stock template creates PR (P1)**
   - Completion report: Pending.

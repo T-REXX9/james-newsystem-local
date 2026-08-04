@@ -34,10 +34,13 @@ export interface ReorderReportEntry {
   target_quantity: number;
   pr_refno: string;
   pr_no: string;
+  pr_status: string;
   po_refno: string;
   po_no: string;
+  po_status: string;
   rr_refno: string;
   rr_no: string;
+  rr_status: string;
   last_arrival_date: string;
   last_arrival_qty: number;
 }
@@ -92,12 +95,42 @@ const normalizeEntry = (raw: any): ReorderReportEntry => ({
   target_quantity: toNumber(raw?.target_quantity),
   pr_refno: toString(raw?.pr_refno),
   pr_no: toString(raw?.pr_no),
+  pr_status: toString(raw?.pr_status),
   po_refno: toString(raw?.po_refno),
   po_no: toString(raw?.po_no),
+  po_status: toString(raw?.po_status),
   rr_refno: toString(raw?.rr_refno),
   rr_no: toString(raw?.rr_no),
+  rr_status: toString(raw?.rr_status),
   last_arrival_date: toString(raw?.last_arrival_date),
   last_arrival_qty: toNumber(raw?.last_arrival_qty),
+});
+
+const CLOSED_WORKFLOW_STATUSES = new Set([
+  'cancelled', 'canceled', 'rejected', 'disapproved', 'completed', 'closed',
+]);
+const COMPLETED_RECEIVING_STATUSES = new Set(['posted', 'received', 'completed']);
+
+export const isReorderWorkflowActive = (row: ReorderReportEntry): boolean => {
+  if (row.rr_refno) {
+    const status = row.rr_status.trim().toLowerCase();
+    return status === '' || !COMPLETED_RECEIVING_STATUSES.has(status) && !CLOSED_WORKFLOW_STATUSES.has(status);
+  }
+  if (row.po_refno) {
+    const status = row.po_status.trim().toLowerCase();
+    return status === '' || !CLOSED_WORKFLOW_STATUSES.has(status);
+  }
+  if (row.pr_refno) {
+    const status = row.pr_status.trim().toLowerCase();
+    return status === '' || !CLOSED_WORKFLOW_STATUSES.has(status);
+  }
+  return false;
+};
+
+export const getReorderWorkflowStages = (row: ReorderReportEntry) => ({
+  pr: row.pr_refno ? (row.pr_status || 'Active') : 'Not started',
+  po: row.po_refno ? (row.po_status || 'Active') : 'Not started',
+  receiving: row.rr_refno ? (row.rr_status || 'Active') : 'Not started',
 });
 
 const getUserContext = () => {
