@@ -67,8 +67,14 @@ Updated: 4 August 2026 (Asia/Manila)
     - Added a component unit test with 20 collection headers and 30 detail rows, verifying the last header and last transaction/action row remain rendered within the correct scroll containers.
     - Verification (unit tests only): focused component test 1/1 passed; production build passed.
 
-- [ ] **DCR-02 — Daily Collection disapproval reverses ledger effect (P0)**
-  - Completion report: Pending.
+- [x] **DCR-02 — Daily Collection disapproval reverses ledger effect (P0)**
+  - Status: Complete.
+  - Completion report:
+    - Changed a disapproval into an immediate final `Disapproved` result instead of allowing the record to continue to the next approval level.
+    - Removed every ledger row linked either by the DCR reference or by one of its collection-item IDs, covering older rows with inconsistent reference values.
+    - Kept the collection status update, approver audit flag/reason/timestamp, and ledger reversal in one database transaction so partial disapproval cannot be saved.
+    - Preserved unrelated ledger entries and returned the number of reversed rows for audit/diagnostic use.
+    - Verification (unit tests only): 2/2 in-memory repository unit tests passed, including forced-failure rollback; changed PHP files passed syntax checks.
 
 - [ ] **DCR-03 — Daily Collection naming, attribution, and approved print (P1)**
   - Completion report: Pending.
