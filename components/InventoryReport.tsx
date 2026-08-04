@@ -16,12 +16,15 @@ import {
 } from 'lucide-react';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
 
-const tableCellClass = 'border border-slate-300 dark:border-slate-700 px-2 py-1.5 text-xs text-slate-700 dark:text-slate-200 print:border-gray-500 print:text-black';
-const tableHeadClass = 'border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-2 py-1.5 text-xs font-semibold uppercase text-slate-700 dark:text-slate-200 print:border-gray-500 print:bg-gray-100 print:text-black';
+const tableCellClass = 'border border-[#ddd] px-2 py-[6px] text-[12px] text-[#333] print:border-black';
+const tableHeadClass = 'border border-[#ddd] bg-[#f5f5f5] px-2 py-2 text-[12px] font-semibold uppercase text-[#333] print:border-black';
+const formRowClass = 'grid items-start gap-4 md:grid-cols-[220px_minmax(0,1fr)]';
+const formLabelClass = 'pt-2 text-left text-[13px] font-semibold text-[#333] md:text-right';
+const formControlClass = 'h-[34px] w-full max-w-[590px] rounded-[3px] border border-[#ccc] bg-white px-3 text-[13px] text-[#333] shadow-inner outline-none focus:border-[#66afe9] focus:ring-1 focus:ring-[#66afe9]';
 type DateCovered = 'All' | 'Today' | 'Week' | 'Month' | 'Year' | 'Custom';
 
 const InventoryRow = memo(({ row, warehouses, index }: { row: InventoryReportRow; warehouses: WarehouseOption[]; index: number }) => (
-  <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 print:hover:bg-transparent">
+  <tr>
     <td className={`${tableCellClass} text-center`}>{index + 1}</td>
     <td className={tableCellClass}>{row.description || '—'}</td>
     <td className={tableCellClass}>{row.partNo || '—'}</td>
@@ -34,7 +37,7 @@ const InventoryRow = memo(({ row, warehouses, index }: { row: InventoryReportRow
     {warehouses.map((wh) => {
       const qty = row.warehouseStock[wh.name] || row.warehouseStock[wh.id] || 0;
       return (
-        <td key={wh.id} className={`${tableCellClass} text-center font-mono ${qty === 0 ? 'text-slate-400 dark:text-slate-500' : ''}`}>
+        <td key={wh.id} className={`${tableCellClass} text-center font-mono ${qty === 0 ? 'text-[#999]' : ''}`}>
           {qty}
         </td>
       );
@@ -46,7 +49,7 @@ const InventoryRow = memo(({ row, warehouses, index }: { row: InventoryReportRow
 ));
 
 const ProductRow = memo(({ row, index }: { row: InventoryReportRow; index: number }) => (
-  <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 print:hover:bg-transparent">
+  <tr>
     <td className={`${tableCellClass} text-center`}>{index + 1}</td>
     <td className={tableCellClass}>{row.description || '—'}</td>
     <td className={tableCellClass}>{row.category || '—'}</td>
@@ -263,7 +266,7 @@ const InventoryReport: React.FC = () => {
 
   if (isInitializing) {
     return (
-      <div className="flex h-full items-center justify-center bg-slate-50 dark:bg-slate-950">
+      <div className="flex h-full items-center justify-center bg-[#f4f4f4]">
         <CustomLoadingSpinner label="Loading" />
       </div>
     );
@@ -271,30 +274,30 @@ const InventoryReport: React.FC = () => {
 
   if (!generatedAt) {
     return (
-      <div className="h-full overflow-auto bg-slate-100 dark:bg-slate-950 p-6 print:bg-white">
-        <div className="mx-auto max-w-6xl rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
-          <div className="border-b border-slate-200 dark:border-slate-800 px-5 py-4">
-            <h1 className="text-base font-semibold uppercase text-slate-800 dark:text-slate-100">
+      <div className="min-h-full overflow-auto bg-[#f4f4f4] px-4 py-10 text-[#333] print:bg-white">
+        <div className="mx-auto max-w-[1140px] overflow-hidden rounded-[5px] border border-[#d8d8d8] bg-white shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+          <div className="min-h-[64px] border-b border-[#e5e5e5] px-5">
+            <h1 className="inline-block border-b border-[#5d82a2] py-5 pr-24 font-['Oswald'] text-[18px] font-semibold uppercase leading-none text-[#315574]">
               Product and Inventory Report
             </h1>
           </div>
 
           <div className="px-5 py-5">
-            <p className="mb-8 text-sm text-slate-600 dark:text-slate-400">
-              Field mark with (<span className="text-rose-600">*</span>) is required. Press generate after you select the sorting options
+            <p className="mb-10 text-[13px]">
+              Field mark with (<span className="text-[#d9534f]">*</span>) is required. Press generate after you select the sorting options
             </p>
 
-            <div className="space-y-5 text-sm">
-              <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
-                <label className="pt-2 text-left font-medium text-slate-700 dark:text-slate-300 md:text-right">Report Type</label>
-                <div className="flex flex-wrap items-center gap-5 pt-2 text-slate-700 dark:text-slate-200">
+            <div className="mx-auto max-w-[900px] space-y-[15px] text-[13px]">
+              <div className={formRowClass}>
+                <label className={formLabelClass}>Report Type</label>
+                <div className="flex flex-wrap items-center gap-5 pt-2 text-[#333]">
                   <label className="inline-flex items-center gap-2">
                     <input
                       type="radio"
                       name="reportType"
                       checked={filters.reportType === 'inventory'}
                       onChange={() => setFilters({ ...filters, reportType: 'inventory' })}
-                      className="h-4 w-4 accent-brand-blue"
+                      className="accent-[#428bca]"
                     />
                     Inventory
                   </label>
@@ -304,21 +307,21 @@ const InventoryReport: React.FC = () => {
                       name="reportType"
                       checked={filters.reportType === 'product'}
                       onChange={() => setFilters({ ...filters, reportType: 'product' })}
-                      className="h-4 w-4 accent-brand-blue"
+                      className="accent-[#428bca]"
                     />
                     Products
                   </label>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
-                <label className="pt-2 text-left font-medium text-slate-700 dark:text-slate-300 md:text-right">
-                  Date Covered <span className="text-rose-600">*</span>
+              <div className={formRowClass}>
+                <label className={formLabelClass}>
+                  Date Covered <span className="text-[#d9534f]">*</span>
                 </label>
                 <select
                   value={dateCovered}
                   onChange={(e) => setDateCovered(e.target.value as DateCovered)}
-                  className="w-full max-w-xl rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                  className={formControlClass}
                 >
                   <option value="All">All</option>
                   <option value="Today">Today</option>
@@ -331,9 +334,9 @@ const InventoryReport: React.FC = () => {
 
               {dateCovered === 'Custom' && (
                 <>
-                  <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
-                    <label className="pt-2 text-left font-medium text-slate-700 dark:text-slate-300 md:text-right">
-                      Date From <span className="text-rose-600">*</span>
+                  <div className={formRowClass}>
+                    <label className={formLabelClass}>
+                      Date From <span className="text-[#d9534f]">*</span>
                     </label>
                     <input
                       type="date"
@@ -347,30 +350,30 @@ const InventoryReport: React.FC = () => {
                           dateTo: filters.dateTo && newFrom && filters.dateTo < newFrom ? newFrom : filters.dateTo,
                         });
                       }}
-                      className="w-full max-w-xl rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                      className={formControlClass}
                     />
                   </div>
-                  <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
-                    <label className="pt-2 text-left font-medium text-slate-700 dark:text-slate-300 md:text-right">
-                      Date To <span className="text-rose-600">*</span>
+                  <div className={formRowClass}>
+                    <label className={formLabelClass}>
+                      Date To<span className="text-[#d9534f]">*</span>
                     </label>
                     <input
                       type="date"
                       value={filters.dateTo || ''}
                       min={filters.dateFrom || undefined}
                       onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
-                      className="w-full max-w-xl rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                      className={formControlClass}
                     />
                   </div>
                 </>
               )}
 
-              <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
-                <label className="pt-2 text-left font-medium text-slate-700 dark:text-slate-300 md:text-right">Product Category</label>
+              <div className={formRowClass}>
+                <label className={formLabelClass}>Product Category</label>
                 <select
                   value={filters.category}
                   onChange={(e) => setFilters({ ...filters, category: e.target.value })}
-                  className="w-full max-w-xl rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                  className={formControlClass}
                 >
                   <option value="">Leave blank to display all</option>
                   {categories.map((cat) => (
@@ -381,9 +384,9 @@ const InventoryReport: React.FC = () => {
                 </select>
               </div>
 
-              <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
-                <label className="pt-2 text-left font-medium text-slate-700 dark:text-slate-300 md:text-right">Part Number</label>
-                <div className="relative w-full max-w-xl">
+              <div className={formRowClass}>
+                <label className={formLabelClass}>Part Number</label>
+                <div className="relative w-full max-w-[590px]">
                   <input
                     type="text"
                     value={partNumberSearch}
@@ -394,11 +397,11 @@ const InventoryReport: React.FC = () => {
                     onFocus={() => setShowPartNumberDropdown(true)}
                     onBlur={() => setTimeout(() => setShowPartNumberDropdown(false), 200)}
                     placeholder="All"
-                    className="w-full rounded border border-slate-300 bg-white px-3 py-2 pr-9 text-sm text-slate-700 outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                    className={`${formControlClass} pr-9`}
                   />
-                  <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#999]" />
                   {showPartNumberDropdown && filteredPartNumbers.length > 0 && (
-                    <div className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                    <div className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-[3px] border border-[#ccc] bg-white shadow-lg">
                       <button
                         type="button"
                         onClick={() => {
@@ -406,7 +409,7 @@ const InventoryReport: React.FC = () => {
                           setFilters({ ...filters, partNumber: '' });
                           setShowPartNumberDropdown(false);
                         }}
-                        className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
+                        className="w-full px-3 py-2 text-left text-[13px] text-[#333] hover:bg-[#f5f5f5]"
                       >
                         All
                       </button>
@@ -419,7 +422,7 @@ const InventoryReport: React.FC = () => {
                             setFilters({ ...filters, partNumber: p.partNo });
                             setShowPartNumberDropdown(false);
                           }}
-                          className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
+                          className="w-full px-3 py-2 text-left text-[13px] text-[#333] hover:bg-[#f5f5f5]"
                         >
                           {p.partNo}
                         </button>
@@ -429,16 +432,16 @@ const InventoryReport: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
-                <label className="pt-1 text-left font-medium text-slate-700 dark:text-slate-300 md:text-right">Stock Option</label>
-                <div className="space-y-2 text-slate-700 dark:text-slate-200">
+              <div className={formRowClass}>
+                <label className={formLabelClass}>Stock Option</label>
+                <div className="space-y-1 pt-1 text-[#333]">
                   <label className="flex items-center gap-2">
                     <input
                       type="radio"
                       name="stockStatus"
                       checked={filters.stockStatus === 'all'}
                       onChange={() => setFilters({ ...filters, stockStatus: 'all' })}
-                      className="h-4 w-4 accent-brand-blue"
+                      className="accent-[#428bca]"
                     />
                     All
                   </label>
@@ -448,7 +451,7 @@ const InventoryReport: React.FC = () => {
                       name="stockStatus"
                       checked={filters.stockStatus === 'with_stock'}
                       onChange={() => setFilters({ ...filters, stockStatus: 'with_stock' })}
-                      className="h-4 w-4 accent-brand-blue"
+                      className="accent-[#428bca]"
                     />
                     With Stock Only
                   </label>
@@ -458,34 +461,34 @@ const InventoryReport: React.FC = () => {
                       name="stockStatus"
                       checked={filters.stockStatus === 'without_stock'}
                       onChange={() => setFilters({ ...filters, stockStatus: 'without_stock' })}
-                      className="h-4 w-4 accent-brand-blue"
+                      className="accent-[#428bca]"
                     />
                     Without Stock Only
                   </label>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
-                <label className="pt-1 text-left font-medium text-slate-700 dark:text-slate-300 md:text-right">Other Options</label>
-                <label className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+              <div className={formRowClass}>
+                <label className={formLabelClass}>Other Options</label>
+                <label className="flex items-center gap-2 pt-2 text-[#333]">
                   <input
                     type="checkbox"
                     checked={!includeHidden}
                     onChange={(e) => setIncludeHidden(!e.target.checked)}
-                    className="h-4 w-4 accent-brand-blue"
+                    className="accent-[#428bca]"
                   />
                   Don't Include Hidden
                 </label>
               </div>
 
-              <div className="grid grid-cols-1 gap-2 pt-2 md:grid-cols-[220px_minmax(0,1fr)]">
+              <div className="grid gap-4 pt-1 md:grid-cols-[220px_minmax(0,1fr)]">
                 <span />
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={handleGenerateReport}
                     disabled={isLoading || (dateCovered === 'Custom' && (!filters.dateFrom || !filters.dateTo))}
-                    className="inline-flex items-center gap-2 rounded bg-brand-blue px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                    className="inline-flex items-center gap-2 rounded-[3px] border border-[#285e8e] bg-[#428bca] px-3 py-[7px] text-[13px] font-semibold text-white hover:bg-[#3276b1] disabled:cursor-not-allowed disabled:bg-[#999]"
                   >
                     {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
                     Generate Report
@@ -493,7 +496,7 @@ const InventoryReport: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleClearFilters}
-                    className="rounded border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                    className="rounded-[3px] border border-[#ccc] bg-white px-3 py-[7px] text-[13px] font-semibold text-[#333] hover:bg-[#ebebeb]"
                   >
                     Cancel
                   </button>
@@ -507,10 +510,10 @@ const InventoryReport: React.FC = () => {
   }
 
   return (
-    <div className="h-full overflow-auto bg-slate-100 p-6 dark:bg-slate-950 print:bg-white print:p-0">
-      <div className="mx-auto max-w-none rounded border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 print:border-none print:shadow-none">
-        <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800 print:hidden">
-          <h1 className="text-base font-semibold uppercase text-slate-800 dark:text-slate-100">
+    <div className="min-h-full overflow-auto bg-[#f4f4f4] px-4 py-10 text-[#333] print:bg-white print:p-0">
+      <div className="mx-auto max-w-[1400px] overflow-hidden rounded-[5px] border border-[#d8d8d8] bg-white shadow-[0_1px_1px_rgba(0,0,0,0.05)] print:max-w-none print:border-none print:shadow-none">
+        <div className="min-h-[64px] border-b border-[#e5e5e5] px-5 print:hidden">
+          <h1 className="inline-block border-b border-[#5d82a2] py-5 pr-24 font-['Oswald'] text-[18px] font-semibold uppercase leading-none text-[#315574]">
             Inventory Report View
           </h1>
         </div>
@@ -520,7 +523,7 @@ const InventoryReport: React.FC = () => {
             <button
               type="button"
               onClick={() => setGeneratedAt(null)}
-              className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
+              className="rounded-[3px] border border-[#398439] bg-[#5cb85c] px-[10px] py-[5px] text-[12px] font-semibold text-white hover:bg-[#47a447]"
             >
               Back to Option
             </button>
@@ -528,7 +531,7 @@ const InventoryReport: React.FC = () => {
               type="button"
               onClick={handleExportExcel}
               disabled={reportData.length === 0}
-              className="inline-flex items-center gap-2 rounded bg-brand-blue px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+              className="inline-flex items-center gap-1 rounded-[3px] border border-[#285e8e] bg-[#428bca] px-[10px] py-[5px] text-[12px] font-semibold text-white hover:bg-[#3276b1] disabled:cursor-not-allowed disabled:bg-[#999]"
             >
               <Download className="h-4 w-4" />
               Export Excel
@@ -537,24 +540,24 @@ const InventoryReport: React.FC = () => {
               type="button"
               onClick={handlePrint}
               disabled={reportData.length === 0}
-              className="ml-auto inline-flex items-center gap-2 rounded bg-slate-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+              className="ml-auto inline-flex items-center gap-1 rounded-[3px] border border-[#ccc] bg-white px-[10px] py-[5px] text-[12px] font-semibold text-[#333] hover:bg-[#ebebeb] disabled:cursor-not-allowed disabled:text-[#999]"
             >
               <Printer className="h-4 w-4" />
               Print Preview
             </button>
           </div>
 
-          <hr className="mb-5 border-slate-200 dark:border-slate-800 print:hidden" />
+          <hr className="mb-5 border-[#eee] print:hidden" />
 
           {dataWarning && (
-            <div className="mb-4 flex items-center gap-2 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-400 print:hidden">
+            <div className="mb-4 flex items-center gap-2 rounded-[3px] border border-[#faebcc] bg-[#fcf8e3] p-3 text-[13px] text-[#8a6d3b] print:hidden">
               <AlertCircle className="h-4 w-4 flex-shrink-0" />
               <span>{dataWarning}</span>
             </div>
           )}
 
           <div id="print_area">
-            <div className="mb-5 text-center text-slate-800 dark:text-slate-100 print:text-black">
+            <div className="mb-5 text-center text-[#333] print:text-black">
               <strong className="text-xl">{reportTitle}</strong>
               {dateRange.dateFrom && dateRange.dateTo && (
                 <div className="mt-1 text-sm">
@@ -569,8 +572,8 @@ const InventoryReport: React.FC = () => {
             {reportData.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <AlertCircle className="mb-3 h-8 w-8 text-amber-500" />
-                <h3 className="text-base font-semibold text-slate-700 dark:text-slate-200">No Products Found</h3>
-                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                <h3 className="text-base font-semibold text-[#555]">No Products Found</h3>
+                <p className="mt-1 text-[13px] text-[#777]">
                   No products match the selected filter criteria.
                 </p>
               </div>

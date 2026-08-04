@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Calendar, RefreshCcw, Search } from 'lucide-react';
 import {
   SoaCustomer,
   SoaDateType,
@@ -21,6 +20,8 @@ const dateTypeOptions: Array<{ value: SoaDateType; label: string }> = [
 
 const formatDate = (value?: string | null): string => {
   if (!value) return '-';
+  const dateOnly = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnly) return `${Number(dateOnly[2])}/${Number(dateOnly[3])}/${dateOnly[1]}`;
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
   return d.toLocaleDateString('en-US');
@@ -55,9 +56,6 @@ const StatementOfAccountView: React.FC = () => {
       .then((rows) => {
         if (!active) return;
         setCustomers(rows);
-        if (!selectedCustomerId && rows[0]?.sessionId) {
-          setSelectedCustomerId(rows[0].sessionId);
-        }
       })
       .catch(() => {
         if (!active) return;
@@ -106,144 +104,39 @@ const StatementOfAccountView: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    if (!selectedCustomerId) return;
-    generate();
-  }, [selectedCustomerId]);
-
   return (
-    <div className="h-full bg-slate-100 dark:bg-slate-950 p-4">
-      <div className="h-full grid grid-cols-12 gap-4 overflow-hidden">
-        <aside className="col-span-12 lg:col-span-3 h-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden flex flex-col">
-          <div className="p-4 border-b border-slate-200 dark:border-slate-800 space-y-3">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Customers</h2>
-            <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                value={customerSearch}
-                onChange={(e) => setCustomerSearch(e.target.value)}
-                placeholder="Search customer..."
-                className="w-full rounded-lg border border-slate-300 pl-9 pr-3 py-2 text-sm bg-white dark:bg-slate-900 dark:border-slate-700"
-              />
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-auto">
-            {loadingCustomers ? (
-              <p className="p-4 text-sm text-slate-500">Loading customers...</p>
-            ) : customers.length === 0 ? (
-              <p className="p-4 text-sm text-slate-500">No customers found.</p>
-            ) : (
-              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                {customers.map((customer) => {
-                  const active = customer.sessionId === selectedCustomerId;
-                  return (
-                    <li key={customer.sessionId}>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedCustomerId(customer.sessionId)}
-                        className={`w-full text-left px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 ${
-                          active ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 pl-3' : ''
-                        }`}
-                      >
-                        <p className="font-semibold text-sm text-slate-900 dark:text-white line-clamp-1">{customer.company || 'Unnamed Customer'}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">{customer.customerCode || customer.sessionId}</p>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-        </aside>
-
-        <section className="col-span-12 lg:col-span-9 h-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden flex flex-col">
-          <div className="p-4 border-b border-slate-200 dark:border-slate-800 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">Statement of Account</h2>
-                <p className="text-sm text-slate-500">{selectedCustomer?.company || 'Select a customer'}</p>
+    <div className="min-h-full overflow-y-auto bg-[#f4f4f4] p-5 text-[#333]">
+      <div className="mx-auto max-w-[1140px] space-y-5">
+        <section className="rounded border border-[#d5d5d5] bg-white shadow-sm">
+          <header className="border-b border-[#ddd] px-5 py-4"><h2 className="font-serif text-lg font-bold uppercase">Statement of Account</h2></header>
+          <div className="p-8">
+            {error && <div className="mb-5 rounded border border-[#ebccd1] bg-[#f2dede] px-4 py-3 text-sm text-[#a94442]"><b>Oops!</b> {error}</div>}
+            <div className="mx-auto max-w-[760px] space-y-5">
+              <div className="grid grid-cols-[210px_1fr] items-start gap-4">
+                <label className="pt-2 text-right text-sm font-semibold">Select Customer <span className="text-red-600">*</span></label>
+                <div className="space-y-2">
+                  <input value={customerSearch} onChange={e => setCustomerSearch(e.target.value)} placeholder="*Leave it blank to show all customers*" className="w-full rounded border border-[#ccc] px-3 py-2 text-sm" />
+                  <select value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)} className="w-full rounded border border-[#ccc] bg-white px-3 py-2 text-sm">
+                    <option value="">{loadingCustomers ? 'Loading customers...' : 'Select Customer'}</option>
+                    {customers.map(customer => <option key={customer.sessionId} value={customer.sessionId}>{customer.company || customer.customerCode || customer.sessionId}</option>)}
+                  </select>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={generate}
-                disabled={loading || !selectedCustomerId}
-                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-              >
-                <RefreshCcw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                Generate
-              </button>
+              <div className="grid grid-cols-[210px_1fr] items-center gap-4">
+                <label className="text-right text-sm font-semibold">Type <span className="text-red-600">*</span></label>
+                <div className="flex gap-5 text-sm"><label><input type="radio" checked={reportType === 'detailed'} onChange={() => setReportType('detailed')} /> Detailed</label><label><input type="radio" checked={reportType === 'summary'} onChange={() => setReportType('summary')} /> Monthly</label></div>
+              </div>
+              <div className="grid grid-cols-[210px_1fr] gap-4"><span/><div className="flex gap-2">
+                <button type="button" onClick={generate} disabled={loading} className="rounded border border-[#2e6da4] bg-[#337ab7] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{loading ? 'Generating...' : 'Generate Report'}</button>
+                <button type="button" onClick={() => { setReport(null); setError(''); }} className="rounded border border-[#ccc] bg-white px-4 py-2 text-sm">Cancel</button>
+              </div></div>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-              <label className="text-sm text-slate-600 dark:text-slate-300">
-                Report Type
-                <select
-                  value={reportType}
-                  onChange={(e) => setReportType(e.target.value as SoaReportType)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:bg-slate-900 dark:border-slate-700"
-                >
-                  <option value="detailed">Detailed</option>
-                  <option value="summary">Monthly</option>
-                </select>
-              </label>
-
-              <label className="text-sm text-slate-600 dark:text-slate-300">
-                Date Type
-                <select
-                  value={dateType}
-                  onChange={(e) => setDateType(e.target.value as SoaDateType)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:bg-slate-900 dark:border-slate-700"
-                >
-                  {dateTypeOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="text-sm text-slate-600 dark:text-slate-300">
-                Date From
-                <div className="relative mt-1">
-                  <Calendar className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                    disabled={dateType !== 'custom'}
-                    className="w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-400 dark:bg-slate-900 dark:border-slate-700"
-                  />
-                </div>
-              </label>
-
-              <label className="text-sm text-slate-600 dark:text-slate-300">
-                Date To
-                <div className="relative mt-1">
-                  <Calendar className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="date"
-                    value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
-                    disabled={dateType !== 'custom'}
-                    className="w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-400 dark:bg-slate-900 dark:border-slate-700"
-                  />
-                </div>
-              </label>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-auto p-4">
-            {error && <p className="mb-3 text-sm text-rose-600">{error}</p>}
-            {loading ? (
-              <p className="text-sm text-slate-500">Loading statement of account...</p>
-            ) : !report ? (
-              <p className="text-sm text-slate-500">No report loaded.</p>
-            ) : reportType === 'summary' ? (
-              <SummaryTable report={report} />
-            ) : (
-              <DetailedTable report={report} />
-            )}
           </div>
         </section>
+        {report && <section className="rounded border border-[#d5d5d5] bg-white p-5 shadow-sm">
+          <div className="mb-5 flex items-start justify-between border-b border-[#ddd] pb-4"><div><h3 className="font-serif text-lg font-bold uppercase">Statement of Account</h3><p className="text-sm">{selectedCustomer?.company || '-'}</p></div><button onClick={() => window.print()} className="rounded border border-[#ccc] px-3 py-2 text-sm">Print</button></div>
+          <div className="overflow-auto">{reportType === 'summary' ? <SummaryTable report={report} /> : <DetailedTable report={report} />}</div>
+        </section>}
       </div>
     </div>
   );

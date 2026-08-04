@@ -185,9 +185,9 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
     }
 
     return (
-        <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-900/50">
+        <div className="min-h-full overflow-y-auto bg-[#f4f4f4] p-5 text-[#333]">
             {/* Header */}
-            <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 flex justify-between items-center sticky top-0 z-10">
+            <div className="mx-auto flex max-w-[1380px] items-center justify-between rounded-t border border-[#d5d5d5] bg-white px-5 py-4">
                 <div className="flex items-center gap-4">
                     <button
                         onClick={onClose}
@@ -196,26 +196,25 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                         <ArrowLeft className="w-5 h-5 text-slate-500" />
                     </button>
                     <div>
-                        <h1 className="text-xl font-bold text-slate-800 dark:text-white">New Receiving Report</h1>
-                        <p className="text-xs text-slate-500">Draft</p>
+                        <h1 className="font-serif text-xl font-bold uppercase">Receiving Stock</h1>
                     </div>
                 </div>
                 <button
                     onClick={handleSave}
                     disabled={loading}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center gap-2 rounded border border-[#4f9e43] bg-[#70b865] px-4 py-2 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
                 >
                     {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    Save Service Report
+                    Add Receiving
                 </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+            <div className="mx-auto w-full max-w-[1380px] space-y-5 rounded-b border-x border-b border-[#d5d5d5] bg-white p-5">
                 {/* Main Form */}
-                <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
+                <div className="border-b border-[#ddd] bg-white p-2 pb-5">
                     <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
                     <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4 border-b border-slate-100 dark:border-slate-700 pb-2">
-                        Report Details
+                        Receiving Details
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         <div>
@@ -298,9 +297,9 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                 </div>
 
                 {/* Line Items */}
-                <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 flex-1 flex flex-col">
+                <div className="flex flex-1 flex-col bg-white p-2">
                     <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Line Items</h2>
+                        <h2 className="text-sm font-bold uppercase">Items</h2>
                         <div className="w-96">
                             <ProductAutocomplete
                                 onSelect={handleAddItem}

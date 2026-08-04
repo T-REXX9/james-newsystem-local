@@ -1748,7 +1748,7 @@ export interface FastSlowMovementItem {
 }
 
 export interface FastSlowReportFilters {
-  sortBy: 'sales_volume' | 'part_no';
+  sortBy: 'part_no' | 'item_code' | 'description' | 'last_arrived' | 'total_purchase' | 'total_sold';
   sortDirection: 'asc' | 'desc';
 }
 

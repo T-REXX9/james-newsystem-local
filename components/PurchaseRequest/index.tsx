@@ -6,7 +6,6 @@ import PurchaseRequestList from './PurchaseRequestList';
 import PurchaseRequestForm from './PurchaseRequestForm';
 import PurchaseRequestDetail from './PurchaseRequestView'; // Filename is PurchaseRequestView.tsx, Component is PurchaseRequestView
 import PurchaseRequestPrint from './PurchaseRequestPrint';
-import { Filter } from 'lucide-react';
 
 interface PurchaseRequestModuleProps {
     initialPRId?: string;
@@ -27,8 +26,9 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
     const [nextPRNumber, setNextPRNumber] = useState('');
 
     // Filter State
-    const [filterStatus, setFilterStatus] = useState<string>('');
-    const [searchTerm, setSearchTerm] = useState('');
+    const currentDate = new Date();
+    const [filterMonth, setFilterMonth] = useState(String(currentDate.getMonth() + 1).padStart(2, '0'));
+    const [filterYear, setFilterYear] = useState(String(currentDate.getFullYear()));
     const consumedDeepLinkRef = useRef('');
 
     // Initial Data Fetch
@@ -40,7 +40,7 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
     const fetchRequests = async () => {
         setLoading(true);
         try {
-            const data = await purchaseRequestService.getPurchaseRequests({ status: filterStatus || undefined });
+            const data = await purchaseRequestService.getPurchaseRequests();
             setRequests(data);
         } catch (err) {
             console.error('Failed to fetch requests', err);
@@ -48,11 +48,6 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
             setLoading(false);
         }
     };
-
-    // Refetch when filter changes
-    useEffect(() => {
-        fetchRequests();
-    }, [filterStatus]);
 
     useEffect(() => {
         const target = String(initialPRId || '').trim();
@@ -87,13 +82,15 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
         }
     };
 
-    // Filter Logic (Client-side search)
+    // The legacy page filters its record table by month and year.
     const filteredRequests = useMemo(() => {
         return requests.filter(pr => {
-            if (!searchTerm) return true;
-            return pr.pr_number.toLowerCase().includes(searchTerm.toLowerCase());
+            const date = new Date(pr.request_date || '');
+            if (Number.isNaN(date.getTime())) return false;
+            return String(date.getFullYear()) === filterYear
+                && String(date.getMonth() + 1).padStart(2, '0') === filterMonth;
         });
-    }, [requests, searchTerm]);
+    }, [requests, filterMonth, filterYear]);
 
     // Handlers
     const handleCreateStart = async () => {
@@ -190,47 +187,36 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
 
 
     return (
-        <div className="h-full bg-slate-100 dark:bg-slate-950">
-            {(viewMode === 'list' || viewMode === 'detail') && (
-                <div className="h-full flex overflow-hidden">
-                    <aside className="w-80 shrink-0">
-                        <PurchaseRequestList
-                            requests={filteredRequests}
-                            loading={loading}
-                            onSelect={handleSelectRequest}
-                            onCreate={handleCreateStart}
-                            filterStatus={filterStatus}
-                            setFilterStatus={setFilterStatus}
-                            searchTerm={searchTerm}
-                            setSearchTerm={setSearchTerm}
-                        />
-                    </aside>
+        <div className="h-full overflow-y-auto bg-[#f4f4f4]">
+            {viewMode === 'list' && (
+                <PurchaseRequestList
+                    requests={filteredRequests}
+                    loading={loading}
+                    onSelect={handleSelectRequest}
+                    onCreate={handleCreateStart}
+                    filterMonth={filterMonth}
+                    setFilterMonth={setFilterMonth}
+                    filterYear={filterYear}
+                    setFilterYear={setFilterYear}
+                />
+            )}
 
-                    <main className="flex-1 overflow-hidden">
-                        {viewMode === 'detail' && selectedRequest ? (
-                            <PurchaseRequestDetail
-                                request={selectedRequest}
-                                onBack={() => {
-                                    setSelectedRequest(null);
-                                    setViewMode('list');
-                                }}
-                                onUpdate={handleUpdate}
-                                onUpdateItem={handleUpdateItem}
-                                onDeleteItem={handleDeleteItem}
-                                onAddItem={handleAddItem}
-                                onConvert={handleConvertPO}
-                                onPrint={() => setViewMode('print')}
-                                products={products}
-                                suppliers={suppliers}
-                            />
-                        ) : (
-                            <div className="h-full flex flex-col items-center justify-center text-slate-400 bg-slate-50 dark:bg-slate-950">
-                                <Filter size={48} className="mb-4 opacity-20" />
-                                <p>Select a Purchase Request to view details</p>
-                            </div>
-                        )}
-                    </main>
-                </div>
+            {viewMode === 'detail' && selectedRequest && (
+                <PurchaseRequestDetail
+                    request={selectedRequest}
+                    onBack={() => {
+                        setSelectedRequest(null);
+                        setViewMode('list');
+                    }}
+                    onUpdate={handleUpdate}
+                    onUpdateItem={handleUpdateItem}
+                    onDeleteItem={handleDeleteItem}
+                    onAddItem={handleAddItem}
+                    onConvert={handleConvertPO}
+                    onPrint={() => setViewMode('print')}
+                    products={products}
+                    suppliers={suppliers}
+                />
             )}
 
             {viewMode === 'create' && (

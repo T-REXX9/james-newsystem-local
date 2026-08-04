@@ -4,7 +4,7 @@ import ReturnToSupplierView from './ReturnToSupplierView';
 import ReturnToSupplierNew from './ReturnToSupplierNew';
 import { returnToSupplierService } from '../../services/returnToSupplierService';
 import { SupplierReturn } from '../../returnToSupplier.types';
-import { Plus, ArrowRightLeft, ListFilter, Search } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 const ReturnToSupplier: React.FC = () => {
     const [returns, setReturns] = useState<SupplierReturn[]>([]);
@@ -15,6 +15,8 @@ const ReturnToSupplier: React.FC = () => {
     // Filters
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
+    const [month, setMonth] = useState(new Date().getMonth() + 1);
+    const [year, setYear] = useState(new Date().getFullYear());
 
     const fetchReturns = async () => {
         setLoading(true);
@@ -44,92 +46,34 @@ const ReturnToSupplier: React.FC = () => {
 
     const selectedReturn = returns.find(r => r.id === selectedId);
 
+    const periodReturns = returns.filter(r => {
+        const date = new Date(r.return_date);
+        return date.getMonth() + 1 === month && date.getFullYear() === year;
+    });
+
     return (
-        <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                <div className="flex items-center gap-3">
-                    <div className="p-2 bg-orange-500 rounded-lg">
-                        <ArrowRightLeft className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                        <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Return to Supplier</h1>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">Manage vendor returns and stock adjustments</p>
-                    </div>
-                </div>
-                <button
-                    onClick={() => setShowNewModal(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                >
-                    <Plus className="w-4 h-4" />
-                    Create Return
-                </button>
-            </div>
-
-            {/* Content */}
-            <div className="flex flex-1 overflow-hidden">
-                {/* Left Panel: List */}
-                <div className="w-96 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col">
-                    {/* Filters */}
-                    <div className="p-4 border-b border-gray-200 dark:border-gray-700 space-y-3">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                            <input
-                                type="text"
-                                placeholder="Search returns..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                        </div>
-                        <div className="flex gap-2">
-                            <select
-                                value={statusFilter}
-                                onChange={(e) => setStatusFilter(e.target.value)}
-                                className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
-                                <option value="all">All Status</option>
-                                <option value="Pending">Pending</option>
-                                <option value="Posted">Posted</option>
+        <div className="min-h-full overflow-y-auto bg-[#f4f4f4] p-5 text-[#333]">
+            <div className="mx-auto max-w-[1380px] space-y-5">
+                <section className="rounded border border-[#d5d5d5] bg-white shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#ddd] px-5 py-4">
+                        <button onClick={() => { setShowNewModal(true); setSelectedId(null); }} className="flex items-center gap-1 rounded border border-[#4f9e43] bg-[#70b865] px-4 py-2 text-sm font-semibold text-white">
+                            <Plus className="h-4 w-4" /> Create New
+                        </button>
+                        <div className="flex items-center gap-3 text-sm">
+                            <label htmlFor="rts-month" className="font-semibold">Filter by Month:</label>
+                            <select id="rts-month" value={month} onChange={e => setMonth(Number(e.target.value))} className="w-48 rounded border border-[#ccc] px-3 py-2">
+                                {Array.from({length: 12}, (_, i) => <option key={i + 1} value={i + 1}>{new Date(0, i).toLocaleString('default', {month: 'long'})}</option>)}
                             </select>
+                            <input aria-label="Filter year" type="number" value={year} onChange={e => setYear(Number(e.target.value))} className="w-24 rounded border border-[#ccc] px-3 py-2" />
                         </div>
                     </div>
-
-                    <ReturnToSupplierList
-                        returns={returns}
-                        selectedId={selectedId}
-                        onSelect={handleSelect}
-                        searchTerm={searchTerm}
-                        onSearchChange={setSearchTerm}
-                        statusFilter={statusFilter}
-                        onStatusFilterChange={setStatusFilter}
-                        loading={loading}
-                    />
-                </div>
-
-                {/* Right Panel: View */}
-                <div className="flex-1 overflow-hidden bg-gray-50 dark:bg-gray-900">
-                    {selectedReturn ? (
-                        <ReturnToSupplierView
-                            returnRecord={selectedReturn}
-                            onUpdate={fetchReturns}
-                        />
-                    ) : (
-                        <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                            <ArrowRightLeft className="w-16 h-16 mb-4 opacity-10" />
-                            <p className="text-lg font-medium">Select a return to view details</p>
-                        </div>
-                    )}
-                </div>
+                    <div className="max-h-[280px] overflow-auto px-5 py-4">
+                        <ReturnToSupplierList returns={periodReturns} selectedId={selectedId} onSelect={r => { handleSelect(r); setShowNewModal(false); }} searchTerm={searchTerm} onSearchChange={setSearchTerm} statusFilter={statusFilter} onStatusFilterChange={setStatusFilter} loading={loading} />
+                    </div>
+                </section>
+                {showNewModal && <ReturnToSupplierNew onClose={() => setShowNewModal(false)} onSuccess={handleSuccessNew} />}
+                {selectedReturn && !showNewModal && <ReturnToSupplierView returnRecord={selectedReturn} onUpdate={fetchReturns} />}
             </div>
-
-            {/* New Modal */}
-            {showNewModal && (
-                <ReturnToSupplierNew
-                    onClose={() => setShowNewModal(false)}
-                    onSuccess={handleSuccessNew}
-                />
-            )}
         </div>
     );
 };

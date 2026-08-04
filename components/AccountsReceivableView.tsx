@@ -31,6 +31,8 @@ const INPUT_CLASS = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-
 
 const formatDate = (value?: string | null): string => {
   if (!value) return '-';
+  const dateOnly = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnly) return `${Number(dateOnly[2])}/${Number(dateOnly[3])}/${dateOnly[1]}`;
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
   return d.toLocaleDateString('en-US');
@@ -133,10 +135,6 @@ const AccountsReceivableView: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    generate();
-  }, []);
-
   const customerOptions = useMemo(() => {
     if (!selectedCustomerOption || customers.some((customer) => customer.sessionId === selectedCustomerOption.sessionId)) {
       return customers;
@@ -152,188 +150,50 @@ const AccountsReceivableView: React.FC = () => {
   }, [customerOptions, selectedCustomer, selectedCustomerOption]);
 
   return (
-    <div className="h-full bg-slate-100 dark:bg-slate-950 p-4">
-      <div className="h-full grid grid-cols-12 gap-4 overflow-hidden">
-        <aside className="col-span-12 lg:col-span-3 h-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden flex flex-col">
-          <div className="p-4 border-b border-slate-200 dark:border-slate-800 space-y-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-brand-blue">Accounting Report</p>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Accounts Receivable</h2>
-            </div>
-
-            <label className="block text-sm text-slate-600 dark:text-slate-300">
-              Customer
-              <div className="mt-1 space-y-2">
-                <input
-                  type="text"
-                  value={customerSearch}
-                  onChange={(e) => setCustomerSearch(e.target.value)}
-                  placeholder="Search customer..."
-                  className={INPUT_CLASS}
-                />
-                {customersLoading ? (
-                  <div className="flex items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading customers...
-                  </div>
-                ) : (
-                  <select
-                    value={selectedCustomer}
-                    onChange={(e) => {
-                      const nextCustomerId = e.target.value;
-                      setSelectedCustomer(nextCustomerId);
-
-                      if (!nextCustomerId) {
-                        setSelectedCustomerOption(null);
-                        return;
-                      }
-
-                      const matchedCustomer = customerOptions.find((customer) => customer.sessionId === nextCustomerId) || null;
-                      setSelectedCustomerOption(matchedCustomer);
-                    }}
-                    className={INPUT_CLASS}
-                  >
-                    <option value="">All Customers</option>
-                    {customerOptions.map((customer) => (
-                      <option key={customer.sessionId} value={customer.sessionId}>
-                        {customer.company || customer.customerCode || customer.sessionId}
-                      </option>
-                    ))}
+    <div className="min-h-full overflow-y-auto bg-[#f4f4f4] p-5 text-[#333]">
+      <div className="mx-auto max-w-[1140px] space-y-5">
+        <section className="rounded border border-[#d5d5d5] bg-white shadow-sm">
+          <header className="border-b border-[#ddd] px-5 py-4"><h2 className="font-serif text-lg font-bold uppercase">Accounts Receivable</h2></header>
+          <div className="p-8">
+            {error && <div className="mb-5 rounded border border-[#ebccd1] bg-[#f2dede] px-4 py-3 text-sm text-[#a94442]"><b>Oops!</b> {error}</div>}
+            <div className="mx-auto max-w-[760px] space-y-5">
+              <div className="grid grid-cols-[210px_1fr] items-start gap-4">
+                <label className="contents">
+                <span className="pt-2 text-right text-sm font-semibold"><span className="sr-only">Customer</span><span aria-hidden="true">Select Customer <span className="text-red-600">*</span></span></span>
+                <div className="space-y-2">
+                  <input value={customerSearch} onChange={e => setCustomerSearch(e.target.value)} placeholder="Search customer — leave it blank to show all customers" className="w-full rounded border border-[#ccc] px-3 py-2 text-sm" />
+                  <select value={selectedCustomer} onChange={e => { const id = e.target.value; setSelectedCustomer(id); setSelectedCustomerOption(customerOptions.find(c => c.sessionId === id) || null); }} className="w-full rounded border border-[#ccc] bg-white px-3 py-2 text-sm">
+                    <option value="">{customersLoading ? 'Loading customers...' : 'All Customers'}</option>
+                    {customerOptions.map(customer => <option key={customer.sessionId} value={customer.sessionId}>{customer.company || customer.customerCode || customer.sessionId}</option>)}
                   </select>
-                )}
+                </div>
+                </label>
               </div>
-            </label>
-
-            <label className="block text-sm text-slate-600 dark:text-slate-300">
-              Debt Type
-              <select
-                value={debtType}
-                onChange={(e) => setDebtType(e.target.value as ArDebtType)}
-                className={`${INPUT_CLASS} mt-1`}
-              >
-                {debtTypeOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </label>
-
-            <label className="block text-sm text-slate-600 dark:text-slate-300">
-              Date Type
-              <select
-                value={dateType}
-                onChange={(e) => setDateType(e.target.value as ArDateType)}
-                className={`${INPUT_CLASS} mt-1`}
-              >
-                {dateTypeOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </label>
-
-            <label className="block text-sm text-slate-600 dark:text-slate-300">
-              Date From
-              <div className="relative mt-1">
-                <Calendar className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  disabled={dateType !== 'custom'}
-                  className={`${INPUT_CLASS} pl-9 disabled:bg-slate-100 disabled:text-slate-400`}
-                />
+              <div className="grid grid-cols-[210px_1fr] items-start gap-4">
+                <label className="pt-1 text-right text-sm font-semibold">Options</label>
+                <div className="space-y-2 text-sm">
+                  {debtTypeOptions.map(option => <label key={option.value} className="block"><input type="radio" checked={debtType === option.value} onChange={() => setDebtType(option.value)} /> {option.value === 'Good' ? 'Good Debt Only' : option.value === 'Bad' ? 'Bad Debt Only' : 'All'}</label>)}
+                </div>
               </div>
-            </label>
-
-            <label className="block text-sm text-slate-600 dark:text-slate-300">
-              Date To
-              <div className="relative mt-1">
-                <Calendar className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                  disabled={dateType !== 'custom'}
-                  className={`${INPUT_CLASS} pl-9 disabled:bg-slate-100 disabled:text-slate-400`}
-                />
-              </div>
-            </label>
-
-            <button
-              type="button"
-              onClick={generate}
-              disabled={loading}
-              className={`${BUTTON_PRIMARY} w-full justify-center px-4 py-2 text-sm disabled:opacity-60 disabled:cursor-not-allowed`}
-            >
-              <RefreshCcw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              Generate Report
-            </button>
-          </div>
-        </aside>
-
-        <section className="col-span-12 lg:col-span-9 h-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden flex flex-col">
-          <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">ACCOUNTS RECEIVABLE</h2>
-              <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">{buildDateRangeLabel(report)}</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">As of: {new Date().toLocaleDateString('en-US')}</p>
-              {isSingleCustomer && selectedCustomerName ? (
-                <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">{selectedCustomerName}</p>
-              ) : null}
+              <div className="grid grid-cols-[210px_1fr] gap-4"><span/><div className="flex gap-2">
+                <button type="button" onClick={generate} disabled={loading} className="rounded border border-[#2e6da4] bg-[#337ab7] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{loading ? 'Generating...' : 'Generate Report'}</button>
+                <button type="button" onClick={() => { setReport(null); setError(''); }} className="rounded border border-[#ccc] bg-white px-4 py-2 text-sm">Cancel</button>
+              </div></div>
             </div>
-
-            <button type="button" className={BUTTON_BASE} onClick={() => window.print()}>
-              <Printer className="w-4 h-4" />
-              Print
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-auto p-4">
-            {error && <p className="mb-3 text-sm text-rose-600">{error}</p>}
-            {loading ? (
-              <p className="text-sm text-slate-500">Loading accounts receivable...</p>
-            ) : !report ? (
-              <p className="text-sm text-slate-500">No report loaded.</p>
-            ) : flattenedRows.length === 0 ? (
-              <p className="text-sm text-slate-500">No outstanding balances found.</p>
-            ) : (
-              <div className="overflow-auto rounded-xl border border-slate-200 dark:border-slate-800">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50 dark:bg-slate-900/60 text-slate-600 dark:text-slate-300">
-                    <tr>
-                      {!isSingleCustomer ? <th className="px-3 py-2 text-left">Customer</th> : null}
-                      <th className="px-3 py-2 text-left">Terms</th>
-                      <th className="px-3 py-2 text-left">Date</th>
-                      <th className="px-3 py-2 text-left">DR/INV</th>
-                      <th className="px-3 py-2 text-right">Amount</th>
-                      <th className="px-3 py-2 text-right">Amount Paid</th>
-                      <th className="px-3 py-2 text-right">Balance</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {flattenedRows.map((row, index) => (
-                      <tr key={`${row.sessionId}-${row.reference}-${index}`}>
-                        {!isSingleCustomer ? <td className="px-3 py-2">{row.customer || '-'}</td> : null}
-                        <td className="px-3 py-2">{row.terms || '-'}</td>
-                        <td className="px-3 py-2">{formatDate(row.date)}</td>
-                        <td className="px-3 py-2">{row.reference || '-'}</td>
-                        <td className="px-3 py-2 text-right">{peso.format(row.amount || 0)}</td>
-                        <td className="px-3 py-2 text-right">{peso.format(row.amount_paid || 0)}</td>
-                        <td className="px-3 py-2 text-right font-semibold">{peso.format(row.balance || 0)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="bg-slate-50 dark:bg-slate-900/60 font-semibold">
-                    <tr>
-                      <td className="px-3 py-3 text-rose-600" colSpan={isSingleCustomer ? 6 : 7}>
-                        GRAND TOTAL BALANCE: {peso.format(report.grand_total_balance || 0)}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            )}
           </div>
         </section>
+
+        {report && <section className="rounded border border-[#d5d5d5] bg-white p-5 shadow-sm">
+          <div className="mb-5 flex items-start justify-between border-b border-[#ddd] pb-4"><div><h3 className="font-serif text-lg font-bold uppercase">Accounts Receivable</h3><p className="text-sm font-semibold">{buildDateRangeLabel(report)}</p><p className="text-xs">As of: {new Date().toLocaleDateString('en-US')}</p>{isSingleCustomer && selectedCustomerName && <p className="mt-1 text-sm">{selectedCustomerName}</p>}</div><button onClick={() => window.print()} className="rounded border border-[#ccc] px-3 py-2 text-sm">Print</button></div>
+          {flattenedRows.length === 0 ? <p className="py-8 text-center text-sm text-gray-500">No outstanding balances found.</p> :
+          <div className="overflow-auto border border-[#ddd]">
+            <table className="min-w-full text-sm">
+              <thead className="bg-[#f5f5f5]"><tr>{!isSingleCustomer && <th className="px-3 py-2 text-left">Customer</th>}<th className="px-3 py-2 text-left">Terms</th><th className="px-3 py-2 text-left">Date</th><th className="px-3 py-2 text-left">DR/INV</th><th className="px-3 py-2 text-right">Amount</th><th className="px-3 py-2 text-right">Amount Paid</th><th className="px-3 py-2 text-right">Balance</th></tr></thead>
+              <tbody>{flattenedRows.map((row,index) => <tr key={`${row.sessionId}-${row.reference}-${index}`} className="border-t border-[#eee]">{!isSingleCustomer && <td className="px-3 py-2">{row.customer || '-'}</td>}<td className="px-3 py-2">{row.terms || '-'}</td><td className="px-3 py-2">{formatDate(row.date)}</td><td className="px-3 py-2">{row.reference || '-'}</td><td className="px-3 py-2 text-right">{peso.format(row.amount || 0)}</td><td className="px-3 py-2 text-right">{peso.format(row.amount_paid || 0)}</td><td className="px-3 py-2 text-right font-semibold">{peso.format(row.balance || 0)}</td></tr>)}</tbody>
+              <tfoot className="border-t-2 border-[#aaa] font-bold text-red-600"><tr><td colSpan={isSingleCustomer ? 6 : 7} className="px-3 py-3">GRAND TOTAL BALANCE: {peso.format(report.grand_total_balance || 0)}</td></tr></tfoot>
+            </table>
+          </div>}
+        </section>}
       </div>
     </div>
   );

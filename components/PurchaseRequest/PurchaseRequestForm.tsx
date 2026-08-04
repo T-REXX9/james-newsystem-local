@@ -1,311 +1,272 @@
 import React, { useState } from 'react';
-import { CreatePRPayload, CreatePRItemPayload, Contact } from '../../purchaseRequest.types';
-import { Save, Plus, Trash2, ArrowLeft, ClipboardList } from 'lucide-react';
-import ValidationSummary from '../ValidationSummary';
-import FieldHelp from '../FieldHelp';
-import { validateNumeric, validateRequired } from '../../utils/formValidation';
+import { ArrowLeft } from 'lucide-react';
+import type { Contact, CreatePRItemPayload, CreatePRPayload } from '../../purchaseRequest.types';
+import type { Product as SearchProduct } from '../../types';
 import { parseSupabaseError } from '../../utils/errorHandler';
-import { useToast } from '../ToastProvider';
+import { validateNumeric, validateRequired } from '../../utils/formValidation';
 import ProductAutocomplete from '../ProductAutocomplete';
-import { Product as SearchProduct } from '../../types';
+import ValidationSummary from '../ValidationSummary';
+import { useToast } from '../ToastProvider';
 
 interface PurchaseRequestFormProps {
-    onCancel: () => void;
-    onSubmit: (payload: CreatePRPayload) => Promise<void>;
-    suppliers: Contact[];
-    initialPRNumber: string;
+  onCancel: () => void;
+  onSubmit: (payload: CreatePRPayload) => Promise<void>;
+  suppliers: Contact[];
+  initialPRNumber: string;
 }
 
 const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
-    onCancel,
-    onSubmit,
-    suppliers,
-    initialPRNumber
+  onCancel,
+  onSubmit,
+  suppliers,
+  initialPRNumber,
 }) => {
-    const { addToast } = useToast();
-    const [requestDate, setRequestDate] = useState(new Date().toISOString().split('T')[0]);
-    const [notes, setNotes] = useState('');
-    const [referenceNo, setReferenceNo] = useState('');
-    const [items, setItems] = useState<CreatePRItemPayload[]>([]);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
-    const [submitCount, setSubmitCount] = useState(0);
-    const [submitError, setSubmitError] = useState('');
+  const { addToast } = useToast();
+  const [notes, setNotes] = useState('');
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [selectedProduct, setSelectedProduct] = useState<SearchProduct | null>(null);
+  const [quantity, setQuantity] = useState(1);
+  const [selectedSupplierId, setSelectedSupplierId] = useState('');
+  const [etaDate, setEtaDate] = useState('');
+  const [items, setItems] = useState<CreatePRItemPayload[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [submitCount, setSubmitCount] = useState(0);
+  const [submitError, setSubmitError] = useState('');
 
-    // Item Entry State
-    const [selectedProductId, setSelectedProductId] = useState('');
-    const [selectedProduct, setSelectedProduct] = useState<SearchProduct | null>(null);
-    const [quantity, setQuantity] = useState(1);
-    const [selectedSupplierId, setSelectedSupplierId] = useState('');
-    const [etaDate, setEtaDate] = useState('');
+  const buildItem = (): CreatePRItemPayload | null => {
+    const errors: Record<string, string> = {};
+    const productValidation = validateRequired(selectedProductId, 'a product');
+    if (!productValidation.isValid) errors.selectedProductId = productValidation.message;
+    const quantityValidation = validateNumeric(quantity, 'quantity', 1);
+    if (!quantityValidation.isValid) errors.quantity = quantityValidation.message;
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      return null;
+    }
 
-    const handleAddItem = () => {
-        const errors: Record<string, string> = {};
-        const productValidation = validateRequired(selectedProductId, 'a product');
-        if (!productValidation.isValid) errors.selectedProductId = productValidation.message;
-        const quantityValidation = validateNumeric(quantity, 'quantity', 1);
-        if (!quantityValidation.isValid) errors.quantity = quantityValidation.message;
-        if (Object.keys(errors).length > 0) {
-            setValidationErrors((prev) => ({ ...prev, ...errors }));
-            return;
-        }
-
-        const product = selectedProduct;
-        const supplier = suppliers.find(s => s.id === selectedSupplierId);
-
-        const newItem: CreatePRItemPayload = {
-            item_id: selectedProductId,
-            item_code: product?.item_code,
-            part_number: product?.part_no,
-            description: product?.description,
-            quantity: quantity,
-            unit_cost: product?.cost || 0, // Default to product cost
-            supplier_id: selectedSupplierId || undefined,
-            supplier_name: supplier?.company,
-            eta_date: etaDate || undefined
-        };
-
-        setItems([...items, newItem]);
-
-        // Reset entry fields
-        setSelectedProductId('');
-        setSelectedProduct(null);
-        setQuantity(1);
-        // Keep supplier? maybe user adds multiple from same
-        setEtaDate('');
+    const supplier = suppliers.find(item => item.id === selectedSupplierId);
+    return {
+      item_id: selectedProductId,
+      item_code: selectedProduct?.item_code,
+      part_number: selectedProduct?.part_no,
+      description: selectedProduct?.description,
+      quantity,
+      unit_cost: selectedProduct?.cost || 0,
+      supplier_id: selectedSupplierId || undefined,
+      supplier_name: supplier?.company,
+      eta_date: etaDate || undefined,
     };
+  };
 
-    const removeItem = (index: number) => {
-        setItems(items.filter((_, i) => i !== index));
-    };
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const pendingItem = items.length === 0 ? buildItem() : null;
+    const submittedItems = items.length > 0 ? items : pendingItem ? [pendingItem] : [];
+    if (submittedItems.length === 0) {
+      setSubmitCount(current => current + 1);
+      return;
+    }
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (items.length === 0) {
-            setValidationErrors((prev) => ({
-                ...prev,
-                items: 'Please add at least one item before submitting the request.'
-            }));
-            setSubmitCount((prev) => prev + 1);
-            return;
-        }
-        setIsSubmitting(true);
-        setSubmitError('');
-        try {
-            await onSubmit({
-                pr_number: initialPRNumber,
-                request_date: requestDate,
-                notes,
-                reference_no: referenceNo, // Added reference_no
-                items
-            });
-            addToast({ 
-                type: 'success', 
-                title: 'Purchase request created',
-                description: `PR ${initialPRNumber} has been submitted successfully.`,
-                durationMs: 4000,
-            });
-        } catch (err: any) {
-            setSubmitError(parseSupabaseError(err, 'purchase request'));
-            addToast({ 
-                type: 'error', 
-                title: 'Unable to create purchase request',
-                description: parseSupabaseError(err, 'purchase request'),
-                durationMs: 6000,
-            });
-            setIsSubmitting(false);
-        }
-    };
+    setIsSubmitting(true);
+    setSubmitError('');
+    try {
+      await onSubmit({
+        pr_number: initialPRNumber,
+        request_date: new Date().toISOString().slice(0, 10),
+        notes,
+        reference_no: '',
+        items: submittedItems,
+      });
+      addToast({
+        type: 'success',
+        title: 'Purchase request created',
+        description: `PR ${initialPRNumber} has been submitted successfully.`,
+        durationMs: 4000,
+      });
+    } catch (error) {
+      const message = parseSupabaseError(error, 'purchase request');
+      setSubmitError(message);
+      addToast({
+        type: 'error',
+        title: 'Unable to create purchase request',
+        description: message,
+        durationMs: 6000,
+      });
+      setIsSubmitting(false);
+    }
+  };
 
-    const handleBlur = (field: string, value: unknown) => {
-        let message = '';
-        if (field === 'selectedProductId') {
-            const result = validateRequired(value, 'a product');
-            message = result.isValid ? '' : result.message;
-        }
-        if (field === 'quantity') {
-            const result = validateNumeric(value, 'quantity', 1);
-            message = result.isValid ? '' : result.message;
-        }
-        setValidationErrors((prev) => ({ ...prev, [field]: message }));
-    };
+  const handleAddItem = () => {
+    const item = buildItem();
+    if (!item) return;
+    setItems(current => [...current, item]);
+    setSelectedProductId('');
+    setSelectedProduct(null);
+    setQuantity(1);
+    setSelectedSupplierId('');
+    setEtaDate('');
+  };
 
-    return (
-        <div className="h-full overflow-y-auto bg-slate-100 p-4 dark:bg-slate-950">
-            <div className="mx-auto max-w-6xl space-y-6">
-                <div className="flex items-center justify-between rounded-2xl bg-gradient-to-r from-slate-800 to-slate-900 px-5 py-4 text-white shadow-sm">
-                    <div className="flex items-center gap-3">
-                        <span className="rounded-xl bg-white/10 p-2.5">
-                            <ClipboardList size={20} />
-                        </span>
-                        <div>
-                            <h2 className="text-xl font-bold">New Purchase Request</h2>
-                            <p className="text-sm text-slate-300">Prepare item requests with the same cleaner structure used across purchasing screens.</p>
-                        </div>
-                    </div>
-                    <button onClick={onCancel} className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-white/15">
-                        <ArrowLeft size={16} />
-                        Back
-                    </button>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow dark:border-slate-800 dark:bg-slate-900">
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
-                        {submitError && (
-                            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                                {submitError}
-                            </div>
-                        )}
-                        {/* Header Fields */}
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-                            <div>
-                                <label className="block text-sm font-semibold mb-1">PR Number</label>
-                                <input type="text" value={initialPRNumber} disabled className="w-full bg-slate-100 border border-slate-300 rounded p-2 text-slate-500" />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-semibold mb-1">Request Date</label>
-                                <input type="date" required value={requestDate} onChange={e => setRequestDate(e.target.value)} className="w-full border border-slate-300 rounded p-2" />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-semibold mb-1">Reference No.</label>
-                                <input type="text" value={referenceNo} onChange={e => setReferenceNo(e.target.value)} className="w-full border border-slate-300 rounded p-2" placeholder="Optional external ref" />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-semibold mb-1">Notes</label>
-                                <input type="text" value={notes} onChange={e => setNotes(e.target.value)} className="w-full border border-slate-300 rounded p-2" placeholder="Purpose of request..." />
-                            </div>
-                        </div>
-
-                        <hr className="border-slate-100 dark:border-slate-800" />
-
-                    {/* Add Item Section */}
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-800/50">
-                        <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-slate-500">Add Line Item</h3>
-                        <div className="grid gap-3 xl:grid-cols-[minmax(0,2.9fr)_minmax(180px,1.15fr)_120px_230px_190px_56px] xl:items-start">
-                            <div className="grid gap-1 [grid-template-rows:auto_44px_auto]">
-                                <label className="block text-xs font-semibold">Product</label>
-                                <ProductAutocomplete
-                                    onSelect={(product) => {
-                                        setSelectedProduct(product);
-                                        setSelectedProductId(product.id);
-                                        setValidationErrors((prev) => ({ ...prev, selectedProductId: '' }));
-                                    }}
-                                    placeholder="Part no. or Item code"
-                                    className={validationErrors.selectedProductId ? 'rounded-md ring-1 ring-rose-400' : ''}
-                                />
-                                <p className="text-xs leading-snug text-slate-500">
-                                    {selectedProduct
-                                        ? `${selectedProduct.part_no} • ${selectedProduct.description}`
-                                        : 'Search by part number, item code, or description.'}
-                                </p>
-                                {validationErrors.selectedProductId && (
-                                    <p className="text-xs text-rose-600">{validationErrors.selectedProductId}</p>
-                                )}
-                            </div>
-                            <div className="grid gap-1 [grid-template-rows:auto_44px_auto]">
-                                <label className="block text-xs font-semibold">Part No.</label>
-                                <input
-                                    type="text"
-                                    readOnly
-                                    value={selectedProduct?.part_no || ''}
-                                    onBlur={() => handleBlur('selectedProductId', selectedProductId)}
-                                    placeholder="Auto-filled"
-                                    className="w-full text-sm rounded border border-gray-300 bg-slate-100 p-2 text-slate-600"
-                                />
-                                <div />
-                            </div>
-                            <div className="grid gap-1 [grid-template-rows:auto_44px_auto]">
-                                <label className="block text-xs font-semibold">Qty</label>
-                                <input
-                                    type="number"
-                                    aria-label="Line item quantity"
-                                    min="1"
-                                    value={quantity}
-                                    onChange={e => setQuantity(Number(e.target.value))}
-                                    onBlur={(e) => handleBlur('quantity', e.target.value)}
-                                    className={`w-full text-sm rounded border p-2 ${
-                                        validationErrors.quantity ? 'border-rose-400' : 'border-gray-300'
-                                    }`}
-                                />
-                                {validationErrors.quantity && (
-                                    <p className="text-xs text-rose-600">{validationErrors.quantity}</p>
-                                )}
-                                {!validationErrors.quantity && <div />}
-                            </div>
-                            <div className="grid gap-1 [grid-template-rows:auto_44px_auto]">
-                                <label className="block text-xs font-semibold">Supplier (Optional)</label>
-                                <select
-                                    aria-label="Line item supplier"
-                                    value={selectedSupplierId}
-                                    onChange={e => setSelectedSupplierId(e.target.value)}
-                                    className="w-full text-sm rounded border-gray-300 p-2"
-                                >
-                                    <option value="">Preferred Supplier...</option>
-                                    {suppliers.map(s => (
-                                        <option key={s.id} value={s.id}>{s.company}</option>
-                                    ))}
-                                </select>
-                                <div />
-                            </div>
-                            <div className="grid gap-1 [grid-template-rows:auto_44px_auto]">
-                                <label className="block text-xs font-semibold">ETA (Optional)</label>
-                                <input aria-label="Line item ETA" type="date" value={etaDate} onChange={e => setEtaDate(e.target.value)} className="w-full text-sm rounded border-gray-300 p-2" />
-                                <FieldHelp text="Set an expected arrival date if the supplier provided one." example="2026-02-05" className="mt-0" />
-                            </div>
-                            <div className="flex xl:pt-[1.45rem] xl:justify-end">
-                                <button type="button" onClick={handleAddItem} aria-label="Add line item" className="flex h-10 w-10 items-center justify-center rounded bg-blue-600 text-white transition-colors hover:bg-blue-700">
-                                    <Plus size={18} />
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                        {/* Items Table */}
-                        {validationErrors.items && (
-                            <div className="text-xs text-rose-600">{validationErrors.items}</div>
-                        )}
-                        <div className="overflow-x-auto border border-slate-200 rounded">
-                            <table className="w-full text-sm text-left">
-                                <thead className="bg-slate-50 text-slate-500 font-semibold">
-                                    <tr>
-                                        <th className="p-2">Part No</th>
-                                        <th className="p-2">Description</th>
-                                        <th className="p-2 text-center">Qty</th>
-                                        <th className="p-2">Supplier</th>
-                                        <th className="p-2">ETA</th>
-                                        <th className="p-2 text-center">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {items.length === 0 && <tr><td colSpan={6} className="p-4 text-center text-slate-400">No items added yet.</td></tr>}
-                                    {items.map((item, idx) => (
-                                        <tr key={idx}>
-                                            <td className="p-2">{item.part_number}</td>
-                                            <td className="p-2">{item.description}</td>
-                                            <td className="p-2 text-center">{item.quantity}</td>
-                                            <td className="max-w-[150px] truncate p-2">{item.supplier_name || '-'}</td>
-                                            <td className="p-2">{item.eta_date || '-'}</td>
-                                            <td className="p-2 text-center">
-                                                <button type="button" onClick={() => removeItem(idx)} aria-label={`Remove item ${idx + 1}`} className="text-red-500 hover:text-red-700"><Trash2 size={16} /></button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <div className="flex justify-end gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
-                            <button type="button" onClick={onCancel} className="px-4 py-2 border rounded text-slate-600 hover:bg-slate-50">Cancel</button>
-                            <button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2">
-                                {isSubmitting ? 'Saving...' : <><Save size={18} /> Create Request</>}
-                            </button>
-                        </div>
-                    </form>
-                </div>
+  return (
+    <div className="min-h-full overflow-auto bg-[#f4f4f4] px-4 py-10 text-[#333]">
+      <div className="mx-auto max-w-[1140px] overflow-hidden rounded-[5px] border border-[#d8d8d8] bg-white shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+        <form onSubmit={handleSubmit}>
+          <header className="flex min-h-[64px] items-center justify-between border-b border-[#e5e5e5] px-5">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={onCancel}
+                className="flex items-center gap-1 rounded-[3px] border border-[#ccc] bg-white px-[10px] py-[5px] text-[12px] font-semibold hover:bg-[#ebebeb]"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Back
+              </button>
+              <h1 className="border-b border-[#5d82a2] py-5 pr-24 font-['Oswald'] text-[18px] font-semibold uppercase leading-none text-[#315574]">
+                Purchase Request
+              </h1>
             </div>
-        </div>
-    );
+            <div className="flex items-center gap-2 text-[13px]">
+              <label htmlFor="new-pr-number" className="text-[16px] font-semibold">PR No:</label>
+              <input
+                id="new-pr-number"
+                readOnly
+                value={initialPRNumber}
+                className="h-[34px] w-[110px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3 shadow-inner"
+              />
+            </div>
+          </header>
+
+          <main className="p-5">
+            <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
+            {submitError && (
+              <div className="mb-4 rounded-[3px] border border-[#ebccd1] bg-[#f2dede] px-4 py-3 text-[13px] text-[#a94442]">
+                <strong>Oops! </strong>{submitError}
+              </div>
+            )}
+
+            <div className="overflow-visible">
+              <table className="w-full border-collapse text-[13px]">
+                <thead>
+                  <tr className="border-b-2 border-[#ddd] text-left">
+                    <th className="w-[12%] px-2 py-2">Quantity</th>
+                    <th className="w-[18%] px-2 py-2">Supplier</th>
+                    <th className="w-[13%] px-2 py-2">Original P/N</th>
+                    <th className="w-[13%] px-2 py-2">Part No.</th>
+                    <th className="w-[11%] px-2 py-2">Item Code</th>
+                    <th className="w-[10%] px-2 py-2">Brand</th>
+                    <th className="px-2 py-2">Description</th>
+                    <th className="w-[9%] px-2 py-2 text-right">COST</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="align-top">
+                    <td className="px-2 py-3">
+                      <input
+                        aria-label="Line item quantity"
+                        type="number"
+                        min={1}
+                        value={quantity}
+                        onChange={event => setQuantity(Number(event.target.value))}
+                        className="h-[34px] w-full rounded-[3px] border border-[#ccc] px-3 shadow-inner"
+                        placeholder="Input Quantity"
+                      />
+                    </td>
+                    <td className="px-2 py-3">
+                      <select
+                        aria-label="Line item supplier"
+                        value={selectedSupplierId}
+                        onChange={event => setSelectedSupplierId(event.target.value)}
+                        className="h-[34px] w-full rounded-[3px] border border-[#ccc] bg-white px-3 shadow-inner"
+                      >
+                        <option value="">Select Supplier</option>
+                        {suppliers.map(supplier => (
+                          <option key={supplier.id} value={supplier.id}>{supplier.company}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td colSpan={6} className="px-2 py-3">
+                      <ProductAutocomplete
+                        onSelect={product => {
+                          setSelectedProduct(product);
+                          setSelectedProductId(product.id);
+                          setValidationErrors(current => ({ ...current, selectedProductId: '' }));
+                        }}
+                        placeholder="Select Product"
+                        className={validationErrors.selectedProductId ? 'ring-1 ring-[#d9534f]' : ''}
+                      />
+                      {selectedProduct && (
+                        <div className="mt-2 grid grid-cols-[1fr_1fr_1fr_1fr_2fr_1fr] gap-3 text-[12px] text-[#555]">
+                          <span>{(selectedProduct as any).opn_number || '-'}</span>
+                          <span>{selectedProduct.part_no || '-'}</span>
+                          <span>{selectedProduct.item_code || '-'}</span>
+                          <span>{selectedProduct.brand || '-'}</span>
+                          <span>{selectedProduct.description || '-'}</span>
+                          <span className="text-right">{Number(selectedProduct.cost || 0).toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="mt-3 flex items-center gap-3">
+                        <input
+                          aria-label="Line item ETA"
+                          type="date"
+                          value={etaDate}
+                          onChange={event => setEtaDate(event.target.value)}
+                          className="h-[34px] rounded-[3px] border border-[#ccc] px-3 shadow-inner"
+                        />
+                        <button
+                          type="button"
+                          aria-label="Add line item"
+                          onClick={handleAddItem}
+                          className="rounded-[3px] border border-[#2e6da4] bg-[#337ab7] px-3 py-[7px] font-semibold text-white hover:bg-[#286090]"
+                        >
+                          Add Item
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {items.map((item, index) => (
+                    <tr key={`${item.item_id}-${index}`} className="border-t border-[#eee] text-[12px]">
+                      <td className="px-2 py-2">{item.quantity}</td>
+                      <td className="px-2 py-2">{item.supplier_name || '-'}</td>
+                      <td className="px-2 py-2">-</td>
+                      <td className="px-2 py-2">{item.part_number || '-'}</td>
+                      <td className="px-2 py-2">{item.item_code || '-'}</td>
+                      <td className="px-2 py-2">-</td>
+                      <td className="px-2 py-2">{item.description || '-'}</td>
+                      <td className="px-2 py-2 text-right">{Number(item.unit_cost || 0).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td colSpan={8} className="px-2 pb-3">
+                      <textarea
+                        value={notes}
+                        onChange={event => setNotes(event.target.value)}
+                        rows={3}
+                        placeholder="Remark"
+                        className="w-[420px] rounded-[3px] border border-[#ccc] px-3 py-2 shadow-inner"
+                      />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colSpan={8} className="px-2 pt-1">
+                      <button
+                        type="submit"
+                        aria-label="Create request"
+                        disabled={isSubmitting}
+                        className="rounded-[3px] border border-[#398439] bg-[#5cb85c] px-3 py-[7px] font-semibold text-white hover:bg-[#47a447] disabled:bg-[#999]"
+                      >
+                        {isSubmitting ? 'Saving...' : 'Create PR'}
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </main>
+        </form>
+      </div>
+    </div>
+  );
 };
 
 export default PurchaseRequestForm;

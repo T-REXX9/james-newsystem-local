@@ -85,7 +85,7 @@ export async function fetchProductMovementClassifications(): Promise<Map<string,
   const result = new Map<string, MovementCategory>();
   try {
     const report = await generateFastSlowReport({
-      sortBy: 'sales_volume',
+      sortBy: 'total_sold',
       sortDirection: 'desc',
     });
 
@@ -102,4 +102,3 @@ export async function fetchProductMovementClassifications(): Promise<Map<string,
   }
   return result;
 }
-

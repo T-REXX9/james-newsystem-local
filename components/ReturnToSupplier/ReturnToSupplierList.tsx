@@ -1,5 +1,4 @@
 import React, { useMemo } from 'react';
-import { Search, Calendar, Package, ArrowRightLeft } from 'lucide-react';
 import StatusBadge from '../StatusBadge';
 import { SupplierReturn } from '../../returnToSupplier.types';
 
@@ -38,58 +37,25 @@ const ReturnToSupplierList: React.FC<ReturnToSupplierListProps> = ({
     }, [returns, searchTerm, statusFilter]);
 
     if (loading && returns.length === 0) {
-        return <div className="p-4 text-center text-gray-500">Loading returns...</div>;
-    }
-
-    if (filteredReturns.length === 0) {
-        return (
-            <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-                <ArrowRightLeft className="w-10 h-10 mb-2 opacity-20" />
-                <p>No returns found</p>
-            </div>
-        );
+        return <div className="p-8 text-center text-gray-500">Loading...</div>;
     }
 
     return (
-        <div className="flex-1 overflow-y-auto">
-            {filteredReturns.map((r) => (
-                <div
-                    key={r.id}
-                    onClick={() => onSelect(r)}
-                    className={`p-4 border-b border-gray-200 dark:border-gray-700 cursor-pointer transition-colors ${selectedId === r.id
-                            ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-l-blue-600'
-                            : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
-                        }`}
-                >
-                    <div className="flex items-start justify-between mb-2">
-                        <div>
-                            <div className="font-medium text-gray-900 dark:text-white">
-                                {r.return_no}
-                            </div>
-                            <div className="text-xs text-brand-blue font-medium mt-0.5">
-                                {r.supplier_name}
-                            </div>
-                        </div>
-                        <StatusBadge
-                            status={r.status.toLowerCase()}
-                            label={r.status}
-                            tone={r.status === 'Posted' ? 'success' : r.status === 'Pending' ? 'neutral' : 'warning'}
-                        />
-                    </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <Calendar className="w-3 h-3" />
-                                {new Date(r.return_date).toLocaleDateString()}
-                            </div>
-                            <span className="font-semibold text-gray-700 dark:text-gray-300">
-                                ₱{r.grand_total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                            </span>
-                        </div>
-                    </div>
-                </div>
-            ))}
-        </div>
+        <table className="w-full border-collapse text-left text-sm">
+            <thead><tr className="border-b-2 border-[#ddd]"><th className="px-2 py-3">Date</th><th className="px-2 py-3">RS No.</th><th className="px-2 py-3">RR No.</th><th className="px-2 py-3">Supplier</th><th className="px-2 py-3">Amount</th><th className="px-2 py-3">Status</th></tr></thead>
+            <tbody>
+            {filteredReturns.length === 0 && <tr><td colSpan={6} className="py-10 text-center text-gray-500">No records found.</td></tr>}
+            {filteredReturns.map(r => (
+                <tr key={r.id} onClick={() => onSelect(r)} className={`cursor-pointer border-b border-[#e5e5e5] hover:bg-[#f5f5f5] ${selectedId === r.id ? 'bg-[#eef6fb]' : ''}`}>
+                    <td className="px-2 py-3">{new Date(r.return_date).toLocaleDateString()}</td>
+                    <td className="px-2 py-3 font-semibold text-[#337ab7]">{r.return_no}</td>
+                    <td className="px-2 py-3">{r.rr_no || '-'}</td>
+                    <td className="px-2 py-3">{r.supplier_name || '-'}</td>
+                    <td className="px-2 py-3">{r.grand_total.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                    <td className="px-2 py-3"><StatusBadge status={r.status.toLowerCase()} label={r.status} tone={r.status === 'Posted' ? 'success' : 'neutral'} /></td>
+                </tr>
+            ))}</tbody>
+        </table>
     );
 };
 

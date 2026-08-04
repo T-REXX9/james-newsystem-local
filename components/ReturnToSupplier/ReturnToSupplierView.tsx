@@ -63,10 +63,10 @@ const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecor
     };
 
     return (
-        <div className="p-6 space-y-6 flex-1 overflow-y-auto h-full">
-            <div className="flex items-center justify-between">
+        <section className="flex-1 space-y-5 rounded border border-[#d5d5d5] bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between border-b border-[#ddd] pb-4">
                 <div>
-                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{returnRecord.return_no}</h2>
+                    <h2 className="font-serif text-xl font-bold uppercase">Return to Supplier <span className="font-sans text-base">RS No. {returnRecord.return_no}</span></h2>
                     <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
                         <span>{new Date(returnRecord.return_date).toLocaleDateString()}</span>
                         <span>•</span>
@@ -100,19 +100,19 @@ const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecor
             </div>
 
             {/* Items Table */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-                <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
-                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Return Items</h3>
+            <div className="overflow-hidden border border-[#ddd] bg-white">
+                <div className="border-b border-[#ddd] bg-white px-4 py-3">
+                    <h3 className="text-sm font-bold uppercase">Return Items</h3>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                         <thead className="bg-gray-50 dark:bg-gray-700">
                             <tr>
-                                <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase">Item</th>
-                                <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase">Reason</th>
-                                <th className="px-4 py-3 text-right font-medium text-gray-500 uppercase">Qty</th>
-                                <th className="px-4 py-3 text-right font-medium text-gray-500 uppercase">Unit Cost</th>
-                                <th className="px-4 py-3 text-right font-medium text-gray-500 uppercase">Total</th>
+                                <th className="px-4 py-3 text-left font-medium uppercase">Item Code / Part No.</th>
+                                <th className="px-4 py-3 text-left font-medium uppercase">Notes</th>
+                                <th className="px-4 py-3 text-right font-medium uppercase">Qty</th>
+                                <th className="px-4 py-3 text-right font-medium uppercase">Cost</th>
+                                <th className="px-4 py-3 text-right font-medium uppercase">Amount</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -175,7 +175,7 @@ const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecor
                 cancelLabel="Cancel"
                 variant="warning"
             />
-        </div>
+        </section>
     );
 };
 

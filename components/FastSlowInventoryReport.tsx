@@ -1,307 +1,261 @@
-import React, { useState, useCallback } from 'react';
-import {
-  Printer,
-  Loader2,
-  TrendingUp,
-  TrendingDown,
-  Download,
-  Play,
-  Package,
-  ArrowUpDown,
-} from 'lucide-react';
+import React, { useCallback, useState } from 'react';
+import { ArrowLeft, Loader2, Printer } from 'lucide-react';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
 import { generateFastSlowReport } from '../services/inventoryMovementService';
 import type { FastSlowMovementItem, FastSlowReportData, FastSlowReportFilters } from '../types';
 
+const DEFAULT_FILTERS: FastSlowReportFilters = {
+  sortBy: 'part_no',
+  sortDirection: 'asc',
+};
+
+const sortOptions: Array<{ value: FastSlowReportFilters['sortBy']; label: string }> = [
+  { value: 'part_no', label: 'Part No.' },
+  { value: 'item_code', label: 'Listing Code' },
+  { value: 'description', label: 'Description' },
+  { value: 'last_arrived', label: 'Last Arrived Date' },
+  { value: 'total_purchase', label: 'Total Purchase' },
+  { value: 'total_sold', label: 'Pcs Sold' },
+];
+
+const formatDate = (value: string | null): string => {
+  if (!value) return 'N/A';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'N/A';
+  return date.toLocaleDateString('en-US', {
+    month: '2-digit',
+    day: '2-digit',
+    year: 'numeric',
+  });
+};
+
 const FastSlowInventoryReport: React.FC = () => {
   const [reportData, setReportData] = useState<FastSlowReportData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [filters, setFilters] = useState<FastSlowReportFilters>({
-    sortBy: 'sales_volume',
-    sortDirection: 'desc',
-  });
+  const [error, setError] = useState('');
+  const [filters, setFilters] = useState<FastSlowReportFilters>(DEFAULT_FILTERS);
 
   const handleGenerateReport = useCallback(async () => {
     setIsLoading(true);
+    setError('');
     try {
-      const data = await generateFastSlowReport(filters);
-      setReportData(data);
-    } catch (error) {
-      console.error('Error generating report:', error);
+      setReportData(await generateFastSlowReport(filters));
+    } catch (requestError) {
+      console.error('Error generating inventory movement report:', requestError);
+      setError(requestError instanceof Error ? requestError.message : 'Unable to generate the report.');
     } finally {
       setIsLoading(false);
     }
   }, [filters]);
 
-  const handlePrint = useCallback(() => {
-    window.print();
+  const handleCancel = useCallback(() => {
+    setFilters(DEFAULT_FILTERS);
+    setReportData(null);
+    setError('');
   }, []);
 
-  const handleExport = useCallback(() => {
-    if (!reportData) return;
-
-    const allItems = [...reportData.fastMovingItems, ...reportData.slowMovingItems];
-    const headers = [
-      'Category',
-      'Part No',
-      'Item Code',
-      'Description',
-      'First Arrival',
-      'Total Purchased',
-      'Total Sold',
-      reportData.fastMovingItems[0]?.month1_label || 'Month 1',
-      reportData.fastMovingItems[0]?.month2_label || 'Month 2',
-      reportData.fastMovingItems[0]?.month3_label || 'Month 3',
-    ];
-
-    const rows = allItems.map(item => [
-      item.category.toUpperCase(),
-      item.part_no,
-      item.item_code,
-      item.description,
-      item.first_arrival_date || 'N/A',
-      item.total_purchased,
-      item.total_sold,
-      item.month1_sales,
-      item.month2_sales,
-      item.month3_sales,
-    ]);
-
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(',')),
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `fast-slow-inventory-report-${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-  }, [reportData]);
-
-  const renderTable = (items: FastSlowMovementItem[], title: string, isFast: boolean) => {
-    const Icon = isFast ? TrendingUp : TrendingDown;
-    const colorClass = isFast
-      ? 'text-emerald-600 dark:text-emerald-400'
-      : 'text-rose-600 dark:text-rose-400';
-    const bgClass = isFast
-      ? 'bg-emerald-50 dark:bg-emerald-900/20'
-      : 'bg-rose-50 dark:bg-rose-900/20';
-    const borderClass = isFast
-      ? 'border-emerald-200 dark:border-emerald-800'
-      : 'border-rose-200 dark:border-rose-800';
-
-    return (
-      <div className="mb-8 print:mb-4">
-        <div className={`flex items-center gap-2 mb-4 print:mb-2`}>
-          <div className={`p-2 rounded-lg ${bgClass} ${colorClass}`}>
-            <Icon className="w-5 h-5" />
-          </div>
-          <h2 className="text-lg font-bold text-slate-800 dark:text-white print:text-black">
-            {title} ({items.length} items)
-          </h2>
-        </div>
-
-        <div className={`bg-white dark:bg-slate-900 rounded-xl border ${borderClass} shadow-sm overflow-hidden print:shadow-none print:border-gray-300`}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse print:text-sm">
-              <thead className="bg-slate-50 dark:bg-slate-800 print:bg-gray-100">
-                <tr className="text-xs uppercase text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-700 print:text-black print:border-gray-300">
-                  <th className="p-3 print:p-2">Part No</th>
-                  <th className="p-3 print:p-2">Item Code</th>
-                  <th className="p-3 print:p-2">Description</th>
-                  <th className="p-3 print:p-2">First Arrival</th>
-                  <th className="p-3 text-center print:p-2">Total Purchased</th>
-                  <th className="p-3 text-center print:p-2">Total Sold</th>
-                  <th className="p-3 text-center print:p-2">{items[0]?.month1_label || 'Month 1'}</th>
-                  <th className="p-3 text-center print:p-2">{items[0]?.month2_label || 'Month 2'}</th>
-                  <th className="p-3 text-center print:p-2">{items[0]?.month3_label || 'Month 3'}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 print:divide-gray-200">
-                {items.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="p-8 text-center text-slate-500 dark:text-slate-400 italic">
-                      No items in this category.
-                    </td>
-                  </tr>
-                ) : (
-                  items.map((item) => (
-                    <tr
-                      key={item.item_id}
-                      className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors print:hover:bg-transparent"
-                    >
-                      <td className="p-3 font-medium text-slate-800 dark:text-white print:p-2 print:text-black">
-                        {item.part_no || '—'}
-                      </td>
-                      <td className="p-3 text-slate-600 dark:text-slate-300 print:p-2 print:text-black">
-                        {item.item_code || '—'}
-                      </td>
-                      <td className="p-3 text-slate-600 dark:text-slate-300 print:p-2 print:text-black max-w-xs truncate">
-                        {item.description || '—'}
-                      </td>
-                      <td className="p-3 text-slate-600 dark:text-slate-300 print:p-2 print:text-black">
-                        {item.first_arrival_date || 'N/A'}
-                      </td>
-                      <td className="p-3 text-center text-slate-600 dark:text-slate-300 print:p-2 print:text-black">
-                        {item.total_purchased}
-                      </td>
-                      <td className="p-3 text-center text-slate-600 dark:text-slate-300 print:p-2 print:text-black">
-                        {item.total_sold}
-                      </td>
-                      <td className="p-3 text-center text-slate-600 dark:text-slate-300 print:p-2 print:text-black">
-                        {item.month1_sales}
-                      </td>
-                      <td className="p-3 text-center text-slate-600 dark:text-slate-300 print:p-2 print:text-black">
-                        {item.month2_sales}
-                      </td>
-                      <td className={`p-3 text-center font-bold print:p-2 ${isFast ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} print:text-black`}>
-                        {item.month3_sales}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    );
-  };
+  const renderTable = (
+    items: FastSlowMovementItem[],
+    title: string,
+    note: string,
+    startIndex: number,
+  ) => (
+    <table className="mb-8 w-full border-collapse text-[13px] text-[#333]">
+      <thead>
+        <tr>
+          <td colSpan={7} className="border-b border-[#ddd] pb-2 pt-1">
+            <h5 className="m-0 text-[14px] font-semibold">
+              <u>{title}</u>
+            </h5>
+            <span>Note: </span>
+            <i>{note}</i>
+          </td>
+        </tr>
+        <tr className="border-b-2 border-[#333]">
+          <th className="w-[3%] px-1 py-2 text-center">#</th>
+          <th className="w-[13%] px-1 py-2 text-center">Part No.</th>
+          <th className="w-[15%] px-1 py-2 text-center">Listing Code</th>
+          <th className="w-[37%] px-1 py-2 text-center">Description</th>
+          <th className="w-[12%] px-1 py-2 text-center">Last Arrived Date</th>
+          <th className="w-[10%] px-1 py-2 text-center">Total Purchase</th>
+          <th className="w-[10%] px-1 py-2 text-center">Pcs Sold</th>
+        </tr>
+      </thead>
+      <tbody>
+        {items.length === 0 ? (
+          <tr>
+            <td colSpan={7} className="py-5 text-center italic text-[#777]">
+              No records found.
+            </td>
+          </tr>
+        ) : (
+          items.map((item, index) => (
+            <tr key={`${title}-${item.item_id}-${index}`}>
+              <td className="px-1 py-[2px] text-right">{startIndex + index}.</td>
+              <td className="px-1 py-[2px]">&nbsp;{item.part_no || 'N/A'}</td>
+              <td className="px-1 py-[2px]">{item.item_code || 'N/A'}</td>
+              <td className="px-1 py-[2px]">{item.description || 'N/A'}</td>
+              <td className="px-1 py-[2px] text-right">{formatDate(item.first_arrival_date)}</td>
+              <td className="px-1 py-[2px] text-right">{item.total_purchased}</td>
+              <td className="px-1 py-[2px] text-right">{item.total_sold}</td>
+            </tr>
+          ))
+        )}
+      </tbody>
+    </table>
+  );
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950 p-8 animate-fadeIn print:p-0 print:bg-white">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 print:mb-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2 print:text-black">
-            <Package className="w-6 h-6 text-brand-blue print:text-black" />
-            Fast/Slow Inventory Report
+    <div className="min-h-full overflow-auto bg-[#f4f4f4] px-4 py-10 text-[#333] print:bg-white print:p-0">
+      <div className="mx-auto max-w-[1140px] overflow-hidden rounded-[5px] border border-[#d8d8d8] bg-white shadow-[0_1px_1px_rgba(0,0,0,0.05)] print:max-w-none print:border-0 print:shadow-none">
+        <header className="min-h-[64px] border-b border-[#e5e5e5] px-5 print:hidden">
+          <h1 className="inline-block border-b border-[#5d82a2] py-5 pr-24 font-['Oswald'] text-[18px] font-semibold uppercase leading-none text-[#315574]">
+            {reportData ? 'Inventory Movement Report View' : 'Inventory Movement Report'}
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 print:text-gray-600">
-            Analyzes product movement over the last 3 months
-          </p>
-        </div>
+        </header>
 
-        <div className="flex items-center gap-2 print:hidden">
-          {reportData && (
+        <main className="p-5">
+          {error && (
+            <div className="mb-5 rounded-[3px] border border-[#ebccd1] bg-[#f2dede] px-4 py-3 text-[13px] text-[#a94442]">
+              <strong>Oops! </strong>
+              {error}
+            </div>
+          )}
+
+          {!reportData && !isLoading && (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleGenerateReport();
+              }}
+            >
+              <p className="mb-10 text-[13px]">
+                Field mark with (<span className="text-[#d9534f]">*</span>) is required. Press generate after you select the sorting options
+              </p>
+
+              <div className="mx-auto max-w-[900px] space-y-[15px]">
+                <div className="grid items-center gap-4 md:grid-cols-[220px_1fr]">
+                  <label htmlFor="movement-sort-field" className="text-right text-[13px] font-semibold">
+                    Order By Field<span className="text-[#d9534f]">*</span>
+                  </label>
+                  <select
+                    id="movement-sort-field"
+                    value={filters.sortBy}
+                    onChange={(event) => setFilters(current => ({
+                      ...current,
+                      sortBy: event.target.value as FastSlowReportFilters['sortBy'],
+                    }))}
+                    className="h-[34px] w-full rounded-[3px] border border-[#ccc] bg-white px-3 text-[13px] shadow-inner outline-none focus:border-[#66afe9] focus:ring-1 focus:ring-[#66afe9]"
+                  >
+                    {sortOptions.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid items-center gap-4 md:grid-cols-[220px_1fr]">
+                  <label htmlFor="movement-sort-order" className="text-right text-[13px] font-semibold">
+                    Order<span className="text-[#d9534f]">*</span>
+                  </label>
+                  <select
+                    id="movement-sort-order"
+                    value={filters.sortDirection}
+                    onChange={(event) => setFilters(current => ({
+                      ...current,
+                      sortDirection: event.target.value as FastSlowReportFilters['sortDirection'],
+                    }))}
+                    className="h-[34px] w-full rounded-[3px] border border-[#ccc] bg-white px-3 text-[13px] shadow-inner outline-none focus:border-[#66afe9] focus:ring-1 focus:ring-[#66afe9]"
+                  >
+                    <option value="asc">Ascending</option>
+                    <option value="desc">Descending</option>
+                  </select>
+                </div>
+
+                <div className="grid gap-4 pt-1 md:grid-cols-[220px_1fr]">
+                  <span />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="submit"
+                      className="rounded-[3px] border border-[#285e8e] bg-[#428bca] px-3 py-[7px] text-[13px] font-semibold text-white hover:bg-[#3276b1]"
+                    >
+                      Generate Report
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCancel}
+                      className="rounded-[3px] border border-[#ccc] bg-white px-3 py-[7px] text-[13px] font-semibold text-[#333] hover:bg-[#ebebeb]"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </form>
+          )}
+
+          {isLoading && (
+            <div className="flex min-h-[260px] items-center justify-center">
+              <div className="flex flex-col items-center gap-3">
+                <CustomLoadingSpinner label="Loading" />
+                <div className="flex items-center gap-2 text-[13px] text-[#777]">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Generating report...
+                </div>
+              </div>
+            </div>
+          )}
+
+          {reportData && !isLoading && (
             <>
-              <button
-                onClick={handleExport}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg shadow-sm font-medium transition-colors"
-              >
-                <Download className="w-4 h-4" /> Export
-              </button>
-              <button
-                onClick={handlePrint}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg shadow-sm font-medium transition-colors"
-              >
-                <Printer className="w-4 h-4" /> Print
-              </button>
+              <div className="mb-4 flex items-center justify-between border-b border-[#eee] pb-4 print:hidden">
+                <button
+                  type="button"
+                  onClick={() => setReportData(null)}
+                  className="flex items-center gap-1 rounded-[3px] border border-[#398439] bg-[#5cb85c] px-[10px] py-[5px] text-[12px] font-semibold text-white hover:bg-[#47a447]"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  Back to Options
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="flex items-center gap-1 rounded-[3px] border border-[#ccc] bg-white px-[10px] py-[5px] text-[12px] font-semibold text-[#333] hover:bg-[#ebebeb]"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  Print Preview
+                </button>
+              </div>
+
+              <section id="print_area" className="overflow-x-auto">
+                <p className="mb-6 text-left text-[13px]">
+                  <strong>FAST MOVING/SLOW MOVING ITEMS SUMMARY</strong>
+                  <br />
+                  <strong>
+                    AS OF {new Date(reportData.generatedAt).toLocaleDateString('en-US', {
+                      month: 'long',
+                      day: '2-digit',
+                      year: 'numeric',
+                    }).toUpperCase()}
+                  </strong>
+                </p>
+
+                {renderTable(
+                  reportData.fastMovingItems,
+                  'FAST MOVING',
+                  'Fast moving item when sales increase every month with 3 consecutive months',
+                  1,
+                )}
+                {renderTable(
+                  reportData.slowMovingItems,
+                  'SLOW MOVING',
+                  'slow moving item when sales drop with 3 consecutive months or no sales at all',
+                  reportData.fastMovingItems.length + 1,
+                )}
+              </section>
             </>
           )}
-        </div>
+        </main>
       </div>
-
-      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 mb-6 print:hidden">
-        <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
-          <div className="flex items-center gap-2">
-            <ArrowUpDown className="w-4 h-4 text-slate-500" />
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Sort By:</label>
-            <select
-              value={filters.sortBy}
-              onChange={(e) => setFilters(f => ({ ...f, sortBy: e.target.value as 'sales_volume' | 'part_no' }))}
-              className="px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-            >
-              <option value="sales_volume">Sales Volume</option>
-              <option value="part_no">Part Number</option>
-            </select>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Direction:</label>
-            <select
-              value={filters.sortDirection}
-              onChange={(e) => setFilters(f => ({ ...f, sortDirection: e.target.value as 'asc' | 'desc' }))}
-              className="px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-            >
-              <option value="desc">Descending</option>
-              <option value="asc">Ascending</option>
-            </select>
-          </div>
-
-          <button
-            onClick={handleGenerateReport}
-            disabled={isLoading}
-            className="flex items-center gap-2 px-4 py-2 bg-brand-blue hover:bg-blue-700 disabled:bg-slate-400 text-white rounded-lg shadow-sm font-medium transition-colors"
-          >
-            {isLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Play className="w-4 h-4" />
-            )}
-            Generate Report
-          </button>
-        </div>
-      </div>
-
-      {isLoading && (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="flex flex-col items-center gap-4">
-            <CustomLoadingSpinner label="Loading" />
-            <p className="text-slate-500 dark:text-slate-400">Calculating inventory movement...</p>
-          </div>
-        </div>
-      )}
-
-      {!isLoading && !reportData && (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <Package className="w-16 h-16 text-slate-300 dark:text-slate-700 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-slate-600 dark:text-slate-400 mb-2">
-              No Report Generated
-            </h3>
-            <p className="text-sm text-slate-500 dark:text-slate-500 max-w-md">
-              Click "Generate Report" to analyze inventory movement over the last 3 months.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {!isLoading && reportData && (
-        <div className="flex-1 overflow-y-auto custom-scrollbar print:overflow-visible print:h-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 print:hidden">
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Fast Moving Items</p>
-                <h4 className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">{reportData.fastMovingItems.length}</h4>
-              </div>
-              <div className="p-3 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg text-emerald-600 dark:text-emerald-400">
-                <TrendingUp className="w-6 h-6" />
-              </div>
-            </div>
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Slow Moving Items</p>
-                <h4 className="text-3xl font-bold text-rose-600 dark:text-rose-400">{reportData.slowMovingItems.length}</h4>
-              </div>
-              <div className="p-3 bg-rose-50 dark:bg-rose-900/30 rounded-lg text-rose-600 dark:text-rose-400">
-                <TrendingDown className="w-6 h-6" />
-              </div>
-            </div>
-          </div>
-
-          <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 print:text-gray-600">
-            Report generated on: {new Date(reportData.generatedAt).toLocaleString()}
-          </p>
-
-          {renderTable(reportData.fastMovingItems, 'Fast Moving Items', true)}
-          {renderTable(reportData.slowMovingItems, 'Slow Moving Items', false)}
-
-          <div className="hidden print:block mt-8 text-center text-xs text-gray-500">
-            <p>End of Report -- TND-OPC System</p>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

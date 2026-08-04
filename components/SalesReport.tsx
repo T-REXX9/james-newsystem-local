@@ -8,7 +8,7 @@ interface SalesReportProps {
 
 const SalesReport: React.FC<SalesReportProps> = ({ currentUser }) => {
   return (
-    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950">
+    <div className="flex h-full flex-col bg-[#f4f4f4]">
       <SalesReportFilter currentUser={currentUser} />
     </div>
   );

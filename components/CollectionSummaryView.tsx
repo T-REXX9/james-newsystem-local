@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { CreditCard, FileText } from 'lucide-react';
 import {
   CollectionSummaryDateType,
@@ -19,6 +19,8 @@ const dateTypeOptions: Array<{ value: CollectionSummaryDateType; label: string }
 
 const formatDate = (value?: string): string => {
   if (!value) return '-';
+  const dateOnly = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnly) return `${Number(dateOnly[2])}/${Number(dateOnly[3])}/${dateOnly[1]}`;
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
   return d.toLocaleDateString('en-US');
@@ -71,94 +73,39 @@ const CollectionSummaryView: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    generate();
-  }, []);
-
   const handleBackToOption = () => {
     setReport(null);
   };
 
   return (
-    <div className="w-full flex flex-col bg-white dark:bg-slate-900 p-3 gap-4">
-      {/* Top controls card */}
-      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 border-t-4 border-t-brand-blue">
-        <div className="flex flex-col gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-brand-blue">Collection Report</p>
-            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Collection Summary</h2>
-          </div>
-
-          <div className="flex flex-col md:flex-row md:items-end gap-3 flex-wrap">
-            <div className="min-w-[220px]">
-              <label className="text-sm text-slate-700 dark:text-slate-300 mb-1 block">Date Type</label>
-              <select
-                className={`${SELECT_CLASS} w-full`}
-                value={dateType}
-                onChange={(e) => setDateType(e.target.value as CollectionSummaryDateType)}
-              >
-                {dateTypeOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
+    <div className="min-h-full overflow-y-auto bg-[#f4f4f4] p-5 text-[#333]">
+      <div className="mx-auto max-w-[1140px] space-y-5">
+      <section className="rounded border border-[#d5d5d5] bg-white shadow-sm">
+        <header className="border-b border-[#ddd] px-5 py-4"><h2 className="font-serif text-lg font-bold">Collection Report</h2></header>
+        <div className="p-6">
+          <p className="mb-8 text-sm">Field mark with (<span className="text-red-600">*</span>) is required. Press generate after you select the sorting options</p>
+          {error && <div className="mb-5 rounded border border-[#ebccd1] bg-[#f2dede] px-4 py-3 text-sm text-[#a94442]"><b>Oops!</b> {error}</div>}
+          <div className="mx-auto max-w-[720px] space-y-5">
+            <div className="grid grid-cols-[200px_1fr] items-center gap-4">
+              <label className="text-right text-sm font-semibold">Report Type <span className="text-red-600">*</span></label>
+              <select className="rounded border border-[#ccc] bg-white px-3 py-2 text-sm" value={dateType} onChange={e => setDateType(e.target.value as CollectionSummaryDateType)}>
+                {dateTypeOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
               </select>
             </div>
-
-            {dateType === 'custom' && (
-              <div className="flex gap-3 flex-wrap">
-                <div>
-                  <label className="text-sm text-slate-700 dark:text-slate-300 mb-1 block">Date From</label>
-                  <div className="relative">
-                    <FileText size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="date"
-                      className={`${INPUT_CLASS} pl-9`}
-                      value={dateFrom}
-                      onChange={(e) => setDateFrom(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-sm text-slate-700 dark:text-slate-300 mb-1 block">Date To</label>
-                  <div className="relative">
-                    <FileText size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="date"
-                      className={`${INPUT_CLASS} pl-9`}
-                      value={dateTo}
-                      onChange={(e) => setDateTo(e.target.value)}
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <button
-              className={`${BUTTON_PRIMARY} px-6 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed`}
-              onClick={generate}
-              disabled={loading}
-            >
-              Generate Report
-            </button>
-
-            {report && (
-              <div className="flex gap-2">
-                <button
-                  className={`${BUTTON_BASE} text-emerald-600 border-emerald-300 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-900/20`}
-                  onClick={handleBackToOption}
-                >
-                  Back to Option
-                </button>
-                <button className={BUTTON_BASE} onClick={() => window.print()}>
-                  Print Preview
-                </button>
-              </div>
-            )}
+            {dateType === 'custom' && <>
+              <div className="grid grid-cols-[200px_1fr] items-center gap-4"><label className="text-right text-sm font-semibold">Date From <span className="text-red-600">*</span></label><input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="rounded border border-[#ccc] px-3 py-2 text-sm" /></div>
+              <div className="grid grid-cols-[200px_1fr] items-center gap-4"><label className="text-right text-sm font-semibold">Date To <span className="text-red-600">*</span></label><input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="rounded border border-[#ccc] px-3 py-2 text-sm" /></div>
+            </>}
+            <div className="grid grid-cols-[200px_1fr] gap-4"><span/><div className="flex gap-2">
+              <button className="rounded border border-[#2e6da4] bg-[#337ab7] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" onClick={generate} disabled={loading}>{loading ? 'Generating...' : 'Generate Report'}</button>
+              <button className="rounded border border-[#ccc] bg-white px-4 py-2 text-sm" onClick={handleBackToOption}>Cancel</button>
+            </div></div>
           </div>
         </div>
-      </div>
+      </section>
 
       {/* Report content card */}
-      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+      {report && <div className="rounded border border-[#d5d5d5] bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4">
           {error && (
             <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
@@ -285,6 +232,7 @@ const CollectionSummaryView: React.FC = () => {
             </>
           )}
         </div>
+      </div>}
       </div>
     </div>
   );

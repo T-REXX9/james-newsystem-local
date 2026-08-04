@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ReceivingReportWithDetails } from '../../receiving.types';
 import { receivingService } from '../../services/receivingService';
-import { Plus, Search, Filter } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import CustomLoadingSpinner from '../CustomLoadingSpinner';
 import ReceivingList from './ReceivingList';
 import ReceivingForm from './ReceivingForm';
@@ -92,96 +92,24 @@ const ReceivingStock: React.FC<ReceivingStockProps> = ({ initialRRId, initialRRR
     }
 
     return (
-        <div className="h-full flex flex-col space-y-4 p-4">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Receiving Stock</h1>
-                    <p className="text-slate-500 dark:text-slate-400">Manage incoming inventory and receiving reports</p>
-                </div>
-                <button
-                    onClick={() => setViewMode('create')}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-lg shadow-blue-500/30 transition-all font-medium"
-                >
-                    <Plus className="w-4 h-4" />
-                    Create New RR
-                </button>
-            </div>
-
-            {/* Filters Bar */}
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
-                <div className="sm:col-span-4 relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Search className="h-4 w-4 text-slate-400" />
-                    </div>
-                    <input
-                        type="text"
-                        placeholder="Search RR # or Supplier..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                        className="pl-10 w-full px-4 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all dark:text-white"
-                    />
-                </div>
-
-                <div className="sm:col-span-2">
-                    <select
-                        value={month}
-                        onChange={(e) => setMonth(parseInt(e.target.value))}
-                        className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all dark:text-white"
-                    >
-                        {Array.from({ length: 12 }, (_, i) => (
-                            <option key={i + 1} value={i + 1}>
-                                {new Date(0, i).toLocaleString('default', { month: 'long' })}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-
-                <div className="sm:col-span-2">
-                    <select
-                        value={year}
-                        onChange={(e) => setYear(parseInt(e.target.value))}
-                        className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all dark:text-white"
-                    >
-                        {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(y => (
-                            <option key={y} value={y}>{y}</option>
-                        ))}
-                    </select>
-                </div>
-
-                <div className="sm:col-span-2">
-                    <select
-                        value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value)}
-                        className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all dark:text-white"
-                    >
-                        <option value="">All Status</option>
-                        <option value="Draft">Draft</option>
-                        <option value="Posted">Posted</option>
-                        <option value="Cancelled">Cancelled</option>
-                    </select>
-                </div>
-                <div className="sm:col-span-2">
-                    <button
-                        onClick={handleSearch}
-                        className="w-full px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg transition-colors font-medium flex items-center justify-center gap-2"
-                    >
-                        <Filter className="w-4 h-4" />
-                        Filter
+        <div className="min-h-full overflow-y-auto bg-[#f4f4f4] p-5 text-[#333]">
+            <section className="mx-auto max-w-[1380px] rounded border border-[#d5d5d5] bg-white shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#ddd] px-5 py-4">
+                    <button onClick={() => setViewMode('create')} className="flex items-center gap-1 rounded border border-[#4f9e43] bg-[#70b865] px-4 py-2 text-sm font-semibold text-white hover:bg-[#5daa52]">
+                        <Plus className="h-4 w-4" /> Create New
                     </button>
-                </div>
-            </div>
-
-            {/* List Content */}
-            <div className="flex-1 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col">
-                {loading ? (
-                    <div className="flex-1 flex items-center justify-center">
-                        <CustomLoadingSpinner label="Loading" />
+                    <div className="flex items-center gap-3 text-sm">
+                        <label htmlFor="rr-month" className="font-semibold">Filter by Month:</label>
+                        <select id="rr-month" value={month} onChange={e => setMonth(Number(e.target.value))} className="w-48 rounded border border-[#ccc] bg-white px-3 py-2">
+                            {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{new Date(0, i).toLocaleString('default', { month: 'long' })}</option>)}
+                        </select>
+                        <input aria-label="Filter year" type="number" value={year} onChange={e => setYear(Number(e.target.value))} className="w-24 rounded border border-[#ccc] px-3 py-2" />
                     </div>
-                ) : (
-                    <ReceivingList rrs={rrs} onView={handleViewRR} />
-                )}
-            </div>
+                </div>
+                <div className="max-h-[300px] overflow-auto px-5 py-4">
+                    {loading ? <div className="flex h-32 items-center justify-center"><CustomLoadingSpinner label="Loading" /></div> : <ReceivingList rrs={rrs} onView={handleViewRR} />}
+                </div>
+            </section>
         </div>
     );
 };

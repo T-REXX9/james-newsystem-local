@@ -248,12 +248,12 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
     };
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-                <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                    <h2 className="text-xl font-semibold text-gray-900 dark:text-white">New Return to Supplier</h2>
-                    <button onClick={onClose} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
-                        <X className="w-5 h-5" />
+        <section className="rounded border border-[#d5d5d5] bg-white shadow-sm">
+            <div className="flex max-h-none w-full flex-col overflow-visible">
+                <div className="flex items-center justify-between border-b border-[#ddd] px-5 py-4">
+                    <h2 className="font-serif text-xl font-bold uppercase">Return to Supplier</h2>
+                    <button onClick={onClose} className="rounded border border-[#ccc] bg-[#f5f5f5] px-3 py-2 text-sm">
+                        ← Back
                     </button>
                 </div>
 
@@ -389,15 +389,15 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
                                 </div>
 
                                 {/* Table */}
-                                <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                                <div className="overflow-hidden border border-[#ddd]">
                                     <table className="w-full text-sm">
-                                        <thead className="bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
+                                        <thead className="bg-white text-[#333]">
                                             <tr>
-                                                <th className="px-3 py-2 text-left">Item</th>
-                                                <th className="px-3 py-2 text-left">Reason</th>
-                                                <th className="px-3 py-2 text-right">Qty</th>
-                                                <th className="px-3 py-2 text-right">Cost</th>
-                                                <th className="px-3 py-2 text-right">Total</th>
+                                                <th className="px-3 py-2 text-left">Item Code / Part No.</th>
+                                                <th className="px-3 py-2 text-left">Remark</th>
+                                                <th className="px-3 py-2 text-right">Quantity</th>
+                                                <th className="px-3 py-2 text-right">Unit Price</th>
+                                                <th className="px-3 py-2 text-right">Amount</th>
                                                 <th className="px-3 py-2"></th>
                                             </tr>
                                         </thead>
@@ -474,7 +474,7 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
                     )}
                 </div>
 
-                <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-between">
+                <div className="flex justify-between border-t border-[#ddd] px-6 py-4">
                     {step === 2 && (
                         <button onClick={() => setStep(1)} className="px-4 py-2 text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg">
                             Back
@@ -488,7 +488,7 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
                             <button
                                 onClick={handleSubmit}
                                 disabled={loading || formData.items.length === 0}
-                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="rounded border border-[#4f9e43] bg-[#70b865] px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 {loading ? 'Creating...' : 'Create Return'}
                             </button>
@@ -496,7 +496,7 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
                     </div>
                 </div>
             </div>
-        </div>
+        </section>
     );
 };
 

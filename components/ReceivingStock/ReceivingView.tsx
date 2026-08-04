@@ -74,7 +74,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
     }
 
     return (
-        <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-900/50">
+        <div className="min-h-full overflow-y-auto bg-[#f4f4f4] p-5 text-[#333]">
             {/* Header */}
             <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 flex justify-between items-center sticky top-0 z-10">
                 <div className="flex items-center gap-4">

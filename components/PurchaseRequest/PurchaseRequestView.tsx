@@ -125,18 +125,18 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
     };
 
     return (
-        <div className="bg-slate-100 dark:bg-slate-950 p-4 h-full overflow-y-auto">
-            <div className="space-y-6">
+        <div className="min-h-full overflow-y-auto bg-[#f4f4f4] p-5 text-[#333]">
+            <div className="mx-auto max-w-[1380px] space-y-5">
                 {/* Header Card */}
-                <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-6">
+                <div className="rounded border border-[#d5d5d5] bg-white p-5 shadow-sm">
                     <div className="flex flex-col gap-5 border-b border-slate-100 pb-4 lg:flex-row lg:items-start lg:justify-between">
                         <div className="space-y-3">
                             <button onClick={onBack} className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition-colors hover:text-slate-700">
                                 <ArrowLeft size={16} />
                                 Back to List
                             </button>
-                            <h1 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
-                                {request.pr_number}
+                            <h1 className="flex items-center gap-3 font-serif text-xl font-bold uppercase">
+                                Purchase Request <span className="font-sans text-base">PR No. {request.pr_number}</span>
                                 <span className={`px-2 py-0.5 text-sm rounded border ${request.status === 'Approved' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-gray-100 text-gray-600'}`}>
                                     {request.status}
                                 </span>
@@ -187,9 +187,9 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                 </div>
 
                 {/* Items Card */}
-                <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
-                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
-                        <h3 className="font-bold text-slate-800 dark:text-white">Items</h3>
+                <div className="overflow-hidden rounded border border-[#d5d5d5] bg-white shadow-sm">
+                    <div className="flex items-center justify-between border-b border-[#ddd] bg-white p-4">
+                        <h3 className="font-serif text-lg font-bold uppercase">Purchase Request Items</h3>
                         {request.status === 'Pending' && (
                             <button onClick={() => setShowAddItem(true)} className="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 flex items-center gap-1"><Plus size={14} /> Add Item</button>
                         )}

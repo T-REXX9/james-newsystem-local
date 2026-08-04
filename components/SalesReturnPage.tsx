@@ -9,8 +9,8 @@ import {
 } from '../services/salesReturnLocalApiService';
 import { Contact, Invoice, OrderSlip } from '../types';
 import { fetchContacts } from '../services/customerDatabaseLocalApiService';
-import { getAllInvoices } from '../services/invoiceLocalApiService';
-import { getAllOrderSlips } from '../services/orderSlipLocalApiService';
+import { getAllInvoices, getInvoicesPage } from '../services/invoiceLocalApiService';
+import { getAllOrderSlips, getOrderSlipsPage } from '../services/orderSlipLocalApiService';
 import { fetchProducts } from '../services/productLocalApiService';
 import CustomerAutocomplete from './CustomerAutocomplete';
 import { useDebounce } from '../hooks/useDebounce';
@@ -25,6 +25,27 @@ interface SourceDocument {
   sales_date: string;
   grand_total: number;
 }
+
+const toSourceDocuments = (invoices: Invoice[], orderSlips: OrderSlip[]): SourceDocument[] => [
+  ...invoices.map((inv): SourceDocument => ({
+    id: inv.id,
+    doc_no: inv.invoice_no,
+    type: 'Invoice',
+    contact_id: inv.contact_id,
+    sales_person: inv.sales_person,
+    sales_date: inv.sales_date,
+    grand_total: inv.grand_total,
+  })),
+  ...orderSlips.map((os): SourceDocument => ({
+    id: os.id,
+    doc_no: os.slip_no,
+    type: 'OR',
+    contact_id: os.contact_id,
+    sales_person: os.sales_person,
+    sales_date: os.sales_date,
+    grand_total: os.grand_total,
+  })),
+];
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
@@ -200,10 +221,11 @@ const SourceDocAutocomplete: React.FC<{
   customers: Contact[];
   selectedDoc: SourceDocument | null;
   onSelect: (doc: SourceDocument) => void;
+  onSearch: (query: string) => Promise<SourceDocument[]>;
   disabled?: boolean;
   placeholder?: string;
   inputClassName?: string;
-}> = ({ documents, customers, selectedDoc, onSelect, disabled = false, placeholder = 'Search invoice or OR number...', inputClassName = '' }) => {
+}> = ({ documents, customers, selectedDoc, onSelect, onSearch, disabled = false, placeholder = 'Search invoice or OR number...', inputClassName = '' }) => {
   const customerMap = useMemo(() => new Map(customers.map((c) => [c.id, c])), [customers]);
   const [query, setQuery] = useState(selectedDoc?.doc_no || '');
   const [showDropdown, setShowDropdown] = useState(false);
@@ -212,10 +234,39 @@ const SourceDocAutocomplete: React.FC<{
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const debouncedQuery = useDebounce(query, 250);
+  const [remoteResults, setRemoteResults] = useState<SourceDocument[] | null>(null);
+  const [remoteSearching, setRemoteSearching] = useState(false);
+  const searchRequestRef = useRef(0);
 
   useEffect(() => {
     setQuery(selectedDoc?.doc_no || '');
   }, [selectedDoc]);
+
+  useEffect(() => {
+    const trimmedQuery = debouncedQuery.trim();
+    if (!trimmedQuery || selectedDoc?.doc_no === trimmedQuery) {
+      setRemoteResults(null);
+      setRemoteSearching(false);
+      return undefined;
+    }
+
+    const requestId = ++searchRequestRef.current;
+    setRemoteSearching(true);
+    onSearch(trimmedQuery)
+      .then((matches) => {
+        if (searchRequestRef.current === requestId) setRemoteResults(matches);
+      })
+      .catch(() => {
+        if (searchRequestRef.current === requestId) setRemoteResults([]);
+      })
+      .finally(() => {
+        if (searchRequestRef.current === requestId) setRemoteSearching(false);
+      });
+
+    return () => {
+      if (searchRequestRef.current === requestId) searchRequestRef.current += 1;
+    };
+  }, [debouncedQuery, onSearch, selectedDoc?.doc_no]);
 
   const updatePosition = useCallback(() => {
     if (inputRef.current && showDropdown) {
@@ -256,15 +307,17 @@ const SourceDocAutocomplete: React.FC<{
 
   const results = useMemo(() => {
     const q = debouncedQuery.trim().toLowerCase();
-    const sorted = [...documents].sort((a, b) => b.sales_date.localeCompare(a.sales_date));
+    const source = q && remoteResults !== null ? remoteResults : documents;
+    const sorted = [...source].sort((a, b) => b.sales_date.localeCompare(a.sales_date));
     if (!q) return sorted.slice(0, 50);
+    if (remoteResults !== null) return sorted;
     return sorted.filter((doc) => {
       const no = doc.doc_no?.toLowerCase() || '';
       const id = doc.id?.toLowerCase() || '';
       const custName = customerMap.get(doc.contact_id)?.company?.toLowerCase() || '';
       return no.includes(q) || id.includes(q) || custName.includes(q);
     });
-  }, [debouncedQuery, documents, customerMap]);
+  }, [debouncedQuery, documents, remoteResults, customerMap]);
 
   useEffect(() => {
     setSelectedIndex(results.length > 0 ? 0 : -1);
@@ -300,7 +353,7 @@ const SourceDocAutocomplete: React.FC<{
     }
   };
 
-  const isSearching = query !== debouncedQuery;
+  const isSearching = query !== debouncedQuery || remoteSearching;
 
   return (
     <div className="relative" ref={wrapperRef}>
@@ -432,6 +485,16 @@ const CreateModal: React.FC<{
   const [selectedDoc, setSelectedDoc] = useState<SourceDocument | null>(null);
   const [pendingContactId, setPendingContactId] = useState<string | null>(null);
 
+  const searchSourceDocs = useCallback(async (query: string): Promise<SourceDocument[]> => {
+    const [invoiceResult, orderSlipResult] = await Promise.all([
+      getInvoicesPage({ status: 'all', search: query, page: 1, perPage: 50 })
+        .catch(() => ({ items: [] as Invoice[], meta: { page: 1, per_page: 50, total: 0, total_pages: 0 } })),
+      getOrderSlipsPage({ status: 'all', search: query, page: 1, perPage: 50 })
+        .catch(() => ({ items: [] as OrderSlip[], meta: { page: 1, per_page: 50, total: 0, total_pages: 0 } })),
+    ]);
+    return toSourceDocuments(invoiceResult.items, orderSlipResult.items);
+  }, []);
+
   useEffect(() => {
     if (open) {
       setReferenceMode('with');
@@ -453,27 +516,7 @@ const CreateModal: React.FC<{
         getAllInvoices().catch(() => [] as Invoice[]),
         getAllOrderSlips().catch(() => [] as OrderSlip[]),
       ]).then(([invoices, orderSlips]) => {
-        const docs: SourceDocument[] = [
-          ...invoices.map((inv): SourceDocument => ({
-            id: inv.id,
-            doc_no: inv.invoice_no,
-            type: 'Invoice',
-            contact_id: inv.contact_id,
-            sales_person: inv.sales_person,
-            sales_date: inv.sales_date,
-            grand_total: inv.grand_total,
-          })),
-          ...orderSlips.map((os): SourceDocument => ({
-            id: os.id,
-            doc_no: os.slip_no,
-            type: 'OR',
-            contact_id: os.contact_id,
-            sales_person: os.sales_person,
-            sales_date: os.sales_date,
-            grand_total: os.grand_total,
-          })),
-        ];
-        setSourceDocs(docs);
+        setSourceDocs(toSourceDocuments(invoices, orderSlips));
       });
     }
   }, [open]);
@@ -564,6 +607,7 @@ const CreateModal: React.FC<{
               customers={customers}
               selectedDoc={selectedDoc}
               onSelect={handleDocSelect}
+              onSearch={searchSourceDocs}
               placeholder="Search invoice or OR number..."
               inputClassName="border-slate-300 dark:border-slate-600"
             />
