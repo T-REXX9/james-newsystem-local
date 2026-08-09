@@ -10,6 +10,7 @@ export type LedgerCustomer = {
   sessionId: string;
   customerCode: string;
   company: string;
+  oldName: string;
 };
 
 export type CustomerLedgerMetrics = {
@@ -21,6 +22,17 @@ export type CustomerLedgerMetrics = {
   credit_limit: number;
   terms: string;
   balance: number;
+  old_name: string | null;
+  price_code: string | null;
+  vip_status: string | null;
+  aging: {
+    current: number;
+    days_31_60: number;
+    days_61_90: number;
+    days_91_120: number;
+    days_121_150: number;
+    over_150: number;
+  };
 };
 
 export type CustomerLedgerDetailedRow = {
@@ -106,6 +118,7 @@ const mapCustomer = (row: any): LedgerCustomer => ({
   sessionId: String(row?.session_id || row?.lsessionid || ''),
   customerCode: String(row?.customer_code || row?.lpatient_code || ''),
   company: String(row?.company || row?.lcompany || ''),
+  oldName: String(row?.old_name || row?.loldname || ''),
 });
 
 export const customerLedgerService = {
@@ -171,6 +184,17 @@ export const customerLedgerService = {
         credit_limit: toNumber(data?.metrics?.credit_limit),
         terms: String(data?.metrics?.terms || ''),
         balance: toNumber(data?.metrics?.balance),
+        old_name: data?.metrics?.old_name || null,
+        price_code: data?.metrics?.price_code || null,
+        vip_status: data?.metrics?.vip_status || null,
+        aging: {
+          current: toNumber(data?.metrics?.aging?.current),
+          days_31_60: toNumber(data?.metrics?.aging?.days_31_60),
+          days_61_90: toNumber(data?.metrics?.aging?.days_61_90),
+          days_91_120: toNumber(data?.metrics?.aging?.days_91_120),
+          days_121_150: toNumber(data?.metrics?.aging?.days_121_150),
+          over_150: toNumber(data?.metrics?.aging?.over_150),
+        },
       },
       rows: rows.map((row: any) => ({
         id: toNumber(row?.id),
@@ -205,5 +229,58 @@ export const customerLedgerService = {
         row_count: toNumber(data?.totals?.row_count),
       },
     };
+  },
+
+  /** Export ledger as CSV (Excel-compatible) and trigger download. */
+  exportLedgerCsv(response: CustomerLedgerResponse): void {
+    const rows = response.rows;
+    const header = [
+      'Date', 'Ref', 'Chk No.', 'Chk Date', 'DCR',
+      'Debit', 'Credit', 'PDC', 'Balance', 'Remarks', 'Promise to Pay',
+    ];
+    const csvRows = [header.join(',')];
+
+    const fmt = (v: number) => v.toFixed(2);
+    const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
+
+    for (const r of rows) {
+      csvRows.push(
+        [
+          esc(r.date || ''),
+          esc(r.reference || ''),
+          esc(r.check_no || ''),
+          esc(r.check_date || ''),
+          esc(r.dcr || ''),
+          fmt(r.debit),
+          fmt(r.credit),
+          fmt(r.pdc),
+          fmt(r.balance),
+          esc(r.remarks || ''),
+          esc(r.promise_to_pay || ''),
+        ].join(','),
+      );
+    }
+
+    // Totals row
+    csvRows.push(
+      [
+        esc('TOTAL'), '', '', '', '',
+        fmt(response.totals.debit),
+        fmt(response.totals.credit),
+        fmt(response.totals.pdc),
+        fmt(response.totals.balance),
+        '', '',
+      ].join(','),
+    );
+
+    const bom = '\uFEFF';
+    const blob = new Blob([bom + csvRows.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const company = response.customer?.company || 'customer';
+    a.download = `Customer_Ledger_${company.replace(/\s+/g, '_')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   },
 };

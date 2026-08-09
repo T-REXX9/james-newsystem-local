@@ -24,8 +24,16 @@ Updated: 4 August 2026 (Asia/Manila)
     - Verification: API regression 7/7 passed; focused frontend tests 3/3 passed; production build passed.
     - Full-suite baseline: 270 tests passed, 15 failed, and 1 skipped. The failures are pre-existing and outside ACC-01; no Sales Return test failed.
 
-- [ ] **ACC-02 — Customer ledger old layout with improved left search (P1)**
-  - Completion report: Pending.
+- [x] **ACC-02 — Customer ledger old layout with improved left search (P1)**
+  - Status: Complete.
+  - Completion report:
+    - Restored James's supplied Customer Ledger structure: permanent left customer search, Accounting Copy heading, old customer name, seven customer metric cards, legacy transaction columns and totals, aging balances, Export Excel, Print, and Back controls.
+    - Customer search now includes historical names and keeps the selected customer/report stable when later searches exclude the customer or fail.
+    - Corrected calendar Week/Month/Year ranges and carried the opening balance into filtered detailed and summary reports.
+    - Replaced invoice-based aging with ledger-based FIFO credit allocation so aging totals reconcile with the effective ledger balance, including PDC and credit-balance handling.
+    - Removed the SQLite-backed Customer Ledger test approach. Ledger calculations now live in a database-free calculator with unit tests, while production repositories retain MySQL-native queries.
+    - Verification (unit tests only): focused frontend tests 35/35 passed; backend ledger-rule tests 8/8 passed; changed PHP files passed syntax checks; production build passed.
+    - Full frontend baseline: 325 passed, 9 failed, 1 skipped. All nine failures are outside ACC-02 (six require an unavailable local API and three are existing Product/Special Price contract mismatches); no Customer Ledger test failed.
 
 - [ ] **ACC-03 — Purchase History matches supplied reference (P2)**
   - Completion report: Pending; exact field list still requires confirmation.
