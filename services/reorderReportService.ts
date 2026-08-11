@@ -109,7 +109,7 @@ const normalizeEntry = (raw: any): ReorderReportEntry => ({
 const CLOSED_WORKFLOW_STATUSES = new Set([
   'cancelled', 'canceled', 'rejected', 'disapproved', 'completed', 'closed',
 ]);
-const COMPLETED_RECEIVING_STATUSES = new Set(['posted', 'received', 'completed']);
+const COMPLETED_RECEIVING_STATUSES = new Set(['posted', 'received', 'delivered', 'completed']);
 
 export const isReorderWorkflowActive = (row: ReorderReportEntry): boolean => {
   if (row.rr_refno) {

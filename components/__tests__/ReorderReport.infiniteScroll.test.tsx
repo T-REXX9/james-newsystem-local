@@ -118,6 +118,47 @@ describe('ReorderReport automatic loading', () => {
     expect(screen.getByText('All 2 entries loaded')).toBeInTheDocument();
   });
 
+  it('keeps Add to PR accessible above the list while more items load', async () => {
+    let resolveSecondPage: ((value: any) => void) | undefined;
+    fetchEntriesMock.mockImplementation(({ page }: { page: number }) => {
+      if (page === 1) {
+        return Promise.resolve({
+          items: [reportRow('1', 'ITEM-1')],
+          meta: { page: 1, per_page: 25, total: 2, total_pages: 2 },
+        });
+      }
+      return new Promise((resolve) => {
+        resolveSecondPage = resolve;
+      });
+    });
+
+    render(<ReorderReport />);
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Report' }));
+    await waitFor(() => expect(screen.getAllByText('ITEM-1').length).toBeGreaterThan(0));
+
+    const actions = screen.getByTestId('reorder-selection-actions');
+    const sentinel = screen.getByTestId('reorder-load-more-sentinel');
+    expect(actions.compareDocumentPosition(sentinel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select ITEM-1' }));
+    expect(screen.getByRole('button', { name: 'Add to PR' })).toBeEnabled();
+
+    await act(async () => {
+      intersectionCallback?.([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver);
+    });
+    await screen.findByText('Loading more items...');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add to PR' }));
+    await screen.findByText('1 item(s) will be added with quantity `1` each (old-system behavior).');
+
+    await act(async () => {
+      resolveSecondPage?.({
+        items: [reportRow('2', 'ITEM-2')],
+        meta: { page: 2, per_page: 25, total: 2, total_pages: 2 },
+      });
+    });
+  });
+
   it('creates one PR from multiple eligible items and blocks an item already in workflow', async () => {
     fetchEntriesMock.mockResolvedValue({
       items: [

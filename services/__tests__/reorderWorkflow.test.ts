@@ -21,13 +21,16 @@ describe('reorder purchasing workflow stages', () => {
     expect(isReorderWorkflowActive(row({ rr_refno: 'RR-1', rr_status: 'Pending' }))).toBe(true);
   });
 
-  it('releases the item after Receiving is posted', () => {
-    expect(isReorderWorkflowActive(row({
-      pr_refno: 'PR-1', pr_status: 'Approved',
-      po_refno: 'PO-1', po_status: 'Posted',
-      rr_refno: 'RR-1', rr_status: 'Posted',
-    }))).toBe(false);
-  });
+  it.each(['Posted', 'Received', 'Delivered', 'Completed'])(
+    'releases the item after Receiving is %s',
+    (receivingStatus) => {
+      expect(isReorderWorkflowActive(row({
+        pr_refno: 'PR-1', pr_status: 'Approved',
+        po_refno: 'PO-1', po_status: 'Posted',
+        rr_refno: 'RR-1', rr_status: receivingStatus,
+      }))).toBe(false);
+    },
+  );
 
   it('shows all three stage statuses', () => {
     expect(getReorderWorkflowStages(row({

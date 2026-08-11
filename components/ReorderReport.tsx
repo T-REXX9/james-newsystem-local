@@ -719,6 +719,34 @@ const ReorderReport: React.FC = () => {
             </div>
           </aside>
           <div className="min-w-0">
+          <div
+            data-testid="reorder-selection-actions"
+            className="sticky top-3 z-10 mb-4 flex flex-wrap items-center justify-between gap-3 rounded border border-[#d9d9d9] bg-white/95 p-3 shadow-sm backdrop-blur"
+          >
+            <span className="text-sm font-semibold text-[#555]">
+              {selectedVisibleCount} item(s) selected
+            </span>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmAction('hide')}
+                disabled={selectedVisibleCount === 0 || processing}
+                className="inline-flex items-center gap-2 rounded bg-rose-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <EyeOff className="h-4 w-4" />}
+                Mark as Hidden
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAddPrModal(true)}
+                disabled={selectedVisibleCount === 0 || processing}
+                className="inline-flex items-center gap-2 rounded bg-rose-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                <ShoppingCart className="h-4 w-4" />
+                Add to PR
+              </button>
+            </div>
+          </div>
           {rows.length === 0 ? (
             <div className="py-20 text-center">
               <h3 className="text-lg font-semibold text-slate-500 dark:text-slate-400">Empty!</h3>
@@ -757,6 +785,7 @@ const ReorderReport: React.FC = () => {
                       <td className={tableCellClass}>
                         <input
                           type="checkbox"
+                          aria-label={`Select ${row.item_code}`}
                           checked={selectedIds.has(row.id)}
                           disabled={isReorderWorkflowActive(row)}
                           title={isReorderWorkflowActive(row) ? 'This item already has an active purchasing workflow' : 'Select item'}
@@ -802,28 +831,7 @@ const ReorderReport: React.FC = () => {
               )}
             </div>
           ) : null}
-          <div ref={loadMoreSentinelRef} className="h-px w-full" aria-hidden="true" />
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setConfirmAction('hide')}
-              disabled={selectedVisibleCount === 0 || processing}
-              className="inline-flex items-center gap-2 rounded bg-rose-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-            >
-              {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <EyeOff className="h-4 w-4" />}
-              Mark as Hidden
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowAddPrModal(true)}
-              disabled={selectedVisibleCount === 0 || processing}
-              className="inline-flex items-center gap-2 rounded bg-rose-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-            >
-              <ShoppingCart className="h-4 w-4" />
-              Add to PR
-            </button>
-          </div>
+          <div ref={loadMoreSentinelRef} data-testid="reorder-load-more-sentinel" className="h-px w-full" aria-hidden="true" />
           </div>
           </div>
         </div>

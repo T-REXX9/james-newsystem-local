@@ -114,6 +114,8 @@ Updated: 4 August 2026 (Asia/Manila)
     - Disabled selection for items already in an active purchasing workflow; select-all now selects eligible items only.
     - Added a server-side workflow guard that rejects duplicate PR creation/addition for items in active PR or PO activity and releases the item after Receiving is posted.
     - Cleared Reorder Report cache after PR creation/item addition, PR-to-PO conversion, and Receiving creation so stage numbers refresh immediately.
+    - Corrected completed Receiving recognition so Delivered records release their item checkboxes instead of being treated as active workflows.
+    - Kept the selected-item actions above the dynamically loaded list so Add to PR remains reachable and usable while additional report rows load.
     - Verification (unit tests only): frontend workflow/component tests 5/5 passed; backend workflow-guard tests 3/3 passed; changed PHP files passed syntax checks; production build passed.
 
 - [ ] **PUR-03 — Newest Item Suggested for Stock template creates PR (P1)**
