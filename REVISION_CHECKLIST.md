@@ -137,6 +137,7 @@ Updated: 4 August 2026 (Asia/Manila)
   - Internal-chat realtime is opt-in unless its companion server is configured, and reconnect attempts are capped.
   - Reorder Report's Receiving status is included in its grouped SQL query, removing the reported server error.
   - Added an inline favicon so the application no longer requests a missing file.
+  - Owner homepage monitoring now retries temporary read failures once and keeps snapshot data available when the separate master-list request fails.
   - Verification (unit tests only): frontend 282/282 passed with 1 intentional skip; backend 13/13 passed.
 - [ ] Production build passes.
 - [x] All focused unit suites pass.

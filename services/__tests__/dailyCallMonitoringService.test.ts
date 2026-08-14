@@ -9,6 +9,7 @@ import {
   fetchContactCustomerLogsForDailyCall,
   fetchCustomersForDailyCall,
   fetchDailyCallMasterList,
+  fetchOwnerSnapshotForDailyCall,
   subscribeToDailyCallMonitoringUpdates,
 } from '../dailyCallMonitoringService';
 
@@ -93,6 +94,20 @@ describe('dailyCallMonitoringService', () => {
     expect(requestUrl).toContain('main_id=1');
     expect(requestUrl).toContain('from_date=2025-10-01');
     expect(requestUrl).toContain('search=priority');
+  });
+
+  it('retries the owner snapshot once after a temporary network failure', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockRejectedValueOnce(new TypeError('NetworkError when attempting to fetch resource.'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { contacts: [{ id: '1' }] } }),
+      } as Response);
+
+    const result = await fetchOwnerSnapshotForDailyCall(1);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(result.contacts).toEqual([{ id: '1' }]);
   });
 
   it('fetchAgentSnapshotForDailyCall maps aggregate payload into frontend shapes', async () => {

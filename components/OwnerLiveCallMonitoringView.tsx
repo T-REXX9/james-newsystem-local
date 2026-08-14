@@ -23,7 +23,10 @@ import {
 } from '@tanstack/react-table';
 import { UserProfile } from '../types';
 import type { DailyCallMasterCustomerRow } from '../types';
-import { fetchDailyCallMasterList } from '../services/dailyCallMonitoringService';
+import {
+  fetchDailyCallMasterList,
+  fetchOwnerSnapshotForDailyCall,
+} from '../services/dailyCallMonitoringService';
 
 interface OwnerLiveCallMonitoringViewProps {
   currentUser: UserProfile | null;
@@ -132,7 +135,6 @@ const toCurrency = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
-const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
 
 interface ContactSnapshotRow {
@@ -333,17 +335,14 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
     setSnapshotError(null);
 
     try {
-      const params = new URLSearchParams({
-        main_id: String((currentUser as any)?.main_id || (currentUser as any)?.main_userid || API_MAIN_ID),
-      });
-      const [response, masterListResult] = await Promise.all([
-        fetch(`${API_BASE_URL}/daily-call-monitoring/owner-snapshot?${params.toString()}`),
-        fetchDailyCallMasterList({ fromDate: '2025-10-01' }),
+      const mainId = Number((currentUser as any)?.main_id || (currentUser as any)?.main_userid || API_MAIN_ID);
+      const [snapshot, masterListResult] = await Promise.all([
+        fetchOwnerSnapshotForDailyCall(mainId),
+        fetchDailyCallMasterList({ fromDate: '2025-10-01' }).catch((error) => {
+          console.warn('Unable to load owner daily-call master list; continuing with snapshot data.', error);
+          return { items: [], meta: { fromDate: '2025-10-01', toDate: '', count: 0 } };
+        }),
       ]);
-      if (!response.ok) throw new Error(`API request failed (${response.status})`);
-
-      const payload = await response.json();
-      const snapshot = payload?.data || {};
 
       const contacts = ((snapshot.contacts as ContactSnapshotRow[]) || []).filter((row) => !row.is_deleted);
       const callLogs = (snapshot.callLogs as CallLogSnapshotRow[]) || [];

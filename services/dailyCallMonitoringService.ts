@@ -91,6 +91,7 @@ export interface WeeklyRangeBucket {
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
 const MASTER_LIST_CACHE_TTL_MS = 2 * 60 * 1000;
+const NETWORK_RETRY_DELAY_MS = 250;
 
 type MasterListCacheEntry = {
   expiresAt: number;
@@ -132,22 +133,46 @@ export const invalidateDailyCallMasterListCache = () => {
   masterListRequests.clear();
 };
 
+const isRetryableNetworkError = (error: unknown): boolean => {
+  if (error instanceof TypeError) return true;
+  const message = String((error as any)?.message || error || '').toLowerCase();
+  return message.includes('networkerror') || message.includes('failed to fetch') || message.includes('load failed');
+};
+
 const requestJson = async (url: string, init?: RequestInit): Promise<any> => {
-  const session = getLocalAuthSession();
-  const headers = new Headers(init?.headers);
-  if (session?.token) headers.set('Authorization', `Bearer ${session.token}`);
-  const response = await fetch(url, { ...init, headers });
-  if (!response.ok) {
-    let message = `API request failed (${response.status})`;
+  const method = String(init?.method || 'GET').toUpperCase();
+  const maxAttempts = method === 'GET' ? 2 : 1;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      const payload = await response.json();
-      message = String(payload?.error || payload?.message || message);
-    } catch {
-      // Keep the status-based fallback.
+      const session = getLocalAuthSession();
+      const headers = new Headers(init?.headers);
+      if (session?.token) headers.set('Authorization', `Bearer ${session.token}`);
+      const response = await fetch(url, { ...init, headers });
+      if (!response.ok) {
+        let message = `API request failed (${response.status})`;
+        try {
+          const payload = await response.json();
+          message = String(payload?.error || payload?.message || message);
+        } catch {
+          // Keep the status-based fallback.
+        }
+        throw new Error(message);
+      }
+      return response.json();
+    } catch (error) {
+      if (attempt >= maxAttempts || !isRetryableNetworkError(error)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, NETWORK_RETRY_DELAY_MS));
     }
-    throw new Error(message);
   }
-  return response.json();
+
+  throw new Error('API request failed');
+};
+
+export const fetchOwnerSnapshotForDailyCall = async (mainId = resolveMainId()): Promise<any> => {
+  const params = new URLSearchParams({ main_id: String(mainId) });
+  const payload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/owner-snapshot?${params.toString()}`);
+  return payload?.data || {};
 };
 
 export interface DailyCallClaim {
