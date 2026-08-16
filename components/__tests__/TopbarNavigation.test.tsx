@@ -33,7 +33,7 @@ describe('TopbarNavigation responsive layout', () => {
     await user.click(toggle);
     const compactMenu = document.querySelector('[data-responsive-nav="compact"]');
     expect(compactMenu).toHaveClass('xl:hidden');
-    expect(within(compactMenu as HTMLElement).getByRole('button', { name: 'HOME' })).toBeVisible();
+    expect(within(compactMenu as HTMLElement).getByRole('button', { name: 'DASHBOARDS' })).toBeVisible();
     expect(within(compactMenu as HTMLElement).queryByText('Transfer Stock')).not.toBeInTheDocument();
   });
 });

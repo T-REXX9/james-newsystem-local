@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { ReceivingReportInsert, ReceivingReportItemInsert, Supplier } from '../../receiving.types';
-import { receivingService } from '../../services/receivingService';
+import { EligiblePurchaseOrder, receivingService } from '../../services/receivingService';
 import { useToast } from '../ToastProvider';
 import { ArrowLeft, Save, Plus, Trash2, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
 import CustomLoadingSpinner from '../CustomLoadingSpinner';
-import ProductAutocomplete from '../ProductAutocomplete';
 import SearchableSelect from '../SearchableSelect';
 import { Product } from '../../types'; // Import from main types for compatibility with ProductAutocomplete
 import ValidationSummary from '../ValidationSummary';
@@ -19,6 +18,9 @@ interface ReceivingFormProps {
 interface LineItem extends Omit<ReceivingReportItemInsert, 'rr_id'> {
     tempId: string;
     product?: Product | null;
+    po_item_id: number;
+    qty_ordered: number;
+    qty_already_received: number;
 }
 
 const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => {
@@ -32,11 +34,13 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
     const [supplierId, setSupplierId] = useState('');
     const [supplierName, setSupplierName] = useState('');
     const [poNo, setPoNo] = useState('');
+    const [poRefno, setPoRefno] = useState('');
     const [remarks, setRemarks] = useState('');
     const warehouseId = 'CENTRALIZED';
 
     // Data Sources
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+    const [eligiblePurchaseOrders, setEligiblePurchaseOrders] = useState<EligiblePurchaseOrder[]>([]);
 
     // Line Items
     const [items, setItems] = useState<LineItem[]>([]);
@@ -47,8 +51,12 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
         const init = async () => {
             try {
                 // Fetch Suppliers
-                const suppliersData = await receivingService.getSuppliers();
+                const [suppliersData, purchaseOrders] = await Promise.all([
+                    receivingService.getSuppliers(),
+                    receivingService.getEligiblePurchaseOrders(),
+                ]);
                 setSuppliers(suppliersData);
+                setEligiblePurchaseOrders(purchaseOrders);
             } catch (error) {
                 console.error("Error initializing form:", error);
                 addToast({ type: 'error', message: 'Failed to initialize form' });
@@ -59,21 +67,40 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
         init();
     }, []);
 
-    const handleAddItem = (product: Product) => {
-        const newItem: LineItem = {
-            tempId: Math.random().toString(36).substr(2, 9),
-            item_id: product.id,
-            item_code: product.item_code || '',
-            part_no: product.part_no || '',
-            description: product.description || '',
-            qty_received: 1,
-            unit_cost: product.cost || 0,
-            total_amount: (product.cost || 0) * 1,
-            qty_ordered: 0,
-            qty_returned: 0,
-            product: product
-        };
-        setItems([...items, newItem]);
+    const handlePurchaseOrderChange = async (id: string) => {
+        setPoRefno(id);
+        const selected = eligiblePurchaseOrders.find((po) => po.id === id);
+        setPoNo(selected?.poNumber || '');
+        setSupplierId(selected?.supplierId || '');
+        setSupplierName(selected?.supplierName || '');
+        setItems([]);
+        if (!id) return;
+        try {
+            const details = await receivingService.getEligiblePurchaseOrderDetails(id);
+            setItems((details.items || []).flatMap((line: any) => {
+                const ordered = Number(line.qty || 0);
+                const received = Number(line.quantity_received || 0);
+                const remaining = Math.max(0, ordered - received);
+                if (remaining <= 0) return [];
+                return [{
+                    tempId: `po-${line.id}`,
+                    po_item_id: Number(line.id),
+                    item_id: line.item_id,
+                    item_code: line.product?.item_code || '',
+                    part_no: line.product?.part_no || '',
+                    description: line.product?.description || '',
+                    qty_received: remaining,
+                    unit_cost: Number(line.unit_price || 0),
+                    total_amount: remaining * Number(line.unit_price || 0),
+                    qty_ordered: ordered,
+                    qty_already_received: received,
+                    qty_returned: 0,
+                    product: line.product,
+                } as LineItem];
+            }));
+        } catch (error: any) {
+            addToast({ type: 'error', title: 'Unable to load purchase order', description: error.message });
+        }
     };
 
     const updateItem = (id: string, field: keyof LineItem, value: any) => {
@@ -103,6 +130,7 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
 
     const validateForm = () => {
         const errors: Record<string, string> = {};
+        if (!poRefno) errors.poRefno = 'Select a posted purchase order created from a purchase request.';
         const supplierValidation = validateRequired(supplierId, 'a supplier');
         if (!supplierValidation.isValid) errors.supplierId = supplierValidation.message;
         if (items.length === 0) {
@@ -111,6 +139,8 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
         items.forEach((item, index) => {
             const qtyCheck = validateNumeric(item.qty_received, `quantity for line ${index + 1}`, 1);
             if (!qtyCheck.isValid) errors[`item-${item.tempId}-qty`] = qtyCheck.message;
+            const remaining = item.qty_ordered - item.qty_already_received;
+            if (Number(item.qty_received) > remaining) errors[`item-${item.tempId}-qty`] = `Quantity cannot exceed the remaining PO quantity (${remaining}).`;
         });
         setValidationErrors(errors);
         return Object.keys(errors).length === 0;
@@ -133,6 +163,7 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                 supplier_id: supplierId,
                 supplier_name: supplierName,
                 po_no: poNo || null,
+                po_refno: poRefno,
                 remarks: remarks || null,
                 warehouse_id: warehouseId,
                 status: 'Draft'
@@ -140,6 +171,7 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
 
             const itemsPayload: Omit<ReceivingReportItemInsert, 'rr_id'>[] = items.map((item) => ({
                     item_id: item.item_id,
+                    po_item_id: item.po_item_id,
                     item_code: item.item_code,
                     part_no: item.part_no,
                     description: item.description,
@@ -254,33 +286,24 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                                 Supplier <span className="text-red-500">*</span>
                             </label>
-                            <SearchableSelect
-                                value={supplierId}
-                                options={suppliers.map(s => ({
-                                    value: s.id,
-                                    label: s.company || s.name || s.id,
-                                    keywords: [s.company || '', s.name || '', s.id],
-                                }))}
-                                onChange={handleSupplierChange}
-                                placeholder="Select Supplier..."
-                                searchPlaceholder="Search supplier..."
-                                buttonClassName={validationErrors.supplierId ? 'border-rose-400' : ''}
-                            />
+                            <input value={supplierName} readOnly className="w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-slate-700" placeholder="Set by purchase order" />
                             {validationErrors.supplierId && (
                                 <p className="mt-1 text-xs text-rose-600">{validationErrors.supplierId}</p>
                             )}
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                PO Reference
+                                Posted PO Reference <span className="text-red-500">*</span>
                             </label>
-                            <input
-                                type="text"
-                                value={poNo}
-                                onChange={(e) => setPoNo(e.target.value)}
-                                placeholder="Optional"
-                                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            <SearchableSelect
+                                value={poRefno}
+                                options={eligiblePurchaseOrders.map((po) => ({ value: po.id, label: `${po.poNumber} • ${po.prNumber} • ${po.supplierName}`, keywords: [po.poNumber, po.prNumber, po.supplierName] }))}
+                                onChange={handlePurchaseOrderChange}
+                                placeholder="Select posted PO..."
+                                searchPlaceholder="Search PO, PR, or supplier..."
+                                buttonClassName={validationErrors.poRefno ? 'border-rose-400' : ''}
                             />
+                            {validationErrors.poRefno && <p className="mt-1 text-xs text-rose-600">{validationErrors.poRefno}</p>}
                         </div>
                         <div className="lg:col-span-4">
                             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
@@ -300,13 +323,7 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                 <div className="flex flex-1 flex-col bg-white p-2">
                     <div className="flex justify-between items-center mb-4">
                         <h2 className="text-sm font-bold uppercase">Items</h2>
-                        <div className="w-96">
-                            <ProductAutocomplete
-                                onSelect={handleAddItem}
-                                placeholder="Scan or search item to add..."
-                                autoFocus={false}
-                            />
-                        </div>
+                        <p className="text-xs text-slate-500">Only remaining items from the selected posted PO are available.</p>
                     </div>
 
                     <div className="overflow-x-auto min-h-[200px]">
@@ -315,6 +332,8 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                                 <tr>
                                     <th className="pl-4 py-3 rounded-l-lg">Item</th>
                                     <th className="px-4 py-3">Description</th>
+                                    <th className="px-4 py-3 w-28">Ordered</th>
+                                    <th className="px-4 py-3 w-28">Previously Received</th>
                                     <th className="px-4 py-3 w-32">Qty Recv</th>
                                     <th className="px-4 py-3 w-40">Unit Cost</th>
                                     <th className="px-4 py-3 w-40 text-right">Total</th>
@@ -324,7 +343,7 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                                 {items.length === 0 ? (
                                     <tr>
-                                        <td colSpan={6} className="py-12 text-center text-slate-400">
+                                        <td colSpan={8} className="py-12 text-center text-slate-400">
                                             <Package className="w-12 h-12 mx-auto mb-3 opacity-20" />
                                             <p>No items added yet</p>
                                         </td>
@@ -339,6 +358,8 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                                             <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                                                 {item.description}
                                             </td>
+                                            <td className="px-4 py-3">{item.qty_ordered}</td>
+                                            <td className="px-4 py-3">{item.qty_already_received}</td>
                                             <td className="px-4 py-3">
                                                 <input
                                                     type="number"

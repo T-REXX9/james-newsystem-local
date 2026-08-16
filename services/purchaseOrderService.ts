@@ -244,6 +244,18 @@ export const purchaseOrderService = {
     if (!response.ok) throw new Error(await parseApiErrorMessage(response));
   },
 
+  async unpostPurchaseOrder(id: string): Promise<PurchaseOrderWithDetails> {
+    const { mainId, userId } = getUserContext();
+    const response = await fetch(`${API_BASE_URL}/purchase-orders/${encodeURIComponent(String(id))}/actions/unpost`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ main_id: mainId, user_id: userId }),
+    });
+    if (!response.ok) throw new Error(await parseApiErrorMessage(response));
+    const payload = await response.json();
+    return toPurchaseOrderDetail(payload?.data || {});
+  },
+
   async getPurchaseOrderItems(poId: string): Promise<PurchaseOrderItem[]> {
     const detail = await this.getPurchaseOrderById(poId);
     return detail.items || [];

@@ -24,13 +24,16 @@ import {
 import { UserProfile } from '../types';
 import {
   CustomerWithInquiries,
+  createPurchaseRequestFromSuggestions,
   fetchCustomersWithNotListedInquiries,
   fetchSuggestedStockDetails,
   fetchSuggestedStockSummary,
   SuggestedStockDetail,
   SuggestedStockItem,
 } from '../services/suggestedStockService';
-import AddToPurchaseRequestModal from './AddToPurchaseRequestModal';
+import { useToast } from './ToastProvider';
+import type { PurchaseRequestWithItems } from '../purchaseRequest.types';
+import ModuleRecordLink from './ModuleRecordLink';
 
 interface SuggestedStockReportProps {
   currentUser?: UserProfile | null;
@@ -85,6 +88,7 @@ const formatDate = (value: string) =>
 const LOAD_BATCH_SIZE = 20;
 
 const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser }) => {
+  const { addToast } = useToast();
   const currentMonth = toIsoDate(new Date()).slice(0, 7);
   const initialRange = getMonthRange(currentMonth);
 
@@ -110,9 +114,9 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
   const [sortOption, setSortOption] = useState<SortOption>('inquiries-desc');
   const [visibleCount, setVisibleCount] = useState(LOAD_BATCH_SIZE);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [selectedItem, setSelectedItem] = useState<SuggestedStockItem | null>(null);
-  const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [refreshRequest, setRefreshRequest] = useState(0);
+  const [isCreatingPR, setIsCreatingPR] = useState(false);
+  const [generatedPR, setGeneratedPR] = useState<PurchaseRequestWithItems | null>(null);
   const loadRequestId = useRef(0);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
@@ -330,6 +334,30 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
     });
   };
 
+  const selectedSuggestions = useMemo(
+    () => summaryData.filter((item) => selectedIds.has(item.id)),
+    [selectedIds, summaryData]
+  );
+
+  const handleCreatePRForSelected = async () => {
+    if (selectedSuggestions.length === 0) return;
+    setIsCreatingPR(true);
+    try {
+      const created = await createPurchaseRequestFromSuggestions(selectedSuggestions);
+      setGeneratedPR(created);
+      setSelectedIds(new Set());
+      addToast({
+        type: 'success',
+        title: 'Purchase request created',
+        description: `${created.pr_number} contains ${selectedSuggestions.length} selected suggestion${selectedSuggestions.length === 1 ? '' : 's'}.`,
+      });
+    } catch (error: any) {
+      addToast({ type: 'error', title: 'Unable to create purchase request', description: error.message });
+    } finally {
+      setIsCreatingPR(false);
+    }
+  };
+
   const exportCsv = () => {
     const escape = (value: unknown) => {
       const text = String(value ?? '');
@@ -368,8 +396,7 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
 
   const handleItemAction = (item: SuggestedStockItem) => {
     if (item.isListed) {
-      setSelectedItem(item);
-      setShowPurchaseModal(true);
+      toggleRow(item.id);
       return;
     }
     window.dispatchEvent(
@@ -408,8 +435,8 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
   return (
     <div className="h-full overflow-auto bg-[#eef1f4] text-[#263f4f]">
       <div className="mx-auto max-w-[1680px] p-4 lg:p-5">
-        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_286px]">
-          <main className="min-w-0 space-y-4">
+        <div className="grid items-start gap-4 xl:grid-cols-[286px_minmax(0,1fr)]">
+          <main className="min-w-0 space-y-4 xl:order-2">
             <header className="flex flex-col gap-4 rounded-[5px] border border-[#d5dce2] bg-white p-5 shadow-sm md:flex-row md:items-start md:justify-between">
               <div className="max-w-4xl">
                 <h1 className="text-[25px] font-bold uppercase tracking-[0.02em] text-[#263f4f]">
@@ -581,6 +608,17 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
                     <option value="part-asc">Part Number A–Z</option>
                   </select>
                 </label>
+                {appliedFilters.viewMode === 'summary' && (
+                  <button
+                    type="button"
+                    onClick={handleCreatePRForSelected}
+                    disabled={selectedSuggestions.length === 0 || isCreatingPR}
+                    className="inline-flex h-9 items-center justify-center gap-2 rounded-[4px] bg-[#175fd3] px-4 text-[11px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isCreatingPR ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                    Create PR for Selected ({selectedSuggestions.length})
+                  </button>
+                )}
               </div>
 
               {isLoading ? (
@@ -646,7 +684,7 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
                                 }`}
                               >
                                 {item.isListed ? <ShoppingCart className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
-                                {item.isListed ? 'Add' : 'Create'}
+                                {item.isListed ? (selectedIds.has(item.id) ? 'Selected' : 'Select') : 'Create'}
                               </button>
                             </td>
                           </tr>
@@ -739,7 +777,19 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
             </section>
           </main>
 
-          <aside className="sticky top-4 rounded-[5px] border border-[#cfd7de] bg-white p-4 shadow-sm">
+          <aside className="sticky top-4 rounded-[5px] border border-[#cfd7de] bg-white p-4 shadow-sm xl:order-1">
+            <div className="mb-4 border-b border-[#e0e5e9] pb-4">
+              <h2 className="text-[13px] font-bold text-[#263f4f]">PR Activity</h2>
+              {generatedPR ? (
+                <ModuleRecordLink tab="warehouse-purchasing-purchase-request" payload={{ prId: generatedPR.id }} className="mt-3 block w-full rounded-[4px] border border-[#b8cff2] bg-[#eef5ff] p-3 text-left hover:bg-[#e3efff]">
+                  <span className="block text-[13px] font-bold text-[#175fd3]">{generatedPR.pr_number}</span>
+                  <span className="mt-1 block text-[10px] text-[#647482]">Created from selected stock suggestions</span>
+                  <span className="mt-2 block text-[10px] font-semibold text-[#175fd3]">Open Purchase Request →</span>
+                </ModuleRecordLink>
+              ) : (
+                <p className="mt-2 text-[10px] leading-4 text-[#8b98a3]">The PR number generated from selected suggestions will appear here.</p>
+              )}
+            </div>
             <h2 className="flex items-center gap-2 border-b border-[#e0e5e9] pb-3 text-[13px] font-bold text-[#263f4f]"><ListFilter className="h-4 w-4 text-[#6685a4]" />How It Works – Step by Step</h2>
             <ol className="mt-4 space-y-4">
               {sidebarSteps.map(([Icon, title, copy], index) => (
@@ -765,16 +815,6 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
         </div>
       </div>
 
-      {showPurchaseModal && selectedItem && (
-        <AddToPurchaseRequestModal
-          item={selectedItem}
-          currentUser={currentUser}
-          onClose={() => {
-            setShowPurchaseModal(false);
-            setSelectedItem(null);
-          }}
-        />
-      )}
     </div>
   );
 };

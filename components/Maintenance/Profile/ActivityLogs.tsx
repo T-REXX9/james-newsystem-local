@@ -24,7 +24,11 @@ const normalizeActionTone = (action: string): string => {
   return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200';
 };
 
-export default function ActivityLogs() {
+interface ActivityLogsProps {
+  title?: string;
+}
+
+export default function ActivityLogs({ title = 'Activity Logs' }: ActivityLogsProps) {
   const [logs, setLogs] = useState<ActivityLogRecord[]>([]);
   const [users, setUsers] = useState<ActivityLogUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,6 +37,7 @@ export default function ActivityLogs() {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [userId, setUserId] = useState('All');
+  const [action, setAction] = useState('All');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
@@ -62,6 +67,7 @@ export default function ActivityLogs() {
       const data = await activityLogsLocalApiService.list({
         search: debouncedSearch || undefined,
         userId: userId !== 'All' ? userId : undefined,
+        action: action !== 'All' ? action : undefined,
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
         page,
@@ -84,7 +90,7 @@ export default function ActivityLogs() {
 
   useEffect(() => {
     fetchLogs();
-  }, [debouncedSearch, userId, dateFrom, dateTo, page]);
+  }, [debouncedSearch, userId, action, dateFrom, dateTo, page]);
 
   const userNameMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -101,7 +107,7 @@ export default function ActivityLogs() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <Activity className="text-blue-600" />
-            Activity Logs
+            {title}
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Audit trail from legacy `tblaudit_trail`
@@ -118,7 +124,7 @@ export default function ActivityLogs() {
       </div>
 
       <div className="p-6 flex-1 overflow-hidden flex flex-col gap-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
           <div className="relative md:col-span-2 xl:col-span-2">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
             <input
@@ -147,6 +153,21 @@ export default function ActivityLogs() {
                 {`${user.first_name || ''} ${user.last_name || ''}`.trim() || user.user_id}
               </option>
             ))}
+          </select>
+
+          <select
+            aria-label="Activity type"
+            value={action}
+            onChange={(e) => { setAction(e.target.value); setPage(1); }}
+            className="px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg"
+          >
+            <option value="All">All Activity Types</option>
+            <option value="Create">Create</option>
+            <option value="Update">Update</option>
+            <option value="Post">Post</option>
+            <option value="Unpost">Unpost</option>
+            <option value="Verify Prospect">Verify Prospect</option>
+            <option value="Reject Prospect - Blacklisted">Reject Prospect - Blacklisted</option>
           </select>
 
           <div className="relative">
@@ -187,18 +208,19 @@ export default function ActivityLogs() {
                 <th className="px-6 py-3 font-medium">Page</th>
                 <th className="px-6 py-3 font-medium">Action</th>
                 <th className="px-6 py-3 font-medium">Ref No</th>
+                <th className="px-6 py-3 font-medium">Result</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700/50">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                     Loading logs...
                   </td>
                 </tr>
               ) : logs.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                     No logs found.
                   </td>
                 </tr>
@@ -225,6 +247,7 @@ export default function ActivityLogs() {
                       <td className="px-6 py-3 text-gray-500 dark:text-gray-400 font-mono text-xs max-w-xs truncate" title={log.lrefno || ''}>
                         {log.lrefno || '-'}
                       </td>
+                      <td className="px-6 py-3 text-emerald-700 font-semibold">Recorded</td>
                     </tr>
                   );
                 })

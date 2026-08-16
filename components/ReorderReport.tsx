@@ -12,6 +12,7 @@ import {
 import { useToast } from './ToastProvider';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
 import ConfirmModal from './ConfirmModal';
+import ModuleRecordLink from './ModuleRecordLink';
 
 interface AddToPrModalProps {
   items: ReorderReportEntry[];
@@ -520,43 +521,33 @@ const ReorderReport: React.FC = () => {
   const dateLabel = generatedAt ? formatReportDate(generatedAt) : '';
 
   const renderPrLink = (row: ReorderReportEntry) => row.pr_refno ? (
-    <button
-      type="button"
+    <ModuleRecordLink
+      tab="warehouse-purchasing-purchase-request"
+      payload={{ prId: row.pr_refno }}
       className="text-brand-blue hover:underline"
-      onClick={() => navigateToModule('warehouse-purchasing-purchase-request', { prId: row.pr_refno })}
     >
       {row.pr_no || row.pr_refno}
-    </button>
+    </ModuleRecordLink>
   ) : null;
 
   const renderPoLink = (row: ReorderReportEntry) => row.po_refno ? (
-    <button
-      type="button"
+    <ModuleRecordLink
+      tab="warehouse-purchasing-purchase-order"
+      payload={{ poId: row.po_refno, poRefNo: row.po_no }}
       className="text-brand-blue hover:underline"
-      onClick={() =>
-        navigateToModule('warehouse-purchasing-purchase-order', {
-          poId: row.po_refno,
-          poRefNo: row.po_no,
-        })
-      }
     >
       {row.po_no || row.po_refno}
-    </button>
+    </ModuleRecordLink>
   ) : null;
 
   const renderRrLink = (row: ReorderReportEntry) => row.rr_refno ? (
-    <button
-      type="button"
+    <ModuleRecordLink
+      tab="warehouse-purchasing-receiving-stock"
+      payload={{ rrId: row.rr_refno, rrRefNo: row.rr_no }}
       className="text-brand-blue hover:underline"
-      onClick={() =>
-        navigateToModule('warehouse-purchasing-receiving-stock', {
-          rrId: row.rr_refno,
-          rrRefNo: row.rr_no,
-        })
-      }
     >
       {row.rr_no || row.rr_refno}
-    </button>
+    </ModuleRecordLink>
   ) : null;
 
   if (!generatedAt) {
@@ -691,14 +682,14 @@ const ReorderReport: React.FC = () => {
           <aside className="rounded border border-[#d9d9d9] bg-[#fafafa] p-4 text-sm">
             <h2 className="border-b border-[#ccc] pb-3 text-base font-bold text-[#29475f]">PURCHASE ACTIVITY</h2>
             {latestCreatedPr ? (
-              <button
-                type="button"
+              <ModuleRecordLink
+                tab="warehouse-purchasing-purchase-request"
+                payload={{ prId: latestCreatedPr.id }}
                 className="mt-4 block w-full rounded bg-blue-50 p-3 text-left text-brand-blue hover:underline"
-                onClick={() => navigateToModule('warehouse-purchasing-purchase-request', { prId: latestCreatedPr.id })}
               >
                 <span className="block text-xs font-bold uppercase text-[#666]">New PR Number</span>
                 <span className="mt-1 block text-lg font-bold">{latestCreatedPr.number}</span>
-              </button>
+              </ModuleRecordLink>
             ) : null}
             <div className="mt-4 space-y-3">
               {workflowRows.length === 0 ? (
@@ -707,9 +698,9 @@ const ReorderReport: React.FC = () => {
                 const stages = getReorderWorkflowStages(row);
                 return (
                   <div key={row.pr_refno} className="rounded border border-[#ddd] bg-white p-3">
-                    <button type="button" className="font-bold text-brand-blue hover:underline" onClick={() => navigateToModule('warehouse-purchasing-purchase-request', { prId: row.pr_refno })}>
+                    <ModuleRecordLink tab="warehouse-purchasing-purchase-request" payload={{ prId: row.pr_refno }} className="font-bold text-brand-blue hover:underline">
                       {row.pr_no || row.pr_refno}
-                    </button>
+                    </ModuleRecordLink>
                     <p className="mt-2">Stage 1 · PR: <strong>{stages.pr}</strong></p>
                     <p>Stage 2 · PO: <strong>{stages.po}</strong></p>
                     <p>Stage 3 · Receiving: <strong>{stages.receiving}</strong></p>

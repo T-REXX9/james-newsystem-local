@@ -12,6 +12,7 @@ import {
   OrderSlip,
   SalesOrder,
 } from '../types';
+import ModuleRecordLink from './ModuleRecordLink';
 import {
   confirmSalesOrder,
   convertToDocument,
@@ -866,7 +867,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
                       <td className="border border-[#d7d7d7] px-2 py-[9px]">{legacyListDate(order.sales_date)}</td>
                       <td className="truncate border border-[#d7d7d7] px-2 py-[9px]" title={customer?.company || ''}>{customer?.company || ''}</td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{order.inquiry_no || ''}</td>
-                      <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{order.order_no || ''}</td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px] underline"><ModuleRecordLink tab="sales-transaction-sales-order" payload={{ orderId: order.id }} onOpen={() => void selectOrder(order)}>{order.order_no || ''}</ModuleRecordLink></td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{order.invoice_no || order.order_slip_no || ''}</td>
                       <td className="truncate border border-[#d7d7d7] px-2 py-[9px]">{order.sales_person || ''}</td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px]">{legacyStatus(order.status)}</td>

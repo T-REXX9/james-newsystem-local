@@ -30,6 +30,7 @@ export interface CreatePRPayload {
     notes?: string;
     items: CreatePRItemPayload[];
     reference_no?: string;
+    status?: 'Draft' | 'Pending';
 }
 
 export interface UpdatePRPayload {

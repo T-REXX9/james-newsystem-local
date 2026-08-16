@@ -100,7 +100,7 @@ const EMPTY_PRODUCT: ProductForm = {
   transaction_count: 0,
 };
 
-const inputClass = 'h-[34px] w-full rounded-[3px] border border-[#ccc] bg-white px-3 text-[13px] text-[#333] outline-none focus:border-[#5d82a2]';
+const inputClass = 'h-[38px] w-full rounded-[3px] border border-[#ccc] bg-white px-3 text-[14px] text-[#333] outline-none focus:border-[#5d82a2]';
 
 const money = (value?: number) => Number(value || 0).toLocaleString(undefined, {
   minimumFractionDigits: 2,
@@ -170,6 +170,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser: _current
   const [submitCount, setSubmitCount] = useState(0);
   const [submitError, setSubmitError] = useState('');
   const [highlightedProductId, setHighlightedProductId] = useState<string | null>(null);
+  const [detailTab, setDetailTab] = useState<'details' | 'suppliers' | 'pricing'>('details');
   const productRowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
   const listViewportRef = useRef<HTMLDivElement | null>(null);
   const loadingRef = useRef(false);
@@ -292,6 +293,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser: _current
     setSubmitError('');
     setValidationErrors({});
     setHighlightedProductId(product.id);
+    setDetailTab('details');
   };
 
   const clearEditor = () => {
@@ -302,6 +304,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser: _current
     setSubmitError('');
     setValidationErrors({});
     setHighlightedProductId(null);
+    setDetailTab('details');
   };
 
   const validateForm = () => {
@@ -436,7 +439,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser: _current
   }
 
   return (
-    <div className="min-h-full overflow-auto bg-[#f4f4f4] px-2 py-6 text-[13px] text-[#222] sm:px-3 lg:px-4">
+    <div className="min-h-full overflow-auto bg-[#f4f4f4] px-2 py-6 text-[14px] text-[#222] sm:px-3 lg:px-4">
       <div className="w-full max-w-none">
         <section className="overflow-hidden rounded-[5px] border border-[#d8d8d8] bg-white">
           <header className="flex min-h-[64px] flex-wrap items-center justify-between gap-3 border-b border-[#ddd] px-5">
@@ -470,7 +473,26 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser: _current
               </div>
             )}
 
-            <div className="grid grid-cols-1 gap-x-5 gap-y-3 lg:grid-cols-2 xl:grid-cols-4">
+            <nav className="mb-5 flex flex-wrap border-b border-[#ccc]" aria-label="Product detail sections">
+              {([
+                ['details', 'Product Details'],
+                ['suppliers', 'Supplier & Costing'],
+                ['pricing', 'Pricing & Stock'],
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="tab"
+                  aria-selected={detailTab === value}
+                  onClick={() => setDetailTab(value)}
+                  className={`border-b-2 px-5 py-3 text-[14px] font-semibold ${detailTab === value ? 'border-[#315574] bg-[#edf3f7] text-[#315574]' : 'border-transparent text-slate-600 hover:bg-slate-50'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </nav>
+
+            {detailTab === 'details' && <div className="grid grid-cols-1 gap-x-5 gap-y-3 lg:grid-cols-2 xl:grid-cols-4">
               <LegacyField label="Part No.">{fieldInput('part_no', 'Input Part Number')}</LegacyField>
               <LegacyField label="Item Code">{fieldInput('item_code', 'Input Item Code')}</LegacyField>
               <LegacyField label="Category">
@@ -498,9 +520,9 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser: _current
                   <option value="Inactive">Hide</option>
                 </select>
               </LegacyField>
-            </div>
+            </div>}
 
-            <hr className="my-6 border-[#ddd]" />
+            {detailTab === 'suppliers' && <div>
 
             <div className="flex items-center justify-between">
               <h2 className="font-semibold">Supplier COG</h2>
@@ -553,9 +575,9 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser: _current
               <input type="checkbox" checked={applyCostToAll} onChange={(event) => setApplyCostToAll(event.target.checked)} />
               Apply this costing to all Part No.
             </label>
+            </div>}
 
-            <hr className="my-6 border-[#ddd]" />
-
+            {detailTab === 'pricing' && <div>
             <h2 className="mb-3 font-semibold">Price List</h2>
             <div className="grid grid-cols-1 gap-x-5 gap-y-3 md:grid-cols-2 xl:grid-cols-4">
               <LegacyField label="Regular">{fieldInput('price_aa', 'Input Amount', 'number')}</LegacyField>
@@ -570,6 +592,15 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser: _current
                 />
               </LegacyField>
             </div>
+            <div className="mt-5 grid grid-cols-1 gap-x-5 gap-y-3 md:grid-cols-2 xl:grid-cols-4">
+              <LegacyField label="Current Stock">
+                <input type="text" value={compactQuantity(getConsolidatedStock(formData as Product))} readOnly className={`${inputClass} bg-[#eee] text-slate-600`} />
+              </LegacyField>
+              <LegacyField label="Reorder Quantity">{fieldInput('reorder_quantity', 'Input Reorder Qty', 'number')}</LegacyField>
+              <LegacyField label="Replenish Quantity">{fieldInput('replenish_quantity', 'Input Replenish Qty', 'number')}</LegacyField>
+              <LegacyField label="Pcs per Box">{fieldInput('no_of_pieces_per_box', 'Input Qty', 'number')}</LegacyField>
+            </div>
+            </div>}
 
             <div className="mt-6 grid max-w-[260px] gap-1">
               <span>Additional Filters:</span>
@@ -593,15 +624,15 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser: _current
               <div
                 ref={listViewportRef}
                 onScroll={handleListScroll}
-                className="max-h-[520px] w-full overflow-x-hidden overflow-y-auto border border-[#ddd]"
+                className="max-h-[520px] w-full overflow-auto border border-[#ddd]"
               >
-                <table className="w-full table-fixed border-collapse text-left text-[7.7px] leading-[1.25] min-[1450px]:text-[8.8px] min-[1750px]:text-[9.9px] [&_td]:break-words [&_th]:break-words">
+                <table className="min-w-[1900px] w-full table-fixed border-collapse text-left text-[11px] leading-[1.35] min-[1450px]:text-[12px] [&_td]:break-words [&_th]:break-words">
                   <colgroup>
                     {[1.8, 5.4, 5.4, 4.4, 5, 4, 7, 4, 3.8, 5.4, 3.8, 6, 5.4, 4.4, 3.8, 4.2, 4.2, 4.2, 6, 3.4, 3.4, 5].map((width, index) => (
                       <col key={index} style={{ width: `${width}%` }} />
                     ))}
                   </colgroup>
-                  <thead className="sticky top-0 z-10 bg-[#f7f7f7] font-['Oswald'] text-[7.7px] uppercase leading-tight min-[1450px]:text-[8.8px] min-[1750px]:text-[9.9px]">
+                  <thead className="sticky top-0 z-10 bg-[#f7f7f7] font-['Oswald'] text-[11px] uppercase leading-tight min-[1450px]:text-[12px]">
                     <tr>
                       <th rowSpan={2} className="border border-[#ccc] px-0.5 py-2 text-center">#</th>
                       <th rowSpan={2} className="border border-[#ccc] px-1 py-2 text-center">Part Number</th>

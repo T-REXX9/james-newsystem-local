@@ -729,10 +729,14 @@ const DailyCollectionEntryView: React.FC = () => {
       );
     }
     if (selectedRefno) {
+      if (status === 'Approved' || status === 'Posted') {
       secondary.push(
         <button key="print" className={BUTTON_BASE} onClick={() => window.print()}>
           Print
         </button>,
+      );
+      }
+      secondary.push(
         <button
           key="logs"
           className={BUTTON_BASE}
@@ -935,7 +939,7 @@ const DailyCollectionEntryView: React.FC = () => {
               <div className="border-b border-[#ddd] px-5 py-4">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                   <div>
-                    <h2 className="border-b border-[#5d82a2] pb-4 pr-24 font-['Oswald'] text-[18px] uppercase text-[#315574]">Daily Collection Report</h2>
+                    <h2 className="border-b border-[#5d82a2] pb-4 pr-24 font-['Oswald'] text-[18px] uppercase text-[#315574]">Daily Collection Entry</h2>
                     <p className="mt-3 font-['Oswald'] text-[18px] text-[#263f52]">
                       {selectedHeader?.lcolection_no || selectedRefno}
                     </p>
@@ -945,6 +949,7 @@ const DailyCollectionEntryView: React.FC = () => {
                     <p>
                       Ref No.: {selectedRefno}
                     </p>
+                    <p>Created by: {selectedHeader?.created_by || '-'}</p>
                   </div>
                   <div className="font-['Oswald'] text-[18px] text-[#263f52]">Status: {selectedHeader?.lstatus || 'Pending'}</div>
                 </div>

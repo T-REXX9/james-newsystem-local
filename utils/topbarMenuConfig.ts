@@ -41,9 +41,18 @@ export interface TopbarMainMenu {
 export const TOPBAR_MENU_CONFIG: TopbarMainMenu[] = [
   {
     id: 'home',
-    label: 'HOME',
+    label: 'DASHBOARDS',
     icon: LayoutDashboard,
-    route: 'home',
+    submenus: [{
+      id: 'dashboard-menu',
+      label: 'DASHBOARDS',
+      icon: LayoutDashboard,
+      items: [
+        { id: 'home', label: 'Daily Call Monitoring Dashboard', route: 'home', icon: Users },
+        { id: 'operations-management-dashboard', label: 'Operations Dashboard', route: 'operations-management-dashboard', icon: ClipboardList },
+        { id: 'sales-performance-management-dashboard', label: 'Sales Performance Dashboard', route: 'sales-performance-management-dashboard', icon: BarChart3 },
+      ],
+    }],
   },
   {
     id: 'warehouse',

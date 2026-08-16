@@ -125,6 +125,7 @@ export const returnToSupplierService = {
       rr_no: returnData.rr_no,
       supplier_refno: returnData.supplier_id,
       po_no: returnData.po_no || '',
+      warehouse: 'CENTRALIZED',
       remarks: returnData.remarks || '',
       items: payloadItems,
     };

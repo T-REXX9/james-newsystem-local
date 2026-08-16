@@ -83,6 +83,7 @@ export const activityLogsLocalApiService = {
   async list(params?: {
     search?: string;
     userId?: string;
+    action?: string;
     dateFrom?: string;
     dateTo?: string;
     page?: number;
@@ -97,6 +98,7 @@ export const activityLogsLocalApiService = {
 
     if (params?.search) query.set('search', params.search);
     if (params?.userId) query.set('user_id', params.userId);
+    if (params?.action) query.set('action', params.action);
     if (params?.dateFrom) query.set('date_from', params.dateFrom);
     if (params?.dateTo) query.set('date_to', params.dateTo);
 

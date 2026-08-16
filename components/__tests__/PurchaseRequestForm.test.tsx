@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PurchaseRequestForm from '../PurchaseRequest/PurchaseRequestForm';
@@ -33,6 +33,7 @@ vi.mock('../ProductAutocomplete', () => ({
 
 describe('PurchaseRequestForm', () => {
   beforeEach(() => {
+    cleanup();
     vi.clearAllMocks();
   });
 
@@ -62,13 +63,14 @@ describe('PurchaseRequestForm', () => {
     expect(screen.getByText('Widget Alpha')).toBeInTheDocument();
     expect(etaInput.value).toBe('');
 
-    await user.click(screen.getByRole('button', { name: /create request/i }));
+    await user.click(screen.getByRole('button', { name: /submit pr/i }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
 
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
         pr_number: 'PR-2601',
+        status: 'Pending',
         items: [
           expect.objectContaining({
             item_id: 'prod-1',
@@ -81,5 +83,19 @@ describe('PurchaseRequestForm', () => {
         ],
       })
     );
+  });
+
+  it('supports draft and preview actions from the simplified template', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    render(<PurchaseRequestForm onCancel={vi.fn()} onSubmit={onSubmit} initialPRNumber="PR-2602" suppliers={[]} />);
+
+    await user.click(screen.getByRole('button', { name: 'Pick Product' }));
+    await user.click(screen.getByRole('button', { name: /preview pr/i }));
+    expect(screen.getByText(/purchase request preview/i)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /close/i }));
+    await user.click(screen.getByRole('button', { name: /save as draft/i }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ status: 'Draft' })));
   });
 });

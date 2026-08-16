@@ -1,6 +1,7 @@
 import React from 'react';
 import { Plus, RefreshCw } from 'lucide-react';
 import type { PurchaseRequestWithItems } from '../../purchaseRequest.types';
+import ModuleRecordLink from '../ModuleRecordLink';
 
 interface PurchaseRequestListProps {
   requests: PurchaseRequestWithItems[];
@@ -92,7 +93,15 @@ const PurchaseRequestList: React.FC<PurchaseRequestListProps> = ({
                   className="cursor-pointer border-b border-[#ddd] hover:bg-[#f5f5f5]"
                 >
                   <td className="w-1/4 px-2 py-2">{new Date(request.request_date || '').toLocaleDateString('en-US')}</td>
-                  <td className="w-1/4 px-2 py-2 text-[#337ab7] underline">{request.pr_number}</td>
+                  <td className="w-1/4 px-2 py-2 text-[#337ab7] underline">
+                    <ModuleRecordLink
+                      tab="warehouse-purchasing-purchase-request"
+                      payload={{ prId: request.id }}
+                      onOpen={() => onSelect(request)}
+                    >
+                      {request.pr_number}
+                    </ModuleRecordLink>
+                  </td>
                   <td className="w-1/4 px-2 py-2 text-[#337ab7]">{request.notes || ''}</td>
                   <td className="w-1/4 px-2 py-2">{request.status}</td>
                 </tr>

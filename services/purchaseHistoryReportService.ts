@@ -31,6 +31,19 @@ export type PurchaseHistoryReport = {
   customer_session: string;
   date_from: string | null;
   date_to: string | null;
+  generated_at: string;
+  customer: {
+    company: string;
+    old_name: string;
+    customer_since: string;
+    vip_status: string;
+    price_code: string;
+    current_month_sales: number;
+    outstanding_balance: number;
+    terms: string;
+    credit_limit: number;
+    agent_name: string;
+  };
   items: PurchaseHistoryRow[];
 };
 
@@ -160,6 +173,19 @@ export const purchaseHistoryReportService = {
       customer_session: String(data?.customer_session || params.customerId),
       date_from: data?.date_from || dateFrom,
       date_to: data?.date_to || dateTo,
+      generated_at: String(data?.generated_at || ''),
+      customer: {
+        company: String(data?.customer?.company || ''),
+        old_name: String(data?.customer?.old_name || ''),
+        customer_since: String(data?.customer?.customer_since || ''),
+        vip_status: String(data?.customer?.vip_status || ''),
+        price_code: String(data?.customer?.price_code || ''),
+        current_month_sales: toNumber(data?.customer?.current_month_sales),
+        outstanding_balance: toNumber(data?.customer?.outstanding_balance),
+        terms: String(data?.customer?.terms || ''),
+        credit_limit: toNumber(data?.customer?.credit_limit),
+        agent_name: String(data?.customer?.agent_name || ''),
+      },
       items: items.map((row: any) => {
         const qty = toNumber(row?.lqty);
         const price = toNumber(row?.lprice);
@@ -177,7 +203,7 @@ export const purchaseHistoryReportService = {
           lprice: price,
           return_qty: returnQty,
           net_qty: qty - returnQty,
-          line_total: qty * price,
+          line_total: (qty - returnQty) * price,
         };
       }),
     };

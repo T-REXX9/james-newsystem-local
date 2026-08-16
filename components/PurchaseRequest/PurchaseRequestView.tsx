@@ -114,9 +114,9 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
     const handleConvertRequest = () => {
         setConfirmModal({
             isOpen: true,
-            title: 'Convert to Purchase Order',
+            title: 'Generate Purchase Order',
             message: `Create a new Purchase Order from ${request.pr_number}? This will carry over the current request items.`,
-            confirmLabel: 'Convert',
+            confirmLabel: 'Generate PO',
             variant: 'info',
             onConfirm: async () => {
                 await onConvert();
@@ -152,7 +152,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                             )}
 
                             {request.status === 'Approved' && (
-                                <button onClick={handleConvertRequest} className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 shadow-sm"><FileOutput size={16} /> Convert to PO</button>
+                                <button onClick={handleConvertRequest} className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 shadow-sm"><FileOutput size={16} /> Generate Purchase Order</button>
                             )}
 
                             {['Pending', 'Approved'].includes(request.status || '') && (

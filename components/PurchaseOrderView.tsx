@@ -18,6 +18,7 @@ import {
   dispatchWorkflowNotification,
   markNotificationsAsReadByEntityKey,
 } from '../services/notificationLocalApiService';
+import ModuleRecordLink from './ModuleRecordLink';
 
 // Inline StatusBadge if generic one is not suitable for POs, but I'll use simple spans for now to be safe, or try to use the imported one if generic. 
 // I'll stick to my own badge logic or reuse if I knew it works. I'll use my own for safety.
@@ -42,6 +43,7 @@ const PURCHASE_ORDER_TAB_ID = 'purchases-transaction-purchase-order';
 const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, initialPORefNo }) => {
   const { addToast } = useToast();
   const currentUser = getLocalAuthSession()?.userProfile;
+  const canUnpost = ['owner', 'company owner', 'administrator', 'purchasing manager'].includes(String(currentUser?.role || '').trim().toLowerCase()) || String(currentUser?.user_type || '') === '1';
   const today = new Date();
   // List State
   const [orders, setOrders] = useState<PurchaseOrderWithDetails[]>([]);
@@ -330,6 +332,26 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
     });
   };
 
+  const handleUnpost = () => {
+    if (!selectedPO || !canUnpost) return;
+    openConfirm({
+      title: 'Unpost Purchase Order',
+      message: `Unpost ${selectedPO.po_number}? This is allowed only when no Receiving Report depends on it.`,
+      variant: 'warning',
+      confirmLabel: 'Unpost',
+      onConfirm: async () => {
+        try {
+          const updated = await purchaseOrderService.unpostPurchaseOrder(selectedPO.id);
+          setSelectedPO(updated);
+          await fetchOrders();
+          addToast({ type: 'success', title: 'Purchase order unposted', description: `${selectedPO.po_number} is pending again.` });
+        } catch (error: any) {
+          addToast({ type: 'error', title: 'Unable to unpost purchase order', description: error.message });
+        }
+      },
+    });
+  };
+
   const addItem = async () => {
     if (!selectedPO || !newItemId) return;
     try {
@@ -469,7 +491,15 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                   filteredOrders.map(po => (
                     <tr key={po.id} onClick={() => handleSelectPO(po)} className={`cursor-pointer border-b border-[#e5e5e5] hover:bg-[#f5f5f5] ${selectedPO?.id === po.id ? 'bg-[#eef6fb]' : ''}`}>
                       <td className="px-2 py-3">{new Date(po.order_date).toLocaleDateString()}</td>
-                      <td className="px-2 py-3 font-semibold text-[#337ab7]">{po.po_number}</td>
+                      <td className="px-2 py-3 font-semibold text-[#337ab7]">
+                        <ModuleRecordLink
+                          tab="warehouse-purchasing-purchase-order"
+                          payload={{ poId: po.id, poRefNo: po.po_number }}
+                          onOpen={() => handleSelectPO(po)}
+                        >
+                          {po.po_number}
+                        </ModuleRecordLink>
+                      </td>
                       <td className="px-2 py-3">{po.pr_reference || '-'}</td>
                       <td className="px-2 py-3"><POStatusBadge status={po.status} /></td>
                     </tr>
@@ -520,6 +550,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                 <strong>PO No. {selectedPO.po_number}</strong>
                 <button onClick={() => setPrintMode(true)} className="rounded border border-[#ccc] px-3 py-2 text-sm">Print</button>
                 {selectedPO.status === 'Pending' && <button onClick={() => handleStatusChange('Posted')} className="rounded bg-[#70b865] px-3 py-2 text-sm font-semibold text-white">Post</button>}
+                {selectedPO.status === 'Posted' && canUnpost && <button onClick={handleUnpost} className="rounded bg-[#d9534f] px-3 py-2 text-sm font-semibold text-white">Unpost</button>}
                 {['Draft', 'Pending'].includes(selectedPO.status) && <button onClick={() => handleStatusChange('Cancelled')} className="rounded bg-[#d9534f] px-3 py-2 text-sm font-semibold text-white">Cancel</button>}
               </div>
             </div>

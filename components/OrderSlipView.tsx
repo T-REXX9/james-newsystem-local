@@ -9,6 +9,7 @@ import {
   ClipboardList,
 } from 'lucide-react';
 import StatusBadge from './StatusBadge';
+import ModuleRecordLink from './ModuleRecordLink';
 import WorkflowStepper from './WorkflowStepper';
 import {
   cancelOrderSlip,
@@ -706,7 +707,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                       <td className="border border-[#d7d7d7] px-2 py-[9px]">{legacyListDate(slip.sales_date)}</td>
                       <td className="truncate border border-[#d7d7d7] px-2 py-[9px]" title={customer?.company || slip.customer_name || ''}>{customer?.company || slip.customer_name || ''}</td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{slip.sales_no || ''}</td>
-                      <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{slip.slip_no || ''}</td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px] underline"><ModuleRecordLink tab="sales-transaction-order-slip" payload={{ orderSlipId: slip.id, orderSlipRefNo: slip.slip_no }} onOpen={() => void selectSlip(slip)}>{slip.slip_no || ''}</ModuleRecordLink></td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px]">{slip.debit_memo_no || ''}</td>
                       <td className="truncate border border-[#d7d7d7] px-2 py-[9px]">{slip.tracking_no || ''}</td>
                       <td className="truncate border border-[#d7d7d7] px-2 py-[9px]">{slip.sales_person || ''}</td>

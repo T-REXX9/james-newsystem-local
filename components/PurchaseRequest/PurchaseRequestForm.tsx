@@ -33,6 +33,7 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [submitCount, setSubmitCount] = useState(0);
   const [submitError, setSubmitError] = useState('');
+  const [showPreview, setShowPreview] = useState(false);
 
   const buildItem = (): CreatePRItemPayload | null => {
     const errors: Record<string, string> = {};
@@ -61,6 +62,8 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+    const status: 'Draft' | 'Pending' = submitter?.value === 'Draft' ? 'Draft' : 'Pending';
     const pendingItem = items.length === 0 ? buildItem() : null;
     const submittedItems = items.length > 0 ? items : pendingItem ? [pendingItem] : [];
     if (submittedItems.length === 0) {
@@ -76,12 +79,13 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
         request_date: new Date().toISOString().slice(0, 10),
         notes,
         reference_no: '',
+        status,
         items: submittedItems,
       });
       addToast({
         type: 'success',
         title: 'Purchase request created',
-        description: `PR ${initialPRNumber} has been submitted successfully.`,
+        description: status === 'Draft' ? `PR ${initialPRNumber} was saved as draft.` : `PR ${initialPRNumber} has been submitted successfully.`,
         durationMs: 4000,
       });
     } catch (error) {
@@ -122,18 +126,15 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
                 <ArrowLeft className="h-3.5 w-3.5" />
                 Back
               </button>
-              <h1 className="border-b border-[#5d82a2] py-5 pr-24 font-['Oswald'] text-[18px] font-semibold uppercase leading-none text-[#315574]">
-                Purchase Request
-              </h1>
+              <div>
+                <h1 className="border-b border-[#5d82a2] py-3 pr-24 font-['Oswald'] text-[18px] font-semibold uppercase leading-none text-[#315574]">Create Purchase Request</h1>
+                <p className="mt-1 text-xs text-slate-500">Add items from Reorder Report, Suggested Stock, or Product Database.</p>
+              </div>
             </div>
-            <div className="flex items-center gap-2 text-[13px]">
-              <label htmlFor="new-pr-number" className="text-[16px] font-semibold">PR No:</label>
-              <input
-                id="new-pr-number"
-                readOnly
-                value={initialPRNumber}
-                className="h-[34px] w-[110px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3 shadow-inner"
-              />
+            <div className="flex flex-wrap items-center justify-end gap-2 text-[13px]">
+              <button type="submit" value="Draft" disabled={isSubmitting} className="rounded border border-[#175fd3] bg-white px-4 py-2 font-semibold text-[#175fd3]">Save as Draft</button>
+              <button type="button" onClick={() => setShowPreview(true)} className="rounded border border-[#175fd3] bg-white px-4 py-2 font-semibold text-[#175fd3]">Preview PR</button>
+              <button type="submit" value="Pending" disabled={isSubmitting} className="rounded bg-[#175fd3] px-4 py-2 font-semibold text-white">{isSubmitting ? 'Saving...' : 'Submit PR'}</button>
             </div>
           </header>
 
@@ -157,6 +158,9 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
                     <th className="w-[10%] px-2 py-2">Brand</th>
                     <th className="px-2 py-2">Description</th>
                     <th className="w-[9%] px-2 py-2 text-right">COST</th>
+                    <th className="w-[7%] px-2 py-2 text-center">SR Cases</th>
+                    <th className="w-[7%] px-2 py-2 text-center">IR Cases</th>
+                    <th className="w-[10%] px-2 py-2 text-center">Recommendation</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -185,7 +189,7 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
                         ))}
                       </select>
                     </td>
-                    <td colSpan={6} className="px-2 py-3">
+                    <td colSpan={9} className="px-2 py-3">
                       <ProductAutocomplete
                         onSelect={product => {
                           setSelectedProduct(product);
@@ -234,10 +238,13 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
                       <td className="px-2 py-2">-</td>
                       <td className="px-2 py-2">{item.description || '-'}</td>
                       <td className="px-2 py-2 text-right">{Number(item.unit_cost || 0).toFixed(2)}</td>
+                      <td className="px-2 py-2 text-center">0</td>
+                      <td className="px-2 py-2 text-center">0</td>
+                      <td className="px-2 py-2 text-center text-emerald-700">Good</td>
                     </tr>
                   ))}
                   <tr>
-                    <td colSpan={8} className="px-2 pb-3">
+                    <td colSpan={11} className="px-2 pb-3">
                       <textarea
                         value={notes}
                         onChange={event => setNotes(event.target.value)}
@@ -247,17 +254,10 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
                       />
                     </td>
                   </tr>
-                  <tr>
-                    <td colSpan={8} className="px-2 pt-1">
-                      <button
-                        type="submit"
-                        aria-label="Create request"
-                        disabled={isSubmitting}
-                        className="rounded-[3px] border border-[#398439] bg-[#5cb85c] px-3 py-[7px] font-semibold text-white hover:bg-[#47a447] disabled:bg-[#999]"
-                      >
-                        {isSubmitting ? 'Saving...' : 'Create PR'}
-                      </button>
-                    </td>
+                  <tr className="border-t-2 border-[#ddd] font-bold">
+                    <td colSpan={6} className="px-2 py-4 text-right">Total Quantity</td>
+                    <td className="px-2 py-4 text-right">{items.reduce((sum, item) => sum + Number(item.quantity || 0), 0)}</td>
+                    <td colSpan={4} className="px-2 py-4 text-right">Total Estimated Amount: ₱{items.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unit_cost || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                   </tr>
                 </tbody>
               </table>
@@ -265,6 +265,14 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
           </main>
         </form>
       </div>
+      {showPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6">
+          <section className="max-h-[80vh] w-full max-w-4xl overflow-auto rounded bg-white p-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b pb-3"><h2 className="text-xl font-bold">Purchase Request Preview — {initialPRNumber}</h2><button type="button" onClick={() => setShowPreview(false)} className="rounded border px-3 py-1">Close</button></div>
+            <table className="mt-4 w-full text-sm"><thead><tr className="border-b text-left"><th className="py-2">Part No.</th><th>Description</th><th className="text-right">Qty</th><th>Supplier</th><th className="text-right">Amount</th></tr></thead><tbody>{items.map((item, index) => <tr key={`${item.item_id}-${index}`} className="border-b"><td className="py-2">{item.part_number || '-'}</td><td>{item.description || '-'}</td><td className="text-right">{item.quantity}</td><td>{item.supplier_name || '-'}</td><td className="text-right">{(Number(item.quantity) * Number(item.unit_cost || 0)).toFixed(2)}</td></tr>)}</tbody></table>
+          </section>
+        </div>
+      )}
     </div>
   );
 };

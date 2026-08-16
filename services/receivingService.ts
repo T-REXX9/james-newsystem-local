@@ -12,6 +12,17 @@ import {
 } from '../receiving.types';
 import { fetchProductsPage } from './productLocalApiService';
 import { getLocalAuthSession } from './localAuthService';
+import { purchaseOrderService } from './purchaseOrderService';
+
+export interface EligiblePurchaseOrder {
+    id: string;
+    poNumber: string;
+    prNumber: string;
+    supplierId: string;
+    supplierName: string;
+    orderDate: string;
+    remainingLineCount: number;
+}
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
@@ -232,11 +243,13 @@ export const receivingService = {
                 rr_number: rr?.rr_no || undefined,
                 receive_date: rr?.receive_date,
                 supplier_id: rr?.supplier_id || '',
+                po_refno: (rr as any)?.po_refno || '',
                 po_number: rr?.po_no || '',
                 reference: rr?.remarks || '',
                 status: toApiStatus(rr?.status || 'Draft'),
                 items: (items || []).map((item) => ({
                     product_session: String(item?.item_id || ''),
+                    po_item_id: (item as any)?.po_item_id,
                     qty: toNumber(item?.qty_received),
                     unit_cost: toNumber(item?.unit_cost),
                     item_code: item?.item_code || '',
@@ -404,6 +417,28 @@ export const receivingService = {
         const payload = await response.json();
         const rows = Array.isArray(payload?.data) ? payload.data : [];
         return rows.map(toSupplier);
+    },
+
+    async getEligiblePurchaseOrders(): Promise<EligiblePurchaseOrder[]> {
+        const response = await fetch(
+            `${API_BASE_URL}/receiving-stocks/purchase-orders/eligible?main_id=${encodeURIComponent(String(API_MAIN_ID))}&limit=200`
+        );
+        if (!response.ok) throw new Error(await parseApiErrorMessage(response));
+        const payload = await response.json();
+        const rows = Array.isArray(payload?.data) ? payload.data : [];
+        return rows.map((row: any) => ({
+            id: String(row?.refno ?? ''),
+            poNumber: String(row?.po_number ?? ''),
+            prNumber: String(row?.pr_number ?? ''),
+            supplierId: String(row?.supplier_id ?? ''),
+            supplierName: String(row?.supplier_name ?? ''),
+            orderDate: String(row?.order_date ?? ''),
+            remainingLineCount: toNumber(row?.remaining_line_count),
+        }));
+    },
+
+    async getEligiblePurchaseOrderDetails(id: string) {
+        return purchaseOrderService.getPurchaseOrderById(id);
     },
 
     async getProducts(): Promise<Product[]> {

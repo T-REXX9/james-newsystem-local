@@ -17,7 +17,7 @@ const navItems: Array<{
 }> = [
   {
     id: 'master-list',
-    label: (isMainUser) => (isMainUser ? 'Management/Staff Dashboard' : 'Staff Dashboard'),
+    label: () => 'Daily Call Monitoring Dashboard',
     icon: Table2,
   },
   { id: 'chart', label: () => 'Chart', icon: BarChart3 },

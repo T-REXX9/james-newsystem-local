@@ -17,6 +17,14 @@ vi.mock('../../services/customerDatabaseLocalApiService', () => ({
   updateContact: vi.fn(),
 }));
 
+vi.mock('../../services/vipTierSettingsService', () => ({
+  getVipTierConfig: vi.fn().mockResolvedValue({
+    one_time_discount_threshold: 50000,
+    unlimited_discount_threshold: 100000,
+    discount_percentage: 10,
+  }),
+}));
+
 vi.mock('../DailyCallCustomerDetailModal', () => ({
   default: ({ isOpen, customer }: any) => isOpen && customer
     ? <div role="dialog">Customer detail popup for {customer.shopName}</div>

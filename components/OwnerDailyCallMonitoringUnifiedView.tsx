@@ -41,9 +41,9 @@ const calculateSummary = (rows: DailyCallMasterCustomerRow[]) => {
   const priority = rows.filter((row) => row.listCategory === 'priority');
   const recovery = rows.filter((row) => row.listCategory === 'recovery');
   const verified = rows.filter((row) => row.purchaseAgeGroup === 'no_purchase' && isProspectRow(row) && row.verification === 'Verified');
-  const unverified = rows.filter((row) => row.purchaseAgeGroup === 'no_purchase' && isProspectRow(row) && row.verification !== 'Verified');
-  const totalPotential = [priority, recovery, verified, unverified]
-    .reduce((sum, categoryRows) => sum + categoryRows.reduce((categorySum, row) => categorySum + row.totalSales, 0), 0);
+  const totalPotential = priority.reduce((sum, row) => sum + row.averageMonthlySales, 0)
+    + recovery.reduce((sum, row) => sum + row.averageMonthlySales, 0)
+    + (verified.length * 5_000);
 
   return { current, totalPotential };
 };
@@ -78,7 +78,7 @@ class LocalErrorBoundary extends Component<LocalErrorBoundaryProps, LocalErrorBo
 }
 
 const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnifiedViewProps> = ({ currentUser }) => {
-  const [activeView, setActiveView] = useState<DailyCallOwnerViewMode>('chart');
+  const [activeView, setActiveView] = useState<DailyCallOwnerViewMode>('master-list');
   const [summary, setSummary] = useState({ current: 0, totalPotential: 0 });
   const [workQueueCounts, setWorkQueueCounts] = useState({
     followUps: 0,
@@ -282,7 +282,7 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
             >
               <div className="mb-3 flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Owner Daily Call Monitoring</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Daily Call Monitoring Dashboard</p>
                   <h2 className="mt-1 flex items-center gap-2 text-lg font-bold text-slate-900 dark:text-white">
                     <Table2 className="h-5 w-5 text-blue-600" />
                     Master List
@@ -307,7 +307,7 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
           <div className="min-h-0 flex-1 overflow-hidden">
             <LocalErrorBoundary>
               {activeView === 'master-list' ? (
-                <DailyCallMasterListView />
+                <DailyCallMasterListView currentUser={currentUser} />
               ) : (
                 <OwnerLiveCallMonitoringView currentUser={currentUser} />
               )}

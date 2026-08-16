@@ -33,7 +33,9 @@ import {
 import { useDebounce } from '../hooks/useDebounce';
 import { fetchCustomersForDailyCall, fetchDailyCallMasterList, getCachedDailyCallMasterList } from '../services/dailyCallMonitoringService';
 import { createContact, updateContact } from '../services/customerDatabaseLocalApiService';
-import { Contact, DailyCallCustomerRow, DailyCallMasterCustomerRow, DailyCallMasterListMeta } from '../types';
+import { getVipTierConfig } from '../services/vipTierSettingsService';
+import { Contact, CustomerStatus, DailyCallCustomerRow, DailyCallMasterCustomerRow, DailyCallMasterListMeta, UserProfile, VipTierConfig } from '../types';
+import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
 import AddContactModal from './AddContactModal';
 import DailyCallCustomerDetailModal from './DailyCallCustomerDetailModal';
 import type { DetailTabId } from './DailyCallCustomerDetailExpansion';
@@ -216,7 +218,11 @@ const trendDetails = (row: DailyCallMasterCustomerRow) => {
   return { Icon: ArrowDown, label: `${Math.round(Math.abs(trend))}% vs last 3 months`, className: 'text-rose-600' };
 };
 
-const DailyCallMasterListView: React.FC = () => {
+interface DailyCallMasterListViewProps {
+  currentUser?: UserProfile | null;
+}
+
+const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ currentUser: _currentUser }) => {
   const initialCachedResult = useMemo(() => getCachedDailyCallMasterList({ fromDate }), []);
   const [rows, setRows] = useState<DailyCallMasterCustomerRow[]>(() => initialCachedResult?.items || []);
   const [meta, setMeta] = useState<DailyCallMasterListMeta>(() => initialCachedResult?.meta || { fromDate, toDate: '', count: 0 });
@@ -235,6 +241,10 @@ const DailyCallMasterListView: React.FC = () => {
   const [activeCategoryId, setActiveCategoryId] = useState<CategoryId>('priority');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [currentVipFilter, setCurrentVipFilter] = useState('all');
+  const [nextVipFilter, setNextVipFilter] = useState('all');
+  const [lastPurchaseFilter, setLastPurchaseFilter] = useState('all');
+  const [vipConfig, setVipConfig] = useState<VipTierConfig>(DEFAULT_VIP_TIER_CONFIG);
   const debouncedSearch = useDebounce(search, 400);
 
   const handleSelectCategory = useCallback((categoryId: CategoryId) => {
@@ -284,7 +294,8 @@ const DailyCallMasterListView: React.FC = () => {
   const handleSubmitVerifiedProspect = useCallback(async (data: Omit<Contact, 'id'>) => {
     const created = await createContact({
       ...data,
-      verification: 'Verified',
+      status: CustomerStatus.PROSPECTIVE,
+      verification: 'Unverified',
     });
     await loadRows(false, true);
     setShowAddVerifiedProspectModal(false);
@@ -299,18 +310,75 @@ const DailyCallMasterListView: React.FC = () => {
     await loadRows(false, true);
   }, [loadRows]);
 
+  const handleRejectExistingProspect = useCallback(async (row: DailyCallMasterCustomerRow) => {
+    await updateContact(row.id, {
+      status: CustomerStatus.BLACKLISTED,
+      debtType: 'Bad',
+      verification: 'Rejected',
+    });
+    setRows((prev) => prev.filter((item) => item.id !== row.id));
+    await loadRows(false, true);
+  }, [loadRows]);
+
   useEffect(() => {
     loadRows();
   }, [loadRows]);
 
+  useEffect(() => {
+    void getVipTierConfig().then(setVipConfig);
+  }, []);
+
+  const getCurrentVip = (row: DailyCallMasterCustomerRow) => {
+    const group = String(row.priceGroup || '').trim().toLowerCase();
+    return group === 'vip2' ? 'gold' : group === 'vip1' ? 'silver' : 'regular';
+  };
+
+  const getNextVip = (row: DailyCallMasterCustomerRow) => {
+    const current = getCurrentVip(row);
+    return current === 'regular' ? 'silver' : current === 'silver' ? 'gold' : 'top';
+  };
+
+  const filteredRows = useMemo(() => rows.filter((row) => {
+    if (currentVipFilter !== 'all' && getCurrentVip(row) !== currentVipFilter) return false;
+    if (nextVipFilter !== 'all' && getNextVip(row) !== nextVipFilter) return false;
+    if (lastPurchaseFilter === 'none' && row.purchaseAgeGroup !== 'no_purchase') return false;
+    if (lastPurchaseFilter === '7' && (row.daysSinceLastPurchase < 0 || row.daysSinceLastPurchase > 7)) return false;
+    if (lastPurchaseFilter === '30' && (row.daysSinceLastPurchase < 8 || row.daysSinceLastPurchase > 30)) return false;
+    if (lastPurchaseFilter === 'older' && row.daysSinceLastPurchase <= 30) return false;
+    return true;
+  }), [currentVipFilter, lastPurchaseFilter, nextVipFilter, rows]);
+
   const categoryData = useMemo(() => categories.map((category) => {
-    const categoryRows = rows.filter(category.matches);
+    const categoryRows = filteredRows.filter(category.matches);
     const currentSales = sumBy(categoryRows, 'currentMonthSales');
-    const potentialSales = sumBy(categoryRows, 'totalSales');
+    const potentialSales = category.id === 'verified'
+      ? categoryRows.length * 5_000
+      : category.id === 'priority' || category.id === 'recovery'
+        ? sumBy(categoryRows, 'averageMonthlySales')
+        : 0;
     const averageSales = sumBy(categoryRows, 'averageMonthlySales');
     return { ...category, rows: categoryRows, currentSales, potentialSales, averageSales };
-  }), [rows]);
+  }), [filteredRows]);
   const summaryCategoryData = categoryData.filter((category) => category.id !== 'all');
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfWeek = startOfToday - (6 * 24 * 60 * 60 * 1000);
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const unverifiedRows = categoryData.find((category) => category.id === 'unverified')?.rows || [];
+  const unverifiedCreatedCounts = {
+    today: unverifiedRows.filter((row) => new Date(row.createdAt || 0).getTime() >= startOfToday).length,
+    week: unverifiedRows.filter((row) => new Date(row.createdAt || 0).getTime() >= startOfWeek).length,
+    month: unverifiedRows.filter((row) => new Date(row.createdAt || 0).getTime() >= startOfMonth).length,
+  };
+
+  const amountToNextVip = (row: DailyCallMasterCustomerRow) => {
+    const current = getCurrentVip(row);
+    if (current === 'gold') return 0;
+    const threshold = current === 'silver'
+      ? vipConfig.unlimited_discount_threshold
+      : vipConfig.one_time_discount_threshold;
+    return Math.max(0, threshold - row.totalSales);
+  };
 
   const activeCategory = categoryData.find((category) => category.id === activeCategoryId) || categoryData[0];
   const pageCount = Math.max(1, Math.ceil(activeCategory.rows.length / pageSize));
@@ -368,13 +436,13 @@ const DailyCallMasterListView: React.FC = () => {
         onClose={() => setShowAddVerifiedProspectModal(false)}
         onSubmit={handleSubmitVerifiedProspect}
         mode="create"
-        defaultVerification="Verified"
-        title="Add Verified Prospect"
-        submitLabel="Save Verified Prospect"
+        defaultVerification="Unverified"
+        title="Add Prospect"
+        submitLabel="Save Prospect"
       />
       <header className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Owner Daily Call Monitoring</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Daily Call Monitoring Dashboard</p>
           <h2 className="mt-1 flex items-center gap-2 text-2xl font-bold">
             <ClipboardList className="h-6 w-6 text-blue-700" /> Master List
           </h2>
@@ -393,9 +461,31 @@ const DailyCallMasterListView: React.FC = () => {
           onClick={() => setShowAddVerifiedProspectModal(true)}
           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-blue-700"
         >
-          <UserRoundCheck className="h-4 w-4" /> Verified Prospect
+          <UserRoundCheck className="h-4 w-4" /> Add Prospect
         </button>
       </header>
+
+      <section className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-3" aria-label="Monitoring filters">
+        <label className="text-xs font-bold text-slate-600">Current VIP Status
+          <select value={currentVipFilter} onChange={(event) => setCurrentVipFilter(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal">
+            <option value="all">All current VIP levels</option><option value="regular">Regular</option><option value="silver">VIP Silver</option><option value="gold">VIP Gold</option>
+          </select>
+        </label>
+        <label className="text-xs font-bold text-slate-600">Next VIP Status
+          <select value={nextVipFilter} onChange={(event) => setNextVipFilter(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal">
+            <option value="all">All next VIP levels</option><option value="silver">Next: VIP Silver</option><option value="gold">Next: VIP Gold</option><option value="top">Highest tier reached</option>
+          </select>
+        </label>
+        <label className="text-xs font-bold text-slate-600">Last Purchase
+          <select value={lastPurchaseFilter} onChange={(event) => setLastPurchaseFilter(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal">
+            <option value="all">Any date</option><option value="7">Within 7 days</option><option value="30">8–30 days ago</option><option value="older">More than 30 days</option><option value="none">No purchase yet</option>
+          </select>
+        </label>
+      </section>
+
+      <p className="text-xs text-slate-500" data-testid="potential-sales-formula">
+        Potential Sales = Priority average monthly sales + Recovery average monthly sales + ₱5,000 per verified prospect. Unverified prospects are excluded.
+      </p>
 
       {error && (
         <div className="flex items-center justify-between rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
@@ -439,6 +529,9 @@ const DailyCallMasterListView: React.FC = () => {
                 {compactPeso.format(category.id === 'priority' || category.id === 'recovery' ? category.averageSales : category.potentialSales)}
               </strong>
             </div>
+            {category.id === 'unverified' && (
+              <p className="mt-2 border-t border-orange-200 pt-2 text-xs font-semibold text-orange-700">Found: {unverifiedCreatedCounts.today} today · {unverifiedCreatedCounts.week} this week · {unverifiedCreatedCounts.month} this month</p>
+            )}
           </article>
         ))}
       </section>
@@ -545,6 +638,9 @@ const DailyCallMasterListView: React.FC = () => {
                             {vip.label}
                           </div>
                           <p className="mt-1 text-[10px] text-slate-500">{vip.sublabel}</p>
+                          {(activeCategory.id === 'priority' || activeCategory.id === 'recovery') && (
+                            <p className="mt-1 text-[10px] font-semibold text-blue-700">{amountToNextVip(row) > 0 ? `${peso.format(amountToNextVip(row))} to next VIP` : 'Highest VIP reached'}</p>
+                          )}
                         </td>
                         <td className="px-2 py-2.5">
                           <p className="text-[15px] font-bold text-blue-950">{peso.format(row.averageMonthlySales)} <span className="text-[12px] font-medium text-slate-500">/ month</span></p>
@@ -563,7 +659,7 @@ const DailyCallMasterListView: React.FC = () => {
                         <td className="px-2 py-2.5">
                           <div className="flex justify-center gap-1.5">
                             {activeCategory.id === 'unverified' && (
-                              <button
+                              <><button
                                 type="button"
                                 aria-label={`Approve verification for ${row.shopName}`}
                                 title={`Approve ${row.shopName} into Verified Prospects`}
@@ -573,6 +669,16 @@ const DailyCallMasterListView: React.FC = () => {
                               >
                                 <UserRoundCheck className="h-4 w-4" />
                               </button>
+                              <button
+                                type="button"
+                                aria-label={`Reject ${row.shopName} to Blacklisted`}
+                                title={`Reject ${row.shopName} to Blacklisted`}
+                                onClick={() => handleRejectExistingProspect(row)}
+                                disabled={loadingCustomerId === row.id}
+                                className="rounded-full border border-rose-200 p-1.5 text-rose-600 transition hover:bg-rose-50 disabled:opacity-60"
+                              >
+                                <XCircle className="h-4 w-4" />
+                              </button></>
                             )}
                             <button
                               type="button"

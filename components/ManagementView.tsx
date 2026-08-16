@@ -138,7 +138,7 @@ export const ManagementView: React.FC<ManagementViewProps> = ({ currentUser }) =
 
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-2">Management Dashboard</h1>
+          <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-2">Sales Performance Dashboard</h1>
           <p className="text-slate-600 dark:text-slate-400">
             Sales performance and customer insights for {new Date(currentYear, currentMonth - 1).toLocaleString('default', { month: 'long', year: 'numeric' })}
           </p>

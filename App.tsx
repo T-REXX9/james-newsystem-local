@@ -74,6 +74,7 @@ import { Pipeline } from './components/Maintenance/Customer/Pipeline';
 import VipThresholdSettings from './components/Maintenance/Customer/VipThresholdSettings';
 import SpecialPrice from './components/Maintenance/Product/SpecialPrice';
 import ActivityLogs from './components/Maintenance/Profile/ActivityLogs';
+import OperationsDashboard from './components/OperationsDashboard';
 
 // AI Customer Service Components
 import AIDashboardView from './components/AIDashboardView';
@@ -603,11 +604,15 @@ const App: React.FC = () => {
         );
       case 'management':
       case 'sales-performance-management-dashboard':
+        if (!isCompanyOwnerRole(userProfile?.role)) return renderAccessDenied();
         return (
           <div className="h-full overflow-y-auto">
             <ManagementView currentUser={userProfile} />
           </div>
         );
+      case 'operations-management-dashboard':
+        if (!isCompanyOwnerRole(userProfile?.role)) return renderAccessDenied();
+        return <OperationsDashboard />;
       case 'sales-reports-inquiry-report':
         return (
           <div className="h-full overflow-y-auto">

@@ -16,11 +16,11 @@ describe('OwnerDailyCallMonitoringUnifiedView', () => {
     cleanup();
   });
 
-  it('renders the Chart view by default', () => {
+  it('renders the Daily Call Monitoring master list by default', () => {
     render(<OwnerDailyCallMonitoringUnifiedView currentUser={null} />);
 
-    expect(screen.getByTestId('chart-view')).toBeInTheDocument();
-    expect(screen.queryByTestId('master-list-view')).not.toBeInTheDocument();
+    expect(screen.getByTestId('master-list-view')).toBeInTheDocument();
+    expect(screen.queryByTestId('chart-view')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /purchase follow-up/i })).not.toBeInTheDocument();
   });
 
@@ -44,21 +44,21 @@ describe('OwnerDailyCallMonitoringUnifiedView', () => {
   it('switches back to Master List view', () => {
     render(<OwnerDailyCallMonitoringUnifiedView currentUser={null} />);
 
-    fireEvent.click(screen.getAllByRole('button', { name: /staff dashboard/i })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: /daily call monitoring dashboard/i })[0]);
 
     expect(screen.getByTestId('master-list-view')).toBeInTheDocument();
     expect(screen.queryByTestId('chart-view')).not.toBeInTheDocument();
   });
 
-  it('renames the first sidebar item for main users', () => {
+  it('uses the requested dashboard name for main users', () => {
     render(<OwnerDailyCallMonitoringUnifiedView currentUser={{ id: '1', email: 'main@example.com', role: 'MAIN' }} />);
 
-    expect(screen.getByRole('button', { name: /management\/staff dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /daily call monitoring dashboard/i })).toBeInTheDocument();
   });
 
-  it('renames the first sidebar item for staff users', () => {
+  it('uses the requested dashboard name for staff users', () => {
     render(<OwnerDailyCallMonitoringUnifiedView currentUser={{ id: '2', email: 'staff@example.com', role: 'Staff' }} />);
 
-    expect(screen.getByRole('button', { name: /^staff dashboard$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /daily call monitoring dashboard/i })).toBeInTheDocument();
   });
 });

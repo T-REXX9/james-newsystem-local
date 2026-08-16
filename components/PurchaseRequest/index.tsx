@@ -178,8 +178,9 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
         if (!selectedRequest) return;
         try {
             const poId = await purchaseRequestService.convertToPO([selectedRequest.id], 'user-id-placeholder');
-            alert(`Converted to PO! (ID: ${poId}) - Logic pending full PO implementation integration.`);
-            // Eventually redirect to PO page
+            window.dispatchEvent(new CustomEvent('workflow:navigate', {
+                detail: { tab: 'warehouse-purchasing-purchase-order', payload: { poId } },
+            }));
         } catch (err: any) {
             alert('Conversion failed: ' + err.message);
         }

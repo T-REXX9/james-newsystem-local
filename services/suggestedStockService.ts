@@ -1,4 +1,6 @@
 import { getLocalAuthSession } from './localAuthService';
+import { purchaseRequestService } from './purchaseRequestService';
+import type { PurchaseRequestWithItems } from '../purchaseRequest.types';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
@@ -252,6 +254,27 @@ export const updateItemRemark = async (
     console.error('Error updating item remark:', err);
     return false;
   }
+};
+
+export const createPurchaseRequestFromSuggestions = async (
+  items: SuggestedStockItem[]
+): Promise<PurchaseRequestWithItems> => {
+  if (items.length === 0) throw new Error('Select at least one suggested item');
+
+  const sourceIds = items.map((item) => item.id).filter(Boolean);
+  return purchaseRequestService.createPurchaseRequest({
+    pr_number: '',
+    request_date: new Date().toISOString().slice(0, 10),
+    notes: `Created from Item Suggested for Stock (${sourceIds.length} suggestion${sourceIds.length === 1 ? '' : 's'})`,
+    reference_no: `Suggested Stock:${sourceIds.join(',')}`,
+    items: items.map((item) => ({
+      item_code: item.databaseItemCode || item.itemCode || undefined,
+      part_number: item.databasePartNo || item.partNo || undefined,
+      description: item.description || undefined,
+      quantity: Math.max(1, Number(item.totalQty) || 1),
+      unit_cost: 0,
+    })),
+  });
 };
 
 export const fetchSuppliers = async (): Promise<SupplierOption[]> => {

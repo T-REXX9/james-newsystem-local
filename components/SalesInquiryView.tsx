@@ -17,6 +17,7 @@ import {
   SalesInquiryItem,
   SalesInquiryStatus,
 } from '../types';
+import ModuleRecordLink from './ModuleRecordLink';
 import { fetchContactById, fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { getLocalAuthSession } from '../services/localAuthService';
 import {
@@ -1313,7 +1314,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                     return <tr key={inquiry.id} onClick={() => void selectInquiry(inquiry)} className={`cursor-pointer hover:bg-[#f7f7f7] ${rowColor}`}>
                       <td className="border border-[#d7d7d7] px-2 py-[9px]">{formatLegacyListDate(inquiry.sales_date)}</td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] truncate" title={customer?.company || ''}>{customer?.company || ''}</td>
-                      <td className="border border-[#d7d7d7] px-2 py-[9px]"><span className="underline">{formatInquiryDisplayNo(inquiry.inquiry_no)}</span> <Copy className="ml-1 inline h-3.5 w-3.5 text-[#337ab7]" /></td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px]"><ModuleRecordLink tab="sales-transaction-sales-inquiry" payload={{ inquiryId: inquiry.id }} onOpen={() => void selectInquiry(inquiry)} className="underline">{formatInquiryDisplayNo(inquiry.inquiry_no)}</ModuleRecordLink> <Copy className="ml-1 inline h-3.5 w-3.5 text-[#337ab7]" /></td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{inquiry.so_no || ''}</td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{inquiry.invoice_no || inquiry.dr_no || ''}</td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] truncate">{inquiry.sales_person || ''}</td>

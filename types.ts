@@ -676,6 +676,7 @@ export interface DailyCallMasterCustomerRow {
   assignedTo: string;
   profileType?: string;
   verification?: string;
+  createdAt?: string;
   priceGroup?: string;
   lastPurchaseDate: string;
   lastPurchaseDateRaw: string;

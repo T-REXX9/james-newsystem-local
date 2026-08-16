@@ -75,7 +75,7 @@ describe('PurchaseRequestView', () => {
     await waitFor(() => expect(onDeleteItem).toHaveBeenCalledWith('101'));
   });
 
-  it('uses the confirmation modal before converting to purchase order', async () => {
+  it('uses the confirmation modal before generating a purchase order', async () => {
     const user = userEvent.setup();
     const onConvert = vi.fn().mockResolvedValue(undefined);
 
@@ -94,10 +94,10 @@ describe('PurchaseRequestView', () => {
       />
     );
 
-    await user.click(screen.getByRole('button', { name: /convert to po/i }));
+    await user.click(screen.getByRole('button', { name: /generate purchase order/i }));
     expect(screen.getByText(/create a new purchase order from pr-2601/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /^convert$/i }));
+    await user.click(screen.getByRole('button', { name: /generate po/i }));
 
     await waitFor(() => expect(onConvert).toHaveBeenCalledTimes(1));
   });

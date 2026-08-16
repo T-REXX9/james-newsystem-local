@@ -563,9 +563,10 @@ const syncContactPersons = async (sessionId: string, contactPersons: ContactPers
   }
 };
 
-export const updateContact = async (id: string, updates: Partial<Contact>): Promise<void> => {
+export const updateContact = async (id: string, updates: Partial<Contact>, actorId?: string): Promise<void> => {
   const payload = {
     main_id: API_MAIN_ID,
+    user_id: actorId || String(getUserContext().userId),
     ...mapContactUpdatesToApi(updates),
   };
 

@@ -150,6 +150,7 @@ export const purchaseRequestService = {
         request_date: payload.request_date,
         notes: payload.notes || '',
         reference_no: payload.reference_no || '',
+        status: payload.status || 'Pending',
         items: (payload.items || []).map(mapCreateItemPayload),
       }),
     });

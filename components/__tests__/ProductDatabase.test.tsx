@@ -117,7 +117,11 @@ describe('ProductDatabase', () => {
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Product Details' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(screen.getByRole('tab', { name: 'Supplier & Costing' }));
     expect(screen.getByText('Supplier COG')).toBeInTheDocument();
+    expect(screen.getByText('QKHT DIESEL PARTS')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'Pricing & Stock' }));
     expect(screen.getByText('Price List')).toBeInTheDocument();
     expect(screen.getAllByText('Regular').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Silver').length).toBeGreaterThan(0);
@@ -130,13 +134,13 @@ describe('ProductDatabase', () => {
     expect(screen.getByText('Stock & Reorder')).toBeInTheDocument();
     expect(screen.getByText('Price List (Per Piece)')).toBeInTheDocument();
     expect(screen.getByText('Last Price Update')).toBeInTheDocument();
-    expect(screen.getByText('QKHT DIESEL PARTS')).toBeInTheDocument();
     expect(screen.getByText('Preferred Supplier 1')).toBeInTheDocument();
     expect(screen.getByText('25')).toBeInTheDocument();
     expect(screen.getByText('(20/07/2026)')).toBeInTheDocument();
     const productTable = screen.getByText('Specifications').closest('table');
     expect(productTable).toHaveClass('w-full', 'table-fixed');
-    expect(productTable?.parentElement).toHaveClass('overflow-x-hidden');
+    expect(productTable).toHaveClass('text-[11px]', 'min-w-[1900px]');
+    expect(productTable?.parentElement).toHaveClass('overflow-auto');
     expect(screen.queryByRole('button', { name: 'Previous' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
     expect(screen.getByText('All items loaded')).toBeInTheDocument();
