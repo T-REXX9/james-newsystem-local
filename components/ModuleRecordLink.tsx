@@ -15,10 +15,20 @@ export const buildModuleRecordHref = (tab: string, payload: Record<string, strin
   return `#/${tab}${query ? `?${query}` : ''}`;
 };
 
-const ModuleRecordLink: React.FC<ModuleRecordLinkProps> = ({ tab, payload, onOpen, children, ...props }) => (
+const ModuleRecordLink: React.FC<ModuleRecordLinkProps> = ({
+  tab,
+  payload,
+  onOpen,
+  children,
+  target = '_blank',
+  rel = 'noopener noreferrer',
+  ...props
+}) => (
   <a
     {...props}
     href={buildModuleRecordHref(tab, payload)}
+    target={target}
+    rel={rel}
     onClick={(event) => {
       event.stopPropagation();
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;

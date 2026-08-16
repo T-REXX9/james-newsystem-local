@@ -16,6 +16,8 @@ describe('ModuleRecordLink', () => {
     const link = screen.getByRole('link', { name: 'REC-1' });
 
     expect(link).toHaveAttribute('href', '#/record-page?id=1');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
     fireEvent.click(link);
     expect(onOpen).toHaveBeenCalledTimes(1);
 

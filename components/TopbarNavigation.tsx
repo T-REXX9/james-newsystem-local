@@ -101,6 +101,29 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
     [onNavigate]
   );
 
+  const routeHref = useCallback((route: string) => {
+    const canonical = MODULE_ID_ALIASES[route] || route;
+    return `#/${canonical}`;
+  }, []);
+
+  const handleRouteLinkClick = useCallback(
+    (event: React.MouseEvent<HTMLAnchorElement>, route: string) => {
+      if (
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      navigateTo(route);
+    },
+    [navigateTo]
+  );
+
   const closeMenus = useCallback(() => {
     setOpenMenuId(null);
   }, []);
@@ -284,9 +307,12 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
                             </div>
                             <div className="space-y-1">
                               {submenu.items.map((item) => (
-                                <button
+                                <a
                                   key={item.id}
-                                  onClick={() => navigateTo(item.route)}
+                                  href={routeHref(item.route)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(event) => handleRouteLinkClick(event, item.route)}
                                   onKeyDown={(event) => {
                                     if (event.key === 'Escape') {
                                       closeMenus();
@@ -300,7 +326,7 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
                                 >
                                   <item.icon className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                                   {item.label}
-                                </button>
+                                </a>
                               ))}
                             </div>
                           </div>
@@ -342,14 +368,17 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
                         </div>
                         <div className="space-y-1" role="menu">
                           {submenu.items.map((item) => (
-                            <button
+                            <a
                               key={item.id}
-                              onClick={() => navigateTo(item.route)}
+                              href={routeHref(item.route)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(event) => handleRouteLinkClick(event, item.route)}
                               className="w-full text-left text-sm py-2 px-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 min-h-[44px] flex items-center"
                               role="menuitem"
                             >
                               {item.label}
-                            </button>
+                            </a>
                           ))}
                         </div>
                       </div>
