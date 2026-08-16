@@ -98,7 +98,7 @@ export const canonicalizeRoleName = (value?: string | null): string => {
   if (normalized === 'warehouse' || normalized === 'warehouse staff' || normalized === 'warehouse personnel') {
     return ROLE_NAMES.WAREHOUSE_PERSONNEL;
   }
-  if (normalized === 'owner' || normalized === 'company owner') {
+  if (normalized === 'owner' || normalized === 'company owner' || normalized === 'main') {
     return ROLE_NAMES.COMPANY_OWNER;
   }
   return String(value || '').trim();

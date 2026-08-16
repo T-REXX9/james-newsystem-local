@@ -78,7 +78,7 @@ describe('specialPriceService request contract', () => {
 
     const records = await fetchSpecialPrices('shock', 2, 25);
     expect(records.meta).toEqual({ page: 2, per_page: 25, total: 40, total_pages: 2 });
-    expect(records.items[0]?.type).toBe('Fix Amount');
+    expect(records.items[0]?.type).toBe('Fixed Amount Deduction');
 
     await fetchProducts('brake', 1, 20);
     await fetchCustomerPicker('acme', 1, 20);
@@ -115,7 +115,7 @@ describe('specialPriceService request contract', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await fetchSpecialPriceDetail('sp-1');
-    await createSpecialPrice('itm-1', 'Fix Amount', 25);
+    await createSpecialPrice('itm-1', 'Fixed Amount Deduction', 25);
     await updateSpecialPrice('sp-1', 'Percentage', 15);
     await deleteSpecialPrice('sp-1');
     await addCustomer('sp-1', 'cust-1');
@@ -126,7 +126,7 @@ describe('specialPriceService request contract', () => {
     await removeCategory('sp-1', 'CAT-1');
 
     const createBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body ?? '{}'));
-    expect(createBody).toEqual({ item_session: 'itm-1', type: 'Fix Amount', amount: 25 });
+    expect(createBody).toEqual({ item_session: 'itm-1', type: 'Fixed Amount Deduction', amount: 25 });
 
     const updateBody = JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body ?? '{}'));
     expect(updateBody).toEqual({ type: 'Percentage', amount: 15 });

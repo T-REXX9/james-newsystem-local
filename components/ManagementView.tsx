@@ -22,17 +22,7 @@ import {
   DollarSign,
   Activity,
 } from 'lucide-react';
-import {
-  fetchMonthlySalesPerformanceBySalesperson,
-  fetchMonthlySalesPerformanceByCity,
-  fetchSalesPerformanceByCustomerStatus,
-  fetchSalesPerformanceByPaymentType,
-  fetchInactiveCustomers,
-  fetchInactiveCriticalCustomers,
-  fetchInquiryOnlyCustomers,
-  fetchContacts,
-} from '../services/supabaseService';
-import { CustomerStatusNotification, InquiryOnlyAlert } from '../types';
+import { fetchManagementDashboardData } from '../services/managementDashboardLocalApiService';
 import ContactDetails from './ContactDetails';
 
 interface ManagementViewProps {
@@ -50,6 +40,7 @@ export const ManagementView: React.FC<ManagementViewProps> = ({ currentUser }) =
   const [inquiryOnlyCustomers, setInquiryOnlyCustomers] = useState<any[]>([]);
   const [selectedContact, setSelectedContact] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
@@ -58,16 +49,10 @@ export const ManagementView: React.FC<ManagementViewProps> = ({ currentUser }) =
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
+      setLoadError('');
       try {
-        const [team, city, status, payment, inactive, criticalInactive, inquiryOnly] = await Promise.all([
-          fetchMonthlySalesPerformanceBySalesperson(currentYear, currentMonth),
-          fetchMonthlySalesPerformanceByCity(currentYear, currentMonth),
-          fetchSalesPerformanceByCustomerStatus(currentYear, currentMonth),
-          fetchSalesPerformanceByPaymentType(currentYear, currentMonth),
-          fetchInactiveCustomers(30),
-          fetchInactiveCriticalCustomers(30),
-          fetchInquiryOnlyCustomers(2),
-        ]);
+        const { team, city, status, payment, inactive, criticalInactive, inquiryOnly } =
+          await fetchManagementDashboardData(Number(currentUser?.main_id || currentUser?.main_userid || 1), currentYear, currentMonth);
 
         setSalesByTeam(team);
         setSalesByCity(city);
@@ -77,14 +62,14 @@ export const ManagementView: React.FC<ManagementViewProps> = ({ currentUser }) =
         setInactiveCritical(criticalInactive);
         setInquiryOnlyCustomers(inquiryOnly);
       } catch (err) {
-        console.error('Error loading management data:', err);
+        setLoadError(err instanceof Error ? err.message : 'Unable to load management data.');
       } finally {
         setLoading(false);
       }
     };
 
     loadData();
-  }, [currentMonth, currentYear]);
+  }, [currentMonth, currentYear, currentUser?.main_id, currentUser?.main_userid]);
 
   const totalCurrentMonthSales = salesByTeam.reduce((sum, s) => sum + s.currentMonthSales, 0);
   const totalPreviousMonthSales = salesByTeam.reduce((sum, s) => sum + s.previousMonthSales, 0);
@@ -137,6 +122,11 @@ export const ManagementView: React.FC<ManagementViewProps> = ({ currentUser }) =
       )}
 
       <div className="max-w-7xl mx-auto">
+        {loadError && (
+          <div role="alert" className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {loadError}
+          </div>
+        )}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-2">Sales Performance Dashboard</h1>
           <p className="text-slate-600 dark:text-slate-400">
@@ -195,7 +185,7 @@ export const ManagementView: React.FC<ManagementViewProps> = ({ currentUser }) =
           <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
             <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-6">Sales by Salesperson</h2>
             <div className="h-80 w-full">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 800, height: 320 }}>
                 <BarChart data={salesByTeam}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#475569" opacity={0.1} />
                   <XAxis dataKey="salesPersonName" stroke="#94a3b8" fontSize={12} />
@@ -248,7 +238,7 @@ export const ManagementView: React.FC<ManagementViewProps> = ({ currentUser }) =
           <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
             <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-6">Sales by City</h2>
             <div className="h-80 w-full">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 800, height: 320 }}>
                 <BarChart data={salesByCity} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#475569" opacity={0.1} />
                   <XAxis type="number" stroke="#94a3b8" fontSize={12} tickFormatter={(val) => `${val / 1000}k`} />
@@ -272,7 +262,7 @@ export const ManagementView: React.FC<ManagementViewProps> = ({ currentUser }) =
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
               <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-6">Sales by Customer Status</h2>
               <div className="h-80 w-full">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 520, height: 320 }}>
                   <PieChart>
                     <Pie
                       data={salesByStatus}
@@ -319,7 +309,7 @@ export const ManagementView: React.FC<ManagementViewProps> = ({ currentUser }) =
           <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
             <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-6">Sales by Payment Type</h2>
             <div className="h-80 w-full">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 800, height: 320 }}>
                 <BarChart data={salesByPayment}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#475569" opacity={0.1} />
                   <XAxis dataKey="paymentType" stroke="#94a3b8" fontSize={12} />
