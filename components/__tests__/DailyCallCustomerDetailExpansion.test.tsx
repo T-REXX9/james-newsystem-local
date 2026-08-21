@@ -5,6 +5,12 @@ import userEvent from '@testing-library/user-event';
 
 import DailyCallCustomerDetailExpansion from '../DailyCallCustomerDetailExpansion';
 
+const fetchManagementInstructionsMock = vi.fn(async () => []);
+
+vi.mock('../../services/dailyCallMonitoringService', () => ({
+  fetchManagementInstructions: (...args: unknown[]) => fetchManagementInstructionsMock(...args),
+}));
+
 vi.mock('../SalesReportTab', () => ({
   default: () => <div>Sales tab content</div>,
 }));
@@ -132,5 +138,22 @@ describe('DailyCallCustomerDetailExpansion', () => {
     expect(screen.getByText('Sales agent call report')).toBeInTheDocument();
     expect(screen.getByText('Customer requested updated quotation.')).toBeInTheDocument();
     expect(screen.getByText('Contacted by Jane Doe')).toBeInTheDocument();
+    expect(screen.getByText(/Sales → Daily Call Monitoring/)).toBeInTheDocument();
+  });
+
+  it('opens the real management-instruction form and removes decorative quick actions', async () => {
+    const user = userEvent.setup();
+    render(
+      <DailyCallCustomerDetailExpansion
+        customer={customer}
+        currentUser={{ id: 'master-1', role: 'Master User', full_name: 'Master User' } as any}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: '+ Add Instruction' }));
+
+    expect(screen.getByText('Comments tab content')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'AI SMS' })).not.toBeInTheDocument();
+    expect(screen.queryByText('AI follow-up review')).not.toBeInTheDocument();
   });
 });

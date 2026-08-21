@@ -1112,9 +1112,9 @@ const StockMovementView: React.FC = () => {
                       <th className="border border-slate-200 px-3 py-3 font-semibold dark:border-slate-800">Brand</th>
                       <th className="border border-slate-200 px-3 py-3 font-semibold dark:border-slate-800">Application</th>
                       <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">Reorder Qty</th>
-                      <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">Regular</th>
-                      <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">Silver</th>
-                      <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">Gold</th>
+                      <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">VIP 1</th>
+                      <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">VIP 2</th>
+                      <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">VIP 3</th>
                       <th className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">Total Stock</th>
                     </tr>
                   </thead>

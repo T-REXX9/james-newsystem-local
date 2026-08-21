@@ -26,8 +26,8 @@ vi.mock('../../services/vipTierSettingsService', () => ({
 }));
 
 vi.mock('../DailyCallCustomerDetailModal', () => ({
-  default: ({ isOpen, customer }: any) => isOpen && customer
-    ? <div role="dialog">Customer detail popup for {customer.shopName}</div>
+  default: ({ isOpen, customer, currentUser }: any) => isOpen && customer
+    ? <div role="dialog" data-current-user={currentUser?.id || ''}>Customer detail popup for {customer.shopName}</div>
     : null,
 }));
 
@@ -269,11 +269,13 @@ describe('DailyCallMasterListView', () => {
       weeklyRangeTotals: [], dailyActivity: [],
     } as any]);
 
-    render(<DailyCallMasterListView />);
+    render(<DailyCallMasterListView currentUser={{ id: 'master-1', role: 'Master User' } as any} />);
     await user.click(await screen.findByRole('button', { name: 'View details for Priority Buyer Shop' }));
 
     expect(fetchCustomersForDailyCall).toHaveBeenCalledWith({});
-    expect(await screen.findByRole('dialog')).toHaveTextContent('Customer detail popup for Priority Buyer Shop');
+    const detailDialog = await screen.findByRole('dialog');
+    expect(detailDialog).toHaveTextContent('Customer detail popup for Priority Buyer Shop');
+    expect(detailDialog).toHaveAttribute('data-current-user', 'master-1');
   });
 
   it('wires the call and message action buttons to the customer popup flow', async () => {

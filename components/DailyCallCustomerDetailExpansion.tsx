@@ -32,6 +32,7 @@ import { isKnownPriceGroup, normalizePriceGroup } from '../constants/pricingGrou
 import { getVipStandingSummary } from '../utils/vipStanding';
 import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
 import { getVipTierConfig } from '../services/vipTierSettingsService';
+import { fetchManagementInstructions } from '../services/dailyCallMonitoringService';
 
 export type DetailTabId =
   | 'overview'
@@ -150,14 +151,19 @@ const PanelCard: React.FC<{
   icon: React.ComponentType<{ className?: string }>;
   tone?: string;
   action?: string;
+  onAction?: () => void;
   children: React.ReactNode;
-}> = ({ title, icon: Icon, tone = 'text-blue-700', action, children }) => (
+}> = ({ title, icon: Icon, tone = 'text-blue-700', action, onAction, children }) => (
   <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
     <header className="flex items-center justify-between gap-3 border-b border-slate-200 px-3.5 py-3">
       <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-800">
         <Icon className={`h-4 w-4 ${tone}`} /> {title}
       </h3>
-      {action && <span className="text-[10px] font-bold text-blue-700">{action}</span>}
+      {action && (onAction ? (
+        <button type="button" onClick={onAction} className="rounded px-1 py-0.5 text-[10px] font-bold text-blue-700 hover:bg-blue-50 hover:underline">
+          {action}
+        </button>
+      ) : <span className="text-[10px] font-bold text-blue-700">{action}</span>)}
     </header>
     <div className="p-3">{children}</div>
   </section>
@@ -170,6 +176,7 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
 }) => {
   const [activeTab, setActiveTab] = useState<DetailTabId>(initialTab);
   const [vipConfig, setVipConfig] = useState<VipTierConfig>(DEFAULT_VIP_TIER_CONFIG);
+  const [latestInstruction, setLatestInstruction] = useState<any | null>(null);
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -182,6 +189,15 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
     });
     return () => { disposed = true; };
   }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    setLatestInstruction(null);
+    fetchManagementInstructions(customer.id).then((comments) => {
+      if (!disposed) setLatestInstruction(comments[0] || null);
+    });
+    return () => { disposed = true; };
+  }, [customer.id, activeTab]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -207,6 +223,10 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
     [dealerPriceTier, customer.lastMonthOrder, vipConfig]
   );
   const activities = useMemo(() => customer.dailyActivity || [], [customer.dailyActivity]);
+  const humanActivities = useMemo(
+    () => activities.filter((activity) => isSalesAgentReport(activity) || Boolean(activity.agent_name)),
+    [activities]
+  );
   const location = [customer.city, customer.province].filter((value) => value && value !== '—').join(', ') || customer.courier || '—';
   const isActive = String(customer.status).toLowerCase() === 'active';
   const totalActivity = activities.reduce((sum, activity) => sum + activity.activity_count, 0);
@@ -215,16 +235,20 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
     <div className="space-y-3 bg-slate-50 p-3">
       <div className="grid gap-3 xl:grid-cols-[0.82fr_1.02fr_1.35fr]">
         <div className="space-y-3">
-          <PanelCard title="Management Instructions" icon={ClipboardList} tone="text-violet-700" action="+ Add Instruction">
-            <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-              <div className="flex items-center justify-between text-[10px] text-slate-500">
-                <span className="font-bold text-slate-800">{currentUser?.full_name || 'Owner'}</span>
-                <span>Customer guidance</span>
+          <PanelCard title="Management Instructions" icon={ClipboardList} tone="text-violet-700" action="+ Add Instruction" onAction={() => setActiveTab('comments')}>
+            {latestInstruction ? (
+              <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                <div className="flex items-center justify-between text-[10px] text-slate-500">
+                  <span className="font-bold text-slate-800">{latestInstruction.author_name || 'Management'}</span>
+                  <span>{formatDate(latestInstruction.timestamp)}</span>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-slate-700">{latestInstruction.text}</p>
               </div>
-              <p className="mt-2 text-xs leading-5 text-slate-700">
-                Review account terms, recent activity, and outstanding balance before the next customer contact.
+            ) : (
+              <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-center text-xs text-slate-500">
+                No management instructions have been saved for this customer.
               </p>
-            </div>
+            )}
             <button type="button" onClick={() => setActiveTab('comments')} className="mt-3 w-full text-center text-[11px] font-bold text-blue-700 hover:underline">
               View All Instructions →
             </button>
@@ -246,27 +270,17 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
         </div>
 
         <div className="space-y-3">
-          <PanelCard title={`Human Agent Activity (${customer.assignedTo || 'Unassigned'})`} icon={UserRound} action="View All">
-            <ActivityList activities={activities} emptyLabel="No human-agent activity has been recorded for this customer." compact />
+          <PanelCard title={`Human Agent Activity (${customer.assignedTo || 'Unassigned'})`} icon={UserRound} action="View All" onAction={() => setActiveTab('human')}>
+            <ActivityList activities={humanActivities} emptyLabel="No human-agent report has been recorded for this customer." compact />
             <button type="button" onClick={() => setActiveTab('human')} className="mt-3 w-full text-center text-[11px] font-bold text-blue-700 hover:underline">View All Human Agent Activity →</button>
           </PanelCard>
 
-          <PanelCard title="AI Agent Activity" icon={Bot} tone="text-violet-700" action="View All">
-            <div className="space-y-2">
-              {activities.slice(0, 4).map((activity, index) => (
-                <div key={`${activity.activity_date}-ai-${index}`} className="flex items-center gap-2 border-l-2 border-violet-300 pl-3 text-xs">
-                  <Bot className="h-3.5 w-3.5 text-violet-700" />
-                  <span className="text-slate-500">{formatDate(activity.activity_date)}</span>
-                  <span className="min-w-0 flex-1 truncate font-semibold text-slate-800">AI follow-up review</span>
-                  <span className="text-[10px] font-bold text-emerald-700">Ready</span>
-                </div>
-              ))}
-              {activities.length === 0 && <p className="py-5 text-center text-xs text-slate-500">No AI-agent activity available.</p>}
-            </div>
+          <PanelCard title="AI Agent Activity" icon={Bot} tone="text-violet-700">
+            <p className="py-5 text-center text-xs text-slate-500">No AI-agent activity has been recorded for this customer.</p>
           </PanelCard>
         </div>
 
-        <PanelCard title="Communication Timeline (All)" icon={MessageSquare} tone="text-slate-700" action="All ▾">
+        <PanelCard title="Communication Timeline (All)" icon={MessageSquare} tone="text-slate-700">
           <ActivityList activities={activities} emptyLabel="No communication history is available for this customer." />
           <button type="button" onClick={() => setActiveTab('communication')} className="mt-3 w-full text-center text-[11px] font-bold text-blue-700 hover:underline">View Full Communication History →</button>
         </PanelCard>
@@ -283,13 +297,21 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
     if (activeTab === 'purchase') return <PurchaseHistoryTab contactId={customer.id} />;
     if (activeTab === 'collections') return <LBCRTOTab contactId={customer.id} />;
     if (activeTab === 'comments') {
-      return <PersonalCommentsTab contactId={customer.id} currentUserId={currentUser?.id} currentUserName={currentUser?.full_name || currentUser?.email || 'Owner'} currentUserAvatar={currentUser?.avatar_url} />;
+      return <PersonalCommentsTab contactId={customer.id} currentUserId={currentUser?.id} currentUserName={currentUser?.full_name || currentUser?.email || 'Owner'} currentUserAvatar={currentUser?.avatar_url} mode="instruction" autoFocus />;
     }
     if (activeTab === 'ai') {
-      return <div className="p-5"><PanelCard title="AI Agent Activity" icon={Bot}><ActivityList activities={activities} emptyLabel="No AI-agent activity available." /></PanelCard></div>;
+      return <div className="p-5"><PanelCard title="AI Agent Activity" icon={Bot}><p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-xs text-slate-500">No AI-agent activity has been recorded for this customer.</p></PanelCard></div>;
     }
-    return <div className="p-5"><PanelCard title={activeTab === 'human' ? `Human Agent Activity (${customer.assignedTo})` : 'Communication Timeline (All)'} icon={activeTab === 'human' ? UserRound : MessageSquare}><ActivityList activities={activities} emptyLabel="No activity is available for this customer." /></PanelCard></div>;
-  }, [activeTab, activities, currentUser, customer, overview]);
+    if (activeTab === 'human') {
+      return <div className="p-5"><PanelCard title={`Human Agent Activity (${customer.assignedTo || 'Unassigned'})`} icon={UserRound}>
+        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-900">
+          Human agents submit the daily sales report from <strong>Sales → Daily Call Monitoring</strong>. Open the customer, select <strong>Call</strong>, complete the <strong>Conversation report</strong>, then select <strong>Submit Report</strong>.
+        </div>
+        <ActivityList activities={humanActivities} emptyLabel="No human-agent report has been recorded for this customer." />
+      </PanelCard></div>;
+    }
+    return <div className="p-5"><PanelCard title="Communication Timeline (All)" icon={MessageSquare}><ActivityList activities={activities} emptyLabel="No activity is available for this customer." /></PanelCard></div>;
+  }, [activeTab, activities, currentUser, customer, humanActivities, overview]);
 
   return (
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-sm">
@@ -349,15 +371,12 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
         <h3 className="text-[10px] font-bold uppercase tracking-wide text-slate-700">Quick Actions</h3>
         <div className="mt-2 grid grid-cols-4 gap-2 lg:grid-cols-8">
           {[
-            ['Call Customer', Phone, 'text-emerald-700 border-emerald-200 bg-emerald-50'],
-            ['Send SMS', Send, 'text-blue-700 border-blue-200 bg-blue-50'],
-            ['AI SMS', Bot, 'text-violet-700 border-violet-200 bg-violet-50'],
-            ['Create Follow-Up', CalendarDays, 'text-orange-700 border-orange-200 bg-orange-50'],
-            ['Add Comment', Plus, 'text-cyan-700 border-cyan-200 bg-cyan-50'],
-            ['Sales Report', BarChart3, 'text-white border-blue-900 bg-blue-950'],
-            ['View Orders', ShoppingCart, 'text-white border-slate-700 bg-slate-700'],
-            ['Timeline', Clock3, 'text-slate-700 border-slate-200 bg-white'],
-          ].map(([label, Icon, tone]) => <button key={String(label)} type="button" className={`flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-[10px] font-bold ${tone}`}><Icon className="h-3.5 w-3.5" />{String(label)}</button>)}
+            ['Add Instruction', Plus, 'text-cyan-700 border-cyan-200 bg-cyan-50', 'comments'],
+            ['Human Agent Reports', UserRound, 'text-emerald-700 border-emerald-200 bg-emerald-50', 'human'],
+            ['Sales Report', BarChart3, 'text-white border-blue-900 bg-blue-950', 'sales'],
+            ['View Orders', ShoppingCart, 'text-white border-slate-700 bg-slate-700', 'purchase'],
+            ['Timeline', Clock3, 'text-slate-700 border-slate-200 bg-white', 'communication'],
+          ].map(([label, Icon, tone, target]) => <button key={String(label)} type="button" onClick={() => setActiveTab(target as DetailTabId)} className={`flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-[10px] font-bold ${tone}`}><Icon className="h-3.5 w-3.5" />{String(label)}</button>)}
         </div>
       </footer>
     </section>

@@ -135,6 +135,7 @@ describe('ProductDatabase', () => {
     expect(screen.getByText('Price List (Per Piece)')).toBeInTheDocument();
     expect(screen.getByText('Last Price Update')).toBeInTheDocument();
     expect(screen.getByText('Preferred Supplier 1')).toBeInTheDocument();
+    expect(screen.getByText('Preferred Supplier 1').closest('div')).toHaveClass('h-12', 'items-center');
     expect(screen.getByText('25')).toBeInTheDocument();
     expect(screen.getByText('(20/07/2026)')).toBeInTheDocument();
     const productTable = screen.getByText('Specifications').closest('table');

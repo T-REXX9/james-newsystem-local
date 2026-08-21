@@ -222,7 +222,7 @@ interface DailyCallMasterListViewProps {
   currentUser?: UserProfile | null;
 }
 
-const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ currentUser: _currentUser }) => {
+const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ currentUser }) => {
   const initialCachedResult = useMemo(() => getCachedDailyCallMasterList({ fromDate }), []);
   const [rows, setRows] = useState<DailyCallMasterCustomerRow[]>(() => initialCachedResult?.items || []);
   const [meta, setMeta] = useState<DailyCallMasterListMeta>(() => initialCachedResult?.meta || { fromDate, toDate: '', count: 0 });
@@ -840,7 +840,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
       <DailyCallCustomerDetailModal
         isOpen={Boolean(selectedCustomer)}
         customer={selectedCustomer}
-        currentUser={null}
+        currentUser={currentUser || null}
         initialTab={detailInitialTab}
         onClose={() => setSelectedCustomer(null)}
       />

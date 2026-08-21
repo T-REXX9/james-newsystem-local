@@ -710,17 +710,17 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser: _current
                           </td>
                           <td className="border border-[#ddd] p-0 align-top">
                             {supplierRows.map((supplier, index) => (
-                              <div key={`${supplier?.supplier_id || 'empty'}-${index}`} className="min-h-[28px] border-b border-[#eee] px-0.5 py-1 last:border-b-0">
+                              <div key={`${supplier?.supplier_id || 'empty'}-${index}`} className="flex h-12 items-center overflow-hidden border-b border-[#eee] px-0.5 py-1 leading-tight last:border-b-0">
                                 {supplier && <><span className={index === 0 ? 'text-amber-500' : index === 1 ? 'text-slate-400' : 'text-orange-600'}>{index === 0 ? '⭐' : '🏆'}</span>{' '}</>}
                                 {supplier?.supplier_code || '-'}
                               </div>
                             ))}
                           </td>
                           <td className="border border-[#ddd] p-0 align-top">
-                            {supplierRows.map((supplier, index) => <div key={`${supplier?.supplier_id || 'empty'}-${index}`} className="min-h-[28px] border-b border-[#eee] px-0.5 py-1 last:border-b-0">{supplier?.supplier_name || '-'}</div>)}
+                            {supplierRows.map((supplier, index) => <div key={`${supplier?.supplier_id || 'empty'}-${index}`} className="flex h-12 items-center overflow-hidden border-b border-[#eee] px-0.5 py-1 leading-tight last:border-b-0" title={supplier?.supplier_name || ''}>{supplier?.supplier_name || '-'}</div>)}
                           </td>
                           <td className="border border-[#ddd] p-0 text-right align-top">
-                            {supplierRows.map((supplier, index) => <div key={`${supplier?.supplier_id || 'empty'}-${index}`} className="min-h-[28px] border-b border-[#eee] px-0.5 py-1 last:border-b-0">{supplier ? money(supplier.cost) : '-'}</div>)}
+                            {supplierRows.map((supplier, index) => <div key={`${supplier?.supplier_id || 'empty'}-${index}`} className="flex h-12 items-center justify-end overflow-hidden border-b border-[#eee] px-0.5 py-1 leading-tight last:border-b-0">{supplier ? money(supplier.cost) : '-'}</div>)}
                           </td>
                           <td className="border border-[#ddd] p-0 text-center align-top">
                             {supplierRows.map((supplier, index) => {
@@ -729,7 +729,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser: _current
                                 ? `Recommended for Blacklisted${supplier?.rank ? ` Supplier ${supplier.rank}` : ''}`
                                 : supplier?.status || '';
                               return (
-                                <div key={`${supplier?.supplier_id || 'empty'}-${index}`} className="flex min-h-[28px] items-center justify-center border-b border-[#eee] px-0.5 py-1 last:border-b-0">
+                                <div key={`${supplier?.supplier_id || 'empty'}-${index}`} className="flex h-12 items-center justify-center overflow-hidden border-b border-[#eee] px-0.5 py-1 leading-tight last:border-b-0">
                                   {status ? <span className={`rounded-full px-1 py-0.5 font-semibold leading-tight ${blacklisted ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-800'}`}>{status}</span> : <span>-</span>}
                                 </div>
                               );

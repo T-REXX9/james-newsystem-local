@@ -1,5 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { MessageSquare, Send } from 'lucide-react';
+import {
+  createManagementInstruction,
+  fetchManagementInstructions,
+} from '../services/dailyCallMonitoringService';
 import { fetchPersonalComments, createPersonalComment } from '../services/supabaseService';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
@@ -9,24 +13,36 @@ interface PersonalCommentsTabProps {
   currentUserId?: string;
   currentUserName?: string;
   currentUserAvatar?: string;
+  mode?: 'comment' | 'instruction';
+  autoFocus?: boolean;
 }
 
 const PersonalCommentsTab: React.FC<PersonalCommentsTabProps> = ({ 
   contactId, 
   currentUserId, 
   currentUserName = 'Unknown User',
-  currentUserAvatar 
+  currentUserAvatar,
+  mode = 'comment',
+  autoFocus = false,
 }) => {
   const { addToast } = useToast();
   const [comments, setComments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const isInstruction = mode === 'instruction';
+
+  useEffect(() => {
+    if (autoFocus && !loading) textareaRef.current?.focus();
+  }, [autoFocus, loading]);
 
   useEffect(() => {
     const loadComments = async () => {
       try {
-        const data = await fetchPersonalComments(contactId);
+        const data = isInstruction
+          ? await fetchManagementInstructions(contactId)
+          : await fetchPersonalComments(contactId);
         setComments(data || []);
       } catch (err) {
         console.error('Error loading comments:', err);
@@ -36,7 +52,7 @@ const PersonalCommentsTab: React.FC<PersonalCommentsTabProps> = ({
     };
     
     loadComments();
-  }, [contactId]);
+  }, [contactId, isInstruction]);
 
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,16 +60,21 @@ const PersonalCommentsTab: React.FC<PersonalCommentsTabProps> = ({
 
     setSubmitting(true);
     try {
-      await createPersonalComment(
-        contactId,
-        currentUserId,
-        currentUserName,
-        newComment,
-        currentUserAvatar
-      );
+      const savedInstruction = isInstruction
+        ? await createManagementInstruction(contactId, currentUserName, newComment)
+        : null;
+      if (!isInstruction) {
+        await createPersonalComment(
+          contactId,
+          currentUserId,
+          currentUserName,
+          newComment,
+          currentUserAvatar
+        );
+      }
       
       // Add to local state
-      const newCommentObj = {
+      const newCommentObj = savedInstruction || {
         id: `comment-${Date.now()}`,
         contact_id: contactId,
         author_id: currentUserId,
@@ -67,16 +88,16 @@ const PersonalCommentsTab: React.FC<PersonalCommentsTabProps> = ({
       setNewComment('');
       addToast({
         type: 'success',
-        title: 'Comment added',
-        description: 'Your comment has been posted successfully.',
+        title: isInstruction ? 'Instruction added' : 'Comment added',
+        description: isInstruction ? 'The management instruction has been saved.' : 'Your comment has been posted successfully.',
         durationMs: 4000,
       });
     } catch (err) {
       console.error('Error creating comment:', err);
       addToast({
         type: 'error',
-        title: 'Unable to add comment',
-        description: parseSupabaseError(err, 'comment'),
+        title: isInstruction ? 'Unable to add instruction' : 'Unable to add comment',
+        description: parseSupabaseError(err, isInstruction ? 'instruction' : 'comment'),
         durationMs: 6000,
       });
     } finally {
@@ -93,13 +114,14 @@ const PersonalCommentsTab: React.FC<PersonalCommentsTabProps> = ({
       {/* Comment Form */}
       <form onSubmit={handleAddComment} className="mb-6 pb-6 border-b border-slate-200 dark:border-slate-700">
         <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-2">
-          Add Personal Comment
+          {isInstruction ? 'Add Management Instruction' : 'Add Personal Comment'}
         </label>
         <div className="flex gap-2">
           <textarea
+            ref={textareaRef}
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
-            placeholder="Share your thoughts about this customer..."
+            placeholder={isInstruction ? 'Write the instruction for the assigned agent...' : 'Share your thoughts about this customer...'}
             className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:border-brand-blue outline-none resize-none"
             rows={3}
           />
@@ -111,7 +133,7 @@ const PersonalCommentsTab: React.FC<PersonalCommentsTabProps> = ({
             className="flex items-center gap-2 px-4 py-2 bg-brand-blue hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded transition-colors"
           >
             <Send className="w-4 h-4" />
-            {submitting ? 'Posting...' : 'Post Comment'}
+            {submitting ? 'Saving...' : isInstruction ? 'Save Instruction' : 'Post Comment'}
           </button>
         </div>
       </form>
@@ -121,7 +143,7 @@ const PersonalCommentsTab: React.FC<PersonalCommentsTabProps> = ({
         {comments.length === 0 ? (
           <div className="text-center text-slate-500">
             <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
-            <p>No comments yet</p>
+            <p>{isInstruction ? 'No management instructions yet' : 'No comments yet'}</p>
           </div>
         ) : (
           <div className="space-y-4">

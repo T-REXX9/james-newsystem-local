@@ -699,6 +699,52 @@ export const fetchContactCustomerLogsForDailyCall = async (contactId: string): P
   return data.map(mapCustomerLog);
 };
 
+export interface ManagementInstruction {
+  id: string;
+  contact_id: string;
+  author_id: string;
+  author_name: string;
+  author_avatar?: string;
+  text: string;
+  timestamp: string;
+}
+
+export const fetchManagementInstructions = async (contactId: string): Promise<ManagementInstruction[]> => {
+  const logs = await fetchContactCustomerLogsForDailyCall(contactId);
+  return logs
+    .filter((log) => log.entry_type === 'Note' && log.topic === 'Comment' && log.status === 'Management Instruction')
+    .map((log) => ({
+      id: log.id,
+      contact_id: log.contact_id,
+      author_id: log.created_by,
+      author_name: log.created_by_name || 'Management',
+      text: log.note || log.comments || '',
+      timestamp: log.occurred_at,
+    }));
+};
+
+export const createManagementInstruction = async (
+  contactId: string,
+  authorName: string,
+  text: string
+): Promise<ManagementInstruction> => {
+  const log = await createCustomerLogForDailyCall({
+    contact_id: contactId,
+    entry_type: 'Note',
+    topic: 'Comment',
+    status: 'Management Instruction',
+    note: text,
+  });
+  return {
+    id: log.id,
+    contact_id: log.contact_id,
+    author_id: log.created_by,
+    author_name: log.created_by_name || authorName,
+    text: log.note || log.comments || text,
+    timestamp: log.occurred_at,
+  };
+};
+
 export const createCallLogForDailyCall = async (
   input: Omit<CallLogEntry, 'id'>
 ): Promise<CallLogEntry> => {

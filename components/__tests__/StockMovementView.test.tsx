@@ -224,9 +224,9 @@ describe('StockMovementView', () => {
     fireEvent.click(screen.getByRole('button', { name: /^search$/i }));
 
     const row = await screen.findByTestId('stock-product-row-ITEM-1');
-    expect(screen.getByRole('columnheader', { name: 'Regular' })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Silver' })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Gold' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'VIP 1' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'VIP 2' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'VIP 3' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Total Stock' })).toBeInTheDocument();
     expect(within(row).getByText('100.00')).toBeInTheDocument();
     expect(within(row).getByText('90.00')).toBeInTheDocument();
