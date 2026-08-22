@@ -612,7 +612,11 @@ const App: React.FC = () => {
         );
       case 'operations-management-dashboard':
         if (!isCompanyOwnerRole(userProfile?.role)) return renderAccessDenied();
-        return <OperationsDashboard />;
+        return <OperationsDashboard onNavigate={(tab, payload) => {
+          const canonicalTab = normalizeModuleId(tab);
+          if (payload) setModuleContext((prev) => ({ ...prev, [canonicalTab]: payload }));
+          setActiveTab(canonicalTab);
+        }} />;
       case 'sales-reports-inquiry-report':
         return (
           <div className="h-full overflow-y-auto">
