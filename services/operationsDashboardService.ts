@@ -39,6 +39,7 @@ const isoDate = (date: Date) => {
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 };
+export const toLocalDateInputValue = isoDate;
 const monthKey = (value: unknown) => String(value || '').slice(0, 7);
 const dateKey = (value: unknown) => String(value || '').slice(0, 10);
 const includesAny = (value: unknown, terms: string[]) => {

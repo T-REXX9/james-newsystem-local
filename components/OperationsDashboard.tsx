@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CalendarDays, CheckCircle2, CircleDollarSign, ClipboardCheck, Clock3, FileText, FolderOpen, Loader2, PackageCheck, Phone, PhoneCall, PhoneIncoming, PhoneMissed, PhoneOutgoing, RefreshCw, RotateCcw, ShoppingCart, Truck, XCircle } from 'lucide-react';
-import { fetchOperationsDashboardSnapshot, OperationsDashboardSnapshot } from '../services/operationsDashboardService';
+import { fetchOperationsDashboardSnapshot, OperationsDashboardSnapshot, toLocalDateInputValue } from '../services/operationsDashboardService';
 
 interface OperationsDashboardProps {
   onNavigate: (route: string, payload?: Record<string, string>) => void;
@@ -44,7 +44,7 @@ const emptySnapshot: OperationsDashboardSnapshot = {
 };
 
 const OperationsDashboard: React.FC<OperationsDashboardProps> = ({ onNavigate }) => {
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [selectedDate, setSelectedDate] = useState(() => toLocalDateInputValue(new Date()));
   const [snapshot, setSnapshot] = useState(emptySnapshot);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

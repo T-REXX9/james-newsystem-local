@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { buildOperationsDashboardSnapshot, resolveOperationsActivityLink } from '../operationsDashboardService';
+import { buildOperationsDashboardSnapshot, resolveOperationsActivityLink, toLocalDateInputValue } from '../operationsDashboardService';
 
 describe('operations dashboard data mapping', () => {
+  it('formats the local calendar date without converting it to UTC', () => {
+    expect(toLocalDateInputValue(new Date(2026, 7, 23, 0, 30))).toBe('2026-08-23');
+  });
+
   it('builds dashboard totals only from real source records', () => {
     const result = buildOperationsDashboardSnapshot({
       inquiries: [
