@@ -8,20 +8,32 @@ export type Contact = Database['public']['Tables']['contacts']['Row'];
 
 export type PRStatus = 'Draft' | 'Pending' | 'Approved' | 'Submitted' | 'Cancelled';
 
+export type PurchaseRequestRecommendation = 'Good' | 'Review Supplier';
+
 export interface PurchaseRequestWithItems extends PurchaseRequest {
     items: PurchaseRequestItem[];
+    item_count?: number;
+    total_qty?: number;
+    total_cost?: number;
+    created_by_name?: string;
 }
 
 export interface CreatePRItemPayload {
     item_id?: string;
     item_code?: string;
     part_number?: string;
+    original_part_no?: string;
+    brand?: string;
     description?: string;
     quantity: number;
+    unit?: string;
     unit_cost?: number;
     supplier_id?: string;
     supplier_name?: string;
     eta_date?: string;
+    sr_cases?: number;
+    ir_cases?: number;
+    recommendation?: PurchaseRequestRecommendation;
 }
 
 export interface CreatePRPayload {

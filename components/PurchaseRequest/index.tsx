@@ -1,245 +1,179 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { purchaseRequestService } from '../../services/purchaseRequestService';
-import { PurchaseRequestWithItems, CreatePRPayload, Product, Contact, PRStatus } from '../../purchaseRequest.types';
-
+import type { Contact, CreatePRPayload, Product, PurchaseRequestWithItems } from '../../purchaseRequest.types';
 import PurchaseRequestList from './PurchaseRequestList';
 import PurchaseRequestForm from './PurchaseRequestForm';
-import PurchaseRequestDetail from './PurchaseRequestView'; // Filename is PurchaseRequestView.tsx, Component is PurchaseRequestView
+import PurchaseRequestDetail from './PurchaseRequestView';
 import PurchaseRequestPrint from './PurchaseRequestPrint';
 
 interface PurchaseRequestModuleProps {
-    initialPRId?: string;
+  initialPRId?: string;
 }
 
+type ViewMode = 'list' | 'create' | 'detail' | 'print';
+
 const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPRId }) => {
-    // Mode State
-    const [viewMode, setViewMode] = useState<'list' | 'create' | 'detail' | 'print'>('list');
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [requests, setRequests] = useState<PurchaseRequestWithItems[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [suppliers, setSuppliers] = useState<Contact[]>([]);
+  const [selectedRequest, setSelectedRequest] = useState<PurchaseRequestWithItems | null>(null);
+  const [nextPRNumber, setNextPRNumber] = useState('');
+  const [search, setSearch] = useState('');
+  const currentDate = new Date();
+  const [filterMonth, setFilterMonth] = useState(String(currentDate.getMonth() + 1).padStart(2, '0'));
+  const [filterYear, setFilterYear] = useState(String(currentDate.getFullYear()));
+  const [filterStatus, setFilterStatus] = useState('All Statuses');
+  const consumedDeepLinkRef = useRef('');
 
-    // Data State
-    const [requests, setRequests] = useState<PurchaseRequestWithItems[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [products, setProducts] = useState<Product[]>([]);
-    const [suppliers, setSuppliers] = useState<Contact[]>([]);
+  const fetchRequests = useCallback(async () => {
+    const year = Number(filterYear);
+    const month = Number(filterMonth);
+    setLoading(true);
+    try {
+      const data = await purchaseRequestService.getPurchaseRequests({
+        month: month >= 1 && month <= 12 ? month : undefined,
+        year: year >= 2000 && year <= 2100 ? year : undefined,
+        status: filterStatus,
+        search,
+      });
+      setRequests(data);
+    } catch (error) {
+      console.error('Failed to fetch purchase requests', error);
+      setRequests([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [filterMonth, filterYear, filterStatus, search]);
 
-    // Selected / Active Item State
-    const [selectedRequest, setSelectedRequest] = useState<PurchaseRequestWithItems | null>(null);
-    const [nextPRNumber, setNextPRNumber] = useState('');
+  useEffect(() => {
+    void fetchRequests();
+  }, [fetchRequests]);
 
-    // Filter State
-    const currentDate = new Date();
-    const [filterMonth, setFilterMonth] = useState(String(currentDate.getMonth() + 1).padStart(2, '0'));
-    const [filterYear, setFilterYear] = useState(String(currentDate.getFullYear()));
-    const consumedDeepLinkRef = useRef('');
+  useEffect(() => {
+    void purchaseRequestService.getSuppliers().then(data => setSuppliers(data as unknown as Contact[])).catch(error => console.error('Failed to fetch suppliers', error));
+  }, []);
 
-    // Initial Data Fetch
-    useEffect(() => {
-        fetchRequests();
-        fetchMetadata();
-    }, []);
+  const ensureProductsLoaded = async () => {
+    if (products.length > 0) return;
+    try {
+      const fetchedProducts = await purchaseRequestService.getProducts();
+      setProducts(fetchedProducts as unknown as Product[]);
+    } catch (error) {
+      console.error('Failed to fetch products', error);
+    }
+  };
 
-    const fetchRequests = async () => {
-        setLoading(true);
-        try {
-            const data = await purchaseRequestService.getPurchaseRequests();
-            setRequests(data);
-        } catch (err) {
-            console.error('Failed to fetch requests', err);
-        } finally {
-            setLoading(false);
-        }
-    };
+  useEffect(() => {
+    const target = String(initialPRId || '').trim();
+    if (!target || consumedDeepLinkRef.current === target) return;
+    consumedDeepLinkRef.current = target;
+    void purchaseRequestService.getPurchaseRequestById(target).then(async request => {
+      await ensureProductsLoaded();
+      setSelectedRequest(request);
+      setViewMode('detail');
+    }).catch(error => console.error('Failed to open purchase request from deep link', error));
+  }, [initialPRId]);
 
-    useEffect(() => {
-        const target = String(initialPRId || '').trim();
-        if (!target || loading) return;
-        if (consumedDeepLinkRef.current === target) return;
+  const handleCreateStart = async () => {
+    try {
+      const prNum = await purchaseRequestService.generatePRNumber();
+      setNextPRNumber(prNum);
+      setViewMode('create');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to generate a Purchase Request number.';
+      window.alert(`Error generating PR Number: ${message}`);
+    }
+  };
 
-        const match = requests.find((pr) => String(pr.id) === target || String(pr.pr_number) === target);
-        if (!match) return;
+  const handleCreateSubmit = async (payload: CreatePRPayload) => {
+    const newPR = await purchaseRequestService.createPurchaseRequest(payload);
+    await fetchRequests();
+    await ensureProductsLoaded();
+    setSelectedRequest(newPR);
+    setViewMode('detail');
+  };
 
-        consumedDeepLinkRef.current = target;
-        handleSelectRequest(match).catch((err) => {
-            console.error('Failed to open purchase request from deep link', err);
-        });
-    }, [initialPRId, requests, loading]);
+  const handleSelectRequest = async (request: PurchaseRequestWithItems) => {
+    const [fullPR] = await Promise.all([purchaseRequestService.getPurchaseRequestById(request.id), ensureProductsLoaded()]);
+    setSelectedRequest(fullPR);
+    setViewMode('detail');
+  };
 
-    const fetchMetadata = async () => {
-        try {
-            const fetchedSuppliers = await purchaseRequestService.getSuppliers();
-            setSuppliers(fetchedSuppliers as unknown as Contact[]);
-        } catch (err) {
-            console.error('Failed to fetch metadata', err);
-        }
-    };
+  const handleUpdate = async (id: string, updates: Record<string, unknown>) => {
+    try {
+      await purchaseRequestService.updatePurchaseRequest(id, updates);
+      const updated = await purchaseRequestService.getPurchaseRequestById(id);
+      setSelectedRequest(updated);
+      await fetchRequests();
+    } catch (error) {
+      window.alert(`Update failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
 
-    const ensureProductsLoaded = async () => {
-        if (products.length > 0) return;
-        try {
-            const fetchedProducts = await purchaseRequestService.getProducts();
-            setProducts(fetchedProducts as unknown as Product[]);
-        } catch (err) {
-            console.error('Failed to fetch products', err);
-        }
-    };
+  const handleUpdateItem = async (itemId: string, updates: Record<string, unknown>) => {
+    try {
+      await purchaseRequestService.updatePRItem(itemId, updates);
+      if (selectedRequest) setSelectedRequest(await purchaseRequestService.getPurchaseRequestById(selectedRequest.id));
+    } catch (error) {
+      console.error('Failed to update Purchase Request item', error);
+    }
+  };
 
-    // The legacy page filters its record table by month and year.
-    const filteredRequests = useMemo(() => {
-        return requests.filter(pr => {
-            const date = new Date(pr.request_date || '');
-            if (Number.isNaN(date.getTime())) return false;
-            return String(date.getFullYear()) === filterYear
-                && String(date.getMonth() + 1).padStart(2, '0') === filterMonth;
-        });
-    }, [requests, filterMonth, filterYear]);
+  const handleDeleteItem = async (itemId: string) => {
+    try {
+      await purchaseRequestService.deletePRItem(itemId);
+      if (selectedRequest) setSelectedRequest(await purchaseRequestService.getPurchaseRequestById(selectedRequest.id));
+    } catch (error) {
+      window.alert(`Delete item failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
 
-    // Handlers
-    const handleCreateStart = async () => {
-        try {
-            const prNum = await purchaseRequestService.generatePRNumber();
-            setNextPRNumber(prNum);
-            setViewMode('create');
-        } catch (err: any) {
-            alert('Error generating PR Number: ' + err.message);
-        }
-    };
+  const handleAddItem = async (item: Record<string, unknown>) => {
+    if (!selectedRequest) return;
+    try {
+      await purchaseRequestService.addPRItem(selectedRequest.id, item);
+      setSelectedRequest(await purchaseRequestService.getPurchaseRequestById(selectedRequest.id));
+    } catch (error) {
+      window.alert(`Add item failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
 
-    const handleCreateSubmit = async (payload: CreatePRPayload) => {
-        try {
-            const newPR = await purchaseRequestService.createPurchaseRequest(payload);
-            await fetchRequests();
-            await ensureProductsLoaded();
-            setSelectedRequest(newPR);
-            setViewMode('detail');
-        } catch (err) {
-            throw err; // Form catches this
-        }
-    };
+  const handleConvertPO = async () => {
+    if (!selectedRequest) return;
+    try {
+      const poId = await purchaseRequestService.convertToPO([selectedRequest.id], '');
+      window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab: 'warehouse-purchasing-purchase-order', payload: { poId } } }));
+    } catch (error) {
+      window.alert(`Conversion failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
 
-    const handleSelectRequest = async (pr: PurchaseRequestWithItems) => {
-        // Fetch full details to ensure fresh items
-        const [fullPR] = await Promise.all([
-            purchaseRequestService.getPurchaseRequestById(pr.id),
-            ensureProductsLoaded()
-        ]);
-        setSelectedRequest(fullPR);
-        setViewMode('detail');
-    };
+  const backToList = () => {
+    setSelectedRequest(null);
+    setViewMode('list');
+    void fetchRequests();
+  };
 
-    const handleUpdate = async (id: string, updates: any) => {
-        try {
-            await purchaseRequestService.updatePurchaseRequest(id, updates);
-            // Refresh
-            const updated = await purchaseRequestService.getPurchaseRequestById(id);
-            setSelectedRequest(updated);
-            // Update list implicitly via fetchRequests eventually, or optimistic?
-            // For now simple refresh list
-            fetchRequests();
-        } catch (err: any) {
-            alert('Update failed: ' + err.message);
-        }
-    };
+  if (viewMode === 'create') {
+    return <PurchaseRequestForm onCancel={backToList} onSubmit={handleCreateSubmit} suppliers={suppliers} initialPRNumber={nextPRNumber} />;
+  }
 
-    const handleUpdateItem = async (itemId: string, updates: any) => {
-        try {
-            await purchaseRequestService.updatePRItem(itemId, updates);
-            if (selectedRequest) {
-                const updated = await purchaseRequestService.getPurchaseRequestById(selectedRequest.id);
-                setSelectedRequest(updated);
-            }
-        } catch (err: any) {
-            console.error(err);
-        }
-    };
+  if (viewMode === 'detail' && selectedRequest) {
+    return <PurchaseRequestDetail request={selectedRequest} onBack={backToList} onUpdate={handleUpdate} onUpdateItem={handleUpdateItem} onDeleteItem={handleDeleteItem} onAddItem={handleAddItem} onConvert={handleConvertPO} onPrint={() => setViewMode('print')} products={products} suppliers={suppliers} />;
+  }
 
-    const handleDeleteItem = async (itemId: string) => {
-        try {
-            await purchaseRequestService.deletePRItem(itemId);
-            if (selectedRequest) {
-                const updated = await purchaseRequestService.getPurchaseRequestById(selectedRequest.id);
-                setSelectedRequest(updated);
-            }
-        } catch (err: any) {
-            alert('Delete item failed: ' + err.message);
-        }
-    };
+  if (viewMode === 'print' && selectedRequest) {
+    return <PurchaseRequestPrint request={selectedRequest} onClose={() => setViewMode('detail')} />;
+  }
 
-    const handleAddItem = async (item: any) => {
-        if (!selectedRequest) return;
-        try {
-            await purchaseRequestService.addPRItem(selectedRequest.id, item);
-            const updated = await purchaseRequestService.getPurchaseRequestById(selectedRequest.id);
-            setSelectedRequest(updated);
-        } catch (err: any) {
-            alert('Add item failed: ' + err.message);
-        }
-    };
-
-    const handleConvertPO = async () => {
-        if (!selectedRequest) return;
-        try {
-            const poId = await purchaseRequestService.convertToPO([selectedRequest.id], 'user-id-placeholder');
-            window.dispatchEvent(new CustomEvent('workflow:navigate', {
-                detail: { tab: 'warehouse-purchasing-purchase-order', payload: { poId } },
-            }));
-        } catch (err: any) {
-            alert('Conversion failed: ' + err.message);
-        }
-    };
-
-
-    return (
-        <div className="h-full overflow-y-auto bg-[#f4f4f4]">
-            {viewMode === 'list' && (
-                <PurchaseRequestList
-                    requests={filteredRequests}
-                    loading={loading}
-                    onSelect={handleSelectRequest}
-                    onCreate={handleCreateStart}
-                    filterMonth={filterMonth}
-                    setFilterMonth={setFilterMonth}
-                    filterYear={filterYear}
-                    setFilterYear={setFilterYear}
-                />
-            )}
-
-            {viewMode === 'detail' && selectedRequest && (
-                <PurchaseRequestDetail
-                    request={selectedRequest}
-                    onBack={() => {
-                        setSelectedRequest(null);
-                        setViewMode('list');
-                    }}
-                    onUpdate={handleUpdate}
-                    onUpdateItem={handleUpdateItem}
-                    onDeleteItem={handleDeleteItem}
-                    onAddItem={handleAddItem}
-                    onConvert={handleConvertPO}
-                    onPrint={() => setViewMode('print')}
-                    products={products}
-                    suppliers={suppliers}
-                />
-            )}
-
-            {viewMode === 'create' && (
-                <PurchaseRequestForm
-                    onCancel={() => {
-                        setViewMode('list');
-                        setSelectedRequest(null);
-                    }}
-                    onSubmit={handleCreateSubmit}
-                    suppliers={suppliers}
-                    initialPRNumber={nextPRNumber}
-                />
-            )}
-
-            {viewMode === 'print' && selectedRequest && (
-                <PurchaseRequestPrint
-                    request={selectedRequest}
-                    onClose={() => setViewMode('detail')}
-                />
-            )}
-        </div>
-    );
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#f7f9fc] lg:flex-row">
+      <PurchaseRequestList requests={requests} loading={loading} onSelect={handleSelectRequest} onCreate={handleCreateStart} filterMonth={filterMonth} setFilterMonth={setFilterMonth} filterYear={filterYear} setFilterYear={setFilterYear} filterStatus={filterStatus} setFilterStatus={setFilterStatus} search={search} setSearch={setSearch} />
+      <main className="hidden min-w-0 flex-1 items-center justify-center p-8 text-center text-slate-500 lg:flex"><div><p className="text-lg font-bold text-slate-700">Select a Purchase Request</p><p className="mt-1 text-sm">Choose a request from the list or create a new one to begin.</p></div></main>
+    </div>
+  );
 };
 
 export default PurchaseRequestModule;

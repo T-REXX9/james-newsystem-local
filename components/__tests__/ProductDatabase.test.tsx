@@ -140,8 +140,10 @@ describe('ProductDatabase', () => {
     expect(screen.getByText('(20/07/2026)')).toBeInTheDocument();
     const productTable = screen.getByText('Specifications').closest('table');
     expect(productTable).toHaveClass('w-full', 'table-fixed');
-    expect(productTable).toHaveClass('text-[11px]', 'min-w-[1900px]');
-    expect(productTable?.parentElement).toHaveClass('overflow-auto');
+    expect(productTable).toHaveClass('text-[clamp(8px,0.72vw,12px)]');
+    expect(productTable).not.toHaveClass('min-w-[1900px]');
+    expect(productTable?.parentElement).toHaveClass('overflow-y-auto', 'overflow-x-hidden');
+    expect(screen.getByRole('button', { name: 'QK2-001' })).toHaveClass('whitespace-nowrap', 'overflow-hidden');
     expect(screen.queryByRole('button', { name: 'Previous' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
     expect(screen.getByText('All items loaded')).toBeInTheDocument();

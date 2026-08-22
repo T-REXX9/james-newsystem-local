@@ -140,6 +140,7 @@ describe('DailyCallMasterListView', () => {
           assignedTo: 'Apostol Ella',
           profileType: 'Prospect',
           verification: 'Verified',
+          verifiedBy: 'Apostol Ella',
           lastPurchaseDate: '—',
           lastPurchaseDateRaw: '',
           purchaseCount: 0,
@@ -201,14 +202,17 @@ describe('DailyCallMasterListView', () => {
     expect(screen.getAllByText(/Recovery List/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Verified Prospects/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Unverified Prospects/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Customer Case Overview/i)).toBeInTheDocument();
-    expect(screen.getByText(/Incident Report Flow/i)).toBeInTheDocument();
+    expect(screen.getByText('Verified By')).toBeInTheDocument();
+    expect(screen.getByText('Apostol Ella')).toBeInTheDocument();
+    expect(screen.queryByText(/Customer Case Overview/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Incident Report Flow/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Quick Go To/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Priority List (2)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Recovery List (1)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Verified Prospects (1)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Unverified Prospects (1)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'All Customers (6)' })).toBeInTheDocument();
+    expect(screen.getByTestId('potential-sales-formula')).toHaveTextContent('₱5,000 per verified prospect');
     expect(screen.getAllByText(/No purchases yet/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/Any ledger activity since October 2025 onwards/i).length).toBeGreaterThanOrEqual(1);
   });
@@ -329,18 +333,16 @@ describe('DailyCallMasterListView', () => {
     expect(await screen.findByRole('dialog')).toHaveTextContent('Customer detail popup for Priority Buyer Shop');
   });
 
-  it('opens case overview details from each View Details button', async () => {
-    const user = userEvent.setup();
+  it('does not render the removed customer case and incident-flow footer area', async () => {
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
       meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 0 },
       items: [],
     });
 
     render(<DailyCallMasterListView />);
-    await user.click(await screen.findByRole('button', { name: 'View Inquiry & Orders details' }));
+    await waitFor(() => expect(screen.getByTestId('master-list-dashboard')).toBeInTheDocument());
 
-    expect(screen.getByRole('dialog', { name: 'Inquiry & Orders Details' })).toBeInTheDocument();
-    expect(screen.getByText('12 open cases')).toBeInTheDocument();
-    expect(screen.getByText('6 pending cases')).toBeInTheDocument();
+    expect(screen.queryByText(/Customer Case Overview/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Incident Report Flow/i)).not.toBeInTheDocument();
   });
 });

@@ -77,7 +77,7 @@ describe('ReorderReport automatic loading', () => {
     createPrMock.mockResolvedValue({ id: 'PR-REF-99', pr_number: 'PR-2699' });
     fetchEntriesMock.mockImplementation(async ({ page }: { page: number }) => ({
       items: page === 1 ? [reportRow('1', 'ITEM-1')] : [reportRow('2', 'ITEM-2')],
-      meta: { page, per_page: 25, total: 2, total_pages: 2 },
+      meta: { page, per_page: 50, total: 2, total_pages: 2 },
     }));
 
     vi.stubGlobal('IntersectionObserver', class {
@@ -112,7 +112,7 @@ describe('ReorderReport automatic loading', () => {
     });
 
     await waitFor(() => expect(screen.getAllByText('ITEM-2').length).toBeGreaterThan(0));
-    expect(fetchEntriesMock).toHaveBeenCalledWith(expect.objectContaining({ page: 2, perPage: 25 }));
+    expect(fetchEntriesMock).toHaveBeenCalledWith(expect.objectContaining({ page: 2, perPage: 50 }));
     expect(screen.queryByRole('button', { name: 'Previous' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
     expect(screen.getByText('All 2 entries loaded')).toBeInTheDocument();
@@ -124,7 +124,7 @@ describe('ReorderReport automatic loading', () => {
       if (page === 1) {
         return Promise.resolve({
           items: [reportRow('1', 'ITEM-1')],
-          meta: { page: 1, per_page: 25, total: 2, total_pages: 2 },
+          meta: { page: 1, per_page: 50, total: 2, total_pages: 2 },
         });
       }
       return new Promise((resolve) => {
@@ -141,20 +141,20 @@ describe('ReorderReport automatic loading', () => {
     expect(actions.compareDocumentPosition(sentinel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select ITEM-1' }));
-    expect(screen.getByRole('button', { name: 'Add to PR' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /Add to PR/i })).toBeEnabled();
 
     await act(async () => {
       intersectionCallback?.([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver);
     });
     await screen.findByText('Loading more items...');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add to PR' }));
+    fireEvent.click(screen.getByRole('button', { name: /Add to PR/i }));
     await screen.findByText('1 item(s) will be added with quantity `1` each (old-system behavior).');
 
     await act(async () => {
       resolveSecondPage?.({
         items: [reportRow('2', 'ITEM-2')],
-        meta: { page: 2, per_page: 25, total: 2, total_pages: 2 },
+        meta: { page: 2, per_page: 50, total: 2, total_pages: 2 },
       });
     });
   });
@@ -166,7 +166,7 @@ describe('ReorderReport automatic loading', () => {
         reportRow('2', 'ITEM-2'),
         { ...reportRow('3', 'ITEM-3'), pr_refno: 'PR-ACTIVE', pr_no: 'PR-2601', pr_status: 'Pending' },
       ],
-      meta: { page: 1, per_page: 25, total: 3, total_pages: 1 },
+      meta: { page: 1, per_page: 50, total: 3, total_pages: 1 },
     });
 
     render(<ReorderReport />);
@@ -176,7 +176,7 @@ describe('ReorderReport automatic loading', () => {
     const activeCheckbox = screen.getByTitle('This item already has an active purchasing workflow');
     expect(activeCheckbox).toBeDisabled();
     fireEvent.click(screen.getByRole('checkbox', { name: 'ALL' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Add to PR' }));
+    fireEvent.click(screen.getByRole('button', { name: /Add to PR/i }));
 
     await screen.findByText('2 item(s) will be added with quantity `1` each (old-system behavior).');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled());
@@ -186,6 +186,6 @@ describe('ReorderReport automatic loading', () => {
     const payload = createPrMock.mock.calls[0][0];
     expect(payload.items.map((item: any) => item.item_code)).toEqual(['ITEM-1', 'ITEM-2']);
     await screen.findByText('PR-2699');
-    expect(screen.getByText('New PR Number')).toBeInTheDocument();
+    expect(screen.getByText('PR Created:')).toBeInTheDocument();
   });
 });

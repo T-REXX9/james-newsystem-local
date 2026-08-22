@@ -1,472 +1,235 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  BarChart,
-  Bar,
-  LineChart,
+  AlertTriangle,
+  BarChart3,
+  CalendarDays,
+  ChevronDown,
+  DollarSign,
+  RefreshCw,
+  ShoppingBag,
+  TrendingDown,
+  TrendingUp,
+  UserRound,
+  Users,
+  WalletCards,
+} from 'lucide-react';
+import {
+  CartesianGrid,
+  Legend,
   Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
 } from 'recharts';
-import {
-  TrendingUp,
-  TrendingDown,
-  AlertTriangle,
-  Users,
-  DollarSign,
-  Activity,
-} from 'lucide-react';
-import { fetchManagementDashboardData } from '../services/managementDashboardLocalApiService';
+import { fetchManagementDashboardData, ManagementDashboardData } from '../services/managementDashboardLocalApiService';
 import ContactDetails from './ContactDetails';
 
 interface ManagementViewProps {
   currentUser?: any;
 }
 
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const MONTH_SHORT_NAMES = MONTH_NAMES.map((month) => month.slice(0, 3));
+const CURRENCY = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 2 });
+const NUMBER = new Intl.NumberFormat('en-PH', { maximumFractionDigits: 0 });
+
+const emptyDashboard: ManagementDashboardData = {
+  year: new Date().getFullYear(),
+  month: new Date().getMonth() + 1,
+  kpis: { totalSalesYtd: 0, totalCollectionsYtd: 0, outstandingReceivables: 0, activeCustomers: 0 },
+  monthlySales: Array.from({ length: 12 }, (_, index) => ({ month: index + 1, sales: 0, collections: 0 })),
+  topCustomers: [],
+  topSalespeople: [],
+  bestItems: [],
+  worstItems: [],
+  team: [], city: [], status: [], payment: [], inactive: [], criticalInactive: [], inquiryOnly: [],
+};
+
+const isMasterUser = (user?: any): boolean => {
+  const role = String(user?.role || '').trim().toLowerCase();
+  const userType = String(user?.user_type ?? '').trim();
+  return userType === '1' || ['master user', 'company owner', 'owner', 'main'].includes(role);
+};
+
+const formatCurrency = (value: number) => CURRENCY.format(Number.isFinite(value) ? value : 0);
+const formatNumber = (value: number) => NUMBER.format(Number.isFinite(value) ? value : 0);
+
+const MetricCard = ({ label, value, helper, icon: Icon, tone }: { label: string; value: string; helper: string; icon: React.ComponentType<{ className?: string }>; tone: string }) => (
+  <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{label}</p>
+        <p className="mt-2 truncate text-2xl font-extrabold text-slate-900" title={value}>{value}</p>
+        <p className="mt-2 text-xs font-medium text-slate-500">{helper}</p>
+      </div>
+      <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl text-white ${tone}`}>
+        <Icon className="h-5 w-5" />
+      </span>
+    </div>
+  </article>
+);
+
+const EmptyTable = ({ columns }: { columns: number }) => (
+  <tr><td colSpan={columns} className="px-3 py-8 text-center text-sm text-slate-400">No records for the selected period.</td></tr>
+);
+
 export const ManagementView: React.FC<ManagementViewProps> = ({ currentUser }) => {
-  const [activeTab, setActiveTab] = useState<'team' | 'city' | 'status' | 'payment' | 'alerts'>('team');
-  const [salesByTeam, setSalesByTeam] = useState<any[]>([]);
-  const [salesByCity, setSalesByCity] = useState<any[]>([]);
-  const [salesByStatus, setSalesByStatus] = useState<any[]>([]);
-  const [salesByPayment, setSalesByPayment] = useState<any[]>([]);
-  const [inactiveCustomers, setInactiveCustomers] = useState<any[]>([]);
-  const [inactiveCritical, setInactiveCritical] = useState<any[]>([]);
-  const [inquiryOnlyCustomers, setInquiryOnlyCustomers] = useState<any[]>([]);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [dashboard, setDashboard] = useState<ManagementDashboardData>(emptyDashboard);
   const [selectedContact, setSelectedContact] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [reloadToken, setReloadToken] = useState(0);
 
-  const now = new Date();
-  const currentMonth = now.getMonth() + 1;
-  const currentYear = now.getFullYear();
+  const mainId = Number(currentUser?.main_id || currentUser?.main_userid || 1);
+  const currentMonth = new Date().getMonth() + 1;
+  const currentYear = new Date().getFullYear();
+  const monthLabel = MONTH_NAMES[Math.max(0, Math.min(11, dashboard.month - 1))];
+  const userName = String(currentUser?.full_name || currentUser?.name || 'Master User');
 
-  useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      setLoadError('');
-      try {
-        const { team, city, status, payment, inactive, criticalInactive, inquiryOnly } =
-          await fetchManagementDashboardData(Number(currentUser?.main_id || currentUser?.main_userid || 1), currentYear, currentMonth);
+  const loadDashboard = useCallback(async () => {
+    if (!isMasterUser(currentUser)) return;
+    setLoading(true);
+    setLoadError('');
+    try {
+      const data = await fetchManagementDashboardData(mainId, selectedYear, currentMonth);
+      setDashboard(data);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Unable to load the Sales Performance Dashboard.');
+    } finally {
+      setLoading(false);
+    }
+  }, [currentMonth, currentUser, mainId, reloadToken, selectedYear]);
 
-        setSalesByTeam(team);
-        setSalesByCity(city);
-        setSalesByStatus(status);
-        setSalesByPayment(payment);
-        setInactiveCustomers(inactive);
-        setInactiveCritical(criticalInactive);
-        setInquiryOnlyCustomers(inquiryOnly);
-      } catch (err) {
-        setLoadError(err instanceof Error ? err.message : 'Unable to load management data.');
-      } finally {
-        setLoading(false);
-      }
-    };
+  useEffect(() => { void loadDashboard(); }, [loadDashboard]);
 
-    loadData();
-  }, [currentMonth, currentYear, currentUser?.main_id, currentUser?.main_userid]);
+  const monthlyChartData = useMemo(() => dashboard.monthlySales.map((row) => ({
+    ...row,
+    label: MONTH_SHORT_NAMES[row.month - 1] || String(row.month),
+  })), [dashboard.monthlySales]);
 
-  const totalCurrentMonthSales = salesByTeam.reduce((sum, s) => sum + s.currentMonthSales, 0);
-  const totalPreviousMonthSales = salesByTeam.reduce((sum, s) => sum + s.previousMonthSales, 0);
-  const totalSalesChange = totalCurrentMonthSales - totalPreviousMonthSales;
-  const totalPercentageChange = totalPreviousMonthSales > 0 
-    ? ((totalCurrentMonthSales - totalPreviousMonthSales) / totalPreviousMonthSales * 100)
-    : 0;
+  const selectedMonthSales = dashboard.monthlySales.find((row) => row.month === dashboard.month)?.sales || 0;
+  const selectedMonthCollections = dashboard.monthlySales.find((row) => row.month === dashboard.month)?.collections || 0;
 
-  const COLORS = ['#0F5298', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
-
-  const MetricCard = ({ label, value, change, icon: Icon, color }: any) => (
-    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">{label}</p>
-          <p className="text-2xl font-bold text-slate-800 dark:text-white">
-            {typeof value === 'number' ? value.toLocaleString('en-US', { maximumFractionDigits: 0 }) : value}
-          </p>
-          {change !== undefined && (
-            <div className={`flex items-center gap-1 mt-2 ${change >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-              {change >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-              <span className="text-xs font-medium">{Math.abs(change).toFixed(1)}%</span>
-            </div>
-          )}
-        </div>
-        <div className={`p-3 rounded-lg ${color}`}>
-          <Icon className="w-6 h-6 text-white" />
-        </div>
-      </div>
-    </div>
-  );
-
-  if (loading) {
+  if (!isMasterUser(currentUser)) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-slate-500 dark:text-slate-400">Loading management data...</div>
+      <div className="grid min-h-full place-items-center bg-slate-50 p-6">
+        <div className="max-w-md rounded-2xl border border-rose-200 bg-white p-8 text-center shadow-sm">
+          <AlertTriangle className="mx-auto h-10 w-10 text-rose-500" />
+          <h1 className="mt-4 text-xl font-bold text-slate-900">Master User access required</h1>
+          <p className="mt-2 text-sm text-slate-600">The Sales Performance Dashboard is restricted to the Master User account.</p>
+        </div>
       </div>
     );
   }
 
+  if (loading && !dashboard.topCustomers.length && !loadError) {
+    return <div className="grid min-h-full place-items-center bg-slate-50 text-sm font-semibold text-slate-500">Loading Sales Performance Dashboard…</div>;
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-8">
+    <div className="min-h-full overflow-y-auto bg-slate-50 p-4 text-slate-900 md:p-6">
       {selectedContact && (
         <ContactDetails
           contact={selectedContact}
-          isOpen={!!selectedContact}
+          isOpen={Boolean(selectedContact)}
           onClose={() => setSelectedContact(null)}
-          onUpdate={() => {}}
+          onUpdate={() => undefined}
         />
       )}
 
-      <div className="max-w-7xl mx-auto">
+      <div className="mx-auto max-w-[1500px] space-y-4">
+        <header className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Management-only analytics</p>
+            <h1 className="mt-1 flex items-center gap-2 text-2xl font-extrabold tracking-tight md:text-3xl"><BarChart3 className="h-7 w-7 text-blue-700" /> Sales Performance Dashboard</h1>
+            <p className="mt-1 flex items-center gap-2 text-sm text-slate-600"><CalendarDays className="h-4 w-4" /> Welcome, <strong>{userName}</strong>. Today is {new Date().toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: '2-digit', year: 'numeric' })}.</p>
+          </div>
+          <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold shadow-sm">
+            <span className="text-slate-600">Filter by Year</span>
+            <span className="relative">
+              <select value={selectedYear} onChange={(event) => setSelectedYear(Number(event.target.value))} className="appearance-none bg-transparent py-1 pl-2 pr-7 font-extrabold outline-none">
+                {Array.from({ length: 6 }, (_, index) => currentYear - index).map((year) => <option key={year} value={year}>{year}</option>)}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-0 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            </span>
+          </label>
+        </header>
+
         {loadError && (
-          <div role="alert" className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {loadError}
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            <span>{loadError}</span>
+            <button type="button" onClick={() => setReloadToken((token) => token + 1)} className="inline-flex items-center gap-2 rounded-md border border-rose-200 bg-white px-3 py-1.5 font-bold hover:bg-rose-100"><RefreshCw className="h-4 w-4" /> Retry</button>
           </div>
         )}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-2">Sales Performance Dashboard</h1>
-          <p className="text-slate-600 dark:text-slate-400">
-            Sales performance and customer insights for {new Date(currentYear, currentMonth - 1).toLocaleString('default', { month: 'long', year: 'numeric' })}
-          </p>
-        </div>
 
-        {/* Key Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <MetricCard
-            label="Total Sales"
-            value={`₱${totalCurrentMonthSales.toLocaleString()}`}
-            change={totalPercentageChange}
-            icon={DollarSign}
-            color="bg-blue-500"
-          />
-          <MetricCard
-            label="Active Customers"
-            value={salesByStatus.find(s => s.status === 'Active')?.customerCount || 0}
-            icon={Users}
-            color="bg-green-500"
-          />
-          <MetricCard
-            label="Inactive Customers"
-            value={inactiveCustomers.length}
-            icon={Activity}
-            color="bg-yellow-500"
-          />
-          <MetricCard
-            label="Critical Alerts"
-            value={inactiveCritical.length + inquiryOnlyCustomers.length}
-            icon={AlertTriangle}
-            color="bg-red-500"
-          />
-        </div>
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Sales performance KPIs">
+          <MetricCard label="Total Sales (YTD)" value={formatCurrency(dashboard.kpis.totalSalesYtd)} helper={`Selected year: ${selectedYear}`} icon={DollarSign} tone="bg-emerald-500" />
+          <MetricCard label="Total Collections (YTD)" value={formatCurrency(dashboard.kpis.totalCollectionsYtd)} helper={`Selected year: ${selectedYear}`} icon={WalletCards} tone="bg-blue-500" />
+          <MetricCard label="Outstanding Receivables" value={formatCurrency(dashboard.kpis.outstandingReceivables)} helper="Current ledger balance" icon={TrendingDown} tone="bg-violet-600" />
+          <MetricCard label="Active Customers" value={formatNumber(dashboard.kpis.activeCustomers)} helper="Active non-prospect accounts" icon={Users} tone="bg-orange-500" />
+        </section>
 
-        {/* Tab Navigation */}
-        <div className="flex gap-2 mb-6 bg-white dark:bg-slate-800 p-1 rounded-lg border border-slate-200 dark:border-slate-700">
-          {['team', 'city', 'status', 'payment', 'alerts'].map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab as any)}
-              className={`px-4 py-2 rounded-md font-medium text-sm transition-colors ${
-                activeTab === tab
-                  ? 'bg-blue-500 text-white'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
-              }`}
-            >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
-            </button>
-          ))}
-        </div>
-
-        {/* Team Performance Tab */}
-        {activeTab === 'team' && (
-          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
-            <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-6">Sales by Salesperson</h2>
-            <div className="h-80 w-full">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 800, height: 320 }}>
-                <BarChart data={salesByTeam}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#475569" opacity={0.1} />
-                  <XAxis dataKey="salesPersonName" stroke="#94a3b8" fontSize={12} />
-                  <YAxis stroke="#94a3b8" fontSize={12} tickFormatter={(val) => `${val / 1000}k`} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#1e293b', borderRadius: '8px', border: 'none', color: '#f8fafc' }}
-                    formatter={(value: any) => [`₱${value.toLocaleString()}`, '']}
-                  />
+        <section className="grid gap-4 xl:grid-cols-[1.65fr_1fr]">
+          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div><h2 className="text-sm font-extrabold uppercase tracking-wide text-emerald-700">Monthly Sales for {selectedYear}</h2><p className="mt-1 text-xs text-slate-500">Ledger debits and credits by calendar month.</p></div>
+              <div className="text-right text-xs text-slate-500"><p>{monthLabel} sales <strong className="text-slate-800">{formatCurrency(selectedMonthSales)}</strong></p><p>{monthLabel} collections <strong className="text-slate-800">{formatCurrency(selectedMonthCollections)}</strong></p></div>
+            </div>
+            <div className="mt-4 h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                <LineChart data={monthlyChartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" opacity={0.7} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#64748b" />
+                  <YAxis tick={{ fontSize: 10 }} stroke="#64748b" tickFormatter={(value) => `${Math.round(value / 1000)}k`} />
+                  <Tooltip formatter={(value: any) => formatCurrency(Number(value))} contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }} />
                   <Legend />
-                  <Bar dataKey="currentMonthSales" fill="#0F5298" name="Current Month" />
-                  <Bar dataKey="previousMonthSales" fill="#94a3b8" name="Previous Month" />
-                </BarChart>
+                  <Line type="monotone" dataKey="sales" name="Total Sales" stroke="#16a34a" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                  <Line type="monotone" dataKey="collections" name="Collections" stroke="#2563eb" strokeWidth={2} dot={{ r: 2 }} />
+                </LineChart>
               </ResponsiveContainer>
             </div>
-            <div className="mt-6 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-700">
-                    <th className="text-left py-3 px-4 font-bold text-slate-700 dark:text-slate-300">Salesperson</th>
-                    <th className="text-right py-3 px-4 font-bold text-slate-700 dark:text-slate-300">Current Month</th>
-                    <th className="text-right py-3 px-4 font-bold text-slate-700 dark:text-slate-300">Previous Month</th>
-                    <th className="text-right py-3 px-4 font-bold text-slate-700 dark:text-slate-300">Change</th>
-                    <th className="text-right py-3 px-4 font-bold text-slate-700 dark:text-slate-300">% Change</th>
-                    <th className="text-right py-3 px-4 font-bold text-slate-700 dark:text-slate-300">Customers</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {salesByTeam.map((row) => (
-                    <tr key={row.salesPersonName} className="border-b border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                      <td className="py-3 px-4 text-slate-800 dark:text-slate-200">{row.salesPersonName}</td>
-                      <td className="text-right py-3 px-4 text-slate-800 dark:text-slate-200">₱{row.currentMonthSales.toLocaleString()}</td>
-                      <td className="text-right py-3 px-4 text-slate-600 dark:text-slate-400">₱{row.previousMonthSales.toLocaleString()}</td>
-                      <td className={`text-right py-3 px-4 font-medium ${row.salesChange >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                        ₱{row.salesChange.toLocaleString()}
-                      </td>
-                      <td className={`text-right py-3 px-4 font-medium ${row.percentageChange >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                        {row.percentageChange.toFixed(1)}%
-                      </td>
-                      <td className="text-right py-3 px-4 text-slate-800 dark:text-slate-200">{row.customerCount}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 border-t border-slate-100 pt-3 text-xs text-slate-600 sm:grid-cols-3 lg:grid-cols-4">
+              {monthlyChartData.map((row) => <div key={row.month} className="flex justify-between gap-2"><span>{MONTH_NAMES[row.month - 1]}</span><strong className="text-slate-800">{formatCurrency(row.sales)}</strong></div>)}
             </div>
-          </div>
-        )}
+          </article>
 
-        {/* City Performance Tab */}
-        {activeTab === 'city' && (
-          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
-            <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-6">Sales by City</h2>
-            <div className="h-80 w-full">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 800, height: 320 }}>
-                <BarChart data={salesByCity} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#475569" opacity={0.1} />
-                  <XAxis type="number" stroke="#94a3b8" fontSize={12} tickFormatter={(val) => `${val / 1000}k`} />
-                  <YAxis dataKey="city" type="category" stroke="#94a3b8" fontSize={12} width={80} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#1e293b', borderRadius: '8px', border: 'none', color: '#f8fafc' }}
-                    formatter={(value: any) => [`₱${value.toLocaleString()}`, '']}
-                  />
-                  <Legend />
-                  <Bar dataKey="currentMonthSales" fill="#10B981" name="Current Month" />
-                  <Bar dataKey="previousMonthSales" fill="#94a3b8" name="Previous Month" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        )}
+          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="text-sm font-extrabold uppercase tracking-wide text-blue-700">Top 10 Customers of the Month ({monthLabel})</h2>
+            <div className="mt-4 overflow-x-auto"><table className="w-full text-sm"><thead className="border-b border-slate-200 text-left text-[11px] uppercase text-slate-500"><tr><th className="px-2 py-2">#</th><th className="px-2 py-2">Customer Name</th><th className="px-2 py-2 text-right">Amount</th></tr></thead><tbody>{dashboard.topCustomers.length ? dashboard.topCustomers.map((row, index) => <tr key={`${row.customerName}-${index}`} className="border-b border-slate-100"><td className="px-2 py-2 text-slate-500">{index + 1}</td><td className="px-2 py-2 font-semibold">{row.customerName}</td><td className="px-2 py-2 text-right font-bold">{formatCurrency(row.amount)}</td></tr>) : <EmptyTable columns={3} />}</tbody></table></div>
+          </article>
+        </section>
 
-        {/* Status Performance Tab */}
-        {activeTab === 'status' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
-              <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-6">Sales by Customer Status</h2>
-              <div className="h-80 w-full">
-                <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 520, height: 320 }}>
-                  <PieChart>
-                    <Pie
-                      data={salesByStatus}
-                      dataKey="currentMonthSales"
-                      nameKey="status"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={120}
-                      label
-                    >
-                      {salesByStatus.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value: any) => `₱${value.toLocaleString()}`} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
-              <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-6">Details</h2>
-              <div className="space-y-3">
-                {salesByStatus.map((status) => (
-                  <div key={status.status} className="flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
-                    <div>
-                      <p className="font-medium text-slate-800 dark:text-slate-200">{status.status}</p>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">{status.customerCount} customers</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold text-slate-800 dark:text-slate-200">₱{status.currentMonthSales.toLocaleString()}</p>
-                      <p className={`text-sm ${status.percentageChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {status.percentageChange >= 0 ? '+' : ''}{status.percentageChange.toFixed(1)}%
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
+        <section className="grid gap-4 xl:grid-cols-[0.9fr_1.2fr_1.2fr]">
+          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="text-sm font-extrabold uppercase tracking-wide text-emerald-700">Top Salesperson of the Month ({monthLabel})</h2>
+            <div className="mt-4 overflow-x-auto"><table className="w-full text-sm"><thead className="border-b border-slate-200 text-left text-[11px] uppercase text-slate-500"><tr><th className="px-2 py-2">Salesperson</th><th className="px-2 py-2 text-right">Amount</th></tr></thead><tbody>{dashboard.topSalespeople.length ? dashboard.topSalespeople.map((row, index) => <tr key={`${row.salesperson}-${index}`} className="border-b border-slate-100"><td className="px-2 py-2 font-semibold">{index === 0 && <TrendingUp className="mr-1 inline h-3.5 w-3.5 text-emerald-600" />}{row.salesperson}</td><td className="px-2 py-2 text-right font-bold">{formatCurrency(row.amount)}</td></tr>) : <EmptyTable columns={2} />}</tbody></table></div>
+            <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-3 text-sm font-bold"><span>Total Sales</span><span className="text-emerald-700">{formatCurrency(dashboard.topSalespeople.reduce((sum, row) => sum + row.amount, 0))}</span></div>
+          </article>
 
-        {/* Payment Type Tab */}
-        {activeTab === 'payment' && (
-          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
-            <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-6">Sales by Payment Type</h2>
-            <div className="h-80 w-full">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 800, height: 320 }}>
-                <BarChart data={salesByPayment}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#475569" opacity={0.1} />
-                  <XAxis dataKey="paymentType" stroke="#94a3b8" fontSize={12} />
-                  <YAxis stroke="#94a3b8" fontSize={12} tickFormatter={(val) => `${val / 1000}k`} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#1e293b', borderRadius: '8px', border: 'none', color: '#f8fafc' }}
-                    formatter={(value: any) => [`₱${value.toLocaleString()}`, '']}
-                  />
-                  <Legend />
-                  <Bar dataKey="currentMonthSales" fill="#8B5CF6" name="Current Month" />
-                  <Bar dataKey="previousMonthSales" fill="#94a3b8" name="Previous Month" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        )}
+          <PerformanceItemsTable title="List of Best Performance Part Number" subtitle={`YTD / MTD (${monthLabel})`} rows={dashboard.bestItems} tone="emerald" />
+          <PerformanceItemsTable title="List of Worst Performance Part Number" subtitle={`YTD / MTD (${monthLabel})`} rows={dashboard.worstItems} tone="rose" />
+        </section>
 
-        {/* Alerts Tab */}
-        {activeTab === 'alerts' && (
-          <div className="space-y-6">
-            {/* Inactive Customers */}
-            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <AlertTriangle className="w-5 h-5 text-yellow-500" />
-                <h2 className="text-xl font-bold text-slate-800 dark:text-white">Inactive Customers (30+ days)</h2>
-              </div>
-              {inactiveCustomers.length === 0 ? (
-                <p className="text-slate-500 dark:text-slate-400">No inactive customers found.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-200 dark:border-slate-700">
-                        <th className="text-left py-3 px-4 font-bold text-slate-700 dark:text-slate-300">Company</th>
-                        <th className="text-left py-3 px-4 font-bold text-slate-700 dark:text-slate-300">City</th>
-                        <th className="text-left py-3 px-4 font-bold text-slate-700 dark:text-slate-300">Salesman</th>
-                        <th className="text-left py-3 px-4 font-bold text-slate-700 dark:text-slate-300">Last Purchase</th>
-                        <th className="text-right py-3 px-4 font-bold text-slate-700 dark:text-slate-300">Balance</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {inactiveCustomers.map((customer) => (
-                        <tr
-                          key={customer.id}
-                          className="border-b border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer"
-                          onDoubleClick={() => setSelectedContact(customer)}
-                        >
-                          <td className="py-3 px-4 text-slate-800 dark:text-slate-200 font-medium">{customer.company}</td>
-                          <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{customer.city}</td>
-                          <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{customer.salesman}</td>
-                          <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
-                            {customer.customer_metrics?.[0]?.last_purchase_date || 'Unknown'}
-                          </td>
-                          <td className="text-right py-3 px-4 text-red-600 dark:text-red-400 font-medium">
-                            ₱{(customer.customer_metrics?.[0]?.outstanding_balance || 0).toLocaleString()}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            {/* Critical Inactive Customers */}
-            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <AlertTriangle className="w-5 h-5 text-red-500" />
-                <h2 className="text-xl font-bold text-slate-800 dark:text-white">Critical: Inactive with Outstanding Balance</h2>
-              </div>
-              {inactiveCritical.length === 0 ? (
-                <p className="text-slate-500 dark:text-slate-400">No critical inactive customers found.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-200 dark:border-slate-700">
-                        <th className="text-left py-3 px-4 font-bold text-slate-700 dark:text-slate-300">Company</th>
-                        <th className="text-left py-3 px-4 font-bold text-slate-700 dark:text-slate-300">City</th>
-                        <th className="text-left py-3 px-4 font-bold text-slate-700 dark:text-slate-300">Salesman</th>
-                        <th className="text-left py-3 px-4 font-bold text-slate-700 dark:text-slate-300">Days Inactive</th>
-                        <th className="text-right py-3 px-4 font-bold text-slate-700 dark:text-slate-300">Outstanding</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {inactiveCritical.map((customer) => {
-                        const lastPurchase = customer.customer_metrics?.[0]?.last_purchase_date;
-                        const daysInactive = lastPurchase
-                          ? Math.floor((Date.now() - new Date(lastPurchase).getTime()) / (1000 * 60 * 60 * 24))
-                          : 0;
-                        return (
-                          <tr
-                            key={customer.id}
-                            className="border-b border-slate-200 dark:border-slate-700 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer"
-                            onDoubleClick={() => setSelectedContact(customer)}
-                          >
-                            <td className="py-3 px-4 text-slate-800 dark:text-slate-200 font-medium">{customer.company}</td>
-                            <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{customer.city}</td>
-                            <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{customer.salesman}</td>
-                            <td className="py-3 px-4 text-red-600 dark:text-red-400 font-medium">{daysInactive}+ days</td>
-                            <td className="text-right py-3 px-4 text-red-600 dark:text-red-400 font-bold">
-                              ₱{(customer.customer_metrics?.[0]?.outstanding_balance || 0).toLocaleString()}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            {/* Inquiry Only Customers */}
-            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <AlertTriangle className="w-5 h-5 text-orange-500" />
-                <h2 className="text-xl font-bold text-slate-800 dark:text-white">Inquiry-Only Customers (High Ratio)</h2>
-              </div>
-              {inquiryOnlyCustomers.length === 0 ? (
-                <p className="text-slate-500 dark:text-slate-400">No inquiry-only customers found.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-200 dark:border-slate-700">
-                        <th className="text-left py-3 px-4 font-bold text-slate-700 dark:text-slate-300">Company</th>
-                        <th className="text-left py-3 px-4 font-bold text-slate-700 dark:text-slate-300">City</th>
-                        <th className="text-left py-3 px-4 font-bold text-slate-700 dark:text-slate-300">Salesman</th>
-                        <th className="text-center py-3 px-4 font-bold text-slate-700 dark:text-slate-300">Inquiries</th>
-                        <th className="text-center py-3 px-4 font-bold text-slate-700 dark:text-slate-300">Purchases</th>
-                        <th className="text-center py-3 px-4 font-bold text-slate-700 dark:text-slate-300">Ratio</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {inquiryOnlyCustomers.map((customer) => (
-                        <tr
-                          key={customer.id}
-                          className="border-b border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer"
-                          onDoubleClick={() => setSelectedContact(customer)}
-                        >
-                          <td className="py-3 px-4 text-slate-800 dark:text-slate-200 font-medium">{customer.company}</td>
-                          <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{customer.city}</td>
-                          <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{customer.salesman}</td>
-                          <td className="text-center py-3 px-4 text-slate-800 dark:text-slate-200 font-medium">{customer.totalInquiries}</td>
-                          <td className="text-center py-3 px-4 text-slate-800 dark:text-slate-200 font-medium">{customer.totalPurchases}</td>
-                          <td className="text-center py-3 px-4 text-orange-600 dark:text-orange-400 font-bold">{customer.inquiryToPurchaseRatio}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-700">Salesperson Details</h2><p className="mt-1 text-xs text-slate-500">Double-click a customer in the dashboard's call-monitoring view for account details.</p></div><span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600"><UserRound className="h-3.5 w-3.5" /> Master User only</span></div>
+        </section>
       </div>
     </div>
+  );
+};
+
+const PerformanceItemsTable = ({ title, subtitle, rows, tone }: { title: string; subtitle: string; rows: ManagementDashboardData['bestItems']; tone: 'emerald' | 'rose' }) => {
+  const headingClass = tone === 'emerald' ? 'text-emerald-700' : 'text-rose-700';
+  return (
+    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <h2 className={`text-sm font-extrabold uppercase tracking-wide ${headingClass}`}>{title}</h2>
+      <p className="mt-1 text-xs text-slate-500">{subtitle}</p>
+      <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[420px] text-xs"><thead className="border-b border-slate-200 text-left text-[10px] uppercase text-slate-500"><tr><th className="px-2 py-2">#</th><th className="px-2 py-2">Item Code</th><th className="px-2 py-2">Part No.</th><th className="px-2 py-2">Description</th><th className="px-2 py-2 text-right">Qty (YTD)</th><th className="px-2 py-2 text-right">Qty (MTD)</th></tr></thead><tbody>{rows.length ? rows.map((row, index) => <tr key={`${row.itemCode}-${row.partNo}-${index}`} className="border-b border-slate-100"><td className="px-2 py-2 text-slate-500">{index + 1}</td><td className="px-2 py-2 font-semibold">{row.itemCode}</td><td className="px-2 py-2">{row.partNo}</td><td className="max-w-[150px] truncate px-2 py-2" title={row.description}>{row.description}</td><td className="px-2 py-2 text-right font-bold">{formatNumber(row.qtyYtd)}</td><td className="px-2 py-2 text-right font-semibold">{formatNumber(row.qtyMtd)}</td></tr>) : <EmptyTable columns={6} />}</tbody></table></div>
+      <p className="mt-2 text-[10px] text-slate-500">Based on quantity sold from approved, posted, and non-cancelled sales documents.</p>
+    </article>
   );
 };
 

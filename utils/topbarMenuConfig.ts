@@ -194,12 +194,7 @@ export const TOPBAR_MENU_CONFIG: TopbarMainMenu[] = [
             route: 'sales-transaction-daily-call-monitoring',
             icon: Users,
           },
-          {
-            id: 'sales-transaction-product-promotions',
-            label: 'Marketing Campaign',
-            route: 'sales-transaction-product-promotions',
-            icon: Tag,
-          },
+
         ],
       },
       {
@@ -480,32 +475,20 @@ export const TOPBAR_MENU_CONFIG: TopbarMainMenu[] = [
     icon: MessageSquare,
     submenus: [
       {
-        id: 'ai-service',
-        label: 'AI SERVICE',
-        icon: Bot,
+        id: 'communication-marketing',
+        label: 'MARKETING',
+        icon: MessageSquare,
         items: [
           {
-            id: 'ai-service-dashboard',
-            label: 'AI Dashboard',
-            route: 'ai-service-dashboard',
-            icon: Bot,
-          },
-          {
-            id: 'ai-service-standard-answers',
-            label: 'Standard Answers',
-            route: 'ai-service-standard-answers',
+            id: 'communication-sms-blasting',
+            label: 'SMS Blasting',
+            route: 'sales-transaction-marketing-campaigns',
             icon: MessageSquare,
           },
           {
-            id: 'ai-service-escalations',
-            label: 'Escalation Queue',
-            route: 'ai-service-escalations',
-            icon: Users,
-          },
-          {
-            id: 'maintenance-system-ai-templates',
-            label: 'Message Templates',
-            route: 'maintenance-system-ai-templates',
+            id: 'communication-sms-templates',
+            label: 'SMS Templates',
+            route: 'communication-sms-templates',
             icon: MessageSquare,
           },
         ],

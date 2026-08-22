@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { EyeOff, Loader2, Printer, Search, ShoppingCart } from 'lucide-react';
+import { EyeOff, Info, Loader2, Printer, Search, ShoppingCart } from 'lucide-react';
 import { purchaseRequestService } from '../services/purchaseRequestService';
 import {
   fetchReorderReportEntries,
@@ -198,7 +198,7 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, onClose, onSaved }) 
                     onFocus={() => setShowSupplierDropdown(true)}
                     onBlur={() => window.setTimeout(() => setShowSupplierDropdown(false), 150)}
                     placeholder="Search supplier..."
-                    className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-10 pr-3 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                   />
                   {showSupplierDropdown ? (
                     <div className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
@@ -278,18 +278,6 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, onClose, onSaved }) 
   );
 };
 
-const tableCellClass = 'border border-[#d9d9d9] px-3 py-[26px] text-center text-[18px] leading-[27px] text-[#333]';
-const tableHeadClass = 'border border-[#d9d9d9] border-b-[3px] border-b-[#333] bg-white px-3 py-[18px] text-center text-[18px] font-semibold uppercase leading-[27px] text-[#333]';
-const formatShortDate = (value?: string) => {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
-  const dd = String(date.getDate()).padStart(2, '0');
-  const yy = String(date.getFullYear()).slice(-2);
-  return `${mm}/${dd}/${yy}`;
-};
-
 const formatReportDate = (date: Date): string => {
   const month = date.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
   const day = String(date.getDate()).padStart(2, '0');
@@ -315,7 +303,7 @@ const ReorderReport: React.FC = () => {
   const [searchInput, setSearchInput] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [meta, setMeta] = useState({ page: 1, per_page: 25, total: 0, total_pages: 1 });
+  const [meta, setMeta] = useState({ page: 1, per_page: 50, total: 0, total_pages: 1 });
   const [printRows, setPrintRows] = useState<ReorderReportEntry[]>([]);
   const [latestCreatedPr, setLatestCreatedPr] = useState<{ id: string; number: string } | null>(null);
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
@@ -335,7 +323,7 @@ const ReorderReport: React.FC = () => {
         hideZeroReplenish,
         showHidden: false,
         page: targetPage,
-        perPage: 25,
+        perPage: 50,
       });
       setRows((current) => {
         if (!append) return data.items;
@@ -399,7 +387,7 @@ const ReorderReport: React.FC = () => {
         if (!entries[0]?.isIntersecting || loadingMore || page >= meta.total_pages) return;
         void loadReport(page + 1, appliedSearch, true);
       },
-      { rootMargin: '300px 0px' }
+      { rootMargin: '300px 0px', threshold: 0.1 }
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
@@ -458,13 +446,6 @@ const ReorderReport: React.FC = () => {
     [eligibleRows, selectedIds]
   );
 
-  const workflowRows = useMemo(
-    () => Array.from(new Map(
-      rows.filter((row) => row.pr_refno).map((row) => [row.pr_refno, row])
-    ).values()),
-    [rows, selectedIds]
-  );
-
   const allSelected = eligibleRows.length > 0 && eligibleRows.every((row) => selectedIds.has(row.id));
 
   const toggleSelectAll = () => {
@@ -513,42 +494,26 @@ const ReorderReport: React.FC = () => {
     }
   };
 
-  const navigateToModule = (tab: string, payload?: Record<string, string>) => {
-    window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab, payload } }));
-  };
-
   const reportTitle = 'TOTAL COMPANY REORDER REPORT';
   const dateLabel = generatedAt ? formatReportDate(generatedAt) : '';
 
   const renderPrLink = (row: ReorderReportEntry) => row.pr_refno ? (
-    <ModuleRecordLink
-      tab="warehouse-purchasing-purchase-request"
-      payload={{ prId: row.pr_refno }}
-      className="text-brand-blue hover:underline"
-    >
+    <ModuleRecordLink tab="warehouse-purchasing-purchase-request" payload={{ prId: row.pr_refno }} className="font-semibold text-brand-blue hover:underline">
       {row.pr_no || row.pr_refno}
     </ModuleRecordLink>
-  ) : null;
+  ) : <span className="text-slate-400">-</span>;
 
   const renderPoLink = (row: ReorderReportEntry) => row.po_refno ? (
-    <ModuleRecordLink
-      tab="warehouse-purchasing-purchase-order"
-      payload={{ poId: row.po_refno, poRefNo: row.po_no }}
-      className="text-brand-blue hover:underline"
-    >
+    <ModuleRecordLink tab="warehouse-purchasing-purchase-order" payload={{ poId: row.po_refno, poRefNo: row.po_no }} className="font-semibold text-brand-blue hover:underline">
       {row.po_no || row.po_refno}
     </ModuleRecordLink>
-  ) : null;
+  ) : <span className="text-slate-400">-</span>;
 
   const renderRrLink = (row: ReorderReportEntry) => row.rr_refno ? (
-    <ModuleRecordLink
-      tab="warehouse-purchasing-receiving-stock"
-      payload={{ rrId: row.rr_refno, rrRefNo: row.rr_no }}
-      className="text-brand-blue hover:underline"
-    >
+    <ModuleRecordLink tab="warehouse-purchasing-receiving-stock" payload={{ rrId: row.rr_refno, rrRefNo: row.rr_no }} className="font-semibold text-brand-blue hover:underline">
       {row.rr_no || row.rr_refno}
     </ModuleRecordLink>
-  ) : null;
+  ) : <span className="text-slate-400">-</span>;
 
   if (!generatedAt) {
     return (
@@ -629,7 +594,7 @@ const ReorderReport: React.FC = () => {
   }
 
   return (
-    <div className="reorder-report-page min-h-full overflow-auto bg-[#f4f4f4] px-5 py-[62px] text-[#222]" style={{ fontFamily: 'Arial, sans-serif' }}>
+    <div className="reorder-report-page min-h-full overflow-y-auto bg-[#f7f9fc] text-slate-900">
       <style>{`
         .reorder-report-print { display: none; }
         @media print {
@@ -642,179 +607,127 @@ const ReorderReport: React.FC = () => {
           .reorder-report-print th { font-weight: 600; }
         }
       `}</style>
-      <div className="mx-auto w-[90%] max-w-[1800px] rounded-[5px] border border-[#d7d7d7] bg-white print:hidden">
-        <div className="flex min-h-[99px] items-center justify-between border-b border-[#d7d7d7] px-[32px]">
-          <h1 className="relative flex h-full min-h-[99px] items-center text-[24px] font-semibold text-[#29475f] after:absolute after:bottom-[-1px] after:left-0 after:h-px after:w-[350px] after:bg-[#6a92b3]" style={{ fontFamily: 'Arial Narrow, Arial, sans-serif' }}>
-            REORDER QUANTITY REPORT
-          </h1>
-          <div className="flex gap-1">
-            <button
-              type="button"
-              onClick={() => setGeneratedAt(null)}
-              className="h-[48px] rounded-[4px] bg-[#4caf50] px-[18px] text-[18px] text-white hover:bg-[#43a047]"
-            >
-              ↶ BACK
-            </button>
-            <button
-              type="button"
-              onClick={() => void handlePrint()}
-              disabled={preparingPrint}
-              className="inline-flex h-[48px] items-center gap-2 rounded-[4px] bg-[#5d82a2] px-[18px] text-[18px] text-white hover:bg-[#4e7392]"
-            >
-              {preparingPrint ? <Loader2 className="h-5 w-5 animate-spin" /> : <Printer className="h-5 w-5" />}
-              {preparingPrint ? 'PREPARING' : 'PRINT'}
+      <div className="mx-auto max-w-[1500px] p-5 lg:p-8 print:hidden">
+        <header className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <div className="mb-1 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-400"><span>Purchasing</span><span>›</span><span>Reports</span><span>›</span><span className="text-slate-700">Reorder Report</span></div>
+            <h1 className="text-2xl font-extrabold uppercase tracking-tight text-[#173c83]">Reorder Report</h1>
+            <p className="mt-1 text-sm text-slate-500">Items that need to be reordered. (Current Stock + Receiving Qty is below Reorder Level)</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="button" onClick={() => setGeneratedAt(null)} className="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50">Back to Filter</button>
+            <button type="button" onClick={() => void handlePrint()} disabled={preparingPrint} className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50">
+              {preparingPrint ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />} Print
             </button>
           </div>
-        </div>
+        </header>
 
-        <div className="px-[40px] pb-[40px] pt-[50px]">
-          <div className="mb-[25px] text-center text-[#222]">
-            <p className="text-[26px] font-bold">{reportTitle}</p>
-            <p className="mt-2 text-[19px] font-bold">AS OF {dateLabel}</p>
-          </div>
-
-          <form onSubmit={handleSearch} className="mb-[25px] flex items-center justify-end gap-3 text-[17px]">
-            <label htmlFor="reorder-search">Search:</label>
-            <input id="reorder-search" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} className="h-[48px] w-[320px] rounded-[4px] border border-[#ccc] px-3 outline-none focus:border-[#777]" />
+        <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+          <form onSubmit={handleSearch} className="flex flex-wrap items-center gap-4 border-b border-slate-200 p-5">
+            <div className="flex-1 min-w-[280px]">
+              <label htmlFor="reorder-search" className="mb-1 block text-xs font-bold text-slate-700">Search Item / Part No.</label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input id="reorder-search" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Search item or part no..." className="h-10 w-full rounded-md border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-[#175fd3] focus:ring-2 focus:ring-blue-100" />
+              </div>
+            </div>
+            <div className="flex items-end gap-2 pt-5">
+              <button type="button" onClick={() => { setSearchInput(''); setAppliedSearch(''); void loadReport(1, ''); }} className="rounded-md border border-[#175fd3] bg-white px-5 py-2.5 text-sm font-bold text-[#175fd3] transition hover:bg-blue-50">Reset</button>
+              <button type="submit" disabled={loading} className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#175fd3] px-6 text-sm font-bold text-white transition hover:bg-[#0e4fb7] disabled:opacity-50">
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Search
+              </button>
+            </div>
           </form>
 
-          <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
-          <aside className="rounded border border-[#d9d9d9] bg-[#fafafa] p-4 text-sm">
-            <h2 className="border-b border-[#ccc] pb-3 text-base font-bold text-[#29475f]">PURCHASE ACTIVITY</h2>
-            {latestCreatedPr ? (
-              <ModuleRecordLink
-                tab="warehouse-purchasing-purchase-request"
-                payload={{ prId: latestCreatedPr.id }}
-                className="mt-4 block w-full rounded bg-blue-50 p-3 text-left text-brand-blue hover:underline"
-              >
-                <span className="block text-xs font-bold uppercase text-[#666]">New PR Number</span>
-                <span className="mt-1 block text-lg font-bold">{latestCreatedPr.number}</span>
-              </ModuleRecordLink>
-            ) : null}
-            <div className="mt-4 space-y-3">
-              {workflowRows.length === 0 ? (
-                <p className="text-[#777]">No active purchase activity.</p>
-              ) : workflowRows.slice(0, 10).map((row) => {
-                const stages = getReorderWorkflowStages(row);
-                return (
-                  <div key={row.pr_refno} className="rounded border border-[#ddd] bg-white p-3">
-                    <ModuleRecordLink tab="warehouse-purchasing-purchase-request" payload={{ prId: row.pr_refno }} className="font-bold text-brand-blue hover:underline">
-                      {row.pr_no || row.pr_refno}
-                    </ModuleRecordLink>
-                    <p className="mt-2">Stage 1 · PR: <strong>{stages.pr}</strong></p>
-                    <p>Stage 2 · PO: <strong>{stages.po}</strong></p>
-                    <p>Stage 3 · Receiving: <strong>{stages.receiving}</strong></p>
-                  </div>
-                );
-              })}
+          <div data-testid="reorder-selection-actions" className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white/95 px-5 py-3 shadow-sm backdrop-blur">
+            <div className="flex items-center gap-4">
+              <span className="text-sm font-bold text-slate-700">{selectedVisibleCount} item(s) selected</span>
+              <button type="button" onClick={() => setShowAddPrModal(true)} disabled={selectedVisibleCount === 0 || processing} className="rounded-md border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-bold text-orange-600 transition hover:bg-orange-100 disabled:opacity-50">
+                <ShoppingCart className="mr-2 inline h-4 w-4" /> Add to PR
+              </button>
+              {latestCreatedPr ? (
+                <ModuleRecordLink tab="warehouse-purchasing-purchase-request" payload={{ prId: latestCreatedPr.id }} className="inline-flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700 transition hover:bg-emerald-100">
+                  <span>PR Created:</span><span className="underline">{latestCreatedPr.number}</span>
+                </ModuleRecordLink>
+              ) : null}
             </div>
-          </aside>
-          <div className="min-w-0">
-          <div
-            data-testid="reorder-selection-actions"
-            className="sticky top-3 z-10 mb-4 flex flex-wrap items-center justify-between gap-3 rounded border border-[#d9d9d9] bg-white/95 p-3 shadow-sm backdrop-blur"
-          >
-            <span className="text-sm font-semibold text-[#555]">
-              {selectedVisibleCount} item(s) selected
-            </span>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmAction('hide')}
-                disabled={selectedVisibleCount === 0 || processing}
-                className="inline-flex items-center gap-2 rounded bg-rose-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-              >
-                {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <EyeOff className="h-4 w-4" />}
-                Mark as Hidden
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowAddPrModal(true)}
-                disabled={selectedVisibleCount === 0 || processing}
-                className="inline-flex items-center gap-2 rounded bg-rose-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-              >
-                <ShoppingCart className="h-4 w-4" />
-                Add to PR
-              </button>
+            <div className="flex items-center gap-2 rounded bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
+              <Info className="h-3.5 w-3.5" /> Items with active purchasing workflow are already in process and cannot be selected.
             </div>
           </div>
-          {rows.length === 0 ? (
-            <div className="py-20 text-center">
-              <h3 className="text-lg font-semibold text-slate-500 dark:text-slate-400">Empty!</h3>
-            </div>
-          ) : (
-            <div className="overflow-auto">
-              <table className="w-full min-w-[1120px] border-collapse">
-                <thead>
-                  <tr>
-                    <th className={tableHeadClass}>
-                      <label className="inline-flex items-center justify-center gap-1">
-                        <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} />
-                        ALL
-                      </label>
-                    </th>
-                    <th className={tableHeadClass}>ITEM CODE</th>
-                    <th className={tableHeadClass}>PART NO.</th>
-                    <th className={tableHeadClass}>DESCRIPTION</th>
-                    <th className={tableHeadClass}>{isWh1Report ? 'TRANS DATE' : 'RR DATE'}</th>
-                    <th className={tableHeadClass}>{isWh1Report ? 'TRANS QTY' : 'LAST ARRIVAL'}</th>
-                    <th className={tableHeadClass}>BAL QTY</th>
-                    <th className={tableHeadClass}>{isWh1Report ? 'RR QTY' : 'LAST RR'}</th>
-                    <th className={tableHeadClass}>RETURN</th>
-                    <th className={tableHeadClass}>{isWh1Report ? 'REPLENISH QTY' : 'RE-ORDER QTY'}</th>
-                    <th className={tableHeadClass}>PR</th>
-                    <th className={tableHeadClass}>PO</th>
-                    <th className={tableHeadClass}>RR</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => (
-                    <tr
-                      key={row.id}
-                      className="odd:bg-white even:bg-[#f8f8f8] hover:bg-[#f5f5f5]"
-                    >
-                      <td className={tableCellClass}>
-                        <input
-                          type="checkbox"
-                          aria-label={`Select ${row.item_code}`}
-                          checked={selectedIds.has(row.id)}
-                          disabled={isReorderWorkflowActive(row)}
-                          title={isReorderWorkflowActive(row) ? 'This item already has an active purchasing workflow' : 'Select item'}
-                          onChange={() => toggleSelectRow(row.id)}
-                        />
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1300px] border-collapse text-xs">
+              <thead>
+                <tr>
+                  <th rowSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-2 text-center text-white"><label className="inline-flex items-center justify-center gap-1"><input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="h-4 w-4 rounded border-white/30 bg-white/10" aria-label="ALL" /> ALL</label></th>
+                  <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-2 text-left font-bold uppercase tracking-wide text-white">Item Code</th>
+                  <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-2 text-left font-bold uppercase tracking-wide text-white">Part No.</th>
+                  <th rowSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-2 text-left font-bold uppercase tracking-wide text-white">Description</th>
+                  <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-2 text-center font-bold uppercase tracking-wide text-white">Current<br />Stock</th>
+                  <th rowSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-2 text-center font-bold uppercase tracking-wide text-white">Reorder<br />Level</th>
+                  <th colSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-2 text-center font-bold uppercase tracking-wide text-white">Recommended Supplier</th>
+                  <th colSpan={2} className="border-b border-r border-white/20 bg-orange-500 px-3 py-2 text-center font-bold uppercase tracking-wide text-white">① PR STAGE<br /><span className="text-[10px] font-normal opacity-90">(Waiting for Approval)</span></th>
+                  <th colSpan={2} className="border-b border-r border-white/20 bg-[#175fd3] px-3 py-2 text-center font-bold uppercase tracking-wide text-white">② PO STAGE<br /><span className="text-[10px] font-normal opacity-90">(Ordered from Supplier)</span></th>
+                  <th colSpan={2} className="border-b border-r border-white/20 bg-purple-700 px-3 py-2 text-center font-bold uppercase tracking-wide text-white">③ RECEIVING STOCK<br /><span className="text-[10px] font-normal opacity-90">(Incoming to Warehouse)</span></th>
+                  <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-2 text-center font-bold uppercase tracking-wide text-white">Recommended<br />Action</th>
+                </tr>
+                <tr>
+                  <th className="border-b border-slate-200 bg-[#102f76] px-3 py-2 text-left font-bold uppercase tracking-wide text-white">Supplier</th>
+                  <th className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-2 text-right font-bold uppercase tracking-wide text-white">Cost (P)</th>
+                  <th className="border-b border-r border-white/20 bg-orange-500 px-3 py-2 text-center font-bold uppercase tracking-wide text-white">PR #</th>
+                  <th className="border-b border-r border-white/20 bg-orange-500 px-3 py-2 text-center font-bold uppercase tracking-wide text-white">PR Qty</th>
+                  <th className="border-b border-r border-white/20 bg-[#175fd3] px-3 py-2 text-center font-bold uppercase tracking-wide text-white">PO #</th>
+                  <th className="border-b border-r border-white/20 bg-[#175fd3] px-3 py-2 text-center font-bold uppercase tracking-wide text-white">PO Qty</th>
+                  <th className="border-b border-r border-white/20 bg-purple-700 px-3 py-2 text-center font-bold uppercase tracking-wide text-white">Receiving #</th>
+                  <th className="border-b border-r border-white/20 bg-purple-700 px-3 py-2 text-center font-bold uppercase tracking-wide text-white">Receiving Qty</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.length === 0 ? (
+                  <tr><td colSpan={15} className="px-4 py-16 text-center text-sm text-slate-500">No items match the current filters.</td></tr>
+                ) : rows.map((row) => {
+                  const active = isReorderWorkflowActive(row);
+                  const isForReceiving = active && row.po_refno && !row.rr_refno;
+                  const isForPo = active && row.pr_refno && !row.po_refno;
+                  const actionLabel = isForReceiving ? 'For Receiving' : isForPo ? 'For PO' : 'For PR';
+                  const actionColor = isForReceiving ? 'text-purple-700' : isForPo ? 'text-[#175fd3]' : 'text-orange-600';
+                  return (
+                    <tr key={row.id} className={`border-b border-slate-100 hover:bg-slate-50 ${active ? 'opacity-70' : ''}`}>
+                      <td className="border-r border-slate-100 px-3 py-3 text-center">
+                        <input type="checkbox" aria-label={`Select ${row.item_code}`} checked={selectedIds.has(row.id)} disabled={active} title={active ? 'This item already has an active purchasing workflow' : 'Select item'} onChange={() => toggleSelectRow(row.id)} className="h-4 w-4 rounded border-slate-300" />
                       </td>
-                      <td className={tableCellClass}>{row.item_code}</td>
-                      <td className={tableCellClass}>{row.part_no}</td>
-                      <td className={`${tableCellClass} text-left`}>
-                        <span>{row.description}</span>
+                      <td className="px-3 py-3 font-semibold text-slate-600">{row.item_code}</td>
+                      <td className="px-3 py-3 font-semibold text-[#173c83]">{row.part_no}</td>
+                      <td className="border-r border-slate-100 px-3 py-3 font-semibold">{row.description}</td>
+                      <td className="px-3 py-3 text-center font-bold text-rose-600">{row.current_stock}</td>
+                      <td className="border-r border-slate-100 px-3 py-3 text-center font-bold text-[#173c83]">{isWh1Report ? row.replenish_qty : row.reorder_qty}</td>
+                      <td className="px-3 py-3 font-semibold">-</td>
+                      <td className="border-r border-slate-100 px-3 py-3 text-right font-semibold">-</td>
+                      <td className="border-r border-slate-100 px-3 py-3 text-center">{renderPrLink(row)}</td>
+                      <td className="border-r border-slate-100 px-3 py-3 text-center font-semibold text-orange-600">{row.pr_refno ? '-' : ''}</td>
+                      <td className="border-r border-slate-100 px-3 py-3 text-center">{renderPoLink(row)}</td>
+                      <td className="border-r border-slate-100 px-3 py-3 text-center font-semibold text-[#175fd3]">{row.po_refno ? '-' : ''}</td>
+                      <td className="border-r border-slate-100 px-3 py-3 text-center">{renderRrLink(row)}</td>
+                      <td className="border-r border-slate-100 px-3 py-3 text-center font-semibold text-purple-700">{row.rr_refno ? '-' : ''}</td>
+                      <td className="px-3 py-3 text-center font-bold">
+                        <span className={`inline-flex items-center gap-1.5 whitespace-nowrap ${actionColor}`}>
+                          <ShoppingCart className="h-4 w-4" /> {actionLabel}
+                        </span>
                       </td>
-                      <td className={tableCellClass}>{formatShortDate(row.last_arrival_date)}</td>
-                      <td className={tableCellClass}>{row.last_arrival_qty}</td>
-                      <td className={tableCellClass}>{row.current_stock}</td>
-                      <td className={tableCellClass}>{row.total_rr}</td>
-                      <td className={tableCellClass}>{row.total_return}</td>
-                      <td className={`${tableCellClass} font-semibold`}>{isWh1Report ? row.replenish_qty : row.reorder_qty}</td>
-                      <td className={tableCellClass}>{renderPrLink(row)}{row.pr_refno ? <small className="mt-1 block">{row.pr_status || 'Active'}</small> : null}</td>
-                      <td className={tableCellClass}>{renderPoLink(row)}{row.po_refno ? <small className="mt-1 block">{row.po_status || 'Active'}</small> : null}</td>
-                      <td className={tableCellClass}>{renderRrLink(row)}{row.rr_refno ? <small className="mt-1 block">{row.rr_status || 'Active'}</small> : null}</td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
 
           {meta.total > 0 ? (
-            <div className="mt-4 text-center text-[13px] text-[#777]">
+            <div className="border-t border-slate-200 px-5 py-4 text-center text-sm text-slate-500">
               {loadingMore ? (
-                <span className="inline-flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading more items...
-                </span>
+                <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Loading more items...</span>
               ) : loadMoreFailed ? (
-                <button type="button" onClick={() => void loadReport(page + 1, appliedSearch, true)} className="text-[#4e7392] underline">
-                  Unable to load more items. Retry
-                </button>
+                <button type="button" onClick={() => void loadReport(page + 1, appliedSearch, true)} className="text-[#175fd3] underline">Unable to load more items. Retry</button>
               ) : page >= meta.total_pages ? (
                 <span>All {rows.length} entries loaded</span>
               ) : (
@@ -823,9 +736,7 @@ const ReorderReport: React.FC = () => {
             </div>
           ) : null}
           <div ref={loadMoreSentinelRef} data-testid="reorder-load-more-sentinel" className="h-px w-full" aria-hidden="true" />
-          </div>
-          </div>
-        </div>
+        </section>
       </div>
 
       {showAddPrModal && selectedRows.length > 0 ? (
@@ -858,10 +769,10 @@ const ReorderReport: React.FC = () => {
         </div>
         <table>
           <thead>
-            <tr><th colSpan={3} /><th colSpan={2}>{isWh1Report ? 'LAST TRANSFER' : 'LAST ARRIVAL'}</th><th>BAL</th><th>TOTAL</th><th>TOTAL</th><th>{isWh1Report ? 'REPLENISH' : 'REORDER'}</th></tr>
-            <tr><th>ITEM CODE</th><th>PART NO.</th><th>DESCRIPTION</th><th>DATE</th><th>QTY</th><th>QTY</th><th>RR</th><th>RETURN</th><th>QTY</th></tr>
+            <tr><th rowSpan={2}>ITEM CODE</th><th rowSpan={2}>PART NO.</th><th rowSpan={2}>DESCRIPTION</th><th rowSpan={2}>CURRENT STOCK</th><th rowSpan={2}>REORDER LEVEL</th><th colSpan={2}>RECOMMENDED SUPPLIER</th><th colSpan={2}>① PR STAGE</th><th colSpan={2}>② PO STAGE</th><th colSpan={2}>③ RECEIVING STOCK</th></tr>
+            <tr><th>SUPPLIER</th><th>COST (P)</th><th>PR #</th><th>PR QTY</th><th>PO #</th><th>PO QTY</th><th>RECEIVING #</th><th>RECEIVING QTY</th></tr>
           </thead>
-          <tbody>{(printRows.length > 0 ? printRows : rows).map((row) => <tr key={`print-${row.product_session}`}><td>{row.item_code}</td><td>{row.part_no}</td><td>{row.description}</td><td>{formatShortDate(row.last_arrival_date)}</td><td>{row.last_arrival_qty}</td><td>{row.current_stock}</td><td>{row.total_rr}</td><td>{row.total_return}</td><td>{isWh1Report ? row.replenish_qty : row.reorder_qty}</td></tr>)}</tbody>
+          <tbody>{(printRows.length > 0 ? printRows : rows).map((row) => <tr key={`print-${row.product_session}`}><td>{row.item_code}</td><td>{row.part_no}</td><td>{row.description}</td><td>{row.current_stock}</td><td>{isWh1Report ? row.replenish_qty : row.reorder_qty}</td><td>-</td><td>-</td><td>{row.pr_no || row.pr_refno || '-'}</td><td>{row.pr_refno ? '-' : ''}</td><td>{row.po_no || row.po_refno || '-'}</td><td>{row.po_refno ? '-' : ''}</td><td>{row.rr_no || row.rr_refno || '-'}</td><td>{row.rr_refno ? '-' : ''}</td></tr>)}</tbody>
         </table>
       </div>
     </div>

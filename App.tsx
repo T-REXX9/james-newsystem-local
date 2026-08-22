@@ -85,6 +85,8 @@ import AIEscalationPanel from './components/AIEscalationPanel';
 import LoyaltyDiscountRulesView from './components/LoyaltyDiscountRulesView';
 import ProfitThresholdSettings from './components/ProfitThresholdSettings';
 import AIMessageTemplatesView from './components/AIMessageTemplatesView';
+import SmsCampaignPreparationView from './components/SmsCampaignPreparationView';
+import SmsTemplatesView from './components/SmsTemplatesView';
 
 import { logAuth } from './services/activityLogService';
 import { UserProfile } from './types';
@@ -590,6 +592,9 @@ const App: React.FC = () => {
             />
           </div>
         );
+      case 'communication-sms-blasting':
+      case 'sales-transaction-marketing-campaigns':
+        return <SmsCampaignPreparationView currentUser={userProfile} />;
       case 'sales-transaction-product-promotions':
         // Owner sees management dashboard, others see list view
         const isOwner = isCompanyOwnerRole(userProfile?.role);
@@ -797,24 +802,8 @@ const App: React.FC = () => {
         );
       case 'maintenance-system-ai-templates':
         return <AIMessageTemplatesView currentUser={userProfile} />;
-      case 'mail':
-      case 'communication-messaging-inbox':
-        return renderComingSoon('Inbox');
-      case 'communication-text-menu-text-messages':
-        return renderComingSoon('Text Messages');
-      case 'communication-text-menu-inbox':
-        return renderComingSoon('Inbox');
-      case 'communication-text-menu-sent':
-        return renderComingSoon('Sent');
-      case 'communication-text-menu-pending':
-        return renderComingSoon('Pending');
-      case 'communication-text-menu-failed':
-        return renderComingSoon('Failed');
-      case 'communication-text-menu-operator':
-        return renderComingSoon('Operator');
-      case 'calendar':
-      case 'communication-productivity-calendar':
-        return renderComingSoon('Calendar');
+      case 'communication-sms-templates':
+        return <SmsTemplatesView currentUser={userProfile} />;
       case 'calls':
       case 'communication-productivity-daily-call-monitoring': {
         const isSalesAgent = userProfile?.role === ROLE_NAMES.SALES_AGENT || userProfile?.role === 'sales_agent';
@@ -824,9 +813,6 @@ const App: React.FC = () => {
           <OwnerDailyCallMonitoringUnifiedView currentUser={userProfile} />
         );
       }
-      case 'tasks':
-      case 'communication-productivity-tasks':
-        return <TasksView currentUser={userProfile} />;
 
       // AI Customer Service Routes
       case 'ai-service-dashboard':

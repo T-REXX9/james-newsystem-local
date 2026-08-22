@@ -20,7 +20,7 @@ import {
 } from '../services/notificationLocalApiService';
 import ModuleRecordLink from './ModuleRecordLink';
 
-// Inline StatusBadge if generic one is not suitable for POs, but I'll use simple spans for now to be safe, or try to use the imported one if generic. 
+// Inline StatusBadge if generic one is not suitable for POs, but I'll use simple spans for now to be safe, or try to use the imported one if generic.
 // I'll stick to my own badge logic or reuse if I knew it works. I'll use my own for safety.
 
 const POStatusBadge = ({ status }: { status: string }) => {
@@ -259,16 +259,16 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
         { targetRoles: ['Owner', 'Purchasing Manager'] }
       );
       setIsCreating(false);
-      addToast({ 
-        type: 'success', 
+      addToast({
+        type: 'success',
         title: 'Purchase order created',
         description: 'Purchase order has been submitted successfully.',
         durationMs: 4000,
       });
     } catch (err: any) {
       setSubmitError(parseSupabaseError(err, 'purchase order'));
-      addToast({ 
-        type: 'error', 
+      addToast({
+        type: 'error',
         title: 'Unable to create purchase order',
         description: parseSupabaseError(err, 'purchase order'),
         durationMs: 6000,
@@ -463,130 +463,269 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   }
 
   return (
-    <div className="min-h-full overflow-y-auto bg-[#f4f4f4] p-5 text-[#333]">
-      <div className="mx-auto max-w-[1380px] space-y-5">
-        <section className="rounded border border-[#d5d5d5] bg-white shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#ddd] px-5 py-4">
-            <button onClick={startCreate} className="inline-flex items-center gap-1 rounded border border-[#4f9e43] bg-[#70b865] px-4 py-2 text-sm font-semibold text-white hover:bg-[#5daa52]">
-              <Plus size={16} /> Create New
-            </button>
-            <div className="flex items-center gap-3 text-sm">
-              <label htmlFor="po-month" className="font-semibold">Filter by Month:</label>
-              <select id="po-month" value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))} className="w-48 rounded border border-[#ccc] bg-white px-3 py-2">
+    <div className="flex h-full flex-col bg-[#f7f9fc] text-slate-900 xl:flex-row">
+      <aside className="w-full shrink-0 border-b border-slate-200 bg-[#f8fafb] xl:w-[320px] xl:border-b-0 xl:border-r">
+        <div className="flex flex-col gap-4 p-5">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-600">Purchase Orders</h2>
+          <button onClick={startCreate} className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#175fd3] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#0e4fb7]">
+            <Plus className="h-4 w-4" /> Generate Purchase Order
+          </button>
+
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search PO No. or PR No. or Supplier..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="h-10 w-full rounded-md border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-[#175fd3] focus:ring-2 focus:ring-blue-100"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-500">Month</label>
+              <select value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))} className="h-9 w-full rounded border border-slate-300 bg-white px-2 text-sm">
                 {monthOptions.map((month, index) => <option key={month} value={index + 1}>{month}</option>)}
               </select>
-              <input aria-label="Filter year" type="number" value={filterYear} onChange={e => setFilterYear(Number(e.target.value))} className="w-24 rounded border border-[#ccc] px-3 py-2" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-500">Year</label>
+              <select value={filterYear} onChange={e => setFilterYear(Number(e.target.value))} className="h-9 w-full rounded border border-slate-300 bg-white px-2 text-sm">
+                {yearOptions.map(year => <option key={year} value={year}>{year}</option>)}
+              </select>
             </div>
           </div>
-          <div className="max-h-[260px] overflow-auto px-5 py-4">
-            <table className="w-full border-collapse text-sm">
-              <thead className="sticky top-0 bg-white">
-                <tr className="border-b-2 border-[#ddd] text-left">
-                  <th className="px-2 py-3">Date</th><th className="px-2 py-3">PO No.</th><th className="px-2 py-3">PR No.</th><th className="px-2 py-3">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? <tr><td colSpan={4} className="py-8 text-center text-gray-500">Loading...</td></tr> :
-                  filteredOrders.length === 0 ? <tr><td colSpan={4} className="py-8 text-center text-gray-500">No records found.</td></tr> :
-                  filteredOrders.map(po => (
-                    <tr key={po.id} onClick={() => handleSelectPO(po)} className={`cursor-pointer border-b border-[#e5e5e5] hover:bg-[#f5f5f5] ${selectedPO?.id === po.id ? 'bg-[#eef6fb]' : ''}`}>
-                      <td className="px-2 py-3">{new Date(po.order_date).toLocaleDateString()}</td>
-                      <td className="px-2 py-3 font-semibold text-[#337ab7]">
-                        <ModuleRecordLink
-                          tab="warehouse-purchasing-purchase-order"
-                          payload={{ poId: po.id, poRefNo: po.po_number }}
-                          onOpen={() => handleSelectPO(po)}
-                        >
-                          {po.po_number}
-                        </ModuleRecordLink>
-                      </td>
-                      <td className="px-2 py-3">{po.pr_reference || '-'}</td>
-                      <td className="px-2 py-3"><POStatusBadge status={po.status} /></td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
 
-        {isCreating && (
-          <section className="rounded border border-[#d5d5d5] bg-white shadow-sm">
-            <form onSubmit={handleCreateSubmit}>
-              <div className="flex items-center justify-between border-b border-[#ddd] px-5 py-4">
-                <div className="flex items-center gap-3">
-                  <button type="button" onClick={() => setIsCreating(false)} className="rounded border border-[#ccc] bg-[#f5f5f5] px-3 py-2 text-sm">← Back</button>
-                  <h2 className="font-serif text-xl font-bold uppercase">Purchase Order</h2>
-                </div>
-                <label className="flex items-center gap-3 font-bold">PO No. <input value={newPONumber} disabled className="w-32 rounded border border-[#ccc] bg-[#eee] px-3 py-2 font-normal" /></label>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-slate-500">Status</label>
+            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="h-9 w-full rounded border border-slate-300 bg-white px-2 text-sm">
+              <option value="">All Statuses</option>
+              {statusOptions.map(status => <option key={status} value={status}>{status}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div className="max-h-[calc(100vh-320px)] overflow-y-auto px-5 pb-5">
+          {loading ? (
+            <div className="py-8 text-center text-sm text-slate-500">Loading...</div>
+          ) : filteredOrders.length === 0 ? (
+            <div className="py-8 text-center text-sm text-slate-500">No records found.</div>
+          ) : (
+            <div className="space-y-2">
+              {paginatedOrders.map(po => {
+                const isSelected = selectedPO?.id === po.id;
+                const statusColor = po.status === 'Draft' || po.status === 'Pending' ? 'bg-slate-100 text-slate-700'
+                  : po.status === 'Posted' ? 'bg-blue-100 text-blue-700'
+                  : po.status === 'Waiting Approval' ? 'bg-orange-100 text-orange-700'
+                  : po.status === 'Completed' ? 'bg-emerald-100 text-emerald-700'
+                  : 'bg-slate-100 text-slate-700';
+
+                return (
+                  <button
+                    key={po.id}
+                    onClick={() => handleSelectPO(po)}
+                    className={`w-full rounded-lg border p-3 text-left transition ${
+                      isSelected ? 'border-blue-200 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-[#175fd3]">{po.po_number}</span>
+                      <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${statusColor}`}>{po.status}</span>
+                    </div>
+                    <div className="mt-1 text-xs font-semibold text-slate-500">{po.pr_reference || '-'}</div>
+                    <div className="mt-2 flex items-center justify-between text-xs">
+                      <span className="text-slate-600">Supplier: <span className="font-semibold">{po.supplier?.company || '-'}</span></span>
+                      <span className="font-semibold text-slate-700">{po.items?.length || 0} Items</span>
+                    </div>
+                    <div className="mt-1 text-[10px] text-slate-500">
+                      ETA: {po.items?.[0]?.eta_date ? new Date(po.items[0].eta_date).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : '-'}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {totalPages > 1 && (
+            <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-4 text-xs text-slate-500">
+              <span>Showing {page * PAGE_SIZE + 1} to {Math.min((page + 1) * PAGE_SIZE, filteredOrders.length)} of {filteredOrders.length}</span>
+              <div className="flex gap-1">
+                <button disabled={page === 0} onClick={() => setPage(p => p - 1)} className="flex h-6 w-6 items-center justify-center rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50"><ChevronLeft className="h-3 w-3" /></button>
+                <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)} className="flex h-6 w-6 items-center justify-center rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50"><ChevronRight className="h-3 w-3" /></button>
               </div>
-              <div className="p-5">
+            </div>
+          )}
+        </div>
+      </aside>
+
+      <main className="min-w-0 flex-1 p-5 lg:p-8">
+        {isCreating ? (
+          <section className="mx-auto max-w-5xl rounded-xl border border-slate-200 bg-white shadow-sm">
+            <form onSubmit={handleCreateSubmit}>
+              <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
+                <div className="flex items-center gap-4">
+                  <button type="button" onClick={() => setIsCreating(false)} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancel</button>
+                  <h2 className="text-xl font-extrabold uppercase tracking-tight text-[#173c83]">New Purchase Order</h2>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-bold text-slate-500">PO No:</span>
+                  <input value={newPONumber} disabled className="w-32 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-700" />
+                </div>
+              </div>
+              <div className="p-6">
                 <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
-                {submitError && <div className="mb-3 border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{submitError}</div>}
-                <div className="grid grid-cols-[130px_230px_150px_1fr] gap-3 border-b-2 border-[#ddd] pb-3 text-sm font-bold">
-                  <span>Quantity</span><span>Supplier</span><span>ETA</span><span>Original P/N &nbsp;&nbsp; Part No. &nbsp;&nbsp; Item Code &nbsp;&nbsp; Brand &nbsp;&nbsp; Description &nbsp;&nbsp; COGS</span>
+                {submitError && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{submitError}</div>}
+
+                <div className="mb-6 grid gap-6 md:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Order Date</label>
+                    <input type="date" value={createForm.order_date} onChange={e => setCreateForm({ ...createForm, order_date: e.target.value })} onBlur={e => handleCreateBlur('order_date', e.target.value)} className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-[#175fd3] focus:ring-1 focus:ring-blue-100" />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Supplier</label>
+                    <SearchableSelect value={createForm.supplier_id || ''} options={suppliers.map(s => ({ value: s.id, label: s.company || s.id }))} onChange={value => setCreateForm({ ...createForm, supplier_id: value })} placeholder="Select Supplier" />
+                  </div>
                 </div>
-                <div className="grid grid-cols-[130px_230px_150px_1fr] gap-3 py-3">
-                  <input value="1" disabled className="rounded border border-[#ccc] bg-[#eee] px-3 py-2" />
-                  <SearchableSelect value={createForm.supplier_id || ''} options={suppliers.map(s => ({ value: s.id, label: s.company || s.id }))} onChange={value => setCreateForm({ ...createForm, supplier_id: value })} placeholder="Select Supplier" />
-                  <input type="date" className="rounded border border-[#ccc] px-3 py-2" />
-                  <div className="rounded border border-[#ddd] bg-[#fafafa] px-3 py-2 text-sm text-gray-500">Items may be added after the purchase order is created.</div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Remarks</label>
+                  <textarea value={createForm.remarks || ''} onChange={e => setCreateForm({ ...createForm, remarks: e.target.value })} placeholder="Add any notes for this purchase order..." rows={3} className="w-full rounded-md border border-slate-300 p-3 text-sm outline-none focus:border-[#175fd3] focus:ring-1 focus:ring-blue-100" />
                 </div>
-                <textarea value={createForm.remarks || ''} onChange={e => setCreateForm({ ...createForm, remarks: e.target.value })} placeholder="Remark" rows={3} className="mt-2 w-1/2 rounded border border-[#ccc] p-3" />
-                <div className="mt-4"><button type="submit" className="rounded border border-[#4f9e43] bg-[#70b865] px-4 py-2 text-sm font-semibold text-white">Add PO</button></div>
+
+                <div className="mt-6 flex justify-end border-t border-slate-100 pt-6">
+                  <button type="submit" className="rounded-md bg-emerald-600 px-6 py-2.5 text-sm font-bold text-white hover:bg-emerald-700">Create Purchase Order</button>
+                </div>
               </div>
             </form>
           </section>
-        )}
-
-        {!isCreating && selectedPO && (
-          <section className="rounded border border-[#d5d5d5] bg-white shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#ddd] px-5 py-4">
+        ) : selectedPO ? (
+          <section className="mx-auto max-w-5xl rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-6 py-5">
+              <h2 className="text-xl font-extrabold uppercase tracking-tight text-[#173c83]">Purchase Order</h2>
               <div className="flex items-center gap-3">
-                <button onClick={() => setSelectedPO(null)} className="rounded border border-[#ccc] bg-[#f5f5f5] px-3 py-2 text-sm">← Back</button>
-                <h2 className="font-serif text-xl font-bold uppercase">Purchase Order</h2>
-                <POStatusBadge status={selectedPO.status} />
-              </div>
-              <div className="flex items-center gap-2">
-                <strong>PO No. {selectedPO.po_number}</strong>
-                <button onClick={() => setPrintMode(true)} className="rounded border border-[#ccc] px-3 py-2 text-sm">Print</button>
-                {selectedPO.status === 'Pending' && <button onClick={() => handleStatusChange('Posted')} className="rounded bg-[#70b865] px-3 py-2 text-sm font-semibold text-white">Post</button>}
-                {selectedPO.status === 'Posted' && canUnpost && <button onClick={handleUnpost} className="rounded bg-[#d9534f] px-3 py-2 text-sm font-semibold text-white">Unpost</button>}
-                {['Draft', 'Pending'].includes(selectedPO.status) && <button onClick={() => handleStatusChange('Cancelled')} className="rounded bg-[#d9534f] px-3 py-2 text-sm font-semibold text-white">Cancel</button>}
+                <span className="text-sm font-bold text-slate-500">PO No:</span>
+                <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-bold text-slate-700">{selectedPO.po_number}</span>
+                <button onClick={() => setPrintMode(true)} className="ml-2 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Print</button>
+                {selectedPO.status === 'Pending' && <button onClick={() => handleStatusChange('Posted')} className="rounded-md bg-emerald-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-emerald-700">Post</button>}
+                {selectedPO.status === 'Posted' && canUnpost && <button onClick={handleUnpost} className="rounded-md bg-amber-500 px-4 py-1.5 text-sm font-bold text-white hover:bg-amber-600">Unpost</button>}
+                {['Draft', 'Pending'].includes(selectedPO.status) && <button onClick={() => handleStatusChange('Cancelled')} className="rounded-md bg-rose-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-rose-700">Cancel</button>}
               </div>
             </div>
-            <div className="p-5">
-              <div className="mb-4 grid grid-cols-3 gap-5 text-sm">
-                <div><b>Supplier:</b> {selectedPO.supplier?.company || '-'}</div><div><b>PR No.:</b> {selectedPO.pr_reference || '-'}</div><div><b>Date:</b> {new Date(selectedPO.order_date).toLocaleDateString()}</div>
+
+            <div className="p-6">
+              <div className="mb-8 grid grid-cols-4 gap-6 border-b border-slate-100 pb-6">
+                <div>
+                  <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">PR No.</p>
+                  <p className="font-semibold text-[#175fd3]">{selectedPO.pr_reference || '-'}</p>
+                </div>
+                <div>
+                  <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">Supplier</p>
+                  <p className="font-semibold text-[#175fd3]">{selectedPO.supplier?.company || '-'}</p>
+                </div>
+                <div>
+                  <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">Status</p>
+                  <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-700">{selectedPO.status}</span>
+                </div>
+                <div>
+                  <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">Created On</p>
+                  <p className="font-semibold text-slate-700">{new Date(selectedPO.order_date).toLocaleDateString('en-GB')}</p>
+                </div>
               </div>
+
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-sm font-bold uppercase text-slate-700">Items</h3>
+                {['Draft', 'Pending'].includes(selectedPO.status) && !showAddItem && (
+                  <button onClick={() => setShowAddItem(true)} className="rounded-md bg-emerald-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-emerald-700">Add PO</button>
+                )}
+              </div>
+
               {showAddItem && (
-                <div className="mb-4 grid grid-cols-[1fr_90px_160px_auto_auto] items-end gap-2 border border-[#ddd] bg-[#f7f7f7] p-3">
-                  <ProductAutocomplete onSelect={product => { setNewItemId(product.id); setSelectedNewItemProduct(product as Product); }} placeholder="Search product..." />
-                  <input aria-label="Quantity" type="number" min="1" value={newItemQty} onChange={e => setNewItemQty(Number(e.target.value))} className="rounded border border-[#ccc] px-2 py-2" />
-                  <input aria-label="ETA" type="date" value={newItemEta} onChange={e => setNewItemEta(e.target.value)} className="rounded border border-[#ccc] px-2 py-2" />
-                  <button onClick={addItem} disabled={!newItemId} className="rounded bg-[#337ab7] px-3 py-2 text-white disabled:opacity-50">Add</button>
-                  <button onClick={() => setShowAddItem(false)} className="rounded border border-[#ccc] bg-white px-3 py-2">Cancel</button>
+                <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="grid grid-cols-[1fr_90px_160px_auto_auto] items-end gap-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-bold text-slate-600">Product</label>
+                      <ProductAutocomplete onSelect={product => { setNewItemId(product.id); setSelectedNewItemProduct(product as Product); }} placeholder="Search product..." />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-bold text-slate-600">Quantity</label>
+                      <input aria-label="Quantity" type="number" min="1" value={newItemQty} onChange={e => setNewItemQty(Number(e.target.value))} className="h-10 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-[#175fd3]" />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-bold text-slate-600">ETA</label>
+                      <input aria-label="ETA" type="date" value={newItemEta} onChange={e => setNewItemEta(e.target.value)} className="h-10 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-[#175fd3]" />
+                    </div>
+                    <button onClick={addItem} disabled={!newItemId} className="h-10 rounded-md bg-[#175fd3] px-4 font-bold text-white hover:bg-[#0e4fb7] disabled:opacity-50">Add</button>
+                    <button onClick={() => setShowAddItem(false)} className="h-10 rounded-md border border-slate-300 bg-white px-4 font-semibold text-slate-600 hover:bg-slate-50">Cancel</button>
+                  </div>
                 </div>
               )}
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[1100px] border-collapse text-sm">
-                  <thead><tr className="border-b-2 border-[#ddd] text-left">
-                    <th className="px-2 py-3"></th><th className="px-2 py-3">Quantity</th><th className="px-2 py-3">Supplier</th><th className="px-2 py-3">ETA</th><th className="px-2 py-3">Original P/N</th><th className="px-2 py-3">Part No.</th><th className="px-2 py-3">Item Code</th><th className="px-2 py-3">Brand</th><th className="px-2 py-3">Description</th><th className="px-2 py-3">COGS</th><th className="px-2 py-3">RR No.</th><th className="px-2 py-3">Received Qty</th>
-                  </tr></thead>
+
+              <div className="overflow-x-auto rounded-lg border border-slate-200">
+                <table className="w-full min-w-[1000px] border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      <th className="px-4 py-3 text-center">#</th>
+                      <th className="px-4 py-3 text-center">Quantity</th>
+                      <th className="px-4 py-3">Supplier</th>
+                      <th className="px-4 py-3">ETA</th>
+                      <th className="px-4 py-3">Original P/N</th>
+                      <th className="px-4 py-3">Part No.</th>
+                      <th className="px-4 py-3">Item Code</th>
+                      <th className="px-4 py-3">Brand</th>
+                      <th className="px-4 py-3">Description</th>
+                      <th className="px-4 py-3 text-right">COGS</th>
+                      <th className="px-4 py-3 text-center">Action</th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    {!selectedPO.items?.length ? <tr><td colSpan={12} className="py-8 text-center text-gray-500">No items.</td></tr> : selectedPO.items.map(item => (
-                      <tr key={item.id} className="border-b border-[#e5e5e5]">
-                        <td className="px-2 py-3">{['Draft','Pending'].includes(selectedPO.status) && <button onClick={() => deleteItem(item.id)} className="text-red-600"><Trash2 size={15}/></button>}</td>
-                        <td className="px-2 py-3">{item.qty}</td><td className="px-2 py-3">{selectedPO.supplier?.company || '-'}</td><td className="px-2 py-3">{item.eta_date ? new Date(item.eta_date).toLocaleDateString() : '-'}</td><td className="px-2 py-3">-</td><td className="px-2 py-3">{item.product?.part_no || '-'}</td><td className="px-2 py-3">{item.product?.item_code || '-'}</td><td className="px-2 py-3">{item.product?.brand || '-'}</td><td className="px-2 py-3">{item.product?.description || '-'}</td><td className="px-2 py-3">{item.unit_price?.toLocaleString() || '-'}</td><td className="px-2 py-3">-</td><td className="px-2 py-3">{item.quantity_received || 0}</td>
+                    {!selectedPO.items?.length ? (
+                      <tr><td colSpan={11} className="py-12 text-center text-sm text-slate-500">No items added yet.</td></tr>
+                    ) : selectedPO.items.map((item, index) => (
+                      <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
+                        <td className="px-4 py-3 text-center font-semibold text-slate-500">{index + 1}</td>
+                        <td className="px-4 py-3 text-center font-bold text-slate-700">{item.qty}</td>
+                        <td className="px-4 py-3 font-semibold">{selectedPO.supplier?.company || '-'}</td>
+                        <td className="px-4 py-3 font-semibold text-slate-600">{item.eta_date ? new Date(item.eta_date).toLocaleDateString('en-GB') : '-'}</td>
+                        <td className="px-4 py-3 font-semibold text-slate-600">-</td>
+                        <td className="px-4 py-3 font-semibold text-[#173c83]">{item.product?.part_no || '-'}</td>
+                        <td className="px-4 py-3 font-semibold text-slate-600">{item.product?.item_code || '-'}</td>
+                        <td className="px-4 py-3 font-semibold text-slate-600">{item.product?.brand || '-'}</td>
+                        <td className="px-4 py-3 font-semibold text-slate-700">{item.product?.description || '-'}</td>
+                        <td className="px-4 py-3 text-right font-bold">{item.unit_price ? item.unit_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
+                        <td className="px-4 py-3 text-center">
+                          {['Draft', 'Pending'].includes(selectedPO.status) && (
+                            <button onClick={() => deleteItem(item.id)} className="text-rose-500 hover:text-rose-700"><Trash2 size={16} /></button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
+                  {selectedPO.items?.length > 0 && (
+                    <tfoot>
+                      <tr className="border-t-2 border-slate-200 bg-slate-50 text-sm font-bold text-slate-700">
+                        <td colSpan={2} className="px-4 py-4 text-left">Total Items: {selectedPO.items.length}</td>
+                        <td colSpan={7} className="px-4 py-4 text-right">Total Quantity: {selectedPO.items.reduce((sum, item) => sum + (item.qty || 0), 0)}</td>
+                        <td colSpan={2} className="px-4 py-4 text-right">Total Amount: ₱{selectedPO.grand_total?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}</td>
+                      </tr>
+                    </tfoot>
+                  )}
                 </table>
               </div>
-              {['Draft','Pending'].includes(selectedPO.status) && !showAddItem && <button onClick={() => setShowAddItem(true)} className="mt-4 rounded bg-[#337ab7] px-4 py-2 text-sm font-semibold text-white">Add Item</button>}
             </div>
           </section>
+        ) : (
+          <div className="flex h-full items-center justify-center rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="text-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                <ListFilter size={32} />
+              </div>
+              <h3 className="text-lg font-bold text-slate-700">Select a Purchase Order</h3>
+              <p className="mt-1 text-sm text-slate-500">Choose an order from the list or create a new one.</p>
+            </div>
+          </div>
         )}
-      </div>
+      </main>
 
       {/* Confirmation Modal */}
       <ConfirmModal

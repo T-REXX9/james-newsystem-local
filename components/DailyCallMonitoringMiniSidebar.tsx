@@ -1,8 +1,8 @@
 import React from 'react';
-import { BarChart3, Table2 } from 'lucide-react';
+import { BarChart3, Table2, ClipboardList } from 'lucide-react';
 import type { UserProfile } from '../types';
 
-export type DailyCallOwnerViewMode = 'master-list' | 'chart';
+export type DailyCallOwnerViewMode = 'master-list' | 'chart' | 'operations';
 
 interface DailyCallMonitoringMiniSidebarProps {
   activeView: DailyCallOwnerViewMode;
@@ -21,6 +21,7 @@ const navItems: Array<{
     icon: Table2,
   },
   { id: 'chart', label: () => 'Chart', icon: BarChart3 },
+  { id: 'operations', label: () => 'Operations Dashboard', icon: ClipboardList },
 ];
 
 const DailyCallMonitoringMiniSidebar: React.FC<DailyCallMonitoringMiniSidebarProps> = ({

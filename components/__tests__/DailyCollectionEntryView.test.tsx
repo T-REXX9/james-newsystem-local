@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DailyCollectionEntryView from '../DailyCollectionEntryView';
 import { dailyCollectionService } from '../../services/dailyCollectionService';
@@ -35,6 +35,7 @@ vi.mock('../../services/notificationLocalApiService', () => ({
 
 describe('DailyCollectionEntryView scrolling', () => {
   beforeEach(() => {
+    cleanup();
     vi.clearAllMocks();
     vi.mocked(dailyCollectionService.listCollections).mockResolvedValue(
       Array.from({ length: 20 }, (_, index) => ({
@@ -81,6 +82,15 @@ describe('DailyCollectionEntryView scrolling', () => {
     vi.mocked(dailyCollectionService.getUnpaidTransactions).mockResolvedValue([]);
   });
 
+  it('shows the Daily Collection Entry title and accountable agent or account on each DCR', async () => {
+    render(<DailyCollectionEntryView />);
+
+    await waitFor(() => expect(screen.getByText('DCR-20')).toBeInTheDocument());
+    expect(screen.getByText('Agent / Account')).toBeInTheDocument();
+    expect(screen.getAllByText('staff-1').length).toBeGreaterThan(0);
+    expect(screen.getByText('Daily Collection Entry')).toBeInTheDocument();
+  });
+
   it('provides vertical scrolling for the page, record list, and detail rows', async () => {
     render(<DailyCollectionEntryView />);
 
@@ -96,5 +106,35 @@ describe('DailyCollectionEntryView scrolling', () => {
       'overflow-y-auto',
     );
     expect(screen.getByText('INV-30')).toBeInTheDocument();
+  });
+
+  it('shows the print action only after a DCR is approved', async () => {
+    vi.mocked(dailyCollectionService.listCollections).mockResolvedValueOnce([{
+      lrefno: 'REF-APPROVED',
+      lcolection_no: 'DCR-APPROVED',
+      lstatus: 'Approved',
+      ldatetime: '2026-08-04',
+      total_amt: 465,
+      created_by: 'staff-1',
+      approved_by: 'staff-2',
+    }]);
+    vi.mocked(dailyCollectionService.getCollection).mockResolvedValueOnce({
+      lrefno: 'REF-APPROVED',
+      lcolection_no: 'DCR-APPROVED',
+      lstatus: 'Approved',
+      ldatetime: '2026-08-04',
+      total_amt: 465,
+      created_by: 'staff-1',
+      approved_by: 'staff-2',
+    });
+    const printSpy = vi.spyOn(window, 'print').mockImplementation(() => undefined);
+
+    render(<DailyCollectionEntryView />);
+
+    const printButton = await screen.findByRole('button', { name: 'Print DCR' });
+    expect(printButton).toHaveAttribute('title', 'Print approved DCR');
+    fireEvent.click(printButton);
+    expect(printSpy).toHaveBeenCalledTimes(1);
+    printSpy.mockRestore();
   });
 });

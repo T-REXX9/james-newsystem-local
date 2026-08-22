@@ -50,6 +50,22 @@ describe('OwnerDailyCallMonitoringUnifiedView', () => {
     expect(screen.queryByTestId('chart-view')).not.toBeInTheDocument();
   });
 
+  it('navigates to the Operations Dashboard when its sidebar entry is clicked', () => {
+    const navigate = vi.fn();
+    window.addEventListener('workflow:navigate', navigate);
+
+    render(<OwnerDailyCallMonitoringUnifiedView currentUser={null} />);
+    fireEvent.click(screen.getByRole('button', { name: /operations dashboard/i }));
+
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(navigate.mock.calls[0][0]).toMatchObject({
+      type: 'workflow:navigate',
+      detail: { tab: 'operations-management-dashboard' },
+    });
+
+    window.removeEventListener('workflow:navigate', navigate);
+  });
+
   it('uses the requested dashboard name for main users', () => {
     render(<OwnerDailyCallMonitoringUnifiedView currentUser={{ id: '1', email: 'main@example.com', role: 'MAIN' }} />);
 

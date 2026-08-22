@@ -80,6 +80,14 @@ class LocalErrorBoundary extends Component<LocalErrorBoundaryProps, LocalErrorBo
 const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnifiedViewProps> = ({ currentUser }) => {
   const [activeView, setActiveView] = useState<DailyCallOwnerViewMode>('master-list');
   const [summary, setSummary] = useState({ current: 0, totalPotential: 0 });
+
+  const handleSidebarViewChange = (view: DailyCallOwnerViewMode) => {
+    if (view === 'operations') {
+      navigateToModule('operations-management-dashboard');
+      return;
+    }
+    setActiveView(view);
+  };
   const [workQueueCounts, setWorkQueueCounts] = useState({
     followUps: 0,
     pendingOrders: 0,
@@ -230,7 +238,7 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
   return (
     <div className="h-full min-h-0 overflow-hidden bg-slate-50 dark:bg-slate-950">
       <div className="flex h-full min-h-0 w-full flex-col lg:flex-row">
-        <DailyCallMonitoringMiniSidebar activeView={activeView} onChangeView={setActiveView} currentUser={currentUser} />
+        <DailyCallMonitoringMiniSidebar activeView={activeView} onChangeView={handleSidebarViewChange} currentUser={currentUser} />
 
         <section className={`min-h-0 min-w-0 flex-1 p-3 md:p-4 2xl:p-6 ${activeView === 'master-list' ? 'flex flex-col gap-4 overflow-hidden' : 'flex flex-col gap-4 overflow-hidden'}`}>
           {activeView !== 'master-list' && (

@@ -11,12 +11,12 @@ describe('Suggested Stock PR controls', () => {
   it('offers one multi-select PR action and displays the generated PR in the left activity panel', () => {
     expect(source).toContain('Create PR for Selected');
     expect(source).toContain('createPurchaseRequestFromSuggestions(selectedSuggestions)');
-    expect(source).toContain('PR Activity');
-    expect(source).toContain('generatedPR.pr_number');
+    expect(source).toContain('PR History');
+    expect(source).toContain('pr.pr_number');
   });
 
   it('links the generated number to Purchase Request and does not bypass PR with the old PO modal', () => {
-    expect(source).toContain("payload={{ prId: generatedPR.id }}");
+    expect(source).toContain("payload={{ prId: pr.id }}");
     expect(source).toContain('ModuleRecordLink');
     expect(source).not.toContain("import AddToPurchaseRequestModal");
   });

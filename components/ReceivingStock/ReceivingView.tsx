@@ -73,162 +73,140 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
         );
     }
 
+    const statusColor = rr.status === 'Draft' || rr.status === 'Pending' ? 'bg-orange-100 text-orange-700'
+        : rr.status === 'Posted' ? 'bg-emerald-100 text-emerald-700'
+        : rr.status === 'Cancelled' ? 'bg-rose-100 text-rose-700'
+        : 'bg-slate-100 text-slate-700';
+
+    const totalOrdered = rr.items?.reduce((sum, item) => sum + (item.qty_ordered || item.qty_received || 0), 0) || 0;
+    const totalReceived = rr.items?.reduce((sum, item) => sum + (item.qty_received || 0), 0) || 0;
+
     return (
-        <div className="min-h-full overflow-y-auto bg-[#f4f4f4] p-5 text-[#333]">
-            {/* Header */}
-            <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 flex justify-between items-center sticky top-0 z-10">
-                <div className="flex items-center gap-4">
-                    <button
-                        onClick={onBack}
-                        className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors"
-                    >
-                        <ArrowLeft className="w-5 h-5 text-slate-500" />
-                    </button>
-                    <div>
-                        <h1 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
-                            {rr.rr_no}
-                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${RR_STATUS_COLORS[rr.status || 'Draft'] || 'bg-gray-100 text-gray-800 border-gray-200'
-                                }`}>
-                                {rr.status || 'Draft'}
-                            </span>
-                        </h1>
-                        <p className="text-xs text-slate-500">
-                            created on {new Date(rr.created_at || '').toLocaleDateString()}
-                        </p>
-                    </div>
+        <div className="mx-auto max-w-5xl rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-6 py-5">
+                <div className="flex items-center gap-3">
+                    <h2 className="text-xl font-extrabold uppercase tracking-tight text-[#173c83]">Receiving Report: {rr.rr_no}</h2>
+                    <span className={`rounded-md px-3 py-1 text-sm font-bold ${statusColor}`}>{rr.status || 'Draft'}</span>
                 </div>
                 <div className="flex items-center gap-3">
-                    {/* Only show Finalize if Draft */}
-                    {rr.status === 'Draft' && (
-                        <button
-                            onClick={() => setShowFinalizeConfirm(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow font-medium"
-                        >
-                            <CheckCircle className="w-4 h-4" />
-                            Finalize & Post
-                        </button>
-                    )}
-
-                    <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
-
-                    <button
-                        // onClick={handlePrint} 
-                        // Implement print logic later or map to ReceivingPrint if separate view is needed
-                        onClick={() => addToast({ type: 'info', message: 'Print functionality coming soon' })}
-                        className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg transition-colors font-medium text-sm"
-                    >
-                        <Printer className="w-4 h-4" />
-                        Print
+                    <button onClick={() => addToast({ type: 'info', message: 'Print functionality coming soon' })} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
+                        <Printer className="h-4 w-4" /> Print RR
                     </button>
-
-                    {/* Only show Cancel/Delete if Draft */}
-                    {rr.status === 'Draft' && (
-                        <button
-                            onClick={() => addToast({ type: 'info', message: 'Delete functionality coming soon' })}
-                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                            title="Delete Draft"
-                        >
-                            <Trash2 className="w-4 h-4" />
+                    <button onClick={() => addToast({ type: 'info', message: 'History view coming soon' })} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
+                        <FileText className="h-4 w-4" /> View History
+                    </button>
+                    {rr.status === 'Draft' ? (
+                        <button onClick={() => setShowFinalizeConfirm(true)} className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700">
+                            <CheckCircle className="h-4 w-4" /> Post Receiving
                         </button>
-                    )}
+                    ) : rr.status === 'Posted' ? (
+                        <button onClick={() => addToast({ type: 'error', message: 'Unpost is not currently supported by the backend.' })} className="inline-flex items-center gap-2 rounded-md bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700">
+                            Unpost Receiving
+                        </button>
+                    ) : null}
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6">
-                <div className="max-w-5xl mx-auto space-y-6">
-                    {/* Info Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
-                            <div className="flex items-center gap-3 mb-2 text-slate-500 dark:text-slate-400 text-sm font-medium uppercase tracking-wide">
-                                <User className="w-4 h-4" /> Supplier
-                            </div>
-                            <div className="text-lg font-bold text-slate-800 dark:text-white mb-1">
-                                {rr.supplier_name}
-                            </div>
-                            <div className="text-sm text-slate-500">
-                                {rr.supplier_id ? 'Registered Supplier' : 'Manual Entry'}
-                            </div>
-                        </div>
-
-                        <div className="bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
-                            <div className="flex items-center gap-3 mb-2 text-slate-500 dark:text-slate-400 text-sm font-medium uppercase tracking-wide">
-                                <Calendar className="w-4 h-4" /> Details
-                            </div>
-                            <div className="space-y-1">
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-slate-500">Date Received:</span>
-                                    <span className="font-medium dark:text-slate-200">{new Date(rr.receive_date).toLocaleDateString()}</span>
-                                </div>
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-slate-500">PO Reference:</span>
-                                    <span className="font-medium dark:text-slate-200">{rr.po_no || 'N/A'}</span>
-                                </div>
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-slate-500">Inventory:</span>
-                                    <span className="font-medium dark:text-slate-200">Centralized quantity</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
-                            <div className="flex items-center gap-3 mb-2 text-slate-500 dark:text-slate-400 text-sm font-medium uppercase tracking-wide">
-                                <FileText className="w-4 h-4" /> Remarks
-                            </div>
-                            <div className="text-sm text-slate-600 dark:text-slate-300 italic">
-                                "{rr.remarks || 'No remarks provided'}"
-                            </div>
-                        </div>
+            <div className="p-6">
+                <div className="mb-8 flex items-center justify-between rounded-xl border border-slate-200 p-6">
+                    <div className="flex flex-col gap-1">
+                        <span className="text-xs font-bold uppercase tracking-wide text-orange-500">PR No.</span>
+                        <span className="text-2xl font-bold text-orange-500">{rr.po?.pr_reference || 'PR-UNKNOWN'}</span>
+                        <span className="mt-2 text-xs font-semibold text-slate-500">PR Date</span>
+                        <span className="text-sm font-semibold text-slate-700">{rr.po?.order_date ? new Date(rr.po.order_date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '-'}</span>
                     </div>
 
-                    {/* Items Table */}
-                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                        <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800">
-                            <h3 className="font-bold text-slate-800 dark:text-white">Line Items</h3>
-                            <span className="text-sm text-slate-500">{rr.items?.length || 0} items</span>
+                    <ArrowLeft className="h-6 w-6 rotate-180 text-slate-300" />
+
+                    <div className="flex flex-col gap-1">
+                        <span className="text-xs font-bold uppercase tracking-wide text-[#175fd3]">PO No.</span>
+                        <span className="text-2xl font-bold text-[#175fd3]">{rr.po_no || '-'}</span>
+                        <span className="mt-2 text-xs font-semibold text-slate-500">PO Date</span>
+                        <span className="text-sm font-semibold text-slate-700">{rr.po?.order_date ? new Date(rr.po.order_date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '-'}</span>
+                    </div>
+
+                    <ArrowLeft className="h-6 w-6 rotate-180 text-slate-300" />
+
+                    <div className="flex flex-col gap-1">
+                        <span className="text-xs font-bold uppercase tracking-wide text-emerald-600">RR No.</span>
+                        <span className="text-2xl font-bold text-emerald-600">{rr.rr_no}</span>
+                        <span className="mt-2 text-xs font-semibold text-slate-500">RR Date</span>
+                        <span className="text-sm font-semibold text-slate-700">{new Date(rr.receive_date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}</span>
+                    </div>
+
+                    <div className="h-24 w-px bg-slate-200"></div>
+
+                    <div className="flex flex-col justify-center">
+                        <div className="flex items-center gap-2">
+                            <Calendar className="h-5 w-5 text-slate-400" />
+                            <span className="text-xs font-bold uppercase tracking-wide text-slate-500">ETA Date</span>
                         </div>
-                        <table className="w-full text-sm text-left">
-                            <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-500 uppercase text-xs font-semibold">
-                                <tr>
-                                    <th className="pl-6 py-3">Item</th>
-                                    <th className="px-4 py-3">Description</th>
-                                    <th className="px-4 py-3 text-right">Qty</th>
-                                    <th className="px-4 py-3 text-right">Unit Cost</th>
-                                    <th className="pr-6 py-3 text-right">Total</th>
+                        <span className="mt-1 text-lg font-bold text-slate-800">{rr.po?.items?.[0]?.eta_date ? new Date(rr.po.items[0].eta_date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '-'}</span>
+                        <span className="text-xs font-semibold text-slate-500">(Estimated Arrival)</span>
+                    </div>
+                </div>
+
+                <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-slate-800">Items Received</h3>
+
+                <div className="overflow-x-auto rounded-lg border border-slate-200">
+                    <table className="w-full min-w-[1000px] border-collapse text-xs">
+                        <thead>
+                            <tr className="border-b border-slate-200 bg-slate-50 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                                <th className="px-4 py-3 text-center">#</th>
+                                <th className="px-4 py-3">Item Code</th>
+                                <th className="px-4 py-3">Description</th>
+                                <th className="px-4 py-3">Original P/N</th>
+                                <th className="px-4 py-3">Part No.</th>
+                                <th className="px-4 py-3">Brand</th>
+                                <th className="px-4 py-3 text-center">Qty Ordered</th>
+                                <th className="px-4 py-3 text-center">Qty Received</th>
+                                <th className="px-4 py-3 text-right">Unit Cost</th>
+                                <th className="px-4 py-3 text-right">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {!rr.items?.length ? (
+                                <tr><td colSpan={10} className="py-12 text-center text-sm text-slate-500">No items received.</td></tr>
+                            ) : rr.items.map((item, index) => (
+                                <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
+                                    <td className="px-4 py-3 text-center font-semibold text-slate-500">{index + 1}</td>
+                                    <td className="px-4 py-3 font-semibold text-slate-600">{item.item_code || '-'}</td>
+                                    <td className="px-4 py-3 font-semibold text-slate-700">{item.description || '-'}</td>
+                                    <td className="px-4 py-3 font-semibold text-slate-600">-</td>
+                                    <td className="px-4 py-3 font-semibold text-slate-600">{item.part_no || '-'}</td>
+                                    <td className="px-4 py-3 font-semibold text-slate-600">{item.product?.brand || '-'}</td>
+                                    <td className="px-4 py-3 text-center font-semibold text-slate-600">{item.qty_ordered || item.qty_received || 0}</td>
+                                    <td className="px-4 py-3 text-center font-bold text-slate-700">{item.qty_received || 0}</td>
+                                    <td className="px-4 py-3 text-right font-semibold text-slate-600">{item.unit_cost ? item.unit_cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
+                                    <td className="px-4 py-3 text-right font-bold text-slate-700">{item.total_amount ? item.total_amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
                                 </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                                {rr.items && rr.items.map((item) => (
-                                    <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                                        <td className="pl-6 py-4">
-                                            <div className="font-medium text-slate-900 dark:text-white">{item.part_no}</div>
-                                            <div className="text-xs text-slate-500">{item.item_code}</div>
-                                        </td>
-                                        <td className="px-4 py-4 text-slate-600 dark:text-slate-300">
-                                            {item.description}
-                                        </td>
-                                        <td className="px-4 py-4 text-right font-medium">
-                                            {item.qty_received}
-                                        </td>
-                                        <td className="px-4 py-4 text-right text-slate-600 dark:text-slate-400">
-                                            ₱{(item.unit_cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                        </td>
-                                        <td className="pr-6 py-4 text-right font-bold text-slate-800 dark:text-white">
-                                            ₱{(item.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                            <tfoot className="bg-slate-50 dark:bg-slate-700/30 border-t border-slate-200 dark:border-slate-700">
-                                <tr>
-                                    <td colSpan={4} className="text-right py-4 px-4 font-bold text-slate-600 dark:text-slate-400 uppercase text-xs tracking-wider">
-                                        Grand Total
-                                    </td>
-                                    <td className="text-right py-4 pr-6 font-bold text-xl text-blue-600 dark:text-blue-400">
-                                        ₱{(rr.grand_total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                    </td>
-                                </tr>
-                            </tfoot>
-                        </table>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div className="mt-4 flex items-start justify-between rounded-lg border border-slate-200 bg-slate-50 p-6">
+                    <div className="flex flex-col gap-3 text-sm font-bold text-slate-700">
+                        <div>Total Items: <span className="ml-2">{rr.items?.length || 0}</span></div>
+                        <div>Total Quantity Received: <span className="ml-2 text-[#175fd3]">{totalReceived}</span></div>
+                    </div>
+                    <div className="flex w-64 flex-col gap-3 text-sm">
+                        <div className="flex justify-between font-semibold text-slate-600">
+                            <span>Total Qty Ordered:</span>
+                            <span>{totalOrdered}</span>
+                        </div>
+                        <div className="flex justify-between font-semibold text-slate-600">
+                            <span>Total Amount:</span>
+                            <span>{rr.grand_total ? rr.grand_total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}</span>
+                        </div>
+                        <div className="flex justify-between font-semibold text-slate-600">
+                            <span>Total COGS:</span>
+                            <span>-</span>
+                        </div>
+                        <div className="mt-2 flex justify-between border-t border-slate-300 pt-3 text-base font-extrabold text-slate-800">
+                            <span>Grand Total:</span>
+                            <span className="text-[#175fd3]">{rr.grand_total ? rr.grand_total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -241,7 +219,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
                             <CheckCircle className="w-6 h-6" />
                         </div>
                         <h3 className="text-xl font-bold text-center text-slate-800 dark:text-white mb-2">
-                            Finalize Receiving Report?
+                            Post Receiving Report?
                         </h3>
                         <p className="text-center text-slate-500 dark:text-slate-400 mb-6">
                             This will post the report, update inventory stock quantities, and create inventory logs. This action cannot be undone.

@@ -624,11 +624,11 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser: _current
               <div
                 ref={listViewportRef}
                 onScroll={handleListScroll}
-                className="max-h-[520px] w-full overflow-auto border border-[#ddd]"
+                className="max-h-[520px] w-full overflow-y-auto overflow-x-hidden border border-[#ddd]"
               >
-                <table className="min-w-[1900px] w-full table-fixed border-collapse text-left text-[11px] leading-[1.35] min-[1450px]:text-[12px] [&_td]:break-words [&_th]:break-words">
+                <table className="w-full table-fixed border-collapse text-left text-[clamp(8px,0.72vw,12px)] leading-[1.35] [&_td]:break-words [&_th]:break-words">
                   <colgroup>
-                    {[1.8, 5.4, 5.4, 4.4, 5, 4, 7, 4, 3.8, 5.4, 3.8, 6, 5.4, 4.4, 3.8, 4.2, 4.2, 4.2, 6, 3.4, 3.4, 5].map((width, index) => (
+                    {[1.8, 8.5, 6.5, 4, 4.5, 3.5, 6, 4, 3.8, 4.2, 3.8, 6, 4.4, 4.4, 3.8, 4.2, 4.2, 4.2, 6, 3.4, 3.4, 5.4].map((width, index) => (
                       <col key={index} style={{ width: `${width}%` }} />
                     ))}
                   </colgroup>
@@ -685,8 +685,8 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser: _current
                             {productIndex + 1}
                             <button type="button" onClick={(event) => { event.stopPropagation(); selectProduct(product); }} className="mt-1 block w-full text-[#315574]" title="View full details"><Eye className="mx-auto h-3 w-3" /></button>
                           </td>
-                          <td className="border border-[#ddd] px-1 py-2 align-top">
-                            <button type="button" onClick={(event) => { event.stopPropagation(); selectProduct(product); }} className="font-bold text-[#1675bd] underline">{product.part_no || '-'}</button>
+                          <td className="border border-[#ddd] px-1 py-2 align-top overflow-hidden whitespace-nowrap">
+                            <button type="button" onClick={(event) => { event.stopPropagation(); selectProduct(product); }} className="block w-full max-w-full overflow-hidden whitespace-nowrap text-[clamp(5px,0.65vw,11px)] font-bold text-[#1675bd] underline" title={product.part_no || '-'}>{product.part_no || '-'}</button>
                           </td>
                           <td className="border border-[#ddd] px-1 py-2 align-top font-semibold">
                             {product.original_pn_no || '-'}

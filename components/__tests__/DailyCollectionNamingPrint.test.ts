@@ -8,7 +8,7 @@ const report = readFileSync(resolve(process.cwd(), 'components/CollectionSummary
 describe('Daily Collection naming and approved output', () => {
   it('uses Daily Collection Entry and displays the creating agent', () => {
     expect(entry).toContain('Daily Collection Entry');
-    expect(entry).toContain('Created by: {selectedHeader?.created_by');
+    expect(entry).toContain('Agent / Account: {selectedHeader?.created_by');
   });
 
   it('gates Print to approved/posted records and keeps Collection Report naming', () => {

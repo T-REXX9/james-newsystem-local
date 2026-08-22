@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, X } from 'lucide-react';
+import { Printer, Search, X } from 'lucide-react';
 import {
   dailyCollectionService,
   DailyCollectionApproverLog,
@@ -731,8 +731,15 @@ const DailyCollectionEntryView: React.FC = () => {
     if (selectedRefno) {
       if (status === 'Approved' || status === 'Posted') {
       secondary.push(
-        <button key="print" className={BUTTON_BASE} onClick={() => window.print()}>
-          Print
+        <button
+          key="print"
+          type="button"
+          title="Print approved DCR"
+          className={BUTTON_BASE}
+          onClick={() => window.print()}
+        >
+          <Printer className="h-4 w-4" />
+          Print DCR
         </button>,
       );
       }
@@ -885,9 +892,10 @@ const DailyCollectionEntryView: React.FC = () => {
             </div>
           </div>
           <div data-testid="daily-collection-list-scroll" className="flex-1 overflow-y-auto px-6 py-6">
-            <div className="grid grid-cols-[180px_1fr] border-b-2 border-[#ddd] px-2 py-2 font-['Oswald'] text-[14px]">
+            <div className="grid grid-cols-[120px_minmax(160px,1fr)_minmax(140px,0.8fr)] border-b-2 border-[#ddd] px-2 py-2 font-['Oswald'] text-[14px]">
               <span>Date</span>
               <span>DCR No.</span>
+              <span>Agent / Account</span>
             </div>
 
             {listLoading && <p className="p-3 text-sm text-slate-500 dark:text-slate-400">Loading collections...</p>}
@@ -901,13 +909,16 @@ const DailyCollectionEntryView: React.FC = () => {
                 <div
                   key={row.lrefno}
                   onClick={() => setSelectedRefno(row.lrefno)}
-                  className={`grid cursor-pointer grid-cols-[180px_1fr] border-b border-[#ddd] px-2 py-2 ${active ? 'text-blue-600' : ''}`}
+                  className={`grid cursor-pointer grid-cols-[120px_minmax(160px,1fr)_minmax(140px,0.8fr)] border-b border-[#ddd] px-2 py-2 ${active ? 'text-blue-600' : ''}`}
                 >
                   <span>
                     {toDisplayDate(row.ldatetime) || '-'}
                   </span>
                   <span className="underline">
                     {row.lcolection_no || row.lrefno}
+                  </span>
+                  <span className="truncate" title={row.created_by || 'Not available'}>
+                    {row.created_by || '-'}
                   </span>
                 </div>
               );
@@ -949,7 +960,7 @@ const DailyCollectionEntryView: React.FC = () => {
                     <p>
                       Ref No.: {selectedRefno}
                     </p>
-                    <p>Created by: {selectedHeader?.created_by || '-'}</p>
+                    <p>Agent / Account: {selectedHeader?.created_by || '-'}</p>
                   </div>
                   <div className="font-['Oswald'] text-[18px] text-[#263f52]">Status: {selectedHeader?.lstatus || 'Pending'}</div>
                 </div>

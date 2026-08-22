@@ -1,33 +1,22 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   ArrowDown,
   ArrowRight,
   ArrowUp,
-  Bot,
   ChevronLeft,
   ChevronRight,
-  CheckCircle2,
   ClipboardList,
   Crown,
-  FileSearch,
-  Headphones,
   Info,
   Loader2,
   MessageSquare,
-  PackageCheck,
   Phone,
   RefreshCw,
-  RotateCcw,
   Search,
-  ShieldAlert,
   Star,
-  Truck,
   UserRoundCheck,
   Users,
-  Wrench,
-  X,
   XCircle,
 } from 'lucide-react';
 import { useDebounce } from '../hooks/useDebounce';
@@ -146,16 +135,6 @@ const ageLabel = (row: DailyCallMasterCustomerRow) => {
   return row.daysSinceLastPurchase === 1 ? '1 day ago' : `${row.daysSinceLastPurchase} days ago`;
 };
 
-const caseOverviewItems = [
-  { label: 'Inquiry & Orders', Icon: Users, open: 12, pending: 6, tone: 'text-blue-700 border-blue-200 bg-blue-50' },
-  { label: 'Delivery Issues', Icon: Truck, open: 3, pending: 1, tone: 'text-orange-600 border-orange-200 bg-orange-50' },
-  { label: 'Quality Issues', Icon: Wrench, open: 5, pending: 2, tone: 'text-rose-600 border-rose-200 bg-rose-50' },
-  { label: 'Incident Reports', Icon: ShieldAlert, open: 4, pending: 2, tone: 'text-violet-700 border-violet-200 bg-violet-50' },
-  { label: 'Sales Returns', Icon: RotateCcw, open: 3, pending: 2, tone: 'text-emerald-700 border-emerald-200 bg-emerald-50' },
-] as const;
-
-type CaseOverviewItem = typeof caseOverviewItems[number];
-
 const masterRowFallback = (row: DailyCallMasterCustomerRow): DailyCallCustomerRow => ({
   id: row.id,
   source: 'Master List',
@@ -234,10 +213,9 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const categoryTableRefs = useRef<Partial<Record<CategoryId, HTMLElement>>>({});
   const fullCustomerRowsRef = useRef<DailyCallCustomerRow[] | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<DailyCallCustomerRow | null>(null);
-  const [showAddVerifiedProspectModal, setShowAddVerifiedProspectModal] = useState(false);
+  const [showAddProspectModal, setShowAddProspectModal] = useState(false);
   const [detailInitialTab, setDetailInitialTab] = useState<DetailTabId>('overview');
   const [loadingCustomerId, setLoadingCustomerId] = useState<string | null>(null);
-  const [selectedCase, setSelectedCase] = useState<CaseOverviewItem | null>(null);
   const [activeCategoryId, setActiveCategoryId] = useState<CategoryId>('priority');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -291,14 +269,14 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     }
   }, [debouncedSearch]);
 
-  const handleSubmitVerifiedProspect = useCallback(async (data: Omit<Contact, 'id'>) => {
+  const handleSubmitProspect = useCallback(async (data: Omit<Contact, 'id'>) => {
     const created = await createContact({
       ...data,
       status: CustomerStatus.PROSPECTIVE,
       verification: 'Unverified',
     });
     await loadRows(false, true);
-    setShowAddVerifiedProspectModal(false);
+    setShowAddProspectModal(false);
     return created;
   }, [loadRows]);
 
@@ -362,14 +340,16 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const summaryCategoryData = categoryData.filter((category) => category.id !== 'all');
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const startOfWeek = startOfToday - (6 * 24 * 60 * 60 * 1000);
+  const daysSinceMonday = (now.getDay() + 6) % 7;
+  const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysSinceMonday).getTime();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
   const unverifiedRows = categoryData.find((category) => category.id === 'unverified')?.rows || [];
   const unverifiedCreatedCounts = {
-    today: unverifiedRows.filter((row) => new Date(row.createdAt || 0).getTime() >= startOfToday).length,
-    week: unverifiedRows.filter((row) => new Date(row.createdAt || 0).getTime() >= startOfWeek).length,
-    month: unverifiedRows.filter((row) => new Date(row.createdAt || 0).getTime() >= startOfMonth).length,
+    today: unverifiedRows.filter((row) => row.createdAt && new Date(row.createdAt).getTime() >= startOfToday).length,
+    week: unverifiedRows.filter((row) => row.createdAt && new Date(row.createdAt).getTime() >= startOfWeek).length,
+    month: unverifiedRows.filter((row) => row.createdAt && new Date(row.createdAt).getTime() >= startOfMonth).length,
   };
+  const totalPotentialSales = summaryCategoryData.reduce((sum, category) => sum + category.potentialSales, 0);
 
   const amountToNextVip = (row: DailyCallMasterCustomerRow) => {
     const current = getCurrentVip(row);
@@ -432,9 +412,9 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
       data-testid="master-list-dashboard"
     >
       <AddContactModal
-        isOpen={showAddVerifiedProspectModal}
-        onClose={() => setShowAddVerifiedProspectModal(false)}
-        onSubmit={handleSubmitVerifiedProspect}
+        isOpen={showAddProspectModal}
+        onClose={() => setShowAddProspectModal(false)}
+        onSubmit={handleSubmitProspect}
         mode="create"
         defaultVerification="Unverified"
         title="Add Prospect"
@@ -442,9 +422,9 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
       />
       <header className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Daily Call Monitoring Dashboard</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Management & Agent View</p>
           <h2 className="mt-1 flex items-center gap-2 text-2xl font-bold">
-            <ClipboardList className="h-6 w-6 text-blue-700" /> Master List
+            <ClipboardList className="h-6 w-6 text-blue-700" /> Daily Call Monitoring Dashboard
           </h2>
         </div>
         <label className="relative block w-[340px]">
@@ -458,7 +438,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
         </label>
         <button
           type="button"
-          onClick={() => setShowAddVerifiedProspectModal(true)}
+          onClick={() => setShowAddProspectModal(true)}
           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-blue-700"
         >
           <UserRoundCheck className="h-4 w-4" /> Add Prospect
@@ -483,9 +463,14 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
         </label>
       </section>
 
-      <p className="text-xs text-slate-500" data-testid="potential-sales-formula">
-        Potential Sales = Priority average monthly sales + Recovery average monthly sales + ₱5,000 per verified prospect. Unverified prospects are excluded.
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-xs text-slate-600">
+        <p data-testid="potential-sales-formula">
+          Potential Sales = Priority average monthly sales + Recovery average monthly sales + ₱5,000 per verified prospect. Unverified prospects are excluded.
+        </p>
+        <p className="font-bold text-blue-900" data-testid="total-potential-sales">
+          Total Potential Sales: {compactPeso.format(totalPotentialSales)}
+        </p>
+      </div>
 
       {error && (
         <div className="flex items-center justify-between rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
@@ -607,6 +592,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                     </th>
                     <th className="w-[135px] px-2 py-2.5">Last Purchase</th>
                     <th className="w-[135px] px-2 py-2.5">Agent</th>
+                    <th className="w-[150px] px-2 py-2.5">Verified By</th>
                     <th className="w-[105px] px-2 py-2.5 text-center">Action</th>
                   </tr>
                 </thead>
@@ -656,13 +642,16 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                           <p className="mt-0.5 text-[11px] text-slate-500">{ageLabel(row)}</p>
                         </td>
                         <td className="break-words px-2 py-2.5 text-[12px] font-bold">{row.assignedTo}</td>
+                        <td className="break-words px-2 py-2.5 text-[12px] font-semibold text-slate-600">
+                          {row.verification === 'Verified' ? (row.verifiedBy || 'Verification recorded') : '—'}
+                        </td>
                         <td className="px-2 py-2.5">
                           <div className="flex justify-center gap-1.5">
                             {activeCategory.id === 'unverified' && (
                               <><button
                                 type="button"
                                 aria-label={`Approve verification for ${row.shopName}`}
-                                title={`Approve ${row.shopName} into Verified Prospects`}
+                                title={`Verify ${row.shopName} prospect`}
                                 onClick={() => handleVerifyExistingProspect(row)}
                                 disabled={loadingCustomerId === row.id}
                                 className="rounded-full border border-blue-200 p-1.5 text-blue-600 transition hover:bg-blue-50 disabled:opacity-60"
@@ -706,7 +695,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                     );
                   })}
                   {activeCategory.rows.length === 0 && (
-                    <tr><td colSpan={8} className="px-3 py-12 text-center text-xs text-slate-400">No customers in this category.</td></tr>
+                    <tr><td colSpan={9} className="px-3 py-12 text-center text-xs text-slate-400">No customers in this category.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -782,57 +771,6 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
         )}
       </section>
 
-      <section className="grid grid-cols-[1fr_1.15fr] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-r border-slate-200 p-4">
-          <h3 className="text-sm font-bold uppercase">Customer Case Overview <span className="text-xs font-normal normal-case">(This Month)</span></h3>
-          <div className="mt-3 grid grid-cols-5 gap-2">
-            {caseOverviewItems.map((item) => (
-              <div key={item.label} className={`rounded-lg border p-2 text-center ${item.tone}`}>
-                <item.Icon className="mx-auto h-5 w-5" />
-                <p className="mt-2 min-h-8 text-[10px] font-bold uppercase">{item.label}</p>
-                <div className="mt-2 flex justify-around text-[10px]"><span>Open<br/><b className="text-base">{item.open}</b></span><span>Pending<br/><b className="text-base">{item.pending}</b></span></div>
-                <button
-                  type="button"
-                  aria-label={`View ${item.label} details`}
-                  onClick={() => setSelectedCase(item)}
-                  className="mt-2 text-[10px] font-bold text-blue-700 hover:underline"
-                >
-                  View Details
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="p-4">
-          <h3 className="text-sm font-bold uppercase">Incident Report Flow</h3>
-          <div className="mt-7 flex items-start justify-between gap-1 text-center">
-            {[
-              [Phone, 'Customer Calls / SMS'],
-              [Bot, 'AI Records Complaint'],
-              [FileSearch, 'AI Extracts Customer'],
-              [UserRoundCheck, 'Management Approves'],
-              [CheckCircle2, 'If Approved'],
-              [XCircle, 'If Rejected'],
-              [Truck, 'Shipment Posted'],
-              [PackageCheck, 'AI Sends Tracking'],
-              [Headphones, 'Customer Calls Agent'],
-            ].map(([Icon, label], index) => (
-              <React.Fragment key={String(label)}>
-                <div className="w-14 shrink-0">
-                  <span className="mx-auto grid h-6 w-6 place-items-center rounded-full bg-slate-100 text-[10px] font-bold">{index + 1}</span>
-                  <div className="mx-auto mt-3 grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-blue-900">
-                    {React.createElement(Icon as React.ComponentType<{ className?: string }>, { className: 'h-5 w-5' })}
-                  </div>
-                  <p className="mt-2 text-[9px] leading-tight">{String(label)}</p>
-                </div>
-                {index < 8 && <span className="mt-12 text-xs font-bold">→</span>}
-              </React.Fragment>
-            ))}
-          </div>
-        </div>
-      </section>
-
       <footer className="flex items-center justify-between px-2 pb-2 text-[11px] text-slate-500">
         <span>© 2026 TND-OPC. All rights reserved.</span><span>Version 1.0.0</span>
       </footer>
@@ -844,46 +782,6 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
         initialTab={detailInitialTab}
         onClose={() => setSelectedCustomer(null)}
       />
-
-      {selectedCase && createPortal((
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/55 p-4 backdrop-blur-sm" onClick={() => setSelectedCase(null)}>
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-label={`${selectedCase.label} Details`}
-            className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 text-[#0f1f46] shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Customer Case Overview</p>
-                <h2 className="mt-1 text-xl font-bold">{selectedCase.label} Details</h2>
-              </div>
-              <button type="button" aria-label="Close case details" onClick={() => setSelectedCase(null)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="mt-5 grid grid-cols-2 gap-4">
-              <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
-                <p className="text-xs font-bold uppercase text-blue-700">Open</p>
-                <p className="mt-1 text-3xl font-bold text-blue-950">{selectedCase.open}</p>
-                <p className="mt-1 text-sm text-slate-600">{selectedCase.open} open cases</p>
-              </div>
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-                <p className="text-xs font-bold uppercase text-amber-700">Pending</p>
-                <p className="mt-1 text-3xl font-bold text-amber-950">{selectedCase.pending}</p>
-                <p className="mt-1 text-sm text-slate-600">{selectedCase.pending} pending cases</p>
-              </div>
-            </div>
-            <p className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
-              This summary covers the current month. Open and pending records are grouped under {selectedCase.label.toLowerCase()}.
-            </p>
-            <div className="mt-5 flex justify-end">
-              <button type="button" onClick={() => setSelectedCase(null)} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white hover:bg-blue-800">Close</button>
-            </div>
-          </section>
-        </div>
-      ), document.body)}
     </div>
     </div>
   );

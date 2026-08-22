@@ -63,6 +63,7 @@ const mapSummaryRow = (row: any): PurchaseRequestWithItems => {
     reference_no: '',
     status: normalizeStatus(row?.status),
     created_by: String(row?.created_by || ''),
+    created_by_name: String(row?.created_by_name || ''),
     created_at: String(row?.request_datetime || ''),
     updated_at: null,
     items: Array.from({ length: Math.max(0, itemCount) }).map(() => ({} as any)),
@@ -83,6 +84,7 @@ const mapDetail = (data: any): PurchaseRequestWithItems => {
     reference_no: '',
     status: normalizeStatus(request?.status),
     created_by: String(request?.created_by || ''),
+    created_by_name: String(request?.created_by_name || ''),
     created_at: String(request?.request_datetime || ''),
     updated_at: null,
     items: items.map((item: any) => ({
@@ -91,14 +93,20 @@ const mapDetail = (data: any): PurchaseRequestWithItems => {
       item_id: String(item?.item_id || ''),
       item_code: String(item?.item_code || ''),
       part_number: String(item?.part_number || ''),
+      original_part_no: String(item?.original_part_no || item?.opn_number || ''),
+      brand: String(item?.brand || ''),
       description: String(item?.description || ''),
       quantity: toNumber(item?.quantity, 0),
+      unit: String(item?.unit || 'PCS'),
       unit_cost: toNumber(item?.unit_cost, 0),
       supplier_id: String(item?.supplier_id || ''),
       supplier_name: String(item?.supplier_name || ''),
       eta_date: String(item?.eta_date || ''),
       created_at: null,
       updated_at: null,
+      sr_cases: toNumber(item?.sr_cases, 0),
+      ir_cases: toNumber(item?.ir_cases, 0),
+      recommendation: item?.recommendation === 'Good' || (toNumber(item?.sr_cases, 0) + toNumber(item?.ir_cases, 0) === 0) ? 'Good' : 'Review Supplier',
     })),
   } as PurchaseRequestWithItems;
 };
@@ -107,8 +115,11 @@ const mapCreateItemPayload = (item: CreatePRItemPayload) => ({
   item_id: item.item_id,
   item_code: item.item_code,
   part_number: item.part_number,
+  original_part_no: item.original_part_no,
+  brand: item.brand,
   description: item.description,
   quantity: toNumber(item.quantity, 0),
+  unit: item.unit || 'PCS',
   unit_cost: toNumber(item.unit_cost ?? 0, 0),
   supplier_id: item.supplier_id || '',
   supplier_name: item.supplier_name || '',
@@ -116,7 +127,7 @@ const mapCreateItemPayload = (item: CreatePRItemPayload) => ({
 });
 
 export const purchaseRequestService = {
-  async getPurchaseRequests(filters?: { month?: number; year?: number; status?: string }): Promise<PurchaseRequestWithItems[]> {
+  async getPurchaseRequests(filters?: { month?: number; year?: number; status?: string; search?: string }): Promise<PurchaseRequestWithItems[]> {
     const query = new URLSearchParams({
       main_id: String(API_MAIN_ID),
       page: '1',
@@ -125,6 +136,7 @@ export const purchaseRequestService = {
     if (filters?.month) query.set('month', String(filters.month));
     if (filters?.year) query.set('year', String(filters.year));
     if (filters?.status && filters.status !== 'All') query.set('status', filters.status);
+    if (filters?.search?.trim()) query.set('search', filters.search.trim());
 
     const data = await requestApi(`${API_BASE_URL}/purchase-requests?${query.toString()}`);
     const rows = Array.isArray(data?.items) ? data.items : [];
@@ -251,6 +263,8 @@ export const purchaseRequestService = {
       id: String(row?.id || ''),
       item_code: String(row?.item_code || ''),
       part_number: String(row?.part_no || ''),
+      original_part_no: String(row?.original_pn_no || ''),
+      brand: String(row?.brand || ''),
       name: String(row?.description || ''),
       description: String(row?.description || ''),
       cost: toNumber(row?.cost, 0),

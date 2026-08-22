@@ -88,6 +88,7 @@ const formatDate = (value: string) =>
 const LOAD_BATCH_SIZE = 20;
 
 const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser }) => {
+  const [prHistory, setPrHistory] = useState<PurchaseRequestWithItems[]>([]);
   const { addToast } = useToast();
   const currentMonth = toIsoDate(new Date()).slice(0, 7);
   const initialRange = getMonthRange(currentMonth);
@@ -345,6 +346,7 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
     try {
       const created = await createPurchaseRequestFromSuggestions(selectedSuggestions);
       setGeneratedPR(created);
+      setPrHistory(prev => [created, ...prev]);
       setSelectedIds(new Set());
       addToast({
         type: 'success',
@@ -433,388 +435,154 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
   ] as const;
 
   return (
-    <div className="h-full overflow-auto bg-[#eef1f4] text-[#263f4f]">
-      <div className="mx-auto max-w-[1680px] p-4 lg:p-5">
-        <div className="grid items-start gap-4 xl:grid-cols-[286px_minmax(0,1fr)]">
-          <main className="min-w-0 space-y-4 xl:order-2">
-            <header className="flex flex-col gap-4 rounded-[5px] border border-[#d5dce2] bg-white p-5 shadow-sm md:flex-row md:items-start md:justify-between">
-              <div className="max-w-4xl">
-                <h1 className="text-[25px] font-bold uppercase tracking-[0.02em] text-[#263f4f]">
-                  Item Suggested for Stock Report
-                </h1>
-                <p className="mt-1 text-[14px] font-bold text-[#c44743]">
-                  Find requested parts that still need an inventory decision.
-                </p>
-                <p className="mt-2 max-w-3xl text-[12px] leading-5 text-[#71808d]">
-                  This report groups inquiry items marked Not Listed. Each inquiry counts once, and a blank or zero
-                  requested quantity counts as one.
-                </p>
-              </div>
-              <div className="flex shrink-0 flex-row gap-2 md:w-[190px] md:flex-col">
-                <button
-                  type="button"
-                  onClick={applyFilters}
-                  className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-[4px] border border-[#54718d] bg-[#6685a4] px-4 text-[12px] font-semibold text-white hover:bg-[#516c87]"
-                >
-                  <FileDown className="h-4 w-4" />
-                  Generate Report
-                </button>
-                <button
-                  type="button"
-                  onClick={exportCsv}
-                  className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-[4px] border border-[#b9c4cc] bg-white px-4 text-[12px] font-semibold text-[#516c87] hover:bg-[#f5f7f8]"
-                >
-                  <Download className="h-4 w-4 text-[#d74b4b]" />
-                  Export CSV
-                </button>
-              </div>
-            </header>
+    <div className="h-full overflow-y-auto bg-[#f7f9fc] text-slate-900">
+      <div className="mx-auto max-w-[1500px] p-5 lg:p-8">
+        <header className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <div className="mb-1 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-400"><span>Purchasing</span><span>›</span><span>Reports</span><span>›</span><span className="text-slate-700">Item Suggested for Stock Report</span></div>
+            <h1 className="text-2xl font-extrabold uppercase tracking-tight text-[#173c83]">Item Suggested for Stock Report</h1>
+            <p className="mt-1 text-sm text-slate-500">Parts requested by customers but not found in the product database.</p>
+          </div>
+        </header>
 
-            <section className="grid gap-2 lg:grid-cols-5">
-              <div className={filterCardClass}>
-                <div className="mb-2 flex items-center gap-2">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#6685a4] text-[10px] font-bold text-white">1</span>
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-[#52606d]">View By</span>
-                </div>
-                <select value={viewMode} onChange={(event) => setViewMode(event.target.value as ViewMode)} className={controlClass}>
-                  <option value="summary">Items Summary</option>
-                  <option value="detail">Inquiry Details</option>
-                </select>
-              </div>
-
-              <div className={filterCardClass}>
-                <div className="mb-2 flex items-center gap-2">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#6685a4] text-[10px] font-bold text-white">2</span>
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-[#52606d]">Period</span>
-                </div>
-                <div className="grid grid-cols-4 overflow-hidden rounded-[4px] border border-[#c9d1d9]">
-                  {(['today', 'week', 'month', 'year'] as Period[]).map((option) => (
-                    <button
-                      key={option}
-                      type="button"
-                      onClick={() => setPeriodAndRange(option)}
-                      className={`h-[34px] border-r border-[#d7dde3] text-[9px] font-bold uppercase last:border-r-0 ${
-                        period === option ? 'bg-[#6685a4] text-white' : 'bg-white text-[#647482] hover:bg-[#f1f4f6]'
-                      }`}
-                    >
-                      {option === 'today' ? 'Day' : option}
-                    </button>
-                  ))}
-                </div>
-                <button type="button" onClick={() => setPeriodAndRange('custom')} className="mt-1 text-[10px] font-semibold text-[#6685a4] hover:underline">
-                  Custom range
-                </button>
-              </div>
-
-              <div className={filterCardClass}>
-                <div className="mb-2 flex items-center gap-2">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#6685a4] text-[10px] font-bold text-white">3</span>
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-[#52606d]">Month</span>
-                </div>
-                <input
-                  type="month"
-                  value={monthValue}
-                  onChange={(event) => {
-                    setMonthValue(event.target.value);
-                    setPeriod('month');
-                    const range = getMonthRange(event.target.value);
-                    setDateFrom(range.dateFrom);
-                    setDateTo(range.dateTo);
-                  }}
-                  className={controlClass}
-                />
-              </div>
-
-              <div className={filterCardClass}>
-                <div className="mb-2 flex items-center gap-2">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#6685a4] text-[10px] font-bold text-white">4</span>
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-[#52606d]">Customer</span>
-                </div>
-                <select value={selectedCustomer} onChange={(event) => setSelectedCustomer(event.target.value)} className={controlClass} disabled={isLoadingCustomers}>
-                  <option value="all">{isLoadingCustomers ? 'Loading customers...' : 'All Customers'}</option>
-                  {customers.map((customer) => (
-                    <option key={customer.id} value={customer.id}>{customer.company} ({customer.inquiryCount})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className={filterCardClass}>
-                <div className="mb-2 flex items-center gap-2">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#6685a4] text-[10px] font-bold text-white">5</span>
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-[#52606d]">Salesperson</span>
-                </div>
-                <select value={selectedSalesperson} onChange={(event) => setSelectedSalesperson(event.target.value)} className={controlClass}>
-                  <option value="all">All Salespersons</option>
-                  {salespeople.map((name) => <option key={name} value={name}>{name}</option>)}
-                </select>
-              </div>
-            </section>
-
-            {period === 'custom' && (
-              <section className="flex flex-wrap items-end gap-3 rounded-[5px] border border-[#d7dde3] bg-white p-3 shadow-sm">
-                <label className="text-[11px] font-semibold text-[#52606d]">
-                  Date From
-                  <input type="date" value={dateFrom} max={dateTo} onChange={(event) => setDateFrom(event.target.value)} className={`${controlClass} mt-1 w-44`} />
-                </label>
-                <label className="text-[11px] font-semibold text-[#52606d]">
-                  Date To
-                  <input type="date" value={dateTo} min={dateFrom} onChange={(event) => setDateTo(event.target.value)} className={`${controlClass} mt-1 w-44`} />
-                </label>
-                {dateFrom > dateTo && <span className="pb-2 text-[11px] font-semibold text-[#c44743]">Date To must be after Date From.</span>}
-              </section>
-            )}
-
-            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {[
-                [Package, 'Unique Not Listed Items', notListedCount, 'Need inventory setup', '#d9534f', '#fbeaea'],
-                [BarChart3, 'Total Inquiries', totalInquiries, 'Within selected period', '#6685a4', '#eaf0f6'],
-                [Users, 'Customers / Prospects', uniqueCustomers, 'Unique requesters', '#5cb85c', '#ebf7eb'],
-                [Box, 'Total Qty Requested', totalQty, 'Blank quantity = 1', '#8a6d3b', '#fff5df'],
-              ].map(([Icon, label, value, caption, color, background]) => (
-                <article key={String(label)} className="flex min-h-[104px] items-center gap-3 rounded-[5px] border border-[#d7dde3] bg-white p-4 shadow-sm">
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full" style={{ color: String(color), backgroundColor: String(background) }}>
-                    <Icon className="h-5 w-5" />
-                  </span>
-                  <div>
-                    <p className="text-[10px] font-bold uppercase leading-4 tracking-wide text-[#71808d]">{label}</p>
-                    <p className="text-[25px] font-bold leading-8 text-[#263f4f]">{String(value)}</p>
-                    <p className="text-[10px] text-[#8b98a3]">{caption}</p>
+        <div className="grid items-start gap-5 xl:grid-cols-[260px_minmax(0,1fr)]">
+          <aside className="rounded-lg border border-slate-200 bg-[#f8fafb] p-4 shadow-sm xl:order-1">
+            <h2 className="border-b border-slate-200 pb-3 text-sm font-bold uppercase text-[#173c83]">PR History</h2>
+            <div className="mt-4 space-y-3">
+              {prHistory.length === 0 ? (
+                <p className="text-sm text-slate-500">No purchase requests created yet.</p>
+              ) : (
+                prHistory.map((pr) => (
+                  <div key={pr.id} className="rounded border border-slate-200 bg-white p-3">
+                    <ModuleRecordLink tab="warehouse-purchasing-purchase-request" payload={{ prId: pr.id }} className="block font-bold text-[#173c83] hover:underline">
+                      {pr.pr_number}
+                    </ModuleRecordLink>
+                    <div className="mt-1 flex items-center justify-between text-xs text-slate-500">
+                      <span>{formatDate(pr.request_date)}</span>
+                      <span className="rounded bg-amber-100 px-2 py-0.5 font-bold text-amber-700">{pr.status}</span>
+                    </div>
+                    <p className="mt-2 text-xs font-semibold text-slate-600">{pr.items?.length || 0} items</p>
                   </div>
-                </article>
-              ))}
-            </section>
+                ))
+              )}
+            </div>
+          </aside>
 
-            <section className="flex items-center gap-3 rounded-[5px] border border-[#efd7a2] border-l-4 border-l-[#f0ad4e] bg-[#fff8e8] p-4">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#f0ad4e] text-[12px] font-bold text-white">1</span>
-              <AlertTriangle className="h-5 w-5 shrink-0 text-[#c88216]" />
-              <div>
-                <p className="text-[12px] font-bold text-[#73561d]">Review Not Listed items before purchasing.</p>
-                <p className="mt-0.5 text-[11px] text-[#8a6d3b]">Create missing inventory records first; items already matched can be added directly to purchasing.</p>
+          <main className="min-w-0 xl:order-2">
+            <section className="mb-4 flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700">
+                <CalendarDays className="h-4 w-4 text-[#175fd3]" /> Search by Date
               </div>
+              <div className="flex overflow-hidden rounded-md border border-slate-300">
+                {(['today', 'week', 'month', 'year'] as Period[]).map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => { setPeriodAndRange(option); setRefreshRequest(c => c + 1); }}
+                    className={`border-r border-slate-200 px-4 py-1.5 text-sm font-bold last:border-r-0 ${
+                      period === option ? 'bg-[#175fd3] text-white' : 'bg-white text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    {option === 'today' ? 'Today' : option === 'week' ? 'This Week' : option === 'month' ? 'This Month' : 'This Year'}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setPeriod('custom')}
+                  className={`px-4 py-1.5 text-sm font-bold ${
+                    period === 'custom' ? 'bg-[#175fd3] text-white' : 'bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  Custom Date
+                </button>
+              </div>
+              {period === 'custom' ? (
+                <div className="flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#173c83]">
+                  <input type="date" value={dateFrom} max={dateTo} onChange={(event) => setDateFrom(event.target.value)} className="bg-transparent outline-none" />
+                  <span>-</span>
+                  <input type="date" value={dateTo} min={dateFrom} onChange={(event) => setDateTo(event.target.value)} className="bg-transparent outline-none" />
+                  <button type="button" onClick={applyFilters} className="ml-2 rounded bg-[#175fd3] px-2 py-0.5 text-white">Apply</button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-1.5 text-sm font-bold text-[#173c83]">
+                  <CalendarDays className="h-4 w-4" /> {new Date(appliedFilters.dateFrom).toLocaleDateString('en-GB')} - {new Date(appliedFilters.dateTo).toLocaleDateString('en-GB')}
+                </div>
+              )}
             </section>
 
-            <section className="overflow-visible rounded-[5px] border border-[#cfd7de] bg-white shadow-sm">
-              <div className="flex flex-col gap-3 border-b border-[#dbe1e6] px-4 py-3 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <h2 className="text-[14px] font-bold text-[#263f4f]">Not Listed Items <span className="font-normal text-[#71808d]">(Grouped by requested part)</span></h2>
-                  <p className="mt-0.5 text-[10px] text-[#8b98a3]">{formatDate(appliedFilters.dateFrom)} – {formatDate(appliedFilters.dateTo)}</p>
-                </div>
-                <label className="flex items-center gap-2 text-[11px] font-semibold text-[#647482]">
-                  Sort by
-                  <select value={sortOption} onChange={(event) => setSortOption(event.target.value as SortOption)} className={`${controlClass} w-[190px]`}>
-                    <option value="inquiries-desc">Most Inquiries</option>
-                    <option value="qty-desc">Highest Quantity</option>
-                    <option value="customers-desc">Most Customers</option>
-                    <option value="part-asc">Part Number A–Z</option>
-                  </select>
-                </label>
-                {appliedFilters.viewMode === 'summary' && (
+            <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+              <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white/95 px-5 py-3 shadow-sm backdrop-blur">
+                <div className="flex items-center gap-4">
+                  <span className="text-sm font-bold text-slate-700">{selectedIds.size} item(s) selected</span>
                   <button
                     type="button"
                     onClick={handleCreatePRForSelected}
                     disabled={selectedSuggestions.length === 0 || isCreatingPR}
-                    className="inline-flex h-9 items-center justify-center gap-2 rounded-[4px] bg-[#175fd3] px-4 text-[11px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex items-center gap-2 rounded-md bg-[#175fd3] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#0e4fb7] disabled:opacity-50"
                   >
                     {isCreatingPR ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                    Create PR for Selected ({selectedSuggestions.length})
+                    Create PR for Selected
                   </button>
-                )}
+                </div>
+                <div className="flex items-center gap-2 rounded bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
+                  <Lightbulb className="h-3.5 w-3.5 text-amber-500" /> These items are not yet in inventory. Create PR to evaluate and purchase.
+                </div>
               </div>
 
               {isLoading ? (
-                <div className="flex h-56 items-center justify-center gap-2 text-[12px] text-[#71808d]">
-                  <Loader2 className="h-5 w-5 animate-spin text-[#6685a4]" />
-                  Loading report data...
+                <div className="flex h-56 items-center justify-center gap-2 text-sm text-slate-500">
+                  <Loader2 className="h-5 w-5 animate-spin text-[#175fd3]" /> Loading report data...
                 </div>
-              ) : activeRows.length === 0 ? (
+              ) : visibleSummary.length === 0 ? (
                 <div className="flex h-56 flex-col items-center justify-center text-center">
-                  <Package className="mb-2 h-10 w-10 text-[#c9d1d9]" />
-                  <p className="text-[13px] font-semibold text-[#52606d]">No suggested stock items found.</p>
-                  <p className="mt-1 text-[11px] text-[#8b98a3]">Adjust the report filters and generate again.</p>
+                  <Package className="mb-2 h-10 w-10 text-slate-300" />
+                  <p className="text-sm font-semibold text-slate-600">No suggested stock items found.</p>
+                  <p className="mt-1 text-xs text-slate-400">Try selecting a different date range.</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto xl:overflow-visible">
-                  {appliedFilters.viewMode === 'summary' ? (
-                    <table className="min-w-[1240px] w-full border-collapse">
-                      <thead className="sticky top-0 z-20 shadow-[0_2px_5px_rgba(38,63,79,0.18)]">
-                        <tr>
-                          <th rowSpan={2} className={`${tableHeaderClass} w-9 text-center`}><input type="checkbox" checked={visibleSummary.length > 0 && visibleSummary.every((item) => selectedIds.has(item.id))} onChange={toggleAll} aria-label="Select all visible items" /></th>
-                          <th rowSpan={2} className={`${tableHeaderClass} w-10 text-center`}>#</th>
-                          <th rowSpan={2} className={tableHeaderClass}>Part Number</th>
-                          <th rowSpan={2} className={tableHeaderClass}>Description</th>
-                          <th rowSpan={2} className={tableHeaderClass}>Brand</th>
-                          <th rowSpan={2} className={`${tableHeaderClass} text-center`}>Total Inquiries<br /><span className="font-normal">(Count)</span></th>
-                          <th rowSpan={2} className={`${tableHeaderClass} text-center`}>Total Qty Requested<br /><span className="font-normal">(Blank qty = 1)</span></th>
-                          <th rowSpan={2} className={`${tableHeaderClass} text-center`}>Customers<br /><span className="font-normal">(Count)</span></th>
-                          <th rowSpan={2} className={`${tableHeaderClass} text-center`}>Status</th>
-                          <th colSpan={2} className={`${tableHeaderClass} text-center`}>If Already Listed</th>
-                          <th rowSpan={2} className={`${tableHeaderClass} text-center`}>Action</th>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[900px] border-collapse text-xs">
+                    <thead>
+                      <tr>
+                        <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-center text-white"><input type="checkbox" checked={visibleSummary.length > 0 && visibleSummary.every((item) => selectedIds.has(item.id))} onChange={toggleAll} className="h-4 w-4 rounded border-white/30 bg-white/10" aria-label="Select all items" /></th>
+                        <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-left font-bold uppercase tracking-wide text-white">Part No</th>
+                        <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-left font-bold uppercase tracking-wide text-white">Description</th>
+                        <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-center font-bold uppercase tracking-wide text-white">Customer Requests</th>
+                        <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-center font-bold uppercase tracking-wide text-white">Qty Requested (Total)</th>
+                        <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-center font-bold uppercase tracking-wide text-white">Customers</th>
+                        <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-center font-bold uppercase tracking-wide text-white">Last Requested</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visibleSummary.map((item) => (
+                        <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
+                          <td className="px-4 py-3 text-center"><input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleRow(item.id)} aria-label={`Select ${item.partNo}`} className="h-4 w-4 rounded border-slate-300" /></td>
+                          <td className="px-4 py-3 font-semibold text-[#e85c41]">{item.partNo || '-'}</td>
+                          <td className="px-4 py-3 font-semibold text-[#173c83]">{item.description || '-'}</td>
+                          <td className="px-4 py-3 text-center font-bold text-[#175fd3]">{item.inquiryCount} requests</td>
+                          <td className="px-4 py-3 text-center font-bold text-slate-700">{item.totalQty} pcs</td>
+                          <td className="px-4 py-3 text-center font-semibold text-slate-600">{item.customerCount} customers</td>
+                          <td className="px-4 py-3 text-center font-semibold text-slate-600">{new Date(item.lastInquiryDate).toLocaleDateString('en-GB')}</td>
                         </tr>
-                        <tr>
-                          <th className={tableHeaderClass}>Item Code</th>
-                          <th className={tableHeaderClass}>Part Number (In Database)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {visibleSummary.map((item, index) => (
-                          <tr key={item.id} className="hover:bg-[#f8fafb]">
-                            <td className={`${tableCellClass} text-center`}><input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleRow(item.id)} aria-label={`Select ${item.partNo || item.description}`} /></td>
-                            <td className={`${tableCellClass} text-center text-[#8b98a3]`}>{index + 1}</td>
-                            <td className={tableCellClass}><button type="button" className="font-semibold text-[#4f7697] hover:underline" onClick={() => handleItemAction(item)}>{item.partNo || '-'}</button></td>
-                            <td className={`${tableCellClass} max-w-[230px]`}>{item.description || '-'}</td>
-                            <td className={tableCellClass}>{item.brand || '-'}</td>
-                            <td className={`${tableCellClass} text-center text-[14px] font-bold text-[#d74b4b]`}>{item.inquiryCount}</td>
-                            <td className={`${tableCellClass} text-center font-semibold`}>{item.totalQty}</td>
-                            <td className={`${tableCellClass} text-center font-semibold`}>{item.customerCount}</td>
-                            <td className={`${tableCellClass} text-center`}>
-                              <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold ${item.isListed ? 'bg-[#e4f5e7] text-[#3c763d]' : 'bg-[#fbeaea] text-[#a94442]'}`}>
-                                {item.isListed ? 'Listed' : 'Not Listed'}
-                              </span>
-                            </td>
-                            <td className={tableCellClass}>{item.databaseItemCode || '-'}</td>
-                            <td className={tableCellClass}>{item.databasePartNo || '-'}</td>
-                            <td className={`${tableCellClass} text-center`}>
-                              <button
-                                type="button"
-                                onClick={() => handleItemAction(item)}
-                                className={`inline-flex h-8 items-center justify-center gap-1 rounded-[4px] px-3 text-[10px] font-bold ${
-                                  item.isListed
-                                    ? 'border border-[#54718d] bg-[#6685a4] text-white hover:bg-[#516c87]'
-                                    : 'border border-[#d74b4b] bg-white text-[#c44743] hover:bg-[#fbeaea]'
-                                }`}
-                              >
-                                {item.isListed ? <ShoppingCart className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
-                                {item.isListed ? (selectedIds.has(item.id) ? 'Selected' : 'Select') : 'Create'}
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <table className="min-w-[980px] w-full border-collapse">
-                      <thead className="sticky top-0 z-20 shadow-[0_2px_5px_rgba(38,63,79,0.18)]">
-                        <tr>
-                          <th className={`${tableHeaderClass} w-9 text-center`}><input type="checkbox" checked={visibleDetailRows.length > 0 && visibleDetailRows.every((item) => selectedIds.has(item.id))} onChange={toggleAll} aria-label="Select all visible inquiries" /></th>
-                          <th className={tableHeaderClass}>Date</th>
-                          <th className={tableHeaderClass}>Inquiry No.</th>
-                          <th className={tableHeaderClass}>Customer</th>
-                          <th className={tableHeaderClass}>Part Number</th>
-                          <th className={tableHeaderClass}>Item Code</th>
-                          <th className={tableHeaderClass}>Description</th>
-                          <th className={`${tableHeaderClass} text-center`}>Qty</th>
-                          <th className={tableHeaderClass}>Salesperson</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {visibleDetailRows.map((item) => (
-                          <tr key={item.id} className="hover:bg-[#f8fafb]">
-                            <td className={`${tableCellClass} text-center`}><input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleRow(item.id)} aria-label={`Select inquiry ${item.inquiryNo}`} /></td>
-                            <td className={tableCellClass}>{item.inquiryDate ? formatDate(item.inquiryDate.slice(0, 10)) : '-'}</td>
-                            <td className={`${tableCellClass} font-semibold text-[#4f7697]`}>{item.inquiryNo || '-'}</td>
-                            <td className={tableCellClass}>{item.customerName || '-'}</td>
-                            <td className={tableCellClass}>{item.partNo || '-'}</td>
-                            <td className={tableCellClass}>{item.itemCode || '-'}</td>
-                            <td className={tableCellClass}>{item.description || '-'}</td>
-                            <td className={`${tableCellClass} text-center font-semibold`}>{Number(item.qty) > 0 ? item.qty : 1}</td>
-                            <td className={tableCellClass}>{item.salesPerson || '-'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-
-                  <div className="sticky left-0 flex min-w-full flex-col gap-2 border-t border-[#dbe1e6] bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-[10px] text-[#8b98a3]">
-                      Showing {visibleItemCount} of {activeRows.length} items
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="sticky left-0 flex min-w-full flex-col gap-2 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm text-slate-500">
+                      Showing 1 to {visibleItemCount} of {activeRows.length} items
                     </p>
-                    <div ref={loadMoreRef} className="flex min-h-7 items-center gap-2 text-[10px] font-semibold text-[#6685a4]">
-                      {hasMoreRows ? (
-                        <>
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          Scroll to load more
-                        </>
-                      ) : (
-                        <span className="text-[#8b98a3]">All items loaded</span>
+                    <div ref={loadMoreRef} className="flex min-h-7 items-center gap-2 text-sm font-semibold text-[#175fd3]">
+                      {hasMoreRows && (
+                        <><Loader2 className="h-4 w-4 animate-spin" /> Scroll to load more</>
                       )}
                     </div>
                   </div>
                 </div>
               )}
             </section>
-
-            <section className="grid gap-3 lg:grid-cols-2">
-              <article className="rounded-[5px] border border-[#d7dde3] bg-white p-4 shadow-sm">
-                <h3 className="flex items-center gap-2 text-[13px] font-bold text-[#263f4f]"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#6685a4] text-[11px] text-white">2</span>Create New Item</h3>
-                <div className="mt-5 grid grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] items-start gap-2 text-center">
-                  {[
-                    [Search, 'Review', 'Check the requested part'],
-                    [Tag, 'Create', 'Add it to Product Database'],
-                    [ClipboardCheck, 'Verify', 'Confirm code and details'],
-                    [ShoppingCart, 'Purchase', 'Continue to purchasing'],
-                  ].map(([Icon, title, copy], index) => (
-                    <React.Fragment key={String(title)}>
-                      <div>
-                        <span className="mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-[#edf2f6] text-[#6685a4]"><Icon className="h-4 w-4" /></span>
-                        <p className="mt-2 text-[10px] font-bold text-[#34495e]">{title}</p>
-                        <p className="mt-1 text-[9px] leading-4 text-[#8b98a3]">{copy}</p>
-                      </div>
-                      {index < 3 && <ArrowRight className="mt-3 h-4 w-4 text-[#c4cdd4]" />}
-                    </React.Fragment>
-                  ))}
-                </div>
-              </article>
-              <article className="rounded-[5px] border border-[#d7dde3] bg-white p-4 shadow-sm">
-                <h3 className="flex items-center gap-2 text-[13px] font-bold text-[#263f4f]"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#5cb85c] text-[11px] text-white">3</span>If Already Listed</h3>
-                <p className="mt-3 text-[11px] leading-5 text-[#71808d]">Matched records show the existing inventory code and database part number. Use Add to continue the purchasing workflow without creating a duplicate item.</p>
-                <div className="mt-3 rounded-[4px] border border-[#d7e7d9] bg-[#f2faf3] p-3 text-[10px]">
-                  <p><b>Item Code:</b> shown from Product Database</p>
-                  <p className="mt-1"><b>Part Number:</b> the matched inventory part</p>
-                </div>
-              </article>
-              <div className="flex items-start gap-2 rounded-[5px] border border-[#efd7a2] bg-[#fff8e8] p-3 text-[10px] text-[#8a6d3b]"><Lightbulb className="h-4 w-4 shrink-0" /><p><b>Tip:</b> Sort by inquiries or quantity to identify the strongest demand first.</p></div>
-              <div className="flex items-start gap-2 rounded-[5px] border border-[#c9ddeb] bg-[#eef7fc] p-3 text-[10px] text-[#4f7697]"><CircleHelp className="h-4 w-4 shrink-0" /><p><b>Need Help?</b> Use Inquiry Details to see the customer and salesperson behind each request.</p></div>
-            </section>
           </main>
-
-          <aside className="sticky top-4 rounded-[5px] border border-[#cfd7de] bg-white p-4 shadow-sm xl:order-1">
-            <div className="mb-4 border-b border-[#e0e5e9] pb-4">
-              <h2 className="text-[13px] font-bold text-[#263f4f]">PR Activity</h2>
-              {generatedPR ? (
-                <ModuleRecordLink tab="warehouse-purchasing-purchase-request" payload={{ prId: generatedPR.id }} className="mt-3 block w-full rounded-[4px] border border-[#b8cff2] bg-[#eef5ff] p-3 text-left hover:bg-[#e3efff]">
-                  <span className="block text-[13px] font-bold text-[#175fd3]">{generatedPR.pr_number}</span>
-                  <span className="mt-1 block text-[10px] text-[#647482]">Created from selected stock suggestions</span>
-                  <span className="mt-2 block text-[10px] font-semibold text-[#175fd3]">Open Purchase Request →</span>
-                </ModuleRecordLink>
-              ) : (
-                <p className="mt-2 text-[10px] leading-4 text-[#8b98a3]">The PR number generated from selected suggestions will appear here.</p>
-              )}
-            </div>
-            <h2 className="flex items-center gap-2 border-b border-[#e0e5e9] pb-3 text-[13px] font-bold text-[#263f4f]"><ListFilter className="h-4 w-4 text-[#6685a4]" />How It Works – Step by Step</h2>
-            <ol className="mt-4 space-y-4">
-              {sidebarSteps.map(([Icon, title, copy], index) => (
-                <li key={title} className="grid grid-cols-[24px_24px_1fr] gap-2">
-                  <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white ${index === 5 ? 'bg-[#d9534f]' : index >= 6 ? 'bg-[#5cb85c]' : 'bg-[#6685a4]'}`}>{index + 1}</span>
-                  <Icon className="mt-1 h-4 w-4 text-[#71808d]" />
-                  <div>
-                    <p className="text-[10px] font-bold text-[#34495e]">{title}</p>
-                    <p className="mt-0.5 text-[9px] leading-4 text-[#8b98a3]">{copy}</p>
-                  </div>
-                </li>
-              ))}
-            </ol>
-            <div className="mt-5 flex gap-2 border-t border-[#e0e5e9] pt-4 text-[9px] leading-4 text-[#8a6d3b]">
-              <AlertTriangle className="h-4 w-4 shrink-0 text-[#f0ad4e]" />
-              <p><b>Note:</b> Creating or adding an item opens the appropriate inventory or purchasing module. Review details before saving.</p>
-            </div>
-            <div className="mt-4 flex gap-2">
-              <button type="button" onClick={() => window.print()} className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-[4px] border border-[#c9d1d9] bg-white text-[10px] font-semibold text-[#647482] hover:bg-[#f5f7f8]"><Printer className="h-3.5 w-3.5" />Print</button>
-              <button type="button" onClick={() => setPeriodAndRange('month')} className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-[4px] border border-[#c9d1d9] bg-white text-[10px] font-semibold text-[#647482] hover:bg-[#f5f7f8]"><Filter className="h-3.5 w-3.5" />Reset Period</button>
-            </div>
-          </aside>
         </div>
       </div>
-
     </div>
   );
 };

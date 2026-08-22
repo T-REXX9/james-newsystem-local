@@ -46,7 +46,7 @@ const ReceivingStock: React.FC<ReceivingStockProps> = ({ initialRRId, initialRRR
 
     useEffect(() => {
         fetchRRs();
-    }, [month, year, statusFilter]); // Search usually triggers on button or debounce, but here on enter or effect if debounced? I'll leave search for manual trigger or effect if simple. 
+    }, [month, year, statusFilter]); // Search usually triggers on button or debounce, but here on enter or effect if debounced? I'll leave search for manual trigger or effect if simple.
     // For simplicity, I'll trigger search on Enter or blur in the input, or just add a button.
     // Or adds search to dependency array with debounce. I'll add a search button logic in UI.
 
@@ -87,29 +87,114 @@ const ReceivingStock: React.FC<ReceivingStockProps> = ({ initialRRId, initialRRR
         return <ReceivingForm onClose={() => setViewMode('list')} onSuccess={handleCreateSuccess} />;
     }
 
-    if (viewMode === 'view' && selectedRrId) {
-        return <ReceivingView rrId={selectedRrId} onBack={handleBackToList} />;
-    }
-
     return (
-        <div className="min-h-full overflow-y-auto bg-[#f4f4f4] p-5 text-[#333]">
-            <section className="mx-auto max-w-[1380px] rounded border border-[#d5d5d5] bg-white shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#ddd] px-5 py-4">
-                    <button onClick={() => setViewMode('create')} className="flex items-center gap-1 rounded border border-[#4f9e43] bg-[#70b865] px-4 py-2 text-sm font-semibold text-white hover:bg-[#5daa52]">
-                        <Plus className="h-4 w-4" /> Create New
-                    </button>
-                    <div className="flex items-center gap-3 text-sm">
-                        <label htmlFor="rr-month" className="font-semibold">Filter by Month:</label>
-                        <select id="rr-month" value={month} onChange={e => setMonth(Number(e.target.value))} className="w-48 rounded border border-[#ccc] bg-white px-3 py-2">
-                            {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{new Date(0, i).toLocaleString('default', { month: 'long' })}</option>)}
+        <div className="flex h-full flex-col bg-[#f7f9fc] text-slate-900 xl:flex-row">
+            <aside className="w-full shrink-0 border-b border-slate-200 bg-[#f8fafb] xl:w-[320px] xl:border-b-0 xl:border-r">
+                <div className="flex flex-col gap-4 p-5">
+                    <h2 className="text-sm font-bold uppercase tracking-wide text-slate-600">Receiving Reports</h2>
+                    <p className="text-xs text-slate-500">List of all Receiving Reports</p>
+
+                    <div className="relative">
+                        <input
+                            type="text"
+                            placeholder="Search RR No., PO No., Supplier..."
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            onBlur={handleSearch}
+                            onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                            className="h-10 w-full rounded-md border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-[#175fd3] focus:ring-2 focus:ring-blue-100"
+                        />
+                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                        <div>
+                            <label className="mb-1 block text-xs font-semibold text-slate-500">Month</label>
+                            <select value={month} onChange={e => setMonth(Number(e.target.value))} className="h-9 w-full rounded border border-slate-300 bg-white px-2 text-sm">
+                                {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{new Date(0, i).toLocaleString('default', { month: 'long' })}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="mb-1 block text-xs font-semibold text-slate-500">Year</label>
+                            <select value={year} onChange={e => setYear(Number(e.target.value))} className="h-9 w-full rounded border border-slate-300 bg-white px-2 text-sm">
+                                {Array.from({ length: 11 }, (_, i) => <option key={new Date().getFullYear() - 5 + i} value={new Date().getFullYear() - 5 + i}>{new Date().getFullYear() - 5 + i}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="mb-1 block text-xs font-semibold text-slate-500">Status</label>
+                        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="h-9 w-full rounded border border-slate-300 bg-white px-2 text-sm">
+                            <option value="">All Statuses</option>
+                            <option value="Draft">Draft</option>
+                            <option value="Pending">Pending</option>
+                            <option value="Posted">Posted</option>
+                            <option value="Cancelled">Cancelled</option>
                         </select>
-                        <input aria-label="Filter year" type="number" value={year} onChange={e => setYear(Number(e.target.value))} className="w-24 rounded border border-[#ccc] px-3 py-2" />
                     </div>
                 </div>
-                <div className="max-h-[300px] overflow-auto px-5 py-4">
-                    {loading ? <div className="flex h-32 items-center justify-center"><CustomLoadingSpinner label="Loading" /></div> : <ReceivingList rrs={rrs} onView={handleViewRR} />}
+
+                <div className="max-h-[calc(100vh-360px)] overflow-y-auto px-5 pb-5">
+                    {loading ? (
+                        <div className="py-8 text-center text-sm text-slate-500">Loading...</div>
+                    ) : rrs.length === 0 ? (
+                        <div className="py-8 text-center text-sm text-slate-500">No records found.</div>
+                    ) : (
+                        <div className="space-y-2">
+                            {rrs.map(rr => {
+                                const isSelected = selectedRrId === rr.id;
+                                const statusColor = rr.status === 'Draft' || rr.status === 'Pending' ? 'bg-orange-100 text-orange-700'
+                                    : rr.status === 'Posted' ? 'bg-emerald-100 text-emerald-700'
+                                    : rr.status === 'Cancelled' ? 'bg-rose-100 text-rose-700'
+                                    : 'bg-slate-100 text-slate-700';
+
+                                return (
+                                    <button
+                                        key={rr.id}
+                                        onClick={() => handleViewRR(rr.id)}
+                                        className={`w-full rounded-lg border p-3 text-left transition ${
+                                            isSelected ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white hover:border-slate-300'
+                                        }`}
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <span className="flex h-6 w-6 items-center justify-center rounded bg-emerald-100 text-[10px] font-bold text-emerald-700">RR</span>
+                                                <span className="font-bold text-emerald-700">{rr.rr_no}</span>
+                                            </div>
+                                            <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${statusColor}`}>{rr.status || 'Draft'}</span>
+                                        </div>
+                                        <div className="mt-2 text-xs text-slate-600">PO No.: {rr.po_no || '-'}</div>
+                                        <div className="mt-1 text-xs text-slate-600">Supplier: {rr.supplier_name || '-'}</div>
+                                        <div className="mt-2 flex items-center justify-between text-xs">
+                                            <span className="text-slate-500">{rr.status === 'Posted' ? 'Received' : rr.status === 'Cancelled' ? 'Cancelled' : 'Expected'}: {new Date(rr.receive_date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}</span>
+                                            <span className="font-semibold text-slate-700">{rr.items?.length || 0} Items ❯</span>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
-            </section>
+            </aside>
+
+            <main className="min-w-0 flex-1 p-5 lg:p-8">
+                {viewMode === 'view' && selectedRrId ? (
+                    <ReceivingView rrId={selectedRrId} onBack={handleBackToList} />
+                ) : (
+                    <div className="flex h-full items-center justify-center rounded-xl border border-slate-200 bg-white shadow-sm">
+                        <div className="text-center">
+                            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                                <span className="text-3xl">📦</span>
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-700">Select a Receiving Report</h3>
+                            <p className="mt-1 text-sm text-slate-500">Choose a report from the list or generate a new one from a Purchase Order.</p>
+                            <button onClick={() => setViewMode('create')} className="mt-6 inline-flex items-center gap-2 rounded-md bg-[#175fd3] px-6 py-2.5 text-sm font-bold text-white transition hover:bg-[#0e4fb7]">
+                                <Plus className="h-4 w-4" /> Generate Receiving Report
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </main>
         </div>
     );
 };

@@ -41,7 +41,16 @@ export async function getMessageTemplates(
         }
 
         const result = await response.json();
-        return (result.data || []) as AIMessageTemplate[];
+
+        // Handle double-nested data due to Router.php wrapping and Repository returning {data, pagination}
+        let items = [];
+        if (result.data && Array.isArray(result.data.data)) {
+            items = result.data.data;
+        } else if (Array.isArray(result.data)) {
+            items = result.data;
+        }
+
+        return items as AIMessageTemplate[];
     } catch (error) {
         console.error('Error fetching message templates:', error);
         return [];
