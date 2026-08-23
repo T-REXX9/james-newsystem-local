@@ -56,13 +56,13 @@ const InventoryReport: React.FC = () => {
   const [reportData, setReportData] = useState<InventoryReportRow[]>([]);
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
 
-  const [categories, setCategories] = useState<string[]>([]);
+  const [descriptions, setDescriptions] = useState<string[]>([]);
   const [partNumbers, setPartNumbers] = useState<{ id: string; partNo: string }[]>([]);
   const [dateCovered, setDateCovered] = useState<DateCovered>('All');
   const [includeHidden, setIncludeHidden] = useState(false);
 
   const [filters, setFilters] = useState<InventoryReportFilters>({
-    category: '',
+    description: '',
     partNumber: '',
     itemCode: '',
     dateFrom: '',
@@ -79,7 +79,7 @@ const InventoryReport: React.FC = () => {
       setIsInitializing(true);
       try {
         const options = await fetchInventoryReportOptions();
-        setCategories(options.categories);
+        setDescriptions(options.descriptions);
         setPartNumbers(options.partNumbers);
       } finally {
         setIsInitializing(false);
@@ -135,7 +135,7 @@ const InventoryReport: React.FC = () => {
 
   const handleClearFilters = () => {
     setFilters({
-      category: '',
+      description: '',
       partNumber: '',
       itemCode: '',
       dateFrom: '',
@@ -173,7 +173,7 @@ const InventoryReport: React.FC = () => {
     let csvRows: string[];
 
     if (isInventoryView) {
-      headers = ['Part No', 'Item Code', 'Description', 'Location', 'Cost', 'Total Stock', 'Value'];
+      headers = ['Part No', 'Item Code', 'Description', 'Location', 'VIP 1 Price', 'Total Stock', 'Value'];
       csvRows = [
         headers.join(','),
         ...reportData.map((row) => {
@@ -242,7 +242,7 @@ const InventoryReport: React.FC = () => {
         <div className="mx-auto max-w-[1140px] overflow-hidden rounded-[5px] border border-[#d8d8d8] bg-white shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
           <div className="min-h-[64px] border-b border-[#e5e5e5] px-5">
             <h1 className="inline-block border-b border-[#5d82a2] py-5 pr-24 font-['Oswald'] text-[18px] font-semibold uppercase leading-none text-[#315574]">
-              Product and Inventory Report
+              Inventory Report
             </h1>
           </div>
 
@@ -333,16 +333,16 @@ const InventoryReport: React.FC = () => {
               )}
 
               <div className={formRowClass}>
-                <label className={formLabelClass}>Product Category</label>
+                <label className={formLabelClass}>Description</label>
                 <select
-                  value={filters.category}
-                  onChange={(e) => setFilters({ ...filters, category: e.target.value })}
+                  value={filters.description}
+                  onChange={(e) => setFilters({ ...filters, description: e.target.value })}
                   className={formControlClass}
                 >
-                  <option value="">Leave blank to display all</option>
-                  {categories.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
+                  <option value="">All descriptions</option>
+                  {descriptions.map((description) => (
+                    <option key={description} value={description}>
+                      {description}
                     </option>
                   ))}
                 </select>
@@ -543,7 +543,7 @@ const InventoryReport: React.FC = () => {
                       <th className={tableHeadClass} style={{ width: '10%' }}>PRODUCT NAME</th>
                       <th className={tableHeadClass} style={{ width: '10%' }}>PART NO</th>
                       <th className={tableHeadClass} style={{ width: '10%' }}>CODE</th>
-                      <th className={tableHeadClass} style={{ width: '5%' }}>COST</th>
+                      <th className={tableHeadClass} style={{ width: '5%' }}>VIP 1 PRICE</th>
                       <th className={tableHeadClass} style={{ width: '5%' }}>LOC</th>
                       <th className={tableHeadClass} style={{ width: '5%' }}>BALANCE</th>
                       <th className={tableHeadClass} style={{ width: '5%' }}>Value</th>

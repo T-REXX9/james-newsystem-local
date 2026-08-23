@@ -86,19 +86,31 @@ const toSupplier = (raw: any): Supplier => ({
 const toReceivingItem = (raw: any, rrId: string): ReceivingReportItem => {
     const qty = toNumber(raw?.qty);
     const unitCost = toNumber(raw?.unit_cost);
+    const brand = String(raw?.brand ?? '');
+    const itemId = String(raw?.product_session ?? raw?.product_id ?? '');
     return {
         id: String(raw?.id ?? ''),
         rr_id: rrId,
-        item_id: String(raw?.product_session ?? raw?.product_id ?? ''),
+        item_id: itemId,
         item_code: String(raw?.item_code ?? ''),
         part_no: String(raw?.part_no ?? ''),
         description: String(raw?.description ?? ''),
         qty_received: qty,
         unit_cost: unitCost,
         total_amount: toNumber(raw?.line_total ?? qty * unitCost),
-        qty_ordered: 0,
-        qty_returned: 0,
-        created_at: new Date().toISOString(),
+        qty_ordered: toNumber(raw?.qty_ordered ?? 0),
+        qty_returned: toNumber(raw?.qty_returned ?? 0),
+        created_at: raw?.created_at ? String(raw.created_at) : new Date().toISOString(),
+        original_part_no: String(raw?.original_part_no ?? raw?.opn_number ?? ''),
+        po_item_id: toNumber(raw?.po_item_id ?? 0),
+        brand,
+        product: {
+            id: itemId,
+            item_code: String(raw?.item_code ?? ''),
+            part_no: String(raw?.part_no ?? ''),
+            description: String(raw?.description ?? ''),
+            brand,
+        },
     } as ReceivingReportItem;
 };
 
@@ -115,6 +127,10 @@ const toReceivingListItem = (raw: any): ReceivingReportWithDetails => {
         warehouse_id: 'WH1',
         grand_total: toNumber(raw?.total_cost ?? 0),
         status: toUiStatus(raw?.status),
+        po_refno: String(raw?.po_refno ?? ''),
+        eta_date: raw?.eta_date ? String(raw.eta_date) : null,
+        item_count: toNumber(raw?.item_count ?? 0),
+        total_qty: toNumber(raw?.total_qty ?? 0),
         created_at: raw?.posted_date
             ? new Date(raw.posted_date).toISOString()
             : new Date().toISOString(),
@@ -123,11 +139,31 @@ const toReceivingListItem = (raw: any): ReceivingReportWithDetails => {
     } as ReceivingReportWithDetails;
 };
 
-const toReceivingDetail = (payload: any): ReceivingReportWithDetails => {
+const toReceivingDetail = (payload: any, purchaseOrder: Awaited<ReturnType<typeof purchaseOrderService.getPurchaseOrderById>> | null = null): ReceivingReportWithDetails => {
     const record = payload?.record || {};
-    const items = Array.isArray(payload?.items) ? payload.items : [];
+    const rawItems = Array.isArray(payload?.items) ? payload.items : [];
     const summary = payload?.summary || {};
     const rrId = String(record?.refno ?? record?.id ?? '');
+    const poItems = purchaseOrder?.items || [];
+
+    const mappedItems = rawItems.map((item: any) => {
+        const mapped = toReceivingItem(item, rrId) as ReceivingReportItem & {
+            po_item_id?: number;
+            qty_ordered?: number;
+            brand?: string;
+        };
+        const poItem = poItems.find((candidate) => (
+            (mapped.po_item_id && String(candidate.id) === String(mapped.po_item_id))
+            || String(candidate.item_id || '') === String(mapped.item_id || '')
+        ));
+        return {
+            ...mapped,
+            po_item_id: mapped.po_item_id || (poItem ? Number(poItem.id) : 0),
+            qty_ordered: mapped.qty_ordered || Number(poItem?.qty || mapped.qty_received || 0),
+            product: mapped.product || poItem?.product || null,
+            brand: mapped.brand || String(poItem?.product?.brand || ''),
+        };
+    });
 
     return {
         id: rrId,
@@ -137,17 +173,30 @@ const toReceivingDetail = (payload: any): ReceivingReportWithDetails => {
         supplier_name: String(record?.supplier_name ?? ''),
         po_no: String(record?.po_number ?? ''),
         remarks: String(record?.reference ?? ''),
-        warehouse_id: String(items?.[0]?.warehouse_name || items?.[0]?.warehouse_id || 'WH1'),
+        warehouse_id: String(rawItems?.[0]?.warehouse_name || rawItems?.[0]?.warehouse_id || 'WH1'),
         grand_total: toNumber(summary?.total_cost ?? 0),
         status: toUiStatus(record?.status),
         created_at: record?.posted_date
             ? new Date(record.posted_date).toISOString()
             : new Date().toISOString(),
         received_by: String(record?.created_by ?? ''),
-        items: items.map((item: any) => ({
-            ...toReceivingItem(item, rrId),
-            product: null,
-        })),
+        po_refno: String(record?.po_refno ?? ''),
+        eta_date: record?.eta_date ? String(record.eta_date) : null,
+        item_count: toNumber(summary?.item_count ?? mappedItems.length),
+        total_qty: toNumber(summary?.total_qty ?? 0),
+        po: purchaseOrder ? {
+            id: String(purchaseOrder.id),
+            po_number: String(purchaseOrder.po_number || ''),
+            order_date: String(purchaseOrder.order_date || ''),
+            pr_reference: String(purchaseOrder.pr_reference || ''),
+            status: String(purchaseOrder.status || ''),
+            items: poItems.map((item) => ({
+                id: String(item.id),
+                qty: Number(item.qty || 0),
+                eta_date: item.eta_date || null,
+            })),
+        } : null,
+        items: mappedItems,
     } as ReceivingReportWithDetails;
 };
 
@@ -184,7 +233,17 @@ export const receivingService = {
         if (!response.ok) throw new Error(await parseApiErrorMessage(response));
 
         const payload = await response.json();
-        return toReceivingDetail(payload?.data || {});
+        const data = payload?.data || {};
+        let purchaseOrder = null;
+        const poRefno = String(data?.record?.po_refno ?? '').trim();
+        if (poRefno) {
+            try {
+                purchaseOrder = await purchaseOrderService.getPurchaseOrderById(poRefno);
+            } catch (error) {
+                console.warn('Unable to load the linked purchase order for receiving detail', error);
+            }
+        }
+        return toReceivingDetail(data, purchaseOrder);
     },
 
     async createReceivingReport(rr: ReceivingReportInsert): Promise<ReceivingReport> {

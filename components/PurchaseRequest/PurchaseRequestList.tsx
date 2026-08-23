@@ -102,7 +102,19 @@ const PurchaseRequestList: React.FC<PurchaseRequestListProps> = ({
         ) : visibleRequests.length === 0 ? (
           <div className="rounded-md border border-dashed border-slate-200 px-3 py-8 text-center text-sm text-slate-500">No purchase requests found for this filter.</div>
         ) : visibleRequests.map(request => (
-          <button type="button" key={request.id} onClick={() => onSelect(request)} className="mb-1.5 block w-full rounded-md border border-transparent px-3 py-2.5 text-left transition hover:border-blue-100 hover:bg-blue-50/50 focus:border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-100">
+          <div
+            key={request.id}
+            role="button"
+            tabIndex={0}
+            onClick={() => onSelect(request)}
+            onKeyDown={event => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onSelect(request);
+              }
+            }}
+            className="mb-1.5 block w-full cursor-pointer rounded-md border border-transparent px-3 py-2.5 text-left transition hover:border-blue-100 hover:bg-blue-50/50 focus:border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-100"
+          >
             <div className="flex items-start justify-between gap-2">
               <ModuleRecordLink tab="warehouse-purchasing-purchase-request" payload={{ prId: request.id }} onOpen={() => onSelect(request)} className="font-bold text-[#173c83] hover:underline">
                 {request.pr_number || 'Unnamed PR'}
@@ -114,7 +126,7 @@ const PurchaseRequestList: React.FC<PurchaseRequestListProps> = ({
               <span>{request.item_count ?? request.items?.length ?? 0} item{(request.item_count ?? request.items?.length ?? 0) === 1 ? '' : 's'}</span>
             </div>
             {(request.created_by_name || request.notes) && <p className="mt-1 truncate text-[11px] text-slate-400">{request.created_by_name || request.notes}</p>}
-          </button>
+          </div>
         ))}
       </div>
 

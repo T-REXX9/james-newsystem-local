@@ -294,8 +294,6 @@ const ReorderReport: React.FC = () => {
   const [processing, setProcessing] = useState(false);
   const [preparingPrint, setPreparingPrint] = useState(false);
   const warehouseType: ReorderWarehouseType = 'total';
-  const [hideZeroReorder, setHideZeroReorder] = useState(false);
-  const [hideZeroReplenish, setHideZeroReplenish] = useState(false);
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showAddPrModal, setShowAddPrModal] = useState(false);
@@ -319,8 +317,6 @@ const ReorderReport: React.FC = () => {
       const data = await fetchReorderReportEntries({
         warehouseType,
         search: targetSearch,
-        hideZeroReorder,
-        hideZeroReplenish,
         showHidden: false,
         page: targetPage,
         perPage: 50,
@@ -351,18 +347,20 @@ const ReorderReport: React.FC = () => {
       if (append) setLoadingMore(false);
       else setLoading(false);
     }
-  }, [addToast, warehouseType, hideZeroReorder, hideZeroReplenish]);
+  }, [addToast, warehouseType]);
 
   const handleGenerateReport = async () => {
-    setSearchInput('');
-    setAppliedSearch('');
-    await loadReport(1, '');
+    const descriptionSearch = searchInput.trim().toLowerCase() === 'all' ? '' : searchInput.trim();
+    setSearchInput(descriptionSearch);
+    setAppliedSearch(descriptionSearch);
+    await loadReport(1, descriptionSearch);
     setGeneratedAt(new Date());
   };
 
   const handleSearch = async (event: React.FormEvent) => {
     event.preventDefault();
-    const nextSearch = searchInput.trim();
+    const nextSearch = searchInput.trim().toLowerCase() === 'all' ? '' : searchInput.trim();
+    setSearchInput(nextSearch);
     setAppliedSearch(nextSearch);
     await loadReport(1, nextSearch);
   };
@@ -399,8 +397,6 @@ const ReorderReport: React.FC = () => {
       const first = await fetchReorderReportEntries({
         warehouseType,
         search: appliedSearch,
-        hideZeroReorder,
-        hideZeroReplenish,
         showHidden: false,
         page: 1,
         perPage: 500,
@@ -517,8 +513,8 @@ const ReorderReport: React.FC = () => {
 
   if (!generatedAt) {
     return (
-      <div className="min-h-full overflow-auto bg-[#f4f4f4] px-5 py-10 text-[#222]" style={{ fontFamily: 'Arial, sans-serif' }}>
-        <div className="mx-auto min-h-[363px] w-full max-w-[1140px] rounded-[5px] border border-[#d7d7d7] bg-white">
+      <div className="min-h-full overflow-auto bg-[#f4f4f4] px-3 py-5 text-[#222] lg:px-5 lg:py-6" style={{ fontFamily: 'Arial, sans-serif' }}>
+        <div className="mx-auto min-h-[363px] w-full max-w-none rounded-[5px] border border-[#d7d7d7] bg-white">
           <div className="relative flex h-[63px] items-center border-b border-[#d7d7d7] px-5">
             <h1 className="text-[18px] font-semibold text-[#29475f] after:absolute after:bottom-[-1px] after:left-5 after:h-px after:w-[135px] after:bg-[#6a92b3]" style={{ fontFamily: 'Arial Narrow, Arial, sans-serif' }}>
               Reorder Report
@@ -531,34 +527,29 @@ const ReorderReport: React.FC = () => {
             </p>
 
             <div className="ml-[96px] mt-[50px] w-full max-w-[620px] text-[13px] max-md:mx-auto">
-              <div className="grid grid-cols-[155px_435px] items-center gap-[30px] max-md:grid-cols-[135px_minmax(0,1fr)]">
-                <label className="text-right font-semibold text-[#222]">Inventory</label>
-                <div className="h-[35px] w-full rounded-[3px] border border-[#c9c9c9] bg-slate-50 px-4 py-2 text-[13px] text-[#555]">
-                  Centralized quantity
-                </div>
-              </div>
-
-              <div className="mt-5 grid grid-cols-[155px_435px] gap-[30px] max-md:grid-cols-[135px_minmax(0,1fr)]">
-                <span />
-                <div className="space-y-[7px] text-[#222]">
-                  <label className="flex items-center gap-1">
+              <div className="grid grid-cols-[155px_435px] items-start gap-[30px] max-md:grid-cols-[135px_minmax(0,1fr)]">
+                <label className="pt-2 text-right font-semibold text-[#222]">Description</label>
+                <div className="text-[#222]">
+                  <label className="block">
                     <input
-                      type="checkbox"
-                      checked={hideZeroReorder}
-                      onChange={(event) => setHideZeroReorder(event.target.checked)}
-                      className="h-[13px] w-[13px] accent-[#555]"
+                      type="text"
+                      list="reorder-description-options"
+                      value={searchInput}
+                      onChange={(event) => setSearchInput(event.target.value)}
+                      placeholder="All descriptions"
+                      className="h-[35px] w-full rounded-[3px] border border-[#c9c9c9] bg-white px-4 py-2 text-[13px] text-[#555] outline-none focus:border-[#66afe9] focus:ring-1 focus:ring-[#66afe9]"
                     />
-                    Don't show zero Re-Order QTY
+                    <datalist id="reorder-description-options">
+                      <option value="All" />
+                      <option value="Nozzle" />
+                      <option value="Plunger" />
+                      <option value="DV" />
+                      <option value="Control Valve" />
+                    </datalist>
                   </label>
-                  <label className="flex items-center gap-1">
-                    <input
-                      type="checkbox"
-                      checked={hideZeroReplenish}
-                      onChange={(event) => setHideZeroReplenish(event.target.checked)}
-                      className="h-[13px] w-[13px] accent-[#555]"
-                    />
-                    Don't show zero Replenish QTY
-                  </label>
+                  <p className="mt-2 text-[12px] text-[#666]">
+                    Select All or enter a description such as nozzle, plunger, DV, or control valve.
+                  </p>
                 </div>
               </div>
 
@@ -577,8 +568,8 @@ const ReorderReport: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      setHideZeroReorder(false);
-                      setHideZeroReplenish(false);
+                      setSearchInput('');
+                      setAppliedSearch('');
                     }}
                     className="h-[35px] rounded-[4px] border border-[#ccc] bg-white px-[13px] text-[14px] text-[#333] hover:bg-[#eee]"
                   >
@@ -607,7 +598,7 @@ const ReorderReport: React.FC = () => {
           .reorder-report-print th { font-weight: 600; }
         }
       `}</style>
-      <div className="mx-auto max-w-[1500px] p-5 lg:p-8 print:hidden">
+      <div className="mx-auto w-full max-w-none p-4 lg:p-6 print:hidden">
         <header className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <div className="mb-1 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-400"><span>Purchasing</span><span>›</span><span>Reports</span><span>›</span><span className="text-slate-700">Reorder Report</span></div>
@@ -657,30 +648,30 @@ const ReorderReport: React.FC = () => {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1300px] border-collapse text-xs">
+            <table className="w-full min-w-[1300px] border-collapse text-sm">
               <thead>
                 <tr>
-                  <th rowSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-2 text-center text-white"><label className="inline-flex items-center justify-center gap-1"><input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="h-4 w-4 rounded border-white/30 bg-white/10" aria-label="ALL" /> ALL</label></th>
-                  <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-2 text-left font-bold uppercase tracking-wide text-white">Item Code</th>
-                  <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-2 text-left font-bold uppercase tracking-wide text-white">Part No.</th>
-                  <th rowSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-2 text-left font-bold uppercase tracking-wide text-white">Description</th>
-                  <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-2 text-center font-bold uppercase tracking-wide text-white">Current<br />Stock</th>
-                  <th rowSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-2 text-center font-bold uppercase tracking-wide text-white">Reorder<br />Level</th>
-                  <th colSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-2 text-center font-bold uppercase tracking-wide text-white">Recommended Supplier</th>
-                  <th colSpan={2} className="border-b border-r border-white/20 bg-orange-500 px-3 py-2 text-center font-bold uppercase tracking-wide text-white">① PR STAGE<br /><span className="text-[10px] font-normal opacity-90">(Waiting for Approval)</span></th>
-                  <th colSpan={2} className="border-b border-r border-white/20 bg-[#175fd3] px-3 py-2 text-center font-bold uppercase tracking-wide text-white">② PO STAGE<br /><span className="text-[10px] font-normal opacity-90">(Ordered from Supplier)</span></th>
-                  <th colSpan={2} className="border-b border-r border-white/20 bg-purple-700 px-3 py-2 text-center font-bold uppercase tracking-wide text-white">③ RECEIVING STOCK<br /><span className="text-[10px] font-normal opacity-90">(Incoming to Warehouse)</span></th>
-                  <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-2 text-center font-bold uppercase tracking-wide text-white">Recommended<br />Action</th>
+                  <th rowSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-3 text-center text-white"><label className="inline-flex items-center justify-center gap-1"><input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="h-4 w-4 rounded border-white/30 bg-white/10" aria-label="ALL" /> ALL</label></th>
+                  <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-3 text-left font-bold uppercase tracking-wide text-white">Item Code</th>
+                  <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-3 text-left font-bold uppercase tracking-wide text-white">Part No.</th>
+                  <th rowSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-3 text-left font-bold uppercase tracking-wide text-white">Description</th>
+                  <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Current<br />Stock</th>
+                  <th rowSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Reorder<br />Level</th>
+                  <th colSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Recommended Supplier</th>
+                  <th colSpan={2} className="border-b border-r border-white/20 bg-orange-500 px-3 py-3 text-center font-bold uppercase tracking-wide text-white">① PR STAGE<br /><span className="text-xs font-normal opacity-90">(Waiting for Approval)</span></th>
+                  <th colSpan={2} className="border-b border-r border-white/20 bg-[#175fd3] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">② PO STAGE<br /><span className="text-xs font-normal opacity-90">(Ordered from Supplier)</span></th>
+                  <th colSpan={2} className="border-b border-r border-white/20 bg-purple-700 px-3 py-3 text-center font-bold uppercase tracking-wide text-white">③ RECEIVING STOCK<br /><span className="text-xs font-normal opacity-90">(Incoming to Warehouse)</span></th>
+                  <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Recommended<br />Action</th>
                 </tr>
                 <tr>
-                  <th className="border-b border-slate-200 bg-[#102f76] px-3 py-2 text-left font-bold uppercase tracking-wide text-white">Supplier</th>
-                  <th className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-2 text-right font-bold uppercase tracking-wide text-white">Cost (P)</th>
-                  <th className="border-b border-r border-white/20 bg-orange-500 px-3 py-2 text-center font-bold uppercase tracking-wide text-white">PR #</th>
-                  <th className="border-b border-r border-white/20 bg-orange-500 px-3 py-2 text-center font-bold uppercase tracking-wide text-white">PR Qty</th>
-                  <th className="border-b border-r border-white/20 bg-[#175fd3] px-3 py-2 text-center font-bold uppercase tracking-wide text-white">PO #</th>
-                  <th className="border-b border-r border-white/20 bg-[#175fd3] px-3 py-2 text-center font-bold uppercase tracking-wide text-white">PO Qty</th>
-                  <th className="border-b border-r border-white/20 bg-purple-700 px-3 py-2 text-center font-bold uppercase tracking-wide text-white">Receiving #</th>
-                  <th className="border-b border-r border-white/20 bg-purple-700 px-3 py-2 text-center font-bold uppercase tracking-wide text-white">Receiving Qty</th>
+                  <th className="border-b border-slate-200 bg-[#102f76] px-3 py-3 text-left font-bold uppercase tracking-wide text-white">Supplier</th>
+                  <th className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-3 text-right font-bold uppercase tracking-wide text-white">Cost (P)</th>
+                  <th className="border-b border-r border-white/20 bg-orange-500 px-3 py-3 text-center font-bold uppercase tracking-wide text-white">PR #</th>
+                  <th className="border-b border-r border-white/20 bg-orange-500 px-3 py-3 text-center font-bold uppercase tracking-wide text-white">PR Qty</th>
+                  <th className="border-b border-r border-white/20 bg-[#175fd3] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">PO #</th>
+                  <th className="border-b border-r border-white/20 bg-[#175fd3] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">PO Qty</th>
+                  <th className="border-b border-r border-white/20 bg-purple-700 px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Receiving #</th>
+                  <th className="border-b border-r border-white/20 bg-purple-700 px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Receiving Qty</th>
                 </tr>
               </thead>
               <tbody>

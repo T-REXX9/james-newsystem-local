@@ -54,6 +54,16 @@ const FastSlowInventoryReport: React.FC = () => {
     setError('');
   }, []);
 
+  const getProductDatabaseUrl = (item: FastSlowMovementItem): string => {
+    const params = new URLSearchParams({
+      productId: item.item_id,
+      partNo: item.part_no,
+    });
+    const productDatabaseUrl = new URL(window.location.href);
+    productDatabaseUrl.hash = `#/warehouse-inventory-product-database?${params.toString()}`;
+    return productDatabaseUrl.toString();
+  };
+
   const renderTable = (
     items: FastSlowMovementItem[],
     title: string,
@@ -63,7 +73,7 @@ const FastSlowInventoryReport: React.FC = () => {
     <table className="mb-8 w-full border-collapse text-[13px] text-[#333]">
       <thead>
         <tr>
-          <td colSpan={7} className="border-b border-[#ddd] pb-2 pt-1">
+          <td colSpan={8} className="border-b border-[#ddd] pb-2 pt-1">
             <h5 className="m-0 text-[14px] font-semibold">
               <u>{title}</u>
             </h5>
@@ -73,9 +83,10 @@ const FastSlowInventoryReport: React.FC = () => {
         </tr>
         <tr className="border-b-2 border-[#333]">
           <th className="w-[3%] px-1 py-2 text-center">#</th>
-          <th className="w-[13%] px-1 py-2 text-center">Part No.</th>
-          <th className="w-[15%] px-1 py-2 text-center">Listing Code</th>
-          <th className="w-[37%] px-1 py-2 text-center">Description</th>
+          <th className="w-[12%] px-1 py-2 text-center">Part No.</th>
+          <th className="w-[13%] px-1 py-2 text-center">Listing Code</th>
+          <th className="w-[27%] px-1 py-2 text-center">Description</th>
+          <th className="w-[12%] px-1 py-2 text-center">Last Price Update</th>
           <th className="w-[12%] px-1 py-2 text-center">Last Arrived Date</th>
           <th className="w-[10%] px-1 py-2 text-center">Total Purchase</th>
           <th className="w-[10%] px-1 py-2 text-center">Pcs Sold</th>
@@ -84,7 +95,7 @@ const FastSlowInventoryReport: React.FC = () => {
       <tbody>
         {items.length === 0 ? (
           <tr>
-            <td colSpan={7} className="py-5 text-center italic text-[#777]">
+            <td colSpan={8} className="py-5 text-center italic text-[#777]">
               No records found.
             </td>
           </tr>
@@ -92,9 +103,16 @@ const FastSlowInventoryReport: React.FC = () => {
           items.map((item, index) => (
             <tr key={`${title}-${item.item_id}-${index}`}>
               <td className="px-1 py-[2px] text-right">{startIndex + index}.</td>
-              <td className="px-1 py-[2px]">&nbsp;{item.part_no || 'N/A'}</td>
+              <td className="px-1 py-[2px]">
+                {item.part_no ? (
+                  <a href={getProductDatabaseUrl(item)} target="_blank" rel="noopener noreferrer" className="font-semibold text-[#175fd3] underline-offset-2 hover:underline">
+                    {item.part_no}
+                  </a>
+                ) : 'N/A'}
+              </td>
               <td className="px-1 py-[2px]">{item.item_code || 'N/A'}</td>
               <td className="px-1 py-[2px]">{item.description || 'N/A'}</td>
+              <td className="px-1 py-[2px] text-right">{formatDate(item.last_price_update)}</td>
               <td className="px-1 py-[2px] text-right">{formatDate(item.first_arrival_date)}</td>
               <td className="px-1 py-[2px] text-right">{item.total_purchased}</td>
               <td className="px-1 py-[2px] text-right">{item.total_sold}</td>
@@ -242,7 +260,7 @@ const FastSlowInventoryReport: React.FC = () => {
                 {renderTable(
                   reportData.fastMovingItems,
                   'FAST MOVING',
-                  'Fast moving item when sales increase every month with 3 consecutive months',
+                  'Fast moving when the item has sales in all 3 consecutive months, regardless of quantity.',
                   1,
                 )}
                 {renderTable(

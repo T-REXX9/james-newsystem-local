@@ -522,7 +522,7 @@ const StockMovementView: React.FC = () => {
 
   if (selectedProduct) {
     return (
-      <div className="min-h-full overflow-auto bg-[#f4f4f4] px-4 py-10 text-[#222]">
+      <div className="min-h-full overflow-auto bg-[#f4f4f4] px-3 py-5 text-[#222] lg:px-5 lg:py-6">
         <style>
           {`
             .stock-movement-print-area {
@@ -623,7 +623,7 @@ const StockMovementView: React.FC = () => {
           `}
         </style>
 
-        <div className="mx-auto max-w-[1140px]">
+        <div className="mx-auto w-full max-w-none">
           <section className="stock-movement-report-face min-h-[560px] overflow-hidden rounded-[5px] border border-[#d8dde2] bg-white">
             <header className="flex min-h-[64px] items-center justify-between border-b border-[#d8dde2] px-5">
               <div>
@@ -746,7 +746,7 @@ const StockMovementView: React.FC = () => {
   }
 
   return (
-    <div className="min-h-full overflow-auto bg-[#f4f4f4] px-4 py-10 text-[#222]">
+    <div className="min-h-full overflow-auto bg-[#f4f4f4] px-3 py-5 text-[#222] lg:px-5 lg:py-6">
       <style>
         {`
           .stock-movement-print-area {
@@ -766,9 +766,9 @@ const StockMovementView: React.FC = () => {
 
           .stock-product-grid th,
           .stock-product-grid td {
-            padding: clamp(0.18rem, 0.35vw, 0.45rem);
-            font-size: clamp(0.55rem, 0.72vw, 0.75rem);
-            line-height: 1.15;
+            padding: clamp(0.35rem, 0.48vw, 0.65rem);
+            font-size: clamp(0.7rem, 0.78vw, 0.875rem);
+            line-height: 1.25;
             overflow-wrap: anywhere;
             word-break: break-word;
             vertical-align: middle;
@@ -864,8 +864,8 @@ const StockMovementView: React.FC = () => {
         `}
       </style>
       {/* Main Content */}
-      <div className="mx-auto max-w-[1140px]">
-        <div className="flex min-h-[620px] flex-col gap-6">
+      <div className="mx-auto w-full max-w-none">
+        <div className="flex min-h-[calc(100vh-7rem)] flex-col gap-4">
           
           <div className="relative z-20 rounded-[5px] border border-[#d8d8d8] bg-white">
             <div className="flex min-h-[64px] flex-wrap items-center justify-between gap-3 border-b border-[#ddd] px-5">
@@ -925,61 +925,61 @@ const StockMovementView: React.FC = () => {
             </div>
 
             {!selectedProduct && (
-              <form onSubmit={handleProductSearch} className="px-8 py-7">
-                <div className="grid grid-cols-1 gap-x-12 gap-y-4 xl:grid-cols-2">
-                  <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-3">
-                    <label htmlFor="stock-search-part-no" className="font-['Oswald'] text-[15px] text-[#263f52]">Part No.</label>
+              <form onSubmit={handleProductSearch} className="px-5 py-5 lg:px-8 lg:py-6">
+                <div className="grid grid-cols-1 gap-x-8 gap-y-4 xl:grid-cols-2">
+                  <div className="grid grid-cols-[130px_minmax(0,1fr)] items-center gap-3">
+                    <label htmlFor="stock-search-part-no" className="font-['Oswald'] text-[16px] text-[#263f52]">Part No.</label>
                     <input
                       id="stock-search-part-no"
                       type="text"
                       value={searchFilters.partNo}
                       onChange={(event) => handleSearchFieldChange('partNo', event.target.value)}
                       placeholder="Search Part No."
-                      className="h-[34px] rounded-[3px] border border-[#ccc] bg-white px-3 text-[13px] outline-none"
+                      className="h-10 rounded-[4px] border border-[#c9d1d9] bg-white px-3 text-[14px] outline-none transition focus:border-[#5d82a2] focus:ring-2 focus:ring-[#5d82a2]/15"
                     />
                   </div>
-                  <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-3">
-                    <label htmlFor="stock-search-item-code" className="font-['Oswald'] text-[15px] text-[#263f52]">Item Code</label>
+                  <div className="grid grid-cols-[130px_minmax(0,1fr)] items-center gap-3">
+                    <label htmlFor="stock-search-item-code" className="font-['Oswald'] text-[16px] text-[#263f52]">Item Code</label>
                     <input
                       id="stock-search-item-code"
                       type="text"
                       value={searchFilters.itemCode}
                       onChange={(event) => handleSearchFieldChange('itemCode', event.target.value)}
                       placeholder="Search Item Code"
-                      className="h-[34px] rounded-[3px] border border-[#ccc] bg-white px-3 text-[13px] outline-none"
+                      className="h-10 rounded-[4px] border border-[#c9d1d9] bg-white px-3 text-[14px] outline-none transition focus:border-[#5d82a2] focus:ring-2 focus:ring-[#5d82a2]/15"
                     />
                   </div>
-                  <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-3">
-                    <label htmlFor="stock-search-description" className="font-['Oswald'] text-[15px] text-[#263f52]">Description</label>
+                  <div className="grid grid-cols-[130px_minmax(0,1fr)] items-center gap-3">
+                    <label htmlFor="stock-search-description" className="font-['Oswald'] text-[16px] text-[#263f52]">Description</label>
                     <input
                       id="stock-search-description"
                       type="text"
                       value={searchFilters.description}
                       onChange={(event) => handleSearchFieldChange('description', event.target.value)}
                       placeholder="Search Item Description"
-                      className="h-[34px] rounded-[3px] border border-[#ccc] bg-white px-3 text-[13px] outline-none"
+                      className="h-10 rounded-[4px] border border-[#c9d1d9] bg-white px-3 text-[14px] outline-none transition focus:border-[#5d82a2] focus:ring-2 focus:ring-[#5d82a2]/15"
                     />
                   </div>
-                  <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-3">
-                    <label htmlFor="stock-search-application" className="font-['Oswald'] text-[15px] text-[#263f52]">Application</label>
+                  <div className="grid grid-cols-[130px_minmax(0,1fr)] items-center gap-3">
+                    <label htmlFor="stock-search-application" className="font-['Oswald'] text-[16px] text-[#263f52]">Application</label>
                     <input
                       id="stock-search-application"
                       type="text"
                       value={searchFilters.application}
                       onChange={(event) => handleSearchFieldChange('application', event.target.value)}
                       placeholder="Search Item Application"
-                      className="h-[34px] rounded-[3px] border border-[#ccc] bg-white px-3 text-[13px] outline-none"
+                      className="h-10 rounded-[4px] border border-[#c9d1d9] bg-white px-3 text-[14px] outline-none transition focus:border-[#5d82a2] focus:ring-2 focus:ring-[#5d82a2]/15"
                     />
                   </div>
-                  <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-3">
-                    <label htmlFor="stock-search-original-pn" className="font-['Oswald'] text-[15px] text-[#263f52]">Original P/N</label>
+                  <div className="grid grid-cols-[130px_minmax(0,1fr)] items-center gap-3">
+                    <label htmlFor="stock-search-original-pn" className="font-['Oswald'] text-[16px] text-[#263f52]">Original P/N</label>
                     <input
                       id="stock-search-original-pn"
                       type="text"
                       value={searchFilters.originalPn}
                       onChange={(event) => handleSearchFieldChange('originalPn', event.target.value)}
                       placeholder="Search Original P/N"
-                      className="h-[34px] rounded-[3px] border border-[#ccc] bg-white px-3 text-[13px] outline-none"
+                      className="h-10 rounded-[4px] border border-[#c9d1d9] bg-white px-3 text-[14px] outline-none transition focus:border-[#5d82a2] focus:ring-2 focus:ring-[#5d82a2]/15"
                     />
                   </div>
                 </div>

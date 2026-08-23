@@ -1747,6 +1747,7 @@ export interface FastSlowMovementItem {
   month1_label: string;
   month2_label: string;
   month3_label: string;
+  last_price_update: string | null;
   category: MovementCategory;
 }
 

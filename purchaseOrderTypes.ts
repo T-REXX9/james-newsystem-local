@@ -18,6 +18,13 @@ export interface PurchaseOrderWithDetails extends PurchaseOrder {
     items: PurchaseOrderItemWithProduct[];
     creator: { email: string } | null;
     approver: { email: string } | null;
+    /** Summary fields returned by the local procurement API list endpoint. */
+    item_count?: number;
+    total_qty?: number;
+    received_lines?: number;
+    received_qty?: number;
+    first_eta_date?: string | null;
+    last_eta_date?: string | null;
 }
 
 export interface PurchaseOrderItemWithProduct extends PurchaseOrderItem {

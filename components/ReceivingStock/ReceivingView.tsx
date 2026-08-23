@@ -16,6 +16,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
     const [rr, setRr] = useState<ReceivingReportWithDetails | null>(null);
     const [finalizing, setFinalizing] = useState(false);
     const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
+    const [showHistory, setShowHistory] = useState(false);
 
     const fetchRR = async () => {
         setLoading(true);
@@ -80,6 +81,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
 
     const totalOrdered = rr.items?.reduce((sum, item) => sum + (item.qty_ordered || item.qty_received || 0), 0) || 0;
     const totalReceived = rr.items?.reduce((sum, item) => sum + (item.qty_received || 0), 0) || 0;
+    const etaDate = rr.eta_date || rr.po?.items?.find(item => item.eta_date)?.eta_date || null;
 
     return (
         <div className="mx-auto max-w-5xl rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -89,19 +91,15 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
                     <span className={`rounded-md px-3 py-1 text-sm font-bold ${statusColor}`}>{rr.status || 'Draft'}</span>
                 </div>
                 <div className="flex items-center gap-3">
-                    <button onClick={() => addToast({ type: 'info', message: 'Print functionality coming soon' })} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
+                    <button onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 print:hidden">
                         <Printer className="h-4 w-4" /> Print RR
                     </button>
-                    <button onClick={() => addToast({ type: 'info', message: 'History view coming soon' })} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
+                    <button onClick={() => setShowHistory(true)} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 print:hidden">
                         <FileText className="h-4 w-4" /> View History
                     </button>
                     {rr.status === 'Draft' ? (
-                        <button onClick={() => setShowFinalizeConfirm(true)} className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700">
+                        <button onClick={() => setShowFinalizeConfirm(true)} className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 print:hidden">
                             <CheckCircle className="h-4 w-4" /> Post Receiving
-                        </button>
-                    ) : rr.status === 'Posted' ? (
-                        <button onClick={() => addToast({ type: 'error', message: 'Unpost is not currently supported by the backend.' })} className="inline-flex items-center gap-2 rounded-md bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700">
-                            Unpost Receiving
                         </button>
                     ) : null}
                 </div>
@@ -141,7 +139,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
                             <Calendar className="h-5 w-5 text-slate-400" />
                             <span className="text-xs font-bold uppercase tracking-wide text-slate-500">ETA Date</span>
                         </div>
-                        <span className="mt-1 text-lg font-bold text-slate-800">{rr.po?.items?.[0]?.eta_date ? new Date(rr.po.items[0].eta_date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '-'}</span>
+                        <span className="mt-1 text-lg font-bold text-slate-800">{etaDate ? new Date(etaDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '-'}</span>
                         <span className="text-xs font-semibold text-slate-500">(Estimated Arrival)</span>
                     </div>
                 </div>
@@ -172,9 +170,9 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
                                     <td className="px-4 py-3 text-center font-semibold text-slate-500">{index + 1}</td>
                                     <td className="px-4 py-3 font-semibold text-slate-600">{item.item_code || '-'}</td>
                                     <td className="px-4 py-3 font-semibold text-slate-700">{item.description || '-'}</td>
-                                    <td className="px-4 py-3 font-semibold text-slate-600">-</td>
+                                    <td className="px-4 py-3 font-semibold text-slate-600">{item.original_part_no || '-'}</td>
                                     <td className="px-4 py-3 font-semibold text-slate-600">{item.part_no || '-'}</td>
-                                    <td className="px-4 py-3 font-semibold text-slate-600">{item.product?.brand || '-'}</td>
+                                    <td className="px-4 py-3 font-semibold text-slate-600">{item.brand || item.product?.brand || '-'}</td>
                                     <td className="px-4 py-3 text-center font-semibold text-slate-600">{item.qty_ordered || item.qty_received || 0}</td>
                                     <td className="px-4 py-3 text-center font-bold text-slate-700">{item.qty_received || 0}</td>
                                     <td className="px-4 py-3 text-right font-semibold text-slate-600">{item.unit_cost ? item.unit_cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
@@ -240,6 +238,28 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
                                 Confirm & Post
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {showHistory && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 print:hidden" role="dialog" aria-modal="true" aria-labelledby="receiving-history-title">
+                    <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-2xl">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <h3 id="receiving-history-title" className="text-lg font-bold text-slate-800">Receiving Report History</h3>
+                                <p className="mt-1 text-sm text-slate-500">Current audit information recorded for {rr.rr_no}.</p>
+                            </div>
+                            <button type="button" onClick={() => setShowHistory(false)} className="rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100" aria-label="Close history">×</button>
+                        </div>
+                        <dl className="mt-5 divide-y divide-slate-100 rounded-lg border border-slate-200 text-sm">
+                            <div className="flex justify-between gap-4 px-4 py-3"><dt className="font-semibold text-slate-500">Created / received by</dt><dd className="text-right text-slate-800">{rr.received_by || '—'}</dd></div>
+                            <div className="flex justify-between gap-4 px-4 py-3"><dt className="font-semibold text-slate-500">Report date</dt><dd className="text-right text-slate-800">{rr.receive_date || '—'}</dd></div>
+                            <div className="flex justify-between gap-4 px-4 py-3"><dt className="font-semibold text-slate-500">Current status</dt><dd className="text-right font-semibold text-slate-800">{rr.status || 'Draft'}</dd></div>
+                            <div className="flex justify-between gap-4 px-4 py-3"><dt className="font-semibold text-slate-500">Items received</dt><dd className="text-right text-slate-800">{rr.item_count ?? rr.items?.length ?? 0}</dd></div>
+                            <div className="flex justify-between gap-4 px-4 py-3"><dt className="font-semibold text-slate-500">Last recorded timestamp</dt><dd className="text-right text-slate-800">{rr.created_at ? new Date(rr.created_at).toLocaleString('en-PH') : '—'}</dd></div>
+                        </dl>
+                        <div className="mt-5 flex justify-end"><button type="button" onClick={() => setShowHistory(false)} className="rounded-md bg-[#175fd3] px-4 py-2 text-sm font-bold text-white hover:bg-[#0e4fb7]">Close</button></div>
                     </div>
                 </div>
             )}

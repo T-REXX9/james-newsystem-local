@@ -11,12 +11,39 @@ export type ReceivingReportItemUpdate = Database['public']['Tables']['receiving_
 export type Product = Database['public']['Tables']['products']['Row'];
 export type Supplier = Database['public']['Tables']['contacts']['Row'];
 
+export interface ReceivingReportPurchaseOrderSummary {
+    id: string;
+    po_number: string;
+    order_date: string;
+    pr_reference: string;
+    status: string;
+    items: Array<{
+        id: string;
+        qty: number;
+        eta_date: string | null;
+    }>;
+}
+
 export interface ReceivingReportWithDetails extends ReceivingReport {
+    /** Local API fields not present in the legacy Supabase generated row. */
+    po_refno?: string;
+    eta_date?: string | null;
+    item_count?: number;
+    total_qty?: number;
+    po?: ReceivingReportPurchaseOrderSummary | null;
     items: ReceivingReportItemWithProduct[];
 }
 
 export interface ReceivingReportItemWithProduct extends ReceivingReportItem {
     product: Product | null;
+    /** Local API fields used by the receiving workflow. */
+    item_code?: string;
+    part_no?: string;
+    original_part_no?: string;
+    qty_ordered?: number;
+    po_item_id?: number;
+    qty_already_received?: number;
+    brand?: string;
 }
 
 export type RRStatus = 'Draft' | 'Posted' | 'Cancelled';

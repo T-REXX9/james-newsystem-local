@@ -101,6 +101,12 @@ const toPurchaseOrder = (raw: any): PurchaseOrderWithDetails => {
     items: [],
     creator: null,
     approver: null,
+    item_count: toNumber(raw?.item_count),
+    total_qty: toNumber(raw?.total_qty),
+    received_lines: toNumber(raw?.received_lines),
+    received_qty: toNumber(raw?.received_qty),
+    first_eta_date: raw?.first_eta_date ? String(raw.first_eta_date) : null,
+    last_eta_date: raw?.last_eta_date ? String(raw.last_eta_date) : null,
   } as PurchaseOrderWithDetails;
 };
 

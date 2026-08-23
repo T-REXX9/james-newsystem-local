@@ -74,7 +74,7 @@ const IncidentItemsReport: React.FC = () => {
     try {
       const data = await fetchIncidentItemsReport(nextFilters);
       setReportData(data);
-      if (data.items.length > 0) setSelectedRow(data.items[0]);
+      setSelectedRow(data.items[0] ?? null);
     } catch (err: any) {
       setError(String(err?.message || 'Unable to load incident items report.'));
     } finally {

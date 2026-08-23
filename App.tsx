@@ -404,6 +404,18 @@ const App: React.FC = () => {
                 moduleContext['warehouse-inventory-product-database']?.productId ||
                 moduleContext.products?.productId
               }
+              initialCreate={
+                (moduleContext['warehouse-inventory-product-database']?.create ||
+                  moduleContext.products?.create) === '1'
+              }
+              initialPartNo={
+                moduleContext['warehouse-inventory-product-database']?.partNo ||
+                moduleContext.products?.partNo
+              }
+              initialDescription={
+                moduleContext['warehouse-inventory-product-database']?.description ||
+                moduleContext.products?.description
+              }
             />
           </div>
         );

@@ -1,5 +1,5 @@
 export interface InventoryReportFilters {
-  category?: string;
+  description?: string;
   partNumber?: string;
   itemCode?: string;
   dateFrom?: string;
@@ -58,7 +58,7 @@ const toNumber = (value: unknown, fallback = 0): number => {
 };
 
 export interface InventoryReportOptions {
-  categories: string[];
+  descriptions: string[];
   partNumbers: { id: string; partNo: string }[];
   itemCodes: { id: string; itemCode: string }[];
   warehouses: WarehouseOption[];
@@ -71,13 +71,13 @@ export const fetchInventoryReportOptions = async (): Promise<InventoryReportOpti
     });
     const data = await requestApi(`${API_BASE_URL}/inventory-report/options?${params.toString()}`);
 
-    const categories = Array.isArray(data?.categories) ? data.categories.map(String).filter(Boolean) : [];
+    const descriptions = Array.isArray(data?.descriptions) ? data.descriptions.map(String).filter(Boolean) : [];
     const partNumbersRaw = Array.isArray(data?.part_numbers) ? data.part_numbers : [];
     const itemCodesRaw = Array.isArray(data?.item_codes) ? data.item_codes : [];
     const warehousesRaw = Array.isArray(data?.warehouses) ? data.warehouses : [];
 
     return {
-      categories,
+      descriptions,
       partNumbers: partNumbersRaw.map((partNo: string, index: number) => ({ id: String(index + 1), partNo: String(partNo) })),
       itemCodes: itemCodesRaw.map((itemCode: string, index: number) => ({ id: String(index + 1), itemCode: String(itemCode) })),
       warehouses: warehousesRaw
@@ -87,7 +87,7 @@ export const fetchInventoryReportOptions = async (): Promise<InventoryReportOpti
   } catch (error) {
     console.error('Error fetching inventory report options:', error);
     return {
-      categories: [],
+      descriptions: [],
       partNumbers: [],
       itemCodes: [],
       warehouses: [],
@@ -95,12 +95,12 @@ export const fetchInventoryReportOptions = async (): Promise<InventoryReportOpti
   }
 };
 
-export const fetchCategories = async (): Promise<string[]> => {
+export const fetchDescriptions = async (): Promise<string[]> => {
   try {
     const options = await fetchInventoryReportOptions();
-    return options.categories;
+    return options.descriptions;
   } catch (err) {
-    console.error('Error fetching categories:', err);
+    console.error('Error fetching descriptions:', err);
     return [];
   }
 };
@@ -134,7 +134,7 @@ export const fetchInventoryReport = async (
       stock_status: filters.stockStatus || 'all',
       report_type: filters.reportType || 'inventory',
     });
-    if (filters.category) params.set('category', filters.category);
+    if (filters.description) params.set('description', filters.description);
     if (filters.partNumber) params.set('part_number', filters.partNumber);
     if (filters.itemCode) params.set('item_code', filters.itemCode);
     if (filters.dateFrom) params.set('date_from', filters.dateFrom);

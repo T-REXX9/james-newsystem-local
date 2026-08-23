@@ -56,6 +56,7 @@ const mapItem = (row: any): FastSlowMovementItem => ({
   month1_label: String(row?.month1_label || 'Month 1'),
   month2_label: String(row?.month2_label || 'Month 2'),
   month3_label: String(row?.month3_label || 'Month 3'),
+  last_price_update: row?.last_price_update ? String(row.last_price_update) : null,
   category: normalizeCategory(row?.category),
 });
 

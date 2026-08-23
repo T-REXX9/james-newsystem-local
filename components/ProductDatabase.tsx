@@ -23,6 +23,9 @@ import { getCentralStock } from '../utils/productStock';
 interface ProductDatabaseProps {
   currentUser: UserProfile | null;
   initialProductId?: string;
+  initialCreate?: boolean;
+  initialPartNo?: string;
+  initialDescription?: string;
 }
 
 type ProductForm = Omit<Product, 'id'>;
@@ -149,7 +152,13 @@ const LegacyField: React.FC<{
   </div>
 );
 
-const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser: _currentUser, initialProductId }) => {
+const ProductDatabase: React.FC<ProductDatabaseProps> = ({
+  currentUser: _currentUser,
+  initialProductId,
+  initialCreate = false,
+  initialPartNo = '',
+  initialDescription = '',
+}) => {
   const { addToast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
   const [page, setPage] = useState(1);
@@ -270,6 +279,28 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser: _current
       window.setTimeout(() => productRowRefs.current[product.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
     });
   }, [initialProductId]);
+
+  useEffect(() => {
+    if (!initialCreate || initialProductId) return;
+    setEditingProduct(null);
+    setFormData({
+      ...EMPTY_PRODUCT,
+      supplier_costs: [],
+      part_no: initialPartNo,
+      description: initialDescription,
+    });
+    setSelectedSupplierRows([]);
+    setApplyCostToAll(false);
+    setSubmitError('');
+    setValidationErrors({});
+    setHighlightedProductId(null);
+    setDetailTab('details');
+  }, [initialCreate, initialDescription, initialPartNo, initialProductId]);
+
+  useEffect(() => {
+    if (!initialPartNo || initialCreate || initialProductId) return;
+    setAppliedFilters((current) => ({ ...current, partNo: initialPartNo }));
+  }, [initialCreate, initialPartNo, initialProductId]);
 
   const updateField = (field: keyof ProductForm, value: string | number) => {
     setFormData((current) => ({ ...current, [field]: value }));

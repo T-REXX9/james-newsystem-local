@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ReceivingReportInsert, ReceivingReportItemInsert, Supplier } from '../../receiving.types';
+import { ReceivingReport, ReceivingReportInsert, ReceivingReportItemInsert, Supplier } from '../../receiving.types';
 import { EligiblePurchaseOrder, receivingService } from '../../services/receivingService';
 import { useToast } from '../ToastProvider';
 import { ArrowLeft, Save, Plus, Trash2, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
@@ -12,7 +12,7 @@ import { validateNumeric, validateRequired } from '../../utils/formValidation';
 
 interface ReceivingFormProps {
     onClose: () => void;
-    onSuccess: () => void;
+    onSuccess: (report: ReceivingReport) => void;
 }
 
 interface LineItem extends Omit<ReceivingReportItemInsert, 'rr_id'> {
@@ -186,7 +186,7 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
             setRrNumber(created.rr_no);
 
             addToast({ type: 'success', title: 'Receiving report created', description: 'The receiving report was saved successfully.' });
-            onSuccess();
+            onSuccess(created);
 
         } catch (error: any) {
             console.error("Error saving RR:", error);

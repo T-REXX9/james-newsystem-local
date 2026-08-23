@@ -73,12 +73,12 @@ describe('SmsCampaignPreparationView', () => {
       </ToastProvider>,
     );
 
-    expect(await screen.findByText('SMS Blast: Send SMS to Customers')).toBeInTheDocument();
+    expect(await screen.findByText('SMS Blasting')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Queue 0 Messages/i })).toBeDisabled();
-    expect(screen.getByText(/Birthdays \(0\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/No Purchase > 1 Month \(0\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/VIP Re-engagement \(0\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/Prospective \(0\)/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Birthdays\s+0/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /No Purchase > 1 Month\s+0/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /VIP Re-engagement\s+0/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Prospective\s+0/i })).toBeInTheDocument();
   });
 
   it('supports campaign queueing, SIM selection, and copy on the default birthday campaign', async () => {
@@ -92,15 +92,15 @@ describe('SmsCampaignPreparationView', () => {
       </ToastProvider>,
     );
 
-    expect(await screen.findByText(/Birthdays \(1\)/i)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Birthdays\s+1/i })).toBeInTheDocument();
 
-    const noPurchaseTab = screen.getAllByRole('button').find(button => button.textContent?.includes('No Purchase > 1 Month (0)'));
+    const noPurchaseTab = screen.getByRole('button', { name: /No Purchase > 1 Month\s+0/i });
     expect(noPurchaseTab).toBeTruthy();
-    fireEvent.click(noPurchaseTab!);
-    expect(await screen.findByText('No clients match this campaign criteria.')).toBeInTheDocument();
+    fireEvent.click(noPurchaseTab);
+    expect(await screen.findByText('No clients match this campaign')).toBeInTheDocument();
 
-    const birthdayTab = screen.getAllByRole('button').find(button => button.textContent?.includes('Birthdays (1)'));
-    fireEvent.click(birthdayTab!);
+    const birthdayTab = screen.getByRole('button', { name: /Birthdays\s+1/i });
+    fireEvent.click(birthdayTab);
     expect(await screen.findByText('Acme Parts')).toBeInTheDocument();
 
     expect(screen.getByRole('option', { name: 'SIM 1 — Globe' })).toBeInTheDocument();
@@ -131,7 +131,7 @@ describe('SmsCampaignPreparationView', () => {
       </ToastProvider>,
     );
 
-    expect(await screen.findByText(/Birthdays \(1\)/i)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Birthdays\s+1/i })).toBeInTheDocument();
 
     const logsTab = screen.getAllByRole('button').find(button => button.textContent?.includes('Logs'));
     expect(logsTab).toBeTruthy();
@@ -162,7 +162,7 @@ describe('SmsCampaignPreparationView', () => {
         const textarea = screen.getByPlaceholderText(/Write your custom SMS message here/i);
     fireEvent.change(textarea, { target: { value: 'Hello this is a custom blast' } });
 
-    const manualInput = screen.getByPlaceholderText(/e.g., 09171234567, 09181234567/i);
+    const manualInput = screen.getByPlaceholderText(/09171234567, 09181234567/i);
     fireEvent.change(manualInput, { target: { value: '09991234567, 09997654321 ' } });
 
     fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: '16' } });

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { purchaseOrderService } from '../services/purchaseOrderService';
 import { PurchaseOrderWithDetails, PurchaseOrderInsert, PurchaseOrderItemInsert, PO_STATUS_COLORS, Product, Supplier } from '../purchaseOrderTypes';
-import { Plus, Trash2, Printer, Filter, ListFilter, Search, RefreshCw, ChevronLeft, ChevronRight, Save, CheckCircle, XCircle, ArrowLeft } from 'lucide-react';
+import { Plus, Trash2, Printer, Filter, ListFilter, Search, RefreshCw, ChevronLeft, ChevronRight, Save, CheckCircle, XCircle, ArrowLeft, Pencil } from 'lucide-react';
 import StatusBadge from './StatusBadge'; // Assuming this exists or I'll inline the style
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates'; // Assuming usage
 import ValidationSummary from './ValidationSummary';
@@ -73,6 +73,10 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   const [selectedNewItemProduct, setSelectedNewItemProduct] = useState<Product | null>(null);
   const [newItemQty, setNewItemQty] = useState(1);
   const [newItemEta, setNewItemEta] = useState('');
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editItemQty, setEditItemQty] = useState(0);
+  const [editItemUnitPrice, setEditItemUnitPrice] = useState(0);
+  const [editItemEta, setEditItemEta] = useState('');
 
   const [printMode, setPrintMode] = useState(false);
 
@@ -148,21 +152,38 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
       });
       const rows = (data as unknown as PurchaseOrderWithDetails[]) || [];
       setOrders(rows);
+      setPage((currentPage) => Math.min(currentPage, Math.max(0, Math.ceil(rows.length / PAGE_SIZE) - 1)));
       if (rows.length === 0) {
         setSelectedPO(null);
       }
     } catch (err) {
-      console.error(err);
+      console.error('Failed to load purchase orders', err);
       setOrders([]);
       setSelectedPO(null);
+      addToast({
+        type: 'error',
+        title: 'Unable to load purchase orders',
+        description: err instanceof Error ? err.message : 'Please try again.',
+        durationMs: 6000,
+      });
     } finally {
       setLoading(false);
     }
   };
 
   const fetchSuppliers = async () => {
-    const data = await purchaseOrderService.getSuppliers();
-    setSuppliers(data || []);
+    try {
+      const data = await purchaseOrderService.getSuppliers();
+      setSuppliers(data || []);
+    } catch (err) {
+      console.error('Failed to load suppliers', err);
+      addToast({
+        type: 'error',
+        title: 'Unable to load suppliers',
+        description: err instanceof Error ? err.message : 'Please try again.',
+        durationMs: 6000,
+      });
+    }
   };
 
   // Data is already server-filtered by month/year/status/search.
@@ -392,15 +413,47 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
     });
   };
 
-  const updateItem = async (itemId: string, field: string, value: any) => {
-    if (!selectedPO) return;
+  const startEditItem = (item: PurchaseOrderWithDetails['items'][number]) => {
+    setEditingItemId(item.id);
+    setEditItemQty(Number(item.qty || 0));
+    setEditItemUnitPrice(Number(item.unit_price || 0));
+    setEditItemEta(item.eta_date || '');
+  };
+
+  const cancelEditItem = () => {
+    setEditingItemId(null);
+    setEditItemQty(0);
+    setEditItemUnitPrice(0);
+    setEditItemEta('');
+  };
+
+  const saveEditItem = async () => {
+    if (!selectedPO || !editingItemId) return;
+    if (!Number.isFinite(editItemQty) || editItemQty <= 0) {
+      addToast({ type: 'error', title: 'Quantity must be greater than zero', durationMs: 4000 });
+      return;
+    }
+    if (!Number.isFinite(editItemUnitPrice) || editItemUnitPrice < 0) {
+      addToast({ type: 'error', title: 'COGS cannot be negative', durationMs: 4000 });
+      return;
+    }
     try {
-      await purchaseOrderService.updatePurchaseOrderItem(itemId, { [field]: value });
-      // Debounce or just refresh? For now simplicity:
+      await purchaseOrderService.updatePurchaseOrderItem(editingItemId, {
+        qty: editItemQty,
+        unit_price: editItemUnitPrice,
+        eta_date: editItemEta || null,
+      });
       const updated = await purchaseOrderService.getPurchaseOrderById(selectedPO.id);
-      setSelectedPO(updated as unknown as PurchaseOrderWithDetails);
+      setSelectedPO(updated);
+      cancelEditItem();
+      addToast({ type: 'success', title: 'Purchase-order item updated', durationMs: 3000 });
     } catch (err) {
-      console.error(err);
+      addToast({
+        type: 'error',
+        title: 'Unable to update purchase-order item',
+        description: err instanceof Error ? err.message : 'Please try again.',
+        durationMs: 6000,
+      });
     }
   };
 
@@ -515,6 +568,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
             <div className="space-y-2">
               {paginatedOrders.map(po => {
                 const isSelected = selectedPO?.id === po.id;
+                const etaDate = po.first_eta_date || po.items?.[0]?.eta_date || null;
                 const statusColor = po.status === 'Draft' || po.status === 'Pending' ? 'bg-slate-100 text-slate-700'
                   : po.status === 'Posted' ? 'bg-blue-100 text-blue-700'
                   : po.status === 'Waiting Approval' ? 'bg-orange-100 text-orange-700'
@@ -536,10 +590,10 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                     <div className="mt-1 text-xs font-semibold text-slate-500">{po.pr_reference || '-'}</div>
                     <div className="mt-2 flex items-center justify-between text-xs">
                       <span className="text-slate-600">Supplier: <span className="font-semibold">{po.supplier?.company || '-'}</span></span>
-                      <span className="font-semibold text-slate-700">{po.items?.length || 0} Items</span>
+                      <span className="font-semibold text-slate-700">{po.item_count ?? po.items?.length ?? 0} Items</span>
                     </div>
                     <div className="mt-1 text-[10px] text-slate-500">
-                      ETA: {po.items?.[0]?.eta_date ? new Date(po.items[0].eta_date).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : '-'}
+                      ETA: {etaDate ? new Date(etaDate).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : '-'}
                     </div>
                   </button>
                 );
@@ -681,25 +735,38 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                   <tbody>
                     {!selectedPO.items?.length ? (
                       <tr><td colSpan={11} className="py-12 text-center text-sm text-slate-500">No items added yet.</td></tr>
-                    ) : selectedPO.items.map((item, index) => (
+                    ) : selectedPO.items.map((item, index) => {
+                      const isEditing = editingItemId === item.id;
+                      return (
                       <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
                         <td className="px-4 py-3 text-center font-semibold text-slate-500">{index + 1}</td>
-                        <td className="px-4 py-3 text-center font-bold text-slate-700">{item.qty}</td>
+                        <td className="px-4 py-3 text-center font-bold text-slate-700">{isEditing ? <input aria-label={`Edit quantity ${index + 1}`} type="number" min="1" value={editItemQty} onChange={event => setEditItemQty(Number(event.target.value))} className="h-8 w-20 rounded border border-slate-300 px-2 text-center" /> : item.qty}</td>
                         <td className="px-4 py-3 font-semibold">{selectedPO.supplier?.company || '-'}</td>
-                        <td className="px-4 py-3 font-semibold text-slate-600">{item.eta_date ? new Date(item.eta_date).toLocaleDateString('en-GB') : '-'}</td>
+                        <td className="px-4 py-3 font-semibold text-slate-600">{isEditing ? <input aria-label={`Edit ETA ${index + 1}`} type="date" value={editItemEta} onChange={event => setEditItemEta(event.target.value)} className="h-8 w-36 rounded border border-slate-300 px-2" /> : item.eta_date ? new Date(item.eta_date).toLocaleDateString('en-GB') : '-'}</td>
                         <td className="px-4 py-3 font-semibold text-slate-600">-</td>
                         <td className="px-4 py-3 font-semibold text-[#173c83]">{item.product?.part_no || '-'}</td>
                         <td className="px-4 py-3 font-semibold text-slate-600">{item.product?.item_code || '-'}</td>
                         <td className="px-4 py-3 font-semibold text-slate-600">{item.product?.brand || '-'}</td>
                         <td className="px-4 py-3 font-semibold text-slate-700">{item.product?.description || '-'}</td>
-                        <td className="px-4 py-3 text-right font-bold">{item.unit_price ? item.unit_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
+                        <td className="px-4 py-3 text-right font-bold">{isEditing ? <input aria-label={`Edit COGS ${index + 1}`} type="number" min="0" step="0.01" value={editItemUnitPrice} onChange={event => setEditItemUnitPrice(Number(event.target.value))} className="h-8 w-28 rounded border border-slate-300 px-2 text-right" /> : item.unit_price ? item.unit_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
                         <td className="px-4 py-3 text-center">
-                          {['Draft', 'Pending'].includes(selectedPO.status) && (
-                            <button onClick={() => deleteItem(item.id)} className="text-rose-500 hover:text-rose-700"><Trash2 size={16} /></button>
+                              {['Draft', 'Pending'].includes(selectedPO.status) && (
+                            isEditing ? (
+                              <div className="flex items-center justify-center gap-2">
+                                <button type="button" onClick={saveEditItem} className="text-emerald-600 hover:text-emerald-800" title="Save item"><Save size={16} /></button>
+                                <button type="button" onClick={cancelEditItem} className="text-slate-400 hover:text-slate-700" title="Cancel edit"><XCircle size={16} /></button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-center gap-2">
+                                <button type="button" onClick={() => startEditItem(item)} className="text-[#175fd3] hover:text-[#0e4fb7]" title="Edit item"><Pencil size={16} /></button>
+                                <button type="button" onClick={() => deleteItem(item.id)} className="text-rose-500 hover:text-rose-700" title="Remove item"><Trash2 size={16} /></button>
+                              </div>
+                            )
                           )}
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                   {selectedPO.items?.length > 0 && (
                     <tfoot>

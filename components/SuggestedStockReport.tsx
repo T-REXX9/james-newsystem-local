@@ -33,6 +33,7 @@ import {
 } from '../services/suggestedStockService';
 import { useToast } from './ToastProvider';
 import type { PurchaseRequestWithItems } from '../purchaseRequest.types';
+import { purchaseRequestService } from '../services/purchaseRequestService';
 import ModuleRecordLink from './ModuleRecordLink';
 
 interface SuggestedStockReportProps {
@@ -200,6 +201,30 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
     return () => window.clearTimeout(timer);
   }, [dateFrom, dateTo, selectedCustomer, selectedSalesperson, viewMode]);
 
+  useEffect(() => {
+    let active = true;
+    void purchaseRequestService.getPurchaseRequests({ status: 'All' })
+      .then((requests) => {
+        if (!active) return;
+        const from = appliedFilters.dateFrom;
+        const to = appliedFilters.dateTo;
+        const reportRequests = requests.filter((request) => {
+          const requestDate = String(request.request_date || '').slice(0, 10);
+          const notes = String(request.notes || '');
+          const cameFromSuggestedStock = /\[Ref:Suggested Stock:/i.test(notes) || /Item Suggested for Stock/i.test(notes);
+          return cameFromSuggestedStock && requestDate >= from && requestDate <= to;
+        });
+        setPrHistory(reportRequests);
+      })
+      .catch(() => {
+        if (active) setPrHistory([]);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [appliedFilters.dateFrom, appliedFilters.dateTo, refreshRequest]);
+
   const visibleDetails = useMemo(
     () =>
       appliedFilters.salesperson === 'all'
@@ -291,7 +316,7 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
   const uniqueCustomers = new Set(
     salespersonSummary.flatMap((item) => item.customers.map((customer) => customer.id))
   ).size;
-  const notListedCount = salespersonSummary.filter((item) => !item.isListed).length;
+  const uniqueItemCount = salespersonSummary.length;
 
   const setPeriodAndRange = (nextPeriod: Period) => {
     setPeriod(nextPeriod);
@@ -401,18 +426,24 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
       toggleRow(item.id);
       return;
     }
-    window.dispatchEvent(
-      new CustomEvent('workflow:navigate', {
-        detail: {
-          tab: 'warehouse-inventory-product-database',
-          payload: {
-            create: '1',
-            partNo: item.partNo,
-            description: item.description,
-          },
-        },
-      })
-    );
+
+    const params = new URLSearchParams({
+      create: '1',
+      partNo: item.partNo,
+      description: item.description,
+    });
+    const productDatabaseUrl = new URL(window.location.href);
+    productDatabaseUrl.hash = `#/warehouse-inventory-product-database?${params.toString()}`;
+    const productWindow = window.open(productDatabaseUrl.toString(), '_blank', 'noopener,noreferrer');
+
+    if (!productWindow) {
+      addToast({
+        type: 'warning',
+        title: 'New tab was blocked',
+        description: 'Please allow pop-ups for this system to open Product Database in a separate tab.',
+        durationMs: 5000,
+      });
+    }
   };
 
   const filterCardClass = 'rounded-[5px] border border-[#d7dde3] bg-white p-3 shadow-sm';
@@ -447,10 +478,11 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
 
         <div className="grid items-start gap-5 xl:grid-cols-[260px_minmax(0,1fr)]">
           <aside className="rounded-lg border border-slate-200 bg-[#f8fafb] p-4 shadow-sm xl:order-1">
-            <h2 className="border-b border-slate-200 pb-3 text-sm font-bold uppercase text-[#173c83]">PR History</h2>
+            <h2 className="border-b border-slate-200 pb-3 text-sm font-bold uppercase text-[#173c83]">PR Numbers</h2>
+            <p className="mt-3 text-xs text-slate-500">Purchase Requests already created for this report period.</p>
             <div className="mt-4 space-y-3">
               {prHistory.length === 0 ? (
-                <p className="text-sm text-slate-500">No purchase requests created yet.</p>
+                <p className="text-sm text-slate-500">No PR has been created for this period.</p>
               ) : (
                 prHistory.map((pr) => (
                   <div key={pr.id} className="rounded border border-slate-200 bg-white p-3">
@@ -469,6 +501,13 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
           </aside>
 
           <main className="min-w-0 xl:order-2">
+            <section className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Unique items in report</p><p className="mt-1 text-2xl font-extrabold text-[#173c83]">{uniqueItemCount}</p></div>
+              <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Total inquiries</p><p className="mt-1 text-2xl font-extrabold text-[#175fd3]">{totalInquiries}</p></div>
+              <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Quantity requested</p><p className="mt-1 text-2xl font-extrabold text-slate-700">{totalQty}</p></div>
+              <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Customers / prospects</p><p className="mt-1 text-2xl font-extrabold text-emerald-700">{uniqueCustomers}</p></div>
+            </section>
+
             <section className="mb-4 flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700">
                 <CalendarDays className="h-4 w-4 text-[#175fd3]" /> Search by Date
@@ -551,6 +590,8 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
                         <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-center font-bold uppercase tracking-wide text-white">Qty Requested (Total)</th>
                         <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-center font-bold uppercase tracking-wide text-white">Customers</th>
                         <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-center font-bold uppercase tracking-wide text-white">Last Requested</th>
+                        <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-center font-bold uppercase tracking-wide text-white">Status</th>
+                        <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-center font-bold uppercase tracking-wide text-white">Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -563,6 +604,8 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
                           <td className="px-4 py-3 text-center font-bold text-slate-700">{item.totalQty} pcs</td>
                           <td className="px-4 py-3 text-center font-semibold text-slate-600">{item.customerCount} customers</td>
                           <td className="px-4 py-3 text-center font-semibold text-slate-600">{new Date(item.lastInquiryDate).toLocaleDateString('en-GB')}</td>
+                          <td className="px-4 py-3 text-center"><span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold ${item.isListed ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>{item.isListed ? 'Listed' : 'Not Listed'}</span></td>
+                          <td className="px-4 py-3 text-center">{item.isListed ? <span className="text-xs font-semibold text-slate-400">Already listed</span> : <button type="button" onClick={() => handleItemAction(item)} className="inline-flex items-center gap-1 rounded-md border border-[#175fd3] bg-white px-3 py-1.5 text-xs font-bold text-[#175fd3] transition hover:bg-blue-50"><Plus className="h-3.5 w-3.5" /> Create</button>}</td>
                         </tr>
                       ))}
                     </tbody>

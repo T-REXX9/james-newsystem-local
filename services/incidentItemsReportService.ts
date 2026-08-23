@@ -1,5 +1,18 @@
+import { getLocalAuthSession } from './localAuthService';
+
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
+
+const resolveMainId = (): number => {
+  const session = getLocalAuthSession();
+  const dynamicMainId = Number(
+    session?.context?.main_userid
+      || session?.context?.user?.main_userid
+      || session?.userProfile?.main_userid
+      || 0
+  );
+  return Number.isFinite(dynamicMainId) && dynamicMainId > 0 ? dynamicMainId : API_MAIN_ID || 1;
+};
 
 export type IncidentMatchSource = 'all' | 'manual' | 'related_transaction' | 'description_match' | 'imported';
 
@@ -110,7 +123,7 @@ export const fetchIncidentItemsReport = async (
   filters: IncidentItemsReportFilters
 ): Promise<IncidentItemsReportData> => {
   const params = new URLSearchParams({
-    main_id: String(API_MAIN_ID),
+    main_id: String(resolveMainId()),
     page: String(Math.max(1, filters.page || 1)),
     per_page: String(Math.max(1, Math.min(300, filters.perPage || 100))),
     match_source: filters.matchSource || 'all',
