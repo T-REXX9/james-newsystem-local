@@ -9,6 +9,9 @@ import { fetchContactById, fetchContactTransactions, fetchCustomerMetrics, fetch
 import CompanyName from './CompanyName';
 import { toast } from 'sonner';
 import { normalizePriceGroup } from '../constants/pricingGroups';
+import { formatCurrency } from '../utils/formatUtils';
+import CallCustomerButton from './CallCustomerButton';
+import CustomerCallHistoryCard from './CustomerCallHistoryCard';
 
 interface CustomerDetailPanelProps {
     contactId: string;
@@ -46,7 +49,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     onUpdate,
     onEditContact
 }) => {
-    const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'inquiries' | 'returns' | 'financials' | 'profile'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'calls' | 'inquiries' | 'returns' | 'financials' | 'profile'>('overview');
     const [transactions, setTransactions] = useState<any[]>([]);
     const [metrics, setMetrics] = useState<any>(null);
     const [terms, setTerms] = useState<CustomerTermsRow[]>([]);
@@ -185,15 +188,21 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                 {normalizedPriceGroup || 'No Group'}
                             </span>
                         </div>
-                        {onEditContact && (
-                            <button
-                                onClick={() => onEditContact(contact)}
-                                className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-brand-blue hover:text-blue-700 border border-blue-100 hover:border-blue-200 rounded-lg bg-blue-50/60 dark:bg-blue-900/20 dark:border-blue-900/40 transition-colors"
-                            >
-                                <Pencil className="w-3.5 h-3.5" />
-                                Edit Details
-                            </button>
-                        )}
+                        <div className="mt-3 flex flex-wrap justify-end gap-2">
+                            <CallCustomerButton
+                                phoneNumber={contact.phone || contact.mobile}
+                                customerId={contact.id}
+                            />
+                            {onEditContact && (
+                                <button
+                                    onClick={() => onEditContact(contact)}
+                                    className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-brand-blue hover:text-blue-700 border border-blue-100 hover:border-blue-200 rounded-lg bg-blue-50/60 dark:bg-blue-900/20 dark:border-blue-900/40 transition-colors"
+                                >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                    Edit Details
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
 
@@ -202,6 +211,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                     {[
                         { id: 'overview', label: 'Overview', icon: Activity },
                         { id: 'history', label: 'Sales History', icon: ShoppingBag },
+                        { id: 'calls', label: 'Calls', icon: Phone },
                         { id: 'inquiries', label: 'Inquiries', icon: MessageSquare },
                         { id: 'returns', label: 'Returns', icon: RotateCcw },
                         { id: 'financials', label: 'Financials', icon: DollarSign },
@@ -302,7 +312,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                                 }>{tx.status}</span></div>
                                                 <div className={`font-bold font-mono text-sm ${tx.type === 'sales_return' ? 'text-rose-500' : 'text-slate-700 dark:text-slate-300'
                                                     }`}>
-                                                    {tx.type === 'sales_return' ? '-' : ''}₱{(tx.amount || 0).toLocaleString()}
+                                                    {tx.type === 'sales_return' ? '-' : ''}{formatCurrency(tx.amount || 0, true)}
                                                 </div>
                                             </div>
                                         </div>
@@ -348,13 +358,17 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                             </span>
                                         </td>
                                         <td className="p-4 text-right font-mono font-bold text-slate-700 dark:text-slate-300">
-                                            ₱{(tx.amount || 0).toLocaleString()}
+                                            {formatCurrency(tx.amount || 0, true)}
                                         </td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
                     </div>
+                )}
+
+                {!loading && activeTab === 'calls' && (
+                    <CustomerCallHistoryCard customerId={contact.id} />
                 )}
 
                 {/* Placeholder for other tabs (Inquiries, Financials, etc.) reuse same table style or specialized components */}
@@ -371,7 +385,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                         <div className="font-bold text-sm">{tx.label}</div>
                                         <div className="text-xs text-slate-400">{new Date(tx.date).toLocaleDateString()}</div>
                                     </div>
-                                    <div className="font-mono font-bold">₱{tx.amount.toLocaleString()}</div>
+                                    <div className="font-mono font-bold">{formatCurrency(tx.amount || 0, true)}</div>
                                 </div>
                             ))}
                         </div>

@@ -1,5 +1,10 @@
-export const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(value);
+export const formatCurrency = (value: number, withDecimals: boolean = false) =>
+  new Intl.NumberFormat('en-PH', {
+    style: 'currency',
+    currency: 'PHP',
+    minimumFractionDigits: withDecimals ? 2 : 0,
+    maximumFractionDigits: withDecimals ? 2 : 0,
+  }).format(value);
 
 export const formatDate = (value?: string | null) => {
   if (!value) return '—';

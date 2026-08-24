@@ -1775,10 +1775,13 @@ export const fetchIncidentReports = async (contactId: string) => {
   }
 };
 
-export const createIncidentReport = async (report: CreateIncidentReportInput) => {
+export const createIncidentReport = async (report: CreateIncidentReportInput): Promise<string | null> => {
   try {
-    const { error } = await supabase.from('incident_reports').insert(report);
+    const reportId = report.id || globalThis.crypto?.randomUUID?.();
+    const payload = reportId ? { ...report, id: reportId } : report;
+    const { error } = await supabase.from('incident_reports').insert(payload);
     if (error) throw error;
+    return reportId || null;
   } catch (err) {
     console.error('Error creating incident report:', err);
     throw err;

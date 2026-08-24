@@ -4,7 +4,7 @@ import ReturnToSupplierView from './ReturnToSupplierView';
 import ReturnToSupplierNew from './ReturnToSupplierNew';
 import { returnToSupplierService } from '../../services/returnToSupplierService';
 import { SupplierReturn } from '../../returnToSupplier.types';
-import { Plus } from 'lucide-react';
+import { CalendarDays, Plus } from 'lucide-react';
 
 const ReturnToSupplier: React.FC = () => {
     const [returns, setReturns] = useState<SupplierReturn[]>([]);
@@ -85,8 +85,46 @@ const ReturnToSupplier: React.FC = () => {
                         <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
                     </div>
 
+                    <div className="rounded-lg border border-slate-200 bg-white p-3">
+                        <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                            <CalendarDays className="h-4 w-4 text-[#175fd3]" />
+                            <span>Filter by Date</span>
+                        </div>
+                        <div className="grid grid-cols-[minmax(0,1fr)_88px] gap-2">
+                            <label className="sr-only" htmlFor="return-to-supplier-month">Return month</label>
+                            <select
+                                id="return-to-supplier-month"
+                                value={month}
+                                onChange={e => setMonth(Number(e.target.value))}
+                                className="h-10 min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-[#175fd3] focus:ring-2 focus:ring-blue-100"
+                            >
+                                {Array.from({ length: 12 }, (_, index) => {
+                                    const monthValue = index + 1;
+                                    return (
+                                        <option key={monthValue} value={monthValue}>
+                                            {new Date(2000, index, 1).toLocaleString('en-US', { month: 'long' })}
+                                        </option>
+                                    );
+                                })}
+                            </select>
+                            <label className="sr-only" htmlFor="return-to-supplier-year">Return year</label>
+                            <input
+                                id="return-to-supplier-year"
+                                type="number"
+                                inputMode="numeric"
+                                min="2000"
+                                max="2100"
+                                value={year}
+                                onChange={e => setYear(Number(e.target.value))}
+                                className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-[#175fd3] focus:ring-2 focus:ring-blue-100"
+                                aria-label="Return year"
+                            />
+                        </div>
+                    </div>
+
                     <div>
-                        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none">
+                        <label className="sr-only" htmlFor="return-to-supplier-status">Return status</label>
+                        <select id="return-to-supplier-status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-[#175fd3] focus:ring-2 focus:ring-blue-100">
                             <option value="all">All Status</option>
                             <option value="pending">Pending</option>
                             <option value="posted">Posted</option>

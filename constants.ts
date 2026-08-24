@@ -238,6 +238,7 @@ export const AVAILABLE_APP_MODULES = [
   { id: 'maintenance-profile-server-maintenance', label: 'Server Maintenance' },
   { id: 'communication-sms-blasting', label: 'SMS Blasting' },
   { id: 'communication-sms-templates', label: 'SMS Templates' },
+  { id: 'communication-call-auto-replies', label: 'Missed-Call Replies' },
 ];
 
 // Mapping from legacy flat module IDs to canonical hierarchical IDs.
@@ -269,6 +270,7 @@ export const MODULE_ID_ALIASES: Record<string, string> = {
   'maintenance-system-loyalty-discounts': 'maintenance-system-loyalty-discounts',
   'maintenance-system-profit-protection': 'maintenance-system-profit-protection',
   'maintenance-system-ai-templates': 'maintenance-system-ai-templates',
+  'communication-call-auto-replies': 'communication-call-auto-replies',
   'maintenance-customer-vip-thresholds': 'maintenance-customer-vip-thresholds',
   'accounting-reports-overview': 'accounting-reports-accounting-overview',
 

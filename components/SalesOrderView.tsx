@@ -35,9 +35,12 @@ import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 import { normalizePriceGroup } from '../constants/pricingGroups';
 import { useToast } from './ToastProvider';
 import { PageHeader, RecordTrustStrip, WorkflowGuidance } from './common/PageScaffold';
+import CallCustomerButton from './CallCustomerButton';
 
 interface SalesOrderViewProps {
   initialOrderId?: string;
+  initialMonth?: string;
+  initialYear?: string;
 }
 
 const MONTH_OPTIONS = [
@@ -98,13 +101,16 @@ const formatCurrency = (value?: number | string | null): string => {
   return `₱${amount.toLocaleString()}`;
 };
 
-const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
+const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initialMonth, initialYear }) => {
   const { addToast } = useToast();
   const userId = String(getLocalAuthSession()?.userProfile?.id || '').trim();
   const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | string>('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [dateRange, setDateRange] = useState<{ from: string; to: string }>({ from: '', to: '' });
+  const [dateRange, setDateRange] = useState<{ from: string; to: string }>(() => {
+    if (!initialMonth || !initialYear) return { from: '', to: '' };
+    return { from: `${initialYear}-${String(initialMonth).padStart(2, '0')}-01`, to: '' };
+  });
   const [confirming, setConfirming] = useState(false);
   const [conversionModalOpen, setConversionModalOpen] = useState(false);
   const [conversionLoading, setConversionLoading] = useState(false);
@@ -123,6 +129,12 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
   const [unpostModalOpen, setUnpostModalOpen] = useState(false);
   const [unpostLoading, setUnpostLoading] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
+
+  useEffect(() => {
+    if (!initialMonth || !initialYear) return;
+    setDateRange({ from: `${initialYear}-${String(initialMonth).padStart(2, '0')}-01`, to: '' });
+    setPage(1);
+  }, [initialMonth, initialYear]);
 
   const targetMonthYear = useMemo(() => {
     if (!dateRange.from) {
@@ -1254,7 +1266,16 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
                   <tbody>
                     <tr>
                       <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Sold to:</td>
-                      <td><input readOnly value={selectedCustomerLabel} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                      <td>
+                        <input readOnly value={selectedCustomerLabel} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" />
+                        <div className="mt-2">
+                          <CallCustomerButton
+                            phoneNumber={selectedCustomer?.phone || selectedCustomer?.mobile}
+                            customerId={selectedCustomer?.id}
+                            label="Call"
+                          />
+                        </div>
+                      </td>
                       <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Date:</td>
                       <td><input readOnly value={selectedOrder.sales_date || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
                       <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Sales Person:</td>

@@ -1,8 +1,9 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import OperationsDashboard from '../OperationsDashboard';
+import { toLocalDateInputValue } from '../../services/operationsDashboardService';
 
 const fetchSnapshotMock = vi.fn();
 vi.mock('../../services/operationsDashboardService', () => ({
@@ -30,6 +31,21 @@ const snapshot = {
 describe('OperationsDashboard', () => {
   afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
+  const expectedPeriod = () => {
+    const date = new Date();
+    const dashboardDate = toLocalDateInputValue(date);
+    const dashboardMonth = String(date.getMonth() + 1).padStart(2, '0');
+    const dashboardYear = String(date.getFullYear());
+    const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+    return {
+      dashboardDate,
+      dashboardMonth,
+      dashboardYear,
+      dashboardMonthStart: `${dashboardYear}-${dashboardMonth}-01`,
+      dashboardMonthEnd: `${dashboardYear}-${dashboardMonth}-${String(monthEnd.getDate()).padStart(2, '0')}`,
+    };
+  };
+
   it('renders the client reference sections and links every operational path', async () => {
     fetchSnapshotMock.mockResolvedValue(snapshot);
     const onNavigate = vi.fn();
@@ -40,17 +56,38 @@ describe('OperationsDashboard', () => {
     expect(screen.getByText('2. Call Overview (Selected Date)')).toBeInTheDocument();
     expect(screen.getByText('7. Receivables Overview (As of Selected Date)')).toBeInTheDocument();
 
+    const period = expectedPeriod();
     await user.click(screen.getByRole('button', { name: /New Inquiry/ }));
-    expect(onNavigate).toHaveBeenLastCalledWith('sales-transaction-sales-inquiry', undefined);
+    expect(onNavigate).toHaveBeenLastCalledWith('sales-transaction-sales-inquiry', expect.objectContaining(period));
     await user.click(screen.getByRole('button', { name: /Incoming Calls/ }));
-    expect(onNavigate).toHaveBeenLastCalledWith('sales-transaction-daily-call-monitoring', undefined);
+    expect(onNavigate).toHaveBeenLastCalledWith('sales-transaction-daily-call-monitoring', expect.objectContaining(period));
     await user.click(screen.getByRole('button', { name: /Ready to Ship/ }));
-    expect(onNavigate).toHaveBeenLastCalledWith('sales-transaction-order-slip', undefined);
-    await user.click(screen.getByRole('button', { name: /Return Requests/ }));
-    expect(onNavigate).toHaveBeenLastCalledWith('accounting-transactions-sales-return-credit', undefined);
+    expect(onNavigate).toHaveBeenLastCalledWith('sales-transaction-order-slip', expect.objectContaining({ ...period, dashboardSlipStatus: 'draft' }));
+    await user.click(screen.getByRole('button', { name: /Under Inspection/ }));
+    expect(onNavigate).toHaveBeenLastCalledWith('accounting-transactions-sales-return-credit', expect.objectContaining({ ...period, dashboardReturnStatus: 'Pending' }));
     await user.click(screen.getByRole('button', { name: 'INQ-1' }));
-    expect(onNavigate).toHaveBeenLastCalledWith('sales-transaction-sales-inquiry', { inquiryId: 'INQ-1' });
+    expect(onNavigate).toHaveBeenLastCalledWith('sales-transaction-sales-inquiry', expect.objectContaining({ ...period, inquiryId: 'INQ-1' }));
     await user.click(screen.getByRole('button', { name: /View Complete Activity Log/ }));
-    expect(onNavigate).toHaveBeenLastCalledWith('maintenance-profile-activity-logs', undefined);
+    expect(onNavigate).toHaveBeenLastCalledWith('maintenance-profile-activity-logs', expect.objectContaining(period));
+  });
+
+  it('passes the selected dashboard date into the sales-return period filter', async () => {
+    fetchSnapshotMock.mockResolvedValue(snapshot);
+    const onNavigate = vi.fn();
+    render(<OperationsDashboard onNavigate={onNavigate} />);
+
+    const dateInput = await screen.findByLabelText('Filter operations dashboard by date');
+    fireEvent.change(dateInput, { target: { value: '2025-02-24' } });
+    await screen.findByText('1. Order Overview (This Month)');
+
+    await userEvent.setup().click(screen.getByRole('button', { name: /Under Inspection/ }));
+    expect(onNavigate).toHaveBeenLastCalledWith('accounting-transactions-sales-return-credit', {
+      dashboardDate: '2025-02-24',
+      dashboardMonth: '02',
+      dashboardYear: '2025',
+      dashboardMonthStart: '2025-02-01',
+      dashboardMonthEnd: '2025-02-28',
+      dashboardReturnStatus: 'Pending',
+    });
   });
 });

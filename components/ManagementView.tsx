@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { formatCurrency } from '../utils/formatUtils';
 import {
   AlertTriangle,
   BarChart3,
@@ -25,6 +26,7 @@ import {
 } from 'recharts';
 import { fetchManagementDashboardData, ManagementDashboardData } from '../services/managementDashboardLocalApiService';
 import ContactDetails from './ContactDetails';
+import CallAccountabilityPanel from './CallAccountabilityPanel';
 
 interface ManagementViewProps {
   currentUser?: any;
@@ -32,7 +34,7 @@ interface ManagementViewProps {
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const MONTH_SHORT_NAMES = MONTH_NAMES.map((month) => month.slice(0, 3));
-const CURRENCY = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 2 });
+// Using shared formatCurrency for consistency
 const NUMBER = new Intl.NumberFormat('en-PH', { maximumFractionDigits: 0 });
 
 const emptyDashboard: ManagementDashboardData = {
@@ -53,7 +55,7 @@ const isMasterUser = (user?: any): boolean => {
   return userType === '1' || ['master user', 'company owner', 'owner', 'main'].includes(role);
 };
 
-const formatCurrency = (value: number) => CURRENCY.format(Number.isFinite(value) ? value : 0);
+const formatCurrencyLocal = (value: number) => formatCurrency(Number.isFinite(value) ? value : 0, true);
 const formatNumber = (value: number) => NUMBER.format(Number.isFinite(value) ? value : 0);
 
 const MetricCard = ({ label, value, helper, icon: Icon, tone }: { label: string; value: string; helper: string; icon: React.ComponentType<{ className?: string }>; tone: string }) => (
@@ -165,10 +167,12 @@ export const ManagementView: React.FC<ManagementViewProps> = ({ currentUser }) =
           </div>
         )}
 
+        <CallAccountabilityPanel title="Staff phone and call accountability" compact />
+
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Sales performance KPIs">
-          <MetricCard label="Total Sales (YTD)" value={formatCurrency(dashboard.kpis.totalSalesYtd)} helper={`Selected year: ${selectedYear}`} icon={DollarSign} tone="bg-emerald-500" />
-          <MetricCard label="Total Collections (YTD)" value={formatCurrency(dashboard.kpis.totalCollectionsYtd)} helper={`Selected year: ${selectedYear}`} icon={WalletCards} tone="bg-blue-500" />
-          <MetricCard label="Outstanding Receivables" value={formatCurrency(dashboard.kpis.outstandingReceivables)} helper="Current ledger balance" icon={TrendingDown} tone="bg-violet-600" />
+          <MetricCard label="Total Sales (YTD)" value={formatCurrencyLocal(dashboard.kpis.totalSalesYtd)} helper={`Selected year: ${selectedYear}`} icon={DollarSign} tone="bg-emerald-500" />
+          <MetricCard label="Total Collections (YTD)" value={formatCurrencyLocal(dashboard.kpis.totalCollectionsYtd)} helper={`Selected year: ${selectedYear}`} icon={WalletCards} tone="bg-blue-500" />
+          <MetricCard label="Outstanding Receivables" value={formatCurrencyLocal(dashboard.kpis.outstandingReceivables)} helper="Current ledger balance" icon={TrendingDown} tone="bg-violet-600" />
           <MetricCard label="Active Customers" value={formatNumber(dashboard.kpis.activeCustomers)} helper="Active non-prospect accounts" icon={Users} tone="bg-orange-500" />
         </section>
 
@@ -176,7 +180,7 @@ export const ManagementView: React.FC<ManagementViewProps> = ({ currentUser }) =
           <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div><h2 className="text-sm font-extrabold uppercase tracking-wide text-emerald-700">Monthly Sales for {selectedYear}</h2><p className="mt-1 text-xs text-slate-500">Ledger debits and credits by calendar month.</p></div>
-              <div className="text-right text-xs text-slate-500"><p>{monthLabel} sales <strong className="text-slate-800">{formatCurrency(selectedMonthSales)}</strong></p><p>{monthLabel} collections <strong className="text-slate-800">{formatCurrency(selectedMonthCollections)}</strong></p></div>
+              <div className="text-right text-xs text-slate-500"><p>{monthLabel} sales <strong className="text-slate-800">{formatCurrencyLocal(selectedMonthSales)}</strong></p><p>{monthLabel} collections <strong className="text-slate-800">{formatCurrencyLocal(selectedMonthCollections)}</strong></p></div>
             </div>
             <div className="mt-4 h-72 w-full">
               <ResponsiveContainer width="100%" height="100%" minWidth={0}>
@@ -184,7 +188,7 @@ export const ManagementView: React.FC<ManagementViewProps> = ({ currentUser }) =
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" opacity={0.7} />
                   <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#64748b" />
                   <YAxis tick={{ fontSize: 10 }} stroke="#64748b" tickFormatter={(value) => `${Math.round(value / 1000)}k`} />
-                  <Tooltip formatter={(value: any) => formatCurrency(Number(value))} contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }} />
+                  <Tooltip formatter={(value: any) => formatCurrencyLocal(Number(value))} contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }} />
                   <Legend />
                   <Line type="monotone" dataKey="sales" name="Total Sales" stroke="#16a34a" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 5 }} />
                   <Line type="monotone" dataKey="collections" name="Collections" stroke="#2563eb" strokeWidth={2} dot={{ r: 2 }} />
@@ -192,21 +196,21 @@ export const ManagementView: React.FC<ManagementViewProps> = ({ currentUser }) =
               </ResponsiveContainer>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 border-t border-slate-100 pt-3 text-xs text-slate-600 sm:grid-cols-3 lg:grid-cols-4">
-              {monthlyChartData.map((row) => <div key={row.month} className="flex justify-between gap-2"><span>{MONTH_NAMES[row.month - 1]}</span><strong className="text-slate-800">{formatCurrency(row.sales)}</strong></div>)}
+              {monthlyChartData.map((row) => <div key={row.month} className="flex justify-between gap-2"><span>{MONTH_NAMES[row.month - 1]}</span><strong className="text-slate-800">{formatCurrencyLocal(row.sales)}</strong></div>)}
             </div>
           </article>
 
           <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <h2 className="text-sm font-extrabold uppercase tracking-wide text-blue-700">Top 10 Customers of the Month ({monthLabel})</h2>
-            <div className="mt-4 overflow-x-auto"><table className="w-full text-sm"><thead className="border-b border-slate-200 text-left text-[11px] uppercase text-slate-500"><tr><th className="px-2 py-2">#</th><th className="px-2 py-2">Customer Name</th><th className="px-2 py-2 text-right">Amount</th></tr></thead><tbody>{dashboard.topCustomers.length ? dashboard.topCustomers.map((row, index) => <tr key={`${row.customerName}-${index}`} className="border-b border-slate-100"><td className="px-2 py-2 text-slate-500">{index + 1}</td><td className="px-2 py-2 font-semibold">{row.customerName}</td><td className="px-2 py-2 text-right font-bold">{formatCurrency(row.amount)}</td></tr>) : <EmptyTable columns={3} />}</tbody></table></div>
+            <div className="mt-4 overflow-x-auto"><table className="w-full text-sm"><thead className="border-b border-slate-200 text-left text-[11px] uppercase text-slate-500"><tr><th className="px-2 py-2">#</th><th className="px-2 py-2">Customer Name</th><th className="px-2 py-2 text-right">Amount</th></tr></thead><tbody>{dashboard.topCustomers.length ? dashboard.topCustomers.map((row, index) => <tr key={`${row.customerName}-${index}`} className="border-b border-slate-100"><td className="px-2 py-2 text-slate-500">{index + 1}</td><td className="px-2 py-2 font-semibold">{row.customerName}</td><td className="px-2 py-2 text-right font-bold">{formatCurrencyLocal(row.amount)}</td></tr>) : <EmptyTable columns={3} />}</tbody></table></div>
           </article>
         </section>
 
         <section className="grid gap-4 xl:grid-cols-[0.9fr_1.2fr_1.2fr]">
           <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <h2 className="text-sm font-extrabold uppercase tracking-wide text-emerald-700">Top Salesperson of the Month ({monthLabel})</h2>
-            <div className="mt-4 overflow-x-auto"><table className="w-full text-sm"><thead className="border-b border-slate-200 text-left text-[11px] uppercase text-slate-500"><tr><th className="px-2 py-2">Salesperson</th><th className="px-2 py-2 text-right">Amount</th></tr></thead><tbody>{dashboard.topSalespeople.length ? dashboard.topSalespeople.map((row, index) => <tr key={`${row.salesperson}-${index}`} className="border-b border-slate-100"><td className="px-2 py-2 font-semibold">{index === 0 && <TrendingUp className="mr-1 inline h-3.5 w-3.5 text-emerald-600" />}{row.salesperson}</td><td className="px-2 py-2 text-right font-bold">{formatCurrency(row.amount)}</td></tr>) : <EmptyTable columns={2} />}</tbody></table></div>
-            <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-3 text-sm font-bold"><span>Total Sales</span><span className="text-emerald-700">{formatCurrency(dashboard.topSalespeople.reduce((sum, row) => sum + row.amount, 0))}</span></div>
+            <div className="mt-4 overflow-x-auto"><table className="w-full text-sm"><thead className="border-b border-slate-200 text-left text-[11px] uppercase text-slate-500"><tr><th className="px-2 py-2">Salesperson</th><th className="px-2 py-2 text-right">Amount</th></tr></thead><tbody>{dashboard.topSalespeople.length ? dashboard.topSalespeople.map((row, index) => <tr key={`${row.salesperson}-${index}`} className="border-b border-slate-100"><td className="px-2 py-2 font-semibold">{index === 0 && <TrendingUp className="mr-1 inline h-3.5 w-3.5 text-emerald-600" />}{row.salesperson}</td><td className="px-2 py-2 text-right font-bold">{formatCurrencyLocal(row.amount)}</td></tr>) : <EmptyTable columns={2} />}</tbody></table></div>
+            <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-3 text-sm font-bold"><span>Total Sales</span><span className="text-emerald-700">{formatCurrencyLocal(dashboard.topSalespeople.reduce((sum, row) => sum + row.amount, 0))}</span></div>
           </article>
 
           <PerformanceItemsTable title="List of Best Performance Part Number" subtitle={`YTD / MTD (${monthLabel})`} rows={dashboard.bestItems} tone="emerald" />

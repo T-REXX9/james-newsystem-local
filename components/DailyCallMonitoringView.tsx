@@ -33,6 +33,7 @@ import {
 import CustomLoadingSpinner from './CustomLoadingSpinner';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import AgentCallActivity from './AgentCallActivity';
+import CallAccountabilityPanel from './CallAccountabilityPanel';
 import CustomerProfileModal from './CustomerProfileModal';
 import ContactDetails from './ContactDetails';
 import AddContactModal from './AddContactModal';
@@ -43,7 +44,7 @@ import {
   countCallOutcomes,
   countUniqueContactsInRange,
   getStartOfMonth,
-  getStartOfToday,
+  getStartOfNextMonth,
   isWithinCurrentMonth
 } from './callMetricsUtils';
 import {
@@ -56,6 +57,7 @@ import {
   subscribeToDailyCallMonitoringUpdates
 } from '../services/dailyCallMonitoringService';
 import { createContact, fetchContactById, updateContact } from '../services/customerDatabaseLocalApiService';
+import { queueCallRequest } from '../services/callingSystemService';
 import {
   CallLogEntry,
   CallOutcome,
@@ -98,6 +100,7 @@ import {
 
 interface DailyCallMonitoringViewProps {
   currentUser: UserProfile | null;
+  initialSelectedDate?: string;
 }
 
 interface ActivityItem {
@@ -128,12 +131,12 @@ const PIE_COLORS = ['#2563eb', '#0ea5e9', '#059669', '#f97316'];
 const CUSTOMER_LOG_TOPICS: CustomerLogTopic[] = ['Sales', 'Payment', 'Comment'];
 const CUSTOMER_LOG_STATUSES: CustomerLogStatus[] = ['Note', 'Call Back', "Can't be Reach", 'No Answer'];
 
-const getCurrentMonthPurchases = (purchases: Purchase[]) =>
-  purchases.filter((purchase) => isWithinCurrentMonth(purchase.purchased_at) && purchase.status === 'paid');
+const getCurrentMonthPurchases = (purchases: Purchase[], referenceDate: Date) =>
+  purchases.filter((purchase) => isWithinCurrentMonth(purchase.purchased_at, referenceDate) && purchase.status === 'paid');
 
-const clientsNoPurchaseThisMonth = (contacts: Contact[], purchases: Purchase[]) => {
+const clientsNoPurchaseThisMonth = (contacts: Contact[], purchases: Purchase[], referenceDate: Date) => {
   const currentIds = new Set(
-    getCurrentMonthPurchases(purchases).map((purchase) => purchase.contact_id)
+    getCurrentMonthPurchases(purchases, referenceDate).map((purchase) => purchase.contact_id)
   );
   return contacts.filter((contact) => !currentIds.has(contact.id));
 };
@@ -451,7 +454,12 @@ const MasterTableRow = React.memo(({
   );
 });
 
-const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ currentUser }) => {
+const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ currentUser, initialSelectedDate }) => {
+  const selectedReferenceDate = useMemo(() => {
+    if (!initialSelectedDate) return new Date();
+    const parsed = new Date(`${initialSelectedDate}T12:00:00`);
+    return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  }, [initialSelectedDate]);
   const { addToast } = useToast();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [callLogs, setCallLogs] = useState<CallLogEntry[]>([]);
@@ -469,6 +477,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [smsRecipient, setSMSRecipient] = useState<Contact | null>(null);
   const [callContact, setCallContact] = useState<Contact | null>(null);
   const [callContactLoading, setCallContactLoading] = useState(false);
+  const [callNumberOptions, setCallNumberOptions] = useState<string[] | null>(null);
   const [callReport, setCallReport] = useState('');
   const [callReportOutcome, setCallReportOutcome] = useState<CallOutcome>('note');
   const [submittingCallReport, setSubmittingCallReport] = useState(false);
@@ -641,6 +650,42 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       })
       .finally(() => setCallContactLoading(false));
   }, [addToast]);
+
+  const handleDialRequest = useCallback(async (phone: string) => {
+    if (!phone || !callContact) return;
+
+    // Split numbers and let user pick if there are multiple
+    const numbers = phone.split('/').map(n => n.trim()).filter(Boolean);
+
+    if (numbers.length > 1) {
+      setCallNumberOptions(numbers);
+      return;
+    }
+
+    try {
+      addToast({ type: 'info', message: `Queueing call to ${numbers[0]}...` });
+      const result = await queueCallRequest(numbers[0], callContact.id);
+      if (result.queued) {
+        addToast({ type: 'success', message: 'Call queued. Check your Android phone.' });
+      }
+    } catch (error) {
+      addToast({ type: 'error', message: error instanceof Error ? error.message : 'Failed to queue call.' });
+    }
+  }, [callContact, addToast]);
+
+  const handleSelectNumberAndDial = useCallback(async (selectedPhone: string) => {
+    if (!callContact) return;
+    setCallNumberOptions(null);
+    try {
+      addToast({ type: 'info', message: `Queueing call to ${selectedPhone}...` });
+      const result = await queueCallRequest(selectedPhone, callContact.id);
+      if (result.queued) {
+        addToast({ type: 'success', message: 'Call queued. Check your Android phone.' });
+      }
+    } catch (error) {
+      addToast({ type: 'error', message: error instanceof Error ? error.message : 'Failed to queue call.' });
+    }
+  }, [callContact, addToast]);
 
   const handleCloseCallContact = useCallback(() => {
     const contactId = callContact?.id;
@@ -983,7 +1028,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     return map;
   }, [contacts, callLogs, inquiries]);
 
-  const currentMonthPurchases = useMemo(() => getCurrentMonthPurchases(purchases), [purchases]);
+  const currentMonthPurchases = useMemo(() => getCurrentMonthPurchases(purchases, selectedReferenceDate), [purchases, selectedReferenceDate]);
   const quota = currentUser?.monthly_quota || 1_500_000;
   const achievements = useMemo(
     () => currentMonthPurchases.reduce((sum, purchase) => sum + (purchase.amount || 0), 0),
@@ -995,8 +1040,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const remainingQuota = achievementsValue !== null ? Math.max(0, quota - achievementsValue) : null;
 
   const noPurchaseContacts = useMemo(
-    () => clientsNoPurchaseThisMonth(contacts, purchases),
-    [contacts, purchases]
+    () => clientsNoPurchaseThisMonth(contacts, purchases, selectedReferenceDate),
+    [contacts, purchases, selectedReferenceDate]
   );
   const noPurchaseSet = useMemo(() => new Set(noPurchaseContacts.map((contact) => contact.id)), [noPurchaseContacts]);
   const searchScopedNoPurchase = useMemo(
@@ -1279,32 +1324,42 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     [customerLogs]
   );
 
-  const todayStart = useMemo(() => getStartOfToday(), []);
-  const monthStart = useMemo(() => getStartOfMonth(), []);
+  const todayStart = useMemo(() => {
+    const start = new Date(selectedReferenceDate);
+    start.setHours(0, 0, 0, 0);
+    return start;
+  }, [selectedReferenceDate]);
+  const tomorrowStart = useMemo(() => {
+    const end = new Date(todayStart);
+    end.setDate(end.getDate() + 1);
+    return end;
+  }, [todayStart]);
+  const monthStart = useMemo(() => getStartOfMonth(selectedReferenceDate), [selectedReferenceDate]);
+  const nextMonthStart = useMemo(() => getStartOfNextMonth(selectedReferenceDate), [selectedReferenceDate]);
 
   const callsToday = useMemo(
-    () => countCallLogsInRange(callLogs, todayStart),
-    [callLogs, todayStart]
+    () => countCallLogsInRange(callLogs, todayStart, tomorrowStart),
+    [callLogs, todayStart, tomorrowStart]
   );
 
   const smsToday = useMemo(
-    () => countCallLogsByChannelInRange(callLogs, 'text', todayStart),
-    [callLogs, todayStart]
+    () => countCallLogsByChannelInRange(callLogs, 'text', todayStart, tomorrowStart),
+    [callLogs, todayStart, tomorrowStart]
   );
 
   const clientsContactedToday = useMemo(
-    () => countUniqueContactsInRange(callLogs, inquiries, todayStart),
-    [callLogs, inquiries, todayStart]
+    () => countUniqueContactsInRange(callLogs, inquiries, todayStart, tomorrowStart),
+    [callLogs, inquiries, todayStart, tomorrowStart]
   );
 
   const callsThisMonth = useMemo(
-    () => countCallLogsInRange(callLogs, monthStart),
-    [callLogs, monthStart]
+    () => countCallLogsInRange(callLogs, monthStart, nextMonthStart),
+    [callLogs, monthStart, nextMonthStart]
   );
 
   const contactsThisMonth = useMemo(
-    () => countUniqueContactsInRange(callLogs, inquiries, monthStart),
-    [callLogs, inquiries, monthStart]
+    () => countUniqueContactsInRange(callLogs, inquiries, monthStart, nextMonthStart),
+    [callLogs, inquiries, monthStart, nextMonthStart]
   );
   const conversionRate = useMemo(
     () => (contactsThisMonth ? Math.round((currentMonthPurchases.length / contactsThisMonth) * 100) : 0),
@@ -1317,11 +1372,10 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         (log) =>
           log.outcome === 'follow_up' &&
           log.next_action_due &&
-          Date.parse(log.next_action_due) <= Date.now()
+          Date.parse(log.next_action_due) <= selectedReferenceDate.getTime()
       ).length,
-    [callLogs]
+        [callLogs, selectedReferenceDate]
   );
-
   const callOutcomeBreakdown = useMemo(() => {
     const counts = countCallOutcomes(callLogs);
     return [
@@ -1564,6 +1618,9 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             All customers assigned to <span className="font-semibold">{agentDisplayName}</span>, ordered by priority
           </p>
+          {initialSelectedDate && <p className="mt-1 text-xs font-semibold text-blue-700 dark:text-blue-300">
+            Opened from dashboard date: {new Date(`${initialSelectedDate}T12:00:00`).toLocaleDateString('en-US')}
+          </p>}
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -1608,6 +1665,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           </button>
         </div>
       </header>
+
+      <CallAccountabilityPanel title="Phone and hardware call activity" compact />
 
       {loadError && (
         <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-900 rounded-xl p-4 shadow-sm flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
@@ -2154,6 +2213,52 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       )}
 
 
+      {callNumberOptions && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="flex w-full max-w-sm flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900"
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 p-4 dark:border-slate-800">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Select phone number</h3>
+              <button
+                type="button"
+                onClick={() => setCallNumberOptions(null)}
+                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-2">
+              <p className="text-sm text-slate-600 dark:text-slate-300 mb-3">
+                Multiple numbers were found for this contact. Which one would you like to dial?
+              </p>
+              {callNumberOptions.map((num, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handleSelectNumberAndDial(num)}
+                  className="w-full flex items-center justify-between rounded-lg border border-slate-200 p-3 text-left hover:border-brand-blue hover:bg-blue-50 dark:border-slate-700 dark:hover:border-blue-900 dark:hover:bg-blue-900/20"
+                >
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{num}</span>
+                  <Phone className="h-4 w-4 text-slate-400" />
+                </button>
+              ))}
+            </div>
+            <div className="border-t border-slate-200 p-4 dark:border-slate-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setCallNumberOptions(null)}
+                className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {callContact && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-2 backdrop-blur-sm sm:p-4">
           <div
@@ -2187,7 +2292,19 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             <div data-testid="call-contact-scroll-area" className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3 sm:p-5">
               <div className="grid gap-4 md:grid-cols-2">
               <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-                <h4 className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">Customer contact</h4>
+                <div className="mb-3 flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">Customer contact</h4>
+                  {callPhoneNumber && (
+                    <button
+                      type="button"
+                      onClick={() => handleDialRequest(callPhoneNumber)}
+                      className="flex items-center gap-1.5 rounded-md bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
+                    >
+                      <Phone className="h-3 w-3" />
+                      Request call
+                    </button>
+                  )}
+                </div>
                 <div className="space-y-2 text-sm text-slate-700 dark:text-slate-200">
                   <p className="font-semibold text-slate-900 dark:text-white">{callContact.company}</p>
                   <p className="flex items-center gap-2"><Phone className="h-4 w-4 text-slate-400" />{callPhoneNumber || 'No phone number on file'}</p>
@@ -2196,7 +2313,19 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               </section>
 
               <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-                <h4 className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">Contact person</h4>
+                <div className="mb-3 flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">Contact person</h4>
+                  {!callContactLoading && callContactPerson && (callContactPerson.mobile || callContactPerson.telephone) && (
+                    <button
+                      type="button"
+                      onClick={() => handleDialRequest(callContactPerson.mobile || callContactPerson.telephone)}
+                      className="flex items-center gap-1.5 rounded-md bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
+                    >
+                      <Phone className="h-3 w-3" />
+                      Request call
+                    </button>
+                  )}
+                </div>
                 {callContactLoading ? (
                   <div className="flex items-center gap-2 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />Loading contact person…</div>
                 ) : callContactPerson ? (

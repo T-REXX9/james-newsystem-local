@@ -1,7 +1,7 @@
 import React, { Component, ReactNode, useEffect, useMemo, useState } from 'react';
 import { ArrowUp, BarChart3, Clock3, FileText, PackageSearch, ReceiptText, Table2, Target, Users, Wallet } from 'lucide-react';
 import OwnerLiveCallMonitoringView from './OwnerLiveCallMonitoringView';
-import DailyCallMonitoringMiniSidebar, { DailyCallOwnerViewMode } from './DailyCallMonitoringMiniSidebar';
+type DailyCallOwnerViewMode = 'master-list' | 'chart' | 'operations';
 import DailyCallMasterListView from './DailyCallMasterListView';
 import { fetchDailyCallMasterList } from '../services/dailyCallMonitoringService';
 import { getAllSalesOrders } from '../services/salesOrderLocalApiService';
@@ -12,6 +12,7 @@ import { getCentralStock } from '../utils/productStock';
 
 interface OwnerDailyCallMonitoringUnifiedViewProps {
   currentUser: UserProfile | null;
+  initialSelectedDate?: string;
 }
 
 interface LocalErrorBoundaryProps {
@@ -77,11 +78,11 @@ class LocalErrorBoundary extends Component<LocalErrorBoundaryProps, LocalErrorBo
   }
 }
 
-const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnifiedViewProps> = ({ currentUser }) => {
+const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnifiedViewProps> = ({ currentUser, initialSelectedDate }) => {
   const [activeView, setActiveView] = useState<DailyCallOwnerViewMode>('master-list');
   const [summary, setSummary] = useState({ current: 0, totalPotential: 0 });
 
-  const handleSidebarViewChange = (view: DailyCallOwnerViewMode) => {
+  const handleViewChange = (view: DailyCallOwnerViewMode) => {
     if (view === 'operations') {
       navigateToModule('operations-management-dashboard');
       return;
@@ -237,10 +238,20 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
 
   return (
     <div className="h-full min-h-0 overflow-hidden bg-slate-50 dark:bg-slate-950">
-      <div className="flex h-full min-h-0 w-full flex-col lg:flex-row">
-        <DailyCallMonitoringMiniSidebar activeView={activeView} onChangeView={handleSidebarViewChange} currentUser={currentUser} />
+      <section className="flex h-full min-h-0 w-full min-w-0 flex-col gap-3 overflow-hidden p-2 sm:p-3 xl:p-4">
+        <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Owner workspace</p>
+            <h1 className="text-xl font-extrabold text-slate-900 dark:text-white">Daily Call Monitoring</h1>
+            {initialSelectedDate && <p className="mt-1 text-xs font-semibold text-blue-700 dark:text-blue-300">Opened from dashboard date: {new Date(`${initialSelectedDate}T12:00:00`).toLocaleDateString('en-US')}</p>}
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Daily call monitoring views">
+            <button type="button" role="tab" aria-selected={activeView === 'master-list'} onClick={() => handleViewChange('master-list')} className={`rounded-lg px-3 py-2 text-sm font-bold transition ${activeView === 'master-list' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}>Master List</button>
+            <button type="button" role="tab" aria-selected={activeView === 'chart'} onClick={() => handleViewChange('chart')} className={`rounded-lg px-3 py-2 text-sm font-bold transition ${activeView === 'chart' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}>Chart</button>
+            <button type="button" role="tab" aria-selected={false} onClick={() => handleViewChange('operations')} className="rounded-lg px-3 py-2 text-sm font-bold text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">Operations Dashboard</button>
+          </div>
+        </header>
 
-        <section className={`min-h-0 min-w-0 flex-1 p-3 md:p-4 2xl:p-6 ${activeView === 'master-list' ? 'flex flex-col gap-4 overflow-hidden' : 'flex flex-col gap-4 overflow-hidden'}`}>
           {activeView !== 'master-list' && (
             <header className="shrink-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
@@ -285,8 +296,8 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
 
           {activeView === 'master-list' && (
             <header
-              className="shrink-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900"
-              style={{ zoom: 1.05, width: '95.2381%' } as React.CSSProperties}
+              className="shrink-0 rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900"
+
             >
               <div className="mb-3 flex items-center justify-between gap-4">
                 <div>
@@ -298,12 +309,12 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
                 </div>
                 <h3 className="text-sm font-bold uppercase tracking-wide text-slate-800 dark:text-slate-100">Quick Summary (MTD)</h3>
               </div>
-              <div className="grid grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
                 {quickSummaryItems.map(({ label, value, Icon, tone, iconClass }) => (
                   <article key={label} className={`flex min-h-[78px] items-center justify-between rounded-xl border px-3 py-2 ${tone}`}>
                     <div className="min-w-0">
-                      <p className="text-[11px] font-bold">{label}</p>
-                      <p className="mt-2 truncate text-lg font-extrabold text-slate-950">{value}</p>
+                      <p className="text-xs font-bold">{label}</p>
+                      <p className="mt-1 truncate text-xl font-extrabold text-slate-950">{value}</p>
                     </div>
                     <Icon className={`h-6 w-6 shrink-0 ${iconClass}`} />
                   </article>
@@ -320,9 +331,8 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
                 <OwnerLiveCallMonitoringView currentUser={currentUser} />
               )}
             </LocalErrorBoundary>
-          </div>
-        </section>
-      </div>
+        </div>
+      </section>
     </div>
   );
 };

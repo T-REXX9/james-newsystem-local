@@ -63,6 +63,11 @@ describe('InventoryReport description filter', () => {
     });
     expect(await screen.findByText('Inventory Report')).toBeInTheDocument();
     expect(screen.getByText('NOZZLE')).toBeInTheDocument();
+
+    // Verify formatted row cost, value, and footer total value
+    expect(screen.getByText('₱100.00')).toBeInTheDocument();
+    expect(screen.getAllByText('₱1,200.00').length).toBe(2);
+    expect(screen.getByText('Total Value:')).toBeInTheDocument();
   });
 
   it('resets the description filter to All descriptions', async () => {

@@ -648,7 +648,13 @@ const CreateModal: React.FC<{
 /* -------------------------------------------------------------------------- */
 /*  Main Page                                                                  */
 /* -------------------------------------------------------------------------- */
-const SalesReturnPage: React.FC = () => {
+interface SalesReturnPageProps {
+  initialMonth?: string;
+  initialYear?: string;
+  initialStatus?: string;
+}
+
+const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initialYear, initialStatus }) => {
   const today = new Date();
   const [rows, setRows] = useState<SalesReturnRecord[]>([]);
   const [selectedRefno, setSelectedRefno] = useState('');
@@ -662,9 +668,9 @@ const SalesReturnPage: React.FC = () => {
 
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('All');
-  const [month, setMonth] = useState(String(today.getMonth() + 1).padStart(2, '0'));
-  const [year, setYear] = useState(String(today.getFullYear()));
+  const [status, setStatus] = useState(initialStatus || 'All');
+  const [month, setMonth] = useState(initialMonth || String(today.getMonth() + 1).padStart(2, '0'));
+  const [year, setYear] = useState(initialYear || String(today.getFullYear()));
 
   const [page, setPage] = useState(1);
   const [perPage] = useState(50);
@@ -675,6 +681,14 @@ const SalesReturnPage: React.FC = () => {
   const [showSourceItems, setShowSourceItems] = useState(false);
   const [sourceItems, setSourceItems] = useState<SourceItem[]>([]);
   const [loadingSource, setLoadingSource] = useState(false);
+
+  useEffect(() => {
+    if (!initialMonth || !initialYear) return;
+    setMonth(String(initialMonth).padStart(2, '0'));
+    setYear(String(initialYear));
+    if (initialStatus) setStatus(initialStatus);
+    setPage(1);
+  }, [initialMonth, initialStatus, initialYear]);
 
   // Confirm dialogs
   const [confirmAction, setConfirmAction] = useState<{

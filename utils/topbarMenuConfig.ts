@@ -8,6 +8,7 @@ import {
   Settings,
   Users,
   MessageSquare,
+  Phone,
   Map,
   Tag,
   Bot,
@@ -21,6 +22,7 @@ export interface TopbarMenuItem {
   label: string;
   route: string;
   icon: LucideIcon;
+  masterOnly?: boolean;
 }
 
 export interface TopbarSubmenu {
@@ -490,6 +492,13 @@ export const TOPBAR_MENU_CONFIG: TopbarMainMenu[] = [
             label: 'SMS Templates',
             route: 'communication-sms-templates',
             icon: MessageSquare,
+          },
+          {
+            id: 'communication-call-auto-replies',
+            label: 'Missed-Call Replies',
+            route: 'communication-call-auto-replies',
+            icon: Phone,
+            masterOnly: true,
           },
         ],
       },

@@ -67,8 +67,11 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
   }, [user]);
 
   const filteredMenus = useMemo(() => {
+    const role = String(user?.role || '').trim().toLowerCase();
+    const isMasterUser = String(user?.user_type || '') === '1'
+      || ['owner', 'company owner', 'master user', 'main'].includes(role);
     const filterItems = (items: TopbarMenuItem[]) =>
-      items.filter((item) => canAccessRoute(item.route));
+      items.filter((item) => (!item.masterOnly || isMasterUser) && canAccessRoute(item.route));
 
     const filterSubmenus = (submenus: TopbarSubmenu[]) =>
       submenus

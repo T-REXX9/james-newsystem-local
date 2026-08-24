@@ -218,7 +218,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const [loadingCustomerId, setLoadingCustomerId] = useState<string | null>(null);
   const [activeCategoryId, setActiveCategoryId] = useState<CategoryId>('priority');
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(15);
   const [currentVipFilter, setCurrentVipFilter] = useState('all');
   const [nextVipFilter, setNextVipFilter] = useState('all');
   const [lastPurchaseFilter, setLastPurchaseFilter] = useState('all');
@@ -407,7 +407,6 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     <div
       ref={dashboardRef}
       tabIndex={-1}
-      style={{ zoom: 1.05, width: '95.2381%' } as React.CSSProperties}
       className="w-full min-w-0 space-y-3 bg-white text-[#0f1f46] outline-none"
       data-testid="master-list-dashboard"
     >
@@ -571,9 +570,9 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 </button>
               </div>
             </div>
-            <div className="min-h-0 flex-1 overflow-hidden">
-              <table className="w-full table-fixed text-left text-[13px]">
-                <thead className="bg-slate-50 text-[11px] text-slate-600">
+            <div className="min-h-0 flex-1 overflow-auto">
+              <table className="w-full table-fixed text-left text-sm">
+                <thead className="bg-slate-50 text-xs text-slate-600">
                   <tr>
                     <th className="w-12 px-3 py-2.5">#</th>
                     <th className="w-[250px] px-2 py-2.5">Customer / Mobile</th>
@@ -611,38 +610,38 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                             onClick={() => openCustomerDetails(row)}
                             disabled={loadingCustomerId === row.id}
                             aria-label={`View details for ${row.shopName}`}
-                            className="line-clamp-2 text-left text-[13px] font-bold leading-tight text-blue-950 underline-offset-2 hover:text-blue-700 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-60"
+                            className="line-clamp-2 text-left text-sm font-bold leading-tight text-blue-950 underline-offset-2 hover:text-blue-700 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-60"
                           >
                             {loadingCustomerId === row.id && <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />}
                             {row.shopName}
                           </button>
-                          <p className="mt-0.5 truncate text-[12px] font-semibold text-blue-700">{row.contactNumber}</p>
+                          <p className="mt-0.5 truncate text-xs font-semibold text-blue-700">{row.contactNumber}</p>
                         </td>
                         <td className="px-2 py-2.5 text-center">
                           <div className={`mx-auto inline-flex min-w-24 items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-[12px] font-bold uppercase ${vip.className}`}>
                             {VipIcon && <VipIcon className="h-3.5 w-3.5" />}
                             {vip.label}
                           </div>
-                          <p className="mt-1 text-[10px] text-slate-500">{vip.sublabel}</p>
+                            <p className="mt-1 text-xs text-slate-500">{vip.sublabel}</p>
                           {(activeCategory.id === 'priority' || activeCategory.id === 'recovery') && (
-                            <p className="mt-1 text-[10px] font-semibold text-blue-700">{amountToNextVip(row) > 0 ? `${peso.format(amountToNextVip(row))} to next VIP` : 'Highest VIP reached'}</p>
+                            <p className="mt-1 text-xs font-semibold text-blue-700">{amountToNextVip(row) > 0 ? `${peso.format(amountToNextVip(row))} to next VIP` : 'Highest VIP reached'}</p>
                           )}
                         </td>
                         <td className="px-2 py-2.5">
-                          <p className="text-[15px] font-bold text-blue-950">{peso.format(row.averageMonthlySales)} <span className="text-[12px] font-medium text-slate-500">/ month</span></p>
+                          <p className="text-base font-bold text-blue-950">{peso.format(row.averageMonthlySales)} <span className="text-[12px] font-medium text-slate-500">/ month</span></p>
                           <p className="mt-0.5 text-[11px] text-slate-500">(Based on {row.averageMonthlySalesMonthCount} months{row.averageMonthlySalesYear ? ` in ${row.averageMonthlySalesYear}` : ''})</p>
-                          <p className={`mt-0.5 inline-flex items-center gap-1 text-[11px] font-bold ${trend.className}`}>
+                            <p className={`mt-0.5 inline-flex items-center gap-1 text-xs font-bold ${trend.className}`}>
                             <TrendIcon className="h-3.5 w-3.5 fill-current" />
                             {trend.label}
                           </p>
                         </td>
-                        <td className="px-2 py-2.5 text-center text-[15px] font-bold text-emerald-700">{peso.format(row.currentMonthSales)}</td>
+                        <td className="px-2 py-2.5 text-center text-base font-bold text-emerald-700">{peso.format(row.currentMonthSales)}</td>
                         <td className="px-2 py-2.5">
-                          <p className="text-[13px] font-medium">{row.lastPurchaseDate}</p>
+                          <p className="text-sm font-medium">{row.lastPurchaseDate}</p>
                           <p className="mt-0.5 text-[11px] text-slate-500">{ageLabel(row)}</p>
                         </td>
-                        <td className="break-words px-2 py-2.5 text-[12px] font-bold">{row.assignedTo}</td>
-                        <td className="break-words px-2 py-2.5 text-[12px] font-semibold text-slate-600">
+                        <td className="break-words px-2 py-2.5 text-sm font-bold">{row.assignedTo}</td>
+                        <td className="break-words px-2 py-2.5 text-sm font-semibold text-slate-600">
                           {row.verification === 'Verified' ? (row.verifiedBy || 'Verification recorded') : '—'}
                         </td>
                         <td className="px-2 py-2.5">

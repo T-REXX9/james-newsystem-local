@@ -164,6 +164,29 @@ db_query_scalar() {
   return 1
 }
 
+apply_required_database_migrations() {
+  local notification_migration="$API_DIR/migrations/014_optimize_notification_indexes.sql"
+
+  if [[ ! -f "$notification_migration" ]]; then
+    echo "ERROR: Required notification migration not found: $notification_migration" >&2
+    return 1
+  fi
+
+  echo "Applying notification performance indexes..."
+  if mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" "-p$DB_PASS" "$DB_NAME" < "$notification_migration" 2>/dev/null; then
+    echo "  [OK] Notification indexes are present"
+    return 0
+  fi
+
+  if sudo mysql "$DB_NAME" < "$notification_migration"; then
+    echo "  [OK] Notification indexes are present"
+    return 0
+  fi
+
+  echo "ERROR: Failed to apply notification performance indexes." >&2
+  return 1
+}
+
 validate_stack() {
   local api_health_url="$1"
   local benchmark_url="$2"
@@ -898,9 +921,10 @@ run_production_mode() {
   step "Importing MySQL data dump if provided"
   import_mysql_dump_if_available
 
-  step "Writing production environment files"
+  step "Writing production environment files and applying database migrations"
   write_production_api_env
   write_production_web_env
+  apply_required_database_migrations
 
   step "Installing frontend and realtime npm dependencies"
   (cd "$WEB_DIR" && npm install)
@@ -947,9 +971,10 @@ run_production_update_mode() {
   fi
   DB_NAME="${DB_NAME:-topnotch_migrate}"
 
-  step "Refreshing production environment files"
+  step "Refreshing production environment files and applying database migrations"
   write_production_api_env
   write_production_web_env
+  apply_required_database_migrations
 
   step "Installing/updating npm dependencies"
   (cd "$WEB_DIR" && npm install)
@@ -1166,9 +1191,10 @@ if [[ "$MODE" == "systemd-init" ]]; then
 fi
 
 if [[ "$MODE" == "update" ]]; then
-  step "Writing API and web environment files"
+  step "Writing API and web environment files and applying database migrations"
   write_api_env
   write_web_env
+  apply_required_database_migrations
 
   step "Installing/updating frontend npm dependencies"
   (cd "$WEB_DIR" && npm install)
@@ -1317,8 +1343,9 @@ else
   echo "Provide one via DB_DUMP_PATH=/path/to/topnotch.sql or DB_DUMP_URL=..."
 fi
 
-step "Writing API environment file"
+step "Writing API environment file and applying database migrations"
 write_api_env
+apply_required_database_migrations
 
 step "Writing web environment file"
 write_web_env

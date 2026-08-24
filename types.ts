@@ -809,6 +809,7 @@ export interface IncidentReport {
 }
 
 export interface CreateIncidentReportInput {
+  id?: string;
   contact_id: string;
   report_date: string;
   incident_date: string;

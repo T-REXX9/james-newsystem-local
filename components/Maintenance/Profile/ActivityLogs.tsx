@@ -26,9 +26,11 @@ const normalizeActionTone = (action: string): string => {
 
 interface ActivityLogsProps {
   title?: string;
+  initialDateFrom?: string;
+  initialDateTo?: string;
 }
 
-export default function ActivityLogs({ title = 'Activity Logs' }: ActivityLogsProps) {
+export default function ActivityLogs({ title = 'Activity Logs', initialDateFrom, initialDateTo }: ActivityLogsProps) {
   const [logs, setLogs] = useState<ActivityLogRecord[]>([]);
   const [users, setUsers] = useState<ActivityLogUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,13 +40,20 @@ export default function ActivityLogs({ title = 'Activity Logs' }: ActivityLogsPr
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [userId, setUserId] = useState('All');
   const [action, setAction] = useState('All');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [dateFrom, setDateFrom] = useState(initialDateFrom || '');
+  const [dateTo, setDateTo] = useState(initialDateTo || '');
 
   const [page, setPage] = useState(1);
   const [perPage] = useState(100);
   const [hasMore, setHasMore] = useState(false);
   const [totalRows, setTotalRows] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!initialDateFrom && !initialDateTo) return;
+    setDateFrom(initialDateFrom || '');
+    setDateTo(initialDateTo || '');
+    setPage(1);
+  }, [initialDateFrom, initialDateTo]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(searchTerm.trim()), 250);

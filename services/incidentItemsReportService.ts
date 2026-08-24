@@ -83,7 +83,14 @@ const parseApiErrorMessage = async (response: Response): Promise<string> => {
 };
 
 const requestApi = async (url: string): Promise<any> => {
-  const response = await fetch(url);
+  const session = getLocalAuthSession();
+  if (!session?.token) {
+    throw new Error('Your session has expired. Please sign in again before viewing the incident report.');
+  }
+
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${session.token}` },
+  });
   if (!response.ok) {
     throw new Error(await parseApiErrorMessage(response));
   }

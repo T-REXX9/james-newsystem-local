@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { CreditCard, FileText } from 'lucide-react';
 import {
   CollectionSummaryDateType,
@@ -34,14 +34,28 @@ const formatTimestamp = (value?: Date | null): string => {
 const INPUT_CLASS = 'w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 text-sm';
 const SELECT_CLASS = 'px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 text-sm';
 
-const CollectionSummaryView: React.FC = () => {
-  const [dateType, setDateType] = useState<CollectionSummaryDateType>('today');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+interface CollectionSummaryViewProps {
+  initialDateType?: CollectionSummaryDateType;
+  initialDateFrom?: string;
+  initialDateTo?: string;
+}
+
+const CollectionSummaryView: React.FC<CollectionSummaryViewProps> = ({ initialDateType, initialDateFrom, initialDateTo }) => {
+  const [dateType, setDateType] = useState<CollectionSummaryDateType>(initialDateType || 'today');
+  const [dateFrom, setDateFrom] = useState(initialDateFrom || '');
+  const [dateTo, setDateTo] = useState(initialDateTo || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [report, setReport] = useState<CollectionSummaryResponse | null>(null);
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
+
+  useEffect(() => {
+    if (!initialDateType && !initialDateFrom && !initialDateTo) return;
+    setDateType(initialDateType || 'today');
+    setDateFrom(initialDateFrom || '');
+    setDateTo(initialDateTo || '');
+    setReport(null);
+  }, [initialDateFrom, initialDateTo, initialDateType]);
 
   const reportRangeLabel = useMemo(() => {
     if (!report) return '';
@@ -72,6 +86,11 @@ const CollectionSummaryView: React.FC = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!initialDateType || !initialDateFrom || !initialDateTo) return;
+    void generate();
+  }, [initialDateFrom, initialDateTo, initialDateType]);
 
   const handleBackToOption = () => {
     setReport(null);

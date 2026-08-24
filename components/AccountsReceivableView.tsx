@@ -57,7 +57,13 @@ const flattenRows = (report: ArResponse | null): Array<ArRow & { customer: strin
   );
 };
 
-const AccountsReceivableView: React.FC = () => {
+interface AccountsReceivableViewProps {
+  initialDateType?: ArDateType;
+  initialDateFrom?: string;
+  initialDateTo?: string;
+}
+
+const AccountsReceivableView: React.FC<AccountsReceivableViewProps> = ({ initialDateType, initialDateFrom, initialDateTo }) => {
   const [selectedCustomer, setSelectedCustomer] = useState('');
   const [customers, setCustomers] = useState<LedgerCustomer[]>([]);
   const [selectedCustomerOption, setSelectedCustomerOption] = useState<LedgerCustomer | null>(null);
@@ -71,6 +77,14 @@ const AccountsReceivableView: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [report, setReport] = useState<ArResponse | null>(null);
+
+  useEffect(() => {
+    if (!initialDateType && !initialDateFrom && !initialDateTo) return;
+    setDateType(initialDateType || 'all');
+    setDateFrom(initialDateFrom || '');
+    setDateTo(initialDateTo || '');
+    setReport(null);
+  }, [initialDateFrom, initialDateTo, initialDateType]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedCustomerSearch(customerSearch.trim()), 220);
@@ -134,6 +148,11 @@ const AccountsReceivableView: React.FC = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!initialDateType || !initialDateFrom || !initialDateTo) return;
+    void generate();
+  }, [initialDateFrom, initialDateTo, initialDateType]);
 
   const customerOptions = useMemo(() => {
     if (!selectedCustomerOption || customers.some((customer) => customer.sessionId === selectedCustomerOption.sessionId)) {

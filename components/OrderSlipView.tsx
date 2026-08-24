@@ -37,6 +37,9 @@ import { PageHeader, RecordTrustStrip, WorkflowGuidance } from './common/PageSca
 interface OrderSlipViewProps {
   initialSlipId?: string;
   initialSlipRefNo?: string;
+  initialMonth?: string;
+  initialYear?: string;
+  initialStatus?: 'all' | OrderSlipStatus;
 }
 
 const MONTH_OPTIONS = [
@@ -77,14 +80,14 @@ const formatCurrency = (value?: number | string | null): string => {
   return `₱${amount.toLocaleString()}`;
 };
 
-const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSlipRefNo }) => {
+const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSlipRefNo, initialMonth, initialYear, initialStatus }) => {
   const { addToast } = useToast();
   const [selectedSlip, setSelectedSlip] = useState<OrderSlip | null>(null);
-  const [statusFilter, setStatusFilter] = useState<'all' | OrderSlipStatus>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | OrderSlipStatus>(initialStatus || 'all');
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [month, setMonth] = useState<number | undefined>(undefined);
-  const [year, setYear] = useState<number | undefined>(undefined);
+  const [month, setMonth] = useState<number | undefined>(() => initialMonth ? Number(initialMonth) : undefined);
+  const [year, setYear] = useState<number | undefined>(() => initialYear ? Number(initialYear) : undefined);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [finalizing, setFinalizing] = useState(false);
@@ -102,6 +105,14 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
   const [trackingNoDraft, setTrackingNoDraft] = useState('');
   const [trackingSaveLoading, setTrackingSaveLoading] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
+
+  useEffect(() => {
+    if (!initialMonth || !initialYear) return;
+    setMonth(Number(initialMonth));
+    setYear(Number(initialYear));
+    if (initialStatus) setStatusFilter(initialStatus);
+    setPage(1);
+  }, [initialMonth, initialStatus, initialYear]);
 
   const isAdmin = useMemo(() => {
     const session = getLocalAuthSession();

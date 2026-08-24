@@ -37,6 +37,7 @@ import CustomerAutocomplete from './CustomerAutocomplete';
 import SearchableSelect from './SearchableSelect';
 import SalesInquiryPrintPreview from './SalesInquiryPrintPreview';
 import StatusBadge from './StatusBadge';
+import CallCustomerButton from './CallCustomerButton';
 import { useToast } from './ToastProvider';
 import ValidationSummary from './ValidationSummary';
 import { validateNumeric, validateRequired } from '../utils/formValidation';
@@ -91,6 +92,10 @@ interface SalesInquiryViewProps {
   initialContactId?: string;
   initialInquiryId?: string;
   initialPrefillToken?: string;
+  initialFilterDay?: string;
+  initialFilterMonth?: string;
+  initialFilterYear?: string;
+  initialDateFilterApplied?: boolean;
 }
 
 const inquiryListColumnWidths = [
@@ -104,7 +109,15 @@ const inquiryListColumnWidths = [
 ];
 const SALES_INQUIRY_TAB_ID = 'sales-transaction-sales-inquiry';
 
-const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, initialInquiryId, initialPrefillToken }) => {
+const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
+  initialContactId,
+  initialInquiryId,
+  initialPrefillToken,
+  initialFilterDay,
+  initialFilterMonth,
+  initialFilterYear,
+  initialDateFilterApplied,
+}) => {
   const { addToast } = useToast();
   const lastAppliedPrefillRef = React.useRef<string | null>(null);
   // Data
@@ -113,12 +126,20 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
   const [statusFilter, setStatusFilter] = useState<'all' | SalesInquiryStatus>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [filterDay, setFilterDay] = useState('');
-  const [filterMonth, setFilterMonth] = useState(() => String(new Date().getMonth() + 1));
-  const [filterYear, setFilterYear] = useState(() => String(new Date().getFullYear()));
-  const [dateFilterApplied, setDateFilterApplied] = useState(false);
+  const [filterDay, setFilterDay] = useState(initialFilterDay || '');
+  const [filterMonth, setFilterMonth] = useState(initialFilterMonth || String(new Date().getMonth() + 1));
+  const [filterYear, setFilterYear] = useState(initialFilterYear || String(new Date().getFullYear()));
+  const [dateFilterApplied, setDateFilterApplied] = useState(Boolean(initialDateFilterApplied));
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [loadedSnapshot, setLoadedSnapshot] = useState<LoadedFormSnapshot | null>(null);
+
+  useEffect(() => {
+    if (!initialFilterDay && !initialFilterMonth && !initialFilterYear && initialDateFilterApplied === undefined) return;
+    setFilterDay(initialFilterDay || '');
+    setFilterMonth(initialFilterMonth || '');
+    setFilterYear(initialFilterYear || '');
+    setDateFilterApplied(Boolean(initialDateFilterApplied));
+  }, [initialDateFilterApplied, initialFilterDay, initialFilterMonth, initialFilterYear]);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window === 'undefined') return true;
     const savedTheme = window.localStorage?.getItem('theme');
@@ -1738,6 +1759,16 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, i
                         onSelect={(customer) => handleCustomerSelect(customer)}
                         inputClassName={validationErrors.customer ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'}
                       />
+                      <div className="mt-2 flex items-center gap-2">
+                        <CallCustomerButton
+                          phoneNumber={selectedCustomer?.phone || selectedCustomer?.mobile}
+                          customerId={selectedCustomer?.id}
+                          label="Call"
+                        />
+                        {selectedCustomer && !selectedCustomer.phone && !selectedCustomer.mobile && (
+                          <span className="text-[11px] text-slate-500">No phone number on file</span>
+                        )}
+                      </div>
                       {validationErrors.customer && <p className="mt-1 text-[11px] text-rose-600">{validationErrors.customer}</p>}
                     </td>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Date:</td>

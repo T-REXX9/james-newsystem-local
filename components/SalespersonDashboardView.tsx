@@ -31,6 +31,7 @@ import { fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { getAllSalesInquiries } from '../services/salesInquiryLocalApiService';
 import { getAllSalesOrders } from '../services/salesOrderLocalApiService';
 import { fetchStaffById } from '../services/staffLocalApiService';
+import CallAccountabilityPanel from './CallAccountabilityPanel';
 
 interface SalespersonDashboardViewProps {
     currentUser: UserProfile | null;
@@ -498,6 +499,8 @@ const SalespersonDashboardView: React.FC<SalespersonDashboardViewProps> = ({
                     </p>
                 </div>
             </section>
+
+            <CallAccountabilityPanel title="My phone and call activity" compact limit={6} />
 
             {/* Call Lists */}
             <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">

@@ -22,6 +22,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 import { LineChartPro as MuiLineChartPro } from '@mui/x-charts-pro/LineChartPro';
+import CallAccountabilityPanel from './CallAccountabilityPanel';
 
 export type CustomerCategoryId = 'priority' | 'recovery' | 'verified' | 'unverified';
 
@@ -300,6 +301,13 @@ const OwnerDashboardTemplate: React.FC<OwnerDashboardTemplateProps> = ({
           </details>
         </div>
       </header>
+
+      <CallAccountabilityPanel
+        title="Staff phone and call accountability"
+        compact
+        agentId={selectedAgentId || undefined}
+        limit={10}
+      />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <KpiCard

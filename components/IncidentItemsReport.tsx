@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Download,
@@ -65,7 +65,8 @@ const IncidentItemsReport: React.FC = () => {
   });
   const [reportData, setReportData] = useState<IncidentItemsReportData | null>(null);
   const [selectedRow, setSelectedRow] = useState<IncidentItemsReportRow | null>(null);
-  const [loading, setLoading] = useState(false);
+  const initialLoadRef = useRef(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const loadReport = useCallback(async (nextFilters: IncidentItemsReportFilters = filters) => {
@@ -81,6 +82,12 @@ const IncidentItemsReport: React.FC = () => {
       setLoading(false);
     }
   }, [filters]);
+
+  useEffect(() => {
+    if (initialLoadRef.current) return;
+    initialLoadRef.current = true;
+    void loadReport(filters);
+  }, [filters, loadReport]);
 
   const updateFilter = <K extends keyof IncidentItemsReportFilters>(key: K, value: IncidentItemsReportFilters[K]) => {
     setFilters((prev) => ({ ...prev, [key]: value, page: 1 }));
@@ -287,7 +294,7 @@ const IncidentItemsReport: React.FC = () => {
                 ) : rows.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-3 py-12 text-center text-slate-500">
-                      Generate the report to view incident items.
+                      {reportData ? 'No incident items match the current filters.' : 'Generate the report to view incident items.'}
                     </td>
                   </tr>
                 ) : (

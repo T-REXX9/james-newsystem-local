@@ -13,6 +13,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
+import { formatCurrency } from '../utils/formatUtils';
 
 const tableCellClass = 'border border-[#ddd] px-2 py-[6px] text-[12px] text-[#333] print:border-black';
 const tableHeadClass = 'border border-[#ddd] bg-[#f5f5f5] px-2 py-2 text-[12px] font-semibold uppercase text-[#333] print:border-black';
@@ -28,12 +29,12 @@ const InventoryRow = memo(({ row, index }: { row: InventoryReportRow; index: num
     <td className={tableCellClass}>{row.partNo || '—'}</td>
     <td className={tableCellClass}>{row.itemCode || '—'}</td>
     <td className={`${tableCellClass} text-right font-mono`}>
-      {row.cost != null ? Number(row.cost).toFixed(2) : '—'}
+      {row.cost != null ? formatCurrency(Number(row.cost), true) : '—'}
     </td>
     <td className={tableCellClass}>{row.location || '—'}</td>
     <td className={`${tableCellClass} text-center font-mono`}>{row.totalStock}</td>
     <td className={`${tableCellClass} text-right font-mono`}>
-      {row.value != null ? Number(row.value).toFixed(2) : '—'}
+      {row.value != null ? formatCurrency(Number(row.value), true) : '—'}
     </td>
   </tr>
 ));
@@ -558,7 +559,7 @@ const InventoryReport: React.FC = () => {
                         Total Value:
                       </td>
                       <td className={`${tableCellClass} text-right font-mono font-semibold`}>
-                        {summaryStats.totalValue.toFixed(2)}
+                        {formatCurrency(summaryStats.totalValue, true)}
                       </td>
                     </tr>
                   </tbody>

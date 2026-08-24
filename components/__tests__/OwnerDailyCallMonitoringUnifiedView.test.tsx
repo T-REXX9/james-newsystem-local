@@ -24,18 +24,18 @@ describe('OwnerDailyCallMonitoringUnifiedView', () => {
     expect(screen.queryByRole('button', { name: /purchase follow-up/i })).not.toBeInTheDocument();
   });
 
-  it('renders the desktop view switcher as a sidebar', () => {
+  it('renders a compact full-width view toolbar without the removed sidebar', () => {
     render(<OwnerDailyCallMonitoringUnifiedView currentUser={null} />);
 
-    const sidebar = screen.getByRole('navigation', { name: /owner dashboard views/i });
-    expect(sidebar).toHaveClass('lg:h-full', 'lg:w-56', 'lg:border-r');
-    expect(screen.getByRole('button', { name: /chart/i })).toHaveClass('text-sm');
+    expect(screen.queryByRole('navigation', { name: /owner dashboard views/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('tablist', { name: /daily call monitoring views/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /chart/i })).toHaveClass('text-sm');
   });
 
   it('keeps the chart view active when Chart is clicked', () => {
     render(<OwnerDailyCallMonitoringUnifiedView currentUser={null} />);
 
-    fireEvent.click(screen.getAllByRole('button', { name: /chart/i })[0]);
+    fireEvent.click(screen.getByRole('tab', { name: /chart/i }));
 
     expect(screen.getByTestId('chart-view')).toBeInTheDocument();
     expect(screen.queryByTestId('master-list-view')).not.toBeInTheDocument();
@@ -44,7 +44,7 @@ describe('OwnerDailyCallMonitoringUnifiedView', () => {
   it('switches back to Master List view', () => {
     render(<OwnerDailyCallMonitoringUnifiedView currentUser={null} />);
 
-    fireEvent.click(screen.getAllByRole('button', { name: /daily call monitoring dashboard/i })[0]);
+    fireEvent.click(screen.getByRole('tab', { name: /master list/i }));
 
     expect(screen.getByTestId('master-list-view')).toBeInTheDocument();
     expect(screen.queryByTestId('chart-view')).not.toBeInTheDocument();
@@ -55,7 +55,7 @@ describe('OwnerDailyCallMonitoringUnifiedView', () => {
     window.addEventListener('workflow:navigate', navigate);
 
     render(<OwnerDailyCallMonitoringUnifiedView currentUser={null} />);
-    fireEvent.click(screen.getByRole('button', { name: /operations dashboard/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /operations dashboard/i }));
 
     expect(navigate).toHaveBeenCalledTimes(1);
     expect(navigate.mock.calls[0][0]).toMatchObject({
@@ -69,12 +69,12 @@ describe('OwnerDailyCallMonitoringUnifiedView', () => {
   it('uses the requested dashboard name for main users', () => {
     render(<OwnerDailyCallMonitoringUnifiedView currentUser={{ id: '1', email: 'main@example.com', role: 'MAIN' }} />);
 
-    expect(screen.getByRole('button', { name: /daily call monitoring dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /daily call monitoring/i })).toBeInTheDocument();
   });
 
   it('uses the requested dashboard name for staff users', () => {
     render(<OwnerDailyCallMonitoringUnifiedView currentUser={{ id: '2', email: 'staff@example.com', role: 'Staff' }} />);
 
-    expect(screen.getByRole('button', { name: /daily call monitoring dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /daily call monitoring/i })).toBeInTheDocument();
   });
 });

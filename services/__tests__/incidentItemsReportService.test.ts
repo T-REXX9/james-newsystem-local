@@ -45,6 +45,10 @@ describe('incidentItemsReportService', () => {
   });
 
   it('normalizes grouped rows and numeric summary values', async () => {
+    localStorage.setItem(
+      'local_api_auth_session',
+      JSON.stringify({ token: 'test-token', context: { main_userid: 42, user: { id: 7, main_userid: 42 } } })
+    );
     (global.fetch as any).mockImplementation(() =>
       okResponse({
         items: [

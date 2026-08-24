@@ -87,6 +87,7 @@ import ProfitThresholdSettings from './components/ProfitThresholdSettings';
 import AIMessageTemplatesView from './components/AIMessageTemplatesView';
 import SmsCampaignPreparationView from './components/SmsCampaignPreparationView';
 import SmsTemplatesView from './components/SmsTemplatesView';
+import CallAutoReplySettingsView from './components/CallAutoReplySettingsView';
 
 import { logAuth } from './services/activityLogService';
 import { UserProfile } from './types';
@@ -541,10 +542,15 @@ const App: React.FC = () => {
           </div>
         );
       case 'salesinquiry':
-      case 'sales-transaction-sales-inquiry':
+      case 'sales-transaction-sales-inquiry': {
+        const context = moduleContext['sales-transaction-sales-inquiry'] || moduleContext.salesinquiry || {};
         return (
           <div className="h-full overflow-y-auto">
             <SalesInquiryView
+              initialFilterDay={context.dashboardDate ? String(Number(context.dashboardDate.slice(8, 10))) : undefined}
+              initialFilterMonth={context.dashboardMonth}
+              initialFilterYear={context.dashboardYear}
+              initialDateFilterApplied={Boolean(context.dashboardMonth && context.dashboardYear)}
               initialContactId={
                 moduleContext['sales-transaction-sales-inquiry']?.contactId ||
                 moduleContext.salesinquiry?.contactId
@@ -560,11 +566,15 @@ const App: React.FC = () => {
             />
           </div>
         );
+      }
       case 'salesorder':
-      case 'sales-transaction-sales-order':
+      case 'sales-transaction-sales-order': {
+        const context = moduleContext['sales-transaction-sales-order'] || moduleContext.salesorder || {};
         return (
           <div className="h-full overflow-y-auto">
             <SalesOrderView
+              initialMonth={context.dashboardMonth}
+              initialYear={context.dashboardYear}
               initialOrderId={
                 moduleContext['sales-transaction-sales-order']?.orderId ||
                 moduleContext.salesorder?.orderId
@@ -572,11 +582,16 @@ const App: React.FC = () => {
             />
           </div>
         );
+      }
       case 'orderslip':
-      case 'sales-transaction-order-slip':
+      case 'sales-transaction-order-slip': {
+        const context = moduleContext['sales-transaction-order-slip'] || moduleContext.orderslip || {};
         return (
           <div className="h-full overflow-y-auto">
             <OrderSlipView
+              initialMonth={context.dashboardMonth}
+              initialYear={context.dashboardYear}
+              initialStatus={context.dashboardSlipStatus as 'all' | import('./types').OrderSlipStatus | undefined}
               initialSlipId={
                 moduleContext['sales-transaction-order-slip']?.orderSlipId ||
                 moduleContext.orderslip?.orderSlipId
@@ -588,6 +603,7 @@ const App: React.FC = () => {
             />
           </div>
         );
+      }
       case 'invoice':
       case 'sales-transaction-invoice':
         return (
@@ -680,8 +696,10 @@ const App: React.FC = () => {
             <FreightChargesReportView />
           </div>
         );
-      case 'accounting-reports-accounts-receivable-report':
-        return <div className="h-full overflow-y-auto"><AccountsReceivableView /></div>;
+      case 'accounting-reports-accounts-receivable-report': {
+        const context = moduleContext['accounting-reports-accounts-receivable-report'] || {};
+        return <div className="h-full overflow-y-auto"><AccountsReceivableView initialDateType={context.dashboardDate ? 'custom' : undefined} initialDateFrom={context.dashboardDate ? '2000-01-01' : undefined} initialDateTo={context.dashboardDate} /></div>;
+      }
       case 'accounting-reports-purchase-history':
         return (
           <div className="h-full overflow-y-auto">
@@ -703,10 +721,11 @@ const App: React.FC = () => {
 
       case 'sales-transaction-daily-call-monitoring': {
         const isSalesAgent = userProfile?.role === ROLE_NAMES.SALES_AGENT || userProfile?.role === 'sales_agent';
+        const context = moduleContext['sales-transaction-daily-call-monitoring'] || {};
         return isSalesAgent ? (
-          <DailyCallMonitoringView currentUser={userProfile} />
+          <DailyCallMonitoringView currentUser={userProfile} initialSelectedDate={context.dashboardDate} />
         ) : (
-          <OwnerDailyCallMonitoringUnifiedView currentUser={userProfile} />
+          <OwnerDailyCallMonitoringUnifiedView currentUser={userProfile} initialSelectedDate={context.dashboardDate} />
         );
       }
       case 'accounting-transactions-freight-charges-debit':
@@ -715,12 +734,14 @@ const App: React.FC = () => {
             <FreightChargesDebitView />
           </div>
         );
-      case 'accounting-transactions-sales-return-credit':
+      case 'accounting-transactions-sales-return-credit': {
+        const context = moduleContext['accounting-transactions-sales-return-credit'] || {};
         return (
           <div className="h-full overflow-y-auto">
-            <SalesReturnPage />
+            <SalesReturnPage initialMonth={context.dashboardMonth} initialYear={context.dashboardYear} initialStatus={context.dashboardReturnStatus} />
           </div>
         );
+      }
       case 'accounting-transactions-adjustment-entry':
         return (
           <div className="h-full overflow-y-auto">
@@ -744,12 +765,14 @@ const App: React.FC = () => {
             <CustomerLedgerView />
           </div>
         );
-      case 'accounting-accounting-collection-summary':
+      case 'accounting-accounting-collection-summary': {
+        const context = moduleContext['accounting-accounting-collection-summary'] || {};
         return (
           <div className="h-full overflow-y-auto">
-            <CollectionSummaryView />
+            <CollectionSummaryView initialDateType={context.dashboardMonthStart && context.dashboardMonthEnd ? 'custom' : undefined} initialDateFrom={context.dashboardMonthStart} initialDateTo={context.dashboardMonthEnd} />
           </div>
         );
+      }
       case 'accounting-accounting-statement-of-account':
         return (
           <div className="h-full overflow-y-auto">
@@ -793,8 +816,10 @@ const App: React.FC = () => {
         );
       case 'maintenance-profile-approver':
         return <Approvers />;
-      case 'maintenance-profile-activity-logs':
-        return <ActivityLogs />;
+      case 'maintenance-profile-activity-logs': {
+        const context = moduleContext['maintenance-profile-activity-logs'] || {};
+        return <ActivityLogs initialDateFrom={context.dashboardDate} initialDateTo={context.dashboardDate} />;
+      }
       case 'recyclebin':
       case 'maintenance-profile-server-maintenance':
         return (
@@ -816,6 +841,8 @@ const App: React.FC = () => {
         return <AIMessageTemplatesView currentUser={userProfile} />;
       case 'communication-sms-templates':
         return <SmsTemplatesView currentUser={userProfile} />;
+      case 'communication-call-auto-replies':
+        return <CallAutoReplySettingsView currentUser={userProfile} />;
       case 'calls':
       case 'communication-productivity-daily-call-monitoring': {
         const isSalesAgent = userProfile?.role === ROLE_NAMES.SALES_AGENT || userProfile?.role === 'sales_agent';

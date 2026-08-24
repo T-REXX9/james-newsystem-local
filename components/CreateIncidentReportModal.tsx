@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { X, AlertCircle, Loader2 } from 'lucide-react';
 import { createIncidentReport, fetchContactTransactions } from '../services/supabaseService';
+import { syncIncidentReportItem } from '../services/incidentItemSyncService';
 import { useToast } from './ToastProvider';
-import { UserProfile, ContactTransaction } from '../types';
+import { Product, UserProfile, ContactTransaction } from '../types';
+import ProductAutocomplete from './ProductAutocomplete';
 import TransactionAutocomplete from './TransactionAutocomplete';
 import ValidationSummary from './ValidationSummary';
 import FieldHelp from './FieldHelp';
@@ -29,6 +31,9 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<ContactTransaction[]>([]);
   const [selectedTransactions, setSelectedTransactions] = useState<ContactTransaction[]>([]);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [affectedQuantity, setAffectedQuantity] = useState('1');
+  const savedIncidentReportIdRef = useRef<string | null>(null);
   const [loadingTransactions, setLoadingTransactions] = useState(false);
   const [submitCount, setSubmitCount] = useState(0);
 
@@ -95,6 +100,15 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
         const result = validateRequired(value, 'a reporter name');
         return result.isValid ? '' : result.message;
       }
+      case 'affectedProduct': {
+        if (formData.issueType !== 'product_quality' && formData.issueType !== 'delivery') return '';
+        return selectedProduct ? '' : 'Please select the affected item for this complaint.';
+      }
+      case 'affectedQuantity': {
+        if (!selectedProduct) return '';
+        const quantity = Number(value);
+        return Number.isFinite(quantity) && quantity > 0 ? '' : 'Quantity must be greater than zero.';
+      }
       default:
         return '';
     }
@@ -106,6 +120,11 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
       const message = validateField(field, (formData as Record<string, unknown>)[field]);
       if (message) errors[field] = message;
     });
+
+    const affectedProductError = validateField('affectedProduct', selectedProduct);
+    if (affectedProductError) errors.affectedProduct = affectedProductError;
+    const affectedQuantityError = validateField('affectedQuantity', affectedQuantity);
+    if (affectedQuantityError) errors.affectedQuantity = affectedQuantityError;
 
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
@@ -134,30 +153,63 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
         transaction_date: transaction.date,
       }));
 
-      await createIncidentReport({
+      let incidentReportId = savedIncidentReportIdRef.current;
+      if (!incidentReportId) {
+        const draftIncidentReportId = globalThis.crypto?.randomUUID?.();
+        if (!draftIncidentReportId) {
+          throw new Error('This browser cannot create a stable incident reference. Please use an updated browser.');
+        }
+
+        const createdIncidentReportId = await createIncidentReport({
+          id: draftIncidentReportId,
+          contact_id: contactId,
+          report_date: formData.reportDate,
+          incident_date: formData.incidentDate,
+          issue_type: formData.issueType as 'product_quality' | 'service_quality' | 'delivery' | 'other',
+          description: formData.description.trim(),
+          reported_by: formData.reportedBy.trim(),
+          attachments: attachmentsArray,
+          related_transactions: relatedTransactions.length > 0 ? relatedTransactions : undefined,
+          notes: formData.notes.trim() || undefined,
+        });
+
+        if (!createdIncidentReportId) {
+          throw new Error('The customer incident was saved, but it could not be linked to the warehouse report.');
+        }
+        savedIncidentReportIdRef.current = createdIncidentReportId;
+        incidentReportId = createdIncidentReportId;
+      }
+
+      const supplier = selectedProduct?.supplier_costs?.find((entry) => !entry.is_blacklisted) || selectedProduct?.supplier_costs?.[0];
+      await syncIncidentReportItem({
+        incident_report_id: incidentReportId,
         contact_id: contactId,
+        product_id: selectedProduct?.id,
+        item_code: selectedProduct?.item_code,
+        part_no: selectedProduct?.part_no,
+        description: selectedProduct?.description || formData.description.trim(),
+        supplier_id: supplier?.supplier_id,
+        supplier_name: supplier?.supplier_name,
+        quantity: selectedProduct ? Number(affectedQuantity) : undefined,
+        issue_summary: formData.description.trim(),
+        issue_type: formData.issueType,
         report_date: formData.reportDate,
-        incident_date: formData.incidentDate,
-        issue_type: formData.issueType as 'product_quality' | 'service_quality' | 'delivery' | 'other',
-        description: formData.description.trim(),
-        reported_by: formData.reportedBy.trim(),
-        attachments: attachmentsArray,
-        related_transactions: relatedTransactions.length > 0 ? relatedTransactions : undefined,
-        notes: formData.notes.trim() || undefined,
       });
 
       addToast({
         type: 'success',
         title: 'Incident report submitted',
-        description: 'Your report has been created and routed for approval.',
+        description: 'The customer record and warehouse incident report have both been saved.',
       });
       onSuccess();
       handleClose();
     } catch (err) {
       console.error('Error creating incident report:', err);
-      const friendlyMessage = parseSupabaseError(err, 'incident report');
+      const friendlyMessage = savedIncidentReportIdRef.current
+        ? 'The customer incident was saved, but the warehouse report sync failed. Please click Retry Warehouse Sync.'
+        : parseSupabaseError(err, 'incident report');
       setError(friendlyMessage);
-      addToast({ type: 'error', title: 'Unable to submit report', description: friendlyMessage, durationMs: 6000 });
+      addToast({ type: 'error', title: 'Unable to complete report sync', description: friendlyMessage, durationMs: 6000 });
     } finally {
       setIsSubmitting(false);
     }
@@ -179,7 +231,10 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
         attachments: '',
         notes: '',
       });
+      setSelectedProduct(null);
+      setAffectedQuantity('1');
       setSelectedTransactions([]);
+      savedIncidentReportIdRef.current = null;
       setValidationErrors({});
       setError(null);
       onClose();
@@ -296,6 +351,67 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
                 {validationErrors.issueType}
               </p>
             )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Affected Item {(formData.issueType === 'product_quality' || formData.issueType === 'delivery') && <span className="text-red-500">*</span>}
+            </label>
+            {selectedProduct ? (
+              <div className="flex items-start justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
+                <div>
+                  <p className="font-semibold text-gray-900 dark:text-white">{selectedProduct.description || 'Selected product'}</p>
+                  <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
+                    {selectedProduct.part_no || 'No part number'} {selectedProduct.item_code ? `• ${selectedProduct.item_code}` : ''}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedProduct(null)}
+                  disabled={isSubmitting}
+                  className="rounded p-1 text-gray-500 hover:bg-white hover:text-red-600 disabled:opacity-50 dark:hover:bg-gray-800"
+                  aria-label="Remove affected item"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <ProductAutocomplete
+                onSelect={(product) => {
+                  setSelectedProduct(product);
+                  setValidationErrors((prev) => ({ ...prev, affectedProduct: '', affectedQuantity: '' }));
+                }}
+                placeholder="Search by part number, item code, or description..."
+              />
+            )}
+            {selectedProduct && (
+              <div className="mt-3">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" htmlFor="incident-affected-quantity">
+                  Affected Quantity <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="incident-affected-quantity"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={affectedQuantity}
+                  onChange={(e) => {
+                    setAffectedQuantity(e.target.value);
+                    setValidationErrors((prev) => ({ ...prev, affectedQuantity: '' }));
+                  }}
+                  onBlur={(e) => handleBlur('affectedQuantity', e.target.value)}
+                  disabled={isSubmitting}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 ${
+                    validationErrors.affectedQuantity ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-gray-600'
+                  }`}
+                />
+                {validationErrors.affectedQuantity && <p className="text-sm text-red-600 dark:text-red-400 mt-1">{validationErrors.affectedQuantity}</p>}
+              </div>
+            )}
+            {validationErrors.affectedProduct && <p className="text-sm text-red-600 dark:text-red-400 mt-1">{validationErrors.affectedProduct}</p>}
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Select the product for product-quality or delivery complaints so it appears in the warehouse incident report.
+            </p>
           </div>
 
           <div>
@@ -421,7 +537,7 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2"
             >
               {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-              {isSubmitting ? 'Creating...' : 'Create Report'}
+              {isSubmitting ? 'Saving...' : savedIncidentReportIdRef.current ? 'Retry Warehouse Sync' : 'Create Report'}
             </button>
           </div>
         </form>
