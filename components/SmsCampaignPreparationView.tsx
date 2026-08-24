@@ -66,19 +66,43 @@ export const SmsCampaignPreparationView: React.FC<Props> = ({ currentUser }) => 
   }, [activeTab]);
 
   useEffect(() => {
-    const loadCustomers = async () => {
-      addLog('[SMS Blasting] Initializing component, loading gateway devices and customers...', 'info');
+    let active = true;
+
+    const loadGatewayDevices = async (initialLoad = false) => {
       try {
-        setLoading(true);
-        try {
-          const deviceData = await getGatewayDevices();
-          addLog(`[SMS Blasting] Gateway devices loaded: ${Object.keys(deviceData.devices || {}).length} devices found`, 'info');
-          if (deviceData.devices) {
-            setDevices(Object.values(deviceData.devices));
+        const deviceData = await getGatewayDevices();
+        const registeredDevices = deviceData?.devices && typeof deviceData.devices === 'object'
+          ? Object.values(deviceData.devices)
+          : [];
+        if (active) {
+          setDevices(registeredDevices);
+          if (initialLoad) {
+            addLog(`[SMS Blasting] Gateway devices loaded: ${registeredDevices.length} device(s) found`, 'info');
           }
-        } catch (e) {
+        }
+      } catch (e) {
+        if (initialLoad) {
           addLog(`[SMS Blasting] Could not load gateway devices: ${e}`, 'warn');
         }
+      }
+    };
+
+    void loadGatewayDevices(true);
+    const refreshTimer = window.setInterval(() => {
+      void loadGatewayDevices();
+    }, 10000);
+
+    return () => {
+      active = false;
+      window.clearInterval(refreshTimer);
+    };
+  }, []);
+
+  useEffect(() => {
+    const loadCustomers = async () => {
+      addLog('[SMS Blasting] Initializing component, loading customers...', 'info');
+      try {
+        setLoading(true);
         const data = await customerDatabaseService.fetchContacts();
         addLog(`[SMS Blasting] Fetched ${data?.length || 0} customers from database`, 'success');
         setCustomers(data);
@@ -271,9 +295,9 @@ export const SmsCampaignPreparationView: React.FC<Props> = ({ currentUser }) => 
                 onChange={(e) => setSelectedSimId(e.target.value ? Number(e.target.value) : undefined)}
               >
                 <option value="">Default SIM</option>
-                {devices.length > 0 && devices[0].sim_cards?.map((sim: any) => (
+                {devices.flatMap((device: any) => Array.isArray(device?.sim_cards) ? device.sim_cards : []).map((sim: any) => (
                   <option key={sim.subscriptionId} value={sim.subscriptionId}>
-                    SIM {sim.slotIndex + 1} — {sim.carrierName}
+                    SIM {Number(sim.slotIndex) + 1} — {sim.carrierName || 'Unknown carrier'}
                   </option>
                 ))}
               </select>

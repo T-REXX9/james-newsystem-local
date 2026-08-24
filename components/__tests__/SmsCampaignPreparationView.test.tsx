@@ -103,6 +103,7 @@ describe('SmsCampaignPreparationView', () => {
     fireEvent.click(birthdayTab);
     expect(await screen.findByText('Acme Parts')).toBeInTheDocument();
 
+    expect(screen.getByText('Connected')).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'SIM 1 — Globe' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'SIM 2 — Smart' })).toBeInTheDocument();
 
