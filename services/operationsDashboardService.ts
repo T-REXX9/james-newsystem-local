@@ -6,11 +6,12 @@ import { salesReturnService } from './salesReturnLocalApiService';
 import { dailyCollectionService } from './dailyCollectionService';
 import { accountsReceivableService } from './accountsReceivableService';
 import { activityLogsLocalApiService, ActivityLogRecord } from './activityLogsLocalApiService';
-import { fetchOwnerSnapshotForDailyCall } from './dailyCallMonitoringService';
+import { fetchHardwareCallLogs } from './callingSystemService';
 
 export interface OperationsDashboardSnapshot {
   orders: { inquiries: number; orders: number; open: number; cancelled: number; previousInquiries: number; previousOrders: number; previousOpen: number; previousCancelled: number };
   calls: { incoming: number; outgoing: number; missed: number; returned: number; unanswered: number; averageResponseSeconds: number };
+  callDetails: OperationsCallDetail[];
   delivery: { ready: number; shipped: number; inTransit: number; delivered: number; delayed: number; failed: number; total: number };
   lbcRto: { total: number; delivered: number; rto: number; refused: number; wrongAddress: number; unclaimed: number };
   returns: { requests: number; inspection: number; approved: number; disapproved: number; replacement: number; refunded: number };
@@ -18,6 +19,18 @@ export interface OperationsDashboardSnapshot {
   receivables: { total: number; current: number; days31to60: number; days61to90: number; over90: number };
   activities: OperationsActivity[];
   unavailable: string[];
+}
+
+export interface OperationsCallDetail {
+  id: string;
+  occurredAt: string;
+  direction: string;
+  durationSeconds: number;
+  phoneNumber: string;
+  agentName: string;
+  customerId?: string;
+  customerName?: string;
+  customerCode?: string;
 }
 
 export interface OperationsActivity {
@@ -42,6 +55,27 @@ const isoDate = (date: Date) => {
 export const toLocalDateInputValue = isoDate;
 const monthKey = (value: unknown) => String(value || '').slice(0, 7);
 const dateKey = (value: unknown) => String(value || '').slice(0, 10);
+const parseHardwareCallTimestamp = (value: unknown) => {
+  const timestamp = String(value || '').trim();
+  if (!timestamp) return null;
+  const hasTimeZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(timestamp);
+  const parsed = new Date(`${timestamp.replace(' ', 'T')}${hasTimeZone ? '' : 'Z'}`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+const hardwareCallDateKey = (value: unknown) => {
+  const timestamp = String(value || '').trim();
+  const parsed = parseHardwareCallTimestamp(timestamp);
+  if (!parsed) return dateKey(timestamp);
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(parsed);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value || '';
+  return `${part('year')}-${part('month')}-${part('day')}`;
+};
 const includesAny = (value: unknown, terms: string[]) => {
   const normalized = String(value || '').toLowerCase();
   return terms.some((term) => normalized.includes(term));
@@ -93,7 +127,7 @@ export const buildOperationsDashboardSnapshot = (input: any, selectedDate: Date)
   const previousOrders = input.previousOrders?.items || [];
   const slips = input.slips?.items || [];
   const returns = input.returns?.items || [];
-  const callLogs = input.owner?.callLogs || [];
+  const callLogs = input.hardwareCallLogs || [];
   const arCustomers = input.receivables?.customers || [];
   const referenceDate = new Date(`${selectedDay}T23:59:59`);
   const aging = { current: 0, days31to60: 0, days61to90: 0, over90: 0 };
@@ -108,8 +142,22 @@ export const buildOperationsDashboardSnapshot = (input: any, selectedDate: Date)
       else aging.over90 += balance;
     }
   }
-  const callsToday = callLogs.filter((log: any) => dateKey(log.occurred_at) === selectedDay);
-  const durations = callsToday.map((log: any) => Number(log.duration_seconds || 0)).filter((value: number) => value > 0);
+  const callsToday = callLogs.filter((log: any) => hardwareCallDateKey(log.lcall_timestamp) === selectedDay);
+  const durations = callsToday.map((log: any) => Number(log.lduration_seconds || 0)).filter((value: number) => value > 0);
+  const callDetails: OperationsCallDetail[] = callsToday.map((log: any) => {
+    const parsedTimestamp = parseHardwareCallTimestamp(log.lcall_timestamp);
+    return {
+      id: String(log.lid || `${log.lcall_timestamp}-${log.lphone_number}`),
+      occurredAt: parsedTimestamp?.toISOString() || String(log.lcall_timestamp || ''),
+      direction: String(log.ldirection || ''),
+      durationSeconds: Number(log.lduration_seconds || 0),
+      phoneNumber: String(log.lphone_number || ''),
+      agentName: `${log.agent_first_name || ''} ${log.agent_last_name || ''}`.trim() || `Staff #${log.lagent_id || '—'}`,
+      customerId: log.lcustomer_id ? String(log.lcustomer_id) : undefined,
+      customerName: String(log.customer_company || '').trim() || undefined,
+      customerCode: String(log.customer_code || '').trim() || undefined,
+    };
+  });
   const shippedRemarks = (slip: any) => `${slip.remarks || ''} ${slip.status || ''}`;
   const trackedSlips = slips.filter((slip: any) => String(slip.tracking_no || '').trim());
   const currentCollection = totalCollection(input.currentCollections);
@@ -129,13 +177,14 @@ export const buildOperationsDashboardSnapshot = (input: any, selectedDate: Date)
       previousCancelled: previousInquiries.filter((row: any) => row.status === SalesInquiryStatus.CANCELLED || row.is_deleted).length,
     },
     calls: {
-      incoming: callsToday.filter((row: any) => row.direction === 'inbound').length,
-      outgoing: callsToday.filter((row: any) => row.direction !== 'inbound').length,
-      missed: callsToday.filter((row: any) => includesAny(row.outcome, ['missed'])).length,
-      returned: callsToday.filter((row: any) => includesAny(row.outcome, ['returned', 'callback completed'])).length,
-      unanswered: callsToday.filter((row: any) => includesAny(row.outcome, ['no answer', 'unanswered', "can't be reach"])).length,
+      incoming: callsToday.filter((row: any) => row.ldirection === 'inbound').length,
+      outgoing: callsToday.filter((row: any) => row.ldirection === 'outbound').length,
+      missed: callsToday.filter((row: any) => row.ldirection === 'missed').length,
+      returned: 0,
+      unanswered: callsToday.filter((row: any) => row.ldirection === 'outbound' && Number(row.lduration_seconds || 0) === 0).length,
       averageResponseSeconds: durations.length ? Math.round(durations.reduce((sum: number, value: number) => sum + value, 0) / durations.length) : 0,
     },
+    callDetails,
     delivery: {
       ready: slips.filter((row: any) => String(row.status).toLowerCase() === 'draft').length,
       shipped: slips.filter((row: any) => String(row.status).toLowerCase() === 'finalized').length,
@@ -190,7 +239,7 @@ export const fetchOperationsDashboardSnapshot = async (selectedDate: Date): Prom
     todayCollections: dailyCollectionService.getSummary({ dateType: 'custom', dateFrom: isoDate(selectedDate), dateTo: isoDate(selectedDate), limit: 1000 }),
     receivables: accountsReceivableService.getReport({ debtType: 'All', dateType: 'custom', dateFrom: '2000-01-01', dateTo: isoDate(selectedDate) }),
     activities: activityLogsLocalApiService.list({ dateFrom: isoDate(selectedDate), dateTo: isoDate(selectedDate), page: 1, perPage: 20 }),
-    owner: fetchOwnerSnapshotForDailyCall(),
+    hardwareCallLogs: fetchHardwareCallLogs(),
   };
   const entries = await Promise.all(Object.entries(jobs).map(async ([key, job]) => {
     try { return [key, await job, null] as const; }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import OperationsDashboard from '../OperationsDashboard';
 import { toLocalDateInputValue } from '../../services/operationsDashboardService';
@@ -18,7 +18,11 @@ vi.mock('../../services/operationsDashboardService', () => ({
 
 const snapshot = {
   orders: { inquiries: 2, orders: 1, open: 1, cancelled: 1, previousInquiries: 1, previousOrders: 1, previousOpen: 1, previousCancelled: 0 },
-  calls: { incoming: 1, outgoing: 2, missed: 0, returned: 0, unanswered: 1, averageResponseSeconds: 60 },
+  calls: { incoming: 2, outgoing: 2, missed: 0, returned: 0, unanswered: 1, averageResponseSeconds: 60 },
+  callDetails: [
+    { id: 'call-1', occurredAt: '2026-08-25T01:29:28.000Z', direction: 'inbound', durationSeconds: 60, phoneNumber: '+639171234567', agentName: 'Call Test', customerId: '301', customerName: 'Acme Store', customerCode: 'C-301' },
+    { id: 'call-2', occurredAt: '2026-08-25T01:28:49.000Z', direction: 'inbound', durationSeconds: 17, phoneNumber: '+639189876543', agentName: 'Call Test' },
+  ],
   delivery: { ready: 1, shipped: 1, inTransit: 0, delivered: 1, delayed: 0, failed: 0, total: 2 },
   lbcRto: { total: 1, delivered: 1, rto: 0, refused: 0, wrongAddress: 0, unclaimed: 0 },
   returns: { requests: 1, inspection: 0, approved: 1, disapproved: 0, replacement: 0, refunded: 0 },
@@ -60,7 +64,13 @@ describe('OperationsDashboard', () => {
     await user.click(screen.getByRole('button', { name: /New Inquiry/ }));
     expect(onNavigate).toHaveBeenLastCalledWith('sales-transaction-sales-inquiry', expect.objectContaining(period));
     await user.click(screen.getByRole('button', { name: /Incoming Calls/ }));
-    expect(onNavigate).toHaveBeenLastCalledWith('sales-transaction-daily-call-monitoring', expect.objectContaining(period));
+    const callDialog = screen.getByRole('dialog', { name: 'Incoming Calls' });
+    expect(within(callDialog).getByText('Acme Store')).toBeInTheDocument();
+    expect(within(callDialog).getByText('+639171234567')).toBeInTheDocument();
+    expect(within(callDialog).getByText('+639189876543')).toBeInTheDocument();
+    expect(within(callDialog).getByText('Saved customer')).toBeInTheDocument();
+    expect(within(callDialog).getByText('Unsaved number')).toBeInTheDocument();
+    await user.click(within(callDialog).getByRole('button', { name: 'Close call breakdown' }));
     await user.click(screen.getByRole('button', { name: /Ready to Ship/ }));
     expect(onNavigate).toHaveBeenLastCalledWith('sales-transaction-order-slip', expect.objectContaining({ ...period, dashboardSlipStatus: 'draft' }));
     await user.click(screen.getByRole('button', { name: /Under Inspection/ }));

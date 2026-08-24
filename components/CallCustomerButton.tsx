@@ -28,7 +28,7 @@ const CallCustomerButton: React.FC<CallCustomerButtonProps> = ({
 
     const confirmed = typeof window === 'undefined'
       ? true
-      : window.confirm(`Queue a call request for ${phone}? The phone app will ask for a second confirmation before opening the dialer.`);
+      : window.confirm(`Open the phone dialer for ${phone}? The registered staff phone will open its dialer automatically.`);
     if (!confirmed) return;
 
     setIsQueueing(true);
@@ -36,7 +36,7 @@ const CallCustomerButton: React.FC<CallCustomerButtonProps> = ({
       const result = await queueCallRequest(phone, customerId);
       if (!result.queued) throw new Error('The call request was not queued.');
       toast.success('Call request sent to the staff phone', {
-        description: 'The phone will ask the staff member to confirm before opening the default dialer.',
+        description: 'The registered staff phone will open the default dialer automatically.',
       });
       onQueued?.();
     } catch (error) {

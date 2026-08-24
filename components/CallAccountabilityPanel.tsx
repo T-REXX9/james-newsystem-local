@@ -35,7 +35,9 @@ const formatDuration = (seconds: number | string) => {
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return 'Not available';
-  const parsed = new Date(value.replace(' ', 'T'));
+  const timestamp = value.trim();
+  const hasTimeZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(timestamp);
+  const parsed = new Date(`${timestamp.replace(' ', 'T')}${hasTimeZone ? '' : 'Z'}`);
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
 };
 

@@ -18,7 +18,7 @@ The TND-OPC Calling Solution connects the web-based James System with a staff ph
 
 The first workflow is **Daily Call Monitoring for sales agents**. An agent opens the Daily Call Monitoring page, selects a customer, and presses **Call**. The system first places a temporary claim on that customer so another agent cannot work on the same customer at the same time. It then opens the customer contact window, where the agent can review customer information, communicate, and submit a conversation report. When the report is submitted, the activity is stored and becomes visible in the owner or Master User customer timeline. If the agent closes the contact window without submitting a report, the customer claim is released.
 
-The second workflow is **website click-to-call queueing**. A user presses a reusable **Call customer** button from supported customer, sales inquiry, sales order, or detail screens. The website asks for confirmation, sends a dial request to the authenticated staff member’s registered phone, and informs the user that the phone will ask for a second confirmation. The phone application receives the request, asks the staff member to confirm, opens the phone’s native dialer, and reports whether the request was dialed or failed. This workflow is implemented by `CallCustomerButton`, `queueCallRequest`, the call-system API, and the Flutter companion app. [1] [2] [3]
+The second workflow is **website click-to-call queueing**. A user presses a reusable **Call customer** button from supported customer, sales inquiry, sales order, or detail screens. The website asks for confirmation, stores the dial request, and pushes a realtime event to the authenticated staff member’s registered phone. The phone application receives the request, opens the phone’s native dialer automatically, and reports whether the dialer was opened or failed. API polling remains as a fallback if the realtime connection drops. The actual call still begins only when the staff member uses the native dialer. This workflow is implemented by `CallCustomerButton`, `queueCallRequest`, the call-system API, and the Flutter companion app. [1] [2] [3]
 
 The solution is designed for **accountability without audio recording**. It records call metadata such as phone number, direction, timestamp, duration, staff account, device, and customer match where available. The system does not record the call’s audio. [4] [5]
 
@@ -73,7 +73,7 @@ The API validates the authenticated staff account, company scope, registered dev
 
 ### 3.4 Staff phone application
 
-The Flutter application is named **TND-OPC Calling**. It logs in using the same staff credentials used by the website, registers the device, requests required permissions, starts visible background monitoring, polls pending dial requests, asks for confirmation before opening the native dialer, and synchronizes call-log metadata. [5]
+The Flutter application is named **TND-OPC Calling**. It logs in using the same staff credentials used by the website, registers the device, requests required permissions, starts visible background monitoring, polls pending dial requests, opens the native dialer after website confirmation, and synchronizes call-log metadata. [5]
 
 ## 4. User roles and access model
 
@@ -84,7 +84,7 @@ The route `sales-transaction-daily-call-monitoring` selects the experience based
 | **Sales Agent** | Work assigned customer calls, open customer information, submit conversation reports, send SMS activity, request prospect verification, and release unfinished call claims. | Agent Daily Call Monitoring view and own phone activity. |
 | **Manager or Owner** | Review customer categories, current and potential sales, human-agent activity, customer timelines, device status, and hardware call metadata. | Owner or management Daily Call Monitoring workspace, customer details, accountability panels, and team-scoped records where permitted. |
 | **Master User** | Manage company-wide calling visibility and missed-call auto-reply configuration. | Team-scoped devices and call logs, global auto-reply settings, and audit records. |
-| **Registered staff phone** | Poll for dial requests, open the native dialer after confirmation, report dial status, send heartbeat, and upload call metadata. | Only requests and data authorized for the registered staff account and device. |
+| **Registered staff phone** | Poll for website-confirmed dial requests, open the native dialer, report dial status, send heartbeat, and upload call metadata. | Only requests and data authorized for the registered staff account and device. |
 
 The server determines team visibility from authentication claims. Master Users can view team-level devices and call logs; ordinary staff are restricted to their own scope. Auto-reply settings are restricted to Master Users. [3]
 
@@ -149,7 +149,7 @@ There are two call-related actions in the current system:
 | Action | What it does | Where it is used |
 |---|---|---|
 | **Daily Call Monitoring → Call** | Claims the customer and opens the agent’s call/report workspace. The manual call report is submitted after the conversation. | Agent Daily Call Monitoring customer list. |
-| **Call customer / click-to-call button** | Sends a dial request to the staff member’s registered phone. The phone asks for confirmation and opens the native dialer. | Supported customer, sales inquiry, sales order, and customer-detail screens. |
+| **Call customer / click-to-call button** | Confirms and sends a dial request to the staff member’s registered phone. The phone opens the native dialer automatically. | Supported customer, sales inquiry, sales order, and customer-detail screens. |
 
 The reusable click-to-call control is `CallCustomerButton`. It is not the same as the Daily Call Monitoring claim-and-report action. This distinction should be retained in user training and support materials. [1] [9]
 
@@ -163,7 +163,7 @@ The website click-to-call procedure is:
 4. The website displays a first confirmation asking whether to queue a call request for the number.
 5. Confirm the request. If the user cancels, nothing is sent.
 6. The website sends an authenticated `POST` request to the dial-request endpoint.
-7. The website displays a success message stating that the request was sent to the staff phone and that the phone will ask for a second confirmation.
+7. The website displays a success message stating that the request was sent and the registered phone will open its dialer automatically.
 8. If the request cannot be queued, the website displays an error and does not claim that the call was started.
 9. The button is disabled while the request is being queued and is disabled when no phone number is available.
 
@@ -173,19 +173,16 @@ The web component stops the click event from propagating to the surrounding cust
 
 After the website queues the request, the staff phone application receives it through its polling cycle:
 
-1. The phone app polls the pending dial-request endpoint every ten seconds while the user is signed in and monitoring is active.
-2. When a new request is found, the phone shows a visible notification and opens a confirmation dialog when the request is handled.
-3. The staff member reviews the number and chooses **Open dialer** or **Cancel**.
-4. If the staff member cancels, the app marks the request as `failed`.
-5. If the staff member confirms, the app opens the native phone dialer with a `tel:` URI.
-6. The app marks the request as `dialed` if the native dialer launch succeeds, or `failed` if it does not.
-7. The server accepts only the final states `dialed` and `failed` for this update operation.
+1. The phone maintains an authenticated realtime connection while monitoring is active. A pushed dial event triggers an immediate pending-request check; periodic API polling remains as a fallback.
+2. When a new request is found, the phone opens the native phone dialer with a `tel:` URI.
+3. The app marks the request as `dialed` if the native dialer launch succeeds, or `failed` if it does not.
+4. The server accepts only the final states `dialed` and `failed` for this update operation.
 
-This two-step confirmation is intentional. The website confirmation prevents accidental queueing, and the phone confirmation prevents a queued request from opening the dialer without staff approval. [3] [5]
+The website confirmation is the approval step. The phone does not show a second application confirmation, but the staff member still controls whether to start the actual call from the native dialer. [3] [5]
 
 ### 6.4 Click-to-call limitations
 
-The current click-to-call workflow queues a request and opens the phone’s native dialer. It does not silently place a call and does not bypass the phone’s confirmation step. The result `dialed` confirms that the native dialer was launched, not that the customer answered or that the conversation was successful.
+The current click-to-call workflow queues a website-confirmed request and opens the phone’s native dialer automatically. It does not silently place the actual call. The result `dialed` confirms that the native dialer was launched, not that the customer answered or that the conversation was successful.
 
 The phone-side hardware call-log synchronization is the mechanism that later provides actual call metadata such as direction, duration, and timestamp. [4] [5]
 
@@ -363,7 +360,7 @@ The solution uses several safeguards:
 3. **Device ownership:** A device cannot be registered to a different staff account without server rejection.
 4. **Registered-device checks:** Hardware call uploads, pending-request polling, and dial-status updates require a device registered to the authenticated staff account.
 5. **Role restrictions:** Team-level device and call-log views are restricted by authenticated role claims; missed-call auto-reply configuration is Master User-only.
-6. **Two-step dialing confirmation:** The website confirmation queues the request, and the phone confirmation opens the native dialer.
+6. **Confirmed dialer launch:** The website confirmation queues the request, and the registered phone opens the native dialer automatically without a second app prompt.
 7. **No audio recording:** The current accountability and synchronization design stores call metadata and does not record call audio.
 8. **Input validation:** Phone numbers, dates, durations, directions, statuses, and IDs are validated by the API.
 9. **Claim protection:** Daily Call Monitoring prevents multiple agents from simultaneously owning the same customer call workspace.
@@ -378,7 +375,7 @@ The agent presses **Call**, waits for the customer workspace to open, conducts t
 
 ### 12.2 Click-to-call procedure
 
-For a supported screen, the user presses **Call customer**, confirms the website prompt, waits for the phone notification, opens the TND-OPC Calling app if necessary, reviews the number, and confirms **Open dialer**. After the call, the phone application synchronizes the hardware call metadata when permission and connectivity are available.
+For a supported screen, the user presses **Call customer** and confirms the website prompt. The registered phone then opens the native dialer automatically with the number filled in. The staff member starts the actual call from the dialer. After the call, the phone application synchronizes the hardware call metadata when permission and connectivity are available.
 
 ### 12.3 Manager daily procedure
 
@@ -407,7 +404,7 @@ The current solution should be understood with the following boundaries:
 |---|---|
 | Manual Daily Call Monitoring reports | Implemented in the web application. These reports record the agent’s report and currently use duration `0` because the workflow is report-based rather than a live timer. |
 | Web click-to-call queueing | Implemented through `CallCustomerButton` and the call-system dial-request API. |
-| Phone confirmation before dialing | Implemented in the Flutter companion application. |
+| Website confirmation before dialer launch | Implemented in the reusable web click-to-call control; the phone does not repeat the confirmation. |
 | Native dialer launch | Implemented using the phone `tel:` intent. |
 | Hardware call-log synchronization | Implemented when phone permission, background monitoring, and network connectivity are available. |
 | Customer matching by phone | Implemented server-side within company scope. |
@@ -428,7 +425,7 @@ Before a production release, the recommended verification sequence is:
 2. Confirm an agent can select a customer, claim the customer, open the call window, submit a report, and see the report in the customer timeline.
 3. Confirm closing without submission releases the claim.
 4. Confirm the website click-to-call control asks for confirmation and queues only after confirmation.
-5. Confirm the phone receives the pending request, asks for a second confirmation, and reports `dialed` or `failed` correctly.
+5. Confirm the phone receives the pending request, automatically opens the native dialer, and reports `dialed` or `failed` correctly.
 6. Confirm a hardware call log uploads with valid direction, duration, timestamp, staff, device, and customer match behavior.
 7. Confirm the owner accountability panel displays current device status and hardware call metadata.
 8. Confirm revoked permission and offline conditions produce visible status changes rather than silent data loss.
@@ -440,7 +437,7 @@ Before a production release, the recommended verification sequence is:
 |---|---|
 | **Application call report** | A report manually entered by a sales agent after a conversation in Daily Call Monitoring. |
 | **Call claim** | A temporary server-side lock associated with a customer and agent while the contact window is open. |
-| **Click-to-call** | The web-to-phone workflow that queues a phone request and opens the native dialer after phone confirmation. |
+| **Click-to-call** | The web-to-phone workflow that confirms a request on the website and automatically opens the native dialer on the registered phone. |
 | **Dial request** | A server record waiting for a registered staff phone to review and process. |
 | **Hardware call log** | Call metadata synchronized from the phone’s native call history. |
 | **Heartbeat** | A periodic phone status update indicating that the background monitor is still active. |

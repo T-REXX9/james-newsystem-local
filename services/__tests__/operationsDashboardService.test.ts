@@ -26,16 +26,38 @@ describe('operations dashboard data mapping', () => {
       todayCollections: { collection_totals: { cash: 200, check: 0, tt: 0, less: 0 } },
       receivables: { grand_total_balance: 300, customers: [{ rows: [{ date: '2026-08-01', balance: 300 }] }] },
       activities: { items: [] },
-      owner: { callLogs: [{ occurred_at: '2026-08-02T09:00:00', direction: 'outbound', outcome: 'No Answer', duration_seconds: 60 }] },
+      hardwareCallLogs: [{ lcall_timestamp: '2026-08-02 01:00:00', ldirection: 'outbound', lduration_seconds: 60 }],
     }, new Date('2026-08-02T12:00:00'));
 
     expect(result.orders).toMatchObject({ inquiries: 2, orders: 2, open: 1, cancelled: 1, previousInquiries: 1, previousOrders: 1 });
-    expect(result.calls).toMatchObject({ outgoing: 1, unanswered: 1, averageResponseSeconds: 60 });
+    expect(result.calls).toMatchObject({ outgoing: 1, unanswered: 0, averageResponseSeconds: 60 });
     expect(result.delivery).toMatchObject({ ready: 1, shipped: 2, delivered: 1, total: 3 });
     expect(result.lbcRto).toMatchObject({ total: 2, delivered: 1, rto: 1, wrongAddress: 1 });
     expect(result.returns).toMatchObject({ requests: 1, approved: 1, replacement: 1 });
     expect(result.collections).toMatchObject({ total: 550, sales: 1500, today: 200 });
     expect(result.receivables).toMatchObject({ total: 300, current: 300 });
+  });
+
+  it('counts UTC hardware calls on their Philippine calendar date', () => {
+    const result = buildOperationsDashboardSnapshot({
+      hardwareCallLogs: [
+        { lcall_timestamp: '2026-08-24 19:45:11', ldirection: 'outbound', lduration_seconds: 0 },
+        { lcall_timestamp: '2026-08-24 17:29:28', ldirection: 'inbound', lduration_seconds: 779 },
+        { lcall_timestamp: '2026-08-24 17:28:49', ldirection: 'inbound', lduration_seconds: 17 },
+      ],
+    }, new Date(2026, 7, 25, 12));
+
+    expect(result.calls).toMatchObject({
+      incoming: 2,
+      outgoing: 1,
+      missed: 0,
+      unanswered: 1,
+      averageResponseSeconds: 398,
+    });
+    expect(result.callDetails).toEqual(expect.arrayContaining([
+      expect.objectContaining({ direction: 'outbound', phoneNumber: '', durationSeconds: 0 }),
+      expect.objectContaining({ direction: 'inbound', durationSeconds: 779 }),
+    ]));
   });
 
   it('links known activity references and leaves unknown entries non-clickable', () => {

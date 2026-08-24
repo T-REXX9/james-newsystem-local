@@ -8,6 +8,7 @@ const PORT = Number(process.env.INTERNAL_CHAT_SOCKET_PORT || 8082);
 const SOCKET_PATH = process.env.INTERNAL_CHAT_SOCKET_PATH || '/socket.io';
 const TOKEN_SECRET = process.env.AUTH_SECRET || process.env.APP_KEY || 'change-this-secret';
 const NOTIFY_SECRET = process.env.INTERNAL_CHAT_SOCKET_SECRET || TOKEN_SECRET;
+const CALL_DIAL_REQUEST_EVENT = 'call:dial-request';
 
 const json = (response, statusCode, payload) => {
   response.statusCode = statusCode;
@@ -164,7 +165,20 @@ const emitToUser = (userId, payload) => {
   io.to(`user:${normalized}`).emit(INTERNAL_CHAT_SOCKET_EVENT, payload);
 };
 
+const emitCallToUser = (userId, payload) => {
+  const normalized = String(userId || '').trim();
+  if (normalized === '') {
+    return;
+  }
+  io.to(`user:${normalized}`).emit(CALL_DIAL_REQUEST_EVENT, payload);
+};
+
 const broadcastInternalChatEvent = (payload) => {
+  if (payload?.type === 'call.dial_request.created') {
+    emitCallToUser(payload.user_id, payload);
+    return;
+  }
+
   for (const { userId, event } of translateInternalChatNotification(payload)) {
     emitToUser(userId, event);
   }
