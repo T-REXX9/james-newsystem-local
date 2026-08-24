@@ -611,9 +611,9 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
             {detailTab === 'pricing' && <div>
             <h2 className="mb-3 font-semibold">Price List</h2>
             <div className="grid grid-cols-1 gap-x-5 gap-y-3 md:grid-cols-2 xl:grid-cols-4">
-              <LegacyField label="Regular">{fieldInput('price_aa', 'Input Amount', 'number')}</LegacyField>
-              <LegacyField label="Silver">{fieldInput('price_vip1', 'Input Amount', 'number')}</LegacyField>
-              <LegacyField label="Gold">{fieldInput('price_vip2', 'Input Amount', 'number')}</LegacyField>
+              <LegacyField label="VIP 1">{fieldInput('price_aa', 'Input Amount', 'number')}</LegacyField>
+              <LegacyField label="VIP 2">{fieldInput('price_vip1', 'Input Amount', 'number')}</LegacyField>
+              <LegacyField label="VIP 3">{fieldInput('price_vip2', 'Input Amount', 'number')}</LegacyField>
               <LegacyField label="Platinum">
                 <input
                   type="text"

@@ -123,12 +123,14 @@ describe('ProductDatabase', () => {
     expect(screen.getByText('QKHT DIESEL PARTS')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: 'Pricing & Stock' }));
     expect(screen.getByText('Price List')).toBeInTheDocument();
-    expect(screen.getAllByText('Regular').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Silver').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Gold').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('VIP 1').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('VIP 2').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('VIP 3').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Platinum').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Regular')).not.toBeInTheDocument();
+    expect(screen.queryByText('Silver')).not.toBeInTheDocument();
+    expect(screen.queryByText('Gold')).not.toBeInTheDocument();
     expect(screen.queryByText('AAA')).not.toBeInTheDocument();
-    expect(screen.queryByText('VIP 1')).not.toBeInTheDocument();
     expect(screen.getByText('Specifications')).toBeInTheDocument();
     expect(screen.getByText('Supplier (Cost of Goods)')).toBeInTheDocument();
     expect(screen.getByText('Stock & Reorder')).toBeInTheDocument();
