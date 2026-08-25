@@ -91,6 +91,7 @@ describe('ReorderReport automatic loading', () => {
   let intersectionCallback: IntersectionObserverCallback | null = null;
 
   beforeEach(() => {
+    window.history.replaceState(null, '', '/#/warehouse-reports-reorder-report');
     fetchDescriptionOptionsMock.mockResolvedValue(['Control Valve', 'DV', 'Nozzle', 'Plunger', 'Rotor Head']);
     getPrsMock.mockResolvedValue([]);
     getSuppliersMock.mockResolvedValue([{ id: 'SUP-1', company: 'Supplier One' }]);
@@ -117,6 +118,7 @@ describe('ReorderReport automatic loading', () => {
 
   afterEach(() => {
     cleanup();
+    window.history.replaceState(null, '', '/');
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
@@ -156,6 +158,37 @@ describe('ReorderReport automatic loading', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Search' }));
     await waitFor(() => expect(fetchEntriesMock).toHaveBeenCalledWith(expect.objectContaining({ search: 'Rotor Head' })));
+  });
+
+  it('restores the generated report when browser history returns to the report', async () => {
+    const firstRender = render(<ReorderReport />);
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Report' }));
+    await waitFor(() => expect(screen.getAllByText('ITEM-1').length).toBeGreaterThan(0));
+    await waitFor(() => expect(window.history.state?.reorderReport?.generatedAt).toBeTruthy());
+
+    const tableScrollContainer = screen.getByTestId('reorder-table-scroll-container');
+    Object.defineProperty(tableScrollContainer, 'scrollTop', { configurable: true, value: 180, writable: true });
+    fireEvent.scroll(tableScrollContainer);
+    expect(window.history.state.reorderReport.scrollTop).toBe(180);
+
+    firstRender.unmount();
+    fetchEntriesMock.mockClear();
+    render(<ReorderReport />);
+
+    expect(screen.queryByRole('button', { name: 'Generate Report' })).not.toBeInTheDocument();
+    expect(screen.getAllByText('ITEM-1').length).toBeGreaterThan(0);
+    expect(fetchEntriesMock).not.toHaveBeenCalled();
+  });
+
+  it('clears the saved generated report when Back to Filter is chosen', async () => {
+    render(<ReorderReport />);
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Report' }));
+    await waitFor(() => expect(screen.getAllByText('ITEM-1').length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to Filter' }));
+
+    expect(screen.getByRole('button', { name: 'Generate Report' })).toBeInTheDocument();
+    expect(window.history.state?.reorderReport).toBeUndefined();
   });
 
   it('loads the next batch when the end sentinel becomes visible without pagination controls', async () => {

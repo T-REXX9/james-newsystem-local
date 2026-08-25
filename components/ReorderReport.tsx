@@ -297,9 +297,35 @@ const formatReportDate = (date: Date): string => {
   return `${month}-${day}-${year}`;
 };
 
+interface ReorderReportHistorySnapshot {
+  version: 1;
+  rows: ReorderReportEntry[];
+  generatedAt: string;
+  selectedIds: string[];
+  searchInput: string;
+  appliedSearch: string;
+  page: number;
+  meta: { page: number; per_page: number; total: number; total_pages: number };
+  latestCreatedPr: { id: string; number: string } | null;
+  scrollTop: number;
+}
+
+const readReorderHistorySnapshot = (): ReorderReportHistorySnapshot | null => {
+  if (typeof window === 'undefined') return null;
+  const snapshot = window.history.state?.reorderReport;
+  return snapshot?.version === 1 && Array.isArray(snapshot.rows) && snapshot.generatedAt
+    ? snapshot as ReorderReportHistorySnapshot
+    : null;
+};
+
+const isReorderReportHistoryEntry = (): boolean =>
+  typeof window !== 'undefined'
+  && window.location.hash.replace(/^#\/?/, '').split('?')[0] === 'warehouse-reports-reorder-report';
+
 const ReorderReport: React.FC = () => {
   const { addToast } = useToast();
-  const [rows, setRows] = useState<ReorderReportEntry[]>([]);
+  const initialSnapshotRef = useRef<ReorderReportHistorySnapshot | null>(readReorderHistorySnapshot());
+  const [rows, setRows] = useState<ReorderReportEntry[]>(() => initialSnapshotRef.current?.rows || []);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadMoreFailed, setLoadMoreFailed] = useState(false);
@@ -307,22 +333,72 @@ const ReorderReport: React.FC = () => {
   const [selectingAll, setSelectingAll] = useState(false);
   const [preparingPrint, setPreparingPrint] = useState(false);
   const warehouseType: ReorderWarehouseType = 'total';
-  const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [generatedAt, setGeneratedAt] = useState<Date | null>(() => {
+    const value = initialSnapshotRef.current?.generatedAt;
+    return value ? new Date(value) : null;
+  });
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(initialSnapshotRef.current?.selectedIds || []));
   const [showAddPrModal, setShowAddPrModal] = useState(false);
   const [confirmAction, setConfirmAction] = useState<'hide' | null>(null);
-  const [searchInput, setSearchInput] = useState('');
+  const [searchInput, setSearchInput] = useState(() => initialSnapshotRef.current?.searchInput || '');
   const [showDescriptionDropdown, setShowDescriptionDropdown] = useState(false);
   const [showReportSearchDropdown, setShowReportSearchDropdown] = useState(false);
   const [descriptionSuggestions, setDescriptionSuggestions] = useState<string[]>([]);
   const [loadingDescriptions, setLoadingDescriptions] = useState(true);
-  const [appliedSearch, setAppliedSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [meta, setMeta] = useState({ page: 1, per_page: 50, total: 0, total_pages: 1 });
+  const [appliedSearch, setAppliedSearch] = useState(() => initialSnapshotRef.current?.appliedSearch || '');
+  const [page, setPage] = useState(() => initialSnapshotRef.current?.page || 1);
+  const [meta, setMeta] = useState(() => initialSnapshotRef.current?.meta || { page: 1, per_page: 50, total: 0, total_pages: 1 });
   const [printRows, setPrintRows] = useState<ReorderReportEntry[]>([]);
-  const [latestCreatedPr, setLatestCreatedPr] = useState<{ id: string; number: string } | null>(null);
+  const [latestCreatedPr, setLatestCreatedPr] = useState<{ id: string; number: string } | null>(() => initialSnapshotRef.current?.latestCreatedPr || null);
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
+  const tableScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const isWh1Report = false;
+
+  const persistHistorySnapshot = useCallback((scrollTop?: number) => {
+    if (!generatedAt || !isReorderReportHistoryEntry()) return;
+    const currentState = window.history.state && typeof window.history.state === 'object'
+      ? window.history.state
+      : {};
+    const snapshot: ReorderReportHistorySnapshot = {
+      version: 1,
+      rows,
+      generatedAt: generatedAt.toISOString(),
+      selectedIds: Array.from(selectedIds),
+      searchInput,
+      appliedSearch,
+      page,
+      meta,
+      latestCreatedPr,
+      scrollTop: scrollTop ?? tableScrollContainerRef.current?.scrollTop ?? initialSnapshotRef.current?.scrollTop ?? 0,
+    };
+    window.history.replaceState({ ...currentState, reorderReport: snapshot }, '', window.location.href);
+  }, [appliedSearch, generatedAt, latestCreatedPr, meta, page, rows, searchInput, selectedIds]);
+
+  useEffect(() => {
+    persistHistorySnapshot();
+  }, [persistHistorySnapshot]);
+
+  useEffect(() => {
+    const restoredScrollTop = initialSnapshotRef.current?.scrollTop || 0;
+    if (!generatedAt || restoredScrollTop <= 0) return;
+    const frame = window.requestAnimationFrame(() => {
+      if (tableScrollContainerRef.current) tableScrollContainerRef.current.scrollTop = restoredScrollTop;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [generatedAt]);
+
+  const handleBackToFilter = () => {
+    const currentState = window.history.state && typeof window.history.state === 'object'
+      ? { ...window.history.state }
+      : {};
+    delete currentState.reorderReport;
+    window.history.replaceState(currentState, '', window.location.href);
+    initialSnapshotRef.current = null;
+    setGeneratedAt(null);
+    setRows([]);
+    setSelectedIds(new Set());
+    setLatestCreatedPr(null);
+  };
 
   const filteredDescriptionSuggestions = useMemo(() => {
     const query = searchInput.trim().toLowerCase();
@@ -821,7 +897,7 @@ const ReorderReport: React.FC = () => {
             <p className="mt-1 text-sm text-slate-500">Live purchasing control from reorder requirement through PR, PO, partial receiving, and completion.</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <button type="button" onClick={() => setGeneratedAt(null)} className="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50">Back to Filter</button>
+            <button type="button" onClick={handleBackToFilter} className="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50">Back to Filter</button>
             <button type="button" onClick={() => void handlePrint()} disabled={preparingPrint} className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50">
               {preparingPrint ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />} Print
             </button>
@@ -929,7 +1005,7 @@ const ReorderReport: React.FC = () => {
             </div>
           </div>
 
-          <div data-testid="reorder-table-scroll-container" className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+          <div ref={tableScrollContainerRef} onScroll={(event) => persistHistorySnapshot(event.currentTarget.scrollTop)} data-testid="reorder-table-scroll-container" className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
             <table className="reorder-report-table w-full table-fixed border-collapse">
               <colgroup>
                 <col style={{ width: '2.5%' }} />
