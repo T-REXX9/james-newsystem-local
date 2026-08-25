@@ -66,14 +66,15 @@ Usage:
   ./setup.sh -production  # configure a full production deployment without starting it
   ./setup.sh -productionupdate  # update production files/config without restarting services
   ./setup.sh restart    # restart api + web preview only
+  ./setup.sh status     # check API, realtime, web, database, and running versions
   ./setup.sh chat-realtime-init  # start/fix internal chat realtime + preview proxy
   ./setup.sh systemd-init  # create/enable persistent systemd services
 EOF
   exit 0
 fi
 
-if [[ "$MODE" != "install" && "$MODE" != "update" && "$MODE" != "-production" && "$MODE" != "production" && "$MODE" != "-productionupdate" && "$MODE" != "productionupdate" && "$MODE" != "restart" && "$MODE" != "chat-realtime-init" && "$MODE" != "systemd-init" ]]; then
-  echo "ERROR: unknown mode '$MODE'. Use: install | update | -production | -productionupdate | restart | chat-realtime-init | systemd-init"
+if [[ "$MODE" != "install" && "$MODE" != "update" && "$MODE" != "-production" && "$MODE" != "production" && "$MODE" != "-productionupdate" && "$MODE" != "productionupdate" && "$MODE" != "restart" && "$MODE" != "status" && "$MODE" != "chat-realtime-init" && "$MODE" != "systemd-init" ]]; then
+  echo "ERROR: unknown mode '$MODE'. Use: install | update | -production | -productionupdate | restart | status | chat-realtime-init | systemd-init"
   exit 1
 fi
 
@@ -346,10 +347,21 @@ restart_services() {
   runtime_socket_secret="${INTERNAL_CHAT_SOCKET_SECRET:-$runtime_auth_secret}"
   realtime_notify_url="http://${REALTIME_HOST}:${REALTIME_PORT}/internal-chat/events"
 
-  pkill -f "php -S ${API_HOST}:${API_PORT} -t public" >/dev/null 2>&1 || true
+  if command -v systemctl >/dev/null 2>&1 \
+    && systemctl list-unit-files james-api.service james-realtime.service james-web.service --no-legend 2>/dev/null | grep -q '^james-api.service'; then
+    echo "Restarting managed james-api, james-realtime, and james-web services..."
+    sudo systemctl daemon-reload
+    sudo systemctl restart james-api james-realtime james-web
+    wait_for_http "http://127.0.0.1:${API_PORT}/api/v1/health" "API health endpoint"
+    wait_for_http "http://${REALTIME_HOST}:${REALTIME_PORT}/health" "internal chat realtime"
+    wait_for_http "http://127.0.0.1:${WEB_PORT}" "web preview"
+    return 0
+  fi
+
+  pkill -f "php -S [^ ]*:${API_PORT} -t public" >/dev/null 2>&1 || true
   pkill -f "node scripts/internal-chat-realtime-server.mjs" >/dev/null 2>&1 || true
   pkill -f "npm run realtime" >/dev/null 2>&1 || true
-  pkill -f "vite preview --host ${WEB_HOST} --port ${WEB_PORT}" >/dev/null 2>&1 || true
+  pkill -f "vite preview --host [^ ]* --port ${WEB_PORT}" >/dev/null 2>&1 || true
 
   nohup bash -lc "cd '$API_DIR' && INTERNAL_CHAT_SOCKET_NOTIFY_URL='$realtime_notify_url' INTERNAL_CHAT_SOCKET_SECRET='$runtime_socket_secret' PHP_CLI_SERVER_WORKERS='${PHP_CLI_SERVER_WORKERS:-4}' php -S ${API_HOST}:${API_PORT} -t public" >"$API_LOG" 2>&1 &
   wait_for_http "http://127.0.0.1:${API_PORT}/api/v1/health" "API health endpoint"
@@ -359,6 +371,76 @@ restart_services() {
 
   nohup bash -lc "cd '$WEB_DIR' && REALTIME_HOST='${REALTIME_HOST}' REALTIME_PORT='${REALTIME_PORT}' npm run preview -- --host ${WEB_HOST} --port ${WEB_PORT}" >"$WEB_LOG" 2>&1 &
   wait_for_http "http://127.0.0.1:${WEB_PORT}" "web preview"
+}
+
+check_stack_status() {
+  local failures=0
+  local api_url="http://127.0.0.1:${API_PORT}/api/v1/health"
+  local realtime_url="http://${REALTIME_HOST}:${REALTIME_PORT}/health"
+  local web_url="http://127.0.0.1:${WEB_PORT}"
+  local socket_url="http://127.0.0.1:${WEB_PORT}/socket.io/?EIO=4&transport=polling"
+
+  check_endpoint() {
+    local label="$1"
+    local url="$2"
+    local expected="${3:-200}"
+    local code
+    code="$(curl -sS -o /dev/null --max-time 5 -w '%{http_code}' "$url" 2>/dev/null || true)"
+    if [[ "$code" =~ ^(${expected})$ ]]; then
+      printf '  [OK]   %-12s %s\n' "$label" "$url"
+    else
+      printf '  [FAIL] %-12s %s (HTTP %s)\n' "$label" "$url" "${code:-no response}"
+      failures=$((failures + 1))
+    fi
+  }
+
+  echo
+  echo "James system status"
+  check_endpoint "API" "$api_url"
+  check_endpoint "Realtime" "$realtime_url"
+  check_endpoint "Web" "$web_url" "200|301|302"
+  check_endpoint "Socket.IO" "$socket_url"
+
+  local runtime_db_name runtime_db_user runtime_db_pass runtime_db_host runtime_db_port
+  runtime_db_name="${DB_NAME:-$(read_env_example_value "$API_DIR/.env" "DB_NAME" || true)}"
+  runtime_db_user="$(read_env_example_value "$API_DIR/.env" "DB_USER" || true)"
+  runtime_db_pass="$(read_env_example_value "$API_DIR/.env" "DB_PASS" || true)"
+  runtime_db_host="$(read_env_example_value "$API_DIR/.env" "DB_HOST" || true)"
+  runtime_db_port="$(read_env_example_value "$API_DIR/.env" "DB_PORT" || true)"
+  runtime_db_user="${runtime_db_user:-$DB_USER}"
+  runtime_db_pass="${runtime_db_pass:-$DB_PASS}"
+  runtime_db_host="${runtime_db_host:-$DB_HOST}"
+  runtime_db_port="${runtime_db_port:-$DB_PORT}"
+  if [[ -n "$runtime_db_name" ]] \
+    && mysql -h "$runtime_db_host" -P "$runtime_db_port" -u "$runtime_db_user" "-p$runtime_db_pass" -Nse "SELECT 1 FROM \`${runtime_db_name}\`.tblaccount LIMIT 1;" >/dev/null 2>&1; then
+    printf '  [OK]   %-12s %s\n' "Database" "$runtime_db_name"
+  else
+    printf '  [FAIL] %-12s %s\n' "Database" "${runtime_db_name:-not configured}"
+    failures=$((failures + 1))
+  fi
+
+  echo
+  if [[ -d "$API_DIR/.git" ]]; then
+    echo "  API commit: $(git -C "$API_DIR" rev-parse --short HEAD) ($(git -C "$API_DIR" log -1 --format=%s))"
+  fi
+  if [[ -d "$WEB_DIR/.git" ]]; then
+    echo "  Web commit: $(git -C "$WEB_DIR" rev-parse --short HEAD) ($(git -C "$WEB_DIR" log -1 --format=%s))"
+  fi
+  if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files james-api.service --no-legend 2>/dev/null | grep -q '^james-api.service'; then
+    echo
+    echo "Managed services:"
+    for service in james-api james-realtime james-web; do
+      printf '  %-16s %s\n' "$service" "$(systemctl is-active "$service" 2>/dev/null || true)"
+    done
+  fi
+
+  echo
+  if (( failures > 0 )); then
+    echo "Status check failed: ${failures} service(s) need attention."
+    echo "Restart everything with: ./setup.sh restart"
+    return 1
+  fi
+  echo "Everything is running."
 }
 
 print_service_urls() {
@@ -1023,6 +1105,14 @@ fi
 if [[ "$MODE" == "-productionupdate" || "$MODE" == "productionupdate" ]]; then
   run_production_update_mode
   exit 0
+fi
+
+if [[ "$MODE" == "status" ]]; then
+  need_cmd curl
+  need_cmd git
+  need_cmd mysql
+  check_stack_status
+  exit $?
 fi
 
 step "Checking prerequisites and sudo access"
