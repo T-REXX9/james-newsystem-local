@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { purchaseOrderService } from '../services/purchaseOrderService';
 import { PurchaseOrderWithDetails, PurchaseOrderInsert, PurchaseOrderItemInsert, PO_STATUS_COLORS, Product, Supplier } from '../purchaseOrderTypes';
 import { Plus, Trash2, Printer, Filter, ListFilter, Search, RefreshCw, ChevronLeft, ChevronRight, Save, CheckCircle, XCircle, ArrowLeft, Pencil } from 'lucide-react';
@@ -58,6 +58,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   // View/Edit State
   const [selectedPO, setSelectedPO] = useState<PurchaseOrderWithDetails | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const consumedDeepLinkRef = useRef('');
 
   // Form State (New PO)
   const [createForm, setCreateForm] = useState<Partial<PurchaseOrderInsert>>({ status: 'Pending', order_date: new Date().toISOString().split('T')[0] });
@@ -153,13 +154,13 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
       const rows = (data as unknown as PurchaseOrderWithDetails[]) || [];
       setOrders(rows);
       setPage((currentPage) => Math.min(currentPage, Math.max(0, Math.ceil(rows.length / PAGE_SIZE) - 1)));
-      if (rows.length === 0) {
+      if (rows.length === 0 && !initialPOId && !initialPORefNo) {
         setSelectedPO(null);
       }
     } catch (err) {
       console.error('Failed to load purchase orders', err);
       setOrders([]);
-      setSelectedPO(null);
+      if (!initialPOId && !initialPORefNo) setSelectedPO(null);
       addToast({
         type: 'error',
         title: 'Unable to load purchase orders',
@@ -225,20 +226,53 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
     });
   }, [currentUser?.id, selectedPO?.id]);
 
-  // Selection Logic
+  // Deep links must load the requested record directly. The record may be outside
+  // the month/year/status filters used by the list in the left-hand panel.
   useEffect(() => {
-    if (orders.length > 0 && !selectedPO) {
-      const foundById = initialPOId ? orders.find(o => o.id === initialPOId) : null;
-      const foundByRef = initialPORefNo
-        ? orders.find(o => String(o.po_number || '').toLowerCase() === initialPORefNo.toLowerCase())
-        : null;
-      const found = foundById || foundByRef;
-      if (found) {
-        handleSelectPO(found);
-        return;
+    const candidates = [initialPOId, initialPORefNo]
+      .map(value => String(value || '').trim())
+      .filter((value, index, values) => value && values.indexOf(value) === index);
+    if (candidates.length === 0) return;
+
+    const deepLinkKey = candidates.join('|');
+    if (consumedDeepLinkRef.current === deepLinkKey) return;
+
+    let cancelled = false;
+    const openDeepLinkedPurchaseOrder = async () => {
+      setIsCreating(false);
+      setShowAddItem(false);
+      setPrintMode(false);
+
+      let lastError: unknown = null;
+      for (const candidate of candidates) {
+        try {
+          const fullPO = await purchaseOrderService.getPurchaseOrderById(candidate);
+          if (!cancelled) {
+            consumedDeepLinkRef.current = deepLinkKey;
+            setSelectedPO(fullPO as unknown as PurchaseOrderWithDetails);
+          }
+          return;
+        } catch (error) {
+          lastError = error;
+        }
       }
-    }
-  }, [orders, initialPOId, initialPORefNo, selectedPO, isCreating]);
+
+      if (!cancelled) {
+        console.error('Failed to open purchase order from deep link', lastError);
+        addToast({
+          type: 'error',
+          title: 'Unable to open purchase order',
+          description: lastError instanceof Error ? lastError.message : 'The requested purchase order could not be loaded.',
+          durationMs: 6000,
+        });
+      }
+    };
+
+    void openDeepLinkedPurchaseOrder();
+    return () => {
+      cancelled = true;
+    };
+  }, [initialPOId, initialPORefNo]);
 
   const startCreate = async () => {
     setIsCreating(true);

@@ -29,9 +29,27 @@ export interface ReorderReportEntry {
   reorder_qty: number;
   replenish_qty: number;
   current_stock: number;
+  physical_stock: number;
+  reserved_stock: number;
+  available_stock: number;
   total_rr: number;
   total_return: number;
   target_quantity: number;
+  suggested_reorder_qty: number;
+  open_pr_qty: number;
+  po_ordered_qty: number;
+  open_po_qty: number;
+  received_qty: number;
+  accepted_qty: number;
+  remaining_qty: number;
+  preferred_supplier_id: string;
+  preferred_supplier_name: string;
+  preferred_supplier_cost: number;
+  overall_status: string;
+  can_create_pr: boolean;
+  pr_documents: ReorderPrDocument[];
+  po_documents: ReorderPoDocument[];
+  rr_documents: ReorderRrDocument[];
   pr_refno: string;
   pr_no: string;
   pr_status: string;
@@ -45,6 +63,45 @@ export interface ReorderReportEntry {
   last_arrival_qty: number;
 }
 
+export interface ReorderPrDocument {
+  refno: string;
+  number: string;
+  requested_qty: number;
+  request_date: string;
+  status: string;
+  supplier_id: string;
+  supplier_name: string;
+  po_refno: string;
+}
+
+export interface ReorderPoDocument {
+  refno: string;
+  number: string;
+  status: string;
+  supplier_id: string;
+  supplier_name: string;
+  ordered_qty: number;
+  accepted_qty: number;
+  outstanding_qty: number;
+  unit_cost: number;
+  order_date: string;
+  expected_delivery_date: string;
+  pr_refno: string;
+  pr_number: string;
+}
+
+export interface ReorderRrDocument {
+  refno: string;
+  number: string;
+  status: string;
+  po_refno: string;
+  po_number: string;
+  received_qty: number;
+  accepted_qty: number;
+  receiving_date: string;
+  received_by: string;
+}
+
 const parseApiErrorMessage = async (response: Response): Promise<string> => {
   try {
     const payload = await response.json();
@@ -56,8 +113,13 @@ const parseApiErrorMessage = async (response: Response): Promise<string> => {
   return `API request failed (${response.status})`;
 };
 
-const requestApi = async (url: string, init?: RequestInit): Promise<any> => {
+const requestApi = async (url: string, init?: RequestInit, retries = 1): Promise<any> => {
   const response = await fetch(url, init);
+  const method = String(init?.method || 'GET').toUpperCase();
+  if (method === 'GET' && retries > 0 && [500, 502, 503, 504].includes(response.status)) {
+    await new Promise((resolve) => window.setTimeout(resolve, 300));
+    return requestApi(url, init, retries - 1);
+  }
   if (!response.ok) {
     throw new Error(await parseApiErrorMessage(response));
   }
@@ -80,6 +142,45 @@ const toBoolean = (value: unknown): boolean => {
   return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
 };
 
+const normalizePrDocument = (raw: any): ReorderPrDocument => ({
+  refno: toString(raw?.refno),
+  number: toString(raw?.number),
+  requested_qty: toNumber(raw?.requested_qty),
+  request_date: toString(raw?.request_date),
+  status: toString(raw?.status),
+  supplier_id: toString(raw?.supplier_id),
+  supplier_name: toString(raw?.supplier_name),
+  po_refno: toString(raw?.po_refno),
+});
+
+const normalizePoDocument = (raw: any): ReorderPoDocument => ({
+  refno: toString(raw?.refno),
+  number: toString(raw?.number),
+  status: toString(raw?.status),
+  supplier_id: toString(raw?.supplier_id),
+  supplier_name: toString(raw?.supplier_name),
+  ordered_qty: toNumber(raw?.ordered_qty),
+  accepted_qty: toNumber(raw?.accepted_qty),
+  outstanding_qty: toNumber(raw?.outstanding_qty),
+  unit_cost: toNumber(raw?.unit_cost),
+  order_date: toString(raw?.order_date),
+  expected_delivery_date: toString(raw?.expected_delivery_date),
+  pr_refno: toString(raw?.pr_refno),
+  pr_number: toString(raw?.pr_number),
+});
+
+const normalizeRrDocument = (raw: any): ReorderRrDocument => ({
+  refno: toString(raw?.refno),
+  number: toString(raw?.number),
+  status: toString(raw?.status),
+  po_refno: toString(raw?.po_refno),
+  po_number: toString(raw?.po_number),
+  received_qty: toNumber(raw?.received_qty),
+  accepted_qty: toNumber(raw?.accepted_qty),
+  receiving_date: toString(raw?.receiving_date),
+  received_by: toString(raw?.received_by),
+});
+
 const normalizeEntry = (raw: any): ReorderReportEntry => ({
   id: toString(raw?.id),
   product_session: toString(raw?.product_session),
@@ -90,9 +191,27 @@ const normalizeEntry = (raw: any): ReorderReportEntry => ({
   reorder_qty: toNumber(raw?.reorder_qty),
   replenish_qty: toNumber(raw?.replenish_qty),
   current_stock: toNumber(raw?.current_stock),
+  physical_stock: toNumber(raw?.physical_stock ?? raw?.current_stock),
+  reserved_stock: toNumber(raw?.reserved_stock),
+  available_stock: toNumber(raw?.available_stock ?? raw?.current_stock),
   total_rr: toNumber(raw?.total_rr),
   total_return: toNumber(raw?.total_return),
   target_quantity: toNumber(raw?.target_quantity),
+  suggested_reorder_qty: toNumber(raw?.suggested_reorder_qty),
+  open_pr_qty: toNumber(raw?.open_pr_qty),
+  po_ordered_qty: toNumber(raw?.po_ordered_qty),
+  open_po_qty: toNumber(raw?.open_po_qty),
+  received_qty: toNumber(raw?.received_qty),
+  accepted_qty: toNumber(raw?.accepted_qty),
+  remaining_qty: toNumber(raw?.remaining_qty),
+  preferred_supplier_id: toString(raw?.preferred_supplier_id),
+  preferred_supplier_name: toString(raw?.preferred_supplier_name),
+  preferred_supplier_cost: toNumber(raw?.preferred_supplier_cost),
+  overall_status: toString(raw?.overall_status || 'Needs PR'),
+  can_create_pr: raw?.can_create_pr === undefined ? true : toBoolean(raw?.can_create_pr),
+  pr_documents: Array.isArray(raw?.pr_documents) ? raw.pr_documents.map(normalizePrDocument) : [],
+  po_documents: Array.isArray(raw?.po_documents) ? raw.po_documents.map(normalizePoDocument) : [],
+  rr_documents: Array.isArray(raw?.rr_documents) ? raw.rr_documents.map(normalizeRrDocument) : [],
   pr_refno: toString(raw?.pr_refno),
   pr_no: toString(raw?.pr_no),
   pr_status: toString(raw?.pr_status),
@@ -112,6 +231,15 @@ const CLOSED_WORKFLOW_STATUSES = new Set([
 const COMPLETED_RECEIVING_STATUSES = new Set(['posted', 'received', 'delivered', 'completed']);
 
 export const isReorderWorkflowActive = (row: ReorderReportEntry): boolean => {
+  const overallStatus = String(row.overall_status || '').trim().toLowerCase();
+  if (typeof row.can_create_pr === 'boolean' && overallStatus) {
+    return !row.can_create_pr
+      || ['pr pending', 'awaiting po', 'ordered', 'partially received', 'overdue'].includes(overallStatus);
+  }
+
+  // Legacy fallback for callers that do not yet provide the server-computed
+  // overall status. Old completed document references must not override an
+  // explicit `Needs PR` / `can_create_pr` decision from the report API.
   if (row.rr_refno) {
     const status = row.rr_status.trim().toLowerCase();
     return status === '' || !COMPLETED_RECEIVING_STATUSES.has(status) && !CLOSED_WORKFLOW_STATUSES.has(status);
@@ -128,9 +256,9 @@ export const isReorderWorkflowActive = (row: ReorderReportEntry): boolean => {
 };
 
 export const getReorderWorkflowStages = (row: ReorderReportEntry) => ({
-  pr: row.pr_refno ? (row.pr_status || 'Active') : 'Not started',
-  po: row.po_refno ? (row.po_status || 'Active') : 'Not started',
-  receiving: row.rr_refno ? (row.rr_status || 'Active') : 'Not started',
+  pr: row.pr_documents.at(-1)?.status || (row.pr_refno ? (row.pr_status || 'Active') : 'Not started'),
+  po: row.po_documents.at(-1)?.status || (row.po_refno ? (row.po_status || 'Active') : 'Not started'),
+  receiving: row.rr_documents.at(-1)?.status || (row.rr_refno ? (row.rr_status || 'Active') : 'Not started'),
 });
 
 const getUserContext = () => {
@@ -193,6 +321,22 @@ export const fetchReorderReportEntries = async (filters: ReorderReportFilters): 
       total_pages: toNumber(meta?.total_pages) || 1,
     },
   };
+};
+
+export const fetchReorderDescriptionOptions = async (): Promise<string[]> => {
+  const ctx = getUserContext();
+  const query = new URLSearchParams({ main_id: String(ctx.mainId) });
+  const data = await requestApi(`${API_BASE_URL}/inventory-report/options?${query.toString()}`);
+  const descriptions = Array.isArray(data?.descriptions) ? data.descriptions : [];
+  const unique = new Map<string, string>();
+
+  descriptions.forEach((value: unknown) => {
+    const description = String(value ?? '').trim();
+    const key = description.toLocaleLowerCase();
+    if (description && !unique.has(key)) unique.set(key, description);
+  });
+
+  return Array.from(unique.values()).sort((left, right) => left.localeCompare(right));
 };
 
 export const hideReorderReportItems = async (itemIds: string[]): Promise<number> => {

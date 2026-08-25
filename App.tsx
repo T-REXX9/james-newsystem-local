@@ -135,7 +135,11 @@ const getRouteStateFromLocation = (): { tab: string; payload?: Record<string, st
   return Object.keys(payload).length > 0 ? { tab, payload } : { tab };
 };
 
-const writeRouteStateToLocation = (tab: string, payload?: Record<string, string>) => {
+const writeRouteStateToLocation = (
+  tab: string,
+  payload?: Record<string, string>,
+  mode: 'push' | 'replace' = 'replace'
+) => {
   if (typeof window === 'undefined') return;
 
   const canonicalTab = normalizeModuleId(tab || DEFAULT_ACTIVE_TAB);
@@ -146,7 +150,12 @@ const writeRouteStateToLocation = (tab: string, payload?: Record<string, string>
     return;
   }
 
-  window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${nextHash}`);
+  const nextUrl = `${window.location.pathname}${window.location.search}${nextHash}`;
+  if (mode === 'push') {
+    window.history.pushState(null, '', nextUrl);
+  } else {
+    window.history.replaceState(null, '', nextUrl);
+  }
 };
 
 const expandModuleIds = (canonicalId: string): string[] => {
@@ -201,6 +210,10 @@ const App: React.FC = () => {
         const restored = await restoreLocalAuthSession();
         if (!mounted) return;
         applyLocalAuthSession(restored);
+        if (restored) {
+          const routeState = getRouteStateFromLocation();
+          writeRouteStateToLocation(routeState.tab, routeState.payload, 'replace');
+        }
       } catch (error) {
         console.error('Error restoring local auth session:', error);
         if (mounted) applyLocalAuthSession(null);
@@ -215,6 +228,7 @@ const App: React.FC = () => {
       const routeState = getRouteStateFromLocation();
       setActiveTab(routeState.tab);
       setModuleContext(routeState.payload ? { [routeState.tab]: routeState.payload } : {});
+      writeRouteStateToLocation(routeState.tab, routeState.payload, 'replace');
       setAppLoading(false);
     };
 
@@ -238,6 +252,7 @@ const App: React.FC = () => {
         [customEvent.detail.tab]: customEvent.detail.payload || {},
       }));
       setActiveTab(canonicalTab);
+      writeRouteStateToLocation(canonicalTab, customEvent.detail.payload, 'push');
     };
 
     window.addEventListener('workflow:navigate', handler as EventListener);
@@ -250,19 +265,13 @@ const App: React.FC = () => {
       setActiveTab(routeState.tab);
       setModuleContext((prev) => ({
         ...prev,
-        ...(routeState.payload ? { [routeState.tab]: routeState.payload } : {}),
+        [routeState.tab]: routeState.payload || {},
       }));
     };
 
     window.addEventListener('hashchange', syncFromLocation);
     return () => window.removeEventListener('hashchange', syncFromLocation);
   }, []);
-
-  useEffect(() => {
-    const canonicalTab = normalizeModuleId(activeTab);
-    const payload = moduleContext[canonicalTab] || moduleContext[activeTab];
-    writeRouteStateToLocation(canonicalTab, payload);
-  }, [activeTab, moduleContext]);
 
   const handleSignOut = async () => {
     try {
@@ -274,7 +283,10 @@ const App: React.FC = () => {
   };
 
   const handleSetActiveTab = (tab: string) => {
-    setActiveTab(normalizeModuleId(tab));
+    const canonicalTab = normalizeModuleId(tab);
+    setModuleContext((prev) => ({ ...prev, [canonicalTab]: {} }));
+    setActiveTab(canonicalTab);
+    writeRouteStateToLocation(canonicalTab, undefined, 'push');
   };
 
   // 2. Render Logic
@@ -647,8 +659,9 @@ const App: React.FC = () => {
         if (!isCompanyOwnerRole(userProfile?.role)) return renderAccessDenied();
         return <OperationsDashboard onNavigate={(tab, payload) => {
           const canonicalTab = normalizeModuleId(tab);
-          if (payload) setModuleContext((prev) => ({ ...prev, [canonicalTab]: payload }));
+          setModuleContext((prev) => ({ ...prev, [canonicalTab]: payload || {} }));
           setActiveTab(canonicalTab);
+          writeRouteStateToLocation(canonicalTab, payload, 'push');
         }} />;
       case 'sales-reports-inquiry-report':
         return (

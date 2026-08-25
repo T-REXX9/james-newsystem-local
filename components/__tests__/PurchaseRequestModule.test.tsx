@@ -53,6 +53,7 @@ describe('PurchaseRequestModule', () => {
   });
 
   it('runs detail mutations, print navigation, conversion, and back navigation', async () => {
+    service.getPurchaseRequests.mockResolvedValueOnce([]);
     const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
     const { default: PurchaseRequestModule } = await import('../PurchaseRequest');
     render(<PurchaseRequestModule initialPRId="PRREF-1" />);

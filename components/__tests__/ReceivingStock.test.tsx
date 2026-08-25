@@ -40,6 +40,7 @@ describe('ReceivingStock module', () => {
   });
 
   it('opens an initial receiving deep link', async () => {
+    service.getReceivingReports.mockResolvedValueOnce([]);
     const { default: ReceivingStock } = await import('../ReceivingStock');
     render(<ReceivingStock initialRRId="RRREF-1" />);
     expect(await screen.findByText('Receiving detail RRREF-1')).toBeInTheDocument();

@@ -16,9 +16,12 @@ vi.mock('../../components/Login', () => ({
 }));
 
 vi.mock('../../components/TopNav', () => ({
-  default: ({ onSignOut }: { onSignOut: () => void }) => (
-    <button data-testid="topnav" onClick={onSignOut}>TopNav</button>
-  )
+  default: ({ onSignOut, onNavigate }: { onSignOut: () => void; onNavigate: (tab: string) => void }) => (
+    <div data-testid="topnav">
+      <button onClick={onSignOut}>Sign out</button>
+      <button onClick={() => onNavigate('sales-transaction-sales-inquiry')}>Open sales inquiry</button>
+    </div>
+  ),
 }));
 
 vi.mock('../../components/Dashboard', () => ({
@@ -110,8 +113,48 @@ describe('App authentication flow', () => {
     render(<App />);
 
     await waitFor(() => expect(screen.getByTestId('topnav')).toBeInTheDocument());
-    fireEvent.click(screen.getByTestId('topnav'));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
     await waitFor(() => expect(mockedLogoutFromLocalApi).toHaveBeenCalled());
+  });
+
+  it('uses browser Back to return to the previous module without logging out', async () => {
+    window.history.replaceState(null, '', '/#/home');
+    mockedRestoreLocalAuthSession.mockResolvedValue({
+      token: 'token-1',
+      context: {
+        token: 'token-1',
+        user: { id: 1, main_userid: 1, email: 'owner@example.com' },
+        main_userid: 1,
+        user_type: '1',
+        session_branch: 'mainbranch',
+        logintype: '1',
+        industry: 'Shop',
+      },
+      userProfile: {
+        id: '1',
+        email: 'owner@example.com',
+        full_name: 'Owner User',
+        role: 'Owner',
+        access_rights: ['*'],
+      },
+    } as any);
+
+    render(<App />);
+    await screen.findByTestId('topnav');
+    expect(window.location.hash).toBe('#/home');
+    const historyLength = window.history.length;
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open sales inquiry' }));
+    expect(await screen.findByText('SalesInquiryView')).toBeInTheDocument();
+    expect(window.location.hash).toBe('#/sales-transaction-sales-inquiry');
+    expect(window.history.length).toBe(historyLength + 1);
+
+    window.history.replaceState(null, '', '/#/home');
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+
+    await waitFor(() => expect(window.location.hash).toBe('#/home'));
+    expect(screen.getByText('OwnerDailyCallMonitoringUnifiedView')).toBeInTheDocument();
+    expect(mockedLogoutFromLocalApi).not.toHaveBeenCalled();
   });
 
   it('does not mount authenticated pages until a cached session is validated', async () => {

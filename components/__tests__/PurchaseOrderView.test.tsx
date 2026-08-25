@@ -58,10 +58,12 @@ describe('PurchaseOrderView', () => {
     expect(service.generatePONumber).toHaveBeenCalled();
   });
 
-  it('opens an initial deep-linked PO and saves inline item edits', async () => {
+  it('opens an initial deep-linked PO even when it is outside the filtered list and saves inline item edits', async () => {
+    service.getPurchaseOrders.mockResolvedValueOnce([]);
     const { default: PurchaseOrderView } = await import('../PurchaseOrderView');
-    render(<PurchaseOrderView initialPOId="POREF-1" />);
+    render(<React.StrictMode><PurchaseOrderView initialPOId="POREF-1" /></React.StrictMode>);
     expect(await screen.findByText('PO-2601')).toBeInTheDocument();
+    expect(service.getPurchaseOrderById).toHaveBeenCalledWith('POREF-1');
     fireEvent.click(await screen.findByTitle('Edit item'));
     fireEvent.change(screen.getByLabelText('Edit quantity 1'), { target: { value: '3' } });
     fireEvent.change(screen.getByLabelText('Edit COGS 1'), { target: { value: '12.5' } });

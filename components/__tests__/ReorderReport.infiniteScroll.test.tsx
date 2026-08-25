@@ -3,8 +3,9 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ReorderReport from '../ReorderReport';
 
-const { fetchEntriesMock, addToastMock, getPrsMock, getSuppliersMock, generatePrMock, createPrMock } = vi.hoisted(() => ({
+const { fetchEntriesMock, fetchDescriptionOptionsMock, addToastMock, getPrsMock, getSuppliersMock, generatePrMock, createPrMock } = vi.hoisted(() => ({
   fetchEntriesMock: vi.fn(),
+  fetchDescriptionOptionsMock: vi.fn(),
   addToastMock: vi.fn(),
   getPrsMock: vi.fn(),
   getSuppliersMock: vi.fn(),
@@ -18,6 +19,7 @@ vi.mock('../../services/reorderReportService', () => ({
     { id: 'wh1', label: 'WH1' },
   ],
   fetchReorderReportEntries: fetchEntriesMock,
+  fetchReorderDescriptionOptions: fetchDescriptionOptionsMock,
   hideReorderReportItems: vi.fn(),
   isReorderWorkflowActive: (row: any) => Boolean(row.pr_refno || row.po_refno) && row.rr_status !== 'Posted',
   getReorderWorkflowStages: (row: any) => ({
@@ -51,9 +53,27 @@ const reportRow = (id: string, itemCode: string) => ({
   reorder_qty: 10,
   replenish_qty: 5,
   current_stock: 1,
+  physical_stock: 1,
+  reserved_stock: 0,
+  available_stock: 1,
   total_rr: 0,
   total_return: 0,
   target_quantity: 10,
+  suggested_reorder_qty: 10,
+  preferred_supplier_id: 'SUP-1',
+  preferred_supplier_name: 'Supplier One',
+  preferred_supplier_cost: 25,
+  open_pr_qty: 0,
+  po_ordered_qty: 0,
+  open_po_qty: 0,
+  received_qty: 0,
+  accepted_qty: 0,
+  remaining_qty: 0,
+  overall_status: 'Needs PR',
+  can_create_pr: true,
+  pr_documents: [],
+  po_documents: [],
+  rr_documents: [],
   pr_refno: '',
   pr_no: '',
   pr_status: '',
@@ -71,6 +91,7 @@ describe('ReorderReport automatic loading', () => {
   let intersectionCallback: IntersectionObserverCallback | null = null;
 
   beforeEach(() => {
+    fetchDescriptionOptionsMock.mockResolvedValue(['Control Valve', 'DV', 'Nozzle', 'Plunger', 'Rotor Head']);
     getPrsMock.mockResolvedValue([]);
     getSuppliersMock.mockResolvedValue([{ id: 'SUP-1', company: 'Supplier One' }]);
     generatePrMock.mockResolvedValue('PR-2699');
@@ -106,7 +127,8 @@ describe('ReorderReport automatic loading', () => {
     const descriptionSearch = screen.getByRole('combobox', { name: 'Description smart search' });
     fireEvent.focus(descriptionSearch);
     expect(screen.getByRole('option', { name: 'All descriptions' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'Nozzle' })).toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: 'Nozzle' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Rotor Head' })).toBeInTheDocument();
 
     fireEvent.change(descriptionSearch, { target: { value: 'plu' } });
     expect(screen.getByRole('option', { name: 'Plunger' })).toBeInTheDocument();
@@ -117,6 +139,20 @@ describe('ReorderReport automatic loading', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Generate Report' }));
     await waitFor(() => expect(fetchEntriesMock).toHaveBeenCalledWith(expect.objectContaining({ search: 'Plunger' })));
+
+    const reportSearch = await screen.findByRole('combobox', { name: 'Reorder report smart search' });
+    fireEvent.focus(reportSearch);
+    fireEvent.change(reportSearch, { target: { value: '' } });
+    expect(screen.getByRole('option', { name: 'Rotor Head' })).toBeInTheDocument();
+
+    fireEvent.change(reportSearch, { target: { value: 'rot' } });
+    expect(screen.getByRole('option', { name: 'Rotor Head' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Plunger' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('option', { name: 'Rotor Head' }));
+    expect(reportSearch).toHaveValue('Rotor Head');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(fetchEntriesMock).toHaveBeenCalledWith(expect.objectContaining({ search: 'Rotor Head' })));
   });
 
   it('loads the next batch when the end sentinel becomes visible without pagination controls', async () => {
@@ -135,6 +171,19 @@ describe('ReorderReport automatic loading', () => {
     expect(screen.queryByRole('button', { name: 'Previous' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
     expect(screen.getByText('All 2 entries loaded')).toBeInTheDocument();
+  });
+
+  it('selects every eligible item across all report batches', async () => {
+    render(<ReorderReport />);
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Report' }));
+    await waitFor(() => expect(screen.getAllByText('ITEM-1').length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'ALL' }));
+
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Select ITEM-1' })).toBeChecked());
+    expect(await screen.findByRole('checkbox', { name: 'Select ITEM-2' })).toBeChecked();
+    expect(screen.getByText('2 item(s) selected')).toBeInTheDocument();
+    expect(fetchEntriesMock).toHaveBeenCalledWith(expect.objectContaining({ page: 2, perPage: 100 }));
   });
 
   it('keeps Add to PR accessible above the list while more items load', async () => {
@@ -168,7 +217,7 @@ describe('ReorderReport automatic loading', () => {
     await screen.findByText('Loading more items...');
 
     fireEvent.click(screen.getByRole('button', { name: /Add to PR/i }));
-    await screen.findByText('1 item(s) will be added with quantity `1` each (old-system behavior).');
+    await screen.findByText('Each line uses the report’s net suggested quantity and recommended supplier. You can override the supplier for all selected lines below.');
 
     await act(async () => {
       resolveSecondPage?.({
@@ -197,13 +246,15 @@ describe('ReorderReport automatic loading', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'ALL' }));
     fireEvent.click(screen.getByRole('button', { name: /Add to PR/i }));
 
-    await screen.findByText('2 item(s) will be added with quantity `1` each (old-system behavior).');
+    await screen.findByText('Each line uses the report’s net suggested quantity and recommended supplier. You can override the supplier for all selected lines below.');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(createPrMock).toHaveBeenCalledTimes(1));
     const payload = createPrMock.mock.calls[0][0];
     expect(payload.items.map((item: any) => item.item_code)).toEqual(['ITEM-1', 'ITEM-2']);
+    expect(payload.items.map((item: any) => item.quantity)).toEqual([10, 10]);
+    expect(payload.items.map((item: any) => item.supplier_id)).toEqual(['SUP-1', 'SUP-1']);
     await screen.findByText('PR-2699');
     expect(screen.getByText('PR Created:')).toBeInTheDocument();
   });

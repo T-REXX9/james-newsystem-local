@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EyeOff, Info, Loader2, Printer, Search, ShoppingCart } from 'lucide-react';
 import { purchaseRequestService } from '../services/purchaseRequestService';
 import {
+  fetchReorderDescriptionOptions,
   fetchReorderReportEntries,
   getReorderWorkflowStages,
   hideReorderReportItems,
@@ -56,10 +57,6 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, onClose, onSaved }) 
         setPendingPRs(pending);
         setSuppliers(supp);
         if (pending.length > 0) setExistingPrId(pending[0].id);
-        if (supp.length > 0) {
-          setSupplierId(supp[0].id);
-          setSupplierSearch(supp[0].company);
-        }
       } finally {
         setLoading(false);
       }
@@ -69,18 +66,26 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, onClose, onSaved }) 
 
   const mapItemsForPR = useCallback(
     (selectedSupplierId: string, selectedSupplierName: string) =>
-      items.map((item) => ({
-        item_id: item.product_session,
-        item_code: item.item_code,
-        part_number: item.part_no,
-        description: item.description,
-        quantity: 1,
-        unit_cost: 0,
-        supplier_id: selectedSupplierId || '',
-        supplier_name: selectedSupplierName || '',
-        eta_date: '',
-      })),
+      items.map((item) => {
+        const useOverride = selectedSupplierId !== '';
+        return {
+          item_id: item.product_session,
+          item_code: item.item_code,
+          part_number: item.part_no,
+          description: item.description,
+          quantity: Math.max(1, item.suggested_reorder_qty),
+          unit_cost: useOverride ? 0 : item.preferred_supplier_cost,
+          supplier_id: useOverride ? selectedSupplierId : item.preferred_supplier_id,
+          supplier_name: useOverride ? selectedSupplierName : item.preferred_supplier_name,
+          eta_date: '',
+        };
+      }),
     [items]
+  );
+
+  const unresolvedSupplierCount = useMemo(
+    () => supplierId ? 0 : items.filter((item) => !item.preferred_supplier_id).length,
+    [items, supplierId]
   );
 
   const filteredSuppliers = useMemo(() => {
@@ -102,7 +107,7 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, onClose, onSaved }) 
 
   const handleSave = async () => {
     if (mode === 'existing' && !existingPrId) return;
-    if (mode === 'new' && !supplierId) return;
+    if (mode === 'new' && unresolvedSupplierCount > 0) return;
 
     setSaving(true);
     try {
@@ -163,7 +168,7 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, onClose, onSaved }) 
         ) : (
           <div className="space-y-4">
             <p className="text-sm text-slate-600 dark:text-slate-300">
-              {items.length} item(s) will be added with quantity `1` each (old-system behavior).
+              Each line uses the report’s net suggested quantity and recommended supplier. You can override the supplier for all selected lines below.
             </p>
 
             <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-200 p-1 dark:border-slate-700">
@@ -185,7 +190,7 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, onClose, onSaved }) 
 
             {mode === 'new' ? (
               <div>
-                <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Supplier</label>
+                <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Supplier override (optional)</label>
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-slate-400" size={16} />
                   <input
@@ -197,7 +202,7 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, onClose, onSaved }) 
                     }}
                     onFocus={() => setShowSupplierDropdown(true)}
                     onBlur={() => window.setTimeout(() => setShowSupplierDropdown(false), 150)}
-                    placeholder="Search supplier..."
+                    placeholder="Use each item’s recommended supplier"
                     className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-10 pr-3 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                   />
                   {showSupplierDropdown ? (
@@ -226,6 +231,13 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, onClose, onSaved }) 
                     </div>
                   ) : null}
                 </div>
+                {unresolvedSupplierCount > 0 ? (
+                  <p className="mt-2 text-xs font-semibold text-amber-700">
+                    {unresolvedSupplierCount} item(s) have no recommended supplier. Select an override to continue.
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs text-slate-500">Leave blank to keep each item’s recommended supplier and recorded cost.</p>
+                )}
               </div>
             ) : (
               <div>
@@ -265,7 +277,7 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, onClose, onSaved }) 
           </button>
           <button
             type="button"
-            disabled={loading || saving || (mode === 'existing' && !existingPrId) || (mode === 'new' && !supplierId)}
+            disabled={loading || saving || (mode === 'existing' && !existingPrId) || (mode === 'new' && unresolvedSupplierCount > 0)}
             onClick={handleSave}
             className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
           >
@@ -285,8 +297,6 @@ const formatReportDate = (date: Date): string => {
   return `${month}-${day}-${year}`;
 };
 
-const DESCRIPTION_SUGGESTIONS = ['Nozzle', 'Plunger', 'DV', 'Control Valve'];
-
 const ReorderReport: React.FC = () => {
   const { addToast } = useToast();
   const [rows, setRows] = useState<ReorderReportEntry[]>([]);
@@ -294,6 +304,7 @@ const ReorderReport: React.FC = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadMoreFailed, setLoadMoreFailed] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [selectingAll, setSelectingAll] = useState(false);
   const [preparingPrint, setPreparingPrint] = useState(false);
   const warehouseType: ReorderWarehouseType = 'total';
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
@@ -302,6 +313,9 @@ const ReorderReport: React.FC = () => {
   const [confirmAction, setConfirmAction] = useState<'hide' | null>(null);
   const [searchInput, setSearchInput] = useState('');
   const [showDescriptionDropdown, setShowDescriptionDropdown] = useState(false);
+  const [showReportSearchDropdown, setShowReportSearchDropdown] = useState(false);
+  const [descriptionSuggestions, setDescriptionSuggestions] = useState<string[]>([]);
+  const [loadingDescriptions, setLoadingDescriptions] = useState(true);
   const [appliedSearch, setAppliedSearch] = useState('');
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ page: 1, per_page: 50, total: 0, total_pages: 1 });
@@ -312,11 +326,37 @@ const ReorderReport: React.FC = () => {
 
   const filteredDescriptionSuggestions = useMemo(() => {
     const query = searchInput.trim().toLowerCase();
-    if (!query) return DESCRIPTION_SUGGESTIONS;
-    return DESCRIPTION_SUGGESTIONS.filter((description) =>
+    if (!query) return descriptionSuggestions;
+    return descriptionSuggestions.filter((description) =>
       description.toLowerCase().includes(query)
     );
-  }, [searchInput]);
+  }, [descriptionSuggestions, searchInput]);
+
+  useEffect(() => {
+    let active = true;
+    setLoadingDescriptions(true);
+    fetchReorderDescriptionOptions()
+      .then((descriptions) => {
+        if (active) setDescriptionSuggestions(descriptions);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setDescriptionSuggestions([]);
+        addToast({
+          type: 'error',
+          title: 'Unable to load descriptions',
+          description: String(error?.message || 'Request failed'),
+          durationMs: 5000,
+        });
+      })
+      .finally(() => {
+        if (active) setLoadingDescriptions(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [addToast]);
 
   const loadReport = useCallback(async (targetPage = 1, targetSearch = '', append = false) => {
     if (append) setLoadingMore(true);
@@ -455,12 +495,58 @@ const ReorderReport: React.FC = () => {
 
   const allSelected = eligibleRows.length > 0 && eligibleRows.every((row) => selectedIds.has(row.id));
 
-  const toggleSelectAll = () => {
+  const toggleSelectAll = async () => {
     if (allSelected) {
       setSelectedIds(new Set());
       return;
     }
-    setSelectedIds(new Set(eligibleRows.map((row) => row.id)));
+
+    if (page >= meta.total_pages) {
+      setSelectedIds(new Set(eligibleRows.map((row) => row.id)));
+      return;
+    }
+
+    setSelectingAll(true);
+    try {
+      const first = await fetchReorderReportEntries({
+        warehouseType,
+        search: appliedSearch,
+        showHidden: false,
+        page: 1,
+        perPage: 100,
+      });
+      const remaining: Array<Awaited<ReturnType<typeof fetchReorderReportEntries>>> = [];
+      for (let nextPage = 2; nextPage <= first.meta.total_pages; nextPage += 1) {
+        remaining.push(await fetchReorderReportEntries({
+          warehouseType,
+          search: appliedSearch,
+          showHidden: false,
+          page: nextPage,
+          perPage: 100,
+        }));
+      }
+      const unique = new Map<string, ReorderReportEntry>();
+      [first.items, ...remaining.map((result) => result.items)].flat().forEach((row) => {
+        const key = row.product_session || `${row.item_code.trim().toLowerCase()}::${row.part_no.trim().toLowerCase()}`;
+        if (!unique.has(key)) unique.set(key, row);
+      });
+      const allRows = Array.from(unique.values());
+      const selectableRows = allRows.filter((row) => !isReorderWorkflowActive(row));
+
+      setRows(allRows);
+      setSelectedIds(new Set(selectableRows.map((row) => row.id)));
+      setPage(first.meta.total_pages);
+      setMeta({ ...first.meta, page: first.meta.total_pages });
+    } catch (error: any) {
+      addToast({
+        type: 'error',
+        title: 'Unable to select all items',
+        description: String(error?.message || 'Request failed'),
+        durationMs: 5000,
+      });
+    } finally {
+      setSelectingAll(false);
+    }
   };
 
   const toggleSelectRow = (id: string) => {
@@ -521,6 +607,71 @@ const ReorderReport: React.FC = () => {
       {row.rr_no || row.rr_refno}
     </ModuleRecordLink>
   ) : <span className="text-slate-400">-</span>;
+
+  const formatQuantity = (value: number): string => new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: 2,
+  }).format(value);
+
+  const formatCurrency = (value: number): string => new Intl.NumberFormat('en-PH', {
+    style: 'currency',
+    currency: 'PHP',
+    maximumFractionDigits: 2,
+  }).format(value);
+
+  const renderStatusBadge = (status: string) => {
+    const normalized = status.toLowerCase();
+    const color = normalized === 'overdue' || normalized === 'cancelled'
+      ? 'bg-rose-100 text-rose-700'
+      : normalized === 'completed'
+        ? 'bg-emerald-100 text-emerald-700'
+        : normalized === 'partially received'
+          ? 'bg-purple-100 text-purple-700'
+          : normalized === 'ordered' || normalized === 'awaiting po'
+            ? 'bg-blue-100 text-blue-700'
+            : 'bg-orange-100 text-orange-700';
+    return <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${color}`}>{status}</span>;
+  };
+
+  const renderPrDocuments = (row: ReorderReportEntry) => row.pr_documents.length > 0 ? (
+    <div className="space-y-2">
+      {row.pr_documents.map((document) => (
+        <div key={`${document.refno}-${document.number}`} className="whitespace-nowrap">
+          <ModuleRecordLink tab="warehouse-purchasing-purchase-request" payload={{ prId: document.refno }} className="font-bold text-brand-blue hover:underline">
+            {document.number || document.refno}
+          </ModuleRecordLink>
+          <div className="text-[11px] text-slate-500">{document.request_date ? document.request_date.slice(0, 10) : 'No date'} · {document.status}</div>
+        </div>
+      ))}
+    </div>
+  ) : renderPrLink(row);
+
+  const renderPoDocuments = (row: ReorderReportEntry) => row.po_documents.length > 0 ? (
+    <div className="space-y-2">
+      {row.po_documents.map((document) => (
+        <div key={`${document.refno}-${document.number}`} className="min-w-40">
+          <ModuleRecordLink tab="warehouse-purchasing-purchase-order" payload={{ poId: document.refno, poRefNo: document.number }} className="font-bold text-brand-blue hover:underline">
+            {document.number || document.refno}
+          </ModuleRecordLink>
+          <div className="text-[11px] text-slate-500">{document.supplier_name || 'No supplier'} · {document.status}</div>
+          <div className="text-[11px] text-slate-500">Ordered {document.order_date || '-'} · ETA {document.expected_delivery_date && document.expected_delivery_date !== '1970-01-01' ? document.expected_delivery_date : '-'}</div>
+          <div className="text-[11px] text-slate-500">{formatCurrency(document.unit_cost)} / unit</div>
+        </div>
+      ))}
+    </div>
+  ) : renderPoLink(row);
+
+  const renderRrDocuments = (row: ReorderReportEntry) => row.rr_documents.length > 0 ? (
+    <div className="space-y-2">
+      {row.rr_documents.map((document) => (
+        <div key={`${document.refno}-${document.number}`} className="whitespace-nowrap">
+          <ModuleRecordLink tab="warehouse-purchasing-receiving-stock" payload={{ rrId: document.refno, rrRefNo: document.number }} className="font-bold text-brand-blue hover:underline">
+            {document.number || document.refno}
+          </ModuleRecordLink>
+          <div className="text-[11px] text-slate-500">{document.receiving_date || 'No date'} · {document.status}</div>
+        </div>
+      ))}
+    </div>
+  ) : renderRrLink(row);
 
   if (!generatedAt) {
     return (
@@ -598,10 +749,16 @@ const ReorderReport: React.FC = () => {
                             {description}
                           </button>
                         ))}
-                        {searchInput.trim() && filteredDescriptionSuggestions.length === 0 && (
+                        {loadingDescriptions && (
+                          <div className="px-3 py-2 text-[13px] text-[#777]">Loading descriptions...</div>
+                        )}
+                        {!loadingDescriptions && searchInput.trim() && filteredDescriptionSuggestions.length === 0 && (
                           <div className="px-3 py-2 text-[13px] text-[#777]">
                             Press Generate Report to search for “{searchInput.trim()}”.
                           </div>
+                        )}
+                        {!loadingDescriptions && !searchInput.trim() && descriptionSuggestions.length === 0 && (
+                          <div className="px-3 py-2 text-[13px] text-[#777]">No descriptions available.</div>
                         )}
                       </div>
                     )}
@@ -648,7 +805,7 @@ const ReorderReport: React.FC = () => {
       <style>{`
         .reorder-report-print { display: none; }
         @media print {
-          @page { margin: 10mm; }
+          @page { size: landscape; margin: 7mm; }
           body * { visibility: hidden !important; }
           .reorder-report-print, .reorder-report-print * { visibility: visible !important; }
           .reorder-report-print { display: block !important; position: absolute; inset: 0; width: 100%; color: #000; background: #fff; font-family: Arial, sans-serif; }
@@ -662,7 +819,7 @@ const ReorderReport: React.FC = () => {
           <div>
             <div className="mb-1 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-400"><span>Purchasing</span><span>›</span><span>Reports</span><span>›</span><span className="text-slate-700">Reorder Report</span></div>
             <h1 className="text-2xl font-extrabold uppercase tracking-tight text-[#173c83]">Reorder Report</h1>
-            <p className="mt-1 text-sm text-slate-500">Items that need to be reordered. (Current Stock + Receiving Qty is below Reorder Level)</p>
+            <p className="mt-1 text-sm text-slate-500">Live purchasing control from reorder requirement through PR, PO, partial receiving, and completion.</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <button type="button" onClick={() => setGeneratedAt(null)} className="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50">Back to Filter</button>
@@ -675,10 +832,77 @@ const ReorderReport: React.FC = () => {
         <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
           <form onSubmit={handleSearch} className="flex flex-wrap items-center gap-4 border-b border-slate-200 p-5">
             <div className="flex-1 min-w-[280px]">
-              <label htmlFor="reorder-search" className="mb-1 block text-xs font-bold text-slate-700">Search Item / Part No.</label>
+              <label htmlFor="reorder-search" className="mb-1 block text-xs font-bold text-slate-700">Search Item / Part No. / Description</label>
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input id="reorder-search" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Search item or part no..." className="h-10 w-full rounded-md border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-[#175fd3] focus:ring-2 focus:ring-blue-100" />
+                <input
+                  id="reorder-search"
+                  value={searchInput}
+                  onChange={(event) => {
+                    setSearchInput(event.target.value);
+                    setShowReportSearchDropdown(true);
+                  }}
+                  onFocus={() => setShowReportSearchDropdown(true)}
+                  onBlur={() => window.setTimeout(() => setShowReportSearchDropdown(false), 150)}
+                  placeholder="Search item, part no., or description..."
+                  role="combobox"
+                  aria-label="Reorder report smart search"
+                  aria-autocomplete="list"
+                  aria-expanded={showReportSearchDropdown}
+                  aria-controls="reorder-report-description-options"
+                  className="h-10 w-full rounded-md border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-[#175fd3] focus:ring-2 focus:ring-blue-100"
+                />
+                {showReportSearchDropdown && (
+                  <div
+                    id="reorder-report-description-options"
+                    role="listbox"
+                    aria-label="Reorder report description suggestions"
+                    className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-slate-200 bg-white py-1 shadow-xl"
+                  >
+                    {(!searchInput.trim() || 'all descriptions'.includes(searchInput.trim().toLowerCase())) && (
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={!searchInput.trim()}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => {
+                          setSearchInput('');
+                          setShowReportSearchDropdown(false);
+                        }}
+                        className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                      >
+                        All descriptions
+                      </button>
+                    )}
+                    {filteredDescriptionSuggestions.map((description) => (
+                      <button
+                        key={description}
+                        type="button"
+                        role="option"
+                        aria-selected={searchInput.toLowerCase() === description.toLowerCase()}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => {
+                          setSearchInput(description);
+                          setShowReportSearchDropdown(false);
+                        }}
+                        className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                      >
+                        {description}
+                      </button>
+                    ))}
+                    {loadingDescriptions && (
+                      <div className="px-3 py-2 text-sm text-slate-500">Loading descriptions...</div>
+                    )}
+                    {!loadingDescriptions && searchInput.trim() && filteredDescriptionSuggestions.length === 0 && (
+                      <div className="px-3 py-2 text-sm text-slate-500">
+                        Press Search to find item or part number “{searchInput.trim()}”.
+                      </div>
+                    )}
+                    {!loadingDescriptions && !searchInput.trim() && descriptionSuggestions.length === 0 && (
+                      <div className="px-3 py-2 text-sm text-slate-500">No descriptions available.</div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex items-end gap-2 pt-5">
@@ -691,7 +915,7 @@ const ReorderReport: React.FC = () => {
 
           <div data-testid="reorder-selection-actions" className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white/95 px-5 py-3 shadow-sm backdrop-blur">
             <div className="flex items-center gap-4">
-              <span className="text-sm font-bold text-slate-700">{selectedVisibleCount} item(s) selected</span>
+              <span className="text-sm font-bold text-slate-700">{selectingAll ? 'Selecting all eligible items...' : `${selectedVisibleCount} item(s) selected`}</span>
               <button type="button" onClick={() => setShowAddPrModal(true)} disabled={selectedVisibleCount === 0 || processing} className="rounded-md border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-bold text-orange-600 transition hover:bg-orange-100 disabled:opacity-50">
                 <ShoppingCart className="mr-2 inline h-4 w-4" /> Add to PR
               </button>
@@ -702,25 +926,28 @@ const ReorderReport: React.FC = () => {
               ) : null}
             </div>
             <div className="flex items-center gap-2 rounded bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
-              <Info className="h-3.5 w-3.5" /> Items with active purchasing workflow are already in process and cannot be selected.
+              <Info className="h-3.5 w-3.5" /> Pending PRs block duplicates but do not count as on order. Only posted PO balances reduce the suggested quantity.
             </div>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1300px] border-collapse text-sm">
+            <table className="w-full min-w-[2300px] border-collapse text-sm">
               <thead>
                 <tr>
-                  <th rowSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-3 text-center text-white"><label className="inline-flex items-center justify-center gap-1"><input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="h-4 w-4 rounded border-white/30 bg-white/10" aria-label="ALL" /> ALL</label></th>
+                  <th rowSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-3 text-center text-white"><label className="inline-flex items-center justify-center gap-1"><input type="checkbox" checked={allSelected} disabled={selectingAll} onChange={() => void toggleSelectAll()} className="h-4 w-4 rounded border-white/30 bg-white/10 disabled:opacity-60" aria-label="ALL" /> ALL</label></th>
                   <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-3 text-left font-bold uppercase tracking-wide text-white">Item Code</th>
                   <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-3 text-left font-bold uppercase tracking-wide text-white">Part No.</th>
                   <th rowSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-3 text-left font-bold uppercase tracking-wide text-white">Description</th>
-                  <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Current<br />Stock</th>
+                  <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Physical<br />Stock</th>
+                  <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Reserved<br />Stock</th>
+                  <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Available<br />Stock</th>
                   <th rowSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Reorder<br />Level</th>
+                  <th rowSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Suggested<br />Reorder</th>
                   <th colSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Recommended Supplier</th>
                   <th colSpan={2} className="border-b border-r border-white/20 bg-orange-500 px-3 py-3 text-center font-bold uppercase tracking-wide text-white">① PR STAGE<br /><span className="text-xs font-normal opacity-90">(Waiting for Approval)</span></th>
-                  <th colSpan={2} className="border-b border-r border-white/20 bg-[#175fd3] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">② PO STAGE<br /><span className="text-xs font-normal opacity-90">(Ordered from Supplier)</span></th>
-                  <th colSpan={2} className="border-b border-r border-white/20 bg-purple-700 px-3 py-3 text-center font-bold uppercase tracking-wide text-white">③ RECEIVING STOCK<br /><span className="text-xs font-normal opacity-90">(Incoming to Warehouse)</span></th>
-                  <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Recommended<br />Action</th>
+                  <th colSpan={4} className="border-b border-r border-white/20 bg-[#175fd3] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">② PO STAGE<br /><span className="text-xs font-normal opacity-90">(Ordered from Supplier)</span></th>
+                  <th colSpan={3} className="border-b border-r border-white/20 bg-purple-700 px-3 py-3 text-center font-bold uppercase tracking-wide text-white">③ RECEIVING STOCK<br /><span className="text-xs font-normal opacity-90">(Incoming to Warehouse)</span></th>
+                  <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Overall<br />Status</th>
                 </tr>
                 <tr>
                   <th className="border-b border-slate-200 bg-[#102f76] px-3 py-3 text-left font-bold uppercase tracking-wide text-white">Supplier</th>
@@ -728,43 +955,44 @@ const ReorderReport: React.FC = () => {
                   <th className="border-b border-r border-white/20 bg-orange-500 px-3 py-3 text-center font-bold uppercase tracking-wide text-white">PR #</th>
                   <th className="border-b border-r border-white/20 bg-orange-500 px-3 py-3 text-center font-bold uppercase tracking-wide text-white">PR Qty</th>
                   <th className="border-b border-r border-white/20 bg-[#175fd3] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">PO #</th>
-                  <th className="border-b border-r border-white/20 bg-[#175fd3] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">PO Qty</th>
+                  <th className="border-b border-r border-white/20 bg-[#175fd3] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Ordered Qty</th>
+                  <th className="border-b border-r border-white/20 bg-[#175fd3] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">On Order</th>
+                  <th className="border-b border-r border-white/20 bg-[#175fd3] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Outstanding</th>
                   <th className="border-b border-r border-white/20 bg-purple-700 px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Receiving #</th>
-                  <th className="border-b border-r border-white/20 bg-purple-700 px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Receiving Qty</th>
+                  <th className="border-b border-r border-white/20 bg-purple-700 px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Received Qty</th>
+                  <th className="border-b border-r border-white/20 bg-purple-700 px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Accepted Qty</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <tr><td colSpan={15} className="px-4 py-16 text-center text-sm text-slate-500">No items match the current filters.</td></tr>
+                  <tr><td colSpan={21} className="px-4 py-16 text-center text-sm text-slate-500">No items match the current filters.</td></tr>
                 ) : rows.map((row) => {
                   const active = isReorderWorkflowActive(row);
-                  const isForReceiving = active && row.po_refno && !row.rr_refno;
-                  const isForPo = active && row.pr_refno && !row.po_refno;
-                  const actionLabel = isForReceiving ? 'For Receiving' : isForPo ? 'For PO' : 'For PR';
-                  const actionColor = isForReceiving ? 'text-purple-700' : isForPo ? 'text-[#175fd3]' : 'text-orange-600';
                   return (
-                    <tr key={row.id} className={`border-b border-slate-100 hover:bg-slate-50 ${active ? 'opacity-70' : ''}`}>
+                    <tr key={row.id} className="border-b border-slate-100 align-top hover:bg-slate-50">
                       <td className="border-r border-slate-100 px-3 py-3 text-center">
                         <input type="checkbox" aria-label={`Select ${row.item_code}`} checked={selectedIds.has(row.id)} disabled={active} title={active ? 'This item already has an active purchasing workflow' : 'Select item'} onChange={() => toggleSelectRow(row.id)} className="h-4 w-4 rounded border-slate-300" />
                       </td>
                       <td className="px-3 py-3 font-semibold text-slate-600">{row.item_code}</td>
                       <td className="px-3 py-3 font-semibold text-[#173c83]">{row.part_no}</td>
                       <td className="border-r border-slate-100 px-3 py-3 font-semibold">{row.description}</td>
-                      <td className="px-3 py-3 text-center font-bold text-rose-600">{row.current_stock}</td>
-                      <td className="border-r border-slate-100 px-3 py-3 text-center font-bold text-[#173c83]">{isWh1Report ? row.replenish_qty : row.reorder_qty}</td>
-                      <td className="px-3 py-3 font-semibold">-</td>
-                      <td className="border-r border-slate-100 px-3 py-3 text-right font-semibold">-</td>
-                      <td className="border-r border-slate-100 px-3 py-3 text-center">{renderPrLink(row)}</td>
-                      <td className="border-r border-slate-100 px-3 py-3 text-center font-semibold text-orange-600">{row.pr_refno ? '-' : ''}</td>
-                      <td className="border-r border-slate-100 px-3 py-3 text-center">{renderPoLink(row)}</td>
-                      <td className="border-r border-slate-100 px-3 py-3 text-center font-semibold text-[#175fd3]">{row.po_refno ? '-' : ''}</td>
-                      <td className="border-r border-slate-100 px-3 py-3 text-center">{renderRrLink(row)}</td>
-                      <td className="border-r border-slate-100 px-3 py-3 text-center font-semibold text-purple-700">{row.rr_refno ? '-' : ''}</td>
-                      <td className="px-3 py-3 text-center font-bold">
-                        <span className={`inline-flex items-center gap-1.5 whitespace-nowrap ${actionColor}`}>
-                          <ShoppingCart className="h-4 w-4" /> {actionLabel}
-                        </span>
-                      </td>
+                      <td className="px-3 py-3 text-center font-bold text-slate-800">{formatQuantity(row.physical_stock)}</td>
+                      <td className="px-3 py-3 text-center font-semibold text-amber-700">{formatQuantity(row.reserved_stock)}</td>
+                      <td className="px-3 py-3 text-center font-bold text-rose-600">{formatQuantity(row.available_stock)}</td>
+                      <td className="border-r border-slate-100 px-3 py-3 text-center font-bold text-[#173c83]">{formatQuantity(row.reorder_qty)}</td>
+                      <td className="border-r border-slate-100 px-3 py-3 text-center font-extrabold text-emerald-700">{formatQuantity(row.suggested_reorder_qty)}</td>
+                      <td className="px-3 py-3 font-semibold">{row.preferred_supplier_name || '-'}</td>
+                      <td className="border-r border-slate-100 px-3 py-3 text-right font-semibold">{row.preferred_supplier_cost > 0 ? formatCurrency(row.preferred_supplier_cost) : '-'}</td>
+                      <td className="border-r border-slate-100 px-3 py-3 text-center">{renderPrDocuments(row)}</td>
+                      <td className="border-r border-slate-100 px-3 py-3 text-center font-semibold text-orange-600">{formatQuantity(row.open_pr_qty)}</td>
+                      <td className="border-r border-slate-100 px-3 py-3 text-center">{renderPoDocuments(row)}</td>
+                      <td className="border-r border-slate-100 px-3 py-3 text-center font-semibold text-[#175fd3]">{formatQuantity(row.po_ordered_qty)}</td>
+                      <td className="border-r border-slate-100 px-3 py-3 text-center font-bold text-[#175fd3]">{formatQuantity(row.open_po_qty)}</td>
+                      <td className="border-r border-slate-100 px-3 py-3 text-center font-bold text-rose-600">{formatQuantity(row.remaining_qty)}</td>
+                      <td className="border-r border-slate-100 px-3 py-3 text-center">{renderRrDocuments(row)}</td>
+                      <td className="border-r border-slate-100 px-3 py-3 text-center font-semibold text-purple-700">{formatQuantity(row.received_qty)}</td>
+                      <td className="border-r border-slate-100 px-3 py-3 text-center font-bold text-emerald-700">{formatQuantity(row.accepted_qty)}</td>
+                      <td className="px-3 py-3 text-center">{renderStatusBadge(row.overall_status)}</td>
                     </tr>
                   );
                 })}
@@ -819,10 +1047,10 @@ const ReorderReport: React.FC = () => {
         </div>
         <table>
           <thead>
-            <tr><th rowSpan={2}>ITEM CODE</th><th rowSpan={2}>PART NO.</th><th rowSpan={2}>DESCRIPTION</th><th rowSpan={2}>CURRENT STOCK</th><th rowSpan={2}>REORDER LEVEL</th><th colSpan={2}>RECOMMENDED SUPPLIER</th><th colSpan={2}>① PR STAGE</th><th colSpan={2}>② PO STAGE</th><th colSpan={2}>③ RECEIVING STOCK</th></tr>
-            <tr><th>SUPPLIER</th><th>COST (P)</th><th>PR #</th><th>PR QTY</th><th>PO #</th><th>PO QTY</th><th>RECEIVING #</th><th>RECEIVING QTY</th></tr>
+            <tr><th rowSpan={2}>ITEM CODE</th><th rowSpan={2}>PART NO.</th><th rowSpan={2}>DESCRIPTION</th><th colSpan={5}>STOCK POSITION</th><th colSpan={2}>RECOMMENDED SUPPLIER</th><th colSpan={2}>① PR STAGE</th><th colSpan={4}>② PO STAGE</th><th colSpan={3}>③ RECEIVING STOCK</th><th rowSpan={2}>STATUS</th></tr>
+            <tr><th>PHYSICAL</th><th>RESERVED</th><th>AVAILABLE</th><th>REORDER</th><th>SUGGESTED</th><th>SUPPLIER</th><th>COST</th><th>PR #</th><th>OPEN PR</th><th>PO #</th><th>ORDERED</th><th>ON ORDER</th><th>OUTSTANDING</th><th>RR #</th><th>RECEIVED</th><th>ACCEPTED</th></tr>
           </thead>
-          <tbody>{(printRows.length > 0 ? printRows : rows).map((row) => <tr key={`print-${row.product_session}`}><td>{row.item_code}</td><td>{row.part_no}</td><td>{row.description}</td><td>{row.current_stock}</td><td>{isWh1Report ? row.replenish_qty : row.reorder_qty}</td><td>-</td><td>-</td><td>{row.pr_no || row.pr_refno || '-'}</td><td>{row.pr_refno ? '-' : ''}</td><td>{row.po_no || row.po_refno || '-'}</td><td>{row.po_refno ? '-' : ''}</td><td>{row.rr_no || row.rr_refno || '-'}</td><td>{row.rr_refno ? '-' : ''}</td></tr>)}</tbody>
+          <tbody>{(printRows.length > 0 ? printRows : rows).map((row) => <tr key={`print-${row.product_session}`}><td>{row.item_code}</td><td>{row.part_no}</td><td>{row.description}</td><td>{formatQuantity(row.physical_stock)}</td><td>{formatQuantity(row.reserved_stock)}</td><td>{formatQuantity(row.available_stock)}</td><td>{formatQuantity(row.reorder_qty)}</td><td>{formatQuantity(row.suggested_reorder_qty)}</td><td>{row.preferred_supplier_name || '-'}</td><td>{row.preferred_supplier_cost > 0 ? formatCurrency(row.preferred_supplier_cost) : '-'}</td><td>{row.pr_documents.map((document) => document.number).join(', ') || row.pr_no || '-'}</td><td>{formatQuantity(row.open_pr_qty)}</td><td>{row.po_documents.map((document) => document.number).join(', ') || row.po_no || '-'}</td><td>{formatQuantity(row.po_ordered_qty)}</td><td>{formatQuantity(row.open_po_qty)}</td><td>{formatQuantity(row.remaining_qty)}</td><td>{row.rr_documents.map((document) => document.number).join(', ') || row.rr_no || '-'}</td><td>{formatQuantity(row.received_qty)}</td><td>{formatQuantity(row.accepted_qty)}</td><td>{row.overall_status}</td></tr>)}</tbody>
         </table>
       </div>
     </div>
