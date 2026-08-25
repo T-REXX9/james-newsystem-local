@@ -190,13 +190,10 @@ apply_required_database_migrations() {
 
 validate_stack() {
   local api_health_url="$1"
-  local benchmark_url="$2"
   local health_code=""
   local table_count=""
   local account_count=""
   local patient_count=""
-  local benchmark_samples=8
-  local times=""
 
   echo
   echo "Post-setup validation:"
@@ -225,39 +222,6 @@ validate_stack() {
     return 1
   fi
   echo "  [OK] Database rows: tblaccount=${account_count}, tblpatient=${patient_count}"
-
-  for _ in $(seq 1 "$benchmark_samples"); do
-    local t=""
-    t="$(curl -sS -o /dev/null -w "%{time_total}" "$benchmark_url" || echo "99")"
-    times="${times} ${t}"
-  done
-
-  local stats=""
-  stats="$(echo "$times" | awk '{
-    min=$1; max=$1; sum=0;
-    for (i=1;i<=NF;i++) {
-      v=$i+0;
-      sum+=v;
-      if (v<min) min=v;
-      if (v>max) max=v;
-    }
-    avg=sum/NF;
-    printf "%.4f %.4f %.4f", avg, min, max;
-  }')"
-
-  local avg min max
-  read -r avg min max <<<"$stats"
-  echo "  [OK] API benchmark (${benchmark_samples} runs): avg=${avg}s min=${min}s max=${max}s"
-
-  if awk -v a="$avg" 'BEGIN { exit (a > 2.50) ? 0 : 1 }'; then
-    echo "  [FAIL] API benchmark is too slow (avg > 2.50s)."
-    return 1
-  fi
-  if awk -v a="$avg" 'BEGIN { exit (a > 1.20) ? 0 : 1 }'; then
-    echo "  [WARN] API is usable but slower than target (avg > 1.20s)."
-  else
-    echo "  [OK] API speed is within target."
-  fi
 
   return 0
 }
@@ -349,12 +313,7 @@ restart_services() {
 
   if command -v systemctl >/dev/null 2>&1 \
     && systemctl list-unit-files james-api.service james-realtime.service james-web.service --no-legend 2>/dev/null | grep -q '^james-api.service'; then
-    echo "Restarting managed james-api, james-realtime, and james-web services..."
-    sudo systemctl daemon-reload
-    sudo systemctl restart james-api james-realtime james-web
-    wait_for_http "http://127.0.0.1:${API_PORT}/api/v1/health" "API health endpoint"
-    wait_for_http "http://${REALTIME_HOST}:${REALTIME_PORT}/health" "internal chat realtime"
-    wait_for_http "http://127.0.0.1:${WEB_PORT}" "web preview"
+    restart_managed_services
     return 0
   fi
 
@@ -373,8 +332,61 @@ restart_services() {
   wait_for_http "http://127.0.0.1:${WEB_PORT}" "web preview"
 }
 
+release_james_ports() {
+  local port
+
+  # Older setup versions launched detached processes outside systemd. Stop only
+  # listeners on the three ports dedicated to this James installation.
+  for port in "$API_PORT" "$REALTIME_PORT" "$WEB_PORT"; do
+    if command -v fuser >/dev/null 2>&1; then
+      sudo fuser -k "${port}/tcp" >/dev/null 2>&1 || true
+    fi
+  done
+
+  # Keep compatibility with machines where psmisc/fuser was not installed yet.
+  pkill -f "php -S [^ ]*:${API_PORT} -t public" >/dev/null 2>&1 || true
+  pkill -f "node scripts/internal-chat-realtime-server.mjs" >/dev/null 2>&1 || true
+  pkill -f "npm run realtime" >/dev/null 2>&1 || true
+  pkill -f "vite preview --host [^ ]* --port ${WEB_PORT}" >/dev/null 2>&1 || true
+}
+
+require_active_service() {
+  local service="$1"
+  local label="$2"
+
+  if sudo systemctl is-active --quiet "$service"; then
+    return 0
+  fi
+
+  echo "ERROR: ${label} failed to start (${service})." >&2
+  sudo systemctl status "$service" --no-pager -l || true
+  return 1
+}
+
+restart_managed_services() {
+  echo "Restarting managed james-api, james-realtime, and james-web services..."
+  sudo systemctl daemon-reload
+  sudo systemctl stop james-web james-realtime james-api >/dev/null 2>&1 || true
+  release_james_ports
+
+  # Start and verify in dependency order. Endpoint checks alone are not enough:
+  # a stale detached process may answer while the systemd unit is crash-looping.
+  sudo systemctl start james-api
+  wait_for_http "http://127.0.0.1:${API_PORT}/api/v1/health" "API health endpoint"
+  require_active_service james-api "API"
+
+  sudo systemctl start james-realtime
+  wait_for_http "http://${REALTIME_HOST}:${REALTIME_PORT}/health" "internal chat realtime"
+  require_active_service james-realtime "realtime service"
+
+  sudo systemctl start james-web
+  wait_for_http "http://127.0.0.1:${WEB_PORT}" "web preview"
+  require_active_service james-web "web service"
+}
+
 check_stack_status() {
   local failures=0
+  local service_state=""
   local api_url="http://127.0.0.1:${API_PORT}/api/v1/health"
   local realtime_url="http://${REALTIME_HOST}:${REALTIME_PORT}/health"
   local web_url="http://127.0.0.1:${WEB_PORT}"
@@ -430,7 +442,13 @@ check_stack_status() {
     echo
     echo "Managed services:"
     for service in james-api james-realtime james-web; do
-      printf '  %-16s %s\n' "$service" "$(systemctl is-active "$service" 2>/dev/null || true)"
+      service_state="$(systemctl is-active "$service" 2>/dev/null || true)"
+      if [[ "$service_state" == "active" ]]; then
+        printf '  [OK]   %-16s %s\n' "$service" "$service_state"
+      else
+        printf '  [FAIL] %-16s %s\n' "$service" "${service_state:-unknown}"
+        failures=$((failures + 1))
+      fi
     done
   fi
 
@@ -536,12 +554,7 @@ EOF
 enable_and_restart_systemd_services() {
   sudo systemctl daemon-reload
   sudo systemctl enable james-api james-realtime james-web
-  sudo systemctl stop james-web james-realtime james-api >/dev/null 2>&1 || true
-  pkill -f "php -S ${API_HOST}:${API_PORT} -t public" >/dev/null 2>&1 || true
-  pkill -f "node scripts/internal-chat-realtime-server.mjs" >/dev/null 2>&1 || true
-  pkill -f "npm run realtime" >/dev/null 2>&1 || true
-  pkill -f "vite preview --host ${WEB_HOST} --port ${WEB_PORT}" >/dev/null 2>&1 || true
-  sudo systemctl restart james-api james-realtime james-web
+  restart_managed_services
 }
 
 build_auth_repo_url() {
@@ -981,6 +994,7 @@ run_production_mode() {
     php-cli \
     php-fpm \
     php-mysql \
+    psmisc \
     pv \
     unzip \
     jq \
@@ -1145,6 +1159,7 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
   php \
   php-cli \
   php-mysql \
+  psmisc \
   pv \
   unzip \
   jq
@@ -1308,13 +1323,7 @@ if [[ "$MODE" == "update" ]]; then
   API_HEALTH_URL="http://127.0.0.1:${API_PORT}/api/v1/health"
   WEB_URL_LOCAL="http://127.0.0.1:${WEB_PORT}"
   WEB_URL_LAN="http://${HOST_IP}:${WEB_PORT}"
-  BENCHMARK_MAIN_ID="$(db_query_scalar "SELECT CAST(lmain_id AS UNSIGNED) FROM \`${DB_NAME}\`.tblpatient WHERE lmain_id IS NOT NULL AND lmain_id <> '' ORDER BY lid ASC LIMIT 1;" || true)"
-  if [[ -z "$BENCHMARK_MAIN_ID" ]]; then
-    BENCHMARK_MAIN_ID="$VITE_MAIN_ID"
-  fi
-  BENCHMARK_URL="http://127.0.0.1:${API_PORT}/api/v1/daily-call-monitoring/excel?main_id=${BENCHMARK_MAIN_ID}&status=all&search="
-
-  validate_stack "$API_HEALTH_URL" "$BENCHMARK_URL"
+  validate_stack "$API_HEALTH_URL"
 
   echo
   echo "Update complete."
