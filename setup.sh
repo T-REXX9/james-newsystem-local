@@ -574,6 +574,14 @@ read_env_example_value() {
   ' "$env_file"
 }
 
+run_as_install_owner() {
+  if [[ "$(id -u)" -eq 0 && "$DEFAULT_OWNER_USER" != "root" ]]; then
+    sudo -u "$DEFAULT_OWNER_USER" -H "$@"
+    return
+  fi
+  "$@"
+}
+
 git_safe_clone_or_pull() {
   local repo_url="$1"
   local target_dir="$2"
@@ -582,19 +590,19 @@ git_safe_clone_or_pull() {
   auth_url="$(build_auth_repo_url "$repo_url")"
 
   if [[ -d "$target_dir/.git" ]]; then
-    GIT_TERMINAL_PROMPT=0 git -C "$target_dir" fetch --all --prune || {
+    run_as_install_owner env GIT_TERMINAL_PROMPT=0 git -C "$target_dir" fetch --all --prune || {
       echo "ERROR: Unable to fetch $repo_label."
       echo "If repo is private, export GITHUB_TOKEN=<token-with-repo-scope> and re-run."
       exit 1
     }
-    git -C "$target_dir" checkout main
-    GIT_TERMINAL_PROMPT=0 git -C "$target_dir" pull --ff-only || {
+    run_as_install_owner git -C "$target_dir" checkout main
+    run_as_install_owner env GIT_TERMINAL_PROMPT=0 git -C "$target_dir" pull --ff-only || {
       echo "ERROR: Unable to pull latest changes for $repo_label."
       echo "If repo is private, export GITHUB_TOKEN=<token-with-repo-scope> and re-run."
       exit 1
     }
   else
-    GIT_TERMINAL_PROMPT=0 git clone "$auth_url" "$target_dir" || {
+    run_as_install_owner env GIT_TERMINAL_PROMPT=0 git clone "$auth_url" "$target_dir" || {
       echo "ERROR: Unable to clone $repo_label."
       echo "If repo is private, export GITHUB_TOKEN=<token-with-repo-scope> and re-run."
       echo "Example: GITHUB_TOKEN=ghp_xxx ./setup.sh"
