@@ -590,24 +590,6 @@ const ReorderReport: React.FC = () => {
   const reportTitle = 'TOTAL COMPANY REORDER REPORT';
   const dateLabel = generatedAt ? formatReportDate(generatedAt) : '';
 
-  const renderPrLink = (row: ReorderReportEntry) => row.pr_refno ? (
-    <ModuleRecordLink tab="warehouse-purchasing-purchase-request" payload={{ prId: row.pr_refno }} className="font-semibold text-brand-blue hover:underline">
-      {row.pr_no || row.pr_refno}
-    </ModuleRecordLink>
-  ) : <span className="text-slate-400">-</span>;
-
-  const renderPoLink = (row: ReorderReportEntry) => row.po_refno ? (
-    <ModuleRecordLink tab="warehouse-purchasing-purchase-order" payload={{ poId: row.po_refno, poRefNo: row.po_no }} className="font-semibold text-brand-blue hover:underline">
-      {row.po_no || row.po_refno}
-    </ModuleRecordLink>
-  ) : <span className="text-slate-400">-</span>;
-
-  const renderRrLink = (row: ReorderReportEntry) => row.rr_refno ? (
-    <ModuleRecordLink tab="warehouse-purchasing-receiving-stock" payload={{ rrId: row.rr_refno, rrRefNo: row.rr_no }} className="font-semibold text-brand-blue hover:underline">
-      {row.rr_no || row.rr_refno}
-    </ModuleRecordLink>
-  ) : <span className="text-slate-400">-</span>;
-
   const formatQuantity = (value: number): string => new Intl.NumberFormat('en-US', {
     maximumFractionDigits: 2,
   }).format(value);
@@ -629,13 +611,13 @@ const ReorderReport: React.FC = () => {
           : normalized === 'ordered' || normalized === 'awaiting po'
             ? 'bg-blue-100 text-blue-700'
             : 'bg-orange-100 text-orange-700';
-    return <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${color}`}>{status}</span>;
+    return <span className={`inline-flex max-w-full justify-center rounded-full px-2 py-1 text-center text-[10px] font-bold leading-tight ${color}`}>{status}</span>;
   };
 
   const renderPrDocuments = (row: ReorderReportEntry) => row.pr_documents.length > 0 ? (
     <div className="space-y-2">
       {row.pr_documents.map((document) => (
-        <div key={`${document.refno}-${document.number}`} className="whitespace-nowrap">
+        <div key={`${document.refno}-${document.number}`} className="break-words">
           <ModuleRecordLink tab="warehouse-purchasing-purchase-request" payload={{ prId: document.refno }} className="font-bold text-brand-blue hover:underline">
             {document.number || document.refno}
           </ModuleRecordLink>
@@ -643,12 +625,12 @@ const ReorderReport: React.FC = () => {
         </div>
       ))}
     </div>
-  ) : renderPrLink(row);
+  ) : <span className="text-slate-400">-</span>;
 
   const renderPoDocuments = (row: ReorderReportEntry) => row.po_documents.length > 0 ? (
     <div className="space-y-2">
       {row.po_documents.map((document) => (
-        <div key={`${document.refno}-${document.number}`} className="min-w-40">
+        <div key={`${document.refno}-${document.number}`} className="min-w-0 break-words">
           <ModuleRecordLink tab="warehouse-purchasing-purchase-order" payload={{ poId: document.refno, poRefNo: document.number }} className="font-bold text-brand-blue hover:underline">
             {document.number || document.refno}
           </ModuleRecordLink>
@@ -658,12 +640,12 @@ const ReorderReport: React.FC = () => {
         </div>
       ))}
     </div>
-  ) : renderPoLink(row);
+  ) : <span className="text-slate-400">-</span>;
 
   const renderRrDocuments = (row: ReorderReportEntry) => row.rr_documents.length > 0 ? (
     <div className="space-y-2">
       {row.rr_documents.map((document) => (
-        <div key={`${document.refno}-${document.number}`} className="whitespace-nowrap">
+        <div key={`${document.refno}-${document.number}`} className="break-words">
           <ModuleRecordLink tab="warehouse-purchasing-receiving-stock" payload={{ rrId: document.refno, rrRefNo: document.number }} className="font-bold text-brand-blue hover:underline">
             {document.number || document.refno}
           </ModuleRecordLink>
@@ -671,7 +653,7 @@ const ReorderReport: React.FC = () => {
         </div>
       ))}
     </div>
-  ) : renderRrLink(row);
+  ) : <span className="text-slate-400">-</span>;
 
   if (!generatedAt) {
     return (
@@ -801,9 +783,26 @@ const ReorderReport: React.FC = () => {
   }
 
   return (
-    <div className="reorder-report-page min-h-full overflow-y-auto bg-[#f7f9fc] text-slate-900">
+    <div className="reorder-report-page h-full min-h-0 overflow-hidden bg-[#f7f9fc] text-slate-900">
       <style>{`
         .reorder-report-print { display: none; }
+        .reorder-report-table th {
+          padding: 0.5rem 0.25rem;
+          font-size: 10px;
+          line-height: 1.2;
+          overflow-wrap: anywhere;
+        }
+        .reorder-report-table th span { font-size: 9px; }
+        .reorder-report-table td {
+          padding: 0.55rem 0.3rem;
+          font-size: 11px;
+          line-height: 1.25;
+          overflow-wrap: anywhere;
+        }
+        @media (min-width: 1536px) {
+          .reorder-report-table th { font-size: 11px; }
+          .reorder-report-table td { font-size: 12px; }
+        }
         @media print {
           @page { size: landscape; margin: 7mm; }
           body * { visibility: hidden !important; }
@@ -814,8 +813,8 @@ const ReorderReport: React.FC = () => {
           .reorder-report-print th { font-weight: 600; }
         }
       `}</style>
-      <div className="mx-auto w-full max-w-none p-4 lg:p-6 print:hidden">
-        <header className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-none flex-col p-4 lg:p-6 print:hidden">
+        <header className="mb-6 flex shrink-0 flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <div className="mb-1 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-400"><span>Purchasing</span><span>›</span><span>Reports</span><span>›</span><span className="text-slate-700">Reorder Report</span></div>
             <h1 className="text-2xl font-extrabold uppercase tracking-tight text-[#173c83]">Reorder Report</h1>
@@ -829,8 +828,8 @@ const ReorderReport: React.FC = () => {
           </div>
         </header>
 
-        <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-          <form onSubmit={handleSearch} className="flex flex-wrap items-center gap-4 border-b border-slate-200 p-5">
+        <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <form onSubmit={handleSearch} className="relative z-40 flex shrink-0 flex-wrap items-center gap-4 border-b border-slate-200 bg-white p-5">
             <div className="flex-1 min-w-[280px]">
               <label htmlFor="reorder-search" className="mb-1 block text-xs font-bold text-slate-700">Search Item / Part No. / Description</label>
               <div className="relative">
@@ -857,7 +856,7 @@ const ReorderReport: React.FC = () => {
                     id="reorder-report-description-options"
                     role="listbox"
                     aria-label="Reorder report description suggestions"
-                    className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-slate-200 bg-white py-1 shadow-xl"
+                    className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-slate-200 bg-white py-1 shadow-xl"
                   >
                     {(!searchInput.trim() || 'all descriptions'.includes(searchInput.trim().toLowerCase())) && (
                       <button
@@ -913,7 +912,7 @@ const ReorderReport: React.FC = () => {
             </div>
           </form>
 
-          <div data-testid="reorder-selection-actions" className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white/95 px-5 py-3 shadow-sm backdrop-blur">
+          <div data-testid="reorder-selection-actions" className="z-10 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white/95 px-5 py-3 shadow-sm backdrop-blur">
             <div className="flex items-center gap-4">
               <span className="text-sm font-bold text-slate-700">{selectingAll ? 'Selecting all eligible items...' : `${selectedVisibleCount} item(s) selected`}</span>
               <button type="button" onClick={() => setShowAddPrModal(true)} disabled={selectedVisibleCount === 0 || processing} className="rounded-md border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-bold text-orange-600 transition hover:bg-orange-100 disabled:opacity-50">
@@ -930,9 +929,32 @@ const ReorderReport: React.FC = () => {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[2300px] border-collapse text-sm">
-              <thead>
+          <div data-testid="reorder-table-scroll-container" className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+            <table className="reorder-report-table w-full table-fixed border-collapse">
+              <colgroup>
+                <col style={{ width: '2.5%' }} />
+                <col style={{ width: '4.5%' }} />
+                <col style={{ width: '5.5%' }} />
+                <col style={{ width: '10.5%' }} />
+                <col style={{ width: '4%' }} />
+                <col style={{ width: '4%' }} />
+                <col style={{ width: '4%' }} />
+                <col style={{ width: '4%' }} />
+                <col style={{ width: '4%' }} />
+                <col style={{ width: '5%' }} />
+                <col style={{ width: '4%' }} />
+                <col style={{ width: '4.5%' }} />
+                <col style={{ width: '3.5%' }} />
+                <col style={{ width: '7.5%' }} />
+                <col style={{ width: '4%' }} />
+                <col style={{ width: '4%' }} />
+                <col style={{ width: '4.5%' }} />
+                <col style={{ width: '7%' }} />
+                <col style={{ width: '4%' }} />
+                <col style={{ width: '4%' }} />
+                <col style={{ width: '5%' }} />
+              </colgroup>
+              <thead className="sticky top-0 z-30 shadow-md">
                 <tr>
                   <th rowSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-3 text-center text-white"><label className="inline-flex items-center justify-center gap-1"><input type="checkbox" checked={allSelected} disabled={selectingAll} onChange={() => void toggleSelectAll()} className="h-4 w-4 rounded border-white/30 bg-white/10 disabled:opacity-60" aria-label="ALL" /> ALL</label></th>
                   <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-3 text-left font-bold uppercase tracking-wide text-white">Item Code</th>
@@ -998,22 +1020,21 @@ const ReorderReport: React.FC = () => {
                 })}
               </tbody>
             </table>
+            {meta.total > 0 ? (
+              <div className="border-t border-slate-200 px-5 py-4 text-center text-sm text-slate-500">
+                {loadingMore ? (
+                  <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Loading more items...</span>
+                ) : loadMoreFailed ? (
+                  <button type="button" onClick={() => void loadReport(page + 1, appliedSearch, true)} className="text-[#175fd3] underline">Unable to load more items. Retry</button>
+                ) : page >= meta.total_pages ? (
+                  <span>All {rows.length} entries loaded</span>
+                ) : (
+                  <span>Showing {rows.length} of {meta.total} entries</span>
+                )}
+              </div>
+            ) : null}
+            <div ref={loadMoreSentinelRef} data-testid="reorder-load-more-sentinel" className="h-px w-full" aria-hidden="true" />
           </div>
-
-          {meta.total > 0 ? (
-            <div className="border-t border-slate-200 px-5 py-4 text-center text-sm text-slate-500">
-              {loadingMore ? (
-                <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Loading more items...</span>
-              ) : loadMoreFailed ? (
-                <button type="button" onClick={() => void loadReport(page + 1, appliedSearch, true)} className="text-[#175fd3] underline">Unable to load more items. Retry</button>
-              ) : page >= meta.total_pages ? (
-                <span>All {rows.length} entries loaded</span>
-              ) : (
-                <span>Showing {rows.length} of {meta.total} entries</span>
-              )}
-            </div>
-          ) : null}
-          <div ref={loadMoreSentinelRef} data-testid="reorder-load-more-sentinel" className="h-px w-full" aria-hidden="true" />
         </section>
       </div>
 
@@ -1050,7 +1071,7 @@ const ReorderReport: React.FC = () => {
             <tr><th rowSpan={2}>ITEM CODE</th><th rowSpan={2}>PART NO.</th><th rowSpan={2}>DESCRIPTION</th><th colSpan={5}>STOCK POSITION</th><th colSpan={2}>RECOMMENDED SUPPLIER</th><th colSpan={2}>① PR STAGE</th><th colSpan={4}>② PO STAGE</th><th colSpan={3}>③ RECEIVING STOCK</th><th rowSpan={2}>STATUS</th></tr>
             <tr><th>PHYSICAL</th><th>RESERVED</th><th>AVAILABLE</th><th>REORDER</th><th>SUGGESTED</th><th>SUPPLIER</th><th>COST</th><th>PR #</th><th>OPEN PR</th><th>PO #</th><th>ORDERED</th><th>ON ORDER</th><th>OUTSTANDING</th><th>RR #</th><th>RECEIVED</th><th>ACCEPTED</th></tr>
           </thead>
-          <tbody>{(printRows.length > 0 ? printRows : rows).map((row) => <tr key={`print-${row.product_session}`}><td>{row.item_code}</td><td>{row.part_no}</td><td>{row.description}</td><td>{formatQuantity(row.physical_stock)}</td><td>{formatQuantity(row.reserved_stock)}</td><td>{formatQuantity(row.available_stock)}</td><td>{formatQuantity(row.reorder_qty)}</td><td>{formatQuantity(row.suggested_reorder_qty)}</td><td>{row.preferred_supplier_name || '-'}</td><td>{row.preferred_supplier_cost > 0 ? formatCurrency(row.preferred_supplier_cost) : '-'}</td><td>{row.pr_documents.map((document) => document.number).join(', ') || row.pr_no || '-'}</td><td>{formatQuantity(row.open_pr_qty)}</td><td>{row.po_documents.map((document) => document.number).join(', ') || row.po_no || '-'}</td><td>{formatQuantity(row.po_ordered_qty)}</td><td>{formatQuantity(row.open_po_qty)}</td><td>{formatQuantity(row.remaining_qty)}</td><td>{row.rr_documents.map((document) => document.number).join(', ') || row.rr_no || '-'}</td><td>{formatQuantity(row.received_qty)}</td><td>{formatQuantity(row.accepted_qty)}</td><td>{row.overall_status}</td></tr>)}</tbody>
+          <tbody>{(printRows.length > 0 ? printRows : rows).map((row) => <tr key={`print-${row.product_session}`}><td>{row.item_code}</td><td>{row.part_no}</td><td>{row.description}</td><td>{formatQuantity(row.physical_stock)}</td><td>{formatQuantity(row.reserved_stock)}</td><td>{formatQuantity(row.available_stock)}</td><td>{formatQuantity(row.reorder_qty)}</td><td>{formatQuantity(row.suggested_reorder_qty)}</td><td>{row.preferred_supplier_name || '-'}</td><td>{row.preferred_supplier_cost > 0 ? formatCurrency(row.preferred_supplier_cost) : '-'}</td><td>{row.pr_documents.map((document) => document.number).join(', ') || '-'}</td><td>{formatQuantity(row.open_pr_qty)}</td><td>{row.po_documents.map((document) => document.number).join(', ') || '-'}</td><td>{formatQuantity(row.po_ordered_qty)}</td><td>{formatQuantity(row.open_po_qty)}</td><td>{formatQuantity(row.remaining_qty)}</td><td>{row.rr_documents.map((document) => document.number).join(', ') || '-'}</td><td>{formatQuantity(row.received_qty)}</td><td>{formatQuantity(row.accepted_qty)}</td><td>{row.overall_status}</td></tr>)}</tbody>
         </table>
       </div>
     </div>

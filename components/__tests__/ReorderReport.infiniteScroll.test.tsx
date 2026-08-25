@@ -143,6 +143,9 @@ describe('ReorderReport automatic loading', () => {
     const reportSearch = await screen.findByRole('combobox', { name: 'Reorder report smart search' });
     fireEvent.focus(reportSearch);
     fireEvent.change(reportSearch, { target: { value: '' } });
+    const reportSearchListbox = screen.getByRole('listbox', { name: 'Reorder report description suggestions' });
+    expect(reportSearchListbox).toHaveClass('z-50');
+    expect(reportSearchListbox.closest('form')).toHaveClass('relative', 'z-40');
     expect(screen.getByRole('option', { name: 'Rotor Head' })).toBeInTheDocument();
 
     fireEvent.change(reportSearch, { target: { value: 'rot' } });
@@ -161,6 +164,13 @@ describe('ReorderReport automatic loading', () => {
 
     await waitFor(() => expect(screen.getAllByText('ITEM-1').length).toBeGreaterThan(0));
     await waitFor(() => expect(intersectionCallback).not.toBeNull());
+
+    const tableScrollContainer = screen.getByTestId('reorder-table-scroll-container');
+    expect(tableScrollContainer).toHaveClass('overflow-x-hidden', 'overflow-y-auto');
+    expect(tableScrollContainer.querySelector('thead')).toHaveClass('sticky', 'top-0');
+    expect(tableScrollContainer.querySelector('table')).toHaveClass('w-full', 'table-fixed');
+    expect(tableScrollContainer.querySelector('table')).not.toHaveClass('min-w-[2300px]');
+    expect(tableScrollContainer.querySelectorAll('col')).toHaveLength(21);
 
     await act(async () => {
       intersectionCallback?.([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver);
@@ -257,5 +267,30 @@ describe('ReorderReport automatic loading', () => {
     expect(payload.items.map((item: any) => item.supplier_id)).toEqual(['SUP-1', 'SUP-1']);
     await screen.findByText('PR-2699');
     expect(screen.getByText('PR Created:')).toBeInTheDocument();
+  });
+
+  it('does not show historical fallback documents in an active Needs PR row', async () => {
+    fetchEntriesMock.mockResolvedValue({
+      items: [{
+        ...reportRow('1', 'ITEM-1'),
+        overall_status: 'Needs PR',
+        can_create_pr: true,
+        po_refno: 'OLD-PO-REF',
+        po_no: 'PO-2160',
+        po_status: 'Completed',
+        rr_refno: 'OLD-RR-REF',
+        rr_no: 'RR-2168',
+        rr_status: 'Delivered',
+      }],
+      meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
+    });
+
+    render(<ReorderReport />);
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Report' }));
+    await waitFor(() => expect(screen.getAllByText('ITEM-1').length).toBeGreaterThan(0));
+
+    expect(screen.queryByText('PO-2160')).not.toBeInTheDocument();
+    expect(screen.queryByText('RR-2168')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Needs PR').length).toBeGreaterThan(0);
   });
 });

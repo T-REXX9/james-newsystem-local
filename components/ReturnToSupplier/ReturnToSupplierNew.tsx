@@ -16,6 +16,8 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
     const [loading, setLoading] = useState(false);
     const [rrSearch, setRrSearch] = useState('');
     const [rrResults, setRrResults] = useState<any[]>([]); // Receiving Reports
+    const [rrSearchLoading, setRrSearchLoading] = useState(false);
+    const [showRrDropdown, setShowRrDropdown] = useState(false);
     const [selectedRR, setSelectedRR] = useState<any | null>(null);
 
     const [formData, setFormData] = useState<{
@@ -34,26 +36,36 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
     const [itemSearchTerm, setItemSearchTerm] = useState('');
     const [showItemDropdown, setShowItemDropdown] = useState(false);
 
-    // Search RRs
+    // Load recent RRs on focus, then filter the suggestions as the user types.
     useEffect(() => {
+        if (step !== 1 || !showRrDropdown) return;
+
+        let cancelled = false;
         const search = async () => {
-            if (!rrSearch) {
-                setRrResults([]);
-                return;
-            }
+            setRrSearchLoading(true);
             try {
                 const results = await returnToSupplierService.searchRRs(rrSearch);
-                setRrResults(results);
+                if (!cancelled) setRrResults(results);
             } catch (err) {
-                console.error(err);
+                if (!cancelled) {
+                    console.error(err);
+                    setRrResults([]);
+                }
+            } finally {
+                if (!cancelled) setRrSearchLoading(false);
             }
         };
-        const debounce = setTimeout(search, 300);
-        return () => clearTimeout(debounce);
-    }, [rrSearch]);
+        const debounce = setTimeout(search, rrSearch.trim() === '' ? 0 : 250);
+        return () => {
+            cancelled = true;
+            clearTimeout(debounce);
+        };
+    }, [rrSearch, showRrDropdown, step]);
 
     const handleSelectRR = async (rr: any) => {
         setSelectedRR(rr);
+        setRrSearch(rr.rr_no || rr.rr_number || '');
+        setShowRrDropdown(false);
         setItemLookup({});
         setItemSearchResults([]);
         setItemSearchTerm('');
@@ -234,18 +246,19 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
         }
     };
 
-    // Filter available items for dropdown
-    const filteredAvailableItems = itemSearchResults.filter(item => {
-        const alreadyAdded = formData.items.some(i => i.rr_item_id === item.id);
-        if (alreadyAdded) return false;
-        return availableMaxQty(item.id) > 0;
-    });
-
     const availableMaxQty = (rrItemId: string) => {
         const item = itemLookup[rrItemId];
         if (!item) return 0;
         return item.quantity_received - item.qty_returned_already;
     };
+
+    // Filter available items for dropdown. The quantity helper must be initialized first
+    // because this callback runs during render as soon as item results are loaded.
+    const filteredAvailableItems = itemSearchResults.filter(item => {
+        const alreadyAdded = formData.items.some(i => i.rr_item_id === item.id);
+        if (alreadyAdded) return false;
+        return availableMaxQty(item.id) > 0;
+    });
 
     return (
         <section className="rounded border border-[#d5d5d5] bg-white shadow-sm">
@@ -257,7 +270,7 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
                     </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-6">
+                <div className={`relative flex-1 p-6 ${step === 1 ? 'overflow-visible' : 'overflow-y-auto'}`}>
                     {step === 1 && (
                         <div className="space-y-4">
                             <h3 className="text-lg font-medium dark:text-white">Select Receiving Report</h3>
@@ -265,32 +278,61 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
                                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                                 <input
                                     type="text"
-                                    placeholder="Search by RR Number..."
+                                    role="combobox"
+                                    aria-label="Receiving report smart search"
+                                    aria-autocomplete="list"
+                                    aria-expanded={showRrDropdown}
+                                    aria-controls="receiving-report-options"
+                                    placeholder="Search RR number, supplier, or PO..."
                                     value={rrSearch}
-                                    onChange={(e) => setRrSearch(e.target.value)}
+                                    onChange={(e) => {
+                                        setRrSearch(e.target.value);
+                                        setShowRrDropdown(true);
+                                    }}
+                                    onFocus={() => setShowRrDropdown(true)}
+                                    onBlur={() => window.setTimeout(() => setShowRrDropdown(false), 150)}
                                     className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     autoFocus
                                 />
-                            </div>
 
-                            <div className="mt-4 space-y-2">
-                                {rrResults.map(rr => (
+                                {showRrDropdown && (
                                     <div
-                                        key={rr.id}
-                                        onClick={() => handleSelectRR(rr)}
-                                        className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer transition-colors"
+                                        id="receiving-report-options"
+                                        role="listbox"
+                                        className="absolute z-50 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
                                     >
-                                        <div className="flex justify-between">
-                                            <span className="font-bold text-gray-900 dark:text-white">{rr.rr_no || rr.rr_number}</span>
-                                            <span className="text-sm text-gray-500">{new Date(rr.received_date || rr.created_at).toLocaleDateString()}</span>
-                                        </div>
-                                        <div className="text-sm text-gray-600 dark:text-gray-400">
-                                            Supplier: {rr.supplier_name} | PO: {rr.po_no || rr.po_number || 'N/A'}
-                                        </div>
+                                        {rrSearchLoading && (
+                                            <div className="p-3 text-sm text-gray-500">Loading available receiving reports...</div>
+                                        )}
+                                        {!rrSearchLoading && rrResults.map((rr) => (
+                                            <button
+                                                key={rr.id}
+                                                type="button"
+                                                role="option"
+                                                aria-selected="false"
+                                                onMouseDown={(event) => event.preventDefault()}
+                                                onClick={() => handleSelectRR(rr)}
+                                                className="block w-full border-b border-gray-100 p-3 text-left transition-colors last:border-b-0 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none dark:border-gray-700 dark:hover:bg-blue-900/20 dark:focus:bg-blue-900/20"
+                                            >
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <span className="font-semibold text-gray-900 dark:text-white">{rr.rr_no || rr.rr_number}</span>
+                                                    <span className="whitespace-nowrap text-xs text-gray-500">
+                                                        {new Date(rr.receive_date || rr.received_date || rr.created_at).toLocaleDateString()}
+                                                    </span>
+                                                </div>
+                                                <div className="mt-0.5 text-sm text-gray-600 dark:text-gray-400">
+                                                    {rr.supplier_name || 'Unknown supplier'} · PO: {rr.po_no || rr.po_number || 'N/A'}
+                                                </div>
+                                            </button>
+                                        ))}
+                                        {!rrSearchLoading && rrResults.length === 0 && (
+                                            <div className="p-3 text-sm text-gray-500">
+                                                {rrSearch.trim() === ''
+                                                    ? 'No posted receiving reports are available.'
+                                                    : 'No matching receiving reports found.'}
+                                            </div>
+                                        )}
                                     </div>
-                                ))}
-                                {rrSearch && rrResults.length === 0 && (
-                                    <div className="text-center text-gray-500 py-4">No RRs found (must be Posted)</div>
                                 )}
                             </div>
                         </div>
