@@ -614,14 +614,6 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
               <LegacyField label="VIP 1">{fieldInput('price_aa', 'Input Amount', 'number')}</LegacyField>
               <LegacyField label="VIP 2">{fieldInput('price_vip1', 'Input Amount', 'number')}</LegacyField>
               <LegacyField label="VIP 3">{fieldInput('price_vip2', 'Input Amount', 'number')}</LegacyField>
-              <LegacyField label="Platinum">
-                <input
-                  type="text"
-                  value={`${money(formData.price_vip2)} (Computed)`}
-                  readOnly
-                  className={`${inputClass} bg-[#eee] text-slate-500`}
-                />
-              </LegacyField>
             </div>
             <div className="mt-5 grid grid-cols-1 gap-x-5 gap-y-3 md:grid-cols-2 xl:grid-cols-4">
               <LegacyField label="Current Stock">

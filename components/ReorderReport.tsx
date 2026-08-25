@@ -285,6 +285,8 @@ const formatReportDate = (date: Date): string => {
   return `${month}-${day}-${year}`;
 };
 
+const DESCRIPTION_SUGGESTIONS = ['Nozzle', 'Plunger', 'DV', 'Control Valve'];
+
 const ReorderReport: React.FC = () => {
   const { addToast } = useToast();
   const [rows, setRows] = useState<ReorderReportEntry[]>([]);
@@ -299,6 +301,7 @@ const ReorderReport: React.FC = () => {
   const [showAddPrModal, setShowAddPrModal] = useState(false);
   const [confirmAction, setConfirmAction] = useState<'hide' | null>(null);
   const [searchInput, setSearchInput] = useState('');
+  const [showDescriptionDropdown, setShowDescriptionDropdown] = useState(false);
   const [appliedSearch, setAppliedSearch] = useState('');
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ page: 1, per_page: 50, total: 0, total_pages: 1 });
@@ -306,6 +309,14 @@ const ReorderReport: React.FC = () => {
   const [latestCreatedPr, setLatestCreatedPr] = useState<{ id: string; number: string } | null>(null);
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const isWh1Report = false;
+
+  const filteredDescriptionSuggestions = useMemo(() => {
+    const query = searchInput.trim().toLowerCase();
+    if (!query) return DESCRIPTION_SUGGESTIONS;
+    return DESCRIPTION_SUGGESTIONS.filter((description) =>
+      description.toLowerCase().includes(query)
+    );
+  }, [searchInput]);
 
   const loadReport = useCallback(async (targetPage = 1, targetSearch = '', append = false) => {
     if (append) setLoadingMore(true);
@@ -530,23 +541,71 @@ const ReorderReport: React.FC = () => {
               <div className="grid grid-cols-[155px_435px] items-start gap-[30px] max-md:grid-cols-[135px_minmax(0,1fr)]">
                 <label className="pt-2 text-right font-semibold text-[#222]">Description</label>
                 <div className="text-[#222]">
-                  <label className="block">
+                  <div className="relative">
                     <input
                       type="text"
-                      list="reorder-description-options"
                       value={searchInput}
-                      onChange={(event) => setSearchInput(event.target.value)}
+                      onChange={(event) => {
+                        setSearchInput(event.target.value);
+                        setShowDescriptionDropdown(true);
+                      }}
+                      onFocus={() => setShowDescriptionDropdown(true)}
+                      onBlur={() => window.setTimeout(() => setShowDescriptionDropdown(false), 150)}
                       placeholder="All descriptions"
-                      className="h-[35px] w-full rounded-[3px] border border-[#c9c9c9] bg-white px-4 py-2 text-[13px] text-[#555] outline-none focus:border-[#66afe9] focus:ring-1 focus:ring-[#66afe9]"
+                      role="combobox"
+                      aria-label="Description smart search"
+                      aria-autocomplete="list"
+                      aria-expanded={showDescriptionDropdown}
+                      aria-controls="reorder-description-options"
+                      className="h-[35px] w-full rounded-[3px] border border-[#c9c9c9] bg-white py-2 pl-4 pr-9 text-[13px] text-[#555] outline-none focus:border-[#66afe9] focus:ring-1 focus:ring-[#66afe9]"
                     />
-                    <datalist id="reorder-description-options">
-                      <option value="All" />
-                      <option value="Nozzle" />
-                      <option value="Plunger" />
-                      <option value="DV" />
-                      <option value="Control Valve" />
-                    </datalist>
-                  </label>
+                    <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#999]" />
+                    {showDescriptionDropdown && (
+                      <div
+                        id="reorder-description-options"
+                        role="listbox"
+                        aria-label="Description suggestions"
+                        className="absolute z-20 mt-1 max-h-52 w-full overflow-y-auto rounded-[3px] border border-[#ccc] bg-white py-1 shadow-lg"
+                      >
+                        {(!searchInput.trim() || 'all descriptions'.includes(searchInput.trim().toLowerCase())) && (
+                          <button
+                            type="button"
+                            role="option"
+                            aria-selected={!searchInput.trim()}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => {
+                              setSearchInput('');
+                              setShowDescriptionDropdown(false);
+                            }}
+                            className="block w-full px-3 py-2 text-left text-[13px] text-[#333] hover:bg-[#f5f5f5]"
+                          >
+                            All descriptions
+                          </button>
+                        )}
+                        {filteredDescriptionSuggestions.map((description) => (
+                          <button
+                            key={description}
+                            type="button"
+                            role="option"
+                            aria-selected={searchInput.toLowerCase() === description.toLowerCase()}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => {
+                              setSearchInput(description);
+                              setShowDescriptionDropdown(false);
+                            }}
+                            className="block w-full px-3 py-2 text-left text-[13px] text-[#333] hover:bg-[#f5f5f5]"
+                          >
+                            {description}
+                          </button>
+                        ))}
+                        {searchInput.trim() && filteredDescriptionSuggestions.length === 0 && (
+                          <div className="px-3 py-2 text-[13px] text-[#777]">
+                            Press Generate Report to search for “{searchInput.trim()}”.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                   <p className="mt-2 text-[12px] text-[#666]">
                     Select All or enter a description such as nozzle, plunger, DV, or control valve.
                   </p>

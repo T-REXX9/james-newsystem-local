@@ -100,6 +100,25 @@ describe('ReorderReport automatic loading', () => {
     vi.clearAllMocks();
   });
 
+  it('filters and selects descriptions from the smart-search dropdown', async () => {
+    render(<ReorderReport />);
+
+    const descriptionSearch = screen.getByRole('combobox', { name: 'Description smart search' });
+    fireEvent.focus(descriptionSearch);
+    expect(screen.getByRole('option', { name: 'All descriptions' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Nozzle' })).toBeInTheDocument();
+
+    fireEvent.change(descriptionSearch, { target: { value: 'plu' } });
+    expect(screen.getByRole('option', { name: 'Plunger' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Nozzle' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('option', { name: 'Plunger' }));
+    expect(descriptionSearch).toHaveValue('Plunger');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Report' }));
+    await waitFor(() => expect(fetchEntriesMock).toHaveBeenCalledWith(expect.objectContaining({ search: 'Plunger' })));
+  });
+
   it('loads the next batch when the end sentinel becomes visible without pagination controls', async () => {
     render(<ReorderReport />);
     fireEvent.click(screen.getByRole('button', { name: 'Generate Report' }));

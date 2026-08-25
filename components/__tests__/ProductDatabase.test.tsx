@@ -126,7 +126,7 @@ describe('ProductDatabase', () => {
     expect(screen.getAllByText('VIP 1').length).toBeGreaterThan(0);
     expect(screen.getAllByText('VIP 2').length).toBeGreaterThan(0);
     expect(screen.getAllByText('VIP 3').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Platinum').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Platinum')).not.toBeInTheDocument();
     expect(screen.queryByText('Regular')).not.toBeInTheDocument();
     expect(screen.queryByText('Silver')).not.toBeInTheDocument();
     expect(screen.queryByText('Gold')).not.toBeInTheDocument();
