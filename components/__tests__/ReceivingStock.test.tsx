@@ -1,6 +1,7 @@
 import React from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createWorkflowHistoryState } from '../../utils/workflowHistory';
 
 const service = {
   getReceivingReports: vi.fn(),
@@ -17,6 +18,7 @@ afterEach(() => cleanup());
 beforeEach(() => {
   cleanup();
   vi.clearAllMocks();
+  window.history.replaceState(null, '', '/');
   service.getReceivingReports.mockResolvedValue([report]);
 });
 
@@ -44,5 +46,16 @@ describe('ReceivingStock module', () => {
     const { default: ReceivingStock } = await import('../ReceivingStock');
     render(<ReceivingStock initialRRId="RRREF-1" />);
     expect(await screen.findByText('Receiving detail RRREF-1')).toBeInTheDocument();
+  });
+
+  it('retraces the previous workflow from a linked receiving report', async () => {
+    window.history.replaceState(createWorkflowHistoryState('#/warehouse-reports-reorder-report'), '', '/#/warehouse-receiving-stock?rrId=RRREF-1');
+    const backSpy = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+    const { default: ReceivingStock } = await import('../ReceivingStock');
+    render(<ReceivingStock initialRRId="RRREF-1" />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Back to receiving list' }));
+    expect(backSpy).toHaveBeenCalledOnce();
+    backSpy.mockRestore();
   });
 });

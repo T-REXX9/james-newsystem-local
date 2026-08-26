@@ -3,9 +3,9 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ReorderReport from '../ReorderReport';
 
-const { fetchEntriesMock, fetchDescriptionOptionsMock, addToastMock, getPrsMock, getSuppliersMock, generatePrMock, createPrMock } = vi.hoisted(() => ({
+const { fetchEntriesMock, fetchSearchOptionsMock, addToastMock, getPrsMock, getSuppliersMock, generatePrMock, createPrMock } = vi.hoisted(() => ({
   fetchEntriesMock: vi.fn(),
-  fetchDescriptionOptionsMock: vi.fn(),
+  fetchSearchOptionsMock: vi.fn(),
   addToastMock: vi.fn(),
   getPrsMock: vi.fn(),
   getSuppliersMock: vi.fn(),
@@ -19,7 +19,7 @@ vi.mock('../../services/reorderReportService', () => ({
     { id: 'wh1', label: 'WH1' },
   ],
   fetchReorderReportEntries: fetchEntriesMock,
-  fetchReorderDescriptionOptions: fetchDescriptionOptionsMock,
+  fetchReorderSearchOptions: fetchSearchOptionsMock,
   hideReorderReportItems: vi.fn(),
   isReorderWorkflowActive: (row: any) => Boolean(row.pr_refno || row.po_refno) && row.rr_status !== 'Posted',
   getReorderWorkflowStages: (row: any) => ({
@@ -93,7 +93,15 @@ describe('ReorderReport automatic loading', () => {
 
   beforeEach(() => {
     window.history.replaceState(null, '', '/#/warehouse-reports-reorder-report');
-    fetchDescriptionOptionsMock.mockResolvedValue(['Control Valve', 'DV', 'Nozzle', 'Plunger', 'Rotor Head']);
+    fetchSearchOptionsMock.mockResolvedValue([
+      { value: 'QK6-026', category: 'Item Code' },
+      { value: 'P-DN21154', category: 'Part Number' },
+      { value: 'OPN-77', category: 'Original Part Number' },
+      { value: 'Control Valve', category: 'Description' },
+      { value: 'Plunger', category: 'Description' },
+      { value: 'Rotor Head', category: 'Description' },
+      { value: 'Bosch', category: 'Brand' },
+    ]);
     getPrsMock.mockResolvedValue([]);
     getSuppliersMock.mockResolvedValue([{ id: 'SUP-1', company: 'Supplier One' }]);
     generatePrMock.mockResolvedValue('PR-2699');
@@ -124,41 +132,24 @@ describe('ReorderReport automatic loading', () => {
     vi.clearAllMocks();
   });
 
-  it('filters and selects descriptions from the smart-search dropdown', async () => {
+  it('opens directly and smart-searches every product field in realtime', async () => {
     render(<ReorderReport />);
-
-    const descriptionSearch = screen.getByRole('combobox', { name: 'Description smart search' });
-    fireEvent.focus(descriptionSearch);
-    expect(screen.getByRole('option', { name: 'All descriptions' })).toBeInTheDocument();
-    expect(await screen.findByRole('option', { name: 'Nozzle' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'Rotor Head' })).toBeInTheDocument();
-
-    fireEvent.change(descriptionSearch, { target: { value: 'plu' } });
-    expect(screen.getByRole('option', { name: 'Plunger' })).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'Nozzle' })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('option', { name: 'Plunger' }));
-    expect(descriptionSearch).toHaveValue('Plunger');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Generate Report' }));
-    await waitFor(() => expect(fetchEntriesMock).toHaveBeenCalledWith(expect.objectContaining({ search: 'Plunger' })));
-
     const reportSearch = await screen.findByRole('combobox', { name: 'Reorder report smart search' });
+    await waitFor(() => expect(fetchEntriesMock).toHaveBeenCalledWith(expect.objectContaining({ search: '', page: 1 })));
+    expect(screen.queryByRole('button', { name: 'Generate Report' })).not.toBeInTheDocument();
     fireEvent.focus(reportSearch);
-    fireEvent.change(reportSearch, { target: { value: '' } });
-    const reportSearchListbox = screen.getByRole('listbox', { name: 'Reorder report description suggestions' });
+    const reportSearchListbox = screen.getByRole('listbox', { name: 'Reorder report smart suggestions' });
     expect(reportSearchListbox).toHaveClass('z-50');
     expect(reportSearchListbox.closest('form')).toHaveClass('relative', 'z-40');
-    expect(screen.getByRole('option', { name: 'Rotor Head' })).toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: /QK6-026.*Item Code/i })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /P-DN21154.*Part Number/i })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /OPN-77.*Original Part Number/i })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Bosch.*Brand/i })).toBeInTheDocument();
 
-    fireEvent.change(reportSearch, { target: { value: 'rot' } });
-    expect(screen.getByRole('option', { name: 'Rotor Head' })).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'Plunger' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('option', { name: 'Rotor Head' }));
-    expect(reportSearch).toHaveValue('Rotor Head');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
-    await waitFor(() => expect(fetchEntriesMock).toHaveBeenCalledWith(expect.objectContaining({ search: 'Rotor Head' })));
+    fireEvent.change(reportSearch, { target: { value: 'qk6' } });
+    expect(screen.getByRole('option', { name: /QK6-026.*Item Code/i })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Bosch.*Brand/i })).not.toBeInTheDocument();
+    await waitFor(() => expect(fetchEntriesMock).toHaveBeenCalledWith(expect.objectContaining({ search: 'qk6' })));
   });
 
   it('shows document quantities even while a generated PO is still pending', async () => {
@@ -183,7 +174,6 @@ describe('ReorderReport automatic loading', () => {
     });
 
     render(<ReorderReport />);
-    fireEvent.click(screen.getByRole('button', { name: 'Generate Report' }));
     const [itemCode] = await screen.findAllByText('QK6-026');
     const cells = itemCode.closest('tr')?.querySelectorAll('td');
     expect(cells?.[12]?.textContent).toBe('15');
@@ -194,7 +184,6 @@ describe('ReorderReport automatic loading', () => {
 
   it('restores the generated report when browser history returns to the report', async () => {
     const firstRender = render(<ReorderReport />);
-    fireEvent.click(screen.getByRole('button', { name: 'Generate Report' }));
     await waitFor(() => expect(screen.getAllByText('ITEM-1').length).toBeGreaterThan(0));
     await waitFor(() => expect(window.history.state?.reorderReport?.generatedAt).toBeTruthy());
 
@@ -212,20 +201,16 @@ describe('ReorderReport automatic loading', () => {
     expect(fetchEntriesMock).not.toHaveBeenCalled();
   });
 
-  it('clears the saved generated report when Back to Filter is chosen', async () => {
+  it('does not expose the removed filter-generation controls', async () => {
     render(<ReorderReport />);
-    fireEvent.click(screen.getByRole('button', { name: 'Generate Report' }));
     await waitFor(() => expect(screen.getAllByText('ITEM-1').length).toBeGreaterThan(0));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Back to Filter' }));
-
-    expect(screen.getByRole('button', { name: 'Generate Report' })).toBeInTheDocument();
-    expect(window.history.state?.reorderReport).toBeUndefined();
+    expect(screen.queryByRole('button', { name: 'Generate Report' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Back to Filter' })).not.toBeInTheDocument();
   });
 
   it('loads the next batch when the end sentinel becomes visible without pagination controls', async () => {
     render(<ReorderReport />);
-    fireEvent.click(screen.getByRole('button', { name: 'Generate Report' }));
 
     await waitFor(() => expect(screen.getAllByText('ITEM-1').length).toBeGreaterThan(0));
     await waitFor(() => expect(intersectionCallback).not.toBeNull());
@@ -250,7 +235,6 @@ describe('ReorderReport automatic loading', () => {
 
   it('selects every eligible item across all report batches', async () => {
     render(<ReorderReport />);
-    fireEvent.click(screen.getByRole('button', { name: 'Generate Report' }));
     await waitFor(() => expect(screen.getAllByText('ITEM-1').length).toBeGreaterThan(0));
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'ALL' }));
@@ -276,7 +260,6 @@ describe('ReorderReport automatic loading', () => {
     });
 
     render(<ReorderReport />);
-    fireEvent.click(screen.getByRole('button', { name: 'Generate Report' }));
     await waitFor(() => expect(screen.getAllByText('ITEM-1').length).toBeGreaterThan(0));
 
     const actions = screen.getByTestId('reorder-selection-actions');
@@ -313,7 +296,6 @@ describe('ReorderReport automatic loading', () => {
     });
 
     render(<ReorderReport />);
-    fireEvent.click(screen.getByRole('button', { name: 'Generate Report' }));
     await waitFor(() => expect(screen.getAllByText('ITEM-3').length).toBeGreaterThan(0));
 
     const activeCheckbox = screen.getByTitle('This item already has an active purchasing workflow');
@@ -351,7 +333,6 @@ describe('ReorderReport automatic loading', () => {
     });
 
     render(<ReorderReport />);
-    fireEvent.click(screen.getByRole('button', { name: 'Generate Report' }));
     await waitFor(() => expect(screen.getAllByText('ITEM-1').length).toBeGreaterThan(0));
 
     expect(screen.queryByText('PO-2160')).not.toBeInTheDocument();

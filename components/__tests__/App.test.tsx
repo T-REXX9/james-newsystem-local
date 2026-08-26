@@ -148,9 +148,12 @@ describe('App authentication flow', () => {
     expect(await screen.findByText('SalesInquiryView')).toBeInTheDocument();
     expect(window.location.hash).toBe('#/sales-transaction-sales-inquiry');
     expect(window.history.length).toBe(historyLength + 1);
+    expect(window.history.state).toEqual(expect.objectContaining({
+      __jamesWorkflowNavigation: expect.objectContaining({ fromHash: '#/home', index: 1 }),
+    }));
 
     window.history.replaceState(null, '', '/#/home');
-    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    window.dispatchEvent(new PopStateEvent('popstate'));
 
     await waitFor(() => expect(window.location.hash).toBe('#/home'));
     expect(screen.getByText('OwnerDailyCallMonitoringUnifiedView')).toBeInTheDocument();

@@ -6,6 +6,7 @@ import PurchaseRequestList from './PurchaseRequestList';
 import PurchaseRequestForm from './PurchaseRequestForm';
 import PurchaseRequestDetail from './PurchaseRequestView';
 import PurchaseRequestPrint from './PurchaseRequestPrint';
+import { retraceWorkflowHistory } from '../../utils/workflowHistory';
 
 interface PurchaseRequestModuleProps {
   initialPRId?: string;
@@ -26,7 +27,7 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
   const [filterMonth, setFilterMonth] = useState(String(currentDate.getMonth() + 1).padStart(2, '0'));
   const [filterYear, setFilterYear] = useState(String(currentDate.getFullYear()));
   const [filterStatus, setFilterStatus] = useState('All Statuses');
-  const consumedDeepLinkRef = useRef('');
+  const deepLinkRequestRef = useRef(0);
   const [deepLinkLoading, setDeepLinkLoading] = useState(Boolean(String(initialPRId || '').trim()));
   const [deepLinkError, setDeepLinkError] = useState('');
   const [deepLinkRetry, setDeepLinkRetry] = useState(0);
@@ -71,8 +72,8 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
 
   useEffect(() => {
     const target = String(initialPRId || '').trim();
-    if (!target || consumedDeepLinkRef.current === target) return;
-    consumedDeepLinkRef.current = target;
+    if (!target) return;
+    const requestId = ++deepLinkRequestRef.current;
     let cancelled = false;
     setDeepLinkLoading(true);
     setDeepLinkError('');
@@ -82,15 +83,15 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
     // own detail request finishes.
     void ensureProductsLoaded();
     void purchaseRequestService.getPurchaseRequestById(target).then(request => {
-      if (cancelled) return;
+      if (cancelled || deepLinkRequestRef.current !== requestId) return;
       setSelectedRequest(request);
       setViewMode('detail');
     }).catch(error => {
-      if (cancelled) return;
+      if (cancelled || deepLinkRequestRef.current !== requestId) return;
       console.error('Failed to open purchase request from deep link', error);
       setDeepLinkError(error instanceof Error ? error.message : 'The purchase request could not be loaded.');
     }).finally(() => {
-      if (!cancelled) setDeepLinkLoading(false);
+      if (!cancelled && deepLinkRequestRef.current === requestId) setDeepLinkLoading(false);
     });
 
     return () => {
@@ -99,7 +100,6 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
   }, [initialPRId, deepLinkRetry]);
 
   const retryDeepLink = () => {
-    consumedDeepLinkRef.current = '';
     setDeepLinkRetry(current => current + 1);
   };
 
@@ -183,12 +183,20 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
     void fetchRequests();
   };
 
+  const handleDetailBack = () => {
+    if (String(initialPRId || '').trim()) {
+      retraceWorkflowHistory(backToList);
+      return;
+    }
+    backToList();
+  };
+
   if (viewMode === 'create') {
     return <PurchaseRequestForm onCancel={backToList} onSubmit={handleCreateSubmit} suppliers={suppliers} initialPRNumber={nextPRNumber} />;
   }
 
   if (viewMode === 'detail' && selectedRequest) {
-    return <PurchaseRequestDetail request={selectedRequest} onBack={backToList} onUpdate={handleUpdate} onUpdateItem={handleUpdateItem} onDeleteItem={handleDeleteItem} onAddItem={handleAddItem} onConvert={handleConvertPO} onPrint={() => setViewMode('print')} products={products} suppliers={suppliers} />;
+    return <PurchaseRequestDetail request={selectedRequest} onBack={handleDetailBack} onUpdate={handleUpdate} onUpdateItem={handleUpdateItem} onDeleteItem={handleDeleteItem} onAddItem={handleAddItem} onConvert={handleConvertPO} onPrint={() => setViewMode('print')} products={products} suppliers={suppliers} />;
   }
 
   if (viewMode === 'print' && selectedRequest) {

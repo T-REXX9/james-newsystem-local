@@ -19,6 +19,7 @@ import {
   markNotificationsAsReadByEntityKey,
 } from '../services/notificationLocalApiService';
 import ModuleRecordLink from './ModuleRecordLink';
+import { retraceWorkflowHistory } from '../utils/workflowHistory';
 
 // Inline StatusBadge if generic one is not suitable for POs, but I'll use simple spans for now to be safe, or try to use the imported one if generic.
 // I'll stick to my own badge logic or reuse if I knew it works. I'll use my own for safety.
@@ -216,6 +217,19 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
       console.error('Error loading purchase order details:', err);
       setSelectedPO(po);
     }
+  };
+
+  const handleBackFromDetail = () => {
+    const returnToList = () => {
+      setShowAddItem(false);
+      setPrintMode(false);
+      setSelectedPO(null);
+    };
+    if (String(initialPOId || initialPORefNo || '').trim()) {
+      retraceWorkflowHistory(returnToList);
+      return;
+    }
+    returnToList();
   };
 
   useEffect(() => {
@@ -690,7 +704,12 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
         ) : selectedPO ? (
           <section className="mx-auto max-w-5xl rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-6 py-5">
-              <h2 className="text-xl font-extrabold uppercase tracking-tight text-[#173c83]">Purchase Order</h2>
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={handleBackFromDetail} aria-label="Back" className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-300 text-slate-600 hover:bg-slate-50">
+                  <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+                </button>
+                <h2 className="text-xl font-extrabold uppercase tracking-tight text-[#173c83]">Purchase Order</h2>
+              </div>
               <div className="flex items-center gap-3">
                 <span className="text-sm font-bold text-slate-500">PO No:</span>
                 <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-bold text-slate-700">{selectedPO.po_number}</span>

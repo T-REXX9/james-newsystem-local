@@ -19,6 +19,11 @@ export interface ReorderReportFilters {
   perPage?: number;
 }
 
+export interface ReorderSearchOption {
+  value: string;
+  category: 'Item Code' | 'Part Number' | 'Original Part Number' | 'Description' | 'Brand';
+}
+
 export interface ReorderReportEntry {
   id: string;
   product_session: string;
@@ -339,6 +344,33 @@ export const fetchReorderDescriptionOptions = async (): Promise<string[]> => {
   });
 
   return Array.from(unique.values()).sort((left, right) => left.localeCompare(right));
+};
+
+export const fetchReorderSearchOptions = async (): Promise<ReorderSearchOption[]> => {
+  const ctx = getUserContext();
+  const query = new URLSearchParams({ main_id: String(ctx.mainId) });
+  const data = await requestApi(`${API_BASE_URL}/inventory-report/options?${query.toString()}`);
+  const groups: Array<{ values: unknown; category: ReorderSearchOption['category'] }> = [
+    { values: data?.item_codes, category: 'Item Code' },
+    { values: data?.part_numbers, category: 'Part Number' },
+    { values: data?.original_part_numbers, category: 'Original Part Number' },
+    { values: data?.descriptions, category: 'Description' },
+    { values: data?.brands, category: 'Brand' },
+  ];
+  const unique = new Map<string, ReorderSearchOption>();
+
+  groups.forEach(({ values, category }) => {
+    if (!Array.isArray(values)) return;
+    values.forEach((rawValue) => {
+      const value = String(rawValue ?? '').trim();
+      const key = `${category}:${value.toLocaleLowerCase()}`;
+      if (value && !unique.has(key)) unique.set(key, { value, category });
+    });
+  });
+
+  return Array.from(unique.values()).sort((left, right) =>
+    left.value.localeCompare(right.value) || left.category.localeCompare(right.category)
+  );
 };
 
 export const hideReorderReportItems = async (itemIds: string[]): Promise<number> => {

@@ -8,6 +8,7 @@
 
 
 import React, { useState, useEffect } from 'react';
+import { canRetraceWorkflowHistory, createWorkflowHistoryState, ensureWorkflowHistoryState, preserveCurrentHistoryState } from './utils/workflowHistory';
 import TopNav from './components/TopNav';
 import PipelineView from './components/PipelineView';
 import Dashboard from './components/Dashboard';
@@ -152,9 +153,9 @@ const writeRouteStateToLocation = (
 
   const nextUrl = `${window.location.pathname}${window.location.search}${nextHash}`;
   if (mode === 'push') {
-    window.history.pushState(null, '', nextUrl);
+    window.history.pushState(createWorkflowHistoryState(window.location.hash), '', nextUrl);
   } else {
-    window.history.replaceState(null, '', nextUrl);
+    window.history.replaceState(preserveCurrentHistoryState(), '', nextUrl);
   }
 };
 
@@ -183,6 +184,7 @@ const App: React.FC = () => {
   const [appLoading, setAppLoading] = useState(true);
 
   const [activeTab, setActiveTab] = useState(initialRouteState.tab);
+  const [canNavigateBack, setCanNavigateBack] = useState(false);
   const [moduleContext, setModuleContext] = useState<Record<string, Record<string, string>>>(
     initialRouteState.payload ? { [initialRouteState.tab]: initialRouteState.payload } : {}
   );
@@ -242,6 +244,11 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    ensureWorkflowHistoryState();
+    setCanNavigateBack(canRetraceWorkflowHistory());
+  }, []);
+
+  useEffect(() => {
     const handler = (event: Event) => {
       const customEvent = event as CustomEvent<{ tab: string; payload?: Record<string, string> }>;
       if (!customEvent.detail?.tab) return;
@@ -253,6 +260,7 @@ const App: React.FC = () => {
       }));
       setActiveTab(canonicalTab);
       writeRouteStateToLocation(canonicalTab, customEvent.detail.payload, 'push');
+      setCanNavigateBack(canRetraceWorkflowHistory());
     };
 
     window.addEventListener('workflow:navigate', handler as EventListener);
@@ -267,10 +275,15 @@ const App: React.FC = () => {
         ...prev,
         [routeState.tab]: routeState.payload || {},
       }));
+      setCanNavigateBack(canRetraceWorkflowHistory());
     };
 
     window.addEventListener('hashchange', syncFromLocation);
-    return () => window.removeEventListener('hashchange', syncFromLocation);
+    window.addEventListener('popstate', syncFromLocation);
+    return () => {
+      window.removeEventListener('hashchange', syncFromLocation);
+      window.removeEventListener('popstate', syncFromLocation);
+    };
   }, []);
 
   const handleSignOut = async () => {
@@ -287,6 +300,12 @@ const App: React.FC = () => {
     setModuleContext((prev) => ({ ...prev, [canonicalTab]: {} }));
     setActiveTab(canonicalTab);
     writeRouteStateToLocation(canonicalTab, undefined, 'push');
+    setCanNavigateBack(canRetraceWorkflowHistory());
+  };
+
+  const handleNavigateBack = () => {
+    if (!canRetraceWorkflowHistory()) return;
+    window.history.back();
   };
 
   // 2. Render Logic
@@ -901,6 +920,8 @@ const App: React.FC = () => {
               onNavigate={handleSetActiveTab}
               user={userProfile}
               onSignOut={handleSignOut}
+              onBack={handleNavigateBack}
+              canGoBack={canNavigateBack}
             />
 
             <div className="flex flex-1 overflow-hidden pt-16">

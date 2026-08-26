@@ -10,6 +10,7 @@ import { getCentralStock } from '../utils/productStock';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
+const API_TIMEOUT_MS = 20_000;
 
 const getUserContext = () => {
   const session = getLocalAuthSession();
@@ -32,11 +33,26 @@ const parseApiErrorMessage = async (response: Response): Promise<string> => {
 };
 
 const requestApi = async (url: string, init?: RequestInit): Promise<any> => {
-  const response = await fetch(url, init);
-  if (!response.ok) throw new Error(await parseApiErrorMessage(response));
-  const payload = await response.json();
-  if (!payload?.ok) throw new Error(payload?.error || 'API request failed');
-  return payload.data;
+  const controller = new AbortController();
+  const forwardAbort = () => controller.abort();
+  init?.signal?.addEventListener('abort', forwardAbort, { once: true });
+  const timeoutId = globalThis.setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    if (!response.ok) throw new Error(await parseApiErrorMessage(response));
+    const payload = await response.json();
+    if (!payload?.ok) throw new Error(payload?.error || 'API request failed');
+    return payload.data;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('The purchase request server took too long to respond. Please try again.');
+    }
+    throw error;
+  } finally {
+    globalThis.clearTimeout(timeoutId);
+    init?.signal?.removeEventListener('abort', forwardAbort);
+  }
 };
 
 const toNumber = (value: unknown, fallback = 0): number => {

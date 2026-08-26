@@ -1,5 +1,5 @@
 import React from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import TopNav from '../TopNav';
 
@@ -25,5 +25,15 @@ describe('TopNav responsive shell', () => {
     expect(screen.getByRole('banner')).toHaveClass('px-3', 'sm:px-4', '2xl:px-6');
     expect(screen.getByText('TND-OPC')).toHaveClass('hidden', 'sm:inline');
     expect(screen.getByText('Master User')).toHaveClass('hidden', '2xl:block');
+  });
+
+  it('provides the same guarded Back control on every page', () => {
+    const onBack = vi.fn();
+    const { rerender } = render(<TopNav onBack={onBack} canGoBack={false} />);
+    expect(screen.getByRole('button', { name: 'Go back to previous page' })).toBeDisabled();
+
+    rerender(<TopNav onBack={onBack} canGoBack />);
+    fireEvent.click(screen.getByRole('button', { name: 'Go back to previous page' }));
+    expect(onBack).toHaveBeenCalledOnce();
   });
 });

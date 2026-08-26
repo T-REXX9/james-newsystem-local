@@ -1,6 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createWorkflowHistoryState } from '../../utils/workflowHistory';
 
 const service = {
   getPurchaseOrders: vi.fn(),
@@ -35,6 +36,7 @@ const po = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.history.replaceState(null, '', '/');
   service.getPurchaseOrders.mockResolvedValue([po]);
   service.getPurchaseOrderById.mockResolvedValue(po);
   service.getSuppliers.mockResolvedValue([po.supplier]);
@@ -69,5 +71,16 @@ describe('PurchaseOrderView', () => {
     fireEvent.change(screen.getByLabelText('Edit COGS 1'), { target: { value: '12.5' } });
     fireEvent.click(screen.getByTitle('Save item'));
     await waitFor(() => expect(service.updatePurchaseOrderItem).toHaveBeenCalledWith('ITEM-1', expect.objectContaining({ qty: 3, unit_price: 12.5 })));
+  });
+
+  it('retraces the previous workflow from a linked purchase order', async () => {
+    window.history.replaceState(createWorkflowHistoryState('#/warehouse-reports-reorder-report'), '', '/#/warehouse-purchasing-purchase-order?poId=POREF-1');
+    const backSpy = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+    const { default: PurchaseOrderView } = await import('../PurchaseOrderView');
+    render(<PurchaseOrderView initialPOId="POREF-1" />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Back' }));
+    expect(backSpy).toHaveBeenCalledOnce();
+    backSpy.mockRestore();
   });
 });

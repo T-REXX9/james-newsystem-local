@@ -6,6 +6,7 @@ import {
   PurchaseHistoryReport,
   purchaseHistoryReportService,
 } from '../services/purchaseHistoryReportService';
+import { retraceWorkflowHistory } from '../utils/workflowHistory';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
@@ -207,7 +208,7 @@ const PurchaseHistoryReportView: React.FC = () => {
                 <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
                   <Printer className="w-4 h-4" /> Print
                 </button>
-                <button type="button" onClick={() => window.history.back()} className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">
+                <button type="button" onClick={() => retraceWorkflowHistory(() => {})} className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">
                   <ArrowLeft className="w-4 h-4" /> Back
                 </button>
                 <button

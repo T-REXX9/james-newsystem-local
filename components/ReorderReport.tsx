@@ -2,12 +2,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EyeOff, Info, Loader2, Printer, Search, ShoppingCart } from 'lucide-react';
 import { purchaseRequestService } from '../services/purchaseRequestService';
 import {
-  fetchReorderDescriptionOptions,
+  fetchReorderSearchOptions,
   fetchReorderReportEntries,
   getReorderWorkflowStages,
   hideReorderReportItems,
   isReorderWorkflowActive,
   ReorderReportEntry,
+  ReorderSearchOption,
   ReorderWarehouseType,
 } from '../services/reorderReportService';
 import { useToast } from './ToastProvider';
@@ -326,25 +327,24 @@ const ReorderReport: React.FC = () => {
   const { addToast } = useToast();
   const initialSnapshotRef = useRef<ReorderReportHistorySnapshot | null>(readReorderHistorySnapshot());
   const [rows, setRows] = useState<ReorderReportEntry[]>(() => initialSnapshotRef.current?.rows || []);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(() => !initialSnapshotRef.current);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadMoreFailed, setLoadMoreFailed] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [selectingAll, setSelectingAll] = useState(false);
   const [preparingPrint, setPreparingPrint] = useState(false);
   const warehouseType: ReorderWarehouseType = 'total';
-  const [generatedAt, setGeneratedAt] = useState<Date | null>(() => {
+  const [generatedAt] = useState<Date>(() => {
     const value = initialSnapshotRef.current?.generatedAt;
-    return value ? new Date(value) : null;
+    return value ? new Date(value) : new Date();
   });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(initialSnapshotRef.current?.selectedIds || []));
   const [showAddPrModal, setShowAddPrModal] = useState(false);
   const [confirmAction, setConfirmAction] = useState<'hide' | null>(null);
   const [searchInput, setSearchInput] = useState(() => initialSnapshotRef.current?.searchInput || '');
-  const [showDescriptionDropdown, setShowDescriptionDropdown] = useState(false);
   const [showReportSearchDropdown, setShowReportSearchDropdown] = useState(false);
-  const [descriptionSuggestions, setDescriptionSuggestions] = useState<string[]>([]);
-  const [loadingDescriptions, setLoadingDescriptions] = useState(true);
+  const [searchSuggestions, setSearchSuggestions] = useState<ReorderSearchOption[]>([]);
+  const [loadingSearchSuggestions, setLoadingSearchSuggestions] = useState(true);
   const [appliedSearch, setAppliedSearch] = useState(() => initialSnapshotRef.current?.appliedSearch || '');
   const [page, setPage] = useState(() => initialSnapshotRef.current?.page || 1);
   const [meta, setMeta] = useState(() => initialSnapshotRef.current?.meta || { page: 1, per_page: 50, total: 0, total_pages: 1 });
@@ -352,6 +352,7 @@ const ReorderReport: React.FC = () => {
   const [latestCreatedPr, setLatestCreatedPr] = useState<{ id: string; number: string } | null>(() => initialSnapshotRef.current?.latestCreatedPr || null);
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const tableScrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const initialLoadStartedRef = useRef(false);
   const isWh1Report = false;
 
   const persistHistorySnapshot = useCallback((scrollTop?: number) => {
@@ -387,46 +388,39 @@ const ReorderReport: React.FC = () => {
     return () => window.cancelAnimationFrame(frame);
   }, [generatedAt]);
 
-  const handleBackToFilter = () => {
-    const currentState = window.history.state && typeof window.history.state === 'object'
-      ? { ...window.history.state }
-      : {};
-    delete currentState.reorderReport;
-    window.history.replaceState(currentState, '', window.location.href);
-    initialSnapshotRef.current = null;
-    setGeneratedAt(null);
-    setRows([]);
-    setSelectedIds(new Set());
-    setLatestCreatedPr(null);
-  };
-
-  const filteredDescriptionSuggestions = useMemo(() => {
+  const filteredSearchSuggestions = useMemo(() => {
     const query = searchInput.trim().toLowerCase();
-    if (!query) return descriptionSuggestions;
-    return descriptionSuggestions.filter((description) =>
-      description.toLowerCase().includes(query)
-    );
-  }, [descriptionSuggestions, searchInput]);
+    const matches = query
+      ? searchSuggestions.filter((option) => option.value.toLowerCase().includes(query))
+      : [...searchSuggestions];
+    return matches
+      .sort((left, right) => {
+        const leftPrefix = query && left.value.toLowerCase().startsWith(query) ? 0 : 1;
+        const rightPrefix = query && right.value.toLowerCase().startsWith(query) ? 0 : 1;
+        return leftPrefix - rightPrefix || left.value.localeCompare(right.value);
+      })
+      .slice(0, 80);
+  }, [searchInput, searchSuggestions]);
 
   useEffect(() => {
     let active = true;
-    setLoadingDescriptions(true);
-    fetchReorderDescriptionOptions()
-      .then((descriptions) => {
-        if (active) setDescriptionSuggestions(descriptions);
+    setLoadingSearchSuggestions(true);
+    fetchReorderSearchOptions()
+      .then((options) => {
+        if (active) setSearchSuggestions(options);
       })
       .catch((error) => {
         if (!active) return;
-        setDescriptionSuggestions([]);
+        setSearchSuggestions([]);
         addToast({
           type: 'error',
-          title: 'Unable to load descriptions',
+          title: 'Unable to load search suggestions',
           description: String(error?.message || 'Request failed'),
           durationMs: 5000,
         });
       })
       .finally(() => {
-        if (active) setLoadingDescriptions(false);
+        if (active) setLoadingSearchSuggestions(false);
       });
 
     return () => {
@@ -476,13 +470,11 @@ const ReorderReport: React.FC = () => {
     }
   }, [addToast, warehouseType]);
 
-  const handleGenerateReport = async () => {
-    const descriptionSearch = searchInput.trim().toLowerCase() === 'all' ? '' : searchInput.trim();
-    setSearchInput(descriptionSearch);
-    setAppliedSearch(descriptionSearch);
-    await loadReport(1, descriptionSearch);
-    setGeneratedAt(new Date());
-  };
+  useEffect(() => {
+    if (initialSnapshotRef.current || initialLoadStartedRef.current) return;
+    initialLoadStartedRef.current = true;
+    void loadReport(1, '');
+  }, [loadReport]);
 
   const handleSearch = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -731,133 +723,6 @@ const ReorderReport: React.FC = () => {
     </div>
   ) : <span className="text-slate-400">-</span>;
 
-  if (!generatedAt) {
-    return (
-      <div className="min-h-full overflow-auto bg-[#f4f4f4] px-3 py-5 text-[#222] lg:px-5 lg:py-6" style={{ fontFamily: 'Arial, sans-serif' }}>
-        <div className="mx-auto min-h-[363px] w-full max-w-none rounded-[5px] border border-[#d7d7d7] bg-white">
-          <div className="relative flex h-[63px] items-center border-b border-[#d7d7d7] px-5">
-            <h1 className="text-[18px] font-semibold text-[#29475f] after:absolute after:bottom-[-1px] after:left-5 after:h-px after:w-[135px] after:bg-[#6a92b3]" style={{ fontFamily: 'Arial Narrow, Arial, sans-serif' }}>
-              Reorder Report
-            </h1>
-          </div>
-
-          <div className="px-[25px] py-[33px]">
-            <p className="text-[13px] text-[#222]">
-              Field mark with (<span className="text-rose-600">*</span>) is required. Press generate after you select the sorting options
-            </p>
-
-            <div className="ml-[96px] mt-[50px] w-full max-w-[620px] text-[13px] max-md:mx-auto">
-              <div className="grid grid-cols-[155px_435px] items-start gap-[30px] max-md:grid-cols-[135px_minmax(0,1fr)]">
-                <label className="pt-2 text-right font-semibold text-[#222]">Description</label>
-                <div className="text-[#222]">
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={searchInput}
-                      onChange={(event) => {
-                        setSearchInput(event.target.value);
-                        setShowDescriptionDropdown(true);
-                      }}
-                      onFocus={() => setShowDescriptionDropdown(true)}
-                      onBlur={() => window.setTimeout(() => setShowDescriptionDropdown(false), 150)}
-                      placeholder="All descriptions"
-                      role="combobox"
-                      aria-label="Description smart search"
-                      aria-autocomplete="list"
-                      aria-expanded={showDescriptionDropdown}
-                      aria-controls="reorder-description-options"
-                      className="h-[35px] w-full rounded-[3px] border border-[#c9c9c9] bg-white py-2 pl-4 pr-9 text-[13px] text-[#555] outline-none focus:border-[#66afe9] focus:ring-1 focus:ring-[#66afe9]"
-                    />
-                    <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#999]" />
-                    {showDescriptionDropdown && (
-                      <div
-                        id="reorder-description-options"
-                        role="listbox"
-                        aria-label="Description suggestions"
-                        className="absolute z-20 mt-1 max-h-52 w-full overflow-y-auto rounded-[3px] border border-[#ccc] bg-white py-1 shadow-lg"
-                      >
-                        {(!searchInput.trim() || 'all descriptions'.includes(searchInput.trim().toLowerCase())) && (
-                          <button
-                            type="button"
-                            role="option"
-                            aria-selected={!searchInput.trim()}
-                            onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => {
-                              setSearchInput('');
-                              setShowDescriptionDropdown(false);
-                            }}
-                            className="block w-full px-3 py-2 text-left text-[13px] text-[#333] hover:bg-[#f5f5f5]"
-                          >
-                            All descriptions
-                          </button>
-                        )}
-                        {filteredDescriptionSuggestions.map((description) => (
-                          <button
-                            key={description}
-                            type="button"
-                            role="option"
-                            aria-selected={searchInput.toLowerCase() === description.toLowerCase()}
-                            onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => {
-                              setSearchInput(description);
-                              setShowDescriptionDropdown(false);
-                            }}
-                            className="block w-full px-3 py-2 text-left text-[13px] text-[#333] hover:bg-[#f5f5f5]"
-                          >
-                            {description}
-                          </button>
-                        ))}
-                        {loadingDescriptions && (
-                          <div className="px-3 py-2 text-[13px] text-[#777]">Loading descriptions...</div>
-                        )}
-                        {!loadingDescriptions && searchInput.trim() && filteredDescriptionSuggestions.length === 0 && (
-                          <div className="px-3 py-2 text-[13px] text-[#777]">
-                            Press Generate Report to search for “{searchInput.trim()}”.
-                          </div>
-                        )}
-                        {!loadingDescriptions && !searchInput.trim() && descriptionSuggestions.length === 0 && (
-                          <div className="px-3 py-2 text-[13px] text-[#777]">No descriptions available.</div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <p className="mt-2 text-[12px] text-[#666]">
-                    Select All or enter a description such as nozzle, plunger, DV, or control valve.
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-[25px] grid grid-cols-[155px_435px] gap-[30px] max-md:grid-cols-[135px_minmax(0,1fr)]">
-                <span />
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={handleGenerateReport}
-                    disabled={loading}
-                    className="inline-flex h-[35px] items-center gap-2 rounded-[4px] border border-[#d43f3a] bg-[#d9534f] px-[13px] text-[14px] text-white hover:bg-[#c9302c] disabled:opacity-60"
-                  >
-                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                    Generate Report
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSearchInput('');
-                      setAppliedSearch('');
-                    }}
-                    className="h-[35px] rounded-[4px] border border-[#ccc] bg-white px-[13px] text-[14px] text-[#333] hover:bg-[#eee]"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="reorder-report-page h-full min-h-0 overflow-hidden bg-[#f7f9fc] text-slate-900">
       <style>{`
@@ -897,7 +762,6 @@ const ReorderReport: React.FC = () => {
             <p className="mt-1 text-sm text-slate-500">Live purchasing control from reorder requirement through PR, PO, partial receiving, and completion.</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <button type="button" onClick={handleBackToFilter} className="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50">Back to Filter</button>
             <button type="button" onClick={() => void handlePrint()} disabled={preparingPrint} className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50">
               {preparingPrint ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />} Print
             </button>
@@ -907,7 +771,7 @@ const ReorderReport: React.FC = () => {
         <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <form onSubmit={handleSearch} className="relative z-40 flex shrink-0 flex-wrap items-center gap-4 border-b border-slate-200 bg-white p-5">
             <div className="flex-1 min-w-[280px]">
-              <label htmlFor="reorder-search" className="mb-1 block text-xs font-bold text-slate-700">Search Item / Part No. / Description</label>
+              <label htmlFor="reorder-search" className="mb-1 block text-xs font-bold text-slate-700">Smart Search — Item Code / Part No. / Original Part No. / Description / Brand</label>
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
@@ -919,22 +783,22 @@ const ReorderReport: React.FC = () => {
                   }}
                   onFocus={() => setShowReportSearchDropdown(true)}
                   onBlur={() => window.setTimeout(() => setShowReportSearchDropdown(false), 150)}
-                  placeholder="Search item, part no., or description..."
+                  placeholder="Type an item code, part number, description, or brand..."
                   role="combobox"
                   aria-label="Reorder report smart search"
                   aria-autocomplete="list"
                   aria-expanded={showReportSearchDropdown}
-                  aria-controls="reorder-report-description-options"
+                  aria-controls="reorder-report-search-options"
                   className="h-10 w-full rounded-md border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-[#175fd3] focus:ring-2 focus:ring-blue-100"
                 />
                 {showReportSearchDropdown && (
                   <div
-                    id="reorder-report-description-options"
+                    id="reorder-report-search-options"
                     role="listbox"
-                    aria-label="Reorder report description suggestions"
+                    aria-label="Reorder report smart suggestions"
                     className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-slate-200 bg-white py-1 shadow-xl"
                   >
-                    {(!searchInput.trim() || 'all descriptions'.includes(searchInput.trim().toLowerCase())) && (
+                    {!searchInput.trim() && (
                       <button
                         type="button"
                         role="option"
@@ -946,35 +810,37 @@ const ReorderReport: React.FC = () => {
                         }}
                         className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
                       >
-                        All descriptions
+                        All reorder items
                       </button>
                     )}
-                    {filteredDescriptionSuggestions.map((description) => (
+                    {filteredSearchSuggestions.map((option) => (
                       <button
-                        key={description}
+                        key={`${option.category}:${option.value}`}
                         type="button"
                         role="option"
-                        aria-selected={searchInput.toLowerCase() === description.toLowerCase()}
+                        aria-label={`${option.value} — ${option.category}`}
+                        aria-selected={searchInput.toLowerCase() === option.value.toLowerCase()}
                         onMouseDown={(event) => event.preventDefault()}
                         onClick={() => {
-                          setSearchInput(description);
+                          setSearchInput(option.value);
                           setShowReportSearchDropdown(false);
                         }}
-                        className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                        className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
                       >
-                        {description}
+                        <span className="truncate font-medium">{option.value}</span>
+                        <span className="shrink-0 rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-500">{option.category}</span>
                       </button>
                     ))}
-                    {loadingDescriptions && (
-                      <div className="px-3 py-2 text-sm text-slate-500">Loading descriptions...</div>
+                    {loadingSearchSuggestions && (
+                      <div className="px-3 py-2 text-sm text-slate-500">Loading smart suggestions...</div>
                     )}
-                    {!loadingDescriptions && searchInput.trim() && filteredDescriptionSuggestions.length === 0 && (
+                    {!loadingSearchSuggestions && searchInput.trim() && filteredSearchSuggestions.length === 0 && (
                       <div className="px-3 py-2 text-sm text-slate-500">
-                        Press Search to find item or part number “{searchInput.trim()}”.
+                        No saved suggestion matches “{searchInput.trim()}”. Live results are still searching every product field.
                       </div>
                     )}
-                    {!loadingDescriptions && !searchInput.trim() && descriptionSuggestions.length === 0 && (
-                      <div className="px-3 py-2 text-sm text-slate-500">No descriptions available.</div>
+                    {!loadingSearchSuggestions && !searchInput.trim() && searchSuggestions.length === 0 && (
+                      <div className="px-3 py-2 text-sm text-slate-500">No search suggestions available.</div>
                     )}
                   </div>
                 )}
@@ -1063,7 +929,9 @@ const ReorderReport: React.FC = () => {
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <tr><td colSpan={21} className="px-4 py-16 text-center text-sm text-slate-500">No items match the current filters.</td></tr>
+                  <tr><td colSpan={21} className="px-4 py-16 text-center text-sm text-slate-500">
+                    {loading ? <CustomLoadingSpinner label="Loading" /> : 'No items match the current filters.'}
+                  </td></tr>
                 ) : rows.map((row) => {
                   const active = isReorderWorkflowActive(row);
                   return (

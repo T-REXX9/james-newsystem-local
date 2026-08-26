@@ -1,6 +1,6 @@
 
 import React, { useEffect } from 'react';
-import { LogOut } from 'lucide-react';
+import { ArrowLeft, LogOut } from 'lucide-react';
 import { UserProfile } from '../types';
 import NotificationCenter from './NotificationCenter';
 import TopbarNavigation from './TopbarNavigation';
@@ -12,9 +12,11 @@ interface TopNavProps {
   onNavigate?: (tab: string) => void;
   user?: UserProfile | null;
   onSignOut?: () => void;
+  onBack?: () => void;
+  canGoBack?: boolean;
 }
 
-const TopNav: React.FC<TopNavProps> = ({ activeTab = 'home', onNavigate, user, onSignOut }) => {
+const TopNav: React.FC<TopNavProps> = ({ activeTab = 'home', onNavigate, user, onSignOut, onBack, canGoBack = false }) => {
   useEffect(() => {
     const html = document.documentElement;
     html.classList.remove('dark');
@@ -24,6 +26,16 @@ const TopNav: React.FC<TopNavProps> = ({ activeTab = 'home', onNavigate, user, o
   return (
     <header className="h-16 bg-gradient-to-r from-brand-blue to-[#0a3d74] flex items-center justify-between px-3 sm:px-4 2xl:px-6 fixed top-0 left-0 right-0 z-[1000] text-white shadow-md print:hidden">
       <div className="flex items-center gap-1 sm:gap-3 2xl:gap-6 flex-1 min-w-0">
+        <button
+          type="button"
+          onClick={onBack}
+          disabled={!canGoBack}
+          aria-label="Go back to previous page"
+          title={canGoBack ? 'Go back to previous page' : 'No previous page'}
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-white/10 text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-35"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+        </button>
         <div className="flex shrink-0 items-center space-x-2 sm:space-x-3 cursor-pointer group" onClick={() => onNavigate?.('home')}>
            <div className="w-8 h-8 sm:w-9 sm:h-9 bg-white/10 rounded-lg flex items-center justify-center font-bold border border-white/10 group-hover:bg-white/20 transition-colors">T</div>
            <div className="flex items-center">

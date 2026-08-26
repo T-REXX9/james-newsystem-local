@@ -6,6 +6,7 @@ import CustomLoadingSpinner from '../CustomLoadingSpinner';
 import ReceivingList from './ReceivingList';
 import ReceivingForm from './ReceivingForm';
 import ReceivingView from './ReceivingView';
+import { retraceWorkflowHistory } from '../../utils/workflowHistory';
 
 interface ReceivingStockProps {
     initialRRId?: string;
@@ -79,9 +80,16 @@ const ReceivingStock: React.FC<ReceivingStockProps> = ({ initialRRId, initialRRR
     };
 
     const handleBackToList = () => {
-        setViewMode('list');
-        setSelectedRrId(null);
-        fetchRRs(); // Refresh list to reflect changes
+        const returnToList = () => {
+            setViewMode('list');
+            setSelectedRrId(null);
+            void fetchRRs(); // Refresh list to reflect changes
+        };
+        if (String(initialRRId || initialRRRefNo || '').trim()) {
+            retraceWorkflowHistory(returnToList);
+            return;
+        }
+        returnToList();
     };
 
     if (viewMode === 'create') {

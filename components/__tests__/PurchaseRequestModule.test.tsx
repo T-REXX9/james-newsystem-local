@@ -1,6 +1,7 @@
 import React from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createWorkflowHistoryState } from '../../utils/workflowHistory';
 
 const service = {
   getPurchaseRequests: vi.fn(),
@@ -27,6 +28,7 @@ const request = { id: 'PRREF-1', pr_number: 'PR-2601', request_date: '2026-08-23
 beforeEach(() => {
   cleanup();
   vi.clearAllMocks();
+  window.history.replaceState(null, '', '/');
   service.getPurchaseRequests.mockResolvedValue([request]);
   service.getSuppliers.mockResolvedValue([]);
   service.getProducts.mockResolvedValue([]);
@@ -58,6 +60,14 @@ describe('PurchaseRequestModule', () => {
 
     resolveRequest?.(request);
     expect(await screen.findByRole('button', { name: 'Update PR' })).toBeInTheDocument();
+  });
+
+  it('finishes opening a deep-linked request under React Strict Mode', async () => {
+    const { default: PurchaseRequestModule } = await import('../PurchaseRequest');
+    render(<React.StrictMode><PurchaseRequestModule initialPRId="PRREF-1" /></React.StrictMode>);
+
+    expect(await screen.findByRole('button', { name: 'Update PR' })).toBeInTheDocument();
+    expect(screen.queryByText('Loading purchase request...')).not.toBeInTheDocument();
   });
 
   it('shows a retry state when a deep-linked request fails', async () => {
@@ -99,5 +109,16 @@ describe('PurchaseRequestModule', () => {
     expect(service.addPRItem).toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Back PR' }));
     expect(await screen.findByRole('button', { name: 'New PR' })).toBeInTheDocument();
+  });
+
+  it('retraces the previous workflow when a linked request uses Back', async () => {
+    window.history.replaceState(createWorkflowHistoryState('#/warehouse-reports-reorder-report'), '', '/#/warehouse-purchasing-purchase-request?prId=PRREF-1');
+    const backSpy = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+    const { default: PurchaseRequestModule } = await import('../PurchaseRequest');
+    render(<PurchaseRequestModule initialPRId="PRREF-1" />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Back PR' }));
+    expect(backSpy).toHaveBeenCalledOnce();
+    backSpy.mockRestore();
   });
 });
