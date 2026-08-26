@@ -36,6 +36,7 @@ export interface ReorderReportEntry {
   total_return: number;
   target_quantity: number;
   suggested_reorder_qty: number;
+  pr_requested_qty: number;
   open_pr_qty: number;
   po_ordered_qty: number;
   open_po_qty: number;
@@ -198,6 +199,7 @@ const normalizeEntry = (raw: any): ReorderReportEntry => ({
   total_return: toNumber(raw?.total_return),
   target_quantity: toNumber(raw?.target_quantity),
   suggested_reorder_qty: toNumber(raw?.suggested_reorder_qty),
+  pr_requested_qty: toNumber(raw?.pr_requested_qty ?? raw?.open_pr_qty),
   open_pr_qty: toNumber(raw?.open_pr_qty),
   po_ordered_qty: toNumber(raw?.po_ordered_qty),
   open_po_qty: toNumber(raw?.open_po_qty),

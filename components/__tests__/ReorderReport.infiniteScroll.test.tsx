@@ -60,6 +60,7 @@ const reportRow = (id: string, itemCode: string) => ({
   total_return: 0,
   target_quantity: 10,
   suggested_reorder_qty: 10,
+  pr_requested_qty: 0,
   preferred_supplier_id: 'SUP-1',
   preferred_supplier_name: 'Supplier One',
   preferred_supplier_cost: 25,
@@ -158,6 +159,37 @@ describe('ReorderReport automatic loading', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Search' }));
     await waitFor(() => expect(fetchEntriesMock).toHaveBeenCalledWith(expect.objectContaining({ search: 'Rotor Head' })));
+  });
+
+  it('shows document quantities even while a generated PO is still pending', async () => {
+    fetchEntriesMock.mockResolvedValueOnce({
+      items: [{
+        ...reportRow('pending-po', 'QK6-026'),
+        pr_requested_qty: 15,
+        open_pr_qty: 0,
+        po_ordered_qty: 15,
+        open_po_qty: 0,
+        remaining_qty: 15,
+        overall_status: 'Awaiting PO',
+        can_create_pr: false,
+        pr_refno: 'pr-ref',
+        pr_no: 'PR-26129',
+        pr_status: 'Approved',
+        po_refno: 'po-ref',
+        po_no: 'PO-26255',
+        po_status: 'Pending',
+      }],
+      meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
+    });
+
+    render(<ReorderReport />);
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Report' }));
+    const [itemCode] = await screen.findAllByText('QK6-026');
+    const cells = itemCode.closest('tr')?.querySelectorAll('td');
+    expect(cells?.[12]?.textContent).toBe('15');
+    expect(cells?.[14]?.textContent).toBe('15');
+    expect(cells?.[15]?.textContent).toBe('0');
+    expect(cells?.[16]?.textContent).toBe('15');
   });
 
   it('restores the generated report when browser history returns to the report', async () => {
