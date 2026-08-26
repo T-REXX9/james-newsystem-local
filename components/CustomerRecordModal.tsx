@@ -19,10 +19,10 @@ import {
 import CustomLoadingSpinner from './CustomLoadingSpinner';
 import {
     fetchCallLogs,
-    fetchIncidentReports,
     fetchInquiries,
     fetchPurchases,
 } from '../services/supabaseService';
+import { fetchDailyCallIncidentReports } from '../services/dailyCallCustomerDetailService';
 import {
     CallLogEntry,
     Contact,
@@ -105,7 +105,7 @@ const CustomerRecordModal: React.FC<CustomerRecordModalProps> = ({
             try {
                 const [purchaseData, incidentData, callLogData, inquiryData] = await Promise.all([
                     fetchPurchases(),
-                    fetchIncidentReports(contact.id),
+                    fetchDailyCallIncidentReports(contact.id),
                     fetchCallLogs(),
                     fetchInquiries(),
                 ]);

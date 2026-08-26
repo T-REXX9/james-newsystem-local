@@ -1,4 +1,5 @@
 import { getLocalAuthSession } from './localAuthService';
+import { CreateIncidentReportInput, IncidentReport } from '../types';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
@@ -38,3 +39,39 @@ export const fetchDailyCallSalesReports = async (contactId: string) =>
 
 export const fetchDailyCallIncidentReports = async (contactId: string) =>
   fetchList<any>(`/daily-call-monitoring/customers/${encodeURIComponent(contactId)}/incident-reports`);
+
+const parseApiErrorMessage = async (response: Response): Promise<string> => {
+  try {
+    const payload = await response.json();
+    if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error.trim();
+    if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message.trim();
+  } catch {
+    // Fall through to the status-based message.
+  }
+  return `API request failed (${response.status})`;
+};
+
+export const createDailyCallIncidentReport = async (input: CreateIncidentReportInput): Promise<IncidentReport> => {
+  const session = getLocalAuthSession();
+  if (!session?.token) {
+    throw new Error('Your session has expired. Please sign in again before saving the incident report.');
+  }
+
+  const response = await fetch(`${API_BASE_URL}/daily-call-monitoring/incident-reports`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.token}`,
+    },
+    body: JSON.stringify({ ...input, main_id: resolveMainId() }),
+  });
+  if (!response.ok) {
+    throw new Error(await parseApiErrorMessage(response));
+  }
+
+  const payload = await response.json();
+  if (!payload?.ok || !payload?.data?.id) {
+    throw new Error(payload?.error || 'The incident report could not be saved.');
+  }
+  return payload.data as IncidentReport;
+};

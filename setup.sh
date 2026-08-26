@@ -166,26 +166,29 @@ db_query_scalar() {
 }
 
 apply_required_database_migrations() {
-  local notification_migration="$API_DIR/migrations/014_optimize_notification_indexes.sql"
+  local migration=""
+  local migrations=(
+    "$API_DIR/migrations/014_optimize_notification_indexes.sql"
+    "$API_DIR/migrations/015_optimize_reorder_report_indexes.sql"
+    "$API_DIR/migrations/016_create_incident_reports.sql"
+  )
 
-  if [[ ! -f "$notification_migration" ]]; then
-    echo "ERROR: Required notification migration not found: $notification_migration" >&2
+  echo "Applying required database migrations..."
+  for migration in "${migrations[@]}"; do
+    if [[ ! -f "$migration" ]]; then
+      echo "ERROR: Required migration not found: $migration" >&2
+      return 1
+    fi
+
+    if mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" "-p$DB_PASS" "$DB_NAME" < "$migration" 2>/dev/null \
+      || sudo mysql "$DB_NAME" < "$migration"; then
+      echo "  [OK] $(basename "$migration")"
+      continue
+    fi
+
+    echo "ERROR: Failed to apply $(basename "$migration")." >&2
     return 1
-  fi
-
-  echo "Applying notification performance indexes..."
-  if mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" "-p$DB_PASS" "$DB_NAME" < "$notification_migration" 2>/dev/null; then
-    echo "  [OK] Notification indexes are present"
-    return 0
-  fi
-
-  if sudo mysql "$DB_NAME" < "$notification_migration"; then
-    echo "  [OK] Notification indexes are present"
-    return 0
-  fi
-
-  echo "ERROR: Failed to apply notification performance indexes." >&2
-  return 1
+  done
 }
 
 validate_stack() {

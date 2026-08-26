@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, AlertCircle, Loader2 } from 'lucide-react';
-import { createIncidentReport, fetchContactTransactions } from '../services/supabaseService';
+import { createDailyCallIncidentReport } from '../services/dailyCallCustomerDetailService';
+import { fetchContactTransactions } from '../services/customerDatabaseLocalApiService';
 import { syncIncidentReportItem } from '../services/incidentItemSyncService';
 import { useToast } from './ToastProvider';
 import { Product, UserProfile, ContactTransaction } from '../types';
@@ -9,7 +10,6 @@ import TransactionAutocomplete from './TransactionAutocomplete';
 import ValidationSummary from './ValidationSummary';
 import FieldHelp from './FieldHelp';
 import { validateMinLength, validateRequired } from '../utils/formValidation';
-import { parseSupabaseError } from '../utils/errorHandler';
 
 interface CreateIncidentReportModalProps {
   contactId: string;
@@ -160,7 +160,7 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
           throw new Error('This browser cannot create a stable incident reference. Please use an updated browser.');
         }
 
-        const createdIncidentReportId = await createIncidentReport({
+        const createdIncidentReport = await createDailyCallIncidentReport({
           id: draftIncidentReportId,
           contact_id: contactId,
           report_date: formData.reportDate,
@@ -173,11 +173,11 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
           notes: formData.notes.trim() || undefined,
         });
 
-        if (!createdIncidentReportId) {
+        if (!createdIncidentReport?.id) {
           throw new Error('The customer incident was saved, but it could not be linked to the warehouse report.');
         }
-        savedIncidentReportIdRef.current = createdIncidentReportId;
-        incidentReportId = createdIncidentReportId;
+        savedIncidentReportIdRef.current = createdIncidentReport.id;
+        incidentReportId = createdIncidentReport.id;
       }
 
       const supplier = selectedProduct?.supplier_costs?.find((entry) => !entry.is_blacklisted) || selectedProduct?.supplier_costs?.[0];
@@ -207,7 +207,7 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
       console.error('Error creating incident report:', err);
       const friendlyMessage = savedIncidentReportIdRef.current
         ? 'The customer incident was saved, but the warehouse report sync failed. Please click Retry Warehouse Sync.'
-        : parseSupabaseError(err, 'incident report');
+        : err instanceof Error ? err.message : 'Unable to create the incident report. Please try again.';
       setError(friendlyMessage);
       addToast({ type: 'error', title: 'Unable to complete report sync', description: friendlyMessage, durationMs: 6000 });
     } finally {

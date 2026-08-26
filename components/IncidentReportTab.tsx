@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle, Clock, Plus, FileText, Receipt, ShoppingCart, HelpCircle, Package } from 'lucide-react';
 import { fetchDailyCallIncidentReports } from '../services/dailyCallCustomerDetailService';
-import { fetchIncidentReports } from '../services/supabaseService';
 import CreateIncidentReportModal from './CreateIncidentReportModal';
 import { UserProfile } from '../types';
 
@@ -18,11 +17,7 @@ const IncidentReportTab: React.FC<IncidentReportTabProps> = ({ contactId, curren
   const loadReports = async () => {
     setLoading(true);
     try {
-      const [customerDatabaseReports, localApiReports] = await Promise.all([
-        fetchIncidentReports(contactId),
-        fetchDailyCallIncidentReports(contactId),
-      ]);
-      const data = customerDatabaseReports.length > 0 ? customerDatabaseReports : localApiReports;
+      const data = await fetchDailyCallIncidentReports(contactId);
       setReports(data || []);
     } catch (err) {
       console.error('Error loading incident reports:', err);

@@ -1,6 +1,6 @@
 import { DEFAULT_CUSTOMER_VAT_TYPE } from '../constants/customerVat';
 import { normalizePriceGroup } from '../constants/pricingGroups';
-import { Contact, ContactPerson, CustomerStatus, CustomerVatType, DealStage, UserProfile } from '../types';
+import { Contact, ContactPerson, ContactTransaction, CustomerStatus, CustomerVatType, DealStage, UserProfile } from '../types';
 import { getLocalAuthSession } from './localAuthService';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
@@ -651,7 +651,7 @@ export const fetchUpdatedContactDetails = async (_contactId: string): Promise<ne
   return [];
 };
 
-export const fetchContactTransactions = async (contactId: string): Promise<Array<Record<string, unknown>>> => {
+export const fetchContactTransactions = async (contactId: string): Promise<ContactTransaction[]> => {
   try {
     const payload = await requestJson<ApiPurchaseHistoryResponse>(
       `${API_BASE_URL}/customers/${encodeURIComponent(String(contactId))}/purchase-history`
@@ -659,7 +659,7 @@ export const fetchContactTransactions = async (contactId: string): Promise<Array
     const rows = Array.isArray(payload?.data?.items) ? payload.data.items : [];
     return rows.map((row: ApiTransactionRow, index: number) => {
       const sourceType = String(row?.source_type || '').toUpperCase();
-      const txType = sourceType === 'INVOICE' ? 'invoice' : 'order_slip';
+      const txType: ContactTransaction['type'] = sourceType === 'INVOICE' ? 'invoice' : 'order_slip';
       const amount = toNumber(row?.lqty, 0) * toNumber(row?.lprice, 0);
       const sourceRefNo = String(row?.source_refno || '').trim();
       const sourceNo = String(row?.source_no || '').trim();
