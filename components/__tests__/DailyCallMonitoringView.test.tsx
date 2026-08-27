@@ -47,12 +47,14 @@ vi.mock('../AgentCallActivity', () => ({
   default: () => <div>AgentCallActivity</div>,
 }));
 
-vi.mock('../CustomerProfileModal', () => ({
+vi.mock('../ContactDetails', () => ({
   default: () => null,
 }));
 
-vi.mock('../ContactDetails', () => ({
-  default: () => null,
+vi.mock('../CreateIncidentReportModal', () => ({
+  default: ({ contactId, isOpen }: { contactId: string; isOpen: boolean }) => isOpen
+    ? <div role="dialog" aria-label={`Create incident report for ${contactId}`}>Incident report form</div>
+    : null,
 }));
 
 vi.mock('../AddContactModal', () => ({
@@ -428,13 +430,19 @@ describe('DailyCallMonitoringView communication actions', () => {
       'bottom-0',
       'top-auto',
       'max-h-[calc(100dvh-1rem)]',
-      'sm:inset-y-0',
+      'sm:top-16',
+      'sm:bottom-0',
       'sm:left-auto',
-      'sm:h-full',
+      'sm:h-auto',
       'sm:max-h-none',
       'sm:w-full',
       'sm:max-w-2xl'
     );
+    expect(screen.queryByRole('button', { name: 'Open Patient Chart' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open Full Details' })).toHaveTextContent('Full Details');
+
+    await user.click(screen.getByRole('button', { name: 'Create Incident Report' }));
+    expect(screen.getByRole('dialog', { name: 'Create incident report for contact-1' })).toBeInTheDocument();
 
     const customerLogHeading = screen.getByText('Customer Log');
     const scrollArea = customerLogHeading.closest('div.flex-1');

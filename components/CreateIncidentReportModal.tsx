@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, AlertCircle, Loader2 } from 'lucide-react';
 import { createDailyCallIncidentReport } from '../services/dailyCallCustomerDetailService';
 import { fetchContactTransactions } from '../services/customerDatabaseLocalApiService';
@@ -19,6 +20,13 @@ interface CreateIncidentReportModalProps {
   currentUser?: UserProfile | null;
 }
 
+const getLocalDateInputValue = (date = new Date()): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
   contactId,
   isOpen,
@@ -37,17 +45,28 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
   const [loadingTransactions, setLoadingTransactions] = useState(false);
   const [submitCount, setSubmitCount] = useState(0);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateInputValue();
 
   const [formData, setFormData] = useState({
     reportDate: today,
-    incidentDate: '',
+    incidentDate: today,
     issueType: '' as 'product_quality' | 'service_quality' | 'delivery' | 'other' | '',
     description: '',
     reportedBy: currentUser?.full_name || '',
     attachments: '',
     notes: '',
   });
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const currentDate = getLocalDateInputValue();
+    setFormData((previous) => ({
+      ...previous,
+      reportDate: currentDate,
+      incidentDate: currentDate,
+    }));
+    setValidationErrors((previous) => ({ ...previous, incidentDate: '' }));
+  }, [isOpen]);
 
   // Update reportedBy when currentUser changes
   useEffect(() => {
@@ -223,8 +242,8 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
   const handleClose = () => {
     if (!isSubmitting) {
       setFormData({
-        reportDate: today,
-        incidentDate: '',
+        reportDate: getLocalDateInputValue(),
+        incidentDate: getLocalDateInputValue(),
         issueType: '',
         description: '',
         reportedBy: currentUser?.full_name || '',
@@ -251,11 +270,17 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between items-center">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+  return createPortal(
+    <div className="fixed inset-0 z-[1300] overflow-y-auto bg-black bg-opacity-50 p-4 sm:p-6">
+      <div className="flex min-h-full items-start justify-center sm:items-center">
+        <div
+          className="flex max-h-[calc(100dvh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-white shadow-xl dark:bg-gray-800 sm:max-h-[calc(100dvh-3rem)]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-incident-report-title"
+        >
+        <div className="relative z-10 flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-6 py-4 dark:border-gray-700 dark:bg-gray-800">
+          <h2 id="create-incident-report-title" className="text-xl font-semibold text-gray-900 dark:text-white">
             Create Incident Report
           </h2>
           <button
@@ -268,7 +293,7 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="min-h-0 flex-1 space-y-4 overflow-y-auto p-6">
           <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
           {error && (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start gap-3">
@@ -279,10 +304,11 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label htmlFor="incident-report-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Report Date
               </label>
               <input
+                id="incident-report-date"
                 type="date"
                 value={formData.reportDate}
                 onChange={(e) => setFormData({ ...formData, reportDate: e.target.value })}
@@ -292,10 +318,11 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label htmlFor="incident-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Incident Date <span className="text-red-500">*</span>
               </label>
               <input
+                id="incident-date"
                 type="date"
                 value={formData.incidentDate}
                 onChange={(e) => {
@@ -541,8 +568,10 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
             </button>
           </div>
         </form>
+        </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

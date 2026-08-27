@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
+  AlertTriangle,
   ArrowUpRight,
   BarChart3,
   Bell,
@@ -34,9 +35,9 @@ import CustomLoadingSpinner from './CustomLoadingSpinner';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import AgentCallActivity from './AgentCallActivity';
 import CallAccountabilityPanel from './CallAccountabilityPanel';
-import CustomerProfileModal from './CustomerProfileModal';
 import ContactDetails from './ContactDetails';
 import AddContactModal from './AddContactModal';
+import CreateIncidentReportModal from './CreateIncidentReportModal';
 import { useToast } from './ToastProvider';
 import {
   countCallLogsByChannelInRange,
@@ -307,7 +308,6 @@ interface MasterTableRowProps {
   onSelectClient: (contactId: string) => void;
   onCallContact: (contact: Contact) => void;
   onOpenSMSModal: (contact: Contact) => void;
-  onOpenPatientChart: (contactId: string) => void;
 }
 
 const getContactLocationLabel = (contact: Contact): string => {
@@ -351,8 +351,7 @@ const MasterTableRow = React.memo(({
   selectedClientId,
   onSelectClient,
   onCallContact,
-  onOpenSMSModal,
-  onOpenPatientChart
+  onOpenSMSModal
 }: MasterTableRowProps) => {
   const isSelected = selectedClientId === row.contact.id;
   const locationLabel = getContactLocationLabel(row.contact);
@@ -424,7 +423,7 @@ const MasterTableRow = React.memo(({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onOpenPatientChart(row.contact.id);
+              onSelectClient(row.contact.id);
             }}
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-[#10244c] transition-all duration-150 hover:bg-blue-100 hover:text-brand-blue active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 dark:bg-slate-800/80 dark:text-slate-200"
             title="Details"
@@ -507,12 +506,12 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     inactivePositive: false,
     prospectivePositive: false
   });
-  const [showPatientChart, setShowPatientChart] = useState(false);
   const [summaryCollapsed, setSummaryCollapsed] = useState(false);
   const [density, setDensity] = useState<'comfortable' | 'compact' | 'ultra-compact'>('compact');
   const [activeTab, setActiveTab] = useState<'master' | 'today' | 'activity'>('master');
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(false);
   const [showContactDetails, setShowContactDetails] = useState(false);
+  const [showIncidentReportModal, setShowIncidentReportModal] = useState(false);
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
   const [addCustomerKind, setAddCustomerKind] = useState<'customer' | 'prospect' | 'verifiedProspect'>('customer');
   const [isFiltering, setIsFiltering] = useState(false);
@@ -537,11 +536,6 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       }
     }));
   }, [selectedClientId]);
-
-  const handleOpenPatientChart = (contactId: string) => {
-    setSelectedClientId(contactId);
-    setShowPatientChart(true);
-  };
 
   const agentDataName = currentUser?.full_name?.trim() || null;
   const agentDisplayName = useMemo(() => {
@@ -1446,11 +1440,6 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     handleOpenSMSModal(contact);
   }, [handleOpenSMSModal]);
 
-  const handleMasterRowDetails = useCallback((contactId: string) => {
-    setSelectedClientId(contactId);
-    setShowPatientChart(true);
-  }, []);
-
   const handleRequestProspectVerification = useCallback(async (contact: Contact) => {
     try {
       await updateContact(contact.id, {
@@ -1864,7 +1853,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       </div>
       {detailsPanelOpen && selectedClient && (
         <div
-          className="fixed inset-x-0 bottom-0 top-auto z-50 flex max-h-[calc(100dvh-1rem)] flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl animate-in slide-in-from-bottom-10 duration-300 dark:border-slate-800 dark:bg-slate-900 sm:inset-y-0 sm:left-auto sm:right-0 sm:h-full sm:max-h-none sm:w-full sm:max-w-2xl sm:rounded-none sm:rounded-l-2xl sm:border-l sm:border-t-0 sm:slide-in-from-right-10"
+          className="fixed inset-x-0 bottom-0 top-auto z-50 flex max-h-[calc(100dvh-1rem)] flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl animate-in slide-in-from-bottom-10 duration-300 dark:border-slate-800 dark:bg-slate-900 sm:bottom-0 sm:left-auto sm:right-0 sm:top-16 sm:h-auto sm:max-h-none sm:w-full sm:max-w-2xl sm:rounded-none sm:rounded-l-2xl sm:border-l sm:border-t-0 sm:slide-in-from-right-10"
           role="dialog"
           aria-modal="true"
           aria-label={`${selectedClient.company} details`}
@@ -1881,18 +1870,14 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setShowPatientChart(true)}
-                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-brand-blue transition-colors"
-                title="Open Patient Chart"
-              >
-                <ClipboardList className="w-5 h-5" />
-              </button>
-              <button
+                type="button"
                 onClick={() => setShowContactDetails(true)}
-                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-brand-blue transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-brand-blue transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
                 title="Open Full Details"
+                aria-label="Open Full Details"
               >
-                <FileText className="w-5 h-5" />
+                <FileText className="h-4 w-4" />
+                Full Details
               </button>
               <button
                 onClick={() => setDetailsPanelOpen(false)}
@@ -1938,6 +1923,15 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               >
                 <FileText className="w-4 h-4" />
                 Sales Inquiry
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowIncidentReportModal(true)}
+                className="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 transition-colors hover:bg-rose-100 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-950/50"
+                aria-label="Create Incident Report"
+              >
+                <AlertTriangle className="h-4 w-4" />
+                Incident Report
               </button>
             </div>
             <div className="space-y-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/40 p-4">
@@ -2481,14 +2475,6 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         </div>
       )}
 
-      {showPatientChart && selectedClient && (
-        <CustomerProfileModal
-          contact={selectedClient}
-          currentUser={currentUser}
-          onClose={() => setShowPatientChart(false)}
-        />
-      )}
-
       {showContactDetails && selectedClient && (
         <div className="fixed inset-0 z-50 bg-white dark:bg-slate-950">
           <ContactDetails
@@ -2500,6 +2486,16 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             }}
           />
         </div>
+      )}
+
+      {selectedClient && (
+        <CreateIncidentReportModal
+          contactId={selectedClient.id}
+          isOpen={showIncidentReportModal}
+          onClose={() => setShowIncidentReportModal(false)}
+          onSuccess={() => setShowIncidentReportModal(false)}
+          currentUser={currentUser}
+        />
       )}
     </div>
   );
