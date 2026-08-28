@@ -1,13 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Search, SlidersHorizontal } from 'lucide-react';
+import { AlertCircle, ChevronLeft, ChevronRight, Plus, RotateCcw, Search, SlidersHorizontal } from 'lucide-react';
 import type { PurchaseRequestWithItems } from '../../purchaseRequest.types';
 import ModuleRecordLink from '../ModuleRecordLink';
 
 interface PurchaseRequestListProps {
   requests: PurchaseRequestWithItems[];
   loading: boolean;
+  error?: string;
+  onRetry?: () => void;
   onSelect: (pr: PurchaseRequestWithItems) => void;
   onCreate: () => void;
+  selectedRequestId?: string;
+  hideOnSmallScreens?: boolean;
   filterMonth: string;
   setFilterMonth: (value: string) => void;
   filterYear: string;
@@ -19,6 +23,7 @@ interface PurchaseRequestListProps {
 }
 
 const months = [
+  ['', 'All Months'],
   ['01', 'January'], ['02', 'February'], ['03', 'March'], ['04', 'April'],
   ['05', 'May'], ['06', 'June'], ['07', 'July'], ['08', 'August'],
   ['09', 'September'], ['10', 'October'], ['11', 'November'], ['12', 'December'],
@@ -45,8 +50,12 @@ const statusClass = (status: string) => {
 const PurchaseRequestList: React.FC<PurchaseRequestListProps> = ({
   requests,
   loading,
+  error = '',
+  onRetry,
   onSelect,
   onCreate,
+  selectedRequestId,
+  hideOnSmallScreens = false,
   filterMonth,
   setFilterMonth,
   filterYear,
@@ -66,7 +75,7 @@ const PurchaseRequestList: React.FC<PurchaseRequestListProps> = ({
   }, [page, totalPages]);
 
   return (
-    <aside className="flex h-full min-h-0 w-full flex-col border-r border-slate-200 bg-white xl:w-[300px] xl:shrink-0">
+    <aside aria-label="Purchase request history" className={`${hideOnSmallScreens ? 'hidden lg:flex' : 'flex'} h-full min-h-0 w-full flex-col border-r border-slate-200 bg-white lg:w-[300px] lg:shrink-0`}>
       <div className="border-b border-slate-200 p-4">
         <button type="button" onClick={onCreate} className="flex w-full items-center justify-center gap-2 rounded-md bg-[#175fd3] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#0e4fb7]">
           <Plus className="h-4 w-4" /> New Request
@@ -83,22 +92,32 @@ const PurchaseRequestList: React.FC<PurchaseRequestListProps> = ({
             {statuses.map(status => <option key={status} value={status}>{status}</option>)}
           </select>
         </label>
-        <p className="mb-2 mt-4 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Filter by month</p>
+        <div className="mb-2 mt-4 flex items-center justify-between gap-2">
+          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Filter by date</p>
+          {(filterMonth || filterYear) && <button type="button" onClick={() => { setFilterMonth(''); setFilterYear(''); setPage(1); }} className="inline-flex items-center gap-1 text-[11px] font-bold text-[#175fd3] hover:underline"><RotateCcw className="h-3 w-3" /> All dates</button>}
+        </div>
         <div className="grid grid-cols-[1fr_0.85fr] gap-2">
           <select aria-label="Filter by month" value={filterMonth} onChange={event => { setFilterMonth(event.target.value); setPage(1); }} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#175fd3] focus:ring-2 focus:ring-blue-100">
             {months.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
-          <input aria-label="Filter by year" type="number" min="2000" max="2100" value={filterYear} onChange={event => { setFilterYear(event.target.value); setPage(1); }} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#175fd3] focus:ring-2 focus:ring-blue-100" />
+          <input aria-label="Filter by year" type="number" min="2000" max="2100" value={filterYear} placeholder="All years" onChange={event => { setFilterYear(event.target.value); setPage(1); }} className="h-10 min-w-0 rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#175fd3] focus:ring-2 focus:ring-blue-100" />
         </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         <div className="flex items-center justify-between px-2 py-2 text-xs font-semibold text-slate-500">
           <span>{loading ? 'Loading...' : `${requests.length} request${requests.length === 1 ? '' : 's'}`}</span>
-          <span>{filterYear}</span>
+          <span>{filterYear || 'All years'}</span>
         </div>
         {loading ? (
           <div className="rounded-md px-3 py-8 text-center text-sm text-slate-500">Loading purchase requests...</div>
+        ) : error ? (
+          <div role="alert" className="rounded-md border border-rose-200 bg-rose-50 px-3 py-6 text-center text-sm text-rose-700">
+            <AlertCircle className="mx-auto mb-2 h-5 w-5" aria-hidden="true" />
+            <p className="font-bold">Unable to load PR history</p>
+            <p className="mt-1 text-xs">{error}</p>
+            {onRetry && <button type="button" onClick={onRetry} className="mt-3 rounded-md bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700">Try again</button>}
+          </div>
         ) : visibleRequests.length === 0 ? (
           <div className="rounded-md border border-dashed border-slate-200 px-3 py-8 text-center text-sm text-slate-500">No purchase requests found for this filter.</div>
         ) : visibleRequests.map(request => (
@@ -113,7 +132,8 @@ const PurchaseRequestList: React.FC<PurchaseRequestListProps> = ({
                 onSelect(request);
               }
             }}
-            className="mb-1.5 block w-full cursor-pointer rounded-md border border-transparent px-3 py-2.5 text-left transition hover:border-blue-100 hover:bg-blue-50/50 focus:border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            aria-current={request.id === selectedRequestId ? 'true' : undefined}
+            className={`mb-1.5 block w-full cursor-pointer rounded-md border px-3 py-2.5 text-left transition focus:border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-100 ${request.id === selectedRequestId ? 'border-blue-200 bg-blue-50 shadow-sm' : 'border-transparent hover:border-blue-100 hover:bg-blue-50/50'}`}
           >
             <div className="flex items-start justify-between gap-2">
               <ModuleRecordLink tab="warehouse-purchasing-purchase-request" payload={{ prId: request.id }} onOpen={() => onSelect(request)} className="font-bold text-[#173c83] hover:underline">

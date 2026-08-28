@@ -147,7 +147,7 @@ export const purchaseRequestService = {
     const query = new URLSearchParams({
       main_id: String(API_MAIN_ID),
       page: '1',
-      per_page: '200',
+      per_page: '500',
     });
     if (filters?.month) query.set('month', String(filters.month));
     if (filters?.year) query.set('year', String(filters.year));

@@ -93,6 +93,11 @@ describe('PurchaseRequestForm', () => {
     await user.click(screen.getByRole('button', { name: 'Pick Product' }));
     await user.click(screen.getByRole('button', { name: /preview pr/i }));
     expect(screen.getByText(/purchase request preview/i)).toBeInTheDocument();
+    const previewTable = screen.getByRole('table', { name: /purchase request preview items/i });
+    expect(previewTable).toHaveClass('table-fixed');
+    const previewColumns = Array.from(previewTable.querySelectorAll('col'));
+    expect(previewColumns).toHaveLength(5);
+    previewColumns.forEach(column => expect(column).toHaveClass('w-1/5'));
     await user.click(screen.getByRole('button', { name: /close/i }));
     await user.click(screen.getByRole('button', { name: /save as draft/i }));
 

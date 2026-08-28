@@ -18,7 +18,7 @@ const service = {
 };
 
 vi.mock('../../services/purchaseRequestService', () => ({ purchaseRequestService: service }));
-vi.mock('../PurchaseRequest/PurchaseRequestList', () => ({ default: ({ loading, onCreate, onSelect }: { loading: boolean; onCreate: () => void; onSelect: (request: unknown) => void }) => <div>{loading && <span>Sidebar loading</span>}<button type="button" onClick={onCreate}>New PR</button><button type="button" onClick={() => onSelect({ id: 'PRREF-1', pr_number: 'PR-2601' })}>Select PR</button></div> }));
+vi.mock('../PurchaseRequest/PurchaseRequestList', () => ({ default: ({ loading, error, onCreate, onSelect }: { loading: boolean; error?: string; onCreate: () => void; onSelect: (request: unknown) => void }) => <div>{loading && <span>Sidebar loading</span>}{error && <span role="alert">{error}</span>}<button type="button" onClick={onCreate}>New PR</button><button type="button" onClick={() => onSelect({ id: 'PRREF-1', pr_number: 'PR-2601' })}>Select PR</button></div> }));
 vi.mock('../PurchaseRequest/PurchaseRequestForm', () => ({ default: ({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: (payload: unknown) => void }) => <div><button type="button" onClick={() => onSubmit({ pr_number: 'PR-2601', request_date: '2026-08-23', items: [] })}>Submit PR</button><button type="button" onClick={onCancel}>Cancel PR</button></div> }));
 vi.mock('../PurchaseRequest/PurchaseRequestView', () => ({ default: ({ onBack, onUpdate, onUpdateItem, onDeleteItem, onAddItem, onConvert, onPrint }: { onBack: () => void; onUpdate: (...args: unknown[]) => void; onUpdateItem: (...args: unknown[]) => void; onDeleteItem: (...args: unknown[]) => void; onAddItem: (...args: unknown[]) => void; onConvert: () => void; onPrint: () => void }) => <div><button type="button" onClick={onBack}>Back PR</button><button type="button" onClick={() => onUpdate('PRREF-1', { status: 'Approved' })}>Update PR</button><button type="button" onClick={() => onUpdateItem('ITEM-1', { quantity: 2 })}>Update PR item</button><button type="button" onClick={() => onDeleteItem('ITEM-1')}>Delete PR item</button><button type="button" onClick={() => onAddItem({ item_id: 'P1', quantity: 1 })}>Add PR item</button><button type="button" onClick={onConvert}>Convert PR</button><button type="button" onClick={onPrint}>Print PR</button></div> }));
 vi.mock('../PurchaseRequest/PurchaseRequestPrint', () => ({ default: ({ onClose }: { onClose: () => void }) => <div><button type="button" onClick={onClose}>Close PR print</button></div> }));
@@ -84,9 +84,29 @@ describe('PurchaseRequestModule', () => {
     const { default: PurchaseRequestModule } = await import('../PurchaseRequest');
     render(<PurchaseRequestModule />);
     fireEvent.click(await screen.findByRole('button', { name: 'New PR' }));
+    expect(screen.getByRole('button', { name: 'New PR' })).toBeInTheDocument();
     fireEvent.click(await screen.findByRole('button', { name: 'Submit PR' }));
     expect(await screen.findByRole('button', { name: 'Update PR' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'New PR' })).toBeInTheDocument();
     expect(service.createPurchaseRequest).toHaveBeenCalled();
+  });
+
+  it('loads all purchase request history by default instead of restricting it to the current month', async () => {
+    const { default: PurchaseRequestModule } = await import('../PurchaseRequest');
+    render(<PurchaseRequestModule />);
+
+    await waitFor(() => expect(service.getPurchaseRequests).toHaveBeenCalled());
+    expect(service.getPurchaseRequests).toHaveBeenCalledWith(expect.objectContaining({ month: undefined, year: undefined }));
+  });
+
+  it('keeps existing history visible and reports a list failure instead of replacing it with an empty list', async () => {
+    service.getPurchaseRequests.mockRejectedValueOnce(new Error('History service unavailable'));
+    const { default: PurchaseRequestModule } = await import('../PurchaseRequest');
+    render(<PurchaseRequestModule />);
+
+    expect(await screen.findByRole('button', { name: 'New PR' })).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent('History service unavailable');
+    expect(service.getPurchaseRequests).toHaveBeenCalled();
   });
 
   it('runs detail mutations, print navigation, conversion, and back navigation', async () => {

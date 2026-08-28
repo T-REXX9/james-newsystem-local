@@ -23,10 +23,10 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
   const [selectedRequest, setSelectedRequest] = useState<PurchaseRequestWithItems | null>(null);
   const [nextPRNumber, setNextPRNumber] = useState('');
   const [search, setSearch] = useState('');
-  const currentDate = new Date();
-  const [filterMonth, setFilterMonth] = useState(String(currentDate.getMonth() + 1).padStart(2, '0'));
-  const [filterYear, setFilterYear] = useState(String(currentDate.getFullYear()));
+  const [filterMonth, setFilterMonth] = useState('');
+  const [filterYear, setFilterYear] = useState('');
   const [filterStatus, setFilterStatus] = useState('All Statuses');
+  const [listError, setListError] = useState('');
   const deepLinkRequestRef = useRef(0);
   const [deepLinkLoading, setDeepLinkLoading] = useState(Boolean(String(initialPRId || '').trim()));
   const [deepLinkError, setDeepLinkError] = useState('');
@@ -36,6 +36,7 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
     const year = Number(filterYear);
     const month = Number(filterMonth);
     setLoading(true);
+    setListError('');
     try {
       const data = await purchaseRequestService.getPurchaseRequests({
         month: month >= 1 && month <= 12 ? month : undefined,
@@ -46,7 +47,7 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
       setRequests(data);
     } catch (error) {
       console.error('Failed to fetch purchase requests', error);
-      setRequests([]);
+      setListError(error instanceof Error ? error.message : 'Purchase request history could not be loaded.');
     } finally {
       setLoading(false);
     }
@@ -116,10 +117,10 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
 
   const handleCreateSubmit = async (payload: CreatePRPayload) => {
     const newPR = await purchaseRequestService.createPurchaseRequest(payload);
-    await fetchRequests();
-    await ensureProductsLoaded();
+    setRequests(current => [newPR, ...current.filter(request => request.id !== newPR.id)]);
     setSelectedRequest(newPR);
     setViewMode('detail');
+    await Promise.all([fetchRequests(), ensureProductsLoaded()]);
   };
 
   const handleSelectRequest = async (request: PurchaseRequestWithItems) => {
@@ -191,23 +192,15 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
     backToList();
   };
 
-  if (viewMode === 'create') {
-    return <PurchaseRequestForm onCancel={backToList} onSubmit={handleCreateSubmit} suppliers={suppliers} initialPRNumber={nextPRNumber} />;
-  }
-
-  if (viewMode === 'detail' && selectedRequest) {
-    return <PurchaseRequestDetail request={selectedRequest} onBack={handleDetailBack} onUpdate={handleUpdate} onUpdateItem={handleUpdateItem} onDeleteItem={handleDeleteItem} onAddItem={handleAddItem} onConvert={handleConvertPO} onPrint={() => setViewMode('print')} products={products} suppliers={suppliers} />;
-  }
-
-  if (viewMode === 'print' && selectedRequest) {
-    return <PurchaseRequestPrint request={selectedRequest} onClose={() => setViewMode('detail')} />;
-  }
-
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#f7f9fc] lg:flex-row">
-      <PurchaseRequestList requests={requests} loading={loading || deepLinkLoading} onSelect={handleSelectRequest} onCreate={handleCreateStart} filterMonth={filterMonth} setFilterMonth={setFilterMonth} filterYear={filterYear} setFilterYear={setFilterYear} filterStatus={filterStatus} setFilterStatus={setFilterStatus} search={search} setSearch={setSearch} />
-      <main className="hidden min-w-0 flex-1 items-center justify-center p-8 text-center text-slate-500 lg:flex">
-        {deepLinkLoading ? (
+      <PurchaseRequestList requests={requests} loading={loading} error={listError} onRetry={fetchRequests} onSelect={handleSelectRequest} onCreate={handleCreateStart} selectedRequestId={selectedRequest?.id} hideOnSmallScreens={viewMode !== 'list'} filterMonth={filterMonth} setFilterMonth={setFilterMonth} filterYear={filterYear} setFilterYear={setFilterYear} filterStatus={filterStatus} setFilterStatus={setFilterStatus} search={search} setSearch={setSearch} />
+      <main className={`min-h-0 min-w-0 flex-1 overflow-hidden ${viewMode === 'list' ? 'hidden items-center justify-center p-8 text-center text-slate-500 lg:flex' : 'block'}`}>
+        {viewMode === 'create' ? (
+          <PurchaseRequestForm onCancel={backToList} onSubmit={handleCreateSubmit} suppliers={suppliers} initialPRNumber={nextPRNumber} />
+        ) : (viewMode === 'detail' || viewMode === 'print') && selectedRequest ? (
+          <PurchaseRequestDetail request={selectedRequest} onBack={handleDetailBack} onUpdate={handleUpdate} onUpdateItem={handleUpdateItem} onDeleteItem={handleDeleteItem} onAddItem={handleAddItem} onConvert={handleConvertPO} onPrint={() => setViewMode('print')} products={products} suppliers={suppliers} />
+        ) : deepLinkLoading ? (
           <div role="status" aria-live="polite" className="flex max-w-md flex-col items-center">
             <Loader2 className="h-9 w-9 animate-spin text-[#175fd3]" aria-hidden="true" />
             <p className="mt-4 text-lg font-bold text-slate-700">Loading purchase request...</p>
@@ -224,6 +217,7 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
           <div><p className="text-lg font-bold text-slate-700">Select a Purchase Request</p><p className="mt-1 text-sm">Choose a request from the list or create a new one to begin.</p></div>
         )}
       </main>
+      {viewMode === 'print' && selectedRequest && <PurchaseRequestPrint request={selectedRequest} onClose={() => setViewMode('detail')} />}
     </div>
   );
 };
