@@ -686,7 +686,7 @@ const ReorderReport: React.FC = () => {
     <div className="space-y-2">
       {row.pr_documents.map((document) => (
         <div key={`${document.refno}-${document.number}`} className="break-words">
-          <ModuleRecordLink tab="warehouse-purchasing-purchase-request" payload={{ prId: document.refno }} className="font-bold text-brand-blue hover:underline">
+          <ModuleRecordLink openInNewTab tab="warehouse-purchasing-purchase-request" payload={{ prId: document.refno }} className="font-bold text-brand-blue hover:underline">
             {document.number || document.refno}
           </ModuleRecordLink>
           <div className="text-[11px] text-slate-500">{document.request_date ? document.request_date.slice(0, 10) : 'No date'} · {document.status}</div>
@@ -699,7 +699,7 @@ const ReorderReport: React.FC = () => {
     <div className="space-y-2">
       {row.po_documents.map((document) => (
         <div key={`${document.refno}-${document.number}`} className="min-w-0 break-words">
-          <ModuleRecordLink tab="warehouse-purchasing-purchase-order" payload={{ poId: document.refno, poRefNo: document.number }} className="font-bold text-brand-blue hover:underline">
+          <ModuleRecordLink openInNewTab tab="warehouse-purchasing-purchase-order" payload={{ poId: document.refno, poRefNo: document.number }} className="font-bold text-brand-blue hover:underline">
             {document.number || document.refno}
           </ModuleRecordLink>
           <div className="text-[11px] text-slate-500">{document.supplier_name || 'No supplier'} · {document.status}</div>
@@ -714,7 +714,7 @@ const ReorderReport: React.FC = () => {
     <div className="space-y-2">
       {row.rr_documents.map((document) => (
         <div key={`${document.refno}-${document.number}`} className="break-words">
-          <ModuleRecordLink tab="warehouse-purchasing-receiving-stock" payload={{ rrId: document.refno, rrRefNo: document.number }} className="font-bold text-brand-blue hover:underline">
+          <ModuleRecordLink openInNewTab tab="warehouse-purchasing-receiving-stock" payload={{ rrId: document.refno, rrRefNo: document.number }} className="font-bold text-brand-blue hover:underline">
             {document.number || document.refno}
           </ModuleRecordLink>
           <div className="text-[11px] text-slate-500">{document.receiving_date || 'No date'} · {document.status}</div>
@@ -861,7 +861,7 @@ const ReorderReport: React.FC = () => {
                 <ShoppingCart className="mr-2 inline h-4 w-4" /> Add to PR
               </button>
               {latestCreatedPr ? (
-                <ModuleRecordLink tab="warehouse-purchasing-purchase-request" payload={{ prId: latestCreatedPr.id }} className="inline-flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700 transition hover:bg-emerald-100">
+                <ModuleRecordLink openInNewTab tab="warehouse-purchasing-purchase-request" payload={{ prId: latestCreatedPr.id }} className="inline-flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700 transition hover:bg-emerald-100">
                   <span>PR Created:</span><span className="underline">{latestCreatedPr.number}</span>
                 </ModuleRecordLink>
               ) : null}
@@ -878,9 +878,6 @@ const ReorderReport: React.FC = () => {
                 <col style={{ width: '4.5%' }} />
                 <col style={{ width: '5.5%' }} />
                 <col style={{ width: '10.5%' }} />
-                <col style={{ width: '4%' }} />
-                <col style={{ width: '4%' }} />
-                <col style={{ width: '4%' }} />
                 <col style={{ width: '4%' }} />
                 <col style={{ width: '4%' }} />
                 <col style={{ width: '5%' }} />
@@ -902,11 +899,8 @@ const ReorderReport: React.FC = () => {
                   <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-3 text-left font-bold uppercase tracking-wide text-white">Item Code</th>
                   <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-3 text-left font-bold uppercase tracking-wide text-white">Part No.</th>
                   <th rowSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-3 text-left font-bold uppercase tracking-wide text-white">Description</th>
-                  <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Physical<br />Stock</th>
-                  <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Reserved<br />Stock</th>
                   <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Available<br />Stock</th>
-                  <th rowSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Reorder<br />Level</th>
-                  <th rowSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Suggested<br />Reorder</th>
+                  <th rowSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Reorder<br />Quantity</th>
                   <th colSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Recommended Supplier</th>
                   <th colSpan={2} className="border-b border-r border-white/20 bg-orange-500 px-3 py-3 text-center font-bold uppercase tracking-wide text-white">① PR STAGE<br /><span className="text-xs font-normal opacity-90">(Waiting for Approval)</span></th>
                   <th colSpan={4} className="border-b border-r border-white/20 bg-[#175fd3] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">② PO STAGE<br /><span className="text-xs font-normal opacity-90">(Ordered from Supplier)</span></th>
@@ -929,7 +923,7 @@ const ReorderReport: React.FC = () => {
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <tr><td colSpan={21} className="px-4 py-16 text-center text-sm text-slate-500">
+                  <tr><td colSpan={18} className="px-4 py-16 text-center text-sm text-slate-500">
                     {loading ? <CustomLoadingSpinner label="Loading" /> : 'No items match the current filters.'}
                   </td></tr>
                 ) : rows.map((row) => {
@@ -942,10 +936,7 @@ const ReorderReport: React.FC = () => {
                       <td className="px-3 py-3 font-semibold text-slate-600">{row.item_code}</td>
                       <td className="px-3 py-3 font-semibold text-[#173c83]">{row.part_no}</td>
                       <td className="border-r border-slate-100 px-3 py-3 font-semibold">{row.description}</td>
-                      <td className="px-3 py-3 text-center font-bold text-slate-800">{formatQuantity(row.physical_stock)}</td>
-                      <td className="px-3 py-3 text-center font-semibold text-amber-700">{formatQuantity(row.reserved_stock)}</td>
                       <td className="px-3 py-3 text-center font-bold text-rose-600">{formatQuantity(row.available_stock)}</td>
-                      <td className="border-r border-slate-100 px-3 py-3 text-center font-bold text-[#173c83]">{formatQuantity(row.reorder_qty)}</td>
                       <td className="border-r border-slate-100 px-3 py-3 text-center font-extrabold text-emerald-700">{formatQuantity(row.suggested_reorder_qty)}</td>
                       <td className="px-3 py-3 font-semibold">{row.preferred_supplier_name || '-'}</td>
                       <td className="border-r border-slate-100 px-3 py-3 text-right font-semibold">{row.preferred_supplier_cost > 0 ? formatCurrency(row.preferred_supplier_cost) : '-'}</td>
@@ -1012,10 +1003,10 @@ const ReorderReport: React.FC = () => {
         </div>
         <table>
           <thead>
-            <tr><th rowSpan={2}>ITEM CODE</th><th rowSpan={2}>PART NO.</th><th rowSpan={2}>DESCRIPTION</th><th colSpan={5}>STOCK POSITION</th><th colSpan={2}>RECOMMENDED SUPPLIER</th><th colSpan={2}>① PR STAGE</th><th colSpan={4}>② PO STAGE</th><th colSpan={3}>③ RECEIVING STOCK</th><th rowSpan={2}>STATUS</th></tr>
-            <tr><th>PHYSICAL</th><th>RESERVED</th><th>AVAILABLE</th><th>REORDER</th><th>SUGGESTED</th><th>SUPPLIER</th><th>COST</th><th>PR #</th><th>OPEN PR</th><th>PO #</th><th>ORDERED</th><th>ON ORDER</th><th>OUTSTANDING</th><th>RR #</th><th>RECEIVED</th><th>ACCEPTED</th></tr>
+            <tr><th rowSpan={2}>ITEM CODE</th><th rowSpan={2}>PART NO.</th><th rowSpan={2}>DESCRIPTION</th><th colSpan={2}>STOCK POSITION</th><th colSpan={2}>RECOMMENDED SUPPLIER</th><th colSpan={2}>① PR STAGE</th><th colSpan={4}>② PO STAGE</th><th colSpan={3}>③ RECEIVING STOCK</th><th rowSpan={2}>STATUS</th></tr>
+            <tr><th>AVAILABLE STOCK</th><th>REORDER QUANTITY</th><th>SUPPLIER</th><th>COST</th><th>PR #</th><th>OPEN PR</th><th>PO #</th><th>ORDERED</th><th>ON ORDER</th><th>OUTSTANDING</th><th>RR #</th><th>RECEIVED</th><th>ACCEPTED</th></tr>
           </thead>
-          <tbody>{(printRows.length > 0 ? printRows : rows).map((row) => <tr key={`print-${row.product_session}`}><td>{row.item_code}</td><td>{row.part_no}</td><td>{row.description}</td><td>{formatQuantity(row.physical_stock)}</td><td>{formatQuantity(row.reserved_stock)}</td><td>{formatQuantity(row.available_stock)}</td><td>{formatQuantity(row.reorder_qty)}</td><td>{formatQuantity(row.suggested_reorder_qty)}</td><td>{row.preferred_supplier_name || '-'}</td><td>{row.preferred_supplier_cost > 0 ? formatCurrency(row.preferred_supplier_cost) : '-'}</td><td>{row.pr_documents.map((document) => document.number).join(', ') || '-'}</td><td>{formatQuantity(row.pr_requested_qty ?? row.open_pr_qty)}</td><td>{row.po_documents.map((document) => document.number).join(', ') || '-'}</td><td>{formatQuantity(row.po_ordered_qty)}</td><td>{formatQuantity(row.open_po_qty)}</td><td>{formatQuantity(row.remaining_qty)}</td><td>{row.rr_documents.map((document) => document.number).join(', ') || '-'}</td><td>{formatQuantity(row.received_qty)}</td><td>{formatQuantity(row.accepted_qty)}</td><td>{row.overall_status}</td></tr>)}</tbody>
+          <tbody>{(printRows.length > 0 ? printRows : rows).map((row) => <tr key={`print-${row.product_session}`}><td>{row.item_code}</td><td>{row.part_no}</td><td>{row.description}</td><td>{formatQuantity(row.available_stock)}</td><td>{formatQuantity(row.suggested_reorder_qty)}</td><td>{row.preferred_supplier_name || '-'}</td><td>{row.preferred_supplier_cost > 0 ? formatCurrency(row.preferred_supplier_cost) : '-'}</td><td>{row.pr_documents.map((document) => document.number).join(', ') || '-'}</td><td>{formatQuantity(row.pr_requested_qty ?? row.open_pr_qty)}</td><td>{row.po_documents.map((document) => document.number).join(', ') || '-'}</td><td>{formatQuantity(row.po_ordered_qty)}</td><td>{formatQuantity(row.open_po_qty)}</td><td>{formatQuantity(row.remaining_qty)}</td><td>{row.rr_documents.map((document) => document.number).join(', ') || '-'}</td><td>{formatQuantity(row.received_qty)}</td><td>{formatQuantity(row.accepted_qty)}</td><td>{row.overall_status}</td></tr>)}</tbody>
         </table>
       </div>
     </div>

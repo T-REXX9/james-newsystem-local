@@ -13,7 +13,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
-import { formatCurrency } from '../utils/formatUtils';
+import { formatCurrency, formatDateFull } from '../utils/formatUtils';
 
 const tableCellClass = 'border border-[#ddd] px-2 py-[6px] text-[12px] text-[#333] print:border-black';
 const tableHeadClass = 'border border-[#ddd] bg-[#f5f5f5] px-2 py-2 text-[12px] font-semibold uppercase text-[#333] print:border-black';
@@ -22,16 +22,53 @@ const formLabelClass = 'pt-2 text-left text-[13px] font-semibold text-[#333] md:
 const formControlClass = 'h-[34px] w-full max-w-[590px] rounded-[3px] border border-[#ccc] bg-white px-3 text-[13px] text-[#333] shadow-inner outline-none focus:border-[#66afe9] focus:ring-1 focus:ring-[#66afe9]';
 type DateCovered = 'All' | 'Today' | 'Week' | 'Month' | 'Year' | 'Custom';
 
+const getProductDatabaseUrl = (row: InventoryReportRow): string => {
+  const params = new URLSearchParams({
+    productId: row.id,
+    partNo: row.partNo,
+  });
+  const productDatabaseUrl = new URL(window.location.href);
+  productDatabaseUrl.hash = `#/warehouse-inventory-product-database?${params.toString()}`;
+  return productDatabaseUrl.toString();
+};
+
+const openProductDatabaseRecord = (row: InventoryReportRow) => {
+  if (!row.id || !row.partNo) return;
+  window.open(getProductDatabaseUrl(row), '_blank', 'noopener,noreferrer');
+};
+
+const PartNumberCell = ({ row }: { row: InventoryReportRow }) => (
+  <td className={tableCellClass}>
+    {row.partNo ? (
+      <button
+        type="button"
+        onDoubleClick={() => openProductDatabaseRecord(row)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') openProductDatabaseRecord(row);
+        }}
+        className="cursor-pointer font-semibold text-[#175fd3] underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
+        title="Double-click to open this Product Database record in a new tab"
+        aria-label={`Open ${row.partNo} in Product Database`}
+      >
+        {row.partNo}
+      </button>
+    ) : '—'}
+  </td>
+);
+
 const InventoryRow = memo(({ row, index }: { row: InventoryReportRow; index: number }) => (
   <tr>
     <td className={`${tableCellClass} text-center`}>{index + 1}</td>
     <td className={tableCellClass}>{row.description || '—'}</td>
-    <td className={tableCellClass}>{row.partNo || '—'}</td>
+    <PartNumberCell row={row} />
     <td className={tableCellClass}>{row.itemCode || '—'}</td>
     <td className={`${tableCellClass} text-right font-mono`}>
       {row.cost != null ? formatCurrency(Number(row.cost), true) : '—'}
     </td>
     <td className={tableCellClass}>{row.location || '—'}</td>
+    <td className={`${tableCellClass} whitespace-nowrap`}>{formatDateFull(row.lastTransactionDate)}</td>
+    <td className={`${tableCellClass} whitespace-nowrap`}>{formatDateFull(row.lastRrDate)}</td>
+    <td className={`${tableCellClass} text-center font-mono`}>{row.reorderQuantity}</td>
     <td className={`${tableCellClass} text-center font-mono`}>{row.totalStock}</td>
     <td className={`${tableCellClass} text-right font-mono`}>
       {row.value != null ? formatCurrency(Number(row.value), true) : '—'}
@@ -44,9 +81,12 @@ const ProductRow = memo(({ row, index }: { row: InventoryReportRow; index: numbe
     <td className={`${tableCellClass} text-center`}>{index + 1}</td>
     <td className={tableCellClass}>{row.description || '—'}</td>
     <td className={tableCellClass}>{row.category || '—'}</td>
-    <td className={tableCellClass}>{row.partNo || '—'}</td>
+    <PartNumberCell row={row} />
     <td className={tableCellClass}>{row.itemCode || '—'}</td>
     <td className={tableCellClass}>{row.location || '—'}</td>
+    <td className={`${tableCellClass} whitespace-nowrap`}>{formatDateFull(row.lastTransactionDate)}</td>
+    <td className={`${tableCellClass} whitespace-nowrap`}>{formatDateFull(row.lastRrDate)}</td>
+    <td className={`${tableCellClass} text-center font-mono`}>{row.reorderQuantity}</td>
     <td className={`${tableCellClass} text-center font-mono`}>{row.totalStock}</td>
   </tr>
 ));
@@ -174,7 +214,7 @@ const InventoryReport: React.FC = () => {
     let csvRows: string[];
 
     if (isInventoryView) {
-      headers = ['Part No', 'Item Code', 'Description', 'Location', 'VIP 1 Price', 'Total Stock', 'Value'];
+      headers = ['Part No', 'Item Code', 'Description', 'Location', 'Last Transaction Date', 'Last RR Date', 'Reorder Quantity', 'VIP 1 Price', 'Total Stock', 'Value'];
       csvRows = [
         headers.join(','),
         ...reportData.map((row) => {
@@ -183,6 +223,9 @@ const InventoryReport: React.FC = () => {
             row.itemCode,
             row.description,
             row.location || '',
+            row.lastTransactionDate || '',
+            row.lastRrDate || '',
+            row.reorderQuantity,
             row.cost ?? 0,
             row.totalStock,
             row.value ?? 0,
@@ -191,11 +234,11 @@ const InventoryReport: React.FC = () => {
         }),
       ];
     } else {
-      headers = ['Part No', 'Category', 'Item Code', 'Description', 'Location', 'Total Stock'];
+      headers = ['Part No', 'Category', 'Item Code', 'Description', 'Location', 'Last Transaction Date', 'Last RR Date', 'Reorder Quantity', 'Total Stock'];
       csvRows = [
         headers.join(','),
         ...reportData.map((row) => {
-          const values = [row.partNo, row.category, row.itemCode, row.description, row.location || '', row.totalStock];
+          const values = [row.partNo, row.category, row.itemCode, row.description, row.location || '', row.lastTransactionDate || '', row.lastRrDate || '', row.reorderQuantity, row.totalStock];
           return values.map(escapeCSV).join(',');
         }),
       ];
@@ -537,7 +580,7 @@ const InventoryReport: React.FC = () => {
               </div>
             ) : isInventoryView ? (
               <div className="overflow-auto print:overflow-visible">
-                <table className="w-full min-w-[1050px] border-collapse text-left print:min-w-0">
+                <table className="w-full min-w-[1360px] border-collapse text-left print:min-w-0">
                   <thead>
                     <tr>
                       <th className={tableHeadClass} style={{ width: '1%' }}>#</th>
@@ -546,6 +589,9 @@ const InventoryReport: React.FC = () => {
                       <th className={tableHeadClass} style={{ width: '10%' }}>CODE</th>
                       <th className={tableHeadClass} style={{ width: '5%' }}>VIP 1 PRICE</th>
                       <th className={tableHeadClass} style={{ width: '5%' }}>LOC</th>
+                      <th className={tableHeadClass} style={{ width: '8%' }}>LAST TRANSACTION DATE</th>
+                      <th className={tableHeadClass} style={{ width: '8%' }}>LAST RR DATE</th>
+                      <th className={tableHeadClass} style={{ width: '6%' }}>REORDER QUANTITY</th>
                       <th className={tableHeadClass} style={{ width: '5%' }}>BALANCE</th>
                       <th className={tableHeadClass} style={{ width: '5%' }}>Value</th>
                     </tr>
@@ -555,7 +601,7 @@ const InventoryReport: React.FC = () => {
                       <InventoryRow key={row.id || `${row.partNo}-${index}`} row={row} index={index} />
                     ))}
                     <tr>
-                      <td colSpan={7} className={`${tableCellClass} text-right font-semibold`}>
+                      <td colSpan={10} className={`${tableCellClass} text-right font-semibold`}>
                         Total Value:
                       </td>
                       <td className={`${tableCellClass} text-right font-mono font-semibold`}>
@@ -567,7 +613,7 @@ const InventoryReport: React.FC = () => {
               </div>
             ) : (
               <div className="overflow-auto print:overflow-visible">
-                <table className="w-full min-w-[760px] border-collapse text-left print:min-w-0">
+                <table className="w-full min-w-[1100px] border-collapse text-left print:min-w-0">
                   <thead>
                     <tr>
                       <th className={tableHeadClass} style={{ width: '1%' }}>#</th>
@@ -576,6 +622,9 @@ const InventoryReport: React.FC = () => {
                       <th className={tableHeadClass} style={{ width: '10%' }}>PART NO</th>
                       <th className={tableHeadClass} style={{ width: '10%' }}>CODE</th>
                       <th className={tableHeadClass} style={{ width: '5%' }}>LOC</th>
+                      <th className={tableHeadClass} style={{ width: '8%' }}>LAST TRANSACTION DATE</th>
+                      <th className={tableHeadClass} style={{ width: '8%' }}>LAST RR DATE</th>
+                      <th className={tableHeadClass} style={{ width: '6%' }}>REORDER QUANTITY</th>
                       <th className={tableHeadClass} style={{ width: '5%' }}>STOCK</th>
                     </tr>
                   </thead>

@@ -4,6 +4,7 @@ interface ModuleRecordLinkProps extends Omit<React.AnchorHTMLAttributes<HTMLAnch
   tab: string;
   payload?: Record<string, string | undefined>;
   onOpen?: () => void;
+  openInNewTab?: boolean;
 }
 
 export const buildModuleRecordHref = (tab: string, payload: Record<string, string | undefined> = {}) => {
@@ -19,6 +20,7 @@ const ModuleRecordLink: React.FC<ModuleRecordLinkProps> = ({
   tab,
   payload,
   onOpen,
+  openInNewTab = false,
   children,
   target = '_blank',
   rel = 'noopener noreferrer',
@@ -32,6 +34,7 @@ const ModuleRecordLink: React.FC<ModuleRecordLinkProps> = ({
     onClick={(event) => {
       event.stopPropagation();
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      if (openInNewTab) return;
       event.preventDefault();
       if (onOpen) {
         onOpen();

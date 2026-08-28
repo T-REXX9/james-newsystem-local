@@ -24,4 +24,15 @@ describe('ModuleRecordLink', () => {
     fireEvent.click(link, { ctrlKey: true });
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
+
+  it('does not intercept a normal click when explicitly opening in a new tab', () => {
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+    render(<ModuleRecordLink openInNewTab tab="record-page" payload={{ id: '2' }}>REC-2</ModuleRecordLink>);
+    const link = screen.getByRole('link', { name: 'REC-2' });
+
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(fireEvent.click(link)).toBe(true);
+    expect(dispatchSpy).not.toHaveBeenCalled();
+  });
 });

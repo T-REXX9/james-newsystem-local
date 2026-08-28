@@ -1,14 +1,8 @@
 import React, { Component, ReactNode, useEffect, useMemo, useState } from 'react';
-import { ArrowUp, BarChart3, Clock3, FileText, PackageSearch, ReceiptText, Table2, Target, Users, Wallet } from 'lucide-react';
-import OwnerLiveCallMonitoringView from './OwnerLiveCallMonitoringView';
-type DailyCallOwnerViewMode = 'master-list' | 'chart' | 'operations';
+import { ArrowUp, BarChart3, Clock3, Table2, Target, Wallet } from 'lucide-react';
 import DailyCallMasterListView from './DailyCallMasterListView';
 import { fetchDailyCallMasterList } from '../services/dailyCallMonitoringService';
-import { getAllSalesOrders } from '../services/salesOrderLocalApiService';
-import { getAllInvoices } from '../services/invoiceLocalApiService';
-import { fetchProductsPage } from '../services/productLocalApiService';
 import { DailyCallMasterCustomerRow, UserProfile } from '../types';
-import { getCentralStock } from '../utils/productStock';
 
 interface OwnerDailyCallMonitoringUnifiedViewProps {
   currentUser: UserProfile | null;
@@ -49,10 +43,6 @@ const calculateSummary = (rows: DailyCallMasterCustomerRow[]) => {
   return { current, totalPotential };
 };
 
-const navigateToModule = (tab: string) => {
-  window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab } }));
-};
-
 class LocalErrorBoundary extends Component<LocalErrorBoundaryProps, LocalErrorBoundaryState> {
   state: LocalErrorBoundaryState = { hasError: false };
 
@@ -78,27 +68,10 @@ class LocalErrorBoundary extends Component<LocalErrorBoundaryProps, LocalErrorBo
   }
 }
 
-const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnifiedViewProps> = ({ currentUser, initialSelectedDate }) => {
-  const [activeView, setActiveView] = useState<DailyCallOwnerViewMode>('master-list');
+const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnifiedViewProps> = ({ currentUser }) => {
   const [summary, setSummary] = useState({ current: 0, totalPotential: 0 });
 
-  const handleViewChange = (view: DailyCallOwnerViewMode) => {
-    if (view === 'operations') {
-      navigateToModule('operations-management-dashboard');
-      return;
-    }
-    setActiveView(view);
-  };
-  const [workQueueCounts, setWorkQueueCounts] = useState({
-    followUps: 0,
-    pendingOrders: 0,
-    unpaidInvoices: 0,
-    lowStock: 0,
-  });
-
   useEffect(() => {
-    if (activeView !== 'master-list') return;
-
     let isMounted = true;
     fetchDailyCallMasterList({ fromDate })
       .then((result) => {
@@ -109,43 +82,6 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
         if (isMounted) setSummary({ current: 0, totalPotential: 0 });
       });
 
-    return () => {
-      isMounted = false;
-    };
-  }, [activeView]);
-
-  useEffect(() => {
-    let isMounted = true;
-    const loadWorkQueueCounts = async () => {
-      const [callsResult, ordersResult, invoicesResult, productsResult] = await Promise.allSettled([
-        fetchDailyCallMasterList({ fromDate }),
-        getAllSalesOrders(),
-        getAllInvoices(),
-        fetchProductsPage({ status: 'active', page: 1, perPage: 100 }),
-      ]);
-
-      if (!isMounted) return;
-
-      const followUps = callsResult.status === 'fulfilled'
-        ? callsResult.value.items.filter((row) => row.purchaseAgeGroup !== 'current_month').length
-        : 0;
-      const pendingOrders = ordersResult.status === 'fulfilled'
-        ? ordersResult.value.filter((order) => ['pending', 'submitted'].includes(String(order.status || '').toLowerCase())).length
-        : 0;
-      const unpaidInvoices = invoicesResult.status === 'fulfilled'
-        ? invoicesResult.value.filter((invoice) => !['paid', 'cancelled'].includes(String(invoice.status || '').toLowerCase())).length
-        : 0;
-      const lowStock = productsResult.status === 'fulfilled'
-        ? productsResult.value.items.filter((product) => {
-            const totalStock = getCentralStock(product);
-            return Number(product.reorder_quantity || 0) > 0 && totalStock <= Number(product.reorder_quantity || 0);
-          }).length
-        : 0;
-
-      setWorkQueueCounts({ followUps, pendingOrders, unpaidInvoices, lowStock });
-    };
-
-    void loadWorkQueueCounts();
     return () => {
       isMounted = false;
     };
@@ -193,112 +129,12 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
     ];
   }, [summary]);
 
-  const workQueueCards = useMemo(() => [
-    {
-      title: 'Follow up inquiries',
-      count: workQueueCounts.followUps,
-      description: 'Review active customer calls and open inquiry work.',
-      action: 'Open follow-ups',
-      Icon: Users,
-      route: 'sales-transaction-daily-call-monitoring',
-    },
-    {
-      title: 'Pending sales orders',
-      count: workQueueCounts.pendingOrders,
-      description: 'Check orders waiting for approval or next documents.',
-      action: 'Review orders',
-      Icon: FileText,
-      route: 'sales-transaction-sales-order',
-    },
-    {
-      title: 'Unpaid invoices',
-      count: workQueueCounts.unpaidInvoices,
-      description: 'Open receivables and see customer balances.',
-      action: 'View AR',
-      Icon: ReceiptText,
-      route: 'accounting-accounting-accounts-receivable',
-    },
-    {
-      title: 'Collections to review',
-      count: null,
-      description: 'Post, check, or reconcile daily collections.',
-      action: 'Open collections',
-      Icon: Wallet,
-      route: 'accounting-transactions-daily-collection-entry',
-    },
-    {
-      title: 'Low stock watch',
-      count: workQueueCounts.lowStock,
-      description: 'Review reorder and suggested stock reports.',
-      action: 'Check stock',
-      Icon: PackageSearch,
-      route: 'warehouse-reports-reorder-report',
-    },
-  ], [workQueueCounts.followUps, workQueueCounts.lowStock, workQueueCounts.pendingOrders, workQueueCounts.unpaidInvoices]);
-
   return (
     <div className="h-full min-h-0 overflow-hidden bg-slate-50 dark:bg-slate-950">
       <section className="flex h-full min-h-0 w-full min-w-0 flex-col gap-3 overflow-hidden p-2 sm:p-3 xl:p-4">
-        <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Owner workspace</p>
-            <h1 className="text-xl font-extrabold text-slate-900 dark:text-white">Daily Call Monitoring</h1>
-            {initialSelectedDate && <p className="mt-1 text-xs font-semibold text-blue-700 dark:text-blue-300">Opened from dashboard date: {new Date(`${initialSelectedDate}T12:00:00`).toLocaleDateString('en-US')}</p>}
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Daily call monitoring views">
-            <button type="button" role="tab" aria-selected={activeView === 'master-list'} onClick={() => handleViewChange('master-list')} className={`rounded-lg px-3 py-2 text-sm font-bold transition ${activeView === 'master-list' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}>Master List</button>
-            <button type="button" role="tab" aria-selected={activeView === 'chart'} onClick={() => handleViewChange('chart')} className={`rounded-lg px-3 py-2 text-sm font-bold transition ${activeView === 'chart' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}>Chart</button>
-            <button type="button" role="tab" aria-selected={false} onClick={() => handleViewChange('operations')} className="rounded-lg px-3 py-2 text-sm font-bold text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">Operations Dashboard</button>
-          </div>
-        </header>
-
-          {activeView !== 'master-list' && (
-            <header className="shrink-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-              <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Today&apos;s Work Queue</p>
-                  <h2 className="mt-1 text-lg font-bold text-slate-900 dark:text-white">What needs attention now</h2>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveView('master-list')}
-                  className="rounded-lg bg-brand-blue px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-[#0a3d74]"
-                >
-                  Open master list
-                </button>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-                {workQueueCards.map(({ title, count, description, action, Icon, route }) => (
-                  <button
-                    key={title}
-                    type="button"
-                    onClick={() => navigateToModule(route)}
-                    className="group flex min-h-[112px] flex-col justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 text-left transition hover:border-brand-blue/40 hover:bg-blue-50 dark:border-slate-800 dark:bg-slate-950 dark:hover:bg-slate-900"
-                  >
-                    <span className="flex items-start justify-between gap-3">
-                      <span>
-                        <span className="block text-sm font-bold text-slate-900 dark:text-white">{title}</span>
-                        {typeof count === 'number' && (
-                          <span className="mt-1 inline-flex rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-brand-blue shadow-sm dark:bg-slate-800">
-                            {count.toLocaleString()} open
-                          </span>
-                        )}
-                        <span className="mt-1 block text-xs leading-5 text-slate-500 dark:text-slate-400">{description}</span>
-                      </span>
-                      <Icon className="h-5 w-5 shrink-0 text-brand-blue" />
-                    </span>
-                    <span className="mt-3 text-xs font-bold text-brand-blue group-hover:underline">{action}</span>
-                  </button>
-                ))}
-              </div>
-            </header>
-          )}
-
-          {activeView === 'master-list' && (
-            <header
-              className="shrink-0 rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900"
-
-            >
+          <header
+            className="shrink-0 rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900"
+          >
               <div className="mb-3 flex items-center justify-between gap-4">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Daily Call Monitoring Dashboard</p>
@@ -320,16 +156,11 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
                   </article>
                 ))}
               </div>
-            </header>
-          )}
+          </header>
 
           <div className="min-h-0 flex-1 overflow-hidden">
             <LocalErrorBoundary>
-              {activeView === 'master-list' ? (
-                <DailyCallMasterListView currentUser={currentUser} />
-              ) : (
-                <OwnerLiveCallMonitoringView currentUser={currentUser} />
-              )}
+              <DailyCallMasterListView currentUser={currentUser} />
             </LocalErrorBoundary>
         </div>
       </section>

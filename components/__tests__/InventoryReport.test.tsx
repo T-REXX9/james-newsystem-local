@@ -22,6 +22,9 @@ const reportRow = {
   description: 'NOZZLE',
   category: 'Fuel System',
   location: 'A-01',
+  lastTransactionDate: '2026-08-27 14:30:00',
+  lastRrDate: '2026-08-12 09:15:00',
+  reorderQuantity: 15,
   cost: 100,
   warehouseStock: {},
   totalStock: 12,
@@ -63,6 +66,13 @@ describe('InventoryReport description filter', () => {
     });
     expect(await screen.findByText('Inventory Report')).toBeInTheDocument();
     expect(screen.getByText('NOZZLE')).toBeInTheDocument();
+    const locationHeader = screen.getByRole('columnheader', { name: 'LOC' });
+    expect(locationHeader.nextElementSibling).toHaveTextContent('LAST TRANSACTION DATE');
+    expect(locationHeader.nextElementSibling?.nextElementSibling).toHaveTextContent('LAST RR DATE');
+    expect(locationHeader.nextElementSibling?.nextElementSibling?.nextElementSibling).toHaveTextContent('REORDER QUANTITY');
+    expect(screen.getByText('Aug 27, 2026')).toBeInTheDocument();
+    expect(screen.getByText('Aug 12, 2026')).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: '15' })).toBeInTheDocument();
 
     // Verify formatted row cost, value, and footer total value
     expect(screen.getByText('₱100.00')).toBeInTheDocument();
@@ -79,5 +89,28 @@ describe('InventoryReport description filter', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.getByDisplayValue('All descriptions')).toHaveValue('');
+  });
+
+  it('opens a part number Product Database record in a new tab on double-click', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    render(<InventoryReport />);
+
+    await screen.findByDisplayValue('All descriptions');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Report' }));
+
+    const partNumber = await screen.findByRole('button', { name: 'Open PN-001 in Product Database' });
+    fireEvent.click(partNumber);
+    expect(openSpy).not.toHaveBeenCalled();
+
+    fireEvent.doubleClick(partNumber);
+    expect(openSpy).toHaveBeenCalledTimes(1);
+    const [url, target, features] = openSpy.mock.calls[0];
+    expect(String(url)).toContain('#/warehouse-inventory-product-database?');
+    expect(String(url)).toContain('productId=item-1');
+    expect(String(url)).toContain('partNo=PN-001');
+    expect(target).toBe('_blank');
+    expect(features).toBe('noopener,noreferrer');
+
+    openSpy.mockRestore();
   });
 });

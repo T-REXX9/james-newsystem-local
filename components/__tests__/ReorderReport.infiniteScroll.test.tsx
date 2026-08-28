@@ -136,6 +136,11 @@ describe('ReorderReport automatic loading', () => {
     render(<ReorderReport />);
     const reportSearch = await screen.findByRole('combobox', { name: 'Reorder report smart search' });
     await waitFor(() => expect(fetchEntriesMock).toHaveBeenCalledWith(expect.objectContaining({ search: '', page: 1 })));
+    expect(screen.getAllByRole('columnheader', { name: /Available\s*Stock/i })).not.toHaveLength(0);
+    expect(screen.getAllByRole('columnheader', { name: /Reorder\s*Quantity/i })).not.toHaveLength(0);
+    expect(screen.queryByRole('columnheader', { name: /Physical\s*Stock/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: /Reserved\s*Stock/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: /Reorder\s*Level/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Generate Report' })).not.toBeInTheDocument();
     fireEvent.focus(reportSearch);
     const reportSearchListbox = screen.getByRole('listbox', { name: 'Reorder report smart suggestions' });
@@ -176,10 +181,33 @@ describe('ReorderReport automatic loading', () => {
     render(<ReorderReport />);
     const [itemCode] = await screen.findAllByText('QK6-026');
     const cells = itemCode.closest('tr')?.querySelectorAll('td');
-    expect(cells?.[12]?.textContent).toBe('15');
-    expect(cells?.[14]?.textContent).toBe('15');
-    expect(cells?.[15]?.textContent).toBe('0');
-    expect(cells?.[16]?.textContent).toBe('15');
+    expect(cells?.[9]?.textContent).toBe('15');
+    expect(cells?.[11]?.textContent).toBe('15');
+    expect(cells?.[12]?.textContent).toBe('0');
+    expect(cells?.[13]?.textContent).toBe('15');
+  });
+
+  it('opens PR, PO, and receiving records in new tabs without replacing the report', async () => {
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+    fetchEntriesMock.mockResolvedValueOnce({
+      items: [{
+        ...reportRow('linked', 'ITEM-LINKED'),
+        pr_documents: [{ refno: 'pr-ref', number: 'PR-100', requested_qty: 5, request_date: '2026-08-28', status: 'Approved', supplier_id: 'SUP-1', supplier_name: 'Supplier One', po_refno: 'po-ref' }],
+        po_documents: [{ refno: 'po-ref', number: 'PO-100', status: 'Posted', supplier_id: 'SUP-1', supplier_name: 'Supplier One', ordered_qty: 5, accepted_qty: 0, outstanding_qty: 5, unit_cost: 25, order_date: '2026-08-28', expected_delivery_date: '2026-08-30', pr_refno: 'pr-ref', pr_number: 'PR-100' }],
+        rr_documents: [{ refno: 'rr-ref', number: 'RR-100', status: 'Pending', po_refno: 'po-ref', po_number: 'PO-100', received_qty: 5, accepted_qty: 0, receiving_date: '2026-08-28', received_by: 'User' }],
+      }],
+      meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
+    });
+
+    render(<ReorderReport />);
+
+    for (const name of ['PR-100', 'PO-100', 'RR-100']) {
+      const link = await screen.findByRole('link', { name });
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+      expect(fireEvent.click(link)).toBe(true);
+    }
+    expect(dispatchSpy).not.toHaveBeenCalled();
   });
 
   it('restores the generated report when browser history returns to the report', async () => {
@@ -220,7 +248,7 @@ describe('ReorderReport automatic loading', () => {
     expect(tableScrollContainer.querySelector('thead')).toHaveClass('sticky', 'top-0');
     expect(tableScrollContainer.querySelector('table')).toHaveClass('w-full', 'table-fixed');
     expect(tableScrollContainer.querySelector('table')).not.toHaveClass('min-w-[2300px]');
-    expect(tableScrollContainer.querySelectorAll('col')).toHaveLength(21);
+    expect(tableScrollContainer.querySelectorAll('col')).toHaveLength(18);
 
     await act(async () => {
       intersectionCallback?.([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver);
