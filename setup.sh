@@ -171,6 +171,8 @@ apply_required_database_migrations() {
     "$API_DIR/migrations/014_optimize_notification_indexes.sql"
     "$API_DIR/migrations/015_optimize_reorder_report_indexes.sql"
     "$API_DIR/migrations/016_create_incident_reports.sql"
+    "$API_DIR/migrations/017_create_customer_requests.sql"
+    "$API_DIR/migrations/018_create_local_recycle_bin.sql"
   )
 
   echo "Applying required database migrations..."
