@@ -23,6 +23,7 @@ describe('FastSlowInventoryReport', () => {
         part_no: 'PN-001',
         item_code: 'IT-001',
         description: 'NOZZLE',
+        vip1_price: 150,
         first_arrival_date: '2026-08-01',
         last_price_update: '2026-08-22 10:30:00',
         total_purchased: 20,
@@ -54,7 +55,12 @@ describe('FastSlowInventoryReport', () => {
     expect(partLink.getAttribute('href')).toContain('productId=session-1');
     expect(partLink.getAttribute('href')).toContain('partNo=PN-001');
     expect(screen.getAllByText('Last Price Update')).toHaveLength(2);
+    expect(screen.getAllByRole('columnheader', { name: 'Item Code' })).toHaveLength(2);
+    expect(screen.queryByRole('columnheader', { name: 'Listing Code' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('columnheader', { name: 'VIP 1 Price' })).toHaveLength(2);
+    expect(screen.getByText('₱150.00')).toBeInTheDocument();
     expect(screen.getByText('08/22/2026')).toBeInTheDocument();
     expect(screen.getByText(/sales in all 3 consecutive months/i)).toBeInTheDocument();
+    expect(screen.getByText(/Analyzed months: May, June, July/i)).toBeInTheDocument();
   });
 });

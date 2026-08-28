@@ -47,6 +47,7 @@ const mapItem = (row: any): FastSlowMovementItem => ({
   part_no: String(row?.part_no || ''),
   item_code: String(row?.item_code || ''),
   description: String(row?.description || ''),
+  vip1_price: toNumber(row?.vip1_price, 0),
   first_arrival_date: row?.first_arrival_date ? String(row.first_arrival_date) : null,
   total_purchased: toNumber(row?.total_purchased, 0),
   total_sold: toNumber(row?.total_sold, 0),

@@ -11,7 +11,7 @@ const DEFAULT_FILTERS: FastSlowReportFilters = {
 
 const sortOptions: Array<{ value: FastSlowReportFilters['sortBy']; label: string }> = [
   { value: 'part_no', label: 'Part No.' },
-  { value: 'item_code', label: 'Listing Code' },
+  { value: 'item_code', label: 'Item Code' },
   { value: 'description', label: 'Description' },
   { value: 'last_arrived', label: 'Last Arrived Date' },
   { value: 'total_purchase', label: 'Total Purchase' },
@@ -28,6 +28,13 @@ const formatDate = (value: string | null): string => {
     year: 'numeric',
   });
 };
+
+const formatPrice = (value: number): string => new Intl.NumberFormat('en-PH', {
+  style: 'currency',
+  currency: 'PHP',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+}).format(Number.isFinite(value) ? value : 0);
 
 const FastSlowInventoryReport: React.FC = () => {
   const [reportData, setReportData] = useState<FastSlowReportData | null>(null);
@@ -54,6 +61,11 @@ const FastSlowInventoryReport: React.FC = () => {
     setError('');
   }, []);
 
+  const movementPeriodSample = reportData?.fastMovingItems[0] || reportData?.slowMovingItems[0];
+  const analyzedMonths = movementPeriodSample
+    ? [movementPeriodSample.month1_label, movementPeriodSample.month2_label, movementPeriodSample.month3_label].join(', ')
+    : 'No sales activity available';
+
   const getProductDatabaseUrl = (item: FastSlowMovementItem): string => {
     const params = new URLSearchParams({
       productId: item.item_id,
@@ -73,7 +85,7 @@ const FastSlowInventoryReport: React.FC = () => {
     <table className="mb-8 w-full border-collapse text-[13px] text-[#333]">
       <thead>
         <tr>
-          <td colSpan={8} className="border-b border-[#ddd] pb-2 pt-1">
+          <td colSpan={9} className="border-b border-[#ddd] pb-2 pt-1">
             <h5 className="m-0 text-[14px] font-semibold">
               <u>{title}</u>
             </h5>
@@ -84,18 +96,19 @@ const FastSlowInventoryReport: React.FC = () => {
         <tr className="border-b-2 border-[#333]">
           <th className="w-[3%] px-1 py-2 text-center">#</th>
           <th className="w-[12%] px-1 py-2 text-center">Part No.</th>
-          <th className="w-[13%] px-1 py-2 text-center">Listing Code</th>
-          <th className="w-[27%] px-1 py-2 text-center">Description</th>
-          <th className="w-[12%] px-1 py-2 text-center">Last Price Update</th>
-          <th className="w-[12%] px-1 py-2 text-center">Last Arrived Date</th>
-          <th className="w-[10%] px-1 py-2 text-center">Total Purchase</th>
-          <th className="w-[10%] px-1 py-2 text-center">Pcs Sold</th>
+          <th className="w-[11%] px-1 py-2 text-center">Item Code</th>
+          <th className="w-[23%] px-1 py-2 text-center">Description</th>
+          <th className="w-[10%] px-1 py-2 text-center">VIP 1 Price</th>
+          <th className="w-[11%] px-1 py-2 text-center">Last Price Update</th>
+          <th className="w-[11%] px-1 py-2 text-center">Last Arrived Date</th>
+          <th className="w-[9%] px-1 py-2 text-center">Total Purchase</th>
+          <th className="w-[9%] px-1 py-2 text-center">Pcs Sold</th>
         </tr>
       </thead>
       <tbody>
         {items.length === 0 ? (
           <tr>
-            <td colSpan={8} className="py-5 text-center italic text-[#777]">
+            <td colSpan={9} className="py-5 text-center italic text-[#777]">
               No records found.
             </td>
           </tr>
@@ -112,6 +125,7 @@ const FastSlowInventoryReport: React.FC = () => {
               </td>
               <td className="px-1 py-[2px]">{item.item_code || 'N/A'}</td>
               <td className="px-1 py-[2px]">{item.description || 'N/A'}</td>
+              <td className="px-1 py-[2px] text-right">{formatPrice(item.vip1_price)}</td>
               <td className="px-1 py-[2px] text-right">{formatDate(item.last_price_update)}</td>
               <td className="px-1 py-[2px] text-right">{formatDate(item.first_arrival_date)}</td>
               <td className="px-1 py-[2px] text-right">{item.total_purchased}</td>
@@ -260,7 +274,7 @@ const FastSlowInventoryReport: React.FC = () => {
                 {renderTable(
                   reportData.fastMovingItems,
                   'FAST MOVING',
-                  'Fast moving when the item has sales in all 3 consecutive months, regardless of quantity.',
+                  `Fast moving when the item has sales in all 3 consecutive months, regardless of quantity. Analyzed months: ${analyzedMonths}.`,
                   1,
                 )}
                 {renderTable(

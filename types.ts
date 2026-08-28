@@ -1739,6 +1739,7 @@ export interface FastSlowMovementItem {
   part_no: string;
   item_code: string;
   description: string;
+  vip1_price: number;
   first_arrival_date: string | null;
   total_purchased: number;
   total_sold: number;

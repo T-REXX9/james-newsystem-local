@@ -42,7 +42,8 @@ interface SuggestedStockReportProps {
 
 type Period = 'today' | 'week' | 'month' | 'year' | 'custom';
 type ViewMode = 'summary' | 'detail';
-type SortOption = 'inquiries-desc' | 'qty-desc' | 'customers-desc' | 'part-asc';
+type SortOption = 'description-asc' | 'description-desc' | 'inquiries-desc' | 'inquiries-asc';
+type ListingFilter = 'all' | 'not-listed' | 'listed';
 
 interface AppliedFilters {
   dateFrom: string;
@@ -66,16 +67,18 @@ const getMonthRange = (monthValue: string) => {
   return { dateFrom: toIsoDate(start), dateTo: toIsoDate(end) };
 };
 
-const getPeriodRange = (period: Period, monthValue: string) => {
+const getPeriodRange = (period: Exclude<Period, 'custom'>) => {
   const today = new Date();
-  if (period === 'month') return getMonthRange(monthValue);
+  if (period === 'month') return getMonthRange(toIsoDate(today).slice(0, 7));
   if (period === 'today') {
     const value = toIsoDate(today);
     return { dateFrom: value, dateTo: value };
   }
   const from = new Date(today);
   if (period === 'week') from.setDate(today.getDate() - 6);
-  if (period === 'year') from.setFullYear(today.getFullYear() - 1);
+  if (period === 'year') {
+    from.setMonth(0, 1);
+  }
   return { dateFrom: toIsoDate(from), dateTo: toIsoDate(today) };
 };
 
@@ -95,7 +98,6 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
   const initialRange = getMonthRange(currentMonth);
 
   const [period, setPeriod] = useState<Period>('month');
-  const [monthValue, setMonthValue] = useState(currentMonth);
   const [dateFrom, setDateFrom] = useState(initialRange.dateFrom);
   const [dateTo, setDateTo] = useState(initialRange.dateTo);
   const [selectedCustomer, setSelectedCustomer] = useState('all');
@@ -114,6 +116,7 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(true);
   const [sortOption, setSortOption] = useState<SortOption>('inquiries-desc');
+  const [listingFilter, setListingFilter] = useState<ListingFilter>('all');
   const [visibleCount, setVisibleCount] = useState(LOAD_BATCH_SIZE);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [refreshRequest, setRefreshRequest] = useState(0);
@@ -176,30 +179,6 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
       setSelectedSalesperson('all');
     }
   }, [salespeople, selectedSalesperson]);
-
-  useEffect(() => {
-    if (!dateFrom || !dateTo || dateFrom > dateTo) return;
-    const timer = window.setTimeout(() => {
-      const nextFilters: AppliedFilters = {
-        dateFrom,
-        dateTo,
-        customerId: selectedCustomer,
-        salesperson: selectedSalesperson,
-        viewMode,
-      };
-      setAppliedFilters((current) =>
-        current.dateFrom === nextFilters.dateFrom &&
-        current.dateTo === nextFilters.dateTo &&
-        current.customerId === nextFilters.customerId &&
-        current.salesperson === nextFilters.salesperson &&
-        current.viewMode === nextFilters.viewMode
-          ? current
-          : nextFilters
-      );
-    }, 150);
-
-    return () => window.clearTimeout(timer);
-  }, [dateFrom, dateTo, selectedCustomer, selectedSalesperson, viewMode]);
 
   useEffect(() => {
     let active = true;
@@ -273,16 +252,25 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
     });
   }, [appliedFilters.salesperson, summaryData, visibleDetails]);
 
+  const filteredSummary = useMemo(
+    () => salespersonSummary.filter((item) => {
+      if (listingFilter === 'listed') return item.isListed;
+      if (listingFilter === 'not-listed') return !item.isListed;
+      return true;
+    }),
+    [listingFilter, salespersonSummary]
+  );
+
   const sortedSummary = useMemo(() => {
-    const rows = [...salespersonSummary];
+    const rows = [...filteredSummary];
     rows.sort((a, b) => {
-      if (sortOption === 'part-asc') return a.partNo.localeCompare(b.partNo);
-      if (sortOption === 'qty-desc') return b.totalQty - a.totalQty;
-      if (sortOption === 'customers-desc') return b.customerCount - a.customerCount;
-      return b.inquiryCount - a.inquiryCount;
+      if (sortOption === 'description-asc') return a.description.localeCompare(b.description);
+      if (sortOption === 'description-desc') return b.description.localeCompare(a.description);
+      if (sortOption === 'inquiries-asc') return a.inquiryCount - b.inquiryCount || a.description.localeCompare(b.description);
+      return b.inquiryCount - a.inquiryCount || a.description.localeCompare(b.description);
     });
     return rows;
-  }, [salespersonSummary, sortOption]);
+  }, [filteredSummary, sortOption]);
 
   const activeRows = appliedFilters.viewMode === 'summary' ? sortedSummary : visibleDetails;
   const visibleItemCount = Math.min(visibleCount, activeRows.length);
@@ -293,7 +281,7 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
   useEffect(() => {
     setVisibleCount(LOAD_BATCH_SIZE);
     setSelectedIds(new Set());
-  }, [appliedFilters, sortOption]);
+  }, [appliedFilters, listingFilter, sortOption]);
 
   useEffect(() => {
     const sentinel = loadMoreRef.current;
@@ -311,19 +299,26 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
     return () => observer.disconnect();
   }, [activeRows.length, hasMoreRows, isLoading]);
 
-  const totalInquiries = salespersonSummary.reduce((sum, item) => sum + item.inquiryCount, 0);
-  const totalQty = salespersonSummary.reduce((sum, item) => sum + item.totalQty, 0);
+  const totalInquiries = filteredSummary.reduce((sum, item) => sum + item.inquiryCount, 0);
+  const totalQty = filteredSummary.reduce((sum, item) => sum + item.totalQty, 0);
   const uniqueCustomers = new Set(
-    salespersonSummary.flatMap((item) => item.customers.map((customer) => customer.id))
+    filteredSummary.flatMap((item) => item.customers.map((customer) => customer.id))
   ).size;
-  const uniqueItemCount = salespersonSummary.length;
+  const uniqueItemCount = filteredSummary.length;
 
   const setPeriodAndRange = (nextPeriod: Period) => {
     setPeriod(nextPeriod);
     if (nextPeriod === 'custom') return;
-    const range = getPeriodRange(nextPeriod, monthValue);
+    const range = getPeriodRange(nextPeriod);
     setDateFrom(range.dateFrom);
     setDateTo(range.dateTo);
+    setAppliedFilters({
+      ...range,
+      customerId: selectedCustomer,
+      salesperson: selectedSalesperson,
+      viewMode,
+    });
+    setRefreshRequest((current) => current + 1);
   };
 
   const applyFilters = () => {
@@ -337,6 +332,26 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
     });
     setRefreshRequest((current) => current + 1);
   };
+
+  const resetDateRange = () => {
+    const range = getPeriodRange('month');
+    setPeriod('month');
+    setDateFrom(range.dateFrom);
+    setDateTo(range.dateTo);
+    setAppliedFilters({
+      ...range,
+      customerId: selectedCustomer,
+      salesperson: selectedSalesperson,
+      viewMode,
+    });
+    setRefreshRequest((current) => current + 1);
+  };
+
+  const dateRangeError = !dateFrom || !dateTo
+    ? 'Choose both a start date and an end date.'
+    : dateFrom > dateTo
+      ? 'Start date must be on or before end date.'
+      : '';
 
   const toggleAll = () => {
     const visibleIds =
@@ -508,45 +523,111 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
               <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Customers / prospects</p><p className="mt-1 text-2xl font-extrabold text-emerald-700">{uniqueCustomers}</p></div>
             </section>
 
-            <section className="mb-4 flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700">
-                <CalendarDays className="h-4 w-4 text-[#175fd3]" /> Search by Date
-              </div>
-              <div className="flex overflow-hidden rounded-md border border-slate-300">
-                {(['today', 'week', 'month', 'year'] as Period[]).map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => { setPeriodAndRange(option); setRefreshRequest(c => c + 1); }}
-                    className={`border-r border-slate-200 px-4 py-1.5 text-sm font-bold last:border-r-0 ${
-                      period === option ? 'bg-[#175fd3] text-white' : 'bg-white text-slate-600 hover:bg-slate-50'
-                    }`}
+            <section className="mb-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm" aria-label="Report filters and sorting">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-600">
+                    <ListFilter className="h-4 w-4 text-[#175fd3]" /> Sort By
+                  </span>
+                  <select
+                    aria-label="Sort suggested stock items"
+                    value={sortOption}
+                    onChange={(event) => setSortOption(event.target.value as SortOption)}
+                    className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#175fd3] focus:ring-2 focus:ring-blue-100"
                   >
-                    {option === 'today' ? 'Today' : option === 'week' ? 'This Week' : option === 'month' ? 'This Month' : 'This Year'}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setPeriod('custom')}
-                  className={`px-4 py-1.5 text-sm font-bold ${
-                    period === 'custom' ? 'bg-[#175fd3] text-white' : 'bg-white text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  Custom Date
-                </button>
+                    <option value="inquiries-desc">Customer requests — highest first</option>
+                    <option value="inquiries-asc">Customer requests — lowest first</option>
+                    <option value="description-asc">Description — A to Z</option>
+                    <option value="description-desc">Description — Z to A</option>
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-1.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-600">
+                    <Filter className="h-4 w-4 text-[#175fd3]" /> Listing Status
+                  </span>
+                  <select
+                    aria-label="Filter by listing status"
+                    value={listingFilter}
+                    onChange={(event) => setListingFilter(event.target.value as ListingFilter)}
+                    className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#175fd3] focus:ring-2 focus:ring-blue-100"
+                  >
+                    <option value="all">All items</option>
+                    <option value="not-listed">Not Listed only</option>
+                    <option value="listed">Listed only</option>
+                  </select>
+                </label>
               </div>
-              {period === 'custom' ? (
-                <div className="flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#173c83]">
-                  <input type="date" value={dateFrom} max={dateTo} onChange={(event) => setDateFrom(event.target.value)} className="bg-transparent outline-none" />
-                  <span>-</span>
-                  <input type="date" value={dateTo} min={dateFrom} onChange={(event) => setDateTo(event.target.value)} className="bg-transparent outline-none" />
-                  <button type="button" onClick={applyFilters} className="ml-2 rounded bg-[#175fd3] px-2 py-0.5 text-white">Apply</button>
+
+              <div className="mt-4 border-t border-slate-200 pt-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                      <CalendarDays className="h-4 w-4 text-[#175fd3]" /> Date Range
+                    </h2>
+                    <p className="mt-0.5 text-xs text-slate-500">Use a quick range or choose exact start and end dates.</p>
+                  </div>
+                  <div className="flex flex-wrap overflow-hidden rounded-md border border-slate-300">
+                    {(['today', 'week', 'month', 'year'] as const).map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => setPeriodAndRange(option)}
+                        className={`border-r border-slate-200 px-3 py-2 text-xs font-bold last:border-r-0 ${
+                          period === option ? 'bg-[#175fd3] text-white' : 'bg-white text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        {option === 'today' ? 'Today' : option === 'week' ? 'Last 7 Days' : option === 'month' ? 'This Month' : 'This Year'}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              ) : (
-                <div className="flex items-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-1.5 text-sm font-bold text-[#173c83]">
-                  <CalendarDays className="h-4 w-4" /> {new Date(appliedFilters.dateFrom).toLocaleDateString('en-GB')} - {new Date(appliedFilters.dateTo).toLocaleDateString('en-GB')}
+
+                <div className="mt-3 grid items-end gap-3 sm:grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_auto_auto]">
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-bold text-slate-600">Start date</span>
+                    <input
+                      aria-label="Start date"
+                      type="date"
+                      value={dateFrom}
+                      onChange={(event) => { setDateFrom(event.target.value); setPeriod('custom'); }}
+                      className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#175fd3] focus:ring-2 focus:ring-blue-100"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-bold text-slate-600">End date</span>
+                    <input
+                      aria-label="End date"
+                      type="date"
+                      value={dateTo}
+                      onChange={(event) => { setDateTo(event.target.value); setPeriod('custom'); }}
+                      className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#175fd3] focus:ring-2 focus:ring-blue-100"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={applyFilters}
+                    disabled={Boolean(dateRangeError)}
+                    className="h-10 rounded-md bg-[#175fd3] px-4 text-sm font-bold text-white transition hover:bg-[#0e4fb7] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Apply Dates
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetDateRange}
+                    className="h-10 rounded-md border border-slate-300 bg-white px-4 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+                  >
+                    Reset
+                  </button>
                 </div>
-              )}
+                {dateRangeError ? (
+                  <p role="alert" className="mt-2 text-xs font-semibold text-rose-600">{dateRangeError}</p>
+                ) : (
+                  <p className="mt-2 text-xs font-semibold text-[#173c83]">
+                    Showing {formatDate(appliedFilters.dateFrom)} through {formatDate(appliedFilters.dateTo)}
+                  </p>
+                )}
+              </div>
             </section>
 
             <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -564,7 +645,7 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
                   </button>
                 </div>
                 <div className="flex items-center gap-2 rounded bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
-                  <Lightbulb className="h-3.5 w-3.5 text-amber-500" /> These items are not yet in inventory. Create PR to evaluate and purchase.
+                  <Lightbulb className="h-3.5 w-3.5 text-amber-500" /> Filter by listing status, then create missing items or prepare selected items for purchasing.
                 </div>
               </div>
 
@@ -576,7 +657,7 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
                 <div className="flex h-56 flex-col items-center justify-center text-center">
                   <Package className="mb-2 h-10 w-10 text-slate-300" />
                   <p className="text-sm font-semibold text-slate-600">No suggested stock items found.</p>
-                  <p className="mt-1 text-xs text-slate-400">Try selecting a different date range.</p>
+                  <p className="mt-1 text-xs text-slate-400">Try a different date range or listing-status filter.</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
