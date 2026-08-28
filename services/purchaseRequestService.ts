@@ -151,7 +151,7 @@ export const purchaseRequestService = {
     });
     if (filters?.month) query.set('month', String(filters.month));
     if (filters?.year) query.set('year', String(filters.year));
-    if (filters?.status && filters.status !== 'All') query.set('status', filters.status);
+    if (filters?.status && filters.status !== 'All' && filters.status !== 'All Statuses') query.set('status', filters.status);
     if (filters?.search?.trim()) query.set('search', filters.search.trim());
 
     const data = await requestApi(`${API_BASE_URL}/purchase-requests?${query.toString()}`);

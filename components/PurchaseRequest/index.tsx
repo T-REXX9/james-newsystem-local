@@ -124,9 +124,16 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
   };
 
   const handleSelectRequest = async (request: PurchaseRequestWithItems) => {
-    const [fullPR] = await Promise.all([purchaseRequestService.getPurchaseRequestById(request.id), ensureProductsLoaded()]);
-    setSelectedRequest(fullPR);
-    setViewMode('detail');
+    try {
+      const [fullPR] = await Promise.all([purchaseRequestService.getPurchaseRequestById(request.id), ensureProductsLoaded()]);
+      setSelectedRequest(fullPR);
+      setViewMode('detail');
+    } catch (error) {
+      console.error('Failed to load purchase request detail', error);
+      // Fall back to showing the summary data we already have so the user sees something
+      setSelectedRequest(request);
+      setViewMode('detail');
+    }
   };
 
   const handleUpdate = async (id: string, updates: Record<string, unknown>) => {
