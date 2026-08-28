@@ -1,14 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { BarChart3, TrendingUp, Calendar, DollarSign } from 'lucide-react';
-import { CustomerMetrics } from '../types';
-import { fetchCustomerMetrics, fetchPurchaseHistory, fetchPaymentTerms } from '../services/supabaseService';
+import { fetchCustomerMetrics } from '../services/customerDatabaseLocalApiService';
 
 interface CustomerMetricsViewProps {
   contactId: string;
 }
 
 const CustomerMetricsView: React.FC<CustomerMetricsViewProps> = ({ contactId }) => {
-  const [metrics, setMetrics] = useState<CustomerMetrics | null>(null);
+  const [metrics, setMetrics] = useState<Awaited<ReturnType<typeof fetchCustomerMetrics>>>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -51,7 +50,7 @@ const CustomerMetricsView: React.FC<CustomerMetricsViewProps> = ({ contactId }) 
             <div>
               <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase">Avg Monthly Purchase</p>
               <p className="text-2xl font-bold text-blue-900 dark:text-blue-100 mt-2">
-                ₱{metrics.average_monthly_purchase?.toLocaleString() || '0'}
+                ₱{metrics.average_monthly_purchase?.toLocaleString() ?? '—'}
               </p>
             </div>
             <TrendingUp className="w-6 h-6 text-blue-500" />
@@ -63,7 +62,7 @@ const CustomerMetricsView: React.FC<CustomerMetricsViewProps> = ({ contactId }) 
             <div>
               <p className="text-xs font-semibold text-green-600 dark:text-green-400 uppercase">Purchase Frequency</p>
               <p className="text-2xl font-bold text-green-900 dark:text-green-100 mt-2">
-                {metrics.purchase_frequency || 0} days
+                {metrics.purchase_frequency === undefined ? '—' : `${metrics.purchase_frequency} days`}
               </p>
             </div>
             <Calendar className="w-6 h-6 text-green-500" />
@@ -87,7 +86,7 @@ const CustomerMetricsView: React.FC<CustomerMetricsViewProps> = ({ contactId }) 
             <div>
               <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 uppercase">Total Purchases</p>
               <p className="text-2xl font-bold text-purple-900 dark:text-purple-100 mt-2">
-                {metrics.total_purchases || 0}
+                ₱{metrics.total_purchases.toLocaleString()}
               </p>
             </div>
             <BarChart3 className="w-6 h-6 text-purple-500" />

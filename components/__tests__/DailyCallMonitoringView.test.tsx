@@ -48,7 +48,7 @@ vi.mock('../AgentCallActivity', () => ({
 }));
 
 vi.mock('../ContactDetails', () => ({
-  default: () => null,
+  default: ({ contact }: { contact: { id: string } }) => <div data-testid="full-contact-details">{contact.id}</div>,
 }));
 
 vi.mock('../CreateIncidentReportModal', () => ({
@@ -449,6 +449,16 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     expect(scrollArea).not.toBeNull();
     expect(scrollArea).toHaveClass('min-h-0', 'overflow-y-auto');
+  });
+
+  it('opens ContactDetails for the selected customer from the agent workflow', async () => {
+    const user = userEvent.setup();
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    await user.click(await screen.findByText('Test Shop'));
+    await user.click(screen.getByRole('button', { name: 'Open Full Details' }));
+
+    expect(screen.getByTestId('full-contact-details')).toHaveTextContent('contact-1');
   });
 
   it('logs an outbound SMS and opens the messaging app with the composed body', async () => {

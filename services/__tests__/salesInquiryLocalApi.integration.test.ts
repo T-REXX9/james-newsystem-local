@@ -31,7 +31,7 @@ const getAnyItemRefnos = async (): Promise<[string, string]> => {
   return [first, second];
 };
 
-describe('Sales Inquiry local API conversion', () => {
+describe.skipIf(process.env.RUN_LOCAL_API_INTEGRATION !== '1')('Sales Inquiry local API conversion', () => {
   beforeEach(() => {
     localStorage.setItem(
       AUTH_STORAGE_KEY,

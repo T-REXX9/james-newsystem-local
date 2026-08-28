@@ -18,7 +18,7 @@ vi.mock('../../services/dailyCallMonitoringService', () => ({
   createManagementInstruction: (...args: unknown[]) => createManagementInstructionMock(...args),
 }));
 
-vi.mock('../../services/supabaseService', () => ({
+vi.mock('../../services/localDataService', () => ({
   fetchPersonalComments: vi.fn(async () => []),
   createPersonalComment: vi.fn(),
 }));

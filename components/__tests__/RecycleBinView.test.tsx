@@ -1,0 +1,31 @@
+import React from 'react';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import RecycleBinView from '../RecycleBinView';
+import { getAllRecycleBinItems, restoreItem, discardRecovery } from '../../services/recycleBinService';
+vi.mock('../../services/recycleBinService', () => ({ getAllRecycleBinItems: vi.fn(), restoreItem: vi.fn(), discardRecovery: vi.fn() }));
+const row = { id: '17', item_type: 'contact' as const, item_id: 'c1', label: 'Deleted customer', deleted_at: '2026-08-29' };
+beforeEach(() => vi.resetAllMocks());
+afterEach(cleanup);
+it('confirms a restore and removes the row only after a successful database response', async () => {
+  const user = userEvent.setup();
+  vi.mocked(getAllRecycleBinItems).mockResolvedValueOnce([row]).mockResolvedValueOnce([]);
+  vi.mocked(restoreItem).mockResolvedValue({ success: true });
+  render(<RecycleBinView />);
+  await user.click(await screen.findByRole('button', { name: 'Restore' }));
+  expect(restoreItem).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('button', { name: 'Confirm' }));
+  expect(restoreItem).toHaveBeenCalledWith('17');
+  expect(await screen.findByText('No recoverable deleted records.')).toBeInTheDocument();
+});
+it('does not remove a recovery record after a failed discard', async () => {
+  const user = userEvent.setup();
+  vi.mocked(getAllRecycleBinItems).mockResolvedValue([row]);
+  vi.mocked(discardRecovery).mockRejectedValue(new Error('Recovery conflict'));
+  render(<RecycleBinView />);
+  await user.click(await screen.findByRole('button', { name: 'Discard recovery' }));
+  await user.click(screen.getByRole('button', { name: 'Confirm' }));
+  expect((await screen.findAllByRole('alert'))[0]).toHaveTextContent('Recovery conflict');
+  expect(screen.getByText('Deleted customer')).toBeInTheDocument();
+});

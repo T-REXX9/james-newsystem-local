@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, AlertCircle } from 'lucide-react';
-import { createDiscountRequest } from '../services/supabaseService';
+import { createDiscountRequest } from '../services/customerWorkflowLocalApiService';
 import ValidationSummary from './ValidationSummary';
 import FieldHelp from './FieldHelp';
 import { validateMinLength, validateNumeric, validateRequired } from '../utils/formValidation';
@@ -72,11 +72,8 @@ const DiscountRequestModal: React.FC<DiscountRequestModalProps> = ({
       setSubmitting(true);
       await createDiscountRequest({
         contact_id: contactId,
-        inquiry_id: inquiryId || null,
-        request_date: new Date().toISOString().split('T')[0],
         discount_percentage: formData.discountPercentage,
         reason: formData.reason,
-        status: 'pending'
       });
 
       addToast({ 

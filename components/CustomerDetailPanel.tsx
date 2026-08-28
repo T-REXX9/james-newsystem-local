@@ -1,3 +1,4 @@
+import { CUSTOMER_UPDATED_EVENT } from '../utils/customerWorkflowEvents';
 import React, { useState, useEffect } from 'react';
 import {
     Building2, User, Phone, Mail, MapPin, Calendar, CreditCard,
@@ -5,7 +6,10 @@ import {
     FileText, DollarSign, Activity, Clock, UserCog, Save, X as XIcon, Pencil
 } from 'lucide-react';
 import { Contact, CustomerStatus, UserProfile } from '../types';
-import { fetchContactById, fetchContactTransactions, fetchCustomerMetrics, fetchCustomerTerms, fetchSalesAgents, updateContact, fetchUpdatedContactDetails } from '../services/customerDatabaseLocalApiService';
+import { fetchContactById, fetchContactTransactions, fetchCustomerMetrics, fetchCustomerTerms, fetchSalesAgents, updateContact } from '../services/customerDatabaseLocalApiService';
+import CustomerHistoryTab from './CustomerHistoryTab';
+import CustomerRequestsTab from './CustomerRequestsTab';
+import { getLocalAuthSession } from '../services/localAuthService';
 import CompanyName from './CompanyName';
 import { toast } from 'sonner';
 import { normalizePriceGroup } from '../constants/pricingGroups';
@@ -59,7 +63,15 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     const [isEditingSalesAgent, setIsEditingSalesAgent] = useState(false);
     const [selectedSalesAgent, setSelectedSalesAgent] = useState<string>('');
     const [isSaving, setIsSaving] = useState(false);
-    const [pendingUpdates, setPendingUpdates] = useState<any[]>([]);
+
+    const [revision, setRevision] = useState(0);
+    useEffect(() => {
+        const refresh = (event: Event) => {
+            if ((event as CustomEvent<{ contactId: string }>).detail.contactId === contactId) setRevision(n => n + 1);
+        };
+        window.addEventListener(CUSTOMER_UPDATED_EVENT, refresh);
+        return () => window.removeEventListener(CUSTOMER_UPDATED_EVENT, refresh);
+    }, [contactId]);
 
     // Sync prop data
     useEffect(() => {
@@ -74,13 +86,12 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
         const loadData = async () => {
             setLoading(true);
             try {
-                const [detail, txs, mets, customerTerms, agents, updates] = await Promise.all([
+                const [detail, txs, mets, customerTerms, agents] = await Promise.all([
                     fetchContactById(contactId),
                     fetchContactTransactions(contactId),
                     fetchCustomerMetrics(contactId),
                     fetchCustomerTerms(contactId),
-                    fetchSalesAgents(),
-                    fetchUpdatedContactDetails(contactId)
+                    fetchSalesAgents()
                 ]);
                 if (detail) {
                     setContact((previous) => ({ ...(previous || {}), ...detail } as Contact));
@@ -88,10 +99,8 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                 }
                 setTransactions(txs);
                 setMetrics(mets);
-                setTerms(customerTerms as CustomerTermsRow[]);
+                setTerms(customerTerms);
                 setSalesAgents(agents);
-                const pending = (updates || []).filter((u: any) => u.approval_status === 'pending');
-                setPendingUpdates(pending);
             } catch (err) {
                 console.error("Failed to load customer details", err);
             } finally {
@@ -100,7 +109,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
         };
 
         loadData();
-    }, [contactId]);
+    }, [contactId, revision]);
 
     // Handler for saving sales agent assignment
     const handleSaveSalesAgent = async () => {
@@ -372,54 +381,11 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                 )}
 
                 {/* Placeholder for other tabs (Inquiries, Financials, etc.) reuse same table style or specialized components */}
-                {!loading && activeTab === 'inquiries' && (
-                    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-8 text-center">
-                        <MessageSquare className="w-12 h-12 text-slate-200 mx-auto mb-4" />
-                        <h3 className="text-lg font-bold text-slate-700">Inquiry History</h3>
-                        <p className="text-slate-400 mb-6">Showing {transactions.filter(t => t.type === 'sales_inquiry').length} inquiries</p>
-                        {/* Similar table for inquiries... */}
-                        <div className="text-left space-y-2">
-                            {transactions.filter(t => t.type === 'sales_inquiry').map(tx => (
-                                <div key={tx.id} className="flex justify-between p-3 border rounded-lg">
-                                    <div>
-                                        <div className="font-bold text-sm">{tx.label}</div>
-                                        <div className="text-xs text-slate-400">{new Date(tx.date).toLocaleDateString()}</div>
-                                    </div>
-                                    <div className="font-mono font-bold">{formatCurrency(tx.amount || 0, true)}</div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
+                {!loading && activeTab === 'inquiries' && <CustomerHistoryTab contactId={contactId} kind="inquiries" />}
 
                 {!loading && activeTab === 'profile' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        {pendingUpdates.length > 0 && (
-                            <div className="md:col-span-2 bg-amber-50/80 dark:bg-amber-900/20 p-4 rounded-xl border border-amber-200 dark:border-amber-900/40 shadow-sm">
-                                <div className="flex items-center justify-between mb-3">
-                                    <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
-                                        <AlertCircle className="w-4 h-4" />
-                                        <h3 className="font-bold text-sm">Pending update requests</h3>
-                                    </div>
-                                    <span className="text-xs font-semibold text-amber-700 dark:text-amber-200">
-                                        {pendingUpdates.length} pending
-                                    </span>
-                                </div>
-                                <div className="space-y-2">
-                                    {pendingUpdates.slice(0, 3).map((update: any) => (
-                                        <div key={update.id} className="flex items-center justify-between text-xs text-amber-900 dark:text-amber-100">
-                                            <span className="font-semibold">Submitted by {update.submitted_by || 'Staff'}</span>
-                                            <span>{update.submitted_date ? new Date(update.submitted_date).toLocaleDateString() : 'Unknown date'}</span>
-                                        </div>
-                                    ))}
-                                    {pendingUpdates.length > 3 && (
-                                        <div className="text-xs text-amber-700 dark:text-amber-200">
-                                            +{pendingUpdates.length - 3} more pending updates
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
+                        <div className="md:col-span-2"><CustomerRequestsTab contactId={contactId} currentUser={getLocalAuthSession()?.userProfile || null} /></div>
                         <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                             <h3 className="font-bold text-slate-800 dark:text-white mb-6 border-b pb-2">Contact Information</h3>
                             <div className="space-y-4">
@@ -658,13 +624,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                     </div>
                 )}
 
-                {!loading && activeTab === 'returns' && (
-                    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-8 text-center">
-                        <RotateCcw className="w-12 h-12 text-slate-200 mx-auto mb-4" />
-                        <h3 className="text-lg font-bold text-slate-700">Returns</h3>
-                        <p className="text-slate-400">Returns data is not available in this panel yet.</p>
-                    </div>
-                )}
+                {!loading && activeTab === 'returns' && <CustomerHistoryTab contactId={contactId} kind="returns" />}
 
                 {!loading && activeTab === 'financials' && (
                     <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-6">

@@ -5,7 +5,7 @@ import {
   deleteProduct,
   fetchProducts,
   updateProduct,
-} from '../supabaseService';
+} from '../localDataService';
 import type { Product } from '../../types';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
@@ -33,7 +33,8 @@ const findProductBySearch = async (query: string): Promise<any | null> => {
   return items[0] || null;
 };
 
-describe('Product Database local API integration', () => {
+// Explicit opt-in: this suite writes real products to the configured database.
+describe.skipIf(process.env.RUN_LOCAL_API_INTEGRATION !== '1')('Product Database local API integration', () => {
   it(
     'loads product list and completes CRUD flow through new-system service methods',
     async () => {

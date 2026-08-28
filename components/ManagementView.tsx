@@ -25,7 +25,6 @@ import {
   YAxis,
 } from 'recharts';
 import { fetchManagementDashboardData, ManagementDashboardData } from '../services/managementDashboardLocalApiService';
-import ContactDetails from './ContactDetails';
 import CallAccountabilityPanel from './CallAccountabilityPanel';
 
 interface ManagementViewProps {
@@ -80,7 +79,6 @@ const EmptyTable = ({ columns }: { columns: number }) => (
 export const ManagementView: React.FC<ManagementViewProps> = ({ currentUser }) => {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [dashboard, setDashboard] = useState<ManagementDashboardData>(emptyDashboard);
-  const [selectedContact, setSelectedContact] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [reloadToken, setReloadToken] = useState(0);
@@ -133,14 +131,6 @@ export const ManagementView: React.FC<ManagementViewProps> = ({ currentUser }) =
 
   return (
     <div className="min-h-full overflow-y-auto bg-slate-50 p-4 text-slate-900 md:p-6">
-      {selectedContact && (
-        <ContactDetails
-          contact={selectedContact}
-          isOpen={Boolean(selectedContact)}
-          onClose={() => setSelectedContact(null)}
-          onUpdate={() => undefined}
-        />
-      )}
 
       <div className="mx-auto max-w-[1500px] space-y-4">
         <header className="flex flex-wrap items-start justify-between gap-4">

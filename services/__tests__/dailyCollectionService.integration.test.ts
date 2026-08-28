@@ -16,7 +16,7 @@ const getAnyCustomerId = async (): Promise<string> => {
   return sessionId;
 };
 
-describe('dailyCollectionService integration', () => {
+describe.skipIf(process.env.RUN_LOCAL_API_INTEGRATION !== '1')('dailyCollectionService integration', () => {
   it(
     'loads collection summary report rows and totals',
     async () => {

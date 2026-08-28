@@ -10,10 +10,7 @@
 import React, { useState, useEffect } from 'react';
 import { canRetraceWorkflowHistory, createWorkflowHistoryState, ensureWorkflowHistoryState, preserveCurrentHistoryState } from './utils/workflowHistory';
 import TopNav from './components/TopNav';
-import PipelineView from './components/PipelineView';
-import Dashboard from './components/Dashboard';
 import Login from './components/Login';
-import StaffView from './components/StaffView';
 import DailyCallMonitoringView from './components/DailyCallMonitoringView';
 import OwnerDailyCallMonitoringUnifiedView from './components/OwnerDailyCallMonitoringUnifiedView';
 import ProductDatabase from './components/ProductDatabase';
@@ -35,8 +32,6 @@ import SuggestedStockReport from './components/SuggestedStockReport';
 import IncidentItemsReport from './components/IncidentItemsReport';
 
 import AccessControlSettings from './components/AccessControlSettings';
-import TasksView from './components/TasksView';
-import SalespersonDashboardView from './components/SalespersonDashboardView';
 import ManagementView from './components/ManagementView';
 import RecycleBinView from './components/RecycleBinView';
 import ReportsView from './components/ReportsView';
@@ -71,16 +66,10 @@ import Approvers from './components/Maintenance/Profile/Approvers';
 import Staff from './components/Maintenance/Profile/Staff';
 import CustomerGroups from './components/Maintenance/Customer/CustomerGroups';
 import { CustomerData } from './components/Maintenance/Customer/CustomerData';
-import { Pipeline } from './components/Maintenance/Customer/Pipeline';
 import VipThresholdSettings from './components/Maintenance/Customer/VipThresholdSettings';
 import SpecialPrice from './components/Maintenance/Product/SpecialPrice';
 import ActivityLogs from './components/Maintenance/Profile/ActivityLogs';
 import OperationsDashboard from './components/OperationsDashboard';
-
-// AI Customer Service Components
-import AIDashboardView from './components/AIDashboardView';
-import AIStandardAnswersView from './components/AIStandardAnswersView';
-import AIEscalationPanel from './components/AIEscalationPanel';
 
 // System Enhancement Components
 import LoyaltyDiscountRulesView from './components/LoyaltyDiscountRulesView';
@@ -420,9 +409,6 @@ const App: React.FC = () => {
           <OwnerDailyCallMonitoringUnifiedView currentUser={userProfile} />
         );
       }
-      case 'pipelines':
-      case 'sales-pipeline-board':
-        return <PipelineView currentUser={userProfile} />;
       case 'staff':
       case 'maintenance-profile-staff':
         return <Staff />;
@@ -828,8 +814,6 @@ const App: React.FC = () => {
             <VipThresholdSettings currentUser={userProfile} />
           </div>
         );
-      case 'maintenance-customer-pipeline':
-        return <Pipeline />;
       case 'maintenance-product-suppliers':
         return <Suppliers />;
       case 'maintenance-product-special-price':
@@ -885,28 +869,8 @@ const App: React.FC = () => {
         );
       }
 
-      // AI Customer Service Routes
-      case 'ai-service-dashboard':
-        return (
-          <div className="h-full overflow-y-auto">
-            <AIDashboardView currentUser={userProfile} />
-          </div>
-        );
-      case 'ai-service-standard-answers':
-        return (
-          <div className="h-full overflow-y-auto">
-            <AIStandardAnswersView currentUser={userProfile} />
-          </div>
-        );
-      case 'ai-service-escalations':
-        return (
-          <div className="h-full overflow-y-auto">
-            <AIEscalationPanel currentUser={userProfile} />
-          </div>
-        );
-
       default:
-        return renderComingSoon(getModuleLabel(canonicalTab));
+        return <div className="p-8"><h1 className="text-xl font-bold">Page not found</h1><p>This page is no longer available.</p><button onClick={() => handleSetActiveTab('home')} className="mt-4 text-blue-600">Go to Dashboard</button></div>;
     }
   };
 

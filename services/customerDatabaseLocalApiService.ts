@@ -28,6 +28,7 @@ interface ApiContactPersonRow {
 }
 
 interface ApiCustomerRow {
+  verification?: string | null;
   session_id?: string | number | null;
   lsessionid?: string | number | null;
   id?: string | number | null;
@@ -341,7 +342,7 @@ const mapContactPayloadToApi = (contact: ContactPayloadWithSalesPersonId) => {
 
 const hasOwn = <K extends string>(value: object, key: K): boolean => Object.prototype.hasOwnProperty.call(value, key);
 
-const mapContactUpdatesToApi = (contact: Partial<ContactPayloadWithSalesPersonId>) => {
+export const mapContactUpdatesToApi = (contact: Partial<ContactPayloadWithSalesPersonId>) => {
   const payload: Record<string, unknown> = {};
 
   if (hasOwn(contact, 'company')) payload.company = String(contact.company || '');
@@ -384,7 +385,7 @@ const mapContactUpdatesToApi = (contact: Partial<ContactPayloadWithSalesPersonId
   return payload;
 };
 
-const mapContactPersonPayloadToApi = (cp: ContactPerson) => {
+export const mapContactPersonPayloadToApi = (cp: ContactPerson) => {
   const parts = splitName(cp?.name || '');
   return {
     first_name: parts.first_name || String(cp?.name || ''),
@@ -647,10 +648,6 @@ export const fetchSalesAgents = async (): Promise<UserProfile[]> => {
     }));
 };
 
-export const fetchUpdatedContactDetails = async (_contactId: string): Promise<never[]> => {
-  return [];
-};
-
 export const fetchContactTransactions = async (contactId: string): Promise<ContactTransaction[]> => {
   try {
     const payload = await requestJson<ApiPurchaseHistoryResponse>(
@@ -680,7 +677,19 @@ export const fetchContactTransactions = async (contactId: string): Promise<Conta
   }
 };
 
-export const fetchCustomerMetrics = async (contactId: string): Promise<Record<string, unknown> | null> => {
+export interface LocalCustomerMetrics {
+  contact_id: string;
+  total_purchases: number;
+  average_order_value: number;
+  last_purchase_date: string | null;
+  outstanding_balance: number;
+  credit_limit: number;
+  currency: string;
+  average_monthly_purchase?: number;
+  purchase_frequency?: number;
+}
+
+export const fetchCustomerMetrics = async (contactId: string): Promise<LocalCustomerMetrics | null> => {
   try {
     const [customerPayload, purchasePayload] = await Promise.all([
       requestJson<ApiCustomerMetricsResponse>(`${API_BASE_URL}/customers/${encodeURIComponent(String(contactId))}`),
@@ -709,7 +718,7 @@ export const fetchCustomerMetrics = async (contactId: string): Promise<Record<st
   }
 };
 
-export const fetchCustomerTerms = async (sessionId: string): Promise<Array<Record<string, unknown>>> => {
+export const fetchCustomerTerms = async (sessionId: string): Promise<Array<ReturnType<typeof mapApiTermRow>>> => {
   try {
     const payload = await requestJson<ApiCustomerDetailResponse>(
       `${API_BASE_URL}/customer-database/${encodeURIComponent(String(sessionId))}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`

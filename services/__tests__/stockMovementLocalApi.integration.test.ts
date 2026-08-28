@@ -32,7 +32,7 @@ const getLogById = async (id: number): Promise<any | null> => {
   return payload?.data || null;
 };
 
-describe('Stock Movement local API integration', () => {
+describe.skipIf(process.env.RUN_LOCAL_API_INTEGRATION !== '1')('Stock Movement local API integration', () => {
   it(
     'completes CRUD flow through stock movement endpoint',
     async () => {

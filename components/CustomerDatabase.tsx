@@ -13,7 +13,7 @@ import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
 import { EmptyState, PageHeader } from './common/PageScaffold';
 
-const CustomerDatabase: React.FC = () => {
+const CustomerDatabase: React.FC<{ initialStatus?: string }> = ({ initialStatus = 'All' }) => {
   const { addToast } = useToast();
   // Data Fetching
   const { data: customers, setData: setCustomers, refetch: reload } = useRealtimeList<Contact>({
@@ -26,7 +26,7 @@ const CustomerDatabase: React.FC = () => {
   // UI State
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<string>('All');
+  const [filterStatus, setFilterStatus] = useState<string>(initialStatus);
   const [filterVisibility, setFilterVisibility] = useState<string>('Unhidden');
 
   // Selection State (Multi-select)

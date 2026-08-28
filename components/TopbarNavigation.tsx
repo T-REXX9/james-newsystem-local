@@ -8,7 +8,7 @@ import {
 import type { UserProfile } from '../types';
 import { useKeyboardShortcuts, getShortcutDisplay } from '../hooks/useKeyboardShortcuts';
 import { useSmartDropdownPosition } from '../hooks/useSmartDropdownPosition';
-import { MODULE_ID_ALIASES } from '../constants';
+import { isCompanyOwnerRole, MODULE_ID_ALIASES } from '../constants';
 import {
   TOPBAR_MENU_CONFIG,
   TopbarMainMenu,
@@ -48,7 +48,7 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
 
     // Special case: server maintenance / recycle bin
     if (canonical === 'maintenance-profile-server-maintenance') {
-      return user.role === 'Owner' || user.role === 'Developer';
+      return isCompanyOwnerRole(user.role);
     }
 
     // Owner always has access

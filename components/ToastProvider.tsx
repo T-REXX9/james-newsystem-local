@@ -15,15 +15,17 @@ interface ToastItem {
   action?: ToastAction;
 }
 
-interface ToastContextValue {
-  addToast: (toast: {
+interface ToastOptions {
     type: ToastType;
     message?: string;
     title?: string;
     description?: string;
     durationMs?: number;
     action?: ToastAction;
-  }) => void;
+}
+
+interface ToastContextValue {
+  addToast: (toast: ToastOptions | string, type?: ToastType) => void;
 }
 
 const ToastContext = createContext<ToastContextValue | undefined>(undefined);
@@ -35,7 +37,10 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
 
-  const addToast = useCallback(({ type, message, title, description, durationMs, action }) => {
+  const addToast = useCallback((input: ToastOptions | string, legacyType: ToastType = 'info') => {
+    const { type, message, title, description, durationMs, action } = typeof input === 'string'
+      ? { type: legacyType, message: input }
+      : input;
     const id = `${Date.now()}_${Math.random()}`;
     const resolvedDuration = durationMs ?? (type === 'error' ? 6000 : 4000);
     const resolvedTitle = title || (type === 'success' ? 'Success' : type === 'warning' ? 'Warning' : type === 'info' ? 'Info' : 'Error');

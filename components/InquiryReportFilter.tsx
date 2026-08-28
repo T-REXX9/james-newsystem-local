@@ -25,6 +25,7 @@ const InquiryReportFilter: React.FC = () => {
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [customers, setCustomers] = useState<InquiryReportCustomer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showView, setShowView] = useState(false);
 
   useEffect(() => {
@@ -32,6 +33,8 @@ const InquiryReportFilter: React.FC = () => {
       setIsLoading(true);
       try {
         setCustomers(await inquiryReportLocalApiService.getCustomers());
+      } catch (error) {
+        setLoadError(error instanceof Error ? error.message : 'Unable to load customer filters');
       } finally {
         setIsLoading(false);
       }
@@ -53,6 +56,10 @@ const InquiryReportFilter: React.FC = () => {
     setDateTo(todayInput());
     setSelectedCustomerId('');
   };
+
+  if (loadError) {
+    return <div role="alert" className="p-6 text-red-700">Unable to load inquiry report filters: {loadError}</div>;
+  }
 
   if (showView) {
     return (

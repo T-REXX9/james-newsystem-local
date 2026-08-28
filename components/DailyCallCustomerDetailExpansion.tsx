@@ -23,6 +23,7 @@ import {
 import SalesReportTab from './SalesReportTab';
 import ItemIssueReportTab from './ItemIssueReportTab';
 import IncidentReportTab from './IncidentReportTab';
+import CustomerRequestsTab from './CustomerRequestsTab';
 import SalesReturnTab from './SalesReturnTab';
 import PurchaseHistoryTab from './PurchaseHistoryTab';
 import PersonalCommentsTab from './PersonalCommentsTab';
@@ -38,13 +39,13 @@ export type DetailTabId =
   | 'overview'
   | 'comments'
   | 'human'
-  | 'ai'
   | 'communication'
   | 'sales'
   | 'item-issues'
   | 'purchase'
   | 'collections'
   | 'incident'
+  | 'requests'
   | 'returns';
 
 interface DailyCallCustomerDetailExpansionProps {
@@ -61,13 +62,13 @@ const tabs: Array<{
   { id: 'overview', label: 'Overview', icon: ShieldCheck },
   { id: 'comments', label: 'Management Instructions', icon: ClipboardList },
   { id: 'human', label: 'Human Agent Activity', icon: UserRound },
-  { id: 'ai', label: 'AI Agent Activity', icon: Bot },
   { id: 'communication', label: 'Communication Timeline', icon: MessageSquare },
   { id: 'sales', label: 'Sales Report', icon: BarChart3 },
   { id: 'item-issues', label: 'Item Issues', icon: PackageSearch },
   { id: 'purchase', label: 'Orders', icon: ShoppingCart },
   { id: 'collections', label: 'Collections', icon: WalletCards },
   { id: 'incident', label: 'Incident Reports', icon: FileWarning },
+  { id: 'requests', label: 'Requests', icon: ClipboardList },
   { id: 'returns', label: 'Sales Returns', icon: RotateCcw },
 ];
 
@@ -293,14 +294,12 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
     if (activeTab === 'sales') return <SalesReportTab contactId={customer.id} currentUserId={currentUser?.id} />;
     if (activeTab === 'item-issues') return <ItemIssueReportTab contactId={customer.id} />;
     if (activeTab === 'incident') return <IncidentReportTab contactId={customer.id} currentUser={currentUser} />;
+    if (activeTab === 'requests') return <CustomerRequestsTab contactId={customer.id} currentUser={currentUser} />;
     if (activeTab === 'returns') return <SalesReturnTab contactId={customer.id} currentUserId={currentUser?.id} />;
     if (activeTab === 'purchase') return <PurchaseHistoryTab contactId={customer.id} />;
     if (activeTab === 'collections') return <LBCRTOTab contactId={customer.id} />;
     if (activeTab === 'comments') {
       return <PersonalCommentsTab contactId={customer.id} currentUserId={currentUser?.id} currentUserName={currentUser?.full_name || currentUser?.email || 'Owner'} currentUserAvatar={currentUser?.avatar_url} mode="instruction" autoFocus />;
-    }
-    if (activeTab === 'ai') {
-      return <div className="p-5"><PanelCard title="AI Agent Activity" icon={Bot}><p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-xs text-slate-500">No AI-agent activity has been recorded for this customer.</p></PanelCard></div>;
     }
     if (activeTab === 'human') {
       return <div className="p-5"><PanelCard title={`Human Agent Activity (${customer.assignedTo || 'Unassigned'})`} icon={UserRound}>

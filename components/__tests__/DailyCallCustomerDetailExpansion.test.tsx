@@ -3,7 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+import { fetchCustomerReturns } from '../../services/customerWorkflowLocalApiService';
 import DailyCallCustomerDetailExpansion from '../DailyCallCustomerDetailExpansion';
+
+vi.mock('../../services/customerWorkflowLocalApiService', () => ({ fetchCustomerReturns: vi.fn() }));
 
 const fetchManagementInstructionsMock = vi.fn(async () => []);
 
@@ -21,10 +24,6 @@ vi.mock('../ItemIssueReportTab', () => ({
 
 vi.mock('../IncidentReportTab', () => ({
   default: () => <div>Incident tab content</div>,
-}));
-
-vi.mock('../SalesReturnTab', () => ({
-  default: () => <div>Returns tab content</div>,
 }));
 
 vi.mock('../PurchaseHistoryTab', () => ({
@@ -81,6 +80,18 @@ const customer = {
 describe('DailyCallCustomerDetailExpansion', () => {
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it('loads local returns through the visible Sales Returns tab', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchCustomerReturns).mockResolvedValue([{ id: 'r1', number: 'SRC-001', date: '2026-07-01', status: 'Posted', amount: 125, notes: 'Local return' }]);
+    render(<DailyCallCustomerDetailExpansion customer={customer} currentUser={null} />);
+
+    await user.click(screen.getByRole('tab', { name: 'Sales Returns' }));
+
+    expect(await screen.findByText('SRC-001')).toBeInTheDocument();
+    expect(fetchCustomerReturns).toHaveBeenCalledWith(customer.id);
   });
 
   it('matches the customer-detail template and switches to report tabs', async () => {

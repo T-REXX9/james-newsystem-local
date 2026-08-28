@@ -4,7 +4,7 @@ import {
   createManagementInstruction,
   fetchManagementInstructions,
 } from '../services/dailyCallMonitoringService';
-import { fetchPersonalComments, createPersonalComment } from '../services/supabaseService';
+import { fetchPersonalComments, createPersonalComment } from '../services/localDataService';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
 
@@ -28,6 +28,7 @@ const PersonalCommentsTab: React.FC<PersonalCommentsTabProps> = ({
   const { addToast } = useToast();
   const [comments, setComments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [newComment, setNewComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -45,6 +46,7 @@ const PersonalCommentsTab: React.FC<PersonalCommentsTabProps> = ({
           : await fetchPersonalComments(contactId);
         setComments(data || []);
       } catch (err) {
+        setLoadError(err instanceof Error ? err.message : 'Unable to load data');
         console.error('Error loading comments:', err);
       } finally {
         setLoading(false);
@@ -104,6 +106,8 @@ const PersonalCommentsTab: React.FC<PersonalCommentsTabProps> = ({
       setSubmitting(false);
     }
   };
+
+  if (loadError) return <div role="alert" className="p-6 text-amber-800">{loadError}</div>;
 
   if (loading) {
     return <div className="p-6 text-center text-slate-500">Loading comments...</div>;

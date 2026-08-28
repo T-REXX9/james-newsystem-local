@@ -10,7 +10,6 @@ import SalesReturnTab from './SalesReturnTab';
 import PurchaseHistoryTab from './PurchaseHistoryTab';
 import InquiryHistoryTab from './InquiryHistoryTab';
 import PersonalCommentsTab from './PersonalCommentsTab';
-import UpdateContactApprovalModal from './UpdateContactApprovalModal';
 import DiscountRequestModal from './DiscountRequestModal';
 import AddContactModal from './AddContactModal';
 import { 
@@ -19,7 +18,10 @@ import {
   Layout, Briefcase, Clock, CheckCircle, AlertTriangle, ShoppingBag, History, Smartphone, User, Users, DollarSign, MapPin, Cake, Building, TrendingUp, AlertCircle, Gift
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { createUpdatedContactDetails, updateContact } from '../services/supabaseService';
+import { updateContact } from '../services/customerDatabaseLocalApiService';
+import { requestCustomerUpdate } from '../services/customerWorkflowLocalApiService';
+import CustomerRequestsTab from './CustomerRequestsTab';
+import { isCompanyOwnerRole } from '../constants';
 import { normalizePriceGroup } from '../constants/pricingGroups';
 
 interface ContactDetailsProps {
@@ -36,7 +38,6 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
   const [aiAnalysis, setAiAnalysis] = useState<{score: number, probability: number} | null>(
     contact.aiScore ? { score: contact.aiScore, probability: contact.winProbability || 0 } : null
   );
-  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const commentsEndRef = useRef<HTMLDivElement>(null);
@@ -61,13 +62,13 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
     commentsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [comments]);
 
-  const isOwner = currentUser?.role === 'Owner';
+  const isOwner = isCompanyOwnerRole(currentUser?.role);
 
   const buildChangedFields = (previous: Contact, next: Omit<Contact, 'id'>) => {
     const changed: Record<string, { oldValue: unknown; newValue: unknown }> = {};
-    Object.keys(next).forEach((key) => {
-      const prevValue = (previous as Record<string, unknown>)[key];
-      const nextValue = (next as Record<string, unknown>)[key];
+    (Object.keys(next) as Array<keyof typeof next>).forEach((key) => {
+      const prevValue = previous[key];
+      const nextValue = next[key];
       const normalize = (value: unknown) => {
         if (value === undefined) return null;
         if (typeof value === 'object' && value !== null) {
@@ -101,13 +102,8 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
       if (Object.keys(changedFields).length === 0) {
         return contact;
       }
-      await createUpdatedContactDetails({
-        contact_id: contact.id,
-        changed_fields: changedFields,
-        submitted_by: currentUser.id,
-        submitted_date: new Date().toISOString(),
-        approval_status: 'pending',
-      });
+      const changes = Object.fromEntries(Object.keys(changedFields).map(key => [key, data[key as keyof typeof data]]));
+      await requestCustomerUpdate(contact.id, changes);
       return contact;
     } catch (error) {
       throw error;
@@ -176,6 +172,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
     { id: 'PurchaseHistory', label: 'Purchase History', icon: ShoppingBag },
     { id: 'InquiryHistory', label: 'Inquiries', icon: AlertCircle },
     { id: 'IncidentReports', label: 'Incidents', icon: AlertTriangle },
+    { id: 'Requests', label: 'Requests', icon: CheckSquare },
     { id: 'SalesReturns', label: 'Returns', icon: ShoppingBag },
     { id: 'PersonalComments', label: 'Comments', icon: MessageSquare }
   ];
@@ -203,15 +200,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
                    <Pencil className="w-4 h-4" />
                    {isOwner ? 'Edit Details' : 'Request Update'}
                </button>
-               {isOwner && (
-                 <button 
-                  onClick={() => setIsUpdateModalOpen(true)}
-                  className="flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-bold transition-colors"
-                 >
-                     <CheckSquare className="w-4 h-4" />
-                     Review Updates
-                 </button>
-               )}
+
                <button className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 transition-colors">
                    <Star className="w-5 h-5" />
                </button>
@@ -514,6 +503,8 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
         {/* Purchase History Tab */}
         {activeTab === 'PurchaseHistory' && <PurchaseHistoryTab contactId={contact.id} />}
 
+        {activeTab === 'Requests' && <CustomerRequestsTab contactId={contact.id} currentUser={currentUser || null} />}
+
         {/* Inquiry History Tab */}
         {activeTab === 'InquiryHistory' && <InquiryHistoryTab contactId={contact.id} />}
 
@@ -535,12 +526,6 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
       </div>
 
       {/* Modals */}
-      <UpdateContactApprovalModal
-        contact={contact}
-        isOpen={isUpdateModalOpen}
-        onClose={() => setIsUpdateModalOpen(false)}
-        currentUserId={currentUser?.id}
-      />
 
       <DiscountRequestModal
         contactId={contact.id}

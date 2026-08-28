@@ -28,7 +28,7 @@ const getAnyItemRefno = async (): Promise<string> => {
   return itemRefno;
 };
 
-describe('Sales Order local API integration', () => {
+describe.skipIf(process.env.RUN_LOCAL_API_INTEGRATION !== '1')('Sales Order local API integration', () => {
   it(
     'loads sales orders and completes approve/cancel action flow',
     async () => {

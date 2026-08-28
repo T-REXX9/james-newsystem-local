@@ -24,13 +24,7 @@ vi.mock('../../components/TopNav', () => ({
   ),
 }));
 
-vi.mock('../../components/Dashboard', () => ({
-  default: () => <div>Dashboard</div>
-}));
 
-vi.mock('../../components/SalesAgentDashboard', () => ({
-  default: () => <div>SalesAgentDashboard</div>
-}));
 
 vi.mock('../../components/ToastProvider', () => ({
   ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -41,9 +35,6 @@ vi.mock('../../components/NotificationProvider', () => ({
   NotificationProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>
 }));
 
-vi.mock('../../components/OwnerLiveCallMonitoringView', () => ({
-  default: () => <div>OwnerLiveCallMonitoringView</div>
-}));
 
 vi.mock('../../components/OwnerDailyCallMonitoringUnifiedView', () => ({
   default: () => <div>OwnerDailyCallMonitoringUnifiedView</div>

@@ -5,7 +5,6 @@ import { Contact, DealStage, PipelineDeal, PipelineColumn, CustomerStatus, Produ
 // Default access rights are expressed in terms of canonical hierarchical module IDs
 export const DEFAULT_STAFF_ACCESS_RIGHTS = [
   'home',
-  'sales-pipeline-board',
   'sales-database-customer-database',
   'sales-transaction-sales-inquiry',
   'sales-transaction-sales-order',
@@ -50,7 +49,6 @@ export const DEFAULT_STAFF_ACCESS_RIGHTS = [
   'maintenance-customer-customer-data',
 
   'maintenance-customer-customer-group',
-  'maintenance-customer-pipeline',
   'maintenance-product-suppliers',
   'maintenance-product-special-price',
   'maintenance-product-category-management',
@@ -109,7 +107,6 @@ export const ROLE_DEFAULT_ACCESS_RIGHTS: Record<string, string[]> = {
   Owner: ['*'],
   'Sales Agent': [
     'home',
-    'sales-pipeline-board',
     'sales-database-customer-database',
     'sales-transaction-sales-inquiry',
     'sales-transaction-sales-order',
@@ -190,7 +187,6 @@ export const AVAILABLE_APP_MODULES = [
   { id: 'warehouse-reports-item-suggested-for-stock-report', label: 'Item Suggested for Stock Report' },
   { id: 'warehouse-reports-fast-slow-inventory-report', label: 'Fast/Slow Inventory Report' },
   { id: 'warehouse-reports-incident-items-report', label: 'Incident Items Report' },
-  { id: 'sales-pipeline-board', label: 'Pipelines' },
   { id: 'sales-database-customer-database', label: 'Customer Database' },
   { id: 'sales-transaction-sales-inquiry', label: 'Sales Inquiry' },
   { id: 'sales-transaction-sales-order', label: 'Sales Orders' },
@@ -224,7 +220,6 @@ export const AVAILABLE_APP_MODULES = [
 
   { id: 'maintenance-customer-customer-group', label: 'Customer Group' },
   { id: 'maintenance-customer-vip-thresholds', label: 'VIP Thresholds' },
-  { id: 'maintenance-customer-pipeline', label: 'Pipeline' },
   { id: 'maintenance-product-suppliers', label: 'Suppliers' },
   { id: 'maintenance-product-special-price', label: 'Special Price' },
   { id: 'maintenance-product-category-management', label: 'Category Management' },
@@ -245,8 +240,6 @@ export const AVAILABLE_APP_MODULES = [
 // Used for routing and permission backward compatibility.
 export const MODULE_ID_ALIASES: Record<string, string> = {
   dashboard: 'home',
-  pipeline: 'maintenance-customer-pipeline',
-  pipelines: 'sales-pipeline-board',
   customers: 'sales-database-customer-database',
   products: 'warehouse-inventory-product-database',
   reorder: 'warehouse-reports-reorder-report',
@@ -260,7 +253,6 @@ export const MODULE_ID_ALIASES: Record<string, string> = {
   mail: 'communication-messaging-inbox',
   calendar: 'communication-productivity-calendar',
   calls: 'sales-transaction-daily-call-monitoring',
-  tasks: 'communication-productivity-tasks',
   recyclebin: 'maintenance-profile-server-maintenance',
   settings: 'maintenance-profile-system-access',
   'warehouse-inventory-reorder-report': 'warehouse-reports-reorder-report',
@@ -1529,18 +1521,6 @@ const SHOULD_EXPORT_MOCK_NOTIFICATIONS =
 const DEV_NOTIFICATION_RECIPIENT_ID = '00000000-0000-0000-0000-000000000001';
 
 export const MOCK_NOTIFICATIONS: Notification[] = SHOULD_EXPORT_MOCK_NOTIFICATIONS ? [
-  {
-    id: 'notif-1',
-    recipient_id: DEV_NOTIFICATION_RECIPIENT_ID,
-    title: 'New Task Assigned',
-    message: 'Follow up with Jiffy Lube regarding Q4 restock proposal has been assigned to you.',
-    type: 'info',
-    action_url: 'communication-productivity-tasks',
-    metadata: { taskId: 't1', priority: 'High' },
-    is_read: false,
-    created_at: new Date(Date.now() - 5 * 60000).toISOString(), // 5 minutes ago
-    read_at: undefined
-  },
   {
     id: 'notif-2',
     recipient_id: DEV_NOTIFICATION_RECIPIENT_ID,

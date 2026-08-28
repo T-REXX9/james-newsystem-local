@@ -20,7 +20,6 @@
     "@mui/material": "^7.3.7",
     "@mui/x-charts": "^8.27.0",
     "@mui/x-charts-pro": "^8.27.0",
-    "@supabase/supabase-js": "2",
     "@tanstack/react-table": "^8.21.3",
     "@types/leaflet": "^1.9.21",
     "date-fns": "^4.1.0",

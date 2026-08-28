@@ -28,7 +28,7 @@ vi.mock('../../services/localAuthService', () => ({
   getLocalAuthSession: vi.fn(() => ({ userProfile: { id: 'user-1', role: 'Owner' } })),
 }));
 
-vi.mock('../../services/supabaseService', () => ({
+vi.mock('../../services/localDataService', () => ({
   dispatchWorkflowNotification: vi.fn(),
   fetchProfiles: (...args: any[]) => fetchProfilesMock(...args),
 }));

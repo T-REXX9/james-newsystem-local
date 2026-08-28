@@ -280,6 +280,10 @@ describe('DailyCallMasterListView', () => {
     const detailDialog = await screen.findByRole('dialog');
     expect(detailDialog).toHaveTextContent('Customer detail popup for Priority Buyer Shop');
     expect(detailDialog).toHaveAttribute('data-current-user', 'master-1');
+    vi.mocked(fetchCustomersForDailyCall).mockResolvedValue([{ id: 'priority-1', shopName: 'Approved new name' } as any]);
+    fireEvent(window, new CustomEvent('customer-workflow:updated', { detail: { contactId: 'priority-1' } }));
+    await waitFor(() => expect(screen.getByRole('dialog')).toHaveTextContent('Approved new name'));
+
   });
 
   it('wires the call and message action buttons to the customer popup flow', async () => {

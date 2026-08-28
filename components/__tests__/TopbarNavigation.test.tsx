@@ -37,29 +37,32 @@ describe('TopbarNavigation responsive layout', () => {
     expect(within(compactMenu as HTMLElement).queryByText('Transfer Stock')).not.toBeInTheDocument();
   });
 
-  it('renders navigable menu items as links that preserve open-in-new-tab gestures', async () => {
+  it.each([
+    ['Product Database', 'warehouse-inventory-product-database', 'Company Owner'],
+    ['Server Maintenance', 'maintenance-profile-server-maintenance', 'Company Owner'],
+  ])('navigates to %s from the current menu and preserves open-in-new-tab gestures', async (label, route, role) => {
     const user = userEvent.setup();
     const onNavigate = vi.fn();
     render(
       <TopbarNavigation
         activeTab="home"
         onNavigate={onNavigate}
-        user={owner}
+        user={{ ...owner, role }}
       />
     );
 
     await user.click(screen.getByRole('button', { name: 'Toggle navigation' }));
     const compactMenu = document.querySelector('[data-responsive-nav="compact"]') as HTMLElement;
-    const productDatabaseLink = within(compactMenu).getByRole('menuitem', { name: 'Product Database' });
+    const menuLink = within(compactMenu).getByRole('menuitem', { name: label });
 
-    expect(productDatabaseLink).toHaveAttribute('href', '#/warehouse-inventory-product-database');
-    expect(productDatabaseLink).toHaveAttribute('target', '_blank');
-    expect(productDatabaseLink).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(menuLink).toHaveAttribute('href', `#/${route}`);
+    expect(menuLink).toHaveAttribute('target', '_blank');
+    expect(menuLink).toHaveAttribute('rel', 'noopener noreferrer');
 
-    fireEvent.click(productDatabaseLink, { ctrlKey: true });
+    fireEvent.click(menuLink, { ctrlKey: true });
     expect(onNavigate).not.toHaveBeenCalled();
 
-    await user.click(productDatabaseLink);
-    expect(onNavigate).toHaveBeenCalledWith('warehouse-inventory-product-database');
+    await user.click(menuLink);
+    expect(onNavigate).toHaveBeenCalledWith(route);
   });
 });

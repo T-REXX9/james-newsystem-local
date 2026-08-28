@@ -452,6 +452,8 @@ describe('SalesInquiryView', () => {
 
     render(<SalesInquiryView />);
 
+    // The page intentionally starts without selecting a record.
+    await userEvent.click(await screen.findByText('INQ26-1'));
     await waitFor(() => expect(getSalesInquiryMock).toHaveBeenCalledWith('inq-legacy'));
 
     const yourReferenceRow = await waitFor(() => screen.getByText('Your Reference:').closest('tr'));

@@ -612,12 +612,13 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     loadInquiryIntoForm(selected);
   }, [loadInquiryIntoForm]);
 
-  useEffect(() => {
-    if (isCreatingNew) return;
-    if (selectedInquiry) return;
-    if (inquiries.length === 0) return;
-    void selectInquiry(inquiries[0]);
-  }, [inquiries, isCreatingNew, selectInquiry, selectedInquiry]);
+  // Removed auto-select of first inquiry to prevent pre-filling forms with test data
+  // useEffect(() => {
+  //   if (isCreatingNew) return;
+  //   if (selectedInquiry) return;
+  //   if (inquiries.length === 0) return;
+  //   void selectInquiry(inquiries[0]);
+  // }, [inquiries, isCreatingNew, selectInquiry, selectedInquiry]);
 
   useEffect(() => {
     if (!selectedInquiry || isCreatingNew) return;

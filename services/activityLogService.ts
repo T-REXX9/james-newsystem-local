@@ -1,6 +1,5 @@
-import { supabase } from '../lib/supabaseClient';
+import { requestLocalApi } from './localApiClient';
 import { getLocalAuthSession } from './localAuthService';
-
 export const ENTITY_TYPES = {
   SALES_ORDER: 'Sales Order',
   SALES_INQUIRY: 'Sales Inquiry',
@@ -25,46 +24,18 @@ export const ENTITY_TYPES = {
 
 type ActivityLogDetails = Record<string, unknown> | null | undefined;
 
-const resolveIpAddress = (): string | null => {
-  if (typeof window === 'undefined') return null;
-  return null;
-};
-
 export const logActivity = async (
   action: string,
   entityType: string,
   entityId: string,
   details?: ActivityLogDetails
 ): Promise<boolean> => {
+  if (!getLocalAuthSession()?.token) return false;
   try {
-    // Local API mode does not have a reachable Supabase activity_logs backend.
-    if (getLocalAuthSession()) {
-      return true;
-    }
-
-    const { data: authData } = await supabase.auth.getUser();
-    const user = authData?.user;
-    if (!user) return false;
-
-    const { error } = await supabase
-      .from('activity_logs')
-      .insert({
-        user_id: user.id,
-        action,
-        entity_type: entityType,
-        entity_id: entityId,
-        details: details ?? null,
-        ip_address: resolveIpAddress(),
-      });
-
-    if (error) {
-      console.error('Failed to log activity:', error);
-      return false;
-    }
-
-    return true;
+    const result = await requestLocalApi<{ saved: boolean }>('/activity-logs', 'POST', { action, entity_type: entityType, entity_id: entityId });
+    return result.saved === true;
   } catch (error) {
-    console.error('Failed to log activity:', error);
+    console.error('Unable to persist client activity log:', error);
     return false;
   }
 };

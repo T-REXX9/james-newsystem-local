@@ -10,7 +10,7 @@ npm run dev
 ```
 
 Default local URL:
-- `http://localhost:5173/james-newsystem/`
+- `http://localhost:8080/james-newsystem/`
 
 Run frontend + API together using shared env config:
 
@@ -54,4 +54,5 @@ npm run build
 ## Current Integration Direction
 
 - Daily Call Monitoring now reads from local MySQL API endpoints.
-- Supabase code remains in the repo for modules not yet migrated.
+- Runtime services use the local API; Supabase migrations/functions remain as archive material.
+- Some legacy-only features still need backend migration. See [repair and verification status](docs/supabase-removal-repair.md) before treating the removal as complete.

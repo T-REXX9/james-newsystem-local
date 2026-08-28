@@ -20,11 +20,10 @@ export default defineConfig(({ mode }) => {
     env.REALTIME_HOST || process.env.REALTIME_HOST,
     '127.0.0.1'
   )}:${env.REALTIME_PORT || process.env.REALTIME_PORT || '8082'}`;
-  if (env.SUPABASE_SERVICE_ROLE_KEY) {
-    process.env.SUPABASE_SERVICE_ROLE_KEY = env.SUPABASE_SERVICE_ROLE_KEY;
-  }
 
   return {
+    // Keep dependency optimization writable even when node_modules contains an old root-owned cache.
+    cacheDir: '.cache/vite',
     server: {
       port: 8080,
       host: '0.0.0.0',

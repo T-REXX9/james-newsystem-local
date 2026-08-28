@@ -1,3 +1,4 @@
+import { CUSTOMER_UPDATED_EVENT } from '../utils/customerWorkflowEvents';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
@@ -268,6 +269,24 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
       if (withLoading) setLoading(false);
     }
   }, [debouncedSearch]);
+
+  useEffect(() => {
+    let active = true;
+    const refreshCustomer = (event: Event) => {
+      const contactId = (event as CustomEvent<{ contactId: string }>).detail.contactId;
+      fullCustomerRowsRef.current = null;
+      void loadRows(false, true);
+      if (selectedCustomer?.id === contactId) {
+        void fetchCustomersForDailyCall({}).then(customers => {
+          if (!active) return;
+          fullCustomerRowsRef.current = customers;
+          setSelectedCustomer(current => current?.id === contactId ? customers.find(row => row.id === contactId) || current : current);
+        }).catch(() => setError('The request was saved, but customer details could not be refreshed.'));
+      }
+    };
+    window.addEventListener(CUSTOMER_UPDATED_EVENT, refreshCustomer);
+    return () => { active = false; window.removeEventListener(CUSTOMER_UPDATED_EVENT, refreshCustomer); };
+  }, [loadRows, selectedCustomer?.id]);
 
   const handleSubmitProspect = useCallback(async (data: Omit<Contact, 'id'>) => {
     const created = await createContact({
