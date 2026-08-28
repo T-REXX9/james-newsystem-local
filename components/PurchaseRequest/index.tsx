@@ -27,6 +27,7 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
   const [filterYear, setFilterYear] = useState('');
   const [filterStatus, setFilterStatus] = useState('All Statuses');
   const [listError, setListError] = useState('');
+  const [detailLoading, setDetailLoading] = useState(false);
   const deepLinkRequestRef = useRef(0);
   const [deepLinkLoading, setDeepLinkLoading] = useState(Boolean(String(initialPRId || '').trim()));
   const [deepLinkError, setDeepLinkError] = useState('');
@@ -124,15 +125,17 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
   };
 
   const handleSelectRequest = async (request: PurchaseRequestWithItems) => {
+    setDetailLoading(true);
     try {
       const [fullPR] = await Promise.all([purchaseRequestService.getPurchaseRequestById(request.id), ensureProductsLoaded()]);
       setSelectedRequest(fullPR);
       setViewMode('detail');
     } catch (error) {
       console.error('Failed to load purchase request detail', error);
-      // Fall back to showing the summary data we already have so the user sees something
       setSelectedRequest(request);
       setViewMode('detail');
+    } finally {
+      setDetailLoading(false);
     }
   };
 
@@ -202,11 +205,17 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#f7f9fc] lg:flex-row">
       <PurchaseRequestList requests={requests} loading={loading} error={listError} onRetry={fetchRequests} onSelect={handleSelectRequest} onCreate={handleCreateStart} selectedRequestId={selectedRequest?.id} hideOnSmallScreens={viewMode !== 'list'} filterMonth={filterMonth} setFilterMonth={setFilterMonth} filterYear={filterYear} setFilterYear={setFilterYear} filterStatus={filterStatus} setFilterStatus={setFilterStatus} search={search} setSearch={setSearch} />
-      <main className={`min-h-0 min-w-0 flex-1 overflow-hidden ${viewMode === 'list' ? 'hidden items-center justify-center p-8 text-center text-slate-500 lg:flex' : 'block'}`}>
-        {viewMode === 'create' ? (
-          <PurchaseRequestForm onCancel={backToList} onSubmit={handleCreateSubmit} suppliers={suppliers} initialPRNumber={nextPRNumber} />
+      <main className={`min-h-0 min-w-0 flex-1 overflow-hidden ${viewMode === 'list' && !detailLoading ? 'hidden items-center justify-center p-8 text-center text-slate-500 lg:flex' : 'flex items-center justify-center p-8'}`}>
+        {detailLoading ? (
+          <div role="status" aria-live="polite" className="flex max-w-md flex-col items-center">
+            <Loader2 className="h-9 w-9 animate-spin text-[#175fd3]" aria-hidden="true" />
+            <p className="mt-4 text-lg font-bold text-slate-700">Loading purchase request...</p>
+            <p className="mt-1 text-sm text-slate-500">Fetching details and line items.</p>
+          </div>
+        ) : viewMode === 'create' ? (
+          <div className="h-full w-full"><PurchaseRequestForm onCancel={backToList} onSubmit={handleCreateSubmit} suppliers={suppliers} initialPRNumber={nextPRNumber} /></div>
         ) : (viewMode === 'detail' || viewMode === 'print') && selectedRequest ? (
-          <PurchaseRequestDetail request={selectedRequest} onBack={handleDetailBack} onUpdate={handleUpdate} onUpdateItem={handleUpdateItem} onDeleteItem={handleDeleteItem} onAddItem={handleAddItem} onConvert={handleConvertPO} onPrint={() => setViewMode('print')} products={products} suppliers={suppliers} />
+          <div className="h-full w-full overflow-auto"><PurchaseRequestDetail request={selectedRequest} onBack={handleDetailBack} onUpdate={handleUpdate} onUpdateItem={handleUpdateItem} onDeleteItem={handleDeleteItem} onAddItem={handleAddItem} onConvert={handleConvertPO} onPrint={() => setViewMode('print')} products={products} suppliers={suppliers} /></div>
         ) : deepLinkLoading ? (
           <div role="status" aria-live="polite" className="flex max-w-md flex-col items-center">
             <Loader2 className="h-9 w-9 animate-spin text-[#175fd3]" aria-hidden="true" />
