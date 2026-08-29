@@ -649,30 +649,30 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
                 onScroll={handleListScroll}
                 className="max-h-[520px] w-full overflow-y-auto overflow-x-hidden border border-[#ddd]"
               >
-                <table className="w-full table-fixed border-collapse text-left text-[clamp(8px,0.72vw,12px)] leading-[1.35] [&_td]:break-words [&_th]:break-words">
+                <table className="w-full table-fixed border-collapse text-left text-[clamp(8px,0.72vw,12px)] leading-[1.35] [&_td]:break-words [&_th]:break-normal [&_th]:[hyphens:none] [&_th]:[word-break:keep-all] [&_th]:[overflow-wrap:normal]">
                   <colgroup>
-                    {[1.8, 8.5, 6.5, 4, 4.5, 3.5, 6, 4, 3.8, 4.2, 3.8, 6, 4.4, 4.4, 3.8, 4.2, 4.2, 4.2, 6, 3.4, 3.4, 5.4].map((width, index) => (
+                    {[1.8, 7.6, 6.0, 3.8, 5.6, 3.6, 6.6, 3.8, 4.2, 4.2, 3.4, 4.6, 4.4, 4.0, 4.0, 3.8, 3.8, 3.8, 5.6, 4.0, 4.0, 5.0].map((width, index) => (
                       <col key={index} style={{ width: `${width}%` }} />
                     ))}
                   </colgroup>
-                  <thead className="sticky top-0 z-10 bg-[#f7f7f7] font-['Oswald'] text-[11px] uppercase leading-tight min-[1450px]:text-[12px]">
+                  <thead className="sticky top-0 z-10 bg-[#f7f7f7] font-['Oswald'] text-[10px] tracking-tight uppercase leading-tight min-[1450px]:text-[11px] min-[1700px]:text-[12px]">
                     <tr>
                       <th rowSpan={2} className="border border-[#ccc] px-0.5 py-2 text-center">#</th>
-                      <th rowSpan={2} className="border border-[#ccc] px-1 py-2 text-center">Part Number</th>
-                      <th rowSpan={2} className="border border-[#ccc] px-1 py-2 text-center">Original Part Number</th>
-                      <th rowSpan={2} className="border border-[#ccc] px-1 py-2 text-center">Item Code</th>
-                      <th rowSpan={2} className="border border-[#ccc] px-1 py-2 text-center">Description</th>
-                      <th rowSpan={2} className="border border-[#ccc] px-1 py-2 text-center">Brand</th>
-                      <th rowSpan={2} className="border border-[#ccc] px-1 py-2 text-center">Specifications</th>
-                      <th rowSpan={2} className="border border-[#ccc] px-1 py-2 text-center">Packing<br />(pcs / box)</th>
-                      <th colSpan={4} className="border border-[#ccc] bg-[#edf3f7] px-1 py-2 text-center text-[#315574]">Supplier (Cost of Goods)</th>
-                      <th rowSpan={2} className="border border-[#ccc] px-1 py-2 text-center">Last Receive Qty<br />(Date)</th>
-                      <th colSpan={2} className="border border-[#ccc] bg-[#eef6ee] px-1 py-2 text-center text-[#315b36]">Stock &amp; Reorder</th>
-                      <th colSpan={3} className="border border-[#ccc] bg-[#eef4fa] px-1 py-2 text-center text-[#315574]">Price List (Per Piece)</th>
-                      <th rowSpan={2} className="border border-[#ccc] px-1 py-2 text-center">Qty Sold Per Year<br />(pcs)</th>
+                      <th rowSpan={2} className="border border-[#ccc] px-0.5 py-2 text-center">Part Number</th>
+                      <th rowSpan={2} className="border border-[#ccc] px-0.5 py-2 text-center">Original Part Number</th>
+                      <th rowSpan={2} className="border border-[#ccc] px-0.5 py-2 text-center">Item Code</th>
+                      <th rowSpan={2} className="border border-[#ccc] px-0.5 py-2 text-center">Description</th>
+                      <th rowSpan={2} className="border border-[#ccc] px-0.5 py-2 text-center">Brand</th>
+                      <th rowSpan={2} className="border border-[#ccc] px-0.5 py-2 text-center">Specifications</th>
+                      <th rowSpan={2} className="border border-[#ccc] px-0.5 py-2 text-center">Packing<br />(pcs / box)</th>
+                      <th colSpan={4} className="border border-[#ccc] bg-[#edf3f7] px-0.5 py-2 text-center text-[#315574]">Supplier (Cost of Goods)</th>
+                      <th rowSpan={2} className="border border-[#ccc] px-0.5 py-2 text-center">Last Receive Qty<br />(Date)</th>
+                      <th colSpan={2} className="border border-[#ccc] bg-[#eef6ee] px-0.5 py-2 text-center text-[#315b36]">Stock &amp; Reorder</th>
+                      <th colSpan={3} className="border border-[#ccc] bg-[#eef4fa] px-0.5 py-2 text-center text-[#315574]">Price List (Per Piece)</th>
+                      <th rowSpan={2} className="border border-[#ccc] px-0.5 py-2 text-center">Qty Sold Per Year<br />(pcs)</th>
                       <th rowSpan={2} className="border border-[#ccc] px-0.5 py-2 text-center">Incident Report<br />(Last 12 Months)</th>
                       <th rowSpan={2} className="border border-[#ccc] px-0.5 py-2 text-center">Return Report<br />(Last 12 Months)</th>
-                      <th rowSpan={2} className="border border-[#ccc] px-1 py-2 text-center">Last Price Update</th>
+                      <th rowSpan={2} className="border border-[#ccc] px-0.5 py-2 text-center">Last Price Update</th>
                     </tr>
                     <tr>
                       <th className="border border-[#ccc] bg-[#edf3f7] px-0.5 py-1.5 text-center">Supplier Code</th>
