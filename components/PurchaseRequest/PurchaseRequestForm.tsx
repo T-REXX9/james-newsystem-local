@@ -180,7 +180,7 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({ onCancel, onS
                   <tr id="purchase-request-item-picker" className="border-b border-blue-100 bg-blue-50/40 align-middle">
                     <td className="px-3 py-3 text-center text-slate-400">+</td>
                     <td colSpan={3} className="px-3 py-3">
-                      <ProductAutocomplete onSelect={product => { setSelectedProduct(product as ProductWithMetadata); setSelectedProductId(product.id); setValidationErrors(current => ({ ...current, selectedProductId: '' })); }} placeholder="Select product by part no. or item code" className={validationErrors.selectedProductId ? 'ring-1 ring-rose-500' : ''} />
+                      <ProductAutocomplete reorderOnly onSelect={product => { setSelectedProduct(product as ProductWithMetadata); setSelectedProductId(product.id); setValidationErrors(current => ({ ...current, selectedProductId: '' })); }} placeholder="Select low-stock product by part no. or item code" className={validationErrors.selectedProductId ? 'ring-1 ring-rose-500' : ''} />
                       {selectedProduct ? (
                         <div className="mt-1.5 flex items-center gap-2 rounded border border-blue-200 bg-blue-50 px-2.5 py-1.5">
                           <span className="text-xs font-bold text-[#173c83]">{selectedProduct.part_no || '-'}</span>

@@ -13,9 +13,10 @@ vi.mock('../ToastProvider', () => ({
 }));
 
 vi.mock('../ProductAutocomplete', () => ({
-  default: ({ onSelect }: { onSelect: (product: any) => void }) => (
+  default: ({ onSelect, reorderOnly }: { onSelect: (product: any) => void; reorderOnly?: boolean }) => (
     <button
       type="button"
+      data-reorder-only={String(Boolean(reorderOnly))}
       onClick={() =>
         onSelect({
           id: 'prod-1',
@@ -49,6 +50,8 @@ describe('PurchaseRequestForm', () => {
         suppliers={[{ id: 'sup-1', company: 'Supplier One' } as any]}
       />
     );
+
+    expect(screen.getByRole('button', { name: 'Pick Product' })).toHaveAttribute('data-reorder-only', 'true');
 
     await user.click(screen.getByRole('button', { name: 'Pick Product' }));
     const qtyInput = screen.getByLabelText('Line item quantity');

@@ -51,6 +51,14 @@ describe('ProductAutocomplete', () => {
     });
   });
 
+  it('uses the reorder-only product search when requested by purchasing', async () => {
+    render(<ProductAutocomplete reorderOnly onSelect={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(searchProductsMock).toHaveBeenCalledWith('', 'active', { reorderOnly: true });
+    });
+  });
+
   it('stays closed after selecting a product even when the reset search resolves', async () => {
     const onSelect = vi.fn();
     render(<ProductAutocomplete onSelect={onSelect} />);

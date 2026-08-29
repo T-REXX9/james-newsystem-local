@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  fetchReorderReportEntries,
   getReorderWorkflowStages,
   isReorderWorkflowActive,
   type ReorderReportEntry,
@@ -20,6 +21,28 @@ const row = (updates: Partial<ReorderReportEntry> = {}): ReorderReportEntry => (
 });
 
 describe('reorder purchasing workflow stages', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('normalizes negative available stock from the API to zero', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        data: {
+          items: [{ id: 1, product_session: 'session-negative', available_stock: -2 }],
+          meta: { page: 1, per_page: 100, total: 1, total_pages: 1 },
+        },
+      }),
+    }));
+
+    const result = await fetchReorderReportEntries({ warehouseType: 'total' });
+
+    expect(result.items[0]?.available_stock).toBe(0);
+  });
+
   it('blocks another request while PR, PO, or Receiving is active', () => {
     expect(isReorderWorkflowActive(row({ pr_refno: 'PR-1', pr_status: 'Pending' }))).toBe(true);
     expect(isReorderWorkflowActive(row({ po_refno: 'PO-1', po_status: 'Posted' }))).toBe(true);

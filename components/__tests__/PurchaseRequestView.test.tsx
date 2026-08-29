@@ -5,9 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PurchaseRequestView from '../PurchaseRequest/PurchaseRequestView';
 
 vi.mock('../ProductAutocomplete', () => ({
-  default: ({ onSelect }: { onSelect: (product: any) => void }) => (
+  default: ({ onSelect, reorderOnly }: { onSelect: (product: any) => void; reorderOnly?: boolean }) => (
     <button
       type="button"
+      data-reorder-only={String(Boolean(reorderOnly))}
       onClick={() =>
         onSelect({
           id: 'prod-2',
@@ -121,7 +122,7 @@ describe('PurchaseRequestView', () => {
     );
 
     await user.click(screen.getAllByRole('button', { name: /add item/i })[0]);
-    expect(screen.getByRole('button', { name: 'Pick View Product' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pick View Product' })).toHaveAttribute('data-reorder-only', 'true');
 
     await user.click(screen.getByRole('button', { name: /close add item/i }));
 

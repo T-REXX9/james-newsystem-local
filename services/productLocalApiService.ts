@@ -141,6 +141,7 @@ export interface FetchProductsPageParams {
   cylinder?: string;
   barcode?: string;
   status?: ProductListStatus;
+  reorderOnly?: boolean;
   page?: number;
   perPage?: number;
 }
@@ -211,6 +212,7 @@ export const fetchProductsPage = async (params: FetchProductsPageParams = {}): P
     cylinder = '',
     barcode = '',
     status = 'all',
+    reorderOnly = false,
     page = 1,
     perPage = 100,
   } = params;
@@ -235,6 +237,7 @@ export const fetchProductsPage = async (params: FetchProductsPageParams = {}): P
     page: String(Math.max(1, page)),
     per_page: String(Math.min(500, Math.max(1, perPage))),
   });
+  if (reorderOnly) query.set('reorder_only', '1');
 
   const response = await fetch(`${API_BASE_URL}/products?${query.toString()}`);
   if (!response.ok) throw new Error(await parseApiErrorMessage(response));
@@ -258,10 +261,12 @@ export const fetchProductsPage = async (params: FetchProductsPageParams = {}): P
 export const searchProducts = async (
   query: string,
   status: ProductListStatus = 'active',
+  options: { reorderOnly?: boolean } = {},
 ): Promise<Product[]> => {
   const page = await fetchProductsPage({
     search: query,
     status,
+    reorderOnly: options.reorderOnly,
     page: 1,
     perPage: 50,
   });

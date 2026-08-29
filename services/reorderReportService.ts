@@ -199,7 +199,7 @@ const normalizeEntry = (raw: any): ReorderReportEntry => ({
   current_stock: toNumber(raw?.current_stock),
   physical_stock: toNumber(raw?.physical_stock ?? raw?.current_stock),
   reserved_stock: toNumber(raw?.reserved_stock),
-  available_stock: toNumber(raw?.available_stock ?? raw?.current_stock),
+  available_stock: Math.max(0, toNumber(raw?.available_stock ?? raw?.current_stock)),
   total_rr: toNumber(raw?.total_rr),
   total_return: toNumber(raw?.total_return),
   target_quantity: toNumber(raw?.target_quantity),

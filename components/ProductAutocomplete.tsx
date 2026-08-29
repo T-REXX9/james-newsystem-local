@@ -11,13 +11,15 @@ interface ProductAutocompleteProps {
     placeholder?: string;
     className?: string;
     autoFocus?: boolean;
+    reorderOnly?: boolean;
 }
 
 const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
     onSelect,
     placeholder = "Search by Part No, Item Code, or Description...",
     className = "",
-    autoFocus = false
+    autoFocus = false,
+    reorderOnly = false,
 }) => {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<Product[]>([]);
@@ -34,6 +36,12 @@ const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
 
     // Debounce query to avoid too many requests
     const debouncedQuery = useDebounce(query, 300);
+    const runProductSearch = useCallback(
+        (searchQuery: string) => reorderOnly
+            ? searchProducts(searchQuery, 'active', { reorderOnly: true })
+            : searchProducts(searchQuery),
+        [reorderOnly]
+    );
 
     // Calculate position
     const updatePosition = useCallback(() => {
@@ -97,7 +105,7 @@ const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
             setLoading(true);
             try {
                 // We now allow empty query to fetch default products
-                const data = await searchProducts(debouncedQuery);
+                const data = await runProductSearch(debouncedQuery);
                 setResults(data);
                 setNoResults(data.length === 0);
 
@@ -115,7 +123,7 @@ const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
         };
 
         fetchProducts();
-    }, [debouncedQuery, updatePosition]);
+    }, [debouncedQuery, runProductSearch, updatePosition]);
 
     // Focus management
     useEffect(() => {
@@ -219,7 +227,7 @@ const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
                         allowAutoOpenRef.current = true;
                         // Trigger search on focus if we don't have results yet, or just show dropdown
                         if (results.length === 0) {
-                            searchProducts('').then(data => {
+                            runProductSearch('').then(data => {
                                 setResults(data);
                                 setShowDropdown(true);
                                 requestAnimationFrame(updatePosition);

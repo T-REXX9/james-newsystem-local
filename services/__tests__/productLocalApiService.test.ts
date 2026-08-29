@@ -48,6 +48,20 @@ describe('productLocalApiService', () => {
     expect(String(url)).toContain('status=all');
   });
 
+  it('requests only products below a positive reorder quantity when required', async () => {
+    (global.fetch as any).mockImplementation(() =>
+      okResponse({
+        items: [],
+        meta: { page: 1, per_page: 50, total: 0, total_pages: 1 },
+      })
+    );
+
+    await searchProducts('brake', 'active', { reorderOnly: true });
+
+    const [url] = (global.fetch as any).mock.calls[0];
+    expect(String(url)).toContain('reorder_only=1');
+  });
+
   it('fetchProductsPage forwards the provided status filter', async () => {
     (global.fetch as any).mockImplementation(() =>
       okResponse({
