@@ -789,9 +789,9 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                   <button type="button" onClick={() => setIsCreating(false)} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancel</button>
                   <h2 className="text-xl font-extrabold uppercase tracking-tight text-[#173c83]">New Purchase Order</h2>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-bold text-slate-500">PO No:</span>
-                  <input value={newPONumber} disabled className="w-32 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-700" />
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                  <span className="text-sm font-bold text-slate-500 whitespace-nowrap">PO No:</span>
+                  <span className="min-w-[180px] rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-700 whitespace-nowrap">{newPONumber}</span>
                 </div>
               </div>
               <div className="p-6">

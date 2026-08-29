@@ -106,7 +106,7 @@ const ReceivingStock: React.FC<ReceivingStockProps> = ({ initialRRId, initialRRR
                     <div className="relative">
                         <input
                             type="text"
-                            placeholder="Search RR No., PO No., Supplier..."
+                            placeholder="Search RR No..."
                             value={search}
                             onChange={e => setSearch(e.target.value)}
                             onBlur={handleSearch}
