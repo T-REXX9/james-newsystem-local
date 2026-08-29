@@ -742,31 +742,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
 
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-sm font-bold uppercase text-slate-700">Items</h3>
-                {['Draft', 'Pending'].includes(selectedPO.status) && !showAddItem && (
-                  <button onClick={() => setShowAddItem(true)} className="rounded-md bg-emerald-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-emerald-700">Add PO</button>
-                )}
               </div>
-
-              {showAddItem && (
-                <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                  <div className="grid grid-cols-[1fr_90px_160px_auto_auto] items-end gap-3">
-                    <div>
-                      <label className="mb-1 block text-xs font-bold text-slate-600">Product</label>
-                      <ProductAutocomplete onSelect={product => { setNewItemId(product.id); setSelectedNewItemProduct(product as Product); }} placeholder="Search product..." />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-bold text-slate-600">Quantity</label>
-                      <input aria-label="Quantity" type="number" min="1" value={newItemQty} onChange={e => setNewItemQty(Number(e.target.value))} className="h-10 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-[#175fd3]" />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-bold text-slate-600">ETA</label>
-                      <input aria-label="ETA" type="date" value={newItemEta} onChange={e => setNewItemEta(e.target.value)} className="h-10 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-[#175fd3]" />
-                    </div>
-                    <button onClick={addItem} disabled={!newItemId} className="h-10 rounded-md bg-[#175fd3] px-4 font-bold text-white hover:bg-[#0e4fb7] disabled:opacity-50">Add</button>
-                    <button onClick={() => setShowAddItem(false)} className="h-10 rounded-md border border-slate-300 bg-white px-4 font-semibold text-slate-600 hover:bg-slate-50">Cancel</button>
-                  </div>
-                </div>
-              )}
 
               <div className="overflow-x-auto rounded-lg border border-slate-200">
                 <table className="w-full min-w-[1000px] border-collapse text-xs">
