@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { purchaseOrderService } from '../services/purchaseOrderService';
+import { purchaseRequestService } from '../services/purchaseRequestService';
+import { PurchaseRequestWithItems } from '../purchaseRequest.types';
 import { PurchaseOrderWithDetails, PurchaseOrderInsert, PurchaseOrderItemInsert, PO_STATUS_COLORS, Product, Supplier } from '../purchaseOrderTypes';
 import { Plus, Trash2, Printer, Filter, ListFilter, Search, RefreshCw, ChevronLeft, ChevronRight, Save, CheckCircle, XCircle, ArrowLeft, Pencil } from 'lucide-react';
 import StatusBadge from './StatusBadge'; // Assuming this exists or I'll inline the style
@@ -36,12 +38,13 @@ const POStatusBadge = ({ status }: { status: string }) => {
 interface PurchaseOrderViewProps {
   initialPOId?: string;
   initialPORefNo?: string;
+  initialPRId?: string;
 }
 
 const PAGE_SIZE = 10;
 const PURCHASE_ORDER_TAB_ID = 'purchases-transaction-purchase-order';
 
-const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, initialPORefNo }) => {
+const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, initialPORefNo, initialPRId }) => {
   const { addToast } = useToast();
   const currentUser = getLocalAuthSession()?.userProfile;
   const canUnpost = ['owner', 'company owner', 'administrator', 'purchasing manager'].includes(String(currentUser?.role || '').trim().toLowerCase()) || String(currentUser?.user_type || '') === '1';
@@ -68,6 +71,12 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   const [submitError, setSubmitError] = useState('');
   const [newPONumber, setNewPONumber] = useState('');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+
+  // PR Selection State for PO Creation
+  const [eligiblePRs, setEligiblePRs] = useState<PurchaseRequestWithItems[]>([]);
+  const [loadingPRs, setLoadingPRs] = useState(false);
+  const [selectedPRId, setSelectedPRId] = useState<string>('');
+  const [selectedPR, setSelectedPR] = useState<PurchaseRequestWithItems | null>(null);
 
   // Item Add State
   const [showAddItem, setShowAddItem] = useState(false);
@@ -288,11 +297,99 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
     };
   }, [initialPOId, initialPORefNo]);
 
+  // Fetch eligible Approved PRs for PO creation
+  const fetchEligiblePRs = async () => {
+    setLoadingPRs(true);
+    try {
+      const allPRs = await purchaseRequestService.getPurchaseRequests({ status: 'Approved' });
+      // Filter for approved PRs
+      const approvedPRs = (allPRs || []).filter(pr => pr.status === 'Approved');
+
+      // Fetch full details for each approved PR to check items and existing PO link
+      const detailedPRs = await Promise.all(
+        approvedPRs.map(async pr => {
+          try {
+            return await purchaseRequestService.getPurchaseRequestById(pr.id);
+          } catch {
+            return pr;
+          }
+        })
+      );
+
+      // Exclude PRs that have no items or are already linked to a generated PO
+      const eligible = detailedPRs.filter(pr => {
+        if (!pr.items || pr.items.length === 0) return false;
+        const hasGeneratedPO = pr.items.some((item: any) => Boolean(item.po_number || item.po_refno));
+        return !hasGeneratedPO;
+      });
+
+      setEligiblePRs(eligible);
+      return eligible;
+    } catch (err) {
+      console.error('Failed to load eligible PRs', err);
+      setEligiblePRs([]);
+      return [];
+    } finally {
+      setLoadingPRs(false);
+    }
+  };
+
+  const handleSelectPR = async (prId: string) => {
+    setSelectedPRId(prId);
+    setSubmitError('');
+    if (!prId) {
+      setSelectedPR(null);
+      setCreateForm(prev => ({ ...prev, supplier_id: '', remarks: '' }));
+      return;
+    }
+
+    try {
+      const prDetail = await purchaseRequestService.getPurchaseRequestById(prId);
+      setSelectedPR(prDetail);
+
+      // Find supplier from PR items
+      const prSupplierId = prDetail.items?.find((i: any) => i.supplier_id)?.supplier_id || '';
+      const prNotes = prDetail.notes || '';
+
+      setCreateForm(prev => ({
+        ...prev,
+        supplier_id: prSupplierId,
+        remarks: prNotes ? `PR Reference: ${prDetail.pr_number}. ${prNotes}` : `PR Reference: ${prDetail.pr_number}`,
+        pr_reference: prDetail.pr_number,
+      }));
+
+      // Clear PR validation error
+      setValidationErrors(prev => {
+        const next = { ...prev };
+        delete next.pr_id;
+        delete next.supplier_id;
+        return next;
+      });
+    } catch (err) {
+      console.error('Failed to load PR details', err);
+      addToast({
+        type: 'error',
+        title: 'Unable to load purchase request details',
+        description: err instanceof Error ? err.message : 'Please try again.',
+        durationMs: 6000,
+      });
+    }
+  };
+
   const startCreate = async () => {
     setIsCreating(true);
     setSelectedPO(null);
     setPrintMode(false);
-    const nextNum = await purchaseOrderService.generatePONumber();
+    setSelectedPRId('');
+    setSelectedPR(null);
+    setValidationErrors({});
+    setSubmitError('');
+
+    const [nextNum, prs] = await Promise.all([
+      purchaseOrderService.generatePONumber(),
+      fetchEligiblePRs(),
+    ]);
+
     setNewPONumber(nextNum);
     setCreateForm({
       order_date: new Date().toISOString().split('T')[0],
@@ -300,6 +397,14 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
       remarks: '',
       grand_total: 0
     });
+
+    // Handle preselection if initialPRId is passed
+    if (initialPRId) {
+      const match = prs.find(p => p.id === initialPRId || p.pr_number === initialPRId);
+      if (match) {
+        void handleSelectPR(match.id);
+      }
+    }
   };
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
@@ -309,29 +414,37 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
       return;
     }
     try {
-      const newPO = await purchaseOrderService.createPurchaseOrder({
-        ...createForm,
-        po_number: newPONumber,
-        warehouse_id: 'WH-MAIN', // Default
-        created_by: '00000000-0000-0000-0000-000000000000' // Placeholder
-      } as PurchaseOrderInsert);
+      if (!selectedPRId) {
+        setSubmitError('Please select a Purchase Requisition.');
+        return;
+      }
+
+      // Convert PR to PO using backend conversion endpoint
+      const createdPORefNo = await purchaseRequestService.convertToPO([selectedPRId], '');
+
       await fetchOrders();
-      // Select the new PO
-      const fullPO = await purchaseOrderService.getPurchaseOrderById(newPO.id);
+
+      // Fetch and select the new PO
+      const fullPO = await purchaseOrderService.getPurchaseOrderById(createdPORefNo);
       setSelectedPO(fullPO as unknown as PurchaseOrderWithDetails);
+
       await notifyPurchaseOrderEvent(
         'Purchase Order Created',
-        `Purchase order ${newPONumber} has been created and submitted successfully.`,
+        `Purchase order ${fullPO.po_number || newPONumber} has been created and submitted successfully from PR ${selectedPR?.pr_number || ''}.`,
         'create',
         'created',
-        newPO.id,
+        fullPO.id,
         { targetRoles: ['Owner', 'Purchasing Manager'] }
       );
+
       setIsCreating(false);
+      setSelectedPRId('');
+      setSelectedPR(null);
+
       addToast({
         type: 'success',
         title: 'Purchase order created',
-        description: 'Purchase order has been submitted successfully.',
+        description: 'Purchase order has been submitted successfully from PR.',
         durationMs: 4000,
       });
     } catch (err: any) {
@@ -347,22 +460,28 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
 
   const validateCreateForm = () => {
     const errors: Record<string, string> = {};
+    const prCheck = validateRequired(selectedPRId, 'a Purchase Requisition');
+    if (!prCheck.isValid) errors.pr_id = 'Please select a Purchase Requisition.';
+
     const dateCheck = validateRequired(createForm.order_date, 'an order date');
     if (!dateCheck.isValid) errors.order_date = dateCheck.message;
-    const supplierCheck = validateRequired(createForm.supplier_id, 'a supplier');
-    if (!supplierCheck.isValid) errors.supplier_id = supplierCheck.message;
+
+    if (!selectedPR || !selectedPR.items || selectedPR.items.length === 0) {
+      errors.items = 'The selected Purchase Requisition has no items.';
+    }
+
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
   const handleCreateBlur = (field: string, value: unknown) => {
     let message = '';
+    if (field === 'pr_id') {
+      const result = validateRequired(value, 'a Purchase Requisition');
+      message = result.isValid ? '' : 'Please select a Purchase Requisition.';
+    }
     if (field === 'order_date') {
       const result = validateRequired(value, 'an order date');
-      message = result.isValid ? '' : result.message;
-    }
-    if (field === 'supplier_id') {
-      const result = validateRequired(value, 'a supplier');
       message = result.isValid ? '' : result.message;
     }
     setValidationErrors((prev) => ({ ...prev, [field]: message }));
@@ -681,18 +800,131 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
 
                 <div className="mb-6 grid gap-6 md:grid-cols-2">
                   <div>
+                    <label className="mb-1.5 block text-xs font-bold uppercase text-slate-500">
+                      Purchase Requisition <span className="text-rose-500">*</span>
+                    </label>
+                    {loadingPRs ? (
+                      <div className="flex h-10 items-center text-xs font-semibold text-slate-500">Loading eligible PRs...</div>
+                    ) : (
+                      <select
+                        value={selectedPRId}
+                        onChange={e => handleSelectPR(e.target.value)}
+                        onBlur={e => handleCreateBlur('pr_id', e.target.value)}
+                        className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-[#175fd3] focus:ring-1 focus:ring-blue-100"
+                      >
+                        <option value="">Select PR</option>
+                        {eligiblePRs.map(pr => {
+                          const supplierName = pr.items?.find((i: any) => i.supplier_name)?.supplier_name || 'No Supplier';
+                          return (
+                            <option key={pr.id} value={pr.id}>
+                              {pr.pr_number} — {supplierName}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    )}
+                    {validationErrors.pr_id && (
+                      <p className="mt-1 text-xs font-semibold text-rose-600">{validationErrors.pr_id}</p>
+                    )}
+                  </div>
+
+                  <div>
                     <label className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Order Date</label>
                     <input type="date" value={createForm.order_date} onChange={e => setCreateForm({ ...createForm, order_date: e.target.value })} onBlur={e => handleCreateBlur('order_date', e.target.value)} className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-[#175fd3] focus:ring-1 focus:ring-blue-100" />
                   </div>
+                </div>
+
+                <div className="mb-6 grid gap-6 md:grid-cols-2">
                   <div>
                     <label className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Supplier</label>
-                    <SearchableSelect value={createForm.supplier_id || ''} options={suppliers.map(s => ({ value: s.id, label: s.company || s.id }))} onChange={value => setCreateForm({ ...createForm, supplier_id: value })} placeholder="Select Supplier" />
+                    <input
+                      type="text"
+                      readOnly
+                      disabled
+                      value={suppliers.find(s => s.id === createForm.supplier_id)?.company || selectedPR?.items?.find((i: any) => i.supplier_name)?.supplier_name || 'Auto-populated from PR'}
+                      className="h-10 w-full rounded-md border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 cursor-not-allowed"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Remarks</label>
+                    <input
+                      type="text"
+                      value={createForm.remarks || ''}
+                      onChange={e => setCreateForm({ ...createForm, remarks: e.target.value })}
+                      placeholder="Add any notes for this purchase order..."
+                      className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-[#175fd3] focus:ring-1 focus:ring-blue-100"
+                    />
                   </div>
                 </div>
 
-                <div>
-                  <label className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Remarks</label>
-                  <textarea value={createForm.remarks || ''} onChange={e => setCreateForm({ ...createForm, remarks: e.target.value })} placeholder="Add any notes for this purchase order..." rows={3} className="w-full rounded-md border border-slate-300 p-3 text-sm outline-none focus:border-[#175fd3] focus:ring-1 focus:ring-blue-100" />
+                {/* Loaded PR Items Section */}
+                <div className="mt-6 border-t border-slate-200 pt-6">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="text-sm font-bold uppercase tracking-wide text-slate-700">PR Items Preview</h3>
+                    {selectedPR && (
+                      <span className="text-xs font-semibold text-slate-500">
+                        Source PR: <strong className="text-[#175fd3]">{selectedPR.pr_number}</strong>
+                      </span>
+                    )}
+                  </div>
+
+                  {!selectedPR ? (
+                    <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-xs font-medium text-slate-500">
+                      Please select a Purchase Requisition above to auto-load its items.
+                    </div>
+                  ) : !selectedPR.items || selectedPR.items.length === 0 ? (
+                    <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-center text-xs font-semibold text-rose-600">
+                      The selected PR has no items.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto rounded-lg border border-slate-200">
+                      <table className="w-full min-w-[800px] border-collapse text-xs">
+                        <thead>
+                          <tr className="border-b border-slate-200 bg-slate-50 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                            <th className="px-4 py-3 text-center">#</th>
+                            <th className="px-4 py-3">Item Code</th>
+                            <th className="px-4 py-3">Part No.</th>
+                            <th className="px-4 py-3">Description</th>
+                            <th className="px-4 py-3 text-center">PR Qty</th>
+                            <th className="px-4 py-3 text-center">Unit</th>
+                            <th className="px-4 py-3 text-right">Unit Cost</th>
+                            <th className="px-4 py-3 text-right">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedPR.items.map((item, index) => {
+                            const qty = Number(item.quantity || 0);
+                            const cost = Number(item.unit_cost || 0);
+                            const amount = qty * cost;
+                            return (
+                              <tr key={item.id || index} className="border-b border-slate-100 hover:bg-slate-50">
+                                <td className="px-4 py-3 text-center font-semibold text-slate-500">{index + 1}</td>
+                                <td className="px-4 py-3 font-semibold text-slate-600">{item.item_code || '-'}</td>
+                                <td className="px-4 py-3 font-semibold text-[#173c83]">{item.part_number || '-'}</td>
+                                <td className="px-4 py-3 font-semibold text-slate-700">{item.description || '-'}</td>
+                                <td className="px-4 py-3 text-center font-bold text-slate-800">{qty}</td>
+                                <td className="px-4 py-3 text-center text-slate-500">{item.unit || 'PCS'}</td>
+                                <td className="px-4 py-3 text-right font-semibold text-slate-700">₱{cost.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                <td className="px-4 py-3 text-right font-bold text-slate-800">₱{amount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t-2 border-slate-200 bg-slate-50 text-xs font-bold text-slate-700">
+                            <td colSpan={4} className="px-4 py-3 text-left">Total Line Items: {selectedPR.items.length}</td>
+                            <td className="px-4 py-3 text-center">
+                              {selectedPR.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0)} PCS
+                            </td>
+                            <td colSpan={2} className="px-4 py-3 text-right">Total Amount:</td>
+                            <td className="px-4 py-3 text-right text-sm text-[#175fd3]">
+                              ₱{selectedPR.items.reduce((sum, item) => sum + (Number(item.quantity || 0) * Number(item.unit_cost || 0)), 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-6 flex justify-end border-t border-slate-100 pt-6">

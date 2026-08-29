@@ -503,6 +503,10 @@ const App: React.FC = () => {
                 moduleContext['warehouse-purchasing-purchase-order']?.poRefNo ||
                 moduleContext.purchaseorder?.poRefNo
               }
+              initialPRId={
+                moduleContext['warehouse-purchasing-purchase-order']?.prId ||
+                moduleContext.purchaseorder?.prId
+              }
             />
           </div>
         );

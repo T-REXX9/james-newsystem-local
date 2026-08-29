@@ -16,7 +16,14 @@ const service = {
   unpostPurchaseOrder: vi.fn(),
 };
 
+const prService = {
+  getPurchaseRequests: vi.fn(),
+  getPurchaseRequestById: vi.fn(),
+  convertToPO: vi.fn(),
+};
+
 vi.mock('../../services/purchaseOrderService', () => ({ purchaseOrderService: service }));
+vi.mock('../../services/purchaseRequestService', () => ({ purchaseRequestService: prService }));
 vi.mock('../ToastProvider', () => ({ useToast: () => ({ addToast: vi.fn() }) }));
 vi.mock('../../services/localAuthService', () => ({ getLocalAuthSession: () => ({ userProfile: { id: '7', role: 'Purchasing Manager' } }) }));
 vi.mock('../../services/notificationLocalApiService', () => ({
@@ -34,6 +41,27 @@ const po = {
   item_count: 1, total_qty: 2, first_eta_date: '2026-08-22', creator: null, approver: null,
 };
 
+const approvedPR = {
+  id: 'PRREF-1',
+  pr_number: 'PR-2601',
+  status: 'Approved',
+  notes: 'Approved note',
+  items: [
+    {
+      id: 'PRITEM-1',
+      item_id: 'P1',
+      item_code: 'ITEM-1',
+      part_number: 'PART-1',
+      description: 'Part 1',
+      quantity: 5,
+      unit: 'PCS',
+      unit_cost: 10,
+      supplier_id: 'S1',
+      supplier_name: 'Supplier 1',
+    },
+  ],
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   window.history.replaceState(null, '', '/');
@@ -47,6 +75,10 @@ beforeEach(() => {
   service.deletePurchaseOrderItem.mockResolvedValue(undefined);
   service.updatePurchaseOrder.mockResolvedValue(po);
   service.unpostPurchaseOrder.mockResolvedValue(po);
+
+  prService.getPurchaseRequests.mockResolvedValue([approvedPR]);
+  prService.getPurchaseRequestById.mockResolvedValue(approvedPR);
+  prService.convertToPO.mockResolvedValue('POREF-1');
 });
 
 describe('PurchaseOrderView', () => {
@@ -58,6 +90,23 @@ describe('PurchaseOrderView', () => {
     fireEvent.click(screen.getByRole('button', { name: /generate purchase order/i }));
     expect(await screen.findByText('New Purchase Order')).toBeInTheDocument();
     expect(service.generatePONumber).toHaveBeenCalled();
+  });
+
+  it('allows selecting an eligible PR, auto-populates items/supplier, and converts PR to PO', async () => {
+    const { default: PurchaseOrderView } = await import('../PurchaseOrderView');
+    render(<PurchaseOrderView />);
+    fireEvent.click(await screen.findByRole('button', { name: /generate purchase order/i }));
+    expect(await screen.findByText('New Purchase Order')).toBeInTheDocument();
+
+    const prSelect = await screen.findByRole('combobox');
+    fireEvent.change(prSelect, { target: { value: 'PRREF-1' } });
+
+    expect(await screen.findByText('Source PR:')).toBeInTheDocument();
+    expect(screen.getByText('PR-2601')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Supplier 1')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /create purchase order/i }));
+    await waitFor(() => expect(prService.convertToPO).toHaveBeenCalledWith(['PRREF-1'], ''));
   });
 
   it('opens an initial deep-linked PO even when it is outside the filtered list and saves inline item edits', async () => {
