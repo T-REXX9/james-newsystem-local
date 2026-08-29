@@ -13,21 +13,52 @@ import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
 import { EmptyState, PageHeader } from './common/PageScaffold';
 
-const CustomerDatabase: React.FC<{ initialStatus?: string }> = ({ initialStatus = 'All' }) => {
-  const { addToast } = useToast();
-  // Data Fetching
-  const { data: customers, setData: setCustomers, refetch: reload } = useRealtimeList<Contact>({
-    tableName: 'contacts',
-    initialFetchFn: fetchContacts,
-    sortFn: (a, b) => (a.company || a.name || '').localeCompare(b.company || b.name || ''),
-    realtimeEnabled: false,
-  });
+const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: string }> = ({ initialStatus = 'All', initialContactId }) => {
+    const { addToast } = useToast();
+    // Data Fetching
+    const { data: customers, setData: setCustomers, refetch: reload, isLoading: isContactsLoading } = useRealtimeList<Contact>({
+        tableName: 'contacts',
+        initialFetchFn: fetchContacts,
+        sortFn: (a, b) => (a.company || a.name || '').localeCompare(b.company || b.name || ''),
+        realtimeEnabled: false,
+    });
 
-  // UI State
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<string>(initialStatus);
-  const [filterVisibility, setFilterVisibility] = useState<string>('Unhidden');
+    // UI State
+    const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [filterStatus, setFilterStatus] = useState<string>(initialStatus);
+    const [filterVisibility, setFilterVisibility] = useState<string>('Unhidden');
+
+    // Track whether the initial contact id resolved to a real customer.
+    // While the contacts list is still loading, we can't verify it yet; once
+    // the list is in, we either select the customer or mark the id as unknown.
+    // The "pending" state lets the page show a loading indicator instead of
+    // the "Select a customer" empty state when arriving from another module
+    // (e.g. Sales Map) so the user doesn't see a misleading "no data" screen.
+    const [pendingContactResolution, setPendingContactResolution] = useState<boolean>(Boolean(initialContactId));
+    React.useEffect(() => {
+        setPendingContactResolution(Boolean(initialContactId));
+    }, [initialContactId]);
+
+    // Pre-select a customer when arriving from another module (e.g. Sales Map).
+    // We wait until the contact list has actually loaded so we can verify the
+    // id is real; if it's not in the list we silently fall back to the default
+    // (no selection) instead of throwing.
+    React.useEffect(() => {
+        if (!initialContactId) return;
+        if (isContactsLoading) return;
+        if (customers.length === 0) {
+            setPendingContactResolution(false);
+            return;
+        }
+        const exists = customers.some((c) => c.id === initialContactId);
+        if (exists) {
+            setSelectedCustomerId(initialContactId);
+            setPendingContactResolution(false);
+        } else {
+            setPendingContactResolution(false);
+        }
+    }, [initialContactId, customers, isContactsLoading]);
 
   // Selection State (Multi-select)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -275,6 +306,15 @@ const CustomerDatabase: React.FC<{ initialStatus?: string }> = ({ initialStatus 
             onUpdate={handleUpdateContact}
             onEditContact={handleEditCustomer}
           />
+        ) : pendingContactResolution ? (
+          <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-3" data-testid="customer-loading">
+            <div className="animate-pulse flex flex-col items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-slate-200 dark:bg-slate-800" />
+              <div className="h-4 w-40 bg-slate-200 dark:bg-slate-800 rounded" />
+              <div className="h-3 w-28 bg-slate-200 dark:bg-slate-800 rounded opacity-60" />
+            </div>
+            <p className="text-sm">Loading customer record…</p>
+          </div>
         ) : (
           <EmptyState
             title="Select a customer"

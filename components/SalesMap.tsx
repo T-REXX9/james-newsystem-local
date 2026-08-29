@@ -65,7 +65,7 @@ const buildCountMap = (summaries: ProvinceSummary[]): globalThis.Map<string, num
     return result;
 };
 
-const SalesMap = () => {
+const SalesMap: React.FC<{ onCustomerSelect?: (id: string) => void }> = ({ onCustomerSelect }) => {
     const [geoData, setGeoData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -407,6 +407,7 @@ const SalesMap = () => {
                     contacts={sidebarContacts}
                     loading={sidebarLoading}
                     onClose={() => setSelectedProvince(null)}
+                    onCustomerSelect={onCustomerSelect}
                 />
             )}
 

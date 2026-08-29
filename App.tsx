@@ -553,12 +553,19 @@ const App: React.FC = () => {
           </div>
         );
       case 'customers':
-      case 'sales-database-customer-database':
+      case 'sales-database-customer-database': {
+        const context = moduleContext['sales-database-customer-database'] || moduleContext.customers || {};
         return (
           <div className="h-full overflow-y-auto">
-            <CustomerDatabase />
+            <CustomerDatabase
+              initialContactId={
+                context.contactId ||
+                context.customerId
+              }
+            />
           </div>
         );
+      }
       case 'salesinquiry':
       case 'sales-transaction-sales-inquiry': {
         const context = moduleContext['sales-transaction-sales-inquiry'] || moduleContext.salesinquiry || {};
@@ -690,7 +697,15 @@ const App: React.FC = () => {
       case 'sales-reports-sales-map':
         return (
           <div className="h-full overflow-y-auto">
-            <SalesMap />
+            <SalesMap
+              onCustomerSelect={(id) => {
+                const targetTab = 'sales-database-customer-database';
+                setModuleContext((prev) => ({ ...prev, [targetTab]: { contactId: id } }));
+                setActiveTab(targetTab);
+                writeRouteStateToLocation(targetTab, { contactId: id }, 'push');
+                setCanNavigateBack(canRetraceWorkflowHistory());
+              }}
+            />
           </div>
         );
       case 'accounting-reports-accounting-overview':
