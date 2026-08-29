@@ -187,6 +187,24 @@ describe('ReorderReport automatic loading', () => {
     expect(cells?.[13]?.textContent).toBe('15');
   });
 
+  it('shows the configured reorder quantity instead of the suggested purchase quantity', async () => {
+    fetchEntriesMock.mockResolvedValueOnce({
+      items: [{
+        ...reportRow('reorder-display', 'QKM2-045'),
+        available_stock: 973,
+        reorder_qty: 1000,
+        suggested_reorder_qty: 27,
+      }],
+      meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
+    });
+
+    render(<ReorderReport />);
+    const [itemCode] = await screen.findAllByText('QKM2-045');
+    const cells = itemCode.closest('tr')?.querySelectorAll('td');
+    expect(cells?.[4]?.textContent).toBe('973');
+    expect(cells?.[5]?.textContent).toBe('1,000');
+  });
+
   it('opens PR, PO, and receiving records in new tabs without replacing the report', async () => {
     const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
     fetchEntriesMock.mockResolvedValueOnce({

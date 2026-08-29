@@ -62,15 +62,15 @@ const InventoryRow = memo(({ row, index }: { row: InventoryReportRow; index: num
     <td className={tableCellClass}>{row.description || '—'}</td>
     <PartNumberCell row={row} />
     <td className={tableCellClass}>{row.itemCode || '—'}</td>
-    <td className={`${tableCellClass} text-right font-mono`}>
-      {row.cost != null ? formatCurrency(Number(row.cost), true) : '—'}
+    <td className={`${tableCellClass} inventory-report-currency text-right font-mono`}>
+      {row.vip1Price != null ? formatCurrency(Number(row.vip1Price), true) : '—'}
     </td>
     <td className={tableCellClass}>{row.location || '—'}</td>
     <td className={`${tableCellClass} whitespace-nowrap`}>{formatDateFull(row.lastTransactionDate)}</td>
     <td className={`${tableCellClass} whitespace-nowrap`}>{formatDateFull(row.lastRrDate)}</td>
     <td className={`${tableCellClass} text-center font-mono`}>{row.reorderQuantity}</td>
     <td className={`${tableCellClass} text-center font-mono`}>{row.totalStock}</td>
-    <td className={`${tableCellClass} text-right font-mono`}>
+    <td className={`${tableCellClass} inventory-report-currency text-right font-mono`}>
       {row.value != null ? formatCurrency(Number(row.value), true) : '—'}
     </td>
   </tr>
@@ -226,7 +226,7 @@ const InventoryReport: React.FC = () => {
             row.lastTransactionDate || '',
             row.lastRrDate || '',
             row.reorderQuantity,
-            row.cost ?? 0,
+            row.vip1Price ?? 0,
             row.totalStock,
             row.value ?? 0,
           ];
@@ -518,15 +518,55 @@ const InventoryReport: React.FC = () => {
   }
 
   return (
-    <div className="min-h-full overflow-auto bg-[#f4f4f4] px-4 py-10 text-[#333] print:bg-white print:p-0">
-      <div className="mx-auto max-w-[1400px] overflow-hidden rounded-[5px] border border-[#d8d8d8] bg-white shadow-[0_1px_1px_rgba(0,0,0,0.05)] print:max-w-none print:border-none print:shadow-none">
+    <div className="inventory-report-print-root min-h-full overflow-auto bg-[#f4f4f4] px-4 py-10 text-[#333] print:min-h-0 print:overflow-visible print:bg-white print:p-0">
+      <style>{`
+        @media print {
+          @page {
+            size: A4 landscape;
+            margin: 8mm;
+          }
+
+          .inventory-report-print-content {
+            width: 100% !important;
+            max-width: none !important;
+          }
+
+          .inventory-report-print-table {
+            width: 100% !important;
+            min-width: 0 !important;
+            table-layout: fixed !important;
+          }
+
+          .inventory-report-print-table th,
+          .inventory-report-print-table td {
+            padding: 4px 5px !important;
+            font-size: 9px !important;
+            line-height: 1.25 !important;
+            overflow-wrap: anywhere;
+            white-space: normal !important;
+          }
+
+          .inventory-report-print-table .inventory-report-currency {
+            white-space: nowrap !important;
+          }
+
+          .inventory-report-print-table thead {
+            display: table-header-group;
+          }
+
+          .inventory-report-print-table tr {
+            break-inside: avoid;
+          }
+        }
+      `}</style>
+      <div className="mx-auto max-w-[1400px] overflow-hidden rounded-[5px] border border-[#d8d8d8] bg-white shadow-[0_1px_1px_rgba(0,0,0,0.05)] print:max-w-none print:overflow-visible print:border-none print:shadow-none">
         <div className="min-h-[64px] border-b border-[#e5e5e5] px-5 print:hidden">
           <h1 className="inline-block border-b border-[#5d82a2] py-5 pr-24 font-['Oswald'] text-[18px] font-semibold uppercase leading-none text-[#315574]">
             Inventory Report View
           </h1>
         </div>
 
-        <div className="px-5 py-4">
+        <div className="px-5 py-4 print:p-0">
           <div className="mb-5 flex flex-wrap items-center gap-2 print:hidden">
             <button
               type="button"
@@ -557,7 +597,7 @@ const InventoryReport: React.FC = () => {
 
           <hr className="mb-5 border-[#eee] print:hidden" />
 
-          <div id="print_area">
+          <div id="print_area" className="inventory-report-print-content">
             <div className="mb-5 text-center text-[#333] print:text-black">
               <strong className="text-xl">{reportTitle}</strong>
               {dateRange.dateFrom && dateRange.dateTo && (
@@ -580,20 +620,33 @@ const InventoryReport: React.FC = () => {
               </div>
             ) : isInventoryView ? (
               <div className="overflow-auto print:overflow-visible">
-                <table className="w-full min-w-[1360px] border-collapse text-left print:min-w-0">
+                <table className="inventory-report-print-table w-full min-w-[1360px] border-collapse text-left print:min-w-0">
+                  <colgroup>
+                    <col style={{ width: '3%' }} />
+                    <col style={{ width: '15%' }} />
+                    <col style={{ width: '14%' }} />
+                    <col style={{ width: '8%' }} />
+                    <col style={{ width: '9%' }} />
+                    <col style={{ width: '5%' }} />
+                    <col style={{ width: '12%' }} />
+                    <col style={{ width: '10%' }} />
+                    <col style={{ width: '9%' }} />
+                    <col style={{ width: '7%' }} />
+                    <col style={{ width: '8%' }} />
+                  </colgroup>
                   <thead>
                     <tr>
-                      <th className={tableHeadClass} style={{ width: '1%' }}>#</th>
-                      <th className={tableHeadClass} style={{ width: '10%' }}>PRODUCT NAME</th>
-                      <th className={tableHeadClass} style={{ width: '10%' }}>PART NO</th>
-                      <th className={tableHeadClass} style={{ width: '10%' }}>CODE</th>
-                      <th className={tableHeadClass} style={{ width: '5%' }}>VIP 1 PRICE</th>
-                      <th className={tableHeadClass} style={{ width: '5%' }}>LOC</th>
-                      <th className={tableHeadClass} style={{ width: '8%' }}>LAST TRANSACTION DATE</th>
-                      <th className={tableHeadClass} style={{ width: '8%' }}>LAST RR DATE</th>
-                      <th className={tableHeadClass} style={{ width: '6%' }}>REORDER QUANTITY</th>
-                      <th className={tableHeadClass} style={{ width: '5%' }}>BALANCE</th>
-                      <th className={tableHeadClass} style={{ width: '5%' }}>Value</th>
+                      <th className={tableHeadClass}>#</th>
+                      <th className={tableHeadClass}>PRODUCT NAME</th>
+                      <th className={tableHeadClass}>PART NO</th>
+                      <th className={tableHeadClass}>CODE</th>
+                      <th className={tableHeadClass}>VIP 1 PRICE</th>
+                      <th className={tableHeadClass}>LOC</th>
+                      <th className={tableHeadClass}>LAST TRANSACTION DATE</th>
+                      <th className={tableHeadClass}>LAST RR DATE</th>
+                      <th className={tableHeadClass}>REORDER QUANTITY</th>
+                      <th className={tableHeadClass}>BALANCE</th>
+                      <th className={tableHeadClass}>Value</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -604,7 +657,7 @@ const InventoryReport: React.FC = () => {
                       <td colSpan={10} className={`${tableCellClass} text-right font-semibold`}>
                         Total Value:
                       </td>
-                      <td className={`${tableCellClass} text-right font-mono font-semibold`}>
+                      <td className={`${tableCellClass} inventory-report-currency text-right font-mono font-semibold`}>
                         {formatCurrency(summaryStats.totalValue, true)}
                       </td>
                     </tr>
@@ -613,19 +666,31 @@ const InventoryReport: React.FC = () => {
               </div>
             ) : (
               <div className="overflow-auto print:overflow-visible">
-                <table className="w-full min-w-[1100px] border-collapse text-left print:min-w-0">
+                <table className="inventory-report-print-table w-full min-w-[1100px] border-collapse text-left print:min-w-0">
+                  <colgroup>
+                    <col style={{ width: '3%' }} />
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '12%' }} />
+                    <col style={{ width: '15%' }} />
+                    <col style={{ width: '10%' }} />
+                    <col style={{ width: '6%' }} />
+                    <col style={{ width: '13%' }} />
+                    <col style={{ width: '11%' }} />
+                    <col style={{ width: '8%' }} />
+                    <col style={{ width: '6%' }} />
+                  </colgroup>
                   <thead>
                     <tr>
-                      <th className={tableHeadClass} style={{ width: '1%' }}>#</th>
-                      <th className={tableHeadClass} style={{ width: '10%' }}>PRODUCT NAME</th>
-                      <th className={tableHeadClass} style={{ width: '10%' }}>CATEGORY</th>
-                      <th className={tableHeadClass} style={{ width: '10%' }}>PART NO</th>
-                      <th className={tableHeadClass} style={{ width: '10%' }}>CODE</th>
-                      <th className={tableHeadClass} style={{ width: '5%' }}>LOC</th>
-                      <th className={tableHeadClass} style={{ width: '8%' }}>LAST TRANSACTION DATE</th>
-                      <th className={tableHeadClass} style={{ width: '8%' }}>LAST RR DATE</th>
-                      <th className={tableHeadClass} style={{ width: '6%' }}>REORDER QUANTITY</th>
-                      <th className={tableHeadClass} style={{ width: '5%' }}>STOCK</th>
+                      <th className={tableHeadClass}>#</th>
+                      <th className={tableHeadClass}>PRODUCT NAME</th>
+                      <th className={tableHeadClass}>CATEGORY</th>
+                      <th className={tableHeadClass}>PART NO</th>
+                      <th className={tableHeadClass}>CODE</th>
+                      <th className={tableHeadClass}>LOC</th>
+                      <th className={tableHeadClass}>LAST TRANSACTION DATE</th>
+                      <th className={tableHeadClass}>LAST RR DATE</th>
+                      <th className={tableHeadClass}>REORDER QUANTITY</th>
+                      <th className={tableHeadClass}>STOCK</th>
                     </tr>
                   </thead>
                   <tbody>

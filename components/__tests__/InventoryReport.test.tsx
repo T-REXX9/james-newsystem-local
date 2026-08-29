@@ -25,7 +25,7 @@ const reportRow = {
   lastTransactionDate: '2026-08-27 14:30:00',
   lastRrDate: '2026-08-12 09:15:00',
   reorderQuantity: 15,
-  cost: 100,
+  vip1Price: 100,
   warehouseStock: {},
   totalStock: 12,
   value: 1200,
@@ -74,10 +74,20 @@ describe('InventoryReport description filter', () => {
     expect(screen.getByText('Aug 12, 2026')).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: '15' })).toBeInTheDocument();
 
-    // Verify formatted row cost, value, and footer total value
+    // Verify the Product Database VIP 1 price, value, and footer total value.
     expect(screen.getByText('₱100.00')).toBeInTheDocument();
     expect(screen.getAllByText('₱1,200.00').length).toBe(2);
     expect(screen.getByText('Total Value:')).toBeInTheDocument();
+
+    const reportTable = screen.getByRole('table');
+    expect(reportTable).toHaveClass('inventory-report-print-table');
+    const columnWidths = Array.from(reportTable.querySelectorAll('col')).map((column) =>
+      Number.parseFloat((column as HTMLTableColElement).style.width),
+    );
+    expect(columnWidths).toHaveLength(11);
+    expect(columnWidths.reduce((total, width) => total + width, 0)).toBe(100);
+    expect(document.querySelector('style')?.textContent).toContain('size: A4 landscape');
+    expect(reportTable.closest('.inventory-report-print-root')).toHaveClass('print:overflow-visible');
   });
 
   it('resets the description filter to All descriptions', async () => {
@@ -89,6 +99,22 @@ describe('InventoryReport description filter', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.getByDisplayValue('All descriptions')).toHaveValue('');
+  });
+
+  it('fits every product report column into the fixed print layout', async () => {
+    render(<InventoryReport />);
+
+    await screen.findByDisplayValue('All descriptions');
+    fireEvent.click(screen.getByRole('radio', { name: 'Products' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Report' }));
+
+    const reportTable = await screen.findByRole('table');
+    const columnWidths = Array.from(reportTable.querySelectorAll('col')).map((column) =>
+      Number.parseFloat((column as HTMLTableColElement).style.width),
+    );
+    expect(screen.getByText('Product Report')).toBeInTheDocument();
+    expect(columnWidths).toHaveLength(10);
+    expect(columnWidths.reduce((total, width) => total + width, 0)).toBe(100);
   });
 
   it('opens a part number Product Database record in a new tab on double-click', async () => {

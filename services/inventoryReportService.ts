@@ -23,7 +23,7 @@ export interface InventoryReportRow {
   lastTransactionDate?: string;
   lastRrDate?: string;
   reorderQuantity: number;
-  cost?: number;
+  vip1Price?: number;
   warehouseStock: Record<string, number>;
   totalStock: number;
   value?: number;
@@ -159,7 +159,7 @@ export const fetchInventoryReport = async (
       lastTransactionDate: String(row?.last_transaction_date || ''),
       lastRrDate: String(row?.last_rr_date || ''),
       reorderQuantity: toNumber(row?.reorder_quantity, 0),
-      cost: toNumber(row?.cost, 0),
+      vip1Price: toNumber(row?.vip1_price ?? row?.cost, 0),
       warehouseStock:
         typeof row?.warehouse_stock === 'object' && row?.warehouse_stock !== null ? row.warehouse_stock : {},
       totalStock: toNumber(row?.total_stock, 0),

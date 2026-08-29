@@ -529,7 +529,7 @@ const App: React.FC = () => {
         );
       case 'warehouse-reports-inventory-report':
         return (
-          <div className="h-full overflow-y-auto">
+          <div className="h-full overflow-y-auto print:h-auto print:overflow-visible">
             <InventoryReport />
           </div>
         );
@@ -878,7 +878,7 @@ const App: React.FC = () => {
     <ToastProvider>
       {!appLoading && session && userProfile && (
         <NotificationProvider userId={userProfile.id}>
-          <div className="h-screen overflow-hidden bg-slate-100 dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-100 flex flex-col">
+          <div className="h-screen overflow-hidden bg-slate-100 dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-100 flex flex-col print:h-auto print:overflow-visible">
             <TopNav
               activeTab={activeTab}
               onNavigate={handleSetActiveTab}
@@ -888,8 +888,8 @@ const App: React.FC = () => {
               canGoBack={canNavigateBack}
             />
 
-            <div className="flex flex-1 overflow-hidden pt-16">
-              <main className="flex-1 overflow-hidden flex flex-col relative bg-slate-100 dark:bg-slate-950">
+            <div className="flex flex-1 overflow-hidden pt-16 print:block print:flex-none print:overflow-visible print:pt-0">
+              <main className="flex-1 overflow-hidden flex flex-col relative bg-slate-100 dark:bg-slate-950 print:block print:overflow-visible">
                 {renderContent()}
               </main>
             </div>
