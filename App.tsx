@@ -66,14 +66,11 @@ import Approvers from './components/Maintenance/Profile/Approvers';
 import Staff from './components/Maintenance/Profile/Staff';
 import CustomerGroups from './components/Maintenance/Customer/CustomerGroups';
 import { CustomerData } from './components/Maintenance/Customer/CustomerData';
-import VipThresholdSettings from './components/Maintenance/Customer/VipThresholdSettings';
 import SpecialPrice from './components/Maintenance/Product/SpecialPrice';
 import ActivityLogs from './components/Maintenance/Profile/ActivityLogs';
 import OperationsDashboard from './components/OperationsDashboard';
 
 // System Enhancement Components
-import LoyaltyDiscountRulesView from './components/LoyaltyDiscountRulesView';
-import ProfitThresholdSettings from './components/ProfitThresholdSettings';
 import AIMessageTemplatesView from './components/AIMessageTemplatesView';
 import SmsCampaignPreparationView from './components/SmsCampaignPreparationView';
 import SmsTemplatesView from './components/SmsTemplatesView';
@@ -813,11 +810,7 @@ const App: React.FC = () => {
       case 'maintenance-customer-customer-group':
         return <CustomerGroups />;
       case 'maintenance-customer-vip-thresholds':
-        return (
-          <div className="h-full overflow-y-auto">
-            <VipThresholdSettings currentUser={userProfile} />
-          </div>
-        );
+        return renderComingSoon(getModuleLabel('maintenance-customer-vip-thresholds'));
       case 'maintenance-product-suppliers':
         return <Suppliers />;
       case 'maintenance-product-special-price':
@@ -850,13 +843,9 @@ const App: React.FC = () => {
       case 'maintenance-profile-system-access':
         return <AccessControlSettings />;
       case 'maintenance-system-loyalty-discounts':
-        return <LoyaltyDiscountRulesView currentUser={userProfile} />;
+        return renderComingSoon(getModuleLabel('maintenance-system-loyalty-discounts'));
       case 'maintenance-system-profit-protection':
-        return (
-          <div className="h-full overflow-y-auto">
-            <ProfitThresholdSettings currentUser={userProfile} />
-          </div>
-        );
+        return renderComingSoon(getModuleLabel('maintenance-system-profit-protection'));
       case 'maintenance-system-ai-templates':
         return <AIMessageTemplatesView currentUser={userProfile} />;
       case 'communication-sms-templates':

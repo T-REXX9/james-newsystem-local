@@ -12,7 +12,6 @@ import {
   Map,
   Tag,
   Bot,
-  Gift,
   Shield,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -362,12 +361,6 @@ export const TOPBAR_MENU_CONFIG: TopbarMainMenu[] = [
             route: 'maintenance-customer-customer-group',
             icon: Users,
           },
-          {
-            id: 'maintenance-customer-vip-thresholds',
-            label: 'VIP Thresholds',
-            route: 'maintenance-customer-vip-thresholds',
-            icon: Shield,
-          },
         ],
       },
       {
@@ -456,16 +449,11 @@ export const TOPBAR_MENU_CONFIG: TopbarMainMenu[] = [
         icon: Settings,
         items: [
           {
-            id: 'maintenance-system-loyalty-discounts',
-            label: 'Loyalty Discounts',
+            id: 'maintenance-system-under-development',
+            label: 'Under Development',
             route: 'maintenance-system-loyalty-discounts',
-            icon: Gift,
-          },
-          {
-            id: 'maintenance-system-profit-protection',
-            label: 'Profit Protection',
-            route: 'maintenance-system-profit-protection',
             icon: Shield,
+            masterOnly: true,
           },
         ],
       },
