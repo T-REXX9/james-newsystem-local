@@ -23,12 +23,11 @@ Run on the server:
 
 ```bash
 cd ~/james-system/james-newsystem
-git pull origin main
 ./setup.sh -productionupdate
 sudo systemctl restart php8.3-fpm nginx james-realtime
 ```
 
-`-productionupdate` updates the API and web code, applies migrations, rebuilds the frontend, refreshes Nginx/systemd configuration, and installs clean realtime dependencies. It deliberately does **not** restore a database dump.
+`-productionupdate` explicitly pulls `origin main` for both repositories, applies migrations, rebuilds the frontend, refreshes Nginx/systemd configuration, and installs clean realtime dependencies. It deliberately does **not** restore a database dump.
 
 ## First production deployment or database restore
 

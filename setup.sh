@@ -678,7 +678,7 @@ git_safe_clone_or_pull() {
       exit 1
     }
     run_as_install_owner git -C "$target_dir" checkout main
-    run_as_install_owner env GIT_TERMINAL_PROMPT=0 git -C "$target_dir" pull --ff-only || {
+    run_as_install_owner env GIT_TERMINAL_PROMPT=0 git -C "$target_dir" pull --ff-only origin main || {
       echo "ERROR: Unable to pull latest changes for $repo_label."
       echo "If repo is private, export GITHUB_TOKEN=<token-with-repo-scope> and re-run."
       exit 1
