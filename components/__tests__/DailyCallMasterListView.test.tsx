@@ -217,6 +217,56 @@ describe('DailyCallMasterListView', () => {
     expect(screen.getAllByText(/Any ledger activity since October 2025 onwards/i).length).toBeGreaterThanOrEqual(1);
   });
 
+  it('renders additional rows on table scroll and applies every purchase-age colour', async () => {
+    const currentDate = new Date();
+    const dateMonthsAgo = (monthsAgo: number) => {
+      const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - monthsAgo, 15);
+      return date.toISOString().slice(0, 10);
+    };
+    const items = Array.from({ length: 31 }, (_, index) => {
+      const monthsAgo = index === 0 ? 1 : index === 1 ? 2 : index === 2 ? 3 : 0;
+      return {
+        id: `scroll-${index + 1}`,
+        shopName: `Scroll Customer ${index + 1}`,
+        province: 'Cebu',
+        city: 'Cebu City',
+        contactNumber: '0917',
+        assignedTo: 'Unassigned',
+        lastPurchaseDate: dateMonthsAgo(monthsAgo),
+        lastPurchaseDateRaw: dateMonthsAgo(monthsAgo),
+        purchaseCount: 1,
+        listCategory: 'priority' as const,
+        totalSales: 1000,
+        currentMonthSales: 0,
+        daysSinceLastPurchase: monthsAgo * 30,
+        monthsSinceLastPurchase: monthsAgo,
+        purchaseAgeGroup: 'recent' as const,
+      };
+    });
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: dateMonthsAgo(0), count: items.length },
+      items,
+    });
+
+    render(<DailyCallMasterListView />);
+
+    await screen.findByText('Scroll Customer 30');
+    expect(screen.queryByText('Scroll Customer 31')).not.toBeInTheDocument();
+    expect(screen.getByText('Scroll Customer 1').closest('tr')).toHaveClass('bg-yellow-100');
+    expect(screen.getByText('Scroll Customer 2').closest('tr')).toHaveClass('bg-purple-100');
+    expect(screen.getByText('Scroll Customer 3').closest('tr')).toHaveClass('bg-white');
+
+    const tableScroll = screen.getByTestId('daily-call-table-scroll');
+    Object.defineProperties(tableScroll, {
+      clientHeight: { configurable: true, value: 500 },
+      scrollHeight: { configurable: true, value: 1200 },
+      scrollTop: { configurable: true, value: 1000, writable: true },
+    });
+    fireEvent.scroll(tableScroll);
+    expect(await screen.findByText('Scroll Customer 31')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/pagination/i)).not.toBeInTheDocument();
+  });
+
   it('uses the quick go to buttons to switch category tables', async () => {
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
       meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 1 },

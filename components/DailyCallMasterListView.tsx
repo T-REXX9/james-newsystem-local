@@ -5,8 +5,6 @@ import {
   ArrowDown,
   ArrowRight,
   ArrowUp,
-  ChevronLeft,
-  ChevronRight,
   ClipboardList,
   Crown,
   Info,
@@ -31,6 +29,8 @@ import DailyCallCustomerDetailModal from './DailyCallCustomerDetailModal';
 import type { DetailTabId } from './DailyCallCustomerDetailExpansion';
 
 const fromDate = '2025-10-01';
+const INITIAL_VISIBLE_ROWS = 30;
+const VISIBLE_ROWS_STEP = 30;
 
 const peso = new Intl.NumberFormat('en-PH', {
   style: 'currency',
@@ -139,9 +139,22 @@ const ageLabel = (row: DailyCallMasterCustomerRow) => {
 const purchaseHighlight = (row: DailyCallMasterCustomerRow) => {
   const blocked = Number(row.customerStatus) === 4 || String(row.debtType || '').toLowerCase() === 'bad';
   if (blocked) return { row: 'bg-red-600 text-white hover:bg-red-700', muted: 'text-red-100', label: 'Do not contact' };
-  if (row.currentMonthSales > 0) return { row: 'bg-green-100 hover:bg-green-200', muted: 'text-green-800', label: 'Bought this month' };
-  if (row.purchaseAgeGroup === 'no_purchase' || row.monthsSinceLastPurchase >= 3) return { row: 'bg-white hover:bg-slate-50', muted: 'text-slate-500', label: 'No purchase for 3+ months' };
-  if (row.monthsSinceLastPurchase === 2) return { row: 'bg-purple-100 hover:bg-purple-200', muted: 'text-purple-800', label: 'No purchase for 2 months' };
+
+  const rawDate = String(row.lastPurchaseDateRaw || '').trim();
+  const lastPurchase = rawDate ? new Date(`${rawDate.slice(0, 10)}T00:00:00`) : null;
+  const monthsSincePurchase = lastPurchase && !Number.isNaN(lastPurchase.getTime())
+    ? ((new Date().getFullYear() - lastPurchase.getFullYear()) * 12) + (new Date().getMonth() - lastPurchase.getMonth())
+    : row.monthsSinceLastPurchase;
+
+  if (row.currentMonthSales > 0 || monthsSincePurchase <= 0) {
+    return { row: 'bg-green-100 hover:bg-green-200', muted: 'text-green-800', label: 'Bought this month' };
+  }
+  if (!rawDate || row.purchaseAgeGroup === 'no_purchase' || monthsSincePurchase >= 3) {
+    return { row: 'bg-white hover:bg-slate-50', muted: 'text-slate-500', label: 'No purchase for 3+ months' };
+  }
+  if (monthsSincePurchase === 2) {
+    return { row: 'bg-purple-100 hover:bg-purple-200', muted: 'text-purple-800', label: 'No purchase for 2 months' };
+  }
   return { row: 'bg-yellow-100 hover:bg-yellow-200', muted: 'text-yellow-800', label: 'No purchase for 1 month' };
 };
 
@@ -220,15 +233,13 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const [loading, setLoading] = useState(!initialCachedResult);
   const [error, setError] = useState<string | null>(null);
   const dashboardRef = useRef<HTMLDivElement>(null);
-  const categoryTableRefs = useRef<Partial<Record<CategoryId, HTMLElement>>>({});
   const fullCustomerRowsRef = useRef<DailyCallCustomerRow[] | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<DailyCallCustomerRow | null>(null);
   const [showAddProspectModal, setShowAddProspectModal] = useState(false);
   const [detailInitialTab, setDetailInitialTab] = useState<DetailTabId>('overview');
   const [loadingCustomerId, setLoadingCustomerId] = useState<string | null>(null);
   const [activeCategoryId, setActiveCategoryId] = useState<CategoryId>('priority');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(15);
+  const [visibleLimit, setVisibleLimit] = useState(INITIAL_VISIBLE_ROWS);
   const [currentVipFilter, setCurrentVipFilter] = useState('all');
   const [nextVipFilter, setNextVipFilter] = useState('all');
   const [lastPurchaseFilter, setLastPurchaseFilter] = useState('all');
@@ -237,13 +248,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
 
   const handleSelectCategory = useCallback((categoryId: CategoryId) => {
     setActiveCategoryId(categoryId);
-    setPage(1);
-  }, []);
-
-  const scrollTo = useCallback((target: HTMLElement | null | undefined) => {
-    if (!target) return;
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    target.focus({ preventScroll: true });
+    setVisibleLimit(INITIAL_VISIBLE_ROWS);
   }, []);
 
   const openCustomerDetails = useCallback(async (row: DailyCallMasterCustomerRow, initialTab: DetailTabId = 'overview') => {
@@ -389,31 +394,23 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   };
 
   const activeCategory = categoryData.find((category) => category.id === activeCategoryId) || categoryData[0];
-  const pageCount = Math.max(1, Math.ceil(activeCategory.rows.length / pageSize));
-  const safePage = Math.min(page, pageCount);
-  const pageStartIndex = activeCategory.rows.length === 0 ? 0 : (safePage - 1) * pageSize;
-  const visibleRows = activeCategory.rows.slice(pageStartIndex, pageStartIndex + pageSize);
-  const visibleRowCount = visibleRows.length;
-  const pageEndIndex = pageStartIndex + visibleRowCount;
-  const paginationPages = useMemo(() => {
-    if (pageCount <= 7) {
-      return Array.from({ length: pageCount }, (_, index) => index + 1);
-    }
-
-    const pages = new Set([1, pageCount, safePage - 1, safePage, safePage + 1]);
-    return Array.from(pages)
-      .filter((pageNumber) => pageNumber >= 1 && pageNumber <= pageCount)
-      .sort((a, b) => a - b);
-  }, [pageCount, safePage]);
+  const visibleRows = activeCategory.rows.slice(0, visibleLimit);
+  const hasMoreRows = visibleRows.length < activeCategory.rows.length;
 
   useEffect(() => {
-    if (page !== safePage) setPage(safePage);
-  }, [page, safePage]);
+    setVisibleLimit(INITIAL_VISIBLE_ROWS);
+  }, [activeCategoryId, currentVipFilter, debouncedSearch, lastPurchaseFilter, nextVipFilter]);
 
-  const goToPage = useCallback((nextPage: number) => {
-    setPage(Math.min(Math.max(1, nextPage), pageCount));
-    requestAnimationFrame(() => scrollTo(categoryTableRefs.current[activeCategory.id]));
-  }, [activeCategory.id, pageCount, scrollTo]);
+  const loadMoreRows = useCallback(() => {
+    setVisibleLimit((currentLimit) => Math.min(activeCategory.rows.length, currentLimit + VISIBLE_ROWS_STEP));
+  }, [activeCategory.rows.length]);
+
+  const handleTableScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    const container = event.currentTarget;
+    if (hasMoreRows && container.scrollTop + container.clientHeight >= container.scrollHeight - 160) {
+      loadMoreRows();
+    }
+  }, [hasMoreRows, loadMoreRows]);
 
   if (loading) {
     return (
@@ -587,9 +584,6 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
         {activeCategory && (
           <article
             key={activeCategory.id}
-            ref={(element) => {
-              if (element) categoryTableRefs.current[activeCategory.id] = element;
-            }}
             tabIndex={-1}
             data-testid={`category-table-${activeCategory.id}`}
             className="flex min-h-[430px] scroll-mt-4 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-blue-500 2xl:min-h-[500px]"
@@ -605,7 +599,11 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 </button>
               </div>
             </div>
-            <div className="min-h-0 flex-1 overflow-auto">
+            <div
+              className="min-h-0 flex-1 overflow-auto"
+              data-testid="daily-call-table-scroll"
+              onScroll={handleTableScroll}
+            >
               <table className="w-full table-fixed text-left text-sm">
                 <thead className="bg-slate-50 text-xs text-slate-600">
                   <tr>
@@ -734,73 +732,6 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                   )}
                 </tbody>
               </table>
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-2 text-sm">
-              <div className="flex flex-wrap items-center gap-3">
-                <span>
-                  {visibleRowCount > 0
-                    ? `Showing ${pageStartIndex + 1} to ${pageEndIndex} of ${activeCategory.rows.length} entries`
-                    : `Showing 0 of ${activeCategory.rows.length} entries`}
-                </span>
-                <label className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                  Rows
-                  <select
-                    value={pageSize}
-                    onChange={(event) => {
-                      setPageSize(Number(event.target.value));
-                      setPage(1);
-                    }}
-                    className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-700 outline-none focus:border-blue-400"
-                  >
-                    <option value={10}>10</option>
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                  </select>
-                </label>
-              </div>
-
-              <nav className="flex items-center gap-1" aria-label={`${activeCategory.label} pagination`}>
-                <button
-                  type="button"
-                  onClick={() => goToPage(safePage - 1)}
-                  disabled={safePage <= 1}
-                  className="grid h-8 w-8 place-items-center rounded-md border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                  aria-label="Previous page"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                {paginationPages.map((pageNumber, index) => {
-                  const previousPage = paginationPages[index - 1];
-                  const hasGap = previousPage && pageNumber - previousPage > 1;
-                  return (
-                    <React.Fragment key={pageNumber}>
-                      {hasGap && <span className="px-1 text-xs font-bold text-slate-400">...</span>}
-                      <button
-                        type="button"
-                        onClick={() => goToPage(pageNumber)}
-                        aria-current={safePage === pageNumber ? 'page' : undefined}
-                        className={`h-8 min-w-8 rounded-md border px-2 text-xs font-bold transition ${
-                          safePage === pageNumber
-                            ? `${activeCategory.border} ${activeCategory.softBg} ${activeCategory.accent}`
-                            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                        }`}
-                      >
-                        {pageNumber}
-                      </button>
-                    </React.Fragment>
-                  );
-                })}
-                <button
-                  type="button"
-                  onClick={() => goToPage(safePage + 1)}
-                  disabled={safePage >= pageCount}
-                  className="grid h-8 w-8 place-items-center rounded-md border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                  aria-label="Next page"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </nav>
             </div>
           </article>
         )}
