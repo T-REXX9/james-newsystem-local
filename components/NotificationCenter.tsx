@@ -113,7 +113,15 @@ const NotificationCenter: React.FC = () => {
     if (notification.action_url) {
       const tabId = notification.action_url.replace(/^\/+/, '').split(/[?#]/)[0].trim();
       if (tabId) {
-        window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab: tabId } }));
+        const metadata = notification.metadata || {};
+        const entityType = String(metadata.entity_type || '');
+        const payload = entityType === 'customer_detail_update_request'
+          ? {
+              contactId: String(metadata.contact_id || ''),
+              approvalRequestId: String(metadata.entity_id || ''),
+            }
+          : undefined;
+        window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab: tabId, payload } }));
         setIsOpen(false);
       }
     }

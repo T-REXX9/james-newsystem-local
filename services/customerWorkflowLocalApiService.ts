@@ -50,6 +50,48 @@ export const fetchCustomerRequests = (id: string): Promise<CustomerRequest[]> =>
   requireSession();
   return requestLocalApi(`${pathFor(id)}/requests`);
 };
+
+/**
+ * Fetch every customer request across all customers in one call.
+ *
+ * Tries the dedicated global endpoint first; if the backend hasn't been
+ * updated yet, it transparently falls back to per-customer aggregation so the
+ * UI keeps working on existing deployments.
+ */
+export const fetchAllCustomerRequests = async (): Promise<CustomerRequest[]> => {
+  requireSession();
+  try {
+    const rows = await requestLocalApi('/customer-workflows/requests');
+    if (Array.isArray(rows)) return rows;
+    return [];
+  } catch (err) {
+    if (err instanceof Error && /404|not found/i.test(err.message)) {
+      return aggregateAllCustomerRequests();
+    }
+    throw err;
+  }
+};
+
+const aggregateAllCustomerRequests = async (): Promise<CustomerRequest[]> => {
+  // Best-effort fallback: iterate the customer list and merge requests.
+  // This is slower than a dedicated endpoint but works without backend changes.
+  const { fetchContacts } = await import('./customerDatabaseLocalApiService');
+  const contacts = await fetchContacts();
+  const batchSize = 8;
+  const all: CustomerRequest[] = [];
+  for (let i = 0; i < contacts.length; i += batchSize) {
+    const batch = contacts.slice(i, i + batchSize);
+    const results = await Promise.allSettled(
+      batch.map((c) => fetchCustomerRequests(String(c.id)))
+    );
+    results.forEach((res) => {
+      if (res.status === 'fulfilled' && Array.isArray(res.value)) {
+        all.push(...res.value);
+      }
+    });
+  }
+  return all;
+};
 export const createDiscountRequest = (request: { contact_id: string; discount_percentage: number; reason: string }) => {
   requireSession();
   return requestLocalApi(`${pathFor(request.contact_id)}/requests`, 'POST', {

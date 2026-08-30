@@ -562,6 +562,7 @@ const App: React.FC = () => {
                 context.contactId ||
                 context.customerId
               }
+              initialApprovalRequestId={context.approvalRequestId}
             />
           </div>
         );

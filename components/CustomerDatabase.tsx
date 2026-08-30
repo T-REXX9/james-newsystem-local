@@ -6,14 +6,17 @@ import CustomerListSidebar from './CustomerListSidebar';
 import CustomerDetailPanel from './CustomerDetailPanel';
 import BulkAssignAgentModal from './BulkAssignAgentModal';
 import BulkSetPriceGroupModal from './BulkSetPriceGroupModal';
-import { Users, UserPlus, EyeOff, Tag, CheckSquare, X } from 'lucide-react';
+import { Users, UserPlus, EyeOff, Tag, CheckSquare, X, ClipboardList } from 'lucide-react';
 import AddContactModal from './AddContactModal';
 import { ACTIVE_PRICING_GROUP_OPTIONS } from '../constants/pricingGroups';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
 import { EmptyState, PageHeader } from './common/PageScaffold';
+import ApprovalRequestsView from './ApprovalRequestsView';
+import { getLocalAuthSession } from '../services/localAuthService';
+import { isCompanyOwnerRole } from '../constants';
 
-const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: string }> = ({ initialStatus = 'All', initialContactId }) => {
+const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: string; initialApprovalRequestId?: string }> = ({ initialStatus = 'All', initialContactId, initialApprovalRequestId }) => {
     const { addToast } = useToast();
     // Data Fetching
     const { data: customers, setData: setCustomers, refetch: reload, isLoading: isContactsLoading } = useRealtimeList<Contact>({
@@ -28,6 +31,14 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
     const [searchQuery, setSearchQuery] = useState('');
     const [filterStatus, setFilterStatus] = useState<string>(initialStatus);
     const [filterVisibility, setFilterVisibility] = useState<string>('Unhidden');
+    const [viewMode, setViewMode] = useState<'customers' | 'approvals'>('customers');
+
+    const currentUser = getLocalAuthSession()?.userProfile ?? null;
+    const canViewApprovals = isCompanyOwnerRole(currentUser?.role);
+
+    React.useEffect(() => {
+        if (initialApprovalRequestId && canViewApprovals) setViewMode('approvals');
+    }, [initialApprovalRequestId, canViewApprovals]);
 
     // Track whether the initial contact id resolved to a real customer.
     // While the contacts list is still loading, we can't verify it yet; once
@@ -250,14 +261,52 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
           </div>
         }
         actions={
-          <button
-            type="button"
-            onClick={handleCreateNew}
-            className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
-          >
-            <UserPlus className="h-4 w-4" />
-            Add Customer
-          </button>
+          <div className="flex items-center gap-2">
+            {canViewApprovals && (
+              <div
+                role="tablist"
+                aria-label="Customer database view"
+                className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 text-xs font-semibold dark:border-slate-700 dark:bg-slate-900"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={viewMode === 'customers'}
+                  onClick={() => setViewMode('customers')}
+                  className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 transition-colors ${
+                    viewMode === 'customers'
+                      ? 'bg-slate-900 text-white shadow-sm dark:bg-slate-700'
+                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
+                  }`}
+                >
+                  <Users className="h-3.5 w-3.5" />
+                  Customers
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={viewMode === 'approvals'}
+                  onClick={() => setViewMode('approvals')}
+                  className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 transition-colors ${
+                    viewMode === 'approvals'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
+                  }`}
+                >
+                  <ClipboardList className="h-3.5 w-3.5" />
+                  Customer Detail Update Requests
+                </button>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={handleCreateNew}
+              className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
+            >
+              <UserPlus className="h-4 w-4" />
+              Add Customer
+            </button>
+          </div>
         }
       />
       <div className="flex min-h-0 flex-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -298,7 +347,16 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
 
       {/* Main Content (Detail Panel) */}
       <main className="flex-1 h-full overflow-hidden relative">
-        {selectedCustomerId ? (
+        {viewMode === 'approvals' && canViewApprovals ? (
+          <ApprovalRequestsView
+            currentUser={currentUser}
+            initialRequestId={initialApprovalRequestId}
+            onSelectCustomer={(id) => {
+              setSelectedCustomerId(id);
+              setViewMode('customers');
+            }}
+          />
+        ) : selectedCustomerId ? (
           <CustomerDetailPanel
             contactId={selectedCustomerId}
             initialData={customers.find(c => c.id === selectedCustomerId)}
@@ -323,8 +381,8 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
           />
         )}
 
-        {/* Floating Bulk Action Bar (Overlay) */}
-        {selectedIds.size > 0 && (
+        {/* Floating Bulk Action Bar (Overlay) — only in customers view */}
+        {viewMode === 'customers' && selectedIds.size > 0 && (
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-6 z-50 animate-in slide-in-from-bottom-4">
             <div className="flex items-center gap-2 border-r border-slate-700 pr-4">
               <CheckSquare className="w-4 h-4 text-brand-blue" />
