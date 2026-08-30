@@ -103,6 +103,38 @@ describe('PurchaseRequestView', () => {
     await waitFor(() => expect(onConvert).toHaveBeenCalledTimes(1));
   });
 
+  it('lets the user assign a supplier from the pending PR line', async () => {
+    const user = userEvent.setup();
+    const onUpdateItem = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <PurchaseRequestView
+        request={baseRequest as any}
+        onBack={vi.fn()}
+        onUpdate={vi.fn()}
+        onUpdateItem={onUpdateItem}
+        onDeleteItem={vi.fn()}
+        onAddItem={vi.fn()}
+        onConvert={vi.fn()}
+        onPrint={vi.fn()}
+        products={[]}
+        suppliers={[{ id: 'sup-2', company: 'Supplier Two' } as any]}
+      />
+    );
+
+    await user.selectOptions(
+      screen.getAllByRole('combobox', { name: 'Supplier PART-OLD' }).at(-1)!,
+      'sup-2',
+    );
+
+    await waitFor(() =>
+      expect(onUpdateItem).toHaveBeenCalledWith('101', {
+        supplier_id: 'sup-2',
+        supplier_name: 'Supplier Two',
+      }),
+    );
+  });
+
   it('opens and closes the inline add row with the new close control', async () => {
     const user = userEvent.setup();
 

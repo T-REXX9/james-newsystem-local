@@ -522,6 +522,8 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
 
   const handleUnpost = () => {
     if (!selectedPO || !canUnpost) return;
+    const reason = window.prompt('Reason for unposting this Purchase Order:')?.trim() || '';
+    if (!reason) return;
     openConfirm({
       title: 'Unpost Purchase Order',
       message: `Unpost ${selectedPO.po_number}? This is allowed only when no Receiving Report depends on it.`,
@@ -529,13 +531,31 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
       confirmLabel: 'Unpost',
       onConfirm: async () => {
         try {
-          const updated = await purchaseOrderService.unpostPurchaseOrder(selectedPO.id);
+          const updated = await purchaseOrderService.unpostPurchaseOrder(selectedPO.id, reason);
           setSelectedPO(updated);
           await fetchOrders();
           addToast({ type: 'success', title: 'Purchase order unposted', description: `${selectedPO.po_number} is pending again.` });
         } catch (error: any) {
           addToast({ type: 'error', title: 'Unable to unpost purchase order', description: error.message });
         }
+      },
+    });
+  };
+
+  const handleDeletePO = () => {
+    if (!selectedPO || !canUnpost) return;
+    const reason = window.prompt('Reason for deleting this Purchase Order:')?.trim() || '';
+    if (!reason) return;
+    openConfirm({
+      title: 'Delete Purchase Order',
+      message: `Delete ${selectedPO.po_number}? It will be retained as Deleted.`,
+      variant: 'danger',
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        await purchaseOrderService.deletePurchaseOrder(selectedPO.id, reason);
+        setSelectedPO(null);
+        await fetchOrders();
+        addToast({ type: 'success', title: 'Purchase order deleted' });
       },
     });
   };
@@ -948,6 +968,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                 <button onClick={() => setPrintMode(true)} className="ml-2 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Print</button>
                 {selectedPO.status === 'Pending' && <button onClick={() => handleStatusChange('Posted')} className="rounded-md bg-emerald-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-emerald-700">Post</button>}
                 {selectedPO.status === 'Posted' && canUnpost && <button onClick={handleUnpost} className="rounded-md bg-amber-500 px-4 py-1.5 text-sm font-bold text-white hover:bg-amber-600">Unpost</button>}
+                {['Pending', 'Unposted'].includes(selectedPO.status) && canUnpost && <button onClick={handleDeletePO} className="rounded-md bg-rose-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-rose-700">Delete</button>}
                 {['Draft', 'Pending'].includes(selectedPO.status) && <button onClick={() => handleStatusChange('Cancelled')} className="rounded-md bg-rose-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-rose-700">Cancel</button>}
               </div>
             </div>

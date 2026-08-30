@@ -123,6 +123,11 @@ const getLocalProductContext = () => {
 const compactObject = (payload: Record<string, unknown>) =>
   Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined));
 
+const withoutReplenishQuantity = (payload: Record<string, unknown>) => {
+  const { replenish_quantity: _replenishQuantity, ...productPayload } = payload;
+  return productPayload;
+};
+
 export type ProductListStatus = 'all' | 'active' | 'inactive';
 
 export interface FetchProductsPageParams {
@@ -279,7 +284,7 @@ export const createProduct = async (product: Omit<Product, 'id'>): Promise<void>
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      ...compactObject(product as unknown as Record<string, unknown>),
+      ...withoutReplenishQuantity(compactObject(product as unknown as Record<string, unknown>)),
       main_id: mainId,
       user_id: userId,
     }),
@@ -293,7 +298,7 @@ export const updateProduct = async (id: string, updates: Partial<Product>): Prom
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      ...compactObject(updates as Record<string, unknown>),
+      ...withoutReplenishQuantity(compactObject(updates as Record<string, unknown>)),
       main_id: mainId,
       user_id: userId,
     }),

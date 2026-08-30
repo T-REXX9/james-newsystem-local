@@ -27,6 +27,8 @@ const normalizePurchaseOrderStatus = (value: unknown): string => {
   if (normalized === 'approved' || normalized === 'posted') return 'Posted';
   if (normalized === 'partial delivery') return 'Partial Delivery';
   if (normalized === 'cancelled') return 'Cancelled';
+  if (normalized === 'unposted') return 'Unposted';
+  if (normalized === 'deleted') return 'Deleted';
   return String(value ?? 'Pending');
 };
 
@@ -242,20 +244,21 @@ export const purchaseOrderService = {
     } as PurchaseOrder;
   },
 
-  async deletePurchaseOrder(id: string): Promise<void> {
+  async deletePurchaseOrder(id: string, reason: string): Promise<void> {
+    const { mainId, userId } = getUserContext();
     const response = await fetch(
       `${API_BASE_URL}/purchase-orders/${encodeURIComponent(String(id))}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`,
-      { method: 'DELETE' }
+      { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...(getLocalAuthSession()?.token ? { Authorization: `Bearer ${getLocalAuthSession()?.token}` } : {}) }, body: JSON.stringify({ main_id: mainId, user_id: userId, reason }) }
     );
     if (!response.ok) throw new Error(await parseApiErrorMessage(response));
   },
 
-  async unpostPurchaseOrder(id: string): Promise<PurchaseOrderWithDetails> {
+  async unpostPurchaseOrder(id: string, reason: string): Promise<PurchaseOrderWithDetails> {
     const { mainId, userId } = getUserContext();
     const response = await fetch(`${API_BASE_URL}/purchase-orders/${encodeURIComponent(String(id))}/actions/unpost`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ main_id: mainId, user_id: userId }),
+      headers: { 'Content-Type': 'application/json', ...(getLocalAuthSession()?.token ? { Authorization: `Bearer ${getLocalAuthSession()?.token}` } : {}) },
+      body: JSON.stringify({ main_id: mainId, user_id: userId, reason }),
     });
     if (!response.ok) throw new Error(await parseApiErrorMessage(response));
     const payload = await response.json();

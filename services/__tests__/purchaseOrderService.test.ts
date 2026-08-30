@@ -135,7 +135,7 @@ describe('purchaseOrderService (local API)', () => {
   it('deletePurchaseOrder calls DELETE endpoint', async () => {
     (global.fetch as any).mockImplementation(() => okResponse({}));
     const { purchaseOrderService } = await import('../purchaseOrderService');
-    await purchaseOrderService.deletePurchaseOrder('PODEL');
+    await purchaseOrderService.deletePurchaseOrder('PODEL', 'Duplicate purchase order');
     const [, init] = (global.fetch as any).mock.calls[0];
     expect(init.method).toBe('DELETE');
   });
@@ -167,10 +167,10 @@ describe('purchaseOrderService (local API)', () => {
 
   it('unposts a purchase order through the guarded action endpoint', async () => {
     (global.fetch as any).mockImplementation(() => okResponse({
-      order: { refno: 'POREF5', po_number: 'PO-005', status: 'Pending' }, items: [], summary: {},
+      order: { refno: 'POREF5', po_number: 'PO-005', status: 'Unposted' }, items: [], summary: {},
     }));
     const { purchaseOrderService } = await import('../purchaseOrderService');
-    await expect(purchaseOrderService.unpostPurchaseOrder('POREF5')).resolves.toMatchObject({ id: 'POREF5', status: 'Pending' });
+    await expect(purchaseOrderService.unpostPurchaseOrder('POREF5', 'Correction required')).resolves.toMatchObject({ id: 'POREF5', status: 'Unposted' });
     expect(String((global.fetch as any).mock.calls[0][0])).toContain('/actions/unpost');
     expect(JSON.parse((global.fetch as any).mock.calls[0][1].body)).toMatchObject({ main_id: 1, user_id: 7 });
   });

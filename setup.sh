@@ -173,6 +173,8 @@ apply_required_database_migrations() {
     "$API_DIR/migrations/016_create_incident_reports.sql"
     "$API_DIR/migrations/017_create_customer_requests.sql"
     "$API_DIR/migrations/018_create_local_recycle_bin.sql"
+    "$API_DIR/migrations/019_add_procurement_recovery_columns.sql"
+    "$API_DIR/migrations/020_create_call_logs_v2.sql"
   )
 
   echo "Applying required database migrations..."

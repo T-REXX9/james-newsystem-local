@@ -56,6 +56,8 @@ const toUiStatus = (apiStatus: unknown): string => {
     const normalized = String(apiStatus || '').trim().toLowerCase();
     if (normalized === 'delivered' || normalized === 'posted') return 'Posted';
     if (normalized === 'cancelled' || normalized === 'canceled') return 'Cancelled';
+    if (normalized === 'unposted') return 'Unposted';
+    if (normalized === 'deleted') return 'Deleted';
     return 'Draft';
 };
 
@@ -374,21 +376,39 @@ export const receivingService = {
         } as ReceivingReport;
     },
 
-    async deleteReceivingReport(id: string): Promise<void> {
+    async deleteReceivingReport(id: string, reason: string): Promise<void> {
+        const { mainId, userId } = getUserContext();
+        const token = getLocalAuthSession()?.token;
         const response = await fetch(
             `${API_BASE_URL}/receiving-stocks/${encodeURIComponent(String(id))}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`,
-            { method: 'DELETE' }
+            { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ main_id: mainId, user_id: userId, reason }) }
         );
         if (!response.ok) throw new Error(await parseApiErrorMessage(response));
     },
 
-    async finalizeReceivingReport(id: string): Promise<void> {
+    async unpostReceivingReport(id: string, reason: string): Promise<void> {
+        const { mainId, userId } = getUserContext();
+        const token = getLocalAuthSession()?.token;
+        const response = await fetch(`${API_BASE_URL}/receiving-stocks/${encodeURIComponent(String(id))}/actions/unpost`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+            body: JSON.stringify({ main_id: mainId, user_id: userId, reason }),
+        });
+        if (!response.ok) throw new Error(await parseApiErrorMessage(response));
+    },
+
+    async finalizeReceivingReport(
+        id: string,
+        options?: { closeRemainingPoQty?: boolean; shortReceiptReason?: string }
+    ): Promise<void> {
         const response = await fetch(`${API_BASE_URL}/receiving-stocks/${encodeURIComponent(String(id))}/finalize`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 main_id: API_MAIN_ID,
                 status: 'Delivered',
+                close_remaining_po_qty: Boolean(options?.closeRemainingPoQty),
+                short_receipt_reason: String(options?.shortReceiptReason || ''),
             }),
         });
         if (!response.ok) throw new Error(await parseApiErrorMessage(response));

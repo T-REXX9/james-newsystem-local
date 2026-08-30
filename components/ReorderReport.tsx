@@ -670,11 +670,11 @@ const ReorderReport: React.FC = () => {
 
   const renderStatusBadge = (status: string) => {
     const normalized = status.toLowerCase();
-    const color = normalized === 'overdue' || normalized === 'cancelled'
+    const color = normalized.startsWith('overdue') || normalized === 'cancelled'
       ? 'bg-rose-100 text-rose-700'
       : normalized === 'completed'
         ? 'bg-emerald-100 text-emerald-700'
-        : normalized === 'partially received'
+      : normalized.startsWith('partially received') || normalized.startsWith('rr pending')
           ? 'bg-purple-100 text-purple-700'
           : normalized === 'ordered' || normalized === 'awaiting po'
             ? 'bg-blue-100 text-blue-700'
@@ -702,9 +702,7 @@ const ReorderReport: React.FC = () => {
           <ModuleRecordLink openInNewTab tab="warehouse-purchasing-purchase-order" payload={{ poId: document.refno, poRefNo: document.number }} className="font-bold text-brand-blue hover:underline">
             {document.number || document.refno}
           </ModuleRecordLink>
-          <div className="text-[11px] text-slate-500">{document.supplier_name || 'No supplier'} · {document.status}</div>
-          <div className="text-[11px] text-slate-500">Ordered {document.order_date || '-'} · ETA {document.expected_delivery_date && document.expected_delivery_date !== '1970-01-01' ? document.expected_delivery_date : '-'}</div>
-          <div className="text-[11px] text-slate-500">{formatCurrency(document.unit_cost)} / unit</div>
+          <div className="text-[11px] text-slate-500">Ordered {formatQuantity(document.ordered_qty)} · {document.status}</div>
         </div>
       ))}
     </div>

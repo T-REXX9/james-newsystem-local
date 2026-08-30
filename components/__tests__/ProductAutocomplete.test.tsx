@@ -51,6 +51,17 @@ describe('ProductAutocomplete', () => {
     });
   });
 
+  it('renders its result overlay above application modals', async () => {
+    render(<ProductAutocomplete onSelect={vi.fn()} />);
+
+    fireEvent.focus(screen.getByRole('textbox'));
+    await screen.findByText(/result matches/i);
+
+    expect(document.getElementById('product-autocomplete-dropdown')).toHaveStyle({
+      zIndex: '12000',
+    });
+  });
+
   it('uses the reorder-only product search when requested by purchasing', async () => {
     render(<ProductAutocomplete reorderOnly onSelect={vi.fn()} />);
 

@@ -168,6 +168,21 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
     }
   };
 
+  const handleUnpost = async (reason: string) => {
+    if (!selectedRequest) return;
+    await purchaseRequestService.unpostPurchaseRequest(selectedRequest.id, reason);
+    setSelectedRequest(await purchaseRequestService.getPurchaseRequestById(selectedRequest.id));
+    await fetchRequests();
+  };
+
+  const handleDeleteRequest = async (reason: string) => {
+    if (!selectedRequest) return;
+    await purchaseRequestService.deletePurchaseRequest(selectedRequest.id, reason);
+    setSelectedRequest(null);
+    setViewMode('list');
+    await fetchRequests();
+  };
+
   const handleAddItem = async (item: Record<string, unknown>) => {
     if (!selectedRequest) return;
     try {
@@ -215,7 +230,7 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
         ) : viewMode === 'create' ? (
           <div className="h-full w-full"><PurchaseRequestForm onCancel={backToList} onSubmit={handleCreateSubmit} suppliers={suppliers} initialPRNumber={nextPRNumber} /></div>
         ) : (viewMode === 'detail' || viewMode === 'print') && selectedRequest ? (
-          <div className="h-full w-full overflow-auto"><PurchaseRequestDetail request={selectedRequest} onBack={handleDetailBack} onUpdate={handleUpdate} onUpdateItem={handleUpdateItem} onDeleteItem={handleDeleteItem} onAddItem={handleAddItem} onConvert={handleConvertPO} onPrint={() => setViewMode('print')} products={products} suppliers={suppliers} /></div>
+          <div className="h-full w-full overflow-auto"><PurchaseRequestDetail request={selectedRequest} onBack={handleDetailBack} onUpdate={handleUpdate} onUpdateItem={handleUpdateItem} onDeleteItem={handleDeleteItem} onAddItem={handleAddItem} onConvert={handleConvertPO} onPrint={() => setViewMode('print')} onUnpost={handleUnpost} onDelete={handleDeleteRequest} products={products} suppliers={suppliers} /></div>
         ) : deepLinkLoading ? (
           <div role="status" aria-live="polite" className="flex max-w-md flex-col items-center">
             <Loader2 className="h-9 w-9 animate-spin text-[#175fd3]" aria-hidden="true" />

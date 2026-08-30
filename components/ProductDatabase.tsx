@@ -77,7 +77,6 @@ const EMPTY_PRODUCT: ProductForm = {
   category: '',
   descriptive_inquiry: '',
   no_of_holes: '',
-  replenish_quantity: 0,
   original_pn_no: '',
   application: '',
   location: '',
@@ -350,13 +349,18 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
     return Object.keys(errors).length === 0;
   };
 
-  const buildPayload = () => ({
-    ...formData,
+  const buildPayload = () => {
+    // Reorder quantity is the sole stocking control. Do not carry the retired
+    // replenish value forward when an existing product is saved.
+    const { replenish_quantity: _replenishQuantity, ...productPayload } = formData;
+    return {
+    ...productPayload,
     part_no: String(formData.part_no || '').replace(/\s+/g, ''),
     item_code: String(formData.item_code || '').trim(),
     supplier_costs: formData.supplier_costs || [],
     apply_cost_to_all_part_no: applyCostToAll,
-  });
+    };
+  };
 
   const saveProduct = async (mode: 'add' | 'edit') => {
     if (!validateForm()) {
@@ -543,7 +547,6 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
               <LegacyField label="No. of Cylinder">{fieldInput('no_of_cylinder', 'Input No. of Cylinder')}</LegacyField>
               <LegacyField label="Barcode">{fieldInput('barcode', 'Input Barcode')}</LegacyField>
               <LegacyField label="Reorder Quantity">{fieldInput('reorder_quantity', 'Input Reorder Qty', 'number')}</LegacyField>
-              <LegacyField label="Replenish Quantity">{fieldInput('replenish_quantity', 'Input Replenish Qty', 'number')}</LegacyField>
               <LegacyField label="Pcs per Box">{fieldInput('no_of_pieces_per_box', 'Input Qty', 'number')}</LegacyField>
               <LegacyField label="Status">
                 <select value={formData.status} onChange={(event) => updateField('status', event.target.value)} className={inputClass}>
@@ -620,7 +623,6 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
                 <input type="text" value={compactQuantity(getConsolidatedStock(formData as Product))} readOnly className={`${inputClass} bg-[#eee] text-slate-600`} />
               </LegacyField>
               <LegacyField label="Reorder Quantity">{fieldInput('reorder_quantity', 'Input Reorder Qty', 'number')}</LegacyField>
-              <LegacyField label="Replenish Quantity">{fieldInput('replenish_quantity', 'Input Replenish Qty', 'number')}</LegacyField>
               <LegacyField label="Pcs per Box">{fieldInput('no_of_pieces_per_box', 'Input Qty', 'number')}</LegacyField>
             </div>
             </div>}

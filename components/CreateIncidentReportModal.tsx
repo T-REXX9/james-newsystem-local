@@ -271,7 +271,7 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[1300] overflow-y-auto bg-black bg-opacity-50 p-4 sm:p-6">
+    <div className="fixed inset-0 z-[11000] overflow-y-auto bg-black bg-opacity-50 p-4 sm:p-6">
       <div className="flex min-h-full items-start justify-center sm:items-center">
         <div
           className="flex max-h-[calc(100dvh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-white shadow-xl dark:bg-gray-800 sm:max-h-[calc(100dvh-3rem)]"

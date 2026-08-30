@@ -241,7 +241,9 @@ export const isReorderWorkflowActive = (row: ReorderReportEntry): boolean => {
   const overallStatus = String(row.overall_status || '').trim().toLowerCase();
   if (typeof row.can_create_pr === 'boolean' && overallStatus) {
     return !row.can_create_pr
-      || ['pr pending', 'awaiting po', 'ordered', 'partially received', 'overdue'].includes(overallStatus);
+      || ['pr pending', 'awaiting po', 'ordered', 'overdue'].includes(overallStatus)
+      || overallStatus.startsWith('partially received')
+      || overallStatus.startsWith('rr pending');
   }
 
   // Legacy fallback for callers that do not yet provide the server-computed

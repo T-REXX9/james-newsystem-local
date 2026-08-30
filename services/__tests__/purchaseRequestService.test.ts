@@ -119,7 +119,7 @@ describe('purchaseRequestService (local API)', () => {
       .mockImplementationOnce(() => okResponse({}));
     const { purchaseRequestService } = await import('../purchaseRequestService');
     await expect(purchaseRequestService.updatePurchaseRequest('PRREF-4', { status: 'Approved', notes: 'approved' } as any)).resolves.toBeUndefined();
-    await expect(purchaseRequestService.deletePurchaseRequest('PRREF-4')).resolves.toBeUndefined();
+    await expect(purchaseRequestService.deletePurchaseRequest('PRREF-4', 'Duplicate request')).resolves.toBeUndefined();
     expect((global.fetch as any).mock.calls[0][1].method).toBe('PATCH');
     expect((global.fetch as any).mock.calls[1][1].method).toBe('DELETE');
   });

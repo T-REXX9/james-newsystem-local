@@ -16,6 +16,8 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
     const [rr, setRr] = useState<ReceivingReportWithDetails | null>(null);
     const [finalizing, setFinalizing] = useState(false);
     const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
+    const [closeShortReceipt, setCloseShortReceipt] = useState(false);
+    const [shortReceiptReason, setShortReceiptReason] = useState('');
     const [showHistory, setShowHistory] = useState(false);
 
     const fetchRR = async () => {
@@ -39,9 +41,20 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
 
     const handleFinalize = async () => {
         if (!rr) return;
+        if (closeShortReceipt && !shortReceiptReason.trim()) {
+            addToast({ type: 'error', message: 'Enter the reason the supplier cannot deliver the remaining quantity.' });
+            return;
+        }
         setFinalizing(true);
         try {
-            await receivingService.finalizeReceivingReport(rr.id);
+            if (closeShortReceipt) {
+                await receivingService.finalizeReceivingReport(rr.id, {
+                    closeRemainingPoQty: true,
+                    shortReceiptReason: shortReceiptReason.trim(),
+                });
+            } else {
+                await receivingService.finalizeReceivingReport(rr.id);
+            }
             addToast({ type: 'success', message: "Receiving Report finalized and inventory updated!" });
             await fetchRR(); // Refresh to see updated status
             setShowFinalizeConfirm(false);
@@ -51,6 +64,22 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
         } finally {
             setFinalizing(false);
         }
+    };
+
+    const handleRecovery = (kind: 'unpost' | 'delete') => {
+        const reason = window.prompt(`Reason for ${kind}ing ${rr?.rr_no || 'this Receiving Report'}:`)?.trim() || '';
+        if (!reason || !rr) return;
+        if (!window.confirm(`${kind === 'unpost' ? 'Unpost' : 'Delete'} ${rr.rr_no}? This action will be recorded in the audit log.`)) return;
+        void (async () => {
+            try {
+                if (kind === 'unpost') await receivingService.unpostReceivingReport(rr.id, reason);
+                else await receivingService.deleteReceivingReport(rr.id, reason);
+                addToast({ type: 'success', message: `${kind === 'unpost' ? 'Receiving Report unposted' : 'Receiving Report deleted'}.` });
+                if (kind === 'delete') onBack(); else await fetchRR();
+            } catch (error: any) {
+                addToast({ type: 'error', message: error.message || `Failed to ${kind} Receiving Report` });
+            }
+        })();
     };
 
     if (loading) {
@@ -81,6 +110,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
 
     const totalOrdered = rr.items?.reduce((sum, item) => sum + (item.qty_ordered || item.qty_received || 0), 0) || 0;
     const totalReceived = rr.items?.reduce((sum, item) => sum + (item.qty_received || 0), 0) || 0;
+    const hasShortReceipt = totalReceived < totalOrdered;
     const etaDate = rr.eta_date || rr.po?.items?.find(item => item.eta_date)?.eta_date || null;
 
     return (
@@ -97,8 +127,10 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
                     <button onClick={() => setShowHistory(true)} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 print:hidden">
                         <FileText className="h-4 w-4" /> View History
                     </button>
+                    {rr.status === 'Posted' && <button onClick={() => handleRecovery('unpost')} className="inline-flex items-center gap-2 rounded-md bg-amber-500 px-4 py-2 text-sm font-bold text-white hover:bg-amber-600 print:hidden"><AlertCircle className="h-4 w-4" /> Unpost</button>}
+                    {['Draft', 'Unposted'].includes(rr.status) && <button onClick={() => handleRecovery('delete')} className="inline-flex items-center gap-2 rounded-md bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 print:hidden"><Trash2 className="h-4 w-4" /> Delete</button>}
                     {rr.status === 'Draft' ? (
-                        <button onClick={() => setShowFinalizeConfirm(true)} className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 print:hidden">
+                        <button onClick={() => { setCloseShortReceipt(false); setShortReceiptReason(''); setShowFinalizeConfirm(true); }} className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 print:hidden">
                             <CheckCircle className="h-4 w-4" /> Post Receiving
                         </button>
                     ) : null}
@@ -222,6 +254,17 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
                         <p className="text-center text-slate-500 dark:text-slate-400 mb-6">
                             This will post the report, update inventory stock quantities, and create inventory logs. This action cannot be undone.
                         </p>
+                        {hasShortReceipt ? (
+                            <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                                <label className="flex cursor-pointer items-start gap-2 font-semibold">
+                                    <input type="checkbox" checked={closeShortReceipt} onChange={(event) => setCloseShortReceipt(event.target.checked)} className="mt-1" />
+                                    <span>Supplier cannot deliver the remaining {totalOrdered - totalReceived} unit(s). Close the remaining PO quantity as a short receipt.</span>
+                                </label>
+                                {closeShortReceipt ? (
+                                    <textarea value={shortReceiptReason} onChange={(event) => setShortReceiptReason(event.target.value)} placeholder="Reason (e.g. factory shortage, lost/damaged in transit)" className="mt-3 w-full rounded-md border border-amber-300 bg-white p-2 text-sm text-slate-800" rows={3} />
+                                ) : null}
+                            </div>
+                        ) : null}
                         <div className="flex gap-3">
                             <button
                                 onClick={() => setShowFinalizeConfirm(false)}
@@ -257,6 +300,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
                             <div className="flex justify-between gap-4 px-4 py-3"><dt className="font-semibold text-slate-500">Report date</dt><dd className="text-right text-slate-800">{rr.receive_date || '—'}</dd></div>
                             <div className="flex justify-between gap-4 px-4 py-3"><dt className="font-semibold text-slate-500">Current status</dt><dd className="text-right font-semibold text-slate-800">{rr.status || 'Draft'}</dd></div>
                             <div className="flex justify-between gap-4 px-4 py-3"><dt className="font-semibold text-slate-500">Items received</dt><dd className="text-right text-slate-800">{rr.item_count ?? rr.items?.length ?? 0}</dd></div>
+                            {rr.remarks ? <div className="flex justify-between gap-4 px-4 py-3"><dt className="font-semibold text-slate-500">Receiving / short-receipt note</dt><dd className="max-w-xs text-right text-slate-800">{rr.remarks}</dd></div> : null}
                             <div className="flex justify-between gap-4 px-4 py-3"><dt className="font-semibold text-slate-500">Last recorded timestamp</dt><dd className="text-right text-slate-800">{rr.created_at ? new Date(rr.created_at).toLocaleString('en-PH') : '—'}</dd></div>
                         </dl>
                         <div className="mt-5 flex justify-end"><button type="button" onClick={() => setShowHistory(false)} className="rounded-md bg-[#175fd3] px-4 py-2 text-sm font-bold text-white hover:bg-[#0e4fb7]">Close</button></div>

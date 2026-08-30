@@ -65,6 +65,8 @@ const normalizeStatus = (value: unknown): string => {
   if (text === 'submitted') return 'Submitted';
   if (text === 'approved') return 'Approved';
   if (text === 'cancelled' || text === 'canceled') return 'Cancelled';
+  if (text === 'unposted') return 'Unposted';
+  if (text === 'deleted') return 'Deleted';
   if (text === 'draft') return 'Draft';
   return 'Pending';
 };
@@ -200,11 +202,21 @@ export const purchaseRequestService = {
     });
   },
 
-  async deletePurchaseRequest(id: string): Promise<void> {
+  async deletePurchaseRequest(id: string, reason: string): Promise<void> {
+    const ctx = getUserContext();
     await requestApi(
       `${API_BASE_URL}/purchase-requests/${encodeURIComponent(id)}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`,
-      { method: 'DELETE' }
+      { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...(getLocalAuthSession()?.token ? { Authorization: `Bearer ${getLocalAuthSession()?.token}` } : {}) }, body: JSON.stringify({ main_id: ctx.mainId, user_id: ctx.userId, reason }) }
     );
+  },
+
+  async unpostPurchaseRequest(id: string, reason: string): Promise<void> {
+    const ctx = getUserContext();
+    await requestApi(`${API_BASE_URL}/purchase-requests/${encodeURIComponent(id)}/actions/unpost`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(getLocalAuthSession()?.token ? { Authorization: `Bearer ${getLocalAuthSession()?.token}` } : {}) },
+      body: JSON.stringify({ main_id: ctx.mainId, user_id: ctx.userId, reason }),
+    });
   },
 
   async addPRItem(prId: string, item: CreatePRItemPayload): Promise<void> {

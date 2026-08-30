@@ -54,7 +54,7 @@ const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
                 left: `${rect.left}px`,
                 width: `${Math.max(rect.width, 300)}px`, // Min width 300px
                 maxHeight: '320px',
-                zIndex: 9999, // Ensure it's on top
+                zIndex: 12000, // Stay above the modal that owns this search field.
             });
         }
     }, [showDropdown]);

@@ -63,6 +63,7 @@ describe('CreateIncidentReportModal', () => {
 
     const dialog = screen.getByRole('dialog', { name: 'Create Incident Report' });
     expect(within(getByTestId('page-layout')).queryByRole('dialog')).not.toBeInTheDocument();
+    expect(dialog.parentElement?.parentElement).toHaveClass('z-[11000]');
     expect(dialog).toHaveClass('flex-col', 'overflow-hidden', 'max-h-[calc(100dvh-2rem)]');
     expect(screen.getByText('Create Incident Report').parentElement).toHaveClass('shrink-0');
   });
