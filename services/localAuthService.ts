@@ -167,6 +167,11 @@ export const getLocalAuthToken = (): string | null => {
 
 export const getLocalAuthSession = (): LocalAuthSession | null => getStoredSession();
 
+export const clearInvalidLocalAuthSession = (): void => {
+  persistSession(null);
+  dispatchAuthChanged(null);
+};
+
 export const loginWithLocalApi = async (email: string, password: string): Promise<LocalAuthSession> => {
   const response = await fetch(`${API_BASE_URL}/auth/login`, {
     method: 'POST',

@@ -697,6 +697,15 @@ generate_secret() {
 resolve_production_auth_secret() {
   local existing_secret=""
   existing_secret="${AUTH_SECRET:-}"
+  # Preserve the signing key already used by the live PHP application. Without
+  # this, a source checkout missing its local .env can generate a new key on an
+  # update and invalidate every active browser session.
+  if [[ -z "$existing_secret" ]]; then
+    existing_secret="$(read_env_example_value "$PRODUCTION_API_DIR/.env" "AUTH_SECRET" || true)"
+  fi
+  if [[ -z "$existing_secret" ]]; then
+    existing_secret="$(read_env_example_value "$PRODUCTION_API_DIR/.env" "APP_KEY" || true)"
+  fi
   if [[ -z "$existing_secret" ]]; then
     existing_secret="$(read_env_example_value "$API_DIR/.env" "AUTH_SECRET" || true)"
   fi

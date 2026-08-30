@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { restoreLocalAuthSession } from '../localAuthService';
+import { clearInvalidLocalAuthSession, restoreLocalAuthSession } from '../localAuthService';
 
 const storageKey = 'local_api_auth_session';
 
@@ -49,6 +49,14 @@ describe('localAuthService session restoration', () => {
     await expect(restoreLocalAuthSession()).resolves.toBeNull();
 
     expect(global.fetch).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem(storageKey)).toBeNull();
+  });
+
+  it('clears an invalid cached session immediately', () => {
+    window.localStorage.setItem(storageKey, JSON.stringify(storedSession(tokenWithExpiry(Math.floor(Date.now() / 1000) + 3600))));
+
+    clearInvalidLocalAuthSession();
+
     expect(window.localStorage.getItem(storageKey)).toBeNull();
   });
 });

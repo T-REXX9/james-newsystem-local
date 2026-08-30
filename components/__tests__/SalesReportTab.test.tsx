@@ -69,6 +69,7 @@ describe('SalesReportTab', () => {
     expect(screen.getByText('First inquiry')).toBeInTheDocument();
     expect(screen.getByText('Follow-up inquiry')).toBeInTheDocument();
     expect(screen.getByText('December inquiry')).toBeInTheDocument();
+    expect(screen.getByText(/Sales Inquiry #rep-1/)).toBeInTheDocument();
 
     const productSelect = screen.getByLabelText('Product') as HTMLSelectElement;
     const optionLabels = Array.from(productSelect.options).map((option) => option.text);

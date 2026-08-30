@@ -3,10 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { fetchCustomerReturns } from '../../services/customerWorkflowLocalApiService';
 import DailyCallCustomerDetailExpansion from '../DailyCallCustomerDetailExpansion';
-
-vi.mock('../../services/customerWorkflowLocalApiService', () => ({ fetchCustomerReturns: vi.fn() }));
 
 const fetchManagementInstructionsMock = vi.fn(async () => []);
 
@@ -26,16 +23,8 @@ vi.mock('../IncidentReportTab', () => ({
   default: () => <div>Incident tab content</div>,
 }));
 
-vi.mock('../PurchaseHistoryTab', () => ({
-  default: () => <div>Purchase tab content</div>,
-}));
-
 vi.mock('../PersonalCommentsTab', () => ({
   default: () => <div>Comments tab content</div>,
-}));
-
-vi.mock('../LBCRTOTab', () => ({
-  default: () => <div>LBC RTO tab content</div>,
 }));
 
 vi.mock('../../services/vipTierSettingsService', () => ({
@@ -83,17 +72,6 @@ describe('DailyCallCustomerDetailExpansion', () => {
     vi.restoreAllMocks();
   });
 
-  it('loads local returns through the visible Sales Returns tab', async () => {
-    const user = userEvent.setup();
-    vi.mocked(fetchCustomerReturns).mockResolvedValue([{ id: 'r1', number: 'SRC-001', date: '2026-07-01', status: 'Posted', amount: 125, notes: 'Local return' }]);
-    render(<DailyCallCustomerDetailExpansion customer={customer} currentUser={null} />);
-
-    await user.click(screen.getByRole('tab', { name: 'Sales Returns' }));
-
-    expect(await screen.findByText('SRC-001')).toBeInTheDocument();
-    expect(fetchCustomerReturns).toHaveBeenCalledWith(customer.id);
-  });
-
   it('matches the customer-detail template and switches to report tabs', async () => {
     const user = userEvent.setup();
 
@@ -107,6 +85,10 @@ describe('DailyCallCustomerDetailExpansion', () => {
     expect(screen.getByRole('heading', { name: /Communication Timeline/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Quick Actions' })).toBeInTheDocument();
     expect(await screen.findByText('UNLIMITED VIP')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Sales Inquiry' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Orders' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Collections' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Sales Returns' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('tab', { name: 'Item Issues' }));
 

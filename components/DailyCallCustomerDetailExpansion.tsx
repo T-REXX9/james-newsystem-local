@@ -13,10 +13,8 @@ import {
   PackageSearch,
   Phone,
   Plus,
-  RotateCcw,
   Send,
   ShieldCheck,
-  ShoppingCart,
   UserRound,
   WalletCards,
 } from 'lucide-react';
@@ -24,10 +22,7 @@ import SalesReportTab from './SalesReportTab';
 import ItemIssueReportTab from './ItemIssueReportTab';
 import IncidentReportTab from './IncidentReportTab';
 import CustomerRequestsTab from './CustomerRequestsTab';
-import SalesReturnTab from './SalesReturnTab';
-import PurchaseHistoryTab from './PurchaseHistoryTab';
 import PersonalCommentsTab from './PersonalCommentsTab';
-import LBCRTOTab from './LBCRTOTab';
 import { DailyActivityRecord, DailyCallCustomerRow, UserProfile, VipTierConfig } from '../types';
 import { isKnownPriceGroup, normalizePriceGroup } from '../constants/pricingGroups';
 import { getVipStandingSummary } from '../utils/vipStanding';
@@ -42,11 +37,8 @@ export type DetailTabId =
   | 'communication'
   | 'sales'
   | 'item-issues'
-  | 'purchase'
-  | 'collections'
   | 'incident'
-  | 'requests'
-  | 'returns';
+  | 'requests';
 
 interface DailyCallCustomerDetailExpansionProps {
   customer: DailyCallCustomerRow;
@@ -63,13 +55,10 @@ const tabs: Array<{
   { id: 'comments', label: 'Management Instructions', icon: ClipboardList },
   { id: 'human', label: 'Human Agent Activity', icon: UserRound },
   { id: 'communication', label: 'Communication Timeline', icon: MessageSquare },
-  { id: 'sales', label: 'Sales Report', icon: BarChart3 },
+  { id: 'sales', label: 'Sales Inquiry', icon: BarChart3 },
   { id: 'item-issues', label: 'Item Issues', icon: PackageSearch },
-  { id: 'purchase', label: 'Orders', icon: ShoppingCart },
-  { id: 'collections', label: 'Collections', icon: WalletCards },
   { id: 'incident', label: 'Incident Reports', icon: FileWarning },
   { id: 'requests', label: 'Requests', icon: ClipboardList },
-  { id: 'returns', label: 'Sales Returns', icon: RotateCcw },
 ];
 
 const formatCurrency = (value: number) =>
@@ -295,9 +284,6 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
     if (activeTab === 'item-issues') return <ItemIssueReportTab contactId={customer.id} />;
     if (activeTab === 'incident') return <IncidentReportTab contactId={customer.id} currentUser={currentUser} />;
     if (activeTab === 'requests') return <CustomerRequestsTab contactId={customer.id} currentUser={currentUser} />;
-    if (activeTab === 'returns') return <SalesReturnTab contactId={customer.id} currentUserId={currentUser?.id} />;
-    if (activeTab === 'purchase') return <PurchaseHistoryTab contactId={customer.id} />;
-    if (activeTab === 'collections') return <LBCRTOTab contactId={customer.id} />;
     if (activeTab === 'comments') {
       return <PersonalCommentsTab contactId={customer.id} currentUserId={currentUser?.id} currentUserName={currentUser?.full_name || currentUser?.email || 'Owner'} currentUserAvatar={currentUser?.avatar_url} mode="instruction" autoFocus />;
     }
@@ -349,7 +335,7 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
           <section className="rounded-xl border border-slate-200 p-4">
             <h3 className="flex items-center gap-2 text-xs font-bold uppercase text-slate-800"><BarChart3 className="h-4 w-4 text-blue-700" /> Sales Snapshot (MTD)</h3>
             <dl className="mt-5 grid grid-cols-3 gap-4 text-xs"><div><dt className="text-slate-500">Current Month Sales</dt><dd className="mt-2 text-xl font-bold">{formatCurrency(customer.monthlyOrder)}</dd></div><div><dt className="text-slate-500">Last Month Sales</dt><dd className="mt-2 text-xl font-bold">{formatCurrency(customer.lastMonthOrder)}</dd></div><div><dt className="text-slate-500">Average Monthly Sales</dt><dd className="mt-2 text-xl font-bold">{formatCurrency(customer.averageMonthlyOrder)}</dd></div></dl>
-            <button type="button" onClick={() => setActiveTab('sales')} className="mt-5 w-full rounded-lg border border-slate-200 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50">View Full Sales Report</button>
+            <button type="button" onClick={() => setActiveTab('sales')} className="mt-5 w-full rounded-lg border border-slate-200 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50">View Sales Inquiries</button>
           </section>
         </div>
       </header>
@@ -368,12 +354,11 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
 
       <footer className="border-t border-slate-200 bg-white px-4 py-3">
         <h3 className="text-[10px] font-bold uppercase tracking-wide text-slate-700">Quick Actions</h3>
-        <div className="mt-2 grid grid-cols-4 gap-2 lg:grid-cols-8">
+        <div className="mt-2 grid grid-cols-3 gap-2 lg:grid-cols-6">
           {[
             ['Add Instruction', Plus, 'text-cyan-700 border-cyan-200 bg-cyan-50', 'comments'],
             ['Human Agent Reports', UserRound, 'text-emerald-700 border-emerald-200 bg-emerald-50', 'human'],
-            ['Sales Report', BarChart3, 'text-white border-blue-900 bg-blue-950', 'sales'],
-            ['View Orders', ShoppingCart, 'text-white border-slate-700 bg-slate-700', 'purchase'],
+            ['Sales Inquiry', BarChart3, 'text-white border-blue-900 bg-blue-950', 'sales'],
             ['Timeline', Clock3, 'text-slate-700 border-slate-200 bg-white', 'communication'],
           ].map(([label, Icon, tone, target]) => <button key={String(label)} type="button" onClick={() => setActiveTab(target as DetailTabId)} className={`flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-[10px] font-bold ${tone}`}><Icon className="h-3.5 w-3.5" />{String(label)}</button>)}
         </div>

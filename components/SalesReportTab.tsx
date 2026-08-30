@@ -188,7 +188,7 @@ const SalesReportTab: React.FC<SalesReportTabProps> = ({ contactId, currentUserI
               <div>
                 <div className="mb-1 flex items-center gap-2">
                   <h4 className="font-semibold text-slate-800 dark:text-white">
-                    Sales Inquiry Report - {new Date(report.date).toLocaleDateString()} {report.time}
+                    Sales Inquiry #{report.id || '—'} · {new Date(report.date).toLocaleDateString()} {report.time}
                   </h4>
                   <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${
                     report.approval_status === 'approved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' :
