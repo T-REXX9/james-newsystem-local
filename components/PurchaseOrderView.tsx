@@ -12,6 +12,7 @@ import ProductAutocomplete from './ProductAutocomplete';
 import SearchableFilterSelect from './SearchableFilterSelect';
 import SearchableSelect from './SearchableSelect';
 import ConfirmModal from './ConfirmModal';
+import RecoveryReasonModal from './RecoveryReasonModal';
 import { validateRequired } from '../utils/formValidation';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
@@ -90,6 +91,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   const [editItemEta, setEditItemEta] = useState('');
 
   const [printMode, setPrintMode] = useState(false);
+  const [recoveryAction, setRecoveryAction] = useState<'unpost' | 'delete' | null>(null);
 
   // Confirm Modal State
   const [confirmModal, setConfirmModal] = useState<{
@@ -520,10 +522,8 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
     });
   };
 
-  const handleUnpost = () => {
+  const handleUnpost = (reason: string) => {
     if (!selectedPO || !canUnpost) return;
-    const reason = window.prompt('Reason for unposting this Purchase Order:')?.trim() || '';
-    if (!reason) return;
     openConfirm({
       title: 'Unpost Purchase Order',
       message: `Unpost ${selectedPO.po_number}? This is allowed only when no Receiving Report depends on it.`,
@@ -537,15 +537,14 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
           addToast({ type: 'success', title: 'Purchase order unposted', description: `${selectedPO.po_number} is pending again.` });
         } catch (error: any) {
           addToast({ type: 'error', title: 'Unable to unpost purchase order', description: error.message });
+          throw error;
         }
       },
     });
   };
 
-  const handleDeletePO = () => {
+  const handleDeletePO = (reason: string) => {
     if (!selectedPO || !canUnpost) return;
-    const reason = window.prompt('Reason for deleting this Purchase Order:')?.trim() || '';
-    if (!reason) return;
     openConfirm({
       title: 'Delete Purchase Order',
       message: `Delete ${selectedPO.po_number}? It will be retained as Deleted.`,
@@ -967,8 +966,8 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                 <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-bold text-slate-700">{selectedPO.po_number}</span>
                 <button onClick={() => setPrintMode(true)} className="ml-2 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Print</button>
                 {selectedPO.status === 'Pending' && <button onClick={() => handleStatusChange('Posted')} className="rounded-md bg-emerald-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-emerald-700">Post</button>}
-                {selectedPO.status === 'Posted' && canUnpost && <button onClick={handleUnpost} className="rounded-md bg-amber-500 px-4 py-1.5 text-sm font-bold text-white hover:bg-amber-600">Unpost</button>}
-                {['Pending', 'Unposted'].includes(selectedPO.status) && canUnpost && <button onClick={handleDeletePO} className="rounded-md bg-rose-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-rose-700">Delete</button>}
+                {selectedPO.status === 'Posted' && canUnpost && <button onClick={() => setRecoveryAction('unpost')} className="rounded-md bg-amber-500 px-4 py-1.5 text-sm font-bold text-white hover:bg-amber-600">Unpost</button>}
+                {['Pending', 'Unposted'].includes(selectedPO.status) && canUnpost && <button onClick={() => setRecoveryAction('delete')} className="rounded-md bg-rose-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-rose-700">Delete</button>}
                 {['Draft', 'Pending'].includes(selectedPO.status) && <button onClick={() => handleStatusChange('Cancelled')} className="rounded-md bg-rose-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-rose-700">Cancel</button>}
               </div>
             </div>
@@ -1085,6 +1084,17 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
         message={confirmModal.message}
         variant={confirmModal.variant}
         confirmLabel={confirmModal.confirmLabel}
+      />
+      <RecoveryReasonModal
+        isOpen={recoveryAction !== null}
+        action={recoveryAction || 'unpost'}
+        recordLabel={selectedPO?.po_number || 'Purchase Order'}
+        description={recoveryAction === 'unpost' ? 'This returns the purchase order to Unposted only when no receiving report or received quantities depend on it.' : 'This keeps an audit trail and removes this pending purchase order from active work.'}
+        onClose={() => setRecoveryAction(null)}
+        onConfirm={async (reason) => {
+          if (recoveryAction === 'unpost') handleUnpost(reason);
+          else handleDeletePO(reason);
+        }}
       />
     </div>
   );

@@ -21,6 +21,7 @@ import type {
   PRStatus,
 } from "../../purchaseRequest.types";
 import ConfirmModal from "../ConfirmModal";
+import RecoveryReasonModal from "../RecoveryReasonModal";
 import ProductAutocomplete from "../ProductAutocomplete";
 import type { Product as SearchProduct } from "../../types";
 
@@ -104,6 +105,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
   const [quantity, setQuantity] = useState(1);
   const [selectedSupplierId, setSelectedSupplierId] = useState("");
   const [etaDate, setEtaDate] = useState("");
+  const [recoveryAction, setRecoveryAction] = useState<"unpost" | "delete" | null>(null);
 
   const items = (request.items || []) as EnrichedItem[];
   const totalQuantity = items.reduce(
@@ -151,11 +153,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
       variant: "info",
       onConfirm: async () => onConvert(),
     });
-  const handleRecovery = (kind: "unpost" | "delete") => {
-    const reason =
-      window.prompt(`Reason for ${kind}ing ${request.pr_number}:`)?.trim() ||
-      "";
-    if (!reason) return;
+  const handleRecovery = (kind: "unpost" | "delete", reason: string) => {
     setConfirmModal({
       isOpen: true,
       title: `${kind === "unpost" ? "Unpost" : "Delete"} Purchase Request`,
@@ -281,7 +279,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
               {onUnpost &&
                 ["Approved", "Submitted"].includes(request.status || "") && (
                   <button
-                    onClick={() => handleRecovery("unpost")}
+                    onClick={() => setRecoveryAction("unpost")}
                     className="rounded-md bg-amber-500 px-3 py-2 text-sm font-bold text-white"
                   >
                     Unpost
@@ -292,7 +290,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                   request.status || "",
                 ) && (
                   <button
-                    onClick={() => handleRecovery("delete")}
+                    onClick={() => setRecoveryAction("delete")}
                     className="rounded-md bg-rose-600 px-3 py-2 text-sm font-bold text-white"
                   >
                     Delete
@@ -719,6 +717,14 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
         message={confirmModal.message}
         confirmLabel={confirmModal.confirmLabel}
         variant={confirmModal.variant}
+      />
+      <RecoveryReasonModal
+        isOpen={recoveryAction !== null}
+        action={recoveryAction || "unpost"}
+        recordLabel={request.pr_number}
+        description={recoveryAction === "unpost" ? "This returns the purchase request to Unposted only when no active purchase order depends on it." : "This keeps an audit trail and removes this draft request from active work."}
+        onClose={() => setRecoveryAction(null)}
+        onConfirm={(reason) => handleRecovery(recoveryAction || "unpost", reason)}
       />
     </div>
   );

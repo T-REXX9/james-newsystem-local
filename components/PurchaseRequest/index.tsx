@@ -6,6 +6,7 @@ import PurchaseRequestList from './PurchaseRequestList';
 import PurchaseRequestForm from './PurchaseRequestForm';
 import PurchaseRequestDetail from './PurchaseRequestView';
 import PurchaseRequestPrint from './PurchaseRequestPrint';
+import { useToast } from '../ToastProvider';
 import { retraceWorkflowHistory } from '../../utils/workflowHistory';
 
 interface PurchaseRequestModuleProps {
@@ -15,6 +16,7 @@ interface PurchaseRequestModuleProps {
 type ViewMode = 'list' | 'create' | 'detail' | 'print';
 
 const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPRId }) => {
+  const { addToast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [requests, setRequests] = useState<PurchaseRequestWithItems[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,7 +114,7 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
       setViewMode('create');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to generate a Purchase Request number.';
-      window.alert(`Error generating PR Number: ${message}`);
+      addToast({ type: 'error', title: 'Unable to generate PR number', description: message });
     }
   };
 
@@ -146,7 +148,9 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
       setSelectedRequest(updated);
       await fetchRequests();
     } catch (error) {
-      window.alert(`Update failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      addToast({ type: 'error', title: 'Unable to update purchase request', description: message });
+      throw error;
     }
   };
 
@@ -155,7 +159,9 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
       await purchaseRequestService.updatePRItem(itemId, updates);
       if (selectedRequest) setSelectedRequest(await purchaseRequestService.getPurchaseRequestById(selectedRequest.id));
     } catch (error) {
-      console.error('Failed to update Purchase Request item', error);
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      addToast({ type: 'error', title: 'Unable to update purchase request item', description: message });
+      throw error;
     }
   };
 
@@ -164,7 +170,9 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
       await purchaseRequestService.deletePRItem(itemId);
       if (selectedRequest) setSelectedRequest(await purchaseRequestService.getPurchaseRequestById(selectedRequest.id));
     } catch (error) {
-      window.alert(`Delete item failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      addToast({ type: 'error', title: 'Unable to delete purchase request item', description: message });
+      throw error;
     }
   };
 
@@ -189,7 +197,9 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
       await purchaseRequestService.addPRItem(selectedRequest.id, item);
       setSelectedRequest(await purchaseRequestService.getPurchaseRequestById(selectedRequest.id));
     } catch (error) {
-      window.alert(`Add item failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      addToast({ type: 'error', title: 'Unable to add purchase request item', description: message });
+      throw error;
     }
   };
 
@@ -199,7 +209,9 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
       const poId = await purchaseRequestService.convertToPO([selectedRequest.id], '');
       window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab: 'warehouse-purchasing-purchase-order', payload: { poId } } }));
     } catch (error) {
-      window.alert(`Conversion failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      addToast({ type: 'error', title: 'Unable to generate purchase order', description: message });
+      throw error;
     }
   };
 

@@ -4,6 +4,7 @@ import { receivingService } from '../../services/receivingService';
 import { useToast } from '../ToastProvider';
 import { ArrowLeft, Printer, CheckCircle, Trash2, Calendar, User, FileText, Loader2, AlertCircle } from 'lucide-react';
 import CustomLoadingSpinner from '../CustomLoadingSpinner';
+import RecoveryReasonModal from '../RecoveryReasonModal';
 
 interface ReceivingViewProps {
     rrId: string;
@@ -19,6 +20,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
     const [closeShortReceipt, setCloseShortReceipt] = useState(false);
     const [shortReceiptReason, setShortReceiptReason] = useState('');
     const [showHistory, setShowHistory] = useState(false);
+    const [recoveryAction, setRecoveryAction] = useState<'unpost' | 'delete' | null>(null);
 
     const fetchRR = async () => {
         setLoading(true);
@@ -66,11 +68,8 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
         }
     };
 
-    const handleRecovery = (kind: 'unpost' | 'delete') => {
-        const reason = window.prompt(`Reason for ${kind}ing ${rr?.rr_no || 'this Receiving Report'}:`)?.trim() || '';
-        if (!reason || !rr) return;
-        if (!window.confirm(`${kind === 'unpost' ? 'Unpost' : 'Delete'} ${rr.rr_no}? This action will be recorded in the audit log.`)) return;
-        void (async () => {
+    const handleRecovery = async (kind: 'unpost' | 'delete', reason: string) => {
+        if (!rr) return;
             try {
                 if (kind === 'unpost') await receivingService.unpostReceivingReport(rr.id, reason);
                 else await receivingService.deleteReceivingReport(rr.id, reason);
@@ -78,8 +77,8 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
                 if (kind === 'delete') onBack(); else await fetchRR();
             } catch (error: any) {
                 addToast({ type: 'error', message: error.message || `Failed to ${kind} Receiving Report` });
+                throw error;
             }
-        })();
     };
 
     if (loading) {
@@ -127,8 +126,8 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
                     <button onClick={() => setShowHistory(true)} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 print:hidden">
                         <FileText className="h-4 w-4" /> View History
                     </button>
-                    {rr.status === 'Posted' && <button onClick={() => handleRecovery('unpost')} className="inline-flex items-center gap-2 rounded-md bg-amber-500 px-4 py-2 text-sm font-bold text-white hover:bg-amber-600 print:hidden"><AlertCircle className="h-4 w-4" /> Unpost</button>}
-                    {['Draft', 'Unposted'].includes(rr.status) && <button onClick={() => handleRecovery('delete')} className="inline-flex items-center gap-2 rounded-md bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 print:hidden"><Trash2 className="h-4 w-4" /> Delete</button>}
+                    {['Posted', 'Delivered'].includes(rr.status) && <button onClick={() => setRecoveryAction('unpost')} className="inline-flex items-center gap-2 rounded-md bg-amber-500 px-4 py-2 text-sm font-bold text-white hover:bg-amber-600 print:hidden"><AlertCircle className="h-4 w-4" /> Unpost</button>}
+                    {['Draft', 'Unposted'].includes(rr.status) && <button onClick={() => setRecoveryAction('delete')} className="inline-flex items-center gap-2 rounded-md bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 print:hidden"><Trash2 className="h-4 w-4" /> Delete</button>}
                     {rr.status === 'Draft' ? (
                         <button onClick={() => { setCloseShortReceipt(false); setShortReceiptReason(''); setShowFinalizeConfirm(true); }} className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 print:hidden">
                             <CheckCircle className="h-4 w-4" /> Post Receiving
@@ -307,6 +306,14 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
                     </div>
                 </div>
             )}
+            <RecoveryReasonModal
+                isOpen={recoveryAction !== null}
+                action={recoveryAction || 'unpost'}
+                recordLabel={rr.rr_no}
+                description={recoveryAction === 'unpost' ? 'This reverses the receiving report and reopens the related purchase order when allowed. Returns linked to this report prevent unposting.' : 'This retains an audit record and removes the draft/unposted receiving report from active work.'}
+                onClose={() => setRecoveryAction(null)}
+                onConfirm={(reason) => handleRecovery(recoveryAction || 'unpost', reason)}
+            />
         </div>
     );
 };
