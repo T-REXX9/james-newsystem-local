@@ -84,7 +84,7 @@ if [[ "$MODE" == "update" ]]; then
 elif [[ "$MODE" == "-production" || "$MODE" == "production" ]]; then
   TOTAL_STEPS=15
 elif [[ "$MODE" == "-productionupdate" || "$MODE" == "productionupdate" ]]; then
-  TOTAL_STEPS=9
+  TOTAL_STEPS=10
 elif [[ "$MODE" == "restart" ]]; then
   TOTAL_STEPS=4
 elif [[ "$MODE" == "chat-realtime-init" ]]; then
@@ -1087,6 +1087,20 @@ print_production_init_commands() {
   fi
 }
 
+restart_production_services() {
+  local php_fpm_service="$1"
+
+  sudo systemctl daemon-reload
+  sudo systemctl enable nginx "$php_fpm_service" james-realtime james-production.target
+  sudo systemctl restart "$php_fpm_service" nginx james-realtime
+
+  require_active_service nginx "Nginx"
+  require_active_service "$php_fpm_service" "PHP-FPM"
+  require_active_service james-realtime "realtime service"
+  wait_for_http "http://127.0.0.1/api/v1/health" "production API health endpoint"
+  wait_for_http "http://${REALTIME_HOST}:${REALTIME_PORT}/health" "production realtime health endpoint"
+}
+
 run_production_mode() {
   step "Checking production prerequisites and sudo access"
   need_cmd bash
@@ -1221,8 +1235,11 @@ run_production_update_mode() {
   write_production_systemd_units "$php_fpm_service"
   sudo nginx -t
 
-  step "Printing production update command"
-  print_production_init_commands "$php_fpm_service"
+  step "Restarting and verifying production services"
+  restart_production_services "$php_fpm_service"
+
+  step "Production update complete"
+  echo "Production services are running and healthy."
 }
 
 sudo_keepalive() {
