@@ -335,6 +335,27 @@ VITE_MAIN_ID=${VITE_MAIN_ID}
 EOF
 }
 
+verify_tunnel_safe_web_bundle() {
+  local bundle_dir="$WEB_DIR/dist"
+  if [[ ! -f "$bundle_dir/index.html" ]]; then
+    echo "ERROR: Frontend build output is missing: $bundle_dir/index.html" >&2
+    return 1
+  fi
+
+  # Vite replaces VITE_* values at build time. Do not start a public/tunnelled
+  # web server if a browser bundle still contains a loopback API address.
+  if grep -RIlE --exclude='*.map' 'https?://(127\.0\.0\.1|localhost|\[::1\])(:[0-9]+)?/api' "$bundle_dir" 2>/dev/null; then
+    echo "ERROR: Refusing to deploy a browser bundle with a loopback API URL." >&2
+    echo "Rebuild after setting VITE_API_BASE_URL=/api/v1." >&2
+    return 1
+  fi
+}
+
+build_web_bundle() {
+  (cd "$WEB_DIR" && npm run build)
+  verify_tunnel_safe_web_bundle
+}
+
 read_api_runtime_value() {
   local key="$1"
   read_env_example_value "$API_DIR/.env" "$key" || true
@@ -365,10 +386,10 @@ restart_services() {
     return 0
   fi
 
-  pkill -f "php -S [^ ]*:${API_PORT} -t public" >/dev/null 2>&1 || true
-  pkill -f "node scripts/internal-chat-realtime-server.mjs" >/dev/null 2>&1 || true
-  pkill -f "npm run realtime" >/dev/null 2>&1 || true
-  pkill -f "vite preview --host [^ ]* --port ${WEB_PORT}" >/dev/null 2>&1 || true
+  # Stop the actual listeners, not only processes whose command line happens
+  # to match. Otherwise Vite can choose another port and the tunnel keeps
+  # serving an old process on the original port.
+  release_james_ports
 
   nohup bash -lc "cd '$API_DIR' && AUTH_SECRET='$runtime_auth_secret' APP_KEY='$runtime_app_key' INTERNAL_CHAT_SOCKET_NOTIFY_URL='$realtime_notify_url' INTERNAL_CHAT_SOCKET_SECRET='$runtime_socket_secret' PHP_CLI_SERVER_WORKERS='${PHP_CLI_SERVER_WORKERS:-4}' php -S ${API_HOST}:${API_PORT} -t public" >"$API_LOG" 2>&1 &
   wait_for_http "http://127.0.0.1:${API_PORT}/api/v1/health" "API health endpoint"
@@ -919,6 +940,11 @@ server {
         return 301 /james-newsystem/;
     }
 
+    location = /james-newsystem/index.html {
+        alias ${PRODUCTION_WEB_DIR}/index.html;
+        add_header Cache-Control "no-store, max-age=0" always;
+    }
+
     location /james-newsystem/ {
         alias ${PRODUCTION_WEB_DIR}/;
         index index.html;
@@ -1091,7 +1117,7 @@ run_production_mode() {
   (cd "$WEB_DIR" && npm install)
 
   step "Building frontend production bundle"
-  (cd "$WEB_DIR" && npm run build)
+  build_web_bundle
 
   step "Deploying production files under ${PRODUCTION_ROOT}"
   deploy_production_files
@@ -1141,7 +1167,7 @@ run_production_update_mode() {
   (cd "$WEB_DIR" && npm install)
 
   step "Rebuilding frontend production bundle"
-  (cd "$WEB_DIR" && npm run build)
+  build_web_bundle
 
   step "Deploying updated production files under ${PRODUCTION_ROOT}"
   deploy_production_files
@@ -1276,7 +1302,7 @@ if [[ "$MODE" == "chat-realtime-init" ]]; then
   (cd "$WEB_DIR" && npm install)
 
   step "Building frontend for preview"
-  (cd "$WEB_DIR" && npm run build)
+  build_web_bundle
 
   step "Restarting API server, internal chat realtime, and web preview"
   restart_services
@@ -1322,7 +1348,7 @@ if [[ "$MODE" == "systemd-init" ]]; then
   (cd "$WEB_DIR" && npm install)
 
   step "Building frontend for preview"
-  (cd "$WEB_DIR" && npm run build)
+  build_web_bundle
 
   step "Writing systemd service files"
   install_systemd_services
@@ -1370,7 +1396,7 @@ if [[ "$MODE" == "update" ]]; then
   (cd "$WEB_DIR" && npm install)
 
   step "Building frontend for preview"
-  (cd "$WEB_DIR" && npm run build)
+  build_web_bundle
 
   step "Restarting API server, internal chat realtime, and web preview"
   restart_services
@@ -1518,7 +1544,7 @@ step "Installing frontend npm dependencies"
 (cd "$WEB_DIR" && npm install)
 
 step "Building frontend for preview"
-(cd "$WEB_DIR" && npm run build)
+build_web_bundle
 
 step "Starting API server, internal chat realtime, and web preview in background"
 restart_services

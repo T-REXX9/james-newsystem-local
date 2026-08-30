@@ -44,6 +44,7 @@ export default defineConfig(({ mode }) => {
     cacheDir: '.cache/vite',
     server: {
       port: 8080,
+      strictPort: true,
       host: '0.0.0.0',
       allowedHosts: true,
       proxy: {
@@ -61,7 +62,13 @@ export default defineConfig(({ mode }) => {
     preview: {
       host: '0.0.0.0',
       port: 3305,
+      strictPort: true,
       allowedHosts: true,
+      headers: {
+        // A tunnel must always retrieve the current HTML entry point after a
+        // deployment; hashed assets can then be selected by that entry point.
+        'Cache-Control': 'no-store, max-age=0',
+      },
       proxy: {
         '/api': {
           target: apiTarget,
