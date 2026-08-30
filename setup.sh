@@ -327,7 +327,10 @@ write_web_env() {
   cat > "$WEB_DIR/.env.local" <<EOF
 VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
 VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
-VITE_API_BASE_URL=http://127.0.0.1:${API_PORT}/api/v1
+# Keep browser API calls on the same host as the page. This is required when
+# the web app is opened through a tunnel: 127.0.0.1 in the visitor's browser
+# is not the deployment server. Vite proxies /api to the local API process.
+VITE_API_BASE_URL=/api/v1
 VITE_MAIN_ID=${VITE_MAIN_ID}
 EOF
 }
