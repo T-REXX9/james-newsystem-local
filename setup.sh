@@ -1099,6 +1099,7 @@ restart_production_services() {
   require_active_service james-realtime "realtime service"
   wait_for_http "http://127.0.0.1/api/v1/health" "production API health endpoint"
   wait_for_http "http://${REALTIME_HOST}:${REALTIME_PORT}/health" "production realtime health endpoint"
+  wait_for_http "http://127.0.0.1:${PRODUCTION_PORT}/james-newsystem/" "production web endpoint"
 }
 
 run_production_mode() {
