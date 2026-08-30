@@ -218,6 +218,7 @@ describe('DailyCallMasterListView', () => {
   });
 
   it('renders additional rows on table scroll and applies every purchase-age colour', async () => {
+    const user = userEvent.setup();
     const currentDate = new Date();
     const dateMonthsAgo = (monthsAgo: number) => {
       const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - monthsAgo, 15);
@@ -265,6 +266,10 @@ describe('DailyCallMasterListView', () => {
     fireEvent.scroll(tableScroll);
     expect(await screen.findByText('Scroll Customer 31')).toBeInTheDocument();
     expect(screen.queryByLabelText(/pagination/i)).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('Color status'), 'purple');
+    expect(screen.getByText('Scroll Customer 2')).toBeInTheDocument();
+    expect(screen.queryByText('Scroll Customer 1')).not.toBeInTheDocument();
   });
 
   it('uses the quick go to buttons to switch category tables', async () => {

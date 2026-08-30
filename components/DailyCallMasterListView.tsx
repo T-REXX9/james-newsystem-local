@@ -138,7 +138,14 @@ const ageLabel = (row: DailyCallMasterCustomerRow) => {
 
 const purchaseHighlight = (row: DailyCallMasterCustomerRow) => {
   const blocked = Number(row.customerStatus) === 4 || String(row.debtType || '').toLowerCase() === 'bad';
-  if (blocked) return { row: 'bg-red-600 text-white hover:bg-red-700', muted: 'text-red-100', label: 'Do not contact' };
+  if (blocked) {
+    return {
+      color: 'red',
+      row: 'bg-[#f94449]/20 text-red-950 backdrop-blur-sm hover:bg-[#f94449]/30',
+      muted: 'text-red-800',
+      label: 'Approved do-not-contact',
+    };
+  }
 
   const rawDate = String(row.lastPurchaseDateRaw || '').trim();
   const lastPurchase = rawDate ? new Date(`${rawDate.slice(0, 10)}T00:00:00`) : null;
@@ -147,15 +154,15 @@ const purchaseHighlight = (row: DailyCallMasterCustomerRow) => {
     : row.monthsSinceLastPurchase;
 
   if (row.currentMonthSales > 0 || monthsSincePurchase <= 0) {
-    return { row: 'bg-green-100 hover:bg-green-200', muted: 'text-green-800', label: 'Bought this month' };
+    return { color: 'green', row: 'bg-green-100 hover:bg-green-200', muted: 'text-green-800', label: 'Bought this month' };
   }
   if (!rawDate || row.purchaseAgeGroup === 'no_purchase' || monthsSincePurchase >= 3) {
-    return { row: 'bg-white hover:bg-slate-50', muted: 'text-slate-500', label: 'No purchase for 3+ months' };
+    return { color: 'white', row: 'bg-white hover:bg-slate-50', muted: 'text-slate-500', label: 'No purchase for 3+ months' };
   }
   if (monthsSincePurchase === 2) {
-    return { row: 'bg-purple-100 hover:bg-purple-200', muted: 'text-purple-800', label: 'No purchase for 2 months' };
+    return { color: 'purple', row: 'bg-purple-100 hover:bg-purple-200', muted: 'text-purple-800', label: 'No purchase for 2 months' };
   }
-  return { row: 'bg-yellow-100 hover:bg-yellow-200', muted: 'text-yellow-800', label: 'No purchase for 1 month' };
+  return { color: 'yellow', row: 'bg-yellow-100 hover:bg-yellow-200', muted: 'text-yellow-800', label: 'No purchase for 1 month' };
 };
 
 const masterRowFallback = (row: DailyCallMasterCustomerRow): DailyCallCustomerRow => ({
@@ -243,6 +250,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const [currentVipFilter, setCurrentVipFilter] = useState('all');
   const [nextVipFilter, setNextVipFilter] = useState('all');
   const [lastPurchaseFilter, setLastPurchaseFilter] = useState('all');
+  const [colorFilter, setColorFilter] = useState('all');
   const [vipConfig, setVipConfig] = useState<VipTierConfig>(DEFAULT_VIP_TIER_CONFIG);
   const debouncedSearch = useDebounce(search, 400);
 
@@ -356,8 +364,9 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     if (lastPurchaseFilter === '7' && (row.daysSinceLastPurchase < 0 || row.daysSinceLastPurchase > 7)) return false;
     if (lastPurchaseFilter === '30' && (row.daysSinceLastPurchase < 8 || row.daysSinceLastPurchase > 30)) return false;
     if (lastPurchaseFilter === 'older' && row.daysSinceLastPurchase <= 30) return false;
+    if (colorFilter !== 'all' && purchaseHighlight(row).color !== colorFilter) return false;
     return true;
-  }), [currentVipFilter, lastPurchaseFilter, nextVipFilter, rows]);
+  }), [colorFilter, currentVipFilter, lastPurchaseFilter, nextVipFilter, rows]);
 
   const categoryData = useMemo(() => categories.map((category) => {
     const categoryRows = filteredRows.filter(category.matches);
@@ -399,7 +408,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
 
   useEffect(() => {
     setVisibleLimit(INITIAL_VISIBLE_ROWS);
-  }, [activeCategoryId, currentVipFilter, debouncedSearch, lastPurchaseFilter, nextVipFilter]);
+  }, [activeCategoryId, colorFilter, currentVipFilter, debouncedSearch, lastPurchaseFilter, nextVipFilter]);
 
   const loadMoreRows = useCallback(() => {
     setVisibleLimit((currentLimit) => Math.min(activeCategory.rows.length, currentLimit + VISIBLE_ROWS_STEP));
@@ -469,7 +478,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
         </button>
       </header>
 
-      <section className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-3" aria-label="Monitoring filters">
+      <section className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-4" aria-label="Monitoring filters">
         <label className="text-xs font-bold text-slate-600">Current VIP Status
           <select value={currentVipFilter} onChange={(event) => setCurrentVipFilter(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal">
             <option value="all">All current VIP levels</option><option value="regular">Regular</option><option value="silver">VIP Silver</option><option value="gold">VIP Gold</option>
@@ -483,6 +492,16 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
         <label className="text-xs font-bold text-slate-600">Last Purchase
           <select value={lastPurchaseFilter} onChange={(event) => setLastPurchaseFilter(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal">
             <option value="all">Any date</option><option value="7">Within 7 days</option><option value="30">8–30 days ago</option><option value="older">More than 30 days</option><option value="none">No purchase yet</option>
+          </select>
+        </label>
+        <label className="text-xs font-bold text-slate-600">Color status
+          <select value={colorFilter} onChange={(event) => setColorFilter(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal">
+            <option value="all">All color statuses</option>
+            <option value="green">Green — bought this month</option>
+            <option value="yellow">Yellow — 1 month no purchase</option>
+            <option value="purple">Purple — 2 months no purchase</option>
+            <option value="white">White — 3+ months / no purchase</option>
+            <option value="red">Red — approved do-not-contact</option>
           </select>
         </label>
       </section>
@@ -500,7 +519,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
         <span><i className="mr-1 inline-block h-3 w-3 rounded bg-yellow-400 align-middle" />1 month no purchase</span>
         <span><i className="mr-1 inline-block h-3 w-3 rounded bg-purple-500 align-middle" />2 months no purchase</span>
         <span><i className="mr-1 inline-block h-3 w-3 rounded border border-slate-300 bg-white align-middle" />3+ months / no purchase</span>
-        <span><i className="mr-1 inline-block h-3 w-3 rounded bg-red-600 align-middle" />Approved do-not-contact</span>
+        <span><i className="mr-1 inline-block h-3 w-3 rounded bg-[#f94449] align-middle" />Approved do-not-contact</span>
       </div>
 
       {error && (
