@@ -202,6 +202,7 @@ validate_stack() {
   local table_count=""
   local account_count=""
   local patient_count=""
+  local incident_issue_type=""
 
   echo
   echo "Post-setup validation:"
@@ -230,6 +231,13 @@ validate_stack() {
     return 1
   fi
   echo "  [OK] Database rows: tblaccount=${account_count}, tblpatient=${patient_count}"
+
+  incident_issue_type="$(db_query_scalar "SELECT COLUMN_TYPE FROM information_schema.columns WHERE table_schema='${DB_NAME}' AND table_name='incident_reports' AND column_name='issue_type';" || echo "")"
+  if [[ "$incident_issue_type" != *"'lbc_rto'"* ]]; then
+    echo "  [FAIL] incident_reports.issue_type does not support lbc_rto. Apply 022_add_lbc_rto_to_incident_reports.sql." >&2
+    return 1
+  fi
+  echo "  [OK] incident_reports supports LBC RTO"
 
   return 0
 }

@@ -23,11 +23,12 @@ Single source config file for API URL/ports:
 
 ## Ubuntu setup and updates
 
-`setup.sh` automatically applies required API migrations `014`–`018` on install,
+`setup.sh` automatically applies required API migrations `014`–`020` and `022` on install,
 update, production setup, and production update, before building/deploying the app.
 Migrations `017` and `018` create the customer-request and recovery tables with
 `CREATE TABLE IF NOT EXISTS`, so rerunning them preserves existing records.
-Missing files or migration failures stop setup. `restart` does not run migrations.
+Migration `022` adds the `lbc_rto` incident type. Missing files, migration failures,
+or a database schema that still lacks that type stop setup. `restart` does not run migrations.
 
 For an existing installation, pull the latest script **before** launching it:
 
