@@ -938,6 +938,12 @@ deploy_production_files() {
   local realtime_user
   realtime_user="${SERVICE_USER:-www-data}"
 
+  # Avoid changing the live dependency tree while the realtime process is
+  # importing it. The caller starts it again after the deployment is complete.
+  if sudo systemctl list-unit-files james-realtime.service --no-legend 2>/dev/null | grep -q '^james-realtime.service'; then
+    sudo systemctl stop james-realtime >/dev/null 2>&1 || true
+  fi
+
   sudo install -d -m 0755 "$PRODUCTION_ROOT" "$PRODUCTION_WEB_DIR" "$PRODUCTION_API_DIR" "$PRODUCTION_REALTIME_DIR"
   sudo rsync -a --delete "$WEB_DIR/dist/" "$PRODUCTION_WEB_DIR/"
   sudo rsync -a --delete --exclude='.git' "$API_DIR/" "$PRODUCTION_API_DIR/"
