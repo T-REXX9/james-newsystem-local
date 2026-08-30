@@ -414,12 +414,19 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     setVisibleLimit((currentLimit) => Math.min(activeCategory.rows.length, currentLimit + VISIBLE_ROWS_STEP));
   }, [activeCategory.rows.length]);
 
-  const handleTableScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
-    const container = event.currentTarget;
+  const loadMoreOnScrollEnd = useCallback((container: HTMLElement) => {
     if (hasMoreRows && container.scrollTop + container.clientHeight >= container.scrollHeight - 160) {
       loadMoreRows();
     }
   }, [hasMoreRows, loadMoreRows]);
+
+  const handleTableScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    loadMoreOnScrollEnd(event.currentTarget);
+  }, [loadMoreOnScrollEnd]);
+
+  const handleMasterListScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    loadMoreOnScrollEnd(event.currentTarget);
+  }, [loadMoreOnScrollEnd]);
 
   if (loading) {
     return (
@@ -437,7 +444,11 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   }
 
   return (
-    <div className="h-full min-h-0 overflow-y-auto overflow-x-hidden" data-testid="master-list-scroll-region">
+    <div
+      className="h-full min-h-0 overflow-y-auto overflow-x-hidden"
+      data-testid="master-list-scroll-region"
+      onScroll={handleMasterListScroll}
+    >
     <div
       ref={dashboardRef}
       tabIndex={-1}

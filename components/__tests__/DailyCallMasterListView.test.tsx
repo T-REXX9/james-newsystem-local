@@ -257,13 +257,13 @@ describe('DailyCallMasterListView', () => {
     expect(screen.getByText('Scroll Customer 2').closest('tr')).toHaveClass('bg-purple-100');
     expect(screen.getByText('Scroll Customer 3').closest('tr')).toHaveClass('bg-white');
 
-    const tableScroll = screen.getByTestId('daily-call-table-scroll');
-    Object.defineProperties(tableScroll, {
+    const pageScroll = screen.getByTestId('master-list-scroll-region');
+    Object.defineProperties(pageScroll, {
       clientHeight: { configurable: true, value: 500 },
       scrollHeight: { configurable: true, value: 1200 },
       scrollTop: { configurable: true, value: 1000, writable: true },
     });
-    fireEvent.scroll(tableScroll);
+    fireEvent.scroll(pageScroll);
     expect(await screen.findByText('Scroll Customer 31')).toBeInTheDocument();
     expect(screen.queryByLabelText(/pagination/i)).not.toBeInTheDocument();
 
