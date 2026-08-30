@@ -136,6 +136,15 @@ const ageLabel = (row: DailyCallMasterCustomerRow) => {
   return row.daysSinceLastPurchase === 1 ? '1 day ago' : `${row.daysSinceLastPurchase} days ago`;
 };
 
+const purchaseHighlight = (row: DailyCallMasterCustomerRow) => {
+  const blocked = Number(row.customerStatus) === 4 || String(row.debtType || '').toLowerCase() === 'bad';
+  if (blocked) return { row: 'bg-red-600 text-white hover:bg-red-700', muted: 'text-red-100', label: 'Do not contact' };
+  if (row.currentMonthSales > 0) return { row: 'bg-green-100 hover:bg-green-200', muted: 'text-green-800', label: 'Bought this month' };
+  if (row.purchaseAgeGroup === 'no_purchase' || row.monthsSinceLastPurchase >= 3) return { row: 'bg-white hover:bg-slate-50', muted: 'text-slate-500', label: 'No purchase for 3+ months' };
+  if (row.monthsSinceLastPurchase === 2) return { row: 'bg-purple-100 hover:bg-purple-200', muted: 'text-purple-800', label: 'No purchase for 2 months' };
+  return { row: 'bg-yellow-100 hover:bg-yellow-200', muted: 'text-yellow-800', label: 'No purchase for 1 month' };
+};
+
 const masterRowFallback = (row: DailyCallMasterCustomerRow): DailyCallCustomerRow => ({
   id: row.id,
   source: 'Master List',
@@ -489,6 +498,13 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
           Total Potential Sales: {compactPeso.format(totalPotentialSales)}
         </p>
       </div>
+      <div className="flex flex-wrap items-center gap-3 px-1 text-xs font-semibold text-slate-600" aria-label="Automatic purchase highlight legend">
+        <span><i className="mr-1 inline-block h-3 w-3 rounded bg-green-500 align-middle" />Bought this month</span>
+        <span><i className="mr-1 inline-block h-3 w-3 rounded bg-yellow-400 align-middle" />1 month no purchase</span>
+        <span><i className="mr-1 inline-block h-3 w-3 rounded bg-purple-500 align-middle" />2 months no purchase</span>
+        <span><i className="mr-1 inline-block h-3 w-3 rounded border border-slate-300 bg-white align-middle" />3+ months / no purchase</span>
+        <span><i className="mr-1 inline-block h-3 w-3 rounded bg-red-600 align-middle" />Approved do-not-contact</span>
+      </div>
 
       {error && (
         <div className="flex items-center justify-between rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
@@ -616,12 +632,13 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 </thead>
                 <tbody>
                   {visibleRows.map((row, index) => {
+                    const highlight = purchaseHighlight(row);
                     const vip = vipDetails(row);
                     const trend = trendDetails(row);
                     const VipIcon = vip.Icon;
                     const TrendIcon = trend.Icon;
                     return (
-                      <tr key={row.id} className="border-t border-slate-100 align-top">
+                      <tr key={row.id} title={highlight.label} className={`border-t border-slate-100 align-top transition-colors ${highlight.row}`}>
                         <td className="px-3 py-2.5 text-sm font-bold">{index + 1}</td>
                         <td className="px-2 py-2.5">
                           <button
@@ -634,7 +651,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                             {loadingCustomerId === row.id && <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />}
                             {row.shopName}
                           </button>
-                          <p className="mt-0.5 truncate text-xs font-semibold text-blue-700">{row.contactNumber}</p>
+                          <p className={`mt-0.5 truncate text-xs font-semibold ${highlight.muted}`}>{row.contactNumber}</p>
                         </td>
                         <td className="px-2 py-2.5 text-center">
                           <div className={`mx-auto inline-flex min-w-24 items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-[12px] font-bold uppercase ${vip.className}`}>

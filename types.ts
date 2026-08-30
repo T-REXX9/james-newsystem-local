@@ -328,6 +328,8 @@ export interface Contact {
   // Status & Logic
   status: CustomerStatus; // "status_filter"
   verification?: string;
+  customerStatus?: number;
+  debtType?: string;
   isHidden: boolean; // "hide_unhide"
   debtType: 'Good' | 'Bad';
   comment: string; // General comment

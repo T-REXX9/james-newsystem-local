@@ -474,6 +474,8 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
     assignedTo: cleanNullableText(row?.assignedTo ?? row?.assigned_to, 'Unassigned'),
     profileType: cleanNullableText(row?.profileType ?? row?.profile_type),
     verification: cleanNullableText(row?.verification),
+    customerStatus: Number(row?.customerStatus ?? row?.customer_status ?? 1),
+    debtType: cleanNullableText(row?.debtType ?? row?.debt_type, 'Good'),
     verifiedBy: cleanNullableText(row?.verifiedBy ?? row?.verified_by),
     createdAt: cleanNullableText(row?.createdAt ?? row?.created_at ?? row?.statusDate ?? row?.status_date),
     priceGroup: cleanNullableText(row?.priceGroup ?? row?.price_group),
