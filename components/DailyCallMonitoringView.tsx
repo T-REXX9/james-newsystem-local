@@ -127,6 +127,7 @@ interface MasterRow {
 }
 
 type ClientListKey = 'active' | 'inactivePositive' | 'prospectivePositive';
+type PurchaseHighlightColor = 'green' | 'yellow' | 'purple' | 'white' | 'red';
 
 const PIE_COLORS = ['#2563eb', '#0ea5e9', '#059669', '#f97316'];
 const CUSTOMER_LOG_TOPICS: CustomerLogTopic[] = ['Sales', 'Payment', 'Comment'];
@@ -184,6 +185,35 @@ const isRecoveryListPurchase = (lastPurchase?: string) => {
 
 const isProspectContact = (contact: Contact) =>
   contact.status === CustomerStatus.PROSPECTIVE || contact.status === CustomerStatus.VERIFIED_PROSPECT;
+
+const getStaffPurchaseHighlight = (row: MasterRow, referenceDate: Date) => {
+  if (row.contact.status === CustomerStatus.BLACKLISTED) {
+    return {
+      color: 'red' as PurchaseHighlightColor,
+      className: 'border-[#f94449]/35 bg-[#f94449]/20 text-red-950 hover:bg-[#f94449]/30',
+      mutedClassName: 'text-red-800',
+      label: 'Approved do-not-contact',
+    };
+  }
+
+  const lastPurchase = row.lastPurchase ? new Date(row.lastPurchase) : null;
+  if (!lastPurchase || Number.isNaN(lastPurchase.getTime())) {
+    return { color: 'white' as PurchaseHighlightColor, className: 'border-slate-200 bg-white hover:bg-slate-50', mutedClassName: 'text-slate-500', label: 'No purchase yet' };
+  }
+
+  const monthsSincePurchase = ((referenceDate.getFullYear() - lastPurchase.getFullYear()) * 12)
+    + (referenceDate.getMonth() - lastPurchase.getMonth());
+  if (monthsSincePurchase <= 0) {
+    return { color: 'green' as PurchaseHighlightColor, className: 'border-green-200 bg-green-100 hover:bg-green-200', mutedClassName: 'text-green-800', label: 'Bought this month' };
+  }
+  if (monthsSincePurchase === 1) {
+    return { color: 'yellow' as PurchaseHighlightColor, className: 'border-yellow-200 bg-yellow-100 hover:bg-yellow-200', mutedClassName: 'text-yellow-800', label: 'No purchase for 1 month' };
+  }
+  if (monthsSincePurchase === 2) {
+    return { color: 'purple' as PurchaseHighlightColor, className: 'border-purple-200 bg-purple-100 hover:bg-purple-200', mutedClassName: 'text-purple-800', label: 'No purchase for 2 months' };
+  }
+  return { color: 'white' as PurchaseHighlightColor, className: 'border-slate-200 bg-white hover:bg-slate-50', mutedClassName: 'text-slate-500', label: 'No purchase for 3+ months' };
+};
 
 const formatCompactCurrency = (value: number) =>
   new Intl.NumberFormat('en-PH', {
@@ -496,6 +526,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [provinceFilter, setProvinceFilter] = useState('All');
   const [statusFilters, setStatusFilters] = useState<CustomerStatus[]>([]);
   const [noPurchaseOnly, setNoPurchaseOnly] = useState(false);
+  const [colorFilter, setColorFilter] = useState<'all' | PurchaseHighlightColor>('all');
   const [searchValue, setSearchValue] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sortField, setSortField] = useState<'priority' | 'lastContact' | 'lastPurchase' | 'salesValue'>('priority');
@@ -1186,13 +1217,14 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
   const masterRows = useMemo<MasterRow[]>(() => {
     const filtered = baseMasterRows.filter((row) => {
-      return matchesSearch(row.contact, debouncedSearch);
+      if (!matchesSearch(row.contact, debouncedSearch)) return false;
+      return colorFilter === 'all' || getStaffPurchaseHighlight(row, selectedReferenceDate).color === colorFilter;
     });
 
     return filtered.sort((a, b) =>
       (b.priority - a.priority) || a.contact.company.localeCompare(b.contact.company)
     );
-  }, [baseMasterRows, debouncedSearch]);
+  }, [baseMasterRows, colorFilter, debouncedSearch, selectedReferenceDate]);
 
   const customerListSummaries = useMemo(() => {
     const summarize = (
@@ -1717,7 +1749,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex min-w-[180px] flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-950">
             <Search className="w-5 h-5 text-slate-400" />
             <input
@@ -1727,9 +1759,32 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               onChange={(event) => setSearchValue(event.target.value)}
             />
           </div>
+          <label className="min-w-[220px] text-xs font-bold text-slate-600 dark:text-slate-300">
+            Color status
+            <select
+              aria-label="Color status"
+              value={colorFilter}
+              onChange={(event) => setColorFilter(event.target.value as 'all' | PurchaseHighlightColor)}
+              className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:border-brand-blue dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+            >
+              <option value="all">All color statuses</option>
+              <option value="green">Green — bought this month</option>
+              <option value="yellow">Yellow — 1 month no purchase</option>
+              <option value="purple">Purple — 2 months no purchase</option>
+              <option value="white">White — 3+ months / no purchase</option>
+              <option value="red">Red — approved do-not-contact</option>
+            </select>
+          </label>
           <span className="shrink-0 text-sm font-bold text-slate-500 dark:text-slate-400">
             {masterRows.length} {masterRows.length === 1 ? 'customer' : 'customers'}
           </span>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] font-semibold text-slate-600 dark:text-slate-300" aria-label="Automatic purchase highlight legend">
+          <span><i className="mr-1 inline-block h-3 w-3 rounded bg-green-500 align-middle" />Bought this month</span>
+          <span><i className="mr-1 inline-block h-3 w-3 rounded bg-yellow-400 align-middle" />1 month no purchase</span>
+          <span><i className="mr-1 inline-block h-3 w-3 rounded bg-purple-500 align-middle" />2 months no purchase</span>
+          <span><i className="mr-1 inline-block h-3 w-3 rounded border border-slate-300 bg-white align-middle" />3+ months / no purchase</span>
+          <span><i className="mr-1 inline-block h-3 w-3 rounded bg-[#f94449] align-middle" />Approved do-not-contact</span>
         </div>
       </section>
 
@@ -1753,27 +1808,30 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 ) : (
                   <table className="w-full table-fixed border-separate border-spacing-y-2">
                     <tbody>
-                      {summary.rows.map((row, index) => (
-                        <tr
-                          key={row.contact.id}
-                          className="group cursor-pointer"
-                          onClick={() => handleSelectClient(row.contact.id)}
-                          tabIndex={0}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault();
-                              handleSelectClient(row.contact.id);
-                            }
-                          }}
-                        >
-                          <td className="p-0">
-                            <div className={`grid w-full grid-cols-[1.25rem_minmax(0,1fr)_4.2rem_5.7rem] items-center gap-2 rounded-lg border border-slate-100 bg-white p-2 text-left shadow-sm transition-colors group-hover:border-blue-200 group-hover:bg-blue-50/50 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800 ${selectedClientId === row.contact.id ? 'border-blue-200 bg-blue-50/70 dark:bg-brand-blue/10' : ''}`}>
+                      {summary.rows.map((row, index) => {
+                        const highlight = getStaffPurchaseHighlight(row, selectedReferenceDate);
+                        return (
+                          <tr
+                            key={row.contact.id}
+                            className="group cursor-pointer"
+                            title={highlight.label}
+                            onClick={() => handleSelectClient(row.contact.id)}
+                            tabIndex={0}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                handleSelectClient(row.contact.id);
+                              }
+                            }}
+                          >
+                            <td className="p-0">
+                              <div className={`grid w-full grid-cols-[1.25rem_minmax(0,1fr)_4.2rem_5.7rem] items-center gap-2 rounded-lg border p-2 text-left shadow-sm transition-colors group-hover:border-blue-200 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800 ${highlight.className} ${selectedClientId === row.contact.id ? 'border-blue-300 ring-1 ring-blue-200 dark:bg-brand-blue/10' : ''}`}>
                               <span className="text-[11px] font-extrabold text-slate-400">{index + 1}</span>
                               <span className="min-w-0">
                                 <span className="block truncate text-[11px] font-extrabold uppercase leading-tight text-[#10244c] dark:text-white" title={row.contact.company}>
                                   {row.contact.company}
                                 </span>
-                                <span className="mt-0.5 block truncate text-[10px] font-medium leading-tight text-slate-500 dark:text-slate-400" title={getPhoneNumber(row.contact) || getContactLocationLabel(row.contact)}>
+                                <span className={`mt-0.5 block truncate text-[10px] font-medium leading-tight ${highlight.mutedClassName} dark:text-slate-400`} title={getPhoneNumber(row.contact) || getContactLocationLabel(row.contact)}>
                                   {getPhoneNumber(row.contact) || getContactLocationLabel(row.contact)}
                                 </span>
                                 <span className="mt-0.5 block truncate text-[10px] leading-tight text-slate-400" title={`${formatDate(row.lastPurchase)} · ${formatRelativeTime(row.lastPurchase)}`}>
@@ -1830,9 +1888,10 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                 </button>
                               </span>
                             </div>
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}
