@@ -58,7 +58,7 @@ const tabs: Array<{
   { id: 'sales', label: 'Sales Inquiry', icon: BarChart3 },
   { id: 'item-issues', label: 'Item Issues', icon: PackageSearch },
   { id: 'incident', label: 'Incident Reports', icon: FileWarning },
-  { id: 'requests', label: 'Requests', icon: ClipboardList },
+  { id: 'requests', label: 'Detail Update Requests', icon: ClipboardList },
 ];
 
 const formatCurrency = (value: number) =>

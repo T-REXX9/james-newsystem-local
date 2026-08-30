@@ -28,10 +28,10 @@ export default function CustomerRequestsTab({ contactId, currentUser }: { contac
     finally { setBusy(''); }
   };
   return <section className="space-y-4 p-5">
-    <div className="flex justify-between"><h3 className="font-bold">Customer Requests</h3><button type="button" disabled={loading || !!busy} onClick={() => setRefresh(n => n + 1)} className="rounded border px-3 py-1">Refresh</button></div>
-    <p className="text-sm text-slate-500">Customer edits apply only after owner approval. Discount approval records authorization; it does not automatically change prices on existing sales documents.</p>
+    <div className="flex justify-between"><h3 className="font-bold">Customer Detail Update Requests</h3><button type="button" disabled={loading || !!busy} onClick={() => setRefresh(n => n + 1)} className="rounded border px-3 py-1">Refresh</button></div>
+    <p className="text-sm text-slate-500">Sales agents submit customer detail changes here for owner approval. Approved changes are then applied to the customer record. Discount approval records authorization; it does not automatically change prices on existing sales documents.</p>
     {error && <p role="alert" className="text-red-600">{error}</p>}
-    {loading ? <p role="status">Loading requests…</p> : !rows.length && !error ? <p>No customer requests.</p> : rows.map(row => <article key={row.id} className="space-y-3 rounded border border-slate-200 p-4 dark:border-slate-700">
+    {loading ? <p role="status">Loading customer detail update requests…</p> : !rows.length && !error ? <p>No customer detail update requests.</p> : rows.map(row => <article key={row.id} className="space-y-3 rounded border border-slate-200 p-4 dark:border-slate-700">
       <div className="flex justify-between gap-3"><strong>{row.kind === 'discount' ? 'Discount request' : 'Customer update'}</strong><span>{row.status}</span></div>
       <p className="text-xs text-slate-500">{row.submitted_by_name} · {row.submitted_at}</p>
       <dl className="space-y-1 text-sm">{Object.entries(row.payload).map(([key, value]) => <div key={key}><dt className="inline font-semibold">{key.replaceAll('_', ' ')}: </dt><dd className="inline whitespace-pre-wrap break-words">{typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value ?? '')}</dd></div>)}</dl>
