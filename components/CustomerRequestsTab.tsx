@@ -28,7 +28,7 @@ export default function CustomerRequestsTab({ contactId, currentUser }: { contac
     finally { setBusy(''); }
   };
   return <section className="space-y-4 p-5">
-    <div className="flex justify-between"><h3 className="font-bold">Customer Detail Update Requests</h3><button type="button" disabled={loading || !!busy} onClick={() => setRefresh(n => n + 1)} className="rounded border px-3 py-1">Refresh</button></div>
+    <div className="flex justify-between"><h3 className="font-bold">Customer Detail Update Request</h3><button type="button" disabled={loading || !!busy} onClick={() => setRefresh(n => n + 1)} className="rounded border px-3 py-1">Refresh</button></div>
     <p className="text-sm text-slate-500">Sales agents submit customer detail changes here for owner approval. Approved changes are then applied to the customer record. Discount approval records authorization; it does not automatically change prices on existing sales documents.</p>
     {error && <p role="alert" className="text-red-600">{error}</p>}
     {loading ? <p role="status">Loading customer detail update requests…</p> : !rows.length && !error ? <p>No customer detail update requests.</p> : rows.map(row => <article key={row.id} className="space-y-3 rounded border border-slate-200 p-4 dark:border-slate-700">
