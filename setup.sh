@@ -54,6 +54,8 @@ PRODUCTION_API_DIR="${PRODUCTION_API_DIR:-$PRODUCTION_ROOT/api}"
 PRODUCTION_REALTIME_DIR="${PRODUCTION_REALTIME_DIR:-$PRODUCTION_ROOT/realtime}"
 PRODUCTION_NGINX_SITE="${PRODUCTION_NGINX_SITE:-james-newsystem}"
 PRODUCTION_PORT="${PRODUCTION_PORT:-80}"
+# Keep the previous tunnel target working while production is served by Nginx.
+PRODUCTION_LEGACY_PORT="${PRODUCTION_LEGACY_PORT:-8080}"
 SERVER_NAME="${SERVER_NAME:-_}"
 
 MODE="${1:-install}"
@@ -960,10 +962,15 @@ deploy_production_files() {
 write_production_nginx_config() {
   local php_fpm_socket="$1"
   local site_path="/etc/nginx/sites-available/${PRODUCTION_NGINX_SITE}"
+  local listen_directives="    listen ${PRODUCTION_PORT};"
+
+  if [[ "$PRODUCTION_LEGACY_PORT" != "$PRODUCTION_PORT" ]]; then
+    listen_directives+=$'\n'"    listen ${PRODUCTION_LEGACY_PORT};"
+  fi
 
   sudo tee "$site_path" >/dev/null <<EOF
 server {
-    listen ${PRODUCTION_PORT};
+${listen_directives}
     server_name ${SERVER_NAME};
 
     client_max_body_size 100M;
@@ -1092,6 +1099,9 @@ restart_production_services() {
 
   sudo systemctl daemon-reload
   sudo systemctl enable nginx "$php_fpm_service" james-realtime james-production.target
+  # Production Nginx now owns the legacy tunnel port too. Stop the old Vite
+  # preview service so it cannot reserve 8080 again after a reboot.
+  sudo systemctl disable --now james-web >/dev/null 2>&1 || true
   sudo systemctl restart "$php_fpm_service" nginx james-realtime
 
   require_active_service nginx "Nginx"
@@ -1100,6 +1110,9 @@ restart_production_services() {
   wait_for_http "http://127.0.0.1/api/v1/health" "production API health endpoint"
   wait_for_http "http://${REALTIME_HOST}:${REALTIME_PORT}/health" "production realtime health endpoint"
   wait_for_http "http://127.0.0.1:${PRODUCTION_PORT}/james-newsystem/" "production web endpoint"
+  if [[ "$PRODUCTION_LEGACY_PORT" != "$PRODUCTION_PORT" ]]; then
+    wait_for_http "http://127.0.0.1:${PRODUCTION_LEGACY_PORT}/james-newsystem/" "legacy tunnel web endpoint"
+  fi
 }
 
 run_production_mode() {

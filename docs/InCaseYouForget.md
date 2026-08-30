@@ -14,6 +14,7 @@ Use this file for the normal deployment commands and locations. Replace `user@yo
 | Production PHP API files | `/var/www/james-newsystem/api/` |
 | Production realtime service files | `/var/www/james-newsystem/realtime/` |
 | Nginx site configuration | `/etc/nginx/sites-available/james-newsystem` |
+| Production web ports | `80` and legacy tunnel port `8080` |
 | API log (non-production preview mode) | `~/james-system/logs/api.log` |
 | Realtime log (non-production preview mode) | `~/james-system/logs/realtime.log` |
 
@@ -66,7 +67,8 @@ sudo systemctl restart php8.3-fpm nginx james-realtime
 ```bash
 sudo systemctl status nginx php8.3-fpm james-realtime --no-pager
 curl -fsS http://127.0.0.1/api/v1/health
-curl -I http://127.0.0.1/james-newsystem/
+curl -I http://127.0.0.1:80/james-newsystem/
+curl -I http://127.0.0.1:8080/james-newsystem/
 curl -fsS http://127.0.0.1:8082/health
 ```
 
@@ -111,7 +113,7 @@ Then run the normal production update above. It stops realtime before replacing 
 
 ## Tunnel requirement
 
-Use the public tunnel URL only through the Nginx app path, normally:
+Pangolin may continue forwarding to `127.0.0.1:8080`; Nginx serves the same production app on both ports `80` and `8080`. Use the public tunnel URL only through the Nginx app path, normally:
 
 ```text
 https://your-tunnel-host/james-newsystem/
