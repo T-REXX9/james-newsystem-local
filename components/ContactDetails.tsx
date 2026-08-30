@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Contact, Comment, CustomerStatus, UserProfile } from '../types';
-import { analyzeLead } from '../services/geminiService';
 import CompanyName from './CompanyName';
 import CustomerMetricsView from './CustomerMetricsView';
 import SalesReportTab from './SalesReportTab';
@@ -35,9 +34,6 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
   const [activeTab, setActiveTab] = useState('Overview');
   const [newComment, setNewComment] = useState('');
   const [comments, setComments] = useState<Comment[]>(contact.comments || []);
-  const [aiAnalysis, setAiAnalysis] = useState<{score: number, probability: number} | null>(
-    contact.aiScore ? { score: contact.aiScore, probability: contact.winProbability || 0 } : null
-  );
   const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const commentsEndRef = useRef<HTMLDivElement>(null);
@@ -127,21 +123,6 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
     onUpdate({ ...contact, comments: updatedComments });
     setNewComment('');
   };
-
-  // Simulated AI trigger on mount if not present
-  useEffect(() => {
-    if (!contact.aiScore) {
-      analyzeLead(contact).then(res => {
-        setAiAnalysis({ score: res.score, probability: res.winProbability });
-        onUpdate({ 
-          ...contact, 
-          aiScore: res.score, 
-          winProbability: res.winProbability, 
-          aiReasoning: res.reasoning 
-        });
-      });
-    }
-  }, [contact.id]);
 
   const getStatusColor = (status: CustomerStatus) => {
       // Safety guard in case Enum is undefined
@@ -503,7 +484,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
         {/* Purchase History Tab */}
         {activeTab === 'PurchaseHistory' && <PurchaseHistoryTab contactId={contact.id} />}
 
-        {activeTab === 'Requests' && <CustomerRequestsTab contactId={contact.id} currentUser={currentUser || null} />}
+        {activeTab === 'Requests' && <CustomerRequestsTab contactId={contact.id} contact={contact} currentUser={currentUser || null} />}
 
         {/* Inquiry History Tab */}
         {activeTab === 'InquiryHistory' && <InquiryHistoryTab contactId={contact.id} />}

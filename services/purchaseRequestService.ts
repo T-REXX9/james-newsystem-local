@@ -38,8 +38,18 @@ const requestApi = async (url: string, init?: RequestInit): Promise<any> => {
   init?.signal?.addEventListener('abort', forwardAbort, { once: true });
   const timeoutId = globalThis.setTimeout(() => controller.abort(), API_TIMEOUT_MS);
 
+  // Inject bearer token automatically if a session exists. Callers may still
+  // override by passing their own Authorization header.
+  const token = getLocalAuthSession()?.token;
+  const headers: Record<string, string> = {
+    ...(init?.headers as Record<string, string> | undefined),
+    ...(token && !(init?.headers as Record<string, string> | undefined)?.Authorization
+      ? { Authorization: `Bearer ${token}` }
+      : {}),
+  };
+
   try {
-    const response = await fetch(url, { ...init, signal: controller.signal });
+    const response = await fetch(url, { ...init, headers, signal: controller.signal });
     if (!response.ok) throw new Error(await parseApiErrorMessage(response));
     const payload = await response.json();
     if (!payload?.ok) throw new Error(payload?.error || 'API request failed');

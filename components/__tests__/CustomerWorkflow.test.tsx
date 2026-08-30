@@ -37,7 +37,7 @@ describe('customer workflow screens', () => {
     render(<CustomerRequestsTab contactId="c1" currentUser={owner} />);
     await user.click(await screen.findByRole('button', { name: 'Approve' }));
     expect(reviewCustomerRequest).toHaveBeenCalledWith('c1', 'r1', 'approved', '');
-    expect(await screen.findByText('approved')).toBeInTheDocument();
+    expect(await screen.findByText('Approved', { selector: 'span' })).toBeInTheDocument();
   });
   it('keeps a request pending when the server rejects approval', async () => {
     const user = userEvent.setup();
@@ -46,12 +46,12 @@ describe('customer workflow screens', () => {
     render(<CustomerRequestsTab contactId="c1" currentUser={owner} />);
     await user.click(await screen.findByRole('button', { name: 'Approve' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Customer details changed');
-    expect(screen.getByText('pending')).toBeInTheDocument();
+    expect(screen.getByText('Pending Review')).toBeInTheDocument();
   });
   it('lets agents see their request status without approval controls', async () => {
     vi.mocked(fetchCustomerRequests).mockResolvedValue([pending]);
     render(<CustomerRequestsTab contactId="c1" currentUser={{ ...owner, role: 'Sales Agent' }} />);
-    expect(await screen.findByText('pending')).toBeInTheDocument();
+    expect(await screen.findByText('Pending Review')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
   });
 });

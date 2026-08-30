@@ -14,12 +14,21 @@ interface KeyboardShortcut {
 export const useKeyboardShortcuts = (shortcuts: KeyboardShortcut[], enabled: boolean = true) => {
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     if (!enabled) return;
+    if (!event || typeof event.key !== 'string') return;
 
-    const target = event.target as HTMLElement;
-    const isInputTarget =
-      target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+    const target = event.target as HTMLElement | null;
+    const isInputTarget = Boolean(
+      target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+    );
 
     for (const shortcut of shortcuts) {
+      // Defensive: a malformed shortcut (missing key) must not break every keypress.
+      if (!shortcut || typeof shortcut.key !== 'string' || typeof shortcut.handler !== 'function') {
+        continue;
+      }
       const keyMatches = event.key.toLowerCase() === shortcut.key.toLowerCase();
       const ctrlMatches = shortcut.ctrl ? event.ctrlKey : !event.ctrlKey;
       const metaMatches = shortcut.meta ? event.metaKey : !event.metaKey;
@@ -53,6 +62,7 @@ export const useKeyboardShortcuts = (shortcuts: KeyboardShortcut[], enabled: boo
 };
 
 export const getShortcutDisplay = (shortcut: KeyboardShortcut): string => {
+  if (!shortcut || typeof shortcut.key !== 'string') return '';
   const parts: string[] = [];
   const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
 

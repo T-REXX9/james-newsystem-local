@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../localAuthService', () => ({
   getLocalAuthSession: () => ({
+    token: 'test-bearer-token',
     context: {
       user: { id: 9 },
     },
@@ -83,6 +84,32 @@ describe('purchaseRequestService (local API)', () => {
     const body = JSON.parse((global.fetch as any).mock.calls[0][1].body);
     expect(body.user_id).toBe(9);
     expect(body.approver_id).toBe('approver-1');
+  });
+
+  it('convertToPO attaches a Bearer token from the local auth session', async () => {
+    (global.fetch as any).mockImplementation(() =>
+      okResponse({ conversion: { po_refno: 'POREF-9', po_number: 'PO-2601' } })
+    );
+    const { purchaseRequestService } = await import('../purchaseRequestService');
+    await purchaseRequestService.convertToPO(['PRREF-9'], 'approver-1');
+    const headers = (global.fetch as any).mock.calls[0][1].headers as Record<string, string>;
+    expect(headers.Authorization).toBe('Bearer test-bearer-token');
+  });
+
+  it('createPurchaseRequest also attaches a Bearer token', async () => {
+    (global.fetch as any).mockImplementation(() =>
+      okResponse({
+        request: { refno: 'PRREF-1', pr_number: 'PR-2601', request_date: '2026-03-26', notes: 'test', status: 'Pending', created_by: '', created_by_name: '', request_datetime: '2026-03-26 10:00:00', items: [] },
+      })
+    );
+    const { purchaseRequestService } = await import('../purchaseRequestService');
+    await purchaseRequestService.createPurchaseRequest({
+      pr_number: 'PR-2601',
+      request_date: '2026-03-26',
+      items: [],
+    } as any);
+    const headers = (global.fetch as any).mock.calls[0][1].headers as Record<string, string>;
+    expect(headers.Authorization).toBe('Bearer test-bearer-token');
   });
 
     it('generatePRNumber reads the next-number endpoint', async () => {

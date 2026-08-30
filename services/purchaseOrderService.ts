@@ -43,6 +43,15 @@ const parseApiErrorMessage = async (response: Response): Promise<string> => {
   return `API request failed (${response.status})`;
 };
 
+const getAuthHeaders = (extra?: Record<string, string>): Record<string, string> => {
+  const token = getLocalAuthSession()?.token;
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(extra || {}),
+  };
+};
+
 const getUserContext = () => {
   const session = getLocalAuthSession();
   const userId = Number(session?.context?.user?.id || 1);
@@ -182,7 +191,7 @@ export const purchaseOrderService = {
 
     const response = await fetch(`${API_BASE_URL}/purchase-orders`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({
         main_id: mainId,
         user_id: userId,
@@ -213,7 +222,7 @@ export const purchaseOrderService = {
   async updatePurchaseOrder(id: string, updates: PurchaseOrderUpdate): Promise<PurchaseOrder> {
     const response = await fetch(`${API_BASE_URL}/purchase-orders/${encodeURIComponent(String(id))}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({
         main_id: API_MAIN_ID,
         order_date: updates?.order_date,
@@ -248,7 +257,7 @@ export const purchaseOrderService = {
     const { mainId, userId } = getUserContext();
     const response = await fetch(
       `${API_BASE_URL}/purchase-orders/${encodeURIComponent(String(id))}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`,
-      { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...(getLocalAuthSession()?.token ? { Authorization: `Bearer ${getLocalAuthSession()?.token}` } : {}) }, body: JSON.stringify({ main_id: mainId, user_id: userId, reason }) }
+      { method: 'DELETE', headers: getAuthHeaders(), body: JSON.stringify({ main_id: mainId, user_id: userId, reason }) }
     );
     if (!response.ok) throw new Error(await parseApiErrorMessage(response));
   },
@@ -257,7 +266,7 @@ export const purchaseOrderService = {
     const { mainId, userId } = getUserContext();
     const response = await fetch(`${API_BASE_URL}/purchase-orders/${encodeURIComponent(String(id))}/actions/unpost`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(getLocalAuthSession()?.token ? { Authorization: `Bearer ${getLocalAuthSession()?.token}` } : {}) },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ main_id: mainId, user_id: userId, reason }),
     });
     if (!response.ok) throw new Error(await parseApiErrorMessage(response));
@@ -279,7 +288,7 @@ export const purchaseOrderService = {
 
     const response = await fetch(`${API_BASE_URL}/purchase-orders/${encodeURIComponent(poRefno)}/items`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({
         main_id: mainId,
         user_id: userId,
@@ -297,7 +306,7 @@ export const purchaseOrderService = {
   async updatePurchaseOrderItem(id: string, updates: PurchaseOrderItemUpdate): Promise<PurchaseOrderItem> {
     const response = await fetch(`${API_BASE_URL}/purchase-order-items/${encodeURIComponent(String(id))}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({
         main_id: API_MAIN_ID,
         qty: updates?.qty,

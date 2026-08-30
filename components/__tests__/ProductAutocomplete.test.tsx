@@ -57,8 +57,10 @@ describe('ProductAutocomplete', () => {
     fireEvent.focus(screen.getByRole('textbox'));
     await screen.findByText(/result matches/i);
 
-    expect(document.getElementById('product-autocomplete-dropdown')).toHaveStyle({
-      zIndex: '12000',
+    await waitFor(() => {
+      expect(document.getElementById('product-autocomplete-dropdown')).toHaveStyle({
+        zIndex: '12000',
+      });
     });
   });
 

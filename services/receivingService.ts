@@ -52,6 +52,15 @@ const getUserContext = () => {
     };
 };
 
+const getAuthHeaders = (extra?: Record<string, string>): Record<string, string> => {
+    const token = getLocalAuthSession()?.token;
+    return {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(extra || {}),
+    };
+};
+
 const toUiStatus = (apiStatus: unknown): string => {
     const normalized = String(apiStatus || '').trim().toLowerCase();
     if (normalized === 'delivered' || normalized === 'posted') return 'Posted';
@@ -253,7 +262,7 @@ export const receivingService = {
 
         const response = await fetch(`${API_BASE_URL}/receiving-stocks`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders(),
             body: JSON.stringify({
                 main_id: mainId,
                 user_id: userId,
@@ -297,7 +306,7 @@ export const receivingService = {
 
         const response = await fetch(`${API_BASE_URL}/receiving-stocks`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders(),
             body: JSON.stringify({
                 main_id: mainId,
                 user_id: userId,
@@ -345,7 +354,7 @@ export const receivingService = {
     async updateReceivingReport(id: string, updates: ReceivingReportUpdate): Promise<ReceivingReport> {
         const response = await fetch(`${API_BASE_URL}/receiving-stocks/${encodeURIComponent(String(id))}`, {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders(),
             body: JSON.stringify({
                 main_id: API_MAIN_ID,
                 receive_date: updates?.receive_date,
@@ -378,20 +387,18 @@ export const receivingService = {
 
     async deleteReceivingReport(id: string, reason: string): Promise<void> {
         const { mainId, userId } = getUserContext();
-        const token = getLocalAuthSession()?.token;
         const response = await fetch(
             `${API_BASE_URL}/receiving-stocks/${encodeURIComponent(String(id))}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`,
-            { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ main_id: mainId, user_id: userId, reason }) }
+            { method: 'DELETE', headers: getAuthHeaders(), body: JSON.stringify({ main_id: mainId, user_id: userId, reason }) }
         );
         if (!response.ok) throw new Error(await parseApiErrorMessage(response));
     },
 
     async unpostReceivingReport(id: string, reason: string): Promise<void> {
         const { mainId, userId } = getUserContext();
-        const token = getLocalAuthSession()?.token;
         const response = await fetch(`${API_BASE_URL}/receiving-stocks/${encodeURIComponent(String(id))}/actions/unpost`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+            headers: getAuthHeaders(),
             body: JSON.stringify({ main_id: mainId, user_id: userId, reason }),
         });
         if (!response.ok) throw new Error(await parseApiErrorMessage(response));
@@ -403,7 +410,7 @@ export const receivingService = {
     ): Promise<void> {
         const response = await fetch(`${API_BASE_URL}/receiving-stocks/${encodeURIComponent(String(id))}/finalize`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders(),
             body: JSON.stringify({
                 main_id: API_MAIN_ID,
                 status: 'Delivered',
@@ -421,7 +428,7 @@ export const receivingService = {
 
         const response = await fetch(`${API_BASE_URL}/receiving-stocks/${encodeURIComponent(rrId)}/items`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders(),
             body: JSON.stringify({
                 main_id: mainId,
                 user_id: userId,
@@ -444,7 +451,7 @@ export const receivingService = {
     async updateReceivingReportItem(id: string, updates: ReceivingReportItemUpdate): Promise<ReceivingReportItem> {
         const response = await fetch(`${API_BASE_URL}/receiving-stock-items/${encodeURIComponent(String(id))}`, {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders(),
             body: JSON.stringify({
                 main_id: API_MAIN_ID,
                 qty: toNumber(updates?.qty_received),

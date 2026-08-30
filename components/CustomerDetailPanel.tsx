@@ -385,7 +385,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
 
                 {!loading && activeTab === 'profile' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="md:col-span-2"><CustomerRequestsTab contactId={contactId} currentUser={getLocalAuthSession()?.userProfile || null} /></div>
+                        <div className="md:col-span-2"><CustomerRequestsTab contactId={contactId} contact={contact} currentUser={getLocalAuthSession()?.userProfile || null} /></div>
                         <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                             <h3 className="font-bold text-slate-800 dark:text-white mb-6 border-b pb-2">Contact Information</h3>
                             <div className="space-y-4">
