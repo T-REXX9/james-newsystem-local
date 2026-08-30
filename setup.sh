@@ -935,11 +935,20 @@ import_mysql_dump_if_available() {
 }
 
 deploy_production_files() {
+  local realtime_user
+  realtime_user="${SERVICE_USER:-www-data}"
+
   sudo install -d -m 0755 "$PRODUCTION_ROOT" "$PRODUCTION_WEB_DIR" "$PRODUCTION_API_DIR" "$PRODUCTION_REALTIME_DIR"
   sudo rsync -a --delete "$WEB_DIR/dist/" "$PRODUCTION_WEB_DIR/"
   sudo rsync -a --delete --exclude='.git' "$API_DIR/" "$PRODUCTION_API_DIR/"
-  sudo rsync -a --delete --exclude='.git' --exclude='dist' "$WEB_DIR/" "$PRODUCTION_REALTIME_DIR/"
+  # Never copy a workstation's node_modules to production. Native/platform
+  # package layouts can be incomplete or incompatible after rsync. Install a
+  # clean, production-only dependency tree on the server instead.
+  sudo rsync -a --delete --exclude='.git' --exclude='dist' --exclude='node_modules' "$WEB_DIR/" "$PRODUCTION_REALTIME_DIR/"
   sudo chown -R www-data:www-data "$PRODUCTION_WEB_DIR" "$PRODUCTION_API_DIR" "$PRODUCTION_REALTIME_DIR"
+  sudo rm -rf "$PRODUCTION_REALTIME_DIR/node_modules"
+  sudo -u "$realtime_user" env NPM_CONFIG_CACHE=/tmp/james-realtime-npm-cache \
+    npm ci --omit=dev --prefix "$PRODUCTION_REALTIME_DIR"
 }
 
 write_production_nginx_config() {
