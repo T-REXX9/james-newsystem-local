@@ -797,7 +797,7 @@ export interface IncidentReport {
   contact_id: string;
   report_date: string;
   incident_date: string;
-  issue_type: 'product_quality' | 'service_quality' | 'delivery' | 'other';
+  issue_type: 'product_quality' | 'service_quality' | 'delivery' | 'lbc_rto' | 'other';
   description: string;
   reported_by: string;
   attachments?: string[];
@@ -813,7 +813,7 @@ export interface CreateIncidentReportInput {
   contact_id: string;
   report_date: string;
   incident_date: string;
-  issue_type: 'product_quality' | 'service_quality' | 'delivery' | 'other';
+  issue_type: 'product_quality' | 'service_quality' | 'delivery' | 'lbc_rto' | 'other';
   description: string;
   reported_by: string;
   attachments?: string[];

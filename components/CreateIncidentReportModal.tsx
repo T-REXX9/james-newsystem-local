@@ -50,7 +50,7 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
   const [formData, setFormData] = useState({
     reportDate: today,
     incidentDate: today,
-    issueType: '' as 'product_quality' | 'service_quality' | 'delivery' | 'other' | '',
+    issueType: '' as 'product_quality' | 'service_quality' | 'delivery' | 'lbc_rto' | 'other' | '',
     description: '',
     reportedBy: currentUser?.full_name || '',
     attachments: '',
@@ -184,7 +184,7 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
           contact_id: contactId,
           report_date: formData.reportDate,
           incident_date: formData.incidentDate,
-          issue_type: formData.issueType as 'product_quality' | 'service_quality' | 'delivery' | 'other',
+          issue_type: formData.issueType as 'product_quality' | 'service_quality' | 'delivery' | 'lbc_rto' | 'other',
           description: formData.description.trim(),
           reported_by: formData.reportedBy.trim(),
           attachments: attachmentsArray,
@@ -371,6 +371,7 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
               <option value="product_quality">Product Quality</option>
               <option value="service_quality">Service Quality</option>
               <option value="delivery">Delivery</option>
+              <option value="lbc_rto">LBC RTO</option>
               <option value="other">Other</option>
             </select>
             {validationErrors.issueType && (
@@ -497,7 +498,7 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Related Transactions (Optional)
+              Transaction Ref#
             </label>
             {loadingTransactions ? (
               <div className="flex items-center justify-center py-4 text-gray-500 dark:text-gray-400">
