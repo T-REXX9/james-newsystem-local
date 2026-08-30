@@ -244,6 +244,15 @@ validate_stack() {
 
 write_api_env() {
   local env_example="$API_DIR/.env.example"
+  # A deployment update must never replace the token signing key. Doing so
+  # invalidates every active browser session and makes a successfully signed-in
+  # user receive "Invalid token signature" on their next protected request.
+  # Read the current values before the file is rebuilt from .env.example.
+  local existing_auth_secret=""
+  local existing_app_key=""
+  existing_auth_secret="$(read_env_example_value "$API_DIR/.env" "AUTH_SECRET" || true)"
+  existing_app_key="$(read_env_example_value "$API_DIR/.env" "APP_KEY" || true)"
+
   if [[ -f "$env_example" ]]; then
     awk \
       -v app_url="http://127.0.0.1:${API_PORT}" \
@@ -278,6 +287,20 @@ write_api_env() {
         }
       }
     ' "$env_example" > "$API_DIR/.env"
+
+    # Keep AUTH_SECRET and APP_KEY aligned. AUTH_SECRET takes precedence, with
+    # APP_KEY retained as a compatibility fallback for older installations.
+    if [[ -z "$existing_auth_secret" ]]; then
+      existing_auth_secret="$existing_app_key"
+    fi
+    if [[ -z "$existing_auth_secret" ]]; then
+      existing_auth_secret="${AUTH_SECRET:-${APP_KEY:-}}"
+    fi
+    if [[ -z "$existing_auth_secret" ]]; then
+      existing_auth_secret="$(generate_secret)"
+    fi
+    set_env_value "$API_DIR/.env" "AUTH_SECRET" "$existing_auth_secret"
+    set_env_value "$API_DIR/.env" "APP_KEY" "$existing_auth_secret"
     return 0
   fi
 
@@ -292,6 +315,12 @@ DB_NAME=${DB_NAME}
 DB_USER=${DB_USER}
 DB_PASS=${DB_PASS}
 EOF
+  local generated_auth_secret="${AUTH_SECRET:-${APP_KEY:-}}"
+  if [[ -z "$generated_auth_secret" ]]; then
+    generated_auth_secret="$(generate_secret)"
+  fi
+  set_env_value "$API_DIR/.env" "AUTH_SECRET" "$generated_auth_secret"
+  set_env_value "$API_DIR/.env" "APP_KEY" "$generated_auth_secret"
 }
 
 write_web_env() {
@@ -338,7 +367,7 @@ restart_services() {
   pkill -f "npm run realtime" >/dev/null 2>&1 || true
   pkill -f "vite preview --host [^ ]* --port ${WEB_PORT}" >/dev/null 2>&1 || true
 
-  nohup bash -lc "cd '$API_DIR' && INTERNAL_CHAT_SOCKET_NOTIFY_URL='$realtime_notify_url' INTERNAL_CHAT_SOCKET_SECRET='$runtime_socket_secret' PHP_CLI_SERVER_WORKERS='${PHP_CLI_SERVER_WORKERS:-4}' php -S ${API_HOST}:${API_PORT} -t public" >"$API_LOG" 2>&1 &
+  nohup bash -lc "cd '$API_DIR' && AUTH_SECRET='$runtime_auth_secret' APP_KEY='$runtime_app_key' INTERNAL_CHAT_SOCKET_NOTIFY_URL='$realtime_notify_url' INTERNAL_CHAT_SOCKET_SECRET='$runtime_socket_secret' PHP_CLI_SERVER_WORKERS='${PHP_CLI_SERVER_WORKERS:-4}' php -S ${API_HOST}:${API_PORT} -t public" >"$API_LOG" 2>&1 &
   wait_for_http "http://127.0.0.1:${API_PORT}/api/v1/health" "API health endpoint"
 
   nohup bash -lc "cd '$WEB_DIR' && INTERNAL_CHAT_SOCKET_HOST='${REALTIME_HOST}' INTERNAL_CHAT_SOCKET_PORT='${REALTIME_PORT}' INTERNAL_CHAT_SOCKET_SECRET='${runtime_socket_secret}' AUTH_SECRET='${runtime_auth_secret}' APP_KEY='${runtime_app_key}' npm run realtime" >"$REALTIME_LOG" 2>&1 &
