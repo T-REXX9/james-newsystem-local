@@ -835,6 +835,25 @@ FLUSH PRIVILEGES;
 SQL
 }
 
+# A deployment backup is intentionally not kept in Git. When no explicit path
+# is supplied, accept the newest SQL backup copied to the shared installation
+# backups directory (or the web repository's own backups directory).
+find_latest_local_database_dump() {
+  local backup_dir=""
+  local newest_dump=""
+
+  for backup_dir in "$INSTALL_DIR/backups" "$SCRIPT_DIR/backups"; do
+    [[ -d "$backup_dir" ]] || continue
+    newest_dump="$(find "$backup_dir" -maxdepth 1 -type f \( -name '*.sql' -o -name '*.sql.gz' \) -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n 1 | cut -d' ' -f2- || true)"
+    if [[ -n "$newest_dump" && -f "$newest_dump" ]]; then
+      printf '%s\n' "$newest_dump"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 import_mysql_dump_if_available() {
   local found_dump=""
   if [[ -n "$DB_DUMP_PATH" && -f "$DB_DUMP_PATH" ]]; then
@@ -851,6 +870,8 @@ import_mysql_dump_if_available() {
     found_dump="$INSTALL_DIR/topnotch.sql"
   elif [[ -f "$INSTALL_DIR/topnotch.sql.gz" ]]; then
     found_dump="$INSTALL_DIR/topnotch.sql.gz"
+  elif found_dump="$(find_latest_local_database_dump || true)"; [[ -n "$found_dump" ]]; then
+    : # The newest copied backup is restored automatically during install/production setup.
   elif [[ -n "$DB_DUMP_URL" ]]; then
     echo "Downloading DB dump from DB_DUMP_URL..."
     if [[ "$DB_DUMP_URL" == *.gz ]]; then
@@ -865,7 +886,7 @@ import_mysql_dump_if_available() {
   if [[ -z "$found_dump" ]]; then
     echo "WARNING: No DB dump provided."
     echo "The app will run, but real data/login may not work until you import your topnotch SQL dump."
-    echo "Provide one via DB_DUMP_PATH=/path/to/topnotch.sql or DB_DUMP_URL=..."
+    echo "Provide one via DB_DUMP_PATH=/path/to/topnotch.sql, DB_DUMP_URL=..., or copy a .sql/.sql.gz file to $INSTALL_DIR/backups/."
     return 0
   fi
 
@@ -1458,6 +1479,8 @@ elif [[ -f "$INSTALL_DIR/topnotch.sql" ]]; then
   FOUND_DUMP="$INSTALL_DIR/topnotch.sql"
 elif [[ -f "$INSTALL_DIR/topnotch.sql.gz" ]]; then
   FOUND_DUMP="$INSTALL_DIR/topnotch.sql.gz"
+elif FOUND_DUMP="$(find_latest_local_database_dump || true)"; [[ -n "$FOUND_DUMP" ]]; then
+  : # The newest copied backup is restored automatically during install.
 elif [[ -n "$DB_DUMP_URL" ]]; then
   echo "Downloading DB dump from DB_DUMP_URL..."
   if [[ "$DB_DUMP_URL" == *.gz ]]; then
@@ -1530,7 +1553,7 @@ if [[ -n "$FOUND_DUMP" ]]; then
 else
   echo "WARNING: No DB dump provided."
   echo "The app will run, but real data/login may not work until you import your topnotch SQL dump."
-  echo "Provide one via DB_DUMP_PATH=/path/to/topnotch.sql or DB_DUMP_URL=..."
+  echo "Provide one via DB_DUMP_PATH=/path/to/topnotch.sql, DB_DUMP_URL=..., or copy a .sql/.sql.gz file to $INSTALL_DIR/backups/."
 fi
 
 step "Writing API environment file and applying database migrations"
