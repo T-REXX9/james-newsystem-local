@@ -1,42 +1,120 @@
-# Call Forwarding Idea
+# Call Forwarding / Calling System Notes
 
-## Overview
-Implement call forwarding for sales agents using carrier-provided USSD codes, allowing automatic redirection of incoming calls from an absent agent's phone to an available agent. This ensures seamless call handling with full audit trails via Supabase.
+## Summary
 
-## How It Works
-- **Trigger Forwarding:** When sales agent 1 is marked "absent" in the Supabase database (via web app or status update), their dialer app automatically dials the carrier forwarding code (e.g., `*21*agent2number#`) using Android's `ACTION_CALL` intent.
-- **Forwarding Mechanism:** The call is forwarded wirelessly over the cellular network to agent 2's phone.
-- **Notification:** Agent 2 receives a real-time notification via the web app about the forwarded call.
-- **Answering:** Agent 2 answers the call on their device.
-- **Logging/Audit Trail:** All actions (forwarding enable/disable, call details, timestamps, agents involved) are logged to Supabase for tracking who handled what call.
+This file started as a carrier-based call forwarding idea, but the repo now implements a different approach: a staff-phone calling system with a web click-to-call request, a Flutter companion app, call-log synchronization, device health monitoring, and missed-call auto-reply support.
 
-## Requirements
-- **Permissions:** `CALL_PHONE` and `READ_PHONE_STATE` in Android manifest.
-- **Carrier Support:** Confirmed for Philippine telcos (Globe: `*143#` menu, but forwarding via `*21*number#`; Smart/Sun: `*123#` menu, forwarding `*21*number#`).
-- **Codes:**
-  - Enable unconditional forwarding: `*21*fullnumber#`
-  - Disable: `#21#`
-  - Conditional (busy): `*67*number#`
-  - Conditional (unanswered): `*61*number#`
-- **App Integration:** Default dialer app to handle calls and logging.
-- **Supabase:** Real-time subscriptions for status updates and notifications.
+The current implementation does **not** silently forward live calls through carrier USSD codes. Instead, the website confirms a call request, the registered staff phone receives it, and the native Android dialer is opened on that device. The actual call still begins when the staff member uses the phone’s dialer.
 
-## Benefits
-- No third-party VoIP providers needed.
-- Wireless forwarding via carrier.
-- Full audit trail for compliance.
-- Easy automation with existing Android APIs.
+## What the repo actually contains
 
-## Potential Challenges
-- Carrier-specific code variations; test per telco.
-- Requires cellular signal.
-- Manual override possible if needed.
+### 1) Web application
+- `james-newsystem/`
+- React/Vite UI for customer, sales, and management screens
+- Reusable call action components such as:
+  - `CallCustomerButton`
+  - `CallAccountabilityPanel`
+- Calling-related views show device health and hardware call metadata
 
-## Implementation Steps
-1. Detect agent status via Supabase real-time.
-2. Dial forwarding code programmatically.
-3. Log events to Supabase.
-4. Notify agents via web app.
-5. Handle call events for audit.
+### 2) API
+- `api/`
+- PHP/MySQL backend that handles:
+  - staff login
+  - device registration and heartbeat
+  - dial-request queueing and polling
+  - call-log ingestion
+  - hardware call history queries
+  - missed-call auto-reply settings and audit history
+- Devices are bound to a staff account and cannot be silently reassigned
 
-Test thoroughly on target devices and carriers.
+### 3) Android companion app
+- `calling_app/`
+- Flutter app used by staff phones
+- Responsibilities:
+  - sign in with James staff credentials
+  - register the device ID
+  - run a visible foreground service
+  - send heartbeat updates
+  - poll or receive dial requests
+  - open the native dialer
+  - sync call-log metadata back to the API
+
+## Implemented call flows
+
+### A. Daily Call Monitoring workflow
+This is the agent-facing calling flow used in the web app.
+
+1. The agent opens Daily Call Monitoring.
+2. The system can claim a customer so another agent does not work the same customer at the same time.
+3. The customer detail / contact window opens.
+4. The agent reviews customer information and works the call.
+5. The agent submits a report after the call.
+6. The report is saved as call activity and becomes visible in management views.
+
+### B. Website click-to-call workflow
+This is the reusable call button flow used in supported screens.
+
+1. The user presses **Call customer**.
+2. The website asks for confirmation.
+3. The system queues a dial request for the authenticated staff phone.
+4. The companion phone app receives the request.
+5. The app opens the native dialer.
+6. The request is marked as dialed or failed.
+
+### C. Hardware call-log sync
+The companion phone can upload metadata for inbound, outbound, and missed calls.
+
+Stored metadata includes:
+- staff account
+- device ID
+- phone number
+- direction
+- duration
+- timestamp
+- customer match when available
+
+The system explicitly does **not** record audio.
+
+## Current calling-related capabilities visible in the codebase
+
+- Device registration and heartbeat tracking
+- Team-scoped vs self-scoped device/call visibility
+- Call history filters by staff, customer, direction, and date range
+- Device health labels such as:
+  - background active
+  - app open
+  - permission missing
+  - no network
+  - device offline
+- Missed-call auto-reply settings for Master Users
+- Realtime notification plus polling fallback for dial requests
+
+## Important implementation detail
+
+The original idea here was carrier forwarding via USSD codes such as `*21*number#`.
+That is **not** what the repo currently implements.
+
+The implemented system is more like:
+- web-requested click-to-call
+- registered staff phone handling
+- native Android dialer launch
+- metadata logging and accountability
+
+## Files worth reading
+
+- `docs/calling_solution.md`
+- `Calling_System_Implementation_Status.md`
+- `api/src/Controllers/CallSystemController.php`
+- `api/src/Repositories/CallSystemRepository.php`
+- `james-newsystem/services/callingSystemService.ts`
+- `james-newsystem/components/CallCustomerButton.tsx`
+- `james-newsystem/components/CallAccountabilityPanel.tsx`
+- `calling_app/lib/main.dart`
+- `calling_app/lib/calling_background_service.dart`
+- `calling_app/lib/calling_api_client.dart`
+
+## Practical takeaway
+
+If the goal is to understand this repo, treat it as a **call monitoring and click-to-call accountability system**, not a carrier call-forwarding demo.
+
+If the goal is to build a true carrier-forwarding feature later, that would be a separate design and likely a separate implementation path.
