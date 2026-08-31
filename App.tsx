@@ -546,12 +546,18 @@ const App: React.FC = () => {
             <FastSlowInventoryReport />
           </div>
         );
-      case 'warehouse-reports-incident-items-report':
+      case 'warehouse-reports-incident-items-report': {
+        const context = moduleContext['warehouse-reports-incident-items-report'] || {};
         return (
           <div className="h-full overflow-y-auto">
-            <IncidentItemsReport />
+            <IncidentItemsReport
+              initialSearch={context.search}
+              initialDateFrom={context.dateFrom}
+              initialDateTo={context.dateTo}
+            />
           </div>
         );
+      }
       case 'customers':
       case 'sales-database-customer-database': {
         const context = moduleContext['sales-database-customer-database'] || moduleContext.customers || {};
@@ -719,12 +725,18 @@ const App: React.FC = () => {
         return renderComingSoon('Aging Report');
       case 'accounting-reports-collection-report':
         return renderComingSoon('Collection Report');
-      case 'accounting-reports-sales-return-report':
+      case 'accounting-reports-sales-return-report': {
+        const context = moduleContext['accounting-reports-sales-return-report'] || {};
         return (
           <div className="h-full overflow-y-auto">
-            <SalesReturnReport />
+            <SalesReturnReport
+              initialSearch={context.search}
+              initialDateFrom={context.dateFrom}
+              initialDateTo={context.dateTo}
+            />
           </div>
         );
+      }
       case 'accounting-reports-freight-charges-report':
         return (
           <div className="h-full overflow-y-auto">

@@ -45,7 +45,17 @@ const StatBox: React.FC<{ label: string; value: string | number; icon: React.Rea
   </div>
 );
 
-const IncidentItemsReport: React.FC = () => {
+interface IncidentItemsReportProps {
+  initialSearch?: string;
+  initialDateFrom?: string;
+  initialDateTo?: string;
+}
+
+const IncidentItemsReport: React.FC<IncidentItemsReportProps> = ({
+  initialSearch = '',
+  initialDateFrom = '',
+  initialDateTo = '',
+}) => {
   const today = new Date().toISOString().slice(0, 10);
   const monthAgo = useMemo(() => {
     const date = new Date();
@@ -54,11 +64,11 @@ const IncidentItemsReport: React.FC = () => {
   }, []);
 
   const [filters, setFilters] = useState<IncidentItemsReportFilters>({
-    search: '',
+    search: initialSearch,
     supplier: '',
     matchSource: 'all',
-    dateFrom: monthAgo,
-    dateTo: today,
+    dateFrom: initialDateFrom || monthAgo,
+    dateTo: initialDateTo || today,
     minCount: 1,
     page: 1,
     perPage: 100,

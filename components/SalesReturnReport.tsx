@@ -9,20 +9,30 @@ import {
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
-const SalesReturnReport: React.FC = () => {
+interface SalesReturnReportProps {
+  initialSearch?: string;
+  initialDateFrom?: string;
+  initialDateTo?: string;
+}
+
+const SalesReturnReport: React.FC<SalesReturnReportProps> = ({
+  initialSearch = '',
+  initialDateFrom = '',
+  initialDateTo = '',
+}) => {
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [loading, setLoading] = useState(false);
-  const [searchInput, setSearchInput] = useState('');
+  const [searchInput, setSearchInput] = useState(initialSearch);
   const [statuses, setStatuses] = useState<string[]>([]);
   const [rows, setRows] = useState<SalesReturnReportRow[]>([]);
   const [summary, setSummary] = useState({ totalQty: 0, totalAmount: 0 });
   const [meta, setMeta] = useState({ page: 1, perPage: 100, total: 0, totalPages: 0 });
 
   const [filters, setFilters] = useState<SalesReturnReportFilters>({
-    dateFrom: today,
-    dateTo: today,
+    dateFrom: initialDateFrom || today,
+    dateTo: initialDateTo || today,
     status: '',
-    search: '',
+    search: initialSearch,
     page: 1,
     perPage: 100,
   });

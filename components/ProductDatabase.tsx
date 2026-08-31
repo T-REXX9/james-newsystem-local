@@ -126,6 +126,28 @@ const compactQuantity = (value?: number): string => {
   return Number.isInteger(amount) ? amount.toLocaleString() : amount.toLocaleString(undefined, { maximumFractionDigits: 2 });
 };
 
+const getLastTwelveMonthsRange = () => {
+  const dateTo = new Date();
+  const dateFrom = new Date(dateTo);
+  dateFrom.setFullYear(dateFrom.getFullYear() - 1);
+  return {
+    dateFrom: dateFrom.toISOString().slice(0, 10),
+    dateTo: dateTo.toISOString().slice(0, 10),
+  };
+};
+
+const openProductHistoryReport = (product: Product, report: 'incident' | 'return') => {
+  const search = product.part_no || product.item_code || product.description || '';
+  const { dateFrom, dateTo } = getLastTwelveMonthsRange();
+  const params = new URLSearchParams({ search, dateFrom, dateTo });
+  const url = new URL(window.location.href);
+  const tab = report === 'incident'
+    ? 'warehouse-reports-incident-items-report'
+    : 'accounting-reports-sales-return-report';
+  url.hash = `#/${tab}?${params.toString()}`;
+  window.open(url.toString(), '_blank', 'noopener,noreferrer');
+};
+
 const getSpecificationRows = (product: Product) => {
   const searchable = `${product.specifications || ''} ${product.application || ''}`;
   const side = searchable.match(/\b(?:L|R)\s*\d+(?:\.\d+)?\s*mm(?:\s*\((?:Left|Right)\))?/i)?.[0]
@@ -782,10 +804,32 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
                             ))}
                           </td>
                           <td className={`border border-[#ddd] px-0.5 py-2 text-center align-top font-bold ${Number(product.incident_report_count || 0) > 0 ? 'text-red-600' : ''}`}>
-                            {Number(product.incident_report_count || 0)}
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openProductHistoryReport(product, 'incident');
+                              }}
+                              className="rounded px-1 underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
+                              title="Open this product's Incident Items Report for the last 12 months in a new tab"
+                              aria-label={`Open incident report for ${product.part_no || product.item_code || product.description}`}
+                            >
+                              {Number(product.incident_report_count || 0)}
+                            </button>
                           </td>
                           <td className={`border border-[#ddd] px-0.5 py-2 text-center align-top font-bold ${Number(product.return_report_count || 0) > 0 ? 'text-red-600' : ''}`}>
-                            {Number(product.return_report_count || 0)}
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openProductHistoryReport(product, 'return');
+                              }}
+                              className="rounded px-1 underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
+                              title="Open this product's Sales Return Report for the last 12 months in a new tab"
+                              aria-label={`Open return report for ${product.part_no || product.item_code || product.description}`}
+                            >
+                              {Number(product.return_report_count || 0)}
+                            </button>
                           </td>
                           <td className="border border-[#ddd] px-1 py-2 text-center align-top">{formatBlueprintDate(product.last_price_update)}</td>
                         </tr>

@@ -157,6 +157,29 @@ describe('ProductDatabase', () => {
     expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled();
   });
 
+  it('opens the matching 12-month incident and return reports in new tabs', async () => {
+    const openWindow = vi.spyOn(window, 'open').mockImplementation(() => null);
+    render(<ProductDatabase currentUser={{ role: 'Owner' } as any} />);
+
+    await screen.findByText('QK2-001');
+    fireEvent.click(screen.getByRole('button', { name: 'Open incident report for QK2-001' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open return report for QK2-001' }));
+
+    expect(openWindow).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('#/warehouse-reports-incident-items-report?search=QK2-001'),
+      '_blank',
+      'noopener,noreferrer'
+    );
+    expect(openWindow).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('#/accounting-reports-sales-return-report?search=QK2-001'),
+      '_blank',
+      'noopener,noreferrer'
+    );
+    openWindow.mockRestore();
+  });
+
   it('loads and appends the next product batch when the list reaches the bottom', async () => {
     const secondProduct = {
       ...sampleProduct,
