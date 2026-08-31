@@ -13,6 +13,7 @@ import {
   Tag,
   Bot,
   Shield,
+  Trash2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -437,9 +438,9 @@ export const TOPBAR_MENU_CONFIG: TopbarMainMenu[] = [
           },
           {
             id: 'maintenance-profile-server-maintenance',
-            label: 'Server Maintenance',
+            label: 'Recycle Bin',
             route: 'maintenance-profile-server-maintenance',
-            icon: Settings,
+            icon: Trash2,
           },
         ],
       },

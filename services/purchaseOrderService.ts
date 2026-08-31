@@ -149,10 +149,11 @@ const toPurchaseOrderDetail = (payload: any): PurchaseOrderWithDetails => {
 };
 
 export const purchaseOrderService = {
-  async getPurchaseOrders(filters?: { month?: number; year?: number; status?: string; search?: string; page?: number; perPage?: number }): Promise<PurchaseOrderWithDetails[]> {
-    const now = new Date();
-    const month = Math.max(1, Math.min(12, Number(filters?.month || now.getMonth() + 1)));
-    const year = Number(filters?.year || now.getFullYear());
+  async getPurchaseOrders(filters?: { month?: number | string; year?: number | string; status?: string; search?: string; page?: number; perPage?: number }): Promise<PurchaseOrderWithDetails[]> {
+    const rawMonth = String(filters?.month ?? '').trim();
+    const rawYear = String(filters?.year ?? '').trim();
+    const month = rawMonth && rawMonth.toLowerCase() !== 'all' ? Math.max(1, Math.min(12, Number(rawMonth))) : null;
+    const year = rawYear && rawYear.toLowerCase() !== 'all' ? Number(rawYear) : null;
     const status = String(filters?.status || 'all').trim().toLowerCase() || 'all';
     const search = String(filters?.search || '').trim();
     const page = Math.max(1, Number(filters?.page || 1));
@@ -160,12 +161,12 @@ export const purchaseOrderService = {
 
     const query = new URLSearchParams({
       main_id: String(API_MAIN_ID),
-      month: String(month),
-      year: String(year),
       status,
       page: String(page),
       per_page: String(perPage),
     });
+    if (month !== null && Number.isFinite(month)) query.set('month', String(month));
+    if (year !== null && Number.isFinite(year)) query.set('year', String(year));
     if (search) query.set('search', search);
 
     const response = await fetch(`${API_BASE_URL}/purchase-orders?${query.toString()}`);

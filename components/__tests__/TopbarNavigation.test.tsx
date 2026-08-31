@@ -39,7 +39,7 @@ describe('TopbarNavigation responsive layout', () => {
 
   it.each([
     ['Product Database', 'warehouse-inventory-product-database', 'Company Owner'],
-    ['Server Maintenance', 'maintenance-profile-server-maintenance', 'Company Owner'],
+    ['Recycle Bin', 'maintenance-profile-server-maintenance', 'Company Owner'],
   ])('navigates to %s from the current menu and preserves open-in-new-tab gestures', async (label, route, role) => {
     const user = userEvent.setup();
     const onNavigate = vi.fn();

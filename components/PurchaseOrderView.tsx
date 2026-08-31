@@ -56,8 +56,8 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [filterMonth, setFilterMonth] = useState<number>(today.getMonth() + 1);
-  const [filterYear, setFilterYear] = useState<number>(today.getFullYear());
+  const [filterMonth, setFilterMonth] = useState<string>(String(today.getMonth() + 1));
+  const [filterYear, setFilterYear] = useState<string>(String(today.getFullYear()));
   const [page, setPage] = useState(0);
 
   // View/Edit State
@@ -724,13 +724,15 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-500">Month</label>
-              <select value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))} className="h-9 w-full rounded border border-slate-300 bg-white px-2 text-sm">
+              <select aria-label="Filter by month" value={filterMonth} onChange={e => { setFilterMonth(e.target.value); setPage(0); }} className="h-9 w-full rounded border border-slate-300 bg-white px-2 text-sm">
+                <option value="">All Months</option>
                 {monthOptions.map((month, index) => <option key={month} value={index + 1}>{month}</option>)}
               </select>
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-500">Year</label>
-              <select value={filterYear} onChange={e => setFilterYear(Number(e.target.value))} className="h-9 w-full rounded border border-slate-300 bg-white px-2 text-sm">
+              <select aria-label="Filter by year" value={filterYear} onChange={e => { setFilterYear(e.target.value); setPage(0); }} className="h-9 w-full rounded border border-slate-300 bg-white px-2 text-sm">
+                <option value="">All Years</option>
                 {yearOptions.map(year => <option key={year} value={year}>{year}</option>)}
               </select>
             </div>

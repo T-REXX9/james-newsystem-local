@@ -54,20 +54,16 @@ newer customer edits. Open customer views refresh after approval. Review actions
 Discount approval records the authorization and its review note. It does not
 automatically reprice existing sales documents or bypass their pricing controls.
 
-### Server Maintenance / recovery
+### Recycle Bin
 
 The menu recognizes the current Company Owner role. The authenticated owner-only
-local recovery API stores snapshots for explicit customer/product deletions made
-with this version. Deletion and snapshot capture occur in one transaction.
-Customer recovery includes related contact people, terms, and image metadata;
-product recovery restores its previous enabled/inventory flags. Conflicting
-references cannot be overwritten. Raw snapshots are not returned to the browser.
+Recycle Bin API reads records marked deleted in their source tables. Customer,
+product, purchase request, purchase order, and receiving report deletes use
+soft-delete metadata. Child/customer detail records remain attached to the
+deleted parent row for audit history.
 
-Older deleted records cannot be reconstructed. Inactive products are not inferred
-to be deleted. Discard recovery permanently deletes the snapshot; disabled product
-rows remain to preserve transaction references. There is no automatic purge or
-promise of 90-day retention. Recovery currently covers customers and products,
-not historical Supabase recycle-bin entries or other document types.
+Older records only appear when their source table has a deleted marker. There is
+no automatic purge or promise of 90-day retention.
 
 ### Activity logs
 
@@ -78,12 +74,13 @@ does not block the primary action. Existing activity-log reading remains intact.
 
 ## Database rollout
 
-Both additive migrations have been applied to the configured local database:
+These additive migrations are required in the configured local database:
 
 - `api/migrations/017_create_customer_requests.sql`
-- `api/migrations/018_create_local_recycle_bin.sql`
+- `api/migrations/019_add_procurement_recovery_columns.sql`
+- `api/migrations/023_add_customer_product_soft_delete_columns.sql`
 
-Apply both migrations **before deploying the updated API**, particularly before
+Apply these migrations **before deploying the updated API**, particularly before
 customer/product deletes. No task, deal, or AI legacy tables were recreated.
 No existing business data was deleted or edited during verification.
 

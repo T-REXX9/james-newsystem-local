@@ -62,6 +62,18 @@ describe('purchaseOrderService (local API)', () => {
     expect(rows[0].first_eta_date).toBe('2026-02-20');
   });
 
+  it('omits month and year when purchase order filters are all dates', async () => {
+    (global.fetch as any).mockImplementation(() => okResponse({ items: [] }));
+
+    const { purchaseOrderService } = await import('../purchaseOrderService');
+    await purchaseOrderService.getPurchaseOrders({ month: '', year: '', search: 'PO-22103' });
+
+    const url = new URL(String((global.fetch as any).mock.calls[0][0]), 'http://localhost');
+    expect(url.searchParams.get('month')).toBeNull();
+    expect(url.searchParams.get('year')).toBeNull();
+    expect(url.searchParams.get('search')).toBe('PO-22103');
+  });
+
   it('createPurchaseOrder posts with auth user context', async () => {
     (global.fetch as any).mockImplementation(() =>
       okResponse({

@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDiscountRequest, fetchCustomerInquiries, fetchCustomerReturns, requestCustomerUpdate, reviewCustomerRequest } from '../customerWorkflowLocalApiService';
-import { discardRecovery, restoreItem } from '../recycleBinService';
 import { logActivity } from '../activityLogService';
 const auth = vi.hoisted(() => ({ token: 'test-token' }));
 vi.mock('../localAuthService', () => ({ getLocalAuthSession: () => ({ token: auth.token, context: { main_userid: 7 } }) }));
@@ -40,12 +39,6 @@ describe('customer workflow local API contracts', () => {
     auth.token = '';
     await expect(fetchCustomerInquiries('c1')).rejects.toThrow('sign in');
     expect(fetchMock).not.toHaveBeenCalled();
-  });
-  it('uses recovery entry IDs for restore/discard and propagates conflicts', async () => {
-    fetchMock.mockResolvedValueOnce(reply({ success: true })).mockResolvedValueOnce(reply(null, 409));
-    await restoreItem('42');
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ main_id: 7, action: 'restore' });
-    await expect(discardRecovery('42')).rejects.toThrow('Save rejected');
   });
   it('only reports a saved audit log after the database endpoint confirms it', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});

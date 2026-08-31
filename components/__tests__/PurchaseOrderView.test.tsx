@@ -92,6 +92,27 @@ describe('PurchaseOrderView', () => {
     expect(service.generatePONumber).toHaveBeenCalled();
   });
 
+  it('supports all-month and all-year list filters', async () => {
+    const { default: PurchaseOrderView } = await import('../PurchaseOrderView');
+    render(<PurchaseOrderView />);
+
+    await screen.findByText('1 Items');
+    const monthSelect = screen.getAllByLabelText('Filter by month')[0];
+    const yearSelect = screen.getAllByLabelText('Filter by year')[0];
+    expect(monthSelect).toHaveTextContent('All Months');
+    expect(yearSelect).toHaveTextContent('All Years');
+
+    fireEvent.change(monthSelect, { target: { value: '' } });
+    fireEvent.change(yearSelect, { target: { value: '' } });
+
+    await waitFor(() => {
+      expect(service.getPurchaseOrders).toHaveBeenCalledWith(expect.objectContaining({
+        month: '',
+        year: '',
+      }));
+    });
+  });
+
   it.skip('allows selecting an eligible PR, auto-populates items/supplier, and converts PR to PO', async () => {
     const { default: PurchaseOrderView } = await import('../PurchaseOrderView');
     render(<PurchaseOrderView />);
