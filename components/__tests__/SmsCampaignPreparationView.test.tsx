@@ -76,7 +76,9 @@ describe('SmsCampaignPreparationView', () => {
     expect(await screen.findByText('SMS Blasting')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Queue 0 Messages/i })).toBeDisabled();
     expect(screen.getByRole('button', { name: /Birthdays\s+0/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /No Purchase > 1 Month\s+0/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /No Purchase 1 Month\s+0/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /No Purchase 2 Months\s+0/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /No Purchase > 3 Months\s+0/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /VIP Re-engagement\s+0/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Prospective\s+0/i })).toBeInTheDocument();
   });
@@ -94,7 +96,7 @@ describe('SmsCampaignPreparationView', () => {
 
     expect(await screen.findByRole('button', { name: /Birthdays\s+1/i })).toBeInTheDocument();
 
-    const noPurchaseTab = screen.getByRole('button', { name: /No Purchase > 1 Month\s+0/i });
+    const noPurchaseTab = screen.getByRole('button', { name: /No Purchase 1 Month\s+0/i });
     expect(noPurchaseTab).toBeTruthy();
     fireEvent.click(noPurchaseTab);
     expect(await screen.findByText('No clients match this campaign')).toBeInTheDocument();
@@ -119,6 +121,51 @@ describe('SmsCampaignPreparationView', () => {
         16,
       );
     });
+  });
+
+  it('splits no-purchase customers into three ranges and applies each saved template', async () => {
+    const now = new Date();
+    const dateMonthsAgo = (months: number) => {
+      const date = new Date(now);
+      date.setDate(15);
+      date.setMonth(date.getMonth() - months);
+      return date.toISOString().slice(0, 10);
+    };
+    const customers = [
+      { ...sampleCustomer('01'), id: 'one-month', company: 'One Month Customer', lastContactDate: dateMonthsAgo(1) },
+      { ...sampleCustomer('01'), id: 'two-months', company: 'Two Months Customer', lastContactDate: dateMonthsAgo(2) },
+      { ...sampleCustomer('01'), id: 'three-plus-months', company: 'Three Plus Months Customer', lastContactDate: dateMonthsAgo(4) },
+    ];
+    mockedFetchContacts.mockResolvedValue(customers as any);
+    mockedGetMessageTemplates.mockResolvedValue([
+      { id: 'tpl-1', name: 'One month', template_type: 'no_purchase_1_month', content: 'One month for {name}', is_active: true } as any,
+      { id: 'tpl-2', name: 'Two months', template_type: 'no_purchase_2_months', content: 'Two months for {name}', is_active: true } as any,
+      { id: 'tpl-3', name: 'Three plus', template_type: 'no_purchase_3_plus', content: 'Three plus for {name}', is_active: true } as any,
+    ]);
+
+    render(
+      <ToastProvider>
+        <SmsCampaignPreparationView currentUser={ownerUser} />
+      </ToastProvider>,
+    );
+
+    const oneMonthTab = await screen.findByRole('button', { name: /No Purchase 1 Month\s+1/i });
+    const twoMonthsTab = screen.getByRole('button', { name: /No Purchase 2 Months\s+1/i });
+    const threePlusTab = screen.getByRole('button', { name: /No Purchase > 3 Months\s+1/i });
+
+    fireEvent.click(oneMonthTab);
+    expect(await screen.findByText('One month for Maria')).toBeInTheDocument();
+    expect(screen.getByText('One Month Customer')).toBeInTheDocument();
+    expect(screen.queryByText('Two Months Customer')).not.toBeInTheDocument();
+
+    fireEvent.click(twoMonthsTab);
+    expect(await screen.findByText('Two months for Maria')).toBeInTheDocument();
+    expect(screen.getByText('Two Months Customer')).toBeInTheDocument();
+    expect(screen.queryByText('Three Plus Months Customer')).not.toBeInTheDocument();
+
+    fireEvent.click(threePlusTab);
+    expect(await screen.findByText('Three plus for Maria')).toBeInTheDocument();
+    expect(screen.getByText('Three Plus Months Customer')).toBeInTheDocument();
   });
 
   it('supports Master User custom message queueing and activity history', async () => {

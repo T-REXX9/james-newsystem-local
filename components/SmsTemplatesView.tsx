@@ -10,7 +10,9 @@ interface Props {
 
 const SMS_CAMPAIGN_TYPES = [
   'birthday',
-  'no_purchase',
+  'no_purchase_1_month',
+  'no_purchase_2_months',
+  'no_purchase_3_plus',
   'vip_reengage',
   'prospective'
 ];
@@ -264,7 +266,9 @@ export const SmsTemplatesView: React.FC<Props> = ({ currentUser }) => {
                   className="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-[#1675bd] focus:outline-none focus:ring-1 focus:ring-[#1675bd]"
                 >
                   <option value="birthday">Birthday</option>
-                  <option value="no_purchase">No Purchase &gt; 1 Month</option>
+                  <option value="no_purchase_1_month">No Purchase 1 Month</option>
+                  <option value="no_purchase_2_months">No Purchase 2 Months</option>
+                  <option value="no_purchase_3_plus">No Purchase &gt; 3 Months</option>
                   <option value="vip_reengage">VIP Re-engagement</option>
                   <option value="prospective">Prospective</option>
                 </select>

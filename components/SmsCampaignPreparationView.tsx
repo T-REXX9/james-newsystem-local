@@ -12,7 +12,26 @@ interface Props {
   currentUser: UserProfile | null;
 }
 
-type CampaignType = 'birthday' | 'no_purchase' | 'vip_reengage' | 'prospective' | 'custom' | 'history' | 'logs';
+type CampaignType = 'birthday' | 'no_purchase_1_month' | 'no_purchase_2_months' | 'no_purchase_3_plus' | 'vip_reengage' | 'prospective' | 'custom' | 'history' | 'logs';
+
+const SMS_CAMPAIGN_TEMPLATE_TYPES: CampaignType[] = [
+  'birthday',
+  'no_purchase_1_month',
+  'no_purchase_2_months',
+  'no_purchase_3_plus',
+  'vip_reengage',
+  'prospective',
+];
+
+const subtractCalendarMonths = (date: Date, months: number): Date => {
+  const result = new Date(date);
+  const originalDay = result.getDate();
+  result.setDate(1);
+  result.setMonth(result.getMonth() - months);
+  const lastDayOfTargetMonth = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
+  result.setDate(Math.min(originalDay, lastDayOfTargetMonth));
+  return result;
+};
 
 interface LogEntry {
   timestamp: Date;
@@ -110,7 +129,7 @@ export const SmsCampaignPreparationView: React.FC<Props> = ({ currentUser }) => 
         try {
           const templatesData = await getMessageTemplates();
           const activeSmsTemplates = templatesData.filter((t: AIMessageTemplate) =>
-            t.is_active && ['birthday', 'no_purchase', 'vip_reengage', 'prospective'].includes(t.template_type)
+            t.is_active && SMS_CAMPAIGN_TEMPLATE_TYPES.includes(t.template_type as CampaignType)
           );
 
           const templateMap: Record<string, string> = {};
@@ -139,8 +158,9 @@ export const SmsCampaignPreparationView: React.FC<Props> = ({ currentUser }) => 
 
   const campaignData = useMemo(() => {
     const today = new Date();
-    const oneMonthAgo = new Date();
-    oneMonthAgo.setMonth(today.getMonth() - 1);
+    const oneMonthAgo = subtractCalendarMonths(today, 1);
+    const twoMonthsAgo = subtractCalendarMonths(today, 2);
+    const threeMonthsAgo = subtractCalendarMonths(today, 3);
 
     const birthday = customers.filter(c => {
       const bday = c.contactPersons?.[0]?.birthday;
@@ -149,9 +169,27 @@ export const SmsCampaignPreparationView: React.FC<Props> = ({ currentUser }) => 
       return parseInt(month, 10) === currentMonth;
     });
 
-    const noPurchase = customers.filter(c => {
-      if (!c.lastContactDate || c.status !== 'Active') return false;
-      return new Date(c.lastContactDate) < oneMonthAgo;
+    const getNoPurchaseDate = (customer: Contact) => {
+      if (customer.status !== 'Active' || !customer.lastContactDate) return null;
+      const date = new Date(customer.lastContactDate);
+      return Number.isNaN(date.getTime()) ? null : date;
+    };
+
+    // Keep the audiences mutually exclusive so a customer is not queued in
+    // multiple no-purchase campaigns at the same time.
+    const noPurchaseOneMonth = customers.filter(c => {
+      const lastPurchaseDate = getNoPurchaseDate(c);
+      return Boolean(lastPurchaseDate && lastPurchaseDate < oneMonthAgo && lastPurchaseDate >= twoMonthsAgo);
+    });
+
+    const noPurchaseTwoMonths = customers.filter(c => {
+      const lastPurchaseDate = getNoPurchaseDate(c);
+      return Boolean(lastPurchaseDate && lastPurchaseDate < twoMonthsAgo && lastPurchaseDate >= threeMonthsAgo);
+    });
+
+    const noPurchaseThreePlus = customers.filter(c => {
+      const lastPurchaseDate = getNoPurchaseDate(c);
+      return Boolean(lastPurchaseDate && lastPurchaseDate < threeMonthsAgo);
     });
 
     const vipReengage = customers.filter(c => {
@@ -162,7 +200,15 @@ export const SmsCampaignPreparationView: React.FC<Props> = ({ currentUser }) => 
 
     const prospective = customers.filter(c => c.status === 'Inquiry Only' || c.status === 'Inactive');
 
-    return { birthday, noPurchase, vipReengage, prospective, custom: customers };
+    return {
+      birthday,
+      noPurchaseOneMonth,
+      noPurchaseTwoMonths,
+      noPurchaseThreePlus,
+      vipReengage,
+      prospective,
+      custom: customers,
+    };
   }, [customers, currentMonth]);
 
   const getTemplate = (type: CampaignType, customer: Contact) => {
@@ -178,8 +224,12 @@ export const SmsCampaignPreparationView: React.FC<Props> = ({ currentUser }) => 
     switch (type) {
       case 'birthday':
         return `Happy Birthday ${name}! Wishing you a fantastic day from your friends at TND. As a special gift, enjoy a discount on your next purchase!`;
-      case 'no_purchase':
-        return `Hi ${name}, we miss you at TND! It's been a while since your last order. Check out our latest products and let us know if we can help you with anything.`;
+      case 'no_purchase_1_month':
+        return `Hi ${name}, we miss you at TND! It's been about a month since your last order. Check out our latest products and let us know if we can help you with anything.`;
+      case 'no_purchase_2_months':
+        return `Hi ${name}, we miss you at TND! It's been about two months since your last order. We would love to help with your next purchase.`;
+      case 'no_purchase_3_plus':
+        return `Hi ${name}, we miss you at TND! It's been more than three months since your last order. Contact us today and let us help you find what you need.`;
       case 'vip_reengage':
         return `Hi ${name}, as one of our valued VIP clients, we want to ensure you're maximizing your benefits. Contact us today to see our exclusive VIP offers!`;
       case 'prospective':
@@ -199,7 +249,9 @@ export const SmsCampaignPreparationView: React.FC<Props> = ({ currentUser }) => 
 
   const activeList = useMemo(() => {
     if (activeTab === 'custom') return (campaignData.custom || []).filter(c => selectedCustomerIds.has(c.id));
-    if (activeTab === 'no_purchase') return campaignData.noPurchase || [];
+    if (activeTab === 'no_purchase_1_month') return campaignData.noPurchaseOneMonth || [];
+    if (activeTab === 'no_purchase_2_months') return campaignData.noPurchaseTwoMonths || [];
+    if (activeTab === 'no_purchase_3_plus') return campaignData.noPurchaseThreePlus || [];
     if (activeTab === 'vip_reengage') return campaignData.vipReengage || [];
     if (activeTab === 'birthday') return campaignData.birthday || [];
     if (activeTab === 'prospective') return campaignData.prospective || [];
@@ -328,28 +380,34 @@ export const SmsCampaignPreparationView: React.FC<Props> = ({ currentUser }) => 
         </section>
 
         <nav className="rounded-2xl border border-slate-200/80 bg-white p-2 shadow-sm shadow-slate-200/60" aria-label="SMS campaign views">
-          <div className="flex gap-1 overflow-x-auto pb-0.5">
-            <button onClick={() => { addLog('[SMS Blasting] Switched tab to: history', 'info'); setActiveTab('history'); }} className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition ${activeTab === 'history' ? 'bg-blue-50 text-[#1675bd] shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>
+          <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-9">
+            <button onClick={() => { addLog('[SMS Blasting] Switched tab to: history', 'info'); setActiveTab('history'); }} className={`flex min-w-0 w-full items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-center text-xs font-semibold transition sm:gap-2 sm:px-3 sm:text-sm ${activeTab === 'history' ? 'bg-blue-50 text-[#1675bd] shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>
               <Clock className="h-4 w-4" /> Activity History
             </button>
-            <button onClick={() => { addLog('[SMS Blasting] Switched tab to: birthday', 'info'); setActiveTab('birthday'); }} className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition ${activeTab === 'birthday' ? 'bg-blue-50 text-[#1675bd] shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>
+            <button onClick={() => { addLog('[SMS Blasting] Switched tab to: birthday', 'info'); setActiveTab('birthday'); }} className={`flex min-w-0 w-full items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-center text-xs font-semibold transition sm:gap-2 sm:px-3 sm:text-sm ${activeTab === 'birthday' ? 'bg-blue-50 text-[#1675bd] shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>
               <Gift className="h-4 w-4" /> Birthdays <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs">{campaignData?.birthday?.length || 0}</span>
             </button>
-            <button onClick={() => { addLog('[SMS Blasting] Switched tab to: no_purchase', 'info'); setActiveTab('no_purchase'); }} className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition ${activeTab === 'no_purchase' ? 'bg-blue-50 text-[#1675bd] shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>
-              <Clock className="h-4 w-4" /> No Purchase &gt; 1 Month <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs">{campaignData?.noPurchase?.length || 0}</span>
+            <button onClick={() => { addLog('[SMS Blasting] Switched tab to: no_purchase_1_month', 'info'); setActiveTab('no_purchase_1_month'); }} className={`flex min-w-0 w-full items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-center text-xs font-semibold transition sm:gap-2 sm:px-3 sm:text-sm ${activeTab === 'no_purchase_1_month' ? 'bg-blue-50 text-[#1675bd] shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>
+              <Clock className="h-4 w-4" /> No Purchase 1 Month <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs">{campaignData?.noPurchaseOneMonth?.length || 0}</span>
             </button>
-            <button onClick={() => { addLog('[SMS Blasting] Switched tab to: vip_reengage', 'info'); setActiveTab('vip_reengage'); }} className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition ${activeTab === 'vip_reengage' ? 'bg-blue-50 text-[#1675bd] shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>
+            <button onClick={() => { addLog('[SMS Blasting] Switched tab to: no_purchase_2_months', 'info'); setActiveTab('no_purchase_2_months'); }} className={`flex min-w-0 w-full items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-center text-xs font-semibold transition sm:gap-2 sm:px-3 sm:text-sm ${activeTab === 'no_purchase_2_months' ? 'bg-blue-50 text-[#1675bd] shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>
+              <Clock className="h-4 w-4" /> No Purchase 2 Months <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs">{campaignData?.noPurchaseTwoMonths?.length || 0}</span>
+            </button>
+            <button onClick={() => { addLog('[SMS Blasting] Switched tab to: no_purchase_3_plus', 'info'); setActiveTab('no_purchase_3_plus'); }} className={`flex min-w-0 w-full items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-center text-xs font-semibold transition sm:gap-2 sm:px-3 sm:text-sm ${activeTab === 'no_purchase_3_plus' ? 'bg-blue-50 text-[#1675bd] shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>
+              <Clock className="h-4 w-4" /> No Purchase &gt; 3 Months <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs">{campaignData?.noPurchaseThreePlus?.length || 0}</span>
+            </button>
+            <button onClick={() => { addLog('[SMS Blasting] Switched tab to: vip_reengage', 'info'); setActiveTab('vip_reengage'); }} className={`flex min-w-0 w-full items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-center text-xs font-semibold transition sm:gap-2 sm:px-3 sm:text-sm ${activeTab === 'vip_reengage' ? 'bg-blue-50 text-[#1675bd] shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>
               <Star className="h-4 w-4" /> VIP Re-engagement <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs">{campaignData?.vipReengage?.length || 0}</span>
             </button>
-            <button onClick={() => { addLog('[SMS Blasting] Switched tab to: prospective', 'info'); setActiveTab('prospective'); }} className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition ${activeTab === 'prospective' ? 'bg-blue-50 text-[#1675bd] shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>
+            <button onClick={() => { addLog('[SMS Blasting] Switched tab to: prospective', 'info'); setActiveTab('prospective'); }} className={`flex min-w-0 w-full items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-center text-xs font-semibold transition sm:gap-2 sm:px-3 sm:text-sm ${activeTab === 'prospective' ? 'bg-blue-50 text-[#1675bd] shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>
               <Users className="h-4 w-4" /> Prospective <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs">{campaignData?.prospective?.length || 0}</span>
             </button>
             {currentUser && (String(currentUser.user_type) === '1' || currentUser.role === 'Master User' || currentUser.role === 'Company Owner' || currentUser.role === 'developer' || currentUser.role === 'main') ? (
-              <button onClick={() => { addLog('[SMS Blasting] Switched tab to: custom', 'info'); setActiveTab('custom'); }} className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition ${activeTab === 'custom' ? 'bg-blue-50 text-[#1675bd] shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>
+              <button onClick={() => { addLog('[SMS Blasting] Switched tab to: custom', 'info'); setActiveTab('custom'); }} className={`flex min-w-0 w-full items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-center text-xs font-semibold transition sm:gap-2 sm:px-3 sm:text-sm ${activeTab === 'custom' ? 'bg-blue-50 text-[#1675bd] shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>
                 <MessageSquare className="h-4 w-4" /> Custom Message
               </button>
             ) : null}
-            <button onClick={() => setActiveTab('logs')} className={`ml-auto inline-flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition ${activeTab === 'logs' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>
+            <button onClick={() => setActiveTab('logs')} className={`flex min-w-0 w-full items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-center text-xs font-semibold transition sm:gap-2 sm:px-3 sm:text-sm ${activeTab === 'logs' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>
               <TerminalSquare className="h-4 w-4" /> Logs
             </button>
           </div>

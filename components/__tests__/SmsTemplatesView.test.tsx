@@ -40,6 +40,31 @@ describe('SmsTemplatesView', () => {
     expect(screen.getByText('No templates found.')).toBeInTheDocument();
   });
 
+  it('allows creating a new template for the more-than-three-month campaign', async () => {
+    render(
+      <ToastProvider>
+        <SmsTemplatesView currentUser={ownerUser} />
+      </ToastProvider>,
+    );
+
+    expect(await screen.findByText('SMS Templates')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /New Template/i }));
+    fireEvent.change(screen.getByPlaceholderText('e.g., Birthday Promo 2026'), { target: { value: 'Three Plus Re-engagement' } });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'no_purchase_3_plus' } });
+    fireEvent.change(screen.getByPlaceholderText(/Enter the SMS message content/i), { target: { value: 'Hello {name}, we would love to serve you again.' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save Template/i }));
+
+    await waitFor(() => {
+      expect(mockedCreateMessageTemplate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Three Plus Re-engagement',
+          content: 'Hello {name}, we would love to serve you again.',
+          template_type: 'no_purchase_3_plus',
+        }),
+      );
+    });
+  });
+
   it('allows creating a new template', async () => {
     render(
       <ToastProvider>
