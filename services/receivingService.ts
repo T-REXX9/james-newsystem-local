@@ -212,21 +212,22 @@ const toReceivingDetail = (payload: any, purchaseOrder: Awaited<ReturnType<typeo
 };
 
 export const receivingService = {
-    async getReceivingReports(filters?: { month?: number; year?: number; status?: string; search?: string }): Promise<ReceivingReportWithDetails[]> {
-        const now = new Date();
-        const month = Math.max(1, Math.min(12, Number(filters?.month || now.getMonth() + 1)));
-        const year = Number(filters?.year || now.getFullYear());
+    async getReceivingReports(filters?: { month?: number | string; year?: number | string; status?: string; search?: string }): Promise<ReceivingReportWithDetails[]> {
+        const rawMonth = String(filters?.month ?? '').trim();
+        const rawYear = String(filters?.year ?? '').trim();
+        const month = rawMonth && rawMonth.toLowerCase() !== 'all' ? Math.max(1, Math.min(12, Number(rawMonth))) : null;
+        const year = rawYear && rawYear.toLowerCase() !== 'all' ? Number(rawYear) : null;
         const status = toApiStatusFilter(filters?.status);
         const search = String(filters?.search || '').trim();
 
         const query = new URLSearchParams({
             main_id: String(API_MAIN_ID),
-            month: String(month),
-            year: String(year),
             status,
             page: '1',
             per_page: '200',
         });
+        if (month !== null && Number.isFinite(month)) query.set('month', String(month));
+        if (year !== null && Number.isFinite(year)) query.set('year', String(year));
         if (search) query.set('search', search);
 
         const response = await fetch(`${API_BASE_URL}/receiving-stocks?${query.toString()}`);

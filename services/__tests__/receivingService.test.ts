@@ -143,7 +143,20 @@ describe('receivingService', () => {
     const { receivingService } = await import('../receivingService');
     const rows = await receivingService.getReceivingReports({ month: 8, year: 2026, status: 'Posted', search: 'RR-2602' });
     expect(rows[0]).toMatchObject({ id: 'RRREF-2', rr_no: 'RR-2602', status: 'Posted', item_count: 2, total_qty: 9, grand_total: 100 });
-    expect(String((global.fetch as any).mock.calls[0][0])).toContain('status=delivered');
+    const requestUrl = String((global.fetch as any).mock.calls[0][0]);
+    expect(requestUrl).toContain('month=8');
+    expect(requestUrl).toContain('year=2026');
+    expect(requestUrl).toContain('status=delivered');
+  });
+
+  it('omits receiving month and year filters when all is selected', async () => {
+    (global.fetch as any).mockImplementation(() => okResponse({ items: [] }));
+    const { receivingService } = await import('../receivingService');
+    await receivingService.getReceivingReports({ month: 'all', year: 'all', status: 'all' });
+    const requestUrl = new URL(String((global.fetch as any).mock.calls[0][0]), 'http://localhost');
+    expect(requestUrl.searchParams.has('month')).toBe(false);
+    expect(requestUrl.searchParams.has('year')).toBe(false);
+    expect(requestUrl.searchParams.get('status')).toBe('all');
   });
 
   it('creates a receiving report header with auth context', async () => {

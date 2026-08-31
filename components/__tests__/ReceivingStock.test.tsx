@@ -27,9 +27,23 @@ describe('ReceivingStock module', () => {
     const { default: ReceivingStock } = await import('../ReceivingStock');
     render(<ReceivingStock />);
     expect(await screen.findByText('RR-2601')).toBeInTheDocument();
+    expect(screen.getByText('All Months')).toBeInTheDocument();
+    expect(screen.getByText('All Years')).toBeInTheDocument();
+    await waitFor(() => expect(service.getReceivingReports).toHaveBeenCalledWith(expect.objectContaining({ month: 'all', year: 'all' })));
     expect(screen.getByText('2 Items ❯')).toBeInTheDocument();
     fireEvent.click(screen.getByText('RR-2601'));
     expect(await screen.findByText('Receiving detail RRREF-1')).toBeInTheDocument();
+  });
+
+  it('reloads receiving reports when a specific month and year are selected', async () => {
+    const { default: ReceivingStock } = await import('../ReceivingStock');
+    render(<ReceivingStock />);
+    await screen.findByText('RR-2601');
+
+    fireEvent.change(screen.getByLabelText('Month'), { target: { value: '8' } });
+    fireEvent.change(screen.getByLabelText('Year'), { target: { value: '2026' } });
+
+    await waitFor(() => expect(service.getReceivingReports).toHaveBeenCalledWith(expect.objectContaining({ month: '8', year: '2026' })));
   });
 
   it('opens a newly saved report directly in detail view', async () => {

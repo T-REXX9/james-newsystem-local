@@ -18,8 +18,8 @@ const ReceivingStock: React.FC<ReceivingStockProps> = ({ initialRRId, initialRRR
     const [rrs, setRrs] = useState<ReceivingReportWithDetails[]>([]);
 
     // Filters
-    const [month, setMonth] = useState<number>(new Date().getMonth() + 1);
-    const [year, setYear] = useState<number>(new Date().getFullYear());
+    const [month, setMonth] = useState<string>('all');
+    const [year, setYear] = useState<string>('all');
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
 
@@ -118,15 +118,17 @@ const ReceivingStock: React.FC<ReceivingStockProps> = ({ initialRRId, initialRRR
 
                     <div className="grid grid-cols-2 gap-2">
                         <div>
-                            <label className="mb-1 block text-xs font-semibold text-slate-500">Month</label>
-                            <select value={month} onChange={e => setMonth(Number(e.target.value))} className="h-9 w-full rounded border border-slate-300 bg-white px-2 text-sm">
-                                {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{new Date(0, i).toLocaleString('default', { month: 'long' })}</option>)}
+                            <label htmlFor="receiving-filter-month" className="mb-1 block text-xs font-semibold text-slate-500">Month</label>
+                            <select id="receiving-filter-month" value={month} onChange={e => setMonth(e.target.value)} className="h-9 w-full rounded border border-slate-300 bg-white px-2 text-sm">
+                                <option value="all">All Months</option>
+                                {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={String(i + 1)}>{new Date(0, i).toLocaleString('default', { month: 'long' })}</option>)}
                             </select>
                         </div>
                         <div>
-                            <label className="mb-1 block text-xs font-semibold text-slate-500">Year</label>
-                            <select value={year} onChange={e => setYear(Number(e.target.value))} className="h-9 w-full rounded border border-slate-300 bg-white px-2 text-sm">
-                                {Array.from({ length: 11 }, (_, i) => <option key={new Date().getFullYear() - 5 + i} value={new Date().getFullYear() - 5 + i}>{new Date().getFullYear() - 5 + i}</option>)}
+                            <label htmlFor="receiving-filter-year" className="mb-1 block text-xs font-semibold text-slate-500">Year</label>
+                            <select id="receiving-filter-year" value={year} onChange={e => setYear(e.target.value)} className="h-9 w-full rounded border border-slate-300 bg-white px-2 text-sm">
+                                <option value="all">All Years</option>
+                                {Array.from({ length: 11 }, (_, i) => <option key={new Date().getFullYear() - 5 + i} value={String(new Date().getFullYear() - 5 + i)}>{new Date().getFullYear() - 5 + i}</option>)}
                             </select>
                         </div>
                     </div>
