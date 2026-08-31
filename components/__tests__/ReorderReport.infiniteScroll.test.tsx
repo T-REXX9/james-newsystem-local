@@ -157,6 +157,53 @@ describe('ReorderReport automatic loading', () => {
     await waitFor(() => expect(fetchEntriesMock).toHaveBeenCalledWith(expect.objectContaining({ search: 'qk6' })));
   });
 
+  it('shows restored rows immediately but refreshes them from the server on return', async () => {
+    window.history.replaceState({
+      reorderReport: {
+        version: 1,
+        rows: [reportRow('old', 'STALE-RR')],
+        generatedAt: new Date('2026-08-01T08:00:00').toISOString(),
+        selectedIds: [],
+        searchInput: '',
+        appliedSearch: '',
+        page: 1,
+        meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
+        latestCreatedPr: null,
+        scrollTop: 0,
+      },
+    }, '', '/#/warehouse-reports-reorder-report');
+    fetchEntriesMock.mockResolvedValueOnce({
+      items: [reportRow('fresh', 'FRESH-RR')],
+      meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
+    });
+
+    render(<ReorderReport />);
+
+    expect(screen.getAllByText('STALE-RR').length).toBeGreaterThan(0);
+    await waitFor(() => expect(fetchEntriesMock).toHaveBeenCalledWith(expect.objectContaining({ page: 1, search: '' })));
+    await waitFor(() => expect(screen.getAllByText('FRESH-RR').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.queryAllByText('STALE-RR')).toHaveLength(0));
+  });
+
+  it('force refreshes the loaded report pages from the toolbar', async () => {
+    fetchEntriesMock
+      .mockResolvedValueOnce({
+        items: [reportRow('1', 'ITEM-1')],
+        meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
+      })
+      .mockResolvedValueOnce({
+        items: [reportRow('2', 'ITEM-2')],
+        meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
+      });
+
+    render(<ReorderReport />);
+    await waitFor(() => expect(screen.getAllByText('ITEM-1').length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole('button', { name: /Refresh/i }));
+
+    await waitFor(() => expect(screen.getAllByText('ITEM-2').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.queryAllByText('ITEM-1')).toHaveLength(0));
+  });
+
   it('shows document quantities even while a generated PO is still pending', async () => {
     fetchEntriesMock.mockResolvedValueOnce({
       items: [{
@@ -244,7 +291,7 @@ describe('ReorderReport automatic loading', () => {
 
     expect(screen.queryByRole('button', { name: 'Generate Report' })).not.toBeInTheDocument();
     expect(screen.getAllByText('ITEM-1').length).toBeGreaterThan(0);
-    expect(fetchEntriesMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(fetchEntriesMock).toHaveBeenCalledWith(expect.objectContaining({ page: 1, search: '' })));
   });
 
   it('does not expose the removed filter-generation controls', async () => {

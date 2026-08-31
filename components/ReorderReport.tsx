@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { EyeOff, Info, Loader2, Printer, Search, ShoppingCart } from 'lucide-react';
+import { EyeOff, Info, Loader2, Printer, RefreshCw, Search, ShoppingCart } from 'lucide-react';
 import { purchaseRequestService } from '../services/purchaseRequestService';
 import {
   fetchReorderSearchOptions,
@@ -334,7 +334,7 @@ const ReorderReport: React.FC = () => {
   const [selectingAll, setSelectingAll] = useState(false);
   const [preparingPrint, setPreparingPrint] = useState(false);
   const warehouseType: ReorderWarehouseType = 'total';
-  const [generatedAt] = useState<Date>(() => {
+  const [generatedAt, setGeneratedAt] = useState<Date>(() => {
     const value = initialSnapshotRef.current?.generatedAt;
     return value ? new Date(value) : new Date();
   });
@@ -353,6 +353,7 @@ const ReorderReport: React.FC = () => {
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const tableScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const initialLoadStartedRef = useRef(false);
+  const refreshStartedAtRef = useRef(0);
   const isWh1Report = false;
 
   const persistHistorySnapshot = useCallback((scrollTop?: number) => {
@@ -428,9 +429,14 @@ const ReorderReport: React.FC = () => {
     };
   }, [addToast]);
 
-  const loadReport = useCallback(async (targetPage = 1, targetSearch = '', append = false) => {
+  const loadReport = useCallback(async (
+    targetPage = 1,
+    targetSearch = '',
+    append = false,
+    options: { background?: boolean; preserveSelection?: boolean } = {}
+  ) => {
     if (append) setLoadingMore(true);
-    else {
+    else if (!options.background) {
       setLoading(true);
       setLoadMoreFailed(false);
     }
@@ -454,7 +460,8 @@ const ReorderReport: React.FC = () => {
       setMeta(data.meta);
       setPage(data.meta.page);
       setLoadMoreFailed(false);
-      if (!append) setSelectedIds(new Set());
+      if (!append) setGeneratedAt(new Date());
+      if (!append && !options.preserveSelection) setSelectedIds(new Set());
     } catch (err: any) {
       addToast({
         type: 'error',
@@ -463,18 +470,99 @@ const ReorderReport: React.FC = () => {
         durationMs: 6000,
       });
       if (append) setLoadMoreFailed(true);
-      else setRows([]);
+      else if (!options.background) setRows([]);
     } finally {
       if (append) setLoadingMore(false);
-      else setLoading(false);
+      else if (!options.background) setLoading(false);
     }
   }, [addToast, warehouseType]);
 
+  const refreshLoadedReport = useCallback(async (options: { background?: boolean } = {}) => {
+    const now = Date.now();
+    if (options.background && now - refreshStartedAtRef.current < 1500) return;
+    refreshStartedAtRef.current = now;
+    if (!options.background) {
+      setLoading(true);
+      setLoadMoreFailed(false);
+    }
+    try {
+      const first = await fetchReorderReportEntries({
+        warehouseType,
+        search: appliedSearch,
+        showHidden: false,
+        page: 1,
+        perPage: 50,
+      });
+      const highestLoadedPage = Math.max(1, page);
+      const lastPageToRefresh = Math.min(highestLoadedPage, first.meta.total_pages);
+      const remaining = lastPageToRefresh > 1
+        ? await Promise.all(Array.from({ length: lastPageToRefresh - 1 }, (_, index) =>
+            fetchReorderReportEntries({
+              warehouseType,
+              search: appliedSearch,
+              showHidden: false,
+              page: index + 2,
+              perPage: 50,
+            })
+          ))
+        : [];
+      const unique = new Map<string, ReorderReportEntry>();
+      [first.items, ...remaining.map((result) => result.items)].flat().forEach((row) => {
+        const key = row.product_session || `${row.item_code.trim().toLowerCase()}::${row.part_no.trim().toLowerCase()}`;
+        if (!unique.has(key)) unique.set(key, row);
+      });
+      const refreshedRows = Array.from(unique.values());
+      setRows(refreshedRows);
+      setMeta({ ...first.meta, page: lastPageToRefresh });
+      setPage(lastPageToRefresh);
+      setSelectedIds((current) => {
+        const validSelectableIds = new Set(refreshedRows.filter((row) => !isReorderWorkflowActive(row)).map((row) => row.id));
+        return new Set(Array.from(current).filter((id) => validSelectableIds.has(id)));
+      });
+      setGeneratedAt(new Date());
+      setLoadMoreFailed(false);
+    } catch (err: any) {
+      if (!options.background) {
+        addToast({
+          type: 'error',
+          title: 'Unable to refresh reorder report',
+          description: String(err?.message || 'Request failed'),
+          durationMs: 6000,
+        });
+      }
+    } finally {
+      if (!options.background) setLoading(false);
+    }
+  }, [addToast, appliedSearch, page, warehouseType]);
+
   useEffect(() => {
-    if (initialSnapshotRef.current || initialLoadStartedRef.current) return;
+    if (initialLoadStartedRef.current) return;
     initialLoadStartedRef.current = true;
+    if (initialSnapshotRef.current) {
+      void refreshLoadedReport({ background: true });
+      return;
+    }
     void loadReport(1, '');
-  }, [loadReport]);
+  }, [loadReport, refreshLoadedReport]);
+
+  useEffect(() => {
+    const refreshIfCurrentTab = () => {
+      if (!isReorderReportHistoryEntry() || document.visibilityState === 'hidden') return;
+      void refreshLoadedReport({ background: true });
+    };
+    window.addEventListener('focus', refreshIfCurrentTab);
+    window.addEventListener('pageshow', refreshIfCurrentTab);
+    document.addEventListener('visibilitychange', refreshIfCurrentTab);
+    window.addEventListener('workflow:record-updated', refreshIfCurrentTab as EventListener);
+    window.addEventListener('workflow:navigate', refreshIfCurrentTab as EventListener);
+    return () => {
+      window.removeEventListener('focus', refreshIfCurrentTab);
+      window.removeEventListener('pageshow', refreshIfCurrentTab);
+      document.removeEventListener('visibilitychange', refreshIfCurrentTab);
+      window.removeEventListener('workflow:record-updated', refreshIfCurrentTab as EventListener);
+      window.removeEventListener('workflow:navigate', refreshIfCurrentTab as EventListener);
+    };
+  }, [refreshLoadedReport]);
 
   const handleSearch = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -525,8 +613,6 @@ const ReorderReport: React.FC = () => {
             fetchReorderReportEntries({
               warehouseType,
               search: appliedSearch,
-              hideZeroReorder,
-              hideZeroReplenish,
               showHidden: false,
               page: index + 2,
               perPage: 500,
@@ -760,6 +846,9 @@ const ReorderReport: React.FC = () => {
             <p className="mt-1 text-sm text-slate-500">Live purchasing control from reorder requirement through PR, PO, partial receiving, and completion.</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            <button type="button" onClick={() => void refreshLoadedReport()} disabled={loading} className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50">
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Refresh
+            </button>
             <button type="button" onClick={() => void handlePrint()} disabled={preparingPrint} className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50">
               {preparingPrint ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />} Print
             </button>
