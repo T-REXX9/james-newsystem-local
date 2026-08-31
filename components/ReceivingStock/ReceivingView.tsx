@@ -2,16 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { ReceivingReportWithDetails, RR_STATUS_COLORS } from '../../receiving.types';
 import { receivingService } from '../../services/receivingService';
 import { useToast } from '../ToastProvider';
-import { ArrowLeft, Printer, CheckCircle, Trash2, Calendar, User, FileText, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Printer, CheckCircle, Trash2, Calendar, User, FileText, Loader2, AlertCircle, Plus } from 'lucide-react';
 import CustomLoadingSpinner from '../CustomLoadingSpinner';
 import RecoveryReasonModal from '../RecoveryReasonModal';
 
 interface ReceivingViewProps {
     rrId: string;
     onBack: () => void;
+    onCreateNew: () => void;
 }
 
-const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
+const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew }) => {
     const { addToast } = useToast();
     const [loading, setLoading] = useState(true);
     const [rr, setRr] = useState<ReceivingReportWithDetails | null>(null);
@@ -120,6 +121,9 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
                     <span className={`rounded-md px-3 py-1 text-sm font-bold ${statusColor}`}>{rr.status || 'Draft'}</span>
                 </div>
                 <div className="flex items-center gap-3">
+                    <button onClick={onCreateNew} className="inline-flex items-center gap-2 rounded-md bg-[#175fd3] px-4 py-2 text-sm font-bold text-white hover:bg-[#0e4fb7] print:hidden">
+                        <Plus className="h-4 w-4" /> New RR
+                    </button>
                     <button onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 print:hidden">
                         <Printer className="h-4 w-4" /> Print RR
                     </button>
@@ -177,20 +181,32 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
 
                 <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-slate-800">Items Received</h3>
 
-                <div className="overflow-x-auto rounded-lg border border-slate-200">
-                    <table className="w-full min-w-[1000px] border-collapse text-xs">
+                <div className="overflow-hidden rounded-lg border border-slate-200">
+                    <table className="w-full table-fixed border-collapse text-[11px]">
+                        <colgroup>
+                            <col className="w-[4%]" />
+                            <col className="w-[11%]" />
+                            <col className="w-[18%]" />
+                            <col className="w-[11%]" />
+                            <col className="w-[11%]" />
+                            <col className="w-[10%]" />
+                            <col className="w-[9%]" />
+                            <col className="w-[9%]" />
+                            <col className="w-[8%]" />
+                            <col className="w-[9%]" />
+                        </colgroup>
                         <thead>
-                            <tr className="border-b border-slate-200 bg-slate-50 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                                <th className="px-4 py-3 text-center">#</th>
-                                <th className="px-4 py-3">Item Code</th>
-                                <th className="px-4 py-3">Description</th>
-                                <th className="px-4 py-3">Original P/N</th>
-                                <th className="px-4 py-3">Part No.</th>
-                                <th className="px-4 py-3">Brand</th>
-                                <th className="px-4 py-3 text-center">Qty Ordered</th>
-                                <th className="px-4 py-3 text-center">Qty Received</th>
-                                <th className="px-4 py-3 text-right">Unit Cost</th>
-                                <th className="px-4 py-3 text-right">Amount</th>
+                            <tr className="border-b border-slate-200 bg-slate-50 text-left text-[9px] font-bold uppercase leading-tight tracking-wide text-slate-500">
+                                <th className="break-words px-2 py-3 text-center">#</th>
+                                <th className="break-words px-2 py-3">Item Code</th>
+                                <th className="break-words px-2 py-3">Description</th>
+                                <th className="break-words px-2 py-3">Original P/N</th>
+                                <th className="break-words px-2 py-3">Part No.</th>
+                                <th className="break-words px-2 py-3">Brand</th>
+                                <th className="break-words px-2 py-3 text-center">Qty Ordered</th>
+                                <th className="break-words px-2 py-3 text-center">Qty Received</th>
+                                <th className="break-words px-2 py-3 text-right">Unit Cost</th>
+                                <th className="break-words px-2 py-3 text-right">Amount</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -198,16 +214,16 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
                                 <tr><td colSpan={10} className="py-12 text-center text-sm text-slate-500">No items received.</td></tr>
                             ) : rr.items.map((item, index) => (
                                 <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
-                                    <td className="px-4 py-3 text-center font-semibold text-slate-500">{index + 1}</td>
-                                    <td className="px-4 py-3 font-semibold text-slate-600">{item.item_code || '-'}</td>
-                                    <td className="px-4 py-3 font-semibold text-slate-700">{item.description || '-'}</td>
-                                    <td className="px-4 py-3 font-semibold text-slate-600">{item.original_part_no || '-'}</td>
-                                    <td className="px-4 py-3 font-semibold text-slate-600">{item.part_no || '-'}</td>
-                                    <td className="px-4 py-3 font-semibold text-slate-600">{item.brand || item.product?.brand || '-'}</td>
-                                    <td className="px-4 py-3 text-center font-semibold text-slate-600">{item.qty_ordered || item.qty_received || 0}</td>
-                                    <td className="px-4 py-3 text-center font-bold text-slate-700">{item.qty_received || 0}</td>
-                                    <td className="px-4 py-3 text-right font-semibold text-slate-600">{item.unit_cost ? item.unit_cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
-                                    <td className="px-4 py-3 text-right font-bold text-slate-700">{item.total_amount ? item.total_amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
+                                    <td className="break-words px-2 py-3 text-center font-semibold text-slate-500">{index + 1}</td>
+                                    <td className="break-words px-2 py-3 font-semibold text-slate-600">{item.item_code || '-'}</td>
+                                    <td className="break-words px-2 py-3 font-semibold text-slate-700">{item.description || '-'}</td>
+                                    <td className="break-words px-2 py-3 font-semibold text-slate-600">{item.original_part_no || '-'}</td>
+                                    <td className="break-words px-2 py-3 font-semibold text-slate-600">{item.part_no || '-'}</td>
+                                    <td className="break-words px-2 py-3 font-semibold text-slate-600">{item.brand || item.product?.brand || '-'}</td>
+                                    <td className="break-words px-2 py-3 text-center font-semibold text-slate-600">{item.qty_ordered || item.qty_received || 0}</td>
+                                    <td className="break-words px-2 py-3 text-center font-bold text-slate-700">{item.qty_received || 0}</td>
+                                    <td className="break-words px-2 py-3 text-right font-semibold text-slate-600">{item.unit_cost ? item.unit_cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
+                                    <td className="break-words px-2 py-3 text-right font-bold text-slate-700">{item.total_amount ? item.total_amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
                                 </tr>
                             ))}
                         </tbody>

@@ -359,12 +359,14 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
     setDetailTab('details');
   };
 
-  const validateForm = () => {
+  const validateForm = (mode: 'add' | 'edit') => {
     const errors: Record<string, string> = {};
     const partNo = validateRequired(formData.part_no, 'a part number');
+    const itemCode = validateRequired(formData.item_code, 'an item code');
     const description = validateRequired(formData.description, 'a description');
     const descriptionLength = validateMinLength(formData.description, 'description', 3);
     if (!partNo.isValid) errors.part_no = partNo.message;
+    if (mode === 'add' && !itemCode.isValid) errors.item_code = itemCode.message;
     if (!description.isValid) errors.description = description.message;
     else if (!descriptionLength.isValid) errors.description = descriptionLength.message;
     setValidationErrors(errors);
@@ -385,7 +387,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
   };
 
   const saveProduct = async (mode: 'add' | 'edit') => {
-    if (!validateForm()) {
+    if (!validateForm(mode)) {
       setSubmitCount((count) => count + 1);
       return;
     }

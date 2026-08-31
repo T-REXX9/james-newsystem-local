@@ -75,6 +75,11 @@ const ReceivingStock: React.FC<ReceivingStockProps> = ({ initialRRId, initialRRR
         setViewMode('view');
     };
 
+    const handleCreateNew = () => {
+        setSelectedRrId(null);
+        setViewMode('create');
+    };
+
     const handleSearch = () => {
         fetchRRs();
     };
@@ -190,7 +195,7 @@ const ReceivingStock: React.FC<ReceivingStockProps> = ({ initialRRId, initialRRR
 
             <main className="min-w-0 flex-1 p-5 lg:p-8">
                 {viewMode === 'view' && selectedRrId ? (
-                    <ReceivingView rrId={selectedRrId} onBack={handleBackToList} />
+                    <ReceivingView rrId={selectedRrId} onBack={handleBackToList} onCreateNew={handleCreateNew} />
                 ) : (
                     <div className="flex h-full items-center justify-center rounded-xl border border-slate-200 bg-white shadow-sm">
                         <div className="text-center">

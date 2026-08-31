@@ -230,8 +230,8 @@ describe('ReorderReport automatic loading', () => {
     const cells = itemCode.closest('tr')?.querySelectorAll('td');
     expect(cells?.[9]?.textContent).toBe('15');
     expect(cells?.[11]?.textContent).toBe('15');
-    expect(cells?.[12]?.textContent).toBe('0');
-    expect(cells?.[13]?.textContent).toBe('15');
+    expect(cells?.[12]?.textContent).toBe('-');
+    expect(cells?.[13]?.textContent).toBe('0');
   });
 
   it('shows the configured reorder quantity instead of the suggested purchase quantity', async () => {
@@ -313,7 +313,7 @@ describe('ReorderReport automatic loading', () => {
     expect(tableScrollContainer.querySelector('thead')).toHaveClass('sticky', 'top-0');
     expect(tableScrollContainer.querySelector('table')).toHaveClass('w-full', 'table-fixed');
     expect(tableScrollContainer.querySelector('table')).not.toHaveClass('min-w-[2300px]');
-    expect(tableScrollContainer.querySelectorAll('col')).toHaveLength(18);
+    expect(tableScrollContainer.querySelectorAll('col')).toHaveLength(15);
 
     await act(async () => {
       intersectionCallback?.([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver);

@@ -9,7 +9,7 @@ const service = {
 
 vi.mock('../../services/receivingService', () => ({ receivingService: service }));
 vi.mock('../ReceivingStock/ReceivingForm', () => ({ default: ({ onClose, onSuccess }: { onClose: () => void; onSuccess: (report: unknown) => void }) => <div><button type="button" onClick={onClose}>Close form</button><button type="button" onClick={() => onSuccess({ id: 'RRREF-1' })}>Save receiving report</button></div> }));
-vi.mock('../ReceivingStock/ReceivingView', () => ({ default: ({ rrId, onBack }: { rrId: string; onBack: () => void }) => <div><span>Receiving detail {rrId}</span><button type="button" onClick={onBack}>Back to receiving list</button></div> }));
+vi.mock('../ReceivingStock/ReceivingView', () => ({ default: ({ rrId, onBack, onCreateNew }: { rrId: string; onBack: () => void; onCreateNew: () => void }) => <div><span>Receiving detail {rrId}</span><button type="button" onClick={onBack}>Back to receiving list</button><button type="button" onClick={onCreateNew}>New RR</button></div> }));
 
 const report = { id: 'RRREF-1', rr_no: 'RR-2601', receive_date: '2026-08-20', supplier_name: 'Supplier 1', po_no: 'PO-2601', status: 'Draft', item_count: 2, items: [] };
 
@@ -53,6 +53,14 @@ describe('ReceivingStock module', () => {
     fireEvent.click(screen.getByRole('button', { name: /save receiving report/i }));
     expect(await screen.findByText('Receiving detail RRREF-1')).toBeInTheDocument();
     await waitFor(() => expect(service.getReceivingReports).toHaveBeenCalled());
+  });
+
+  it('starts a fresh receiving report from an existing report detail view', async () => {
+    const { default: ReceivingStock } = await import('../ReceivingStock');
+    render(<ReceivingStock />);
+    fireEvent.click(await screen.findByRole('button', { name: /RR-2601/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'New RR' }));
+    expect(screen.getByRole('button', { name: 'Save receiving report' })).toBeInTheDocument();
   });
 
   it('opens an initial receiving deep link', async () => {

@@ -961,24 +961,21 @@ const ReorderReport: React.FC = () => {
           <div ref={tableScrollContainerRef} onScroll={(event) => persistHistorySnapshot(event.currentTarget.scrollTop)} data-testid="reorder-table-scroll-container" className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
             <table className="reorder-report-table w-full table-fixed border-collapse">
               <colgroup>
-                <col style={{ width: '2.5%' }} />
-                <col style={{ width: '4.5%' }} />
-                <col style={{ width: '5.5%' }} />
-                <col style={{ width: '10.5%' }} />
-                <col style={{ width: '4%' }} />
-                <col style={{ width: '4%' }} />
+                <col style={{ width: '3%' }} />
+                <col style={{ width: '6%' }} />
+                <col style={{ width: '8%' }} />
+                <col style={{ width: '15%' }} />
                 <col style={{ width: '5%' }} />
-                <col style={{ width: '4%' }} />
-                <col style={{ width: '4.5%' }} />
-                <col style={{ width: '3.5%' }} />
-                <col style={{ width: '7.5%' }} />
-                <col style={{ width: '4%' }} />
-                <col style={{ width: '4%' }} />
-                <col style={{ width: '4.5%' }} />
+                <col style={{ width: '6%' }} />
+                <col style={{ width: '8%' }} />
+                <col style={{ width: '6%' }} />
+                <col style={{ width: '6%' }} />
+                <col style={{ width: '5%' }} />
+                <col style={{ width: '8%' }} />
+                <col style={{ width: '6%' }} />
                 <col style={{ width: '7%' }} />
-                <col style={{ width: '4%' }} />
-                <col style={{ width: '4%' }} />
                 <col style={{ width: '5%' }} />
+                <col style={{ width: '6%' }} />
               </colgroup>
               <thead className="sticky top-0 z-30 shadow-md">
                 <tr>
@@ -990,8 +987,8 @@ const ReorderReport: React.FC = () => {
                   <th rowSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Reorder<br />Quantity</th>
                   <th colSpan={2} className="border-b border-r border-slate-200 bg-[#102f76] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Recommended Supplier</th>
                   <th colSpan={2} className="border-b border-r border-white/20 bg-orange-500 px-3 py-3 text-center font-bold uppercase tracking-wide text-white">① PR STAGE<br /><span className="text-xs font-normal opacity-90">(Waiting for Approval)</span></th>
-                  <th colSpan={4} className="border-b border-r border-white/20 bg-[#175fd3] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">② PO STAGE<br /><span className="text-xs font-normal opacity-90">(Ordered from Supplier)</span></th>
-                  <th colSpan={3} className="border-b border-r border-white/20 bg-purple-700 px-3 py-3 text-center font-bold uppercase tracking-wide text-white">③ RECEIVING STOCK<br /><span className="text-xs font-normal opacity-90">(Incoming to Warehouse)</span></th>
+                  <th colSpan={2} className="border-b border-r border-white/20 bg-[#175fd3] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">② PO STAGE<br /><span className="text-xs font-normal opacity-90">(Ordered from Supplier)</span></th>
+                  <th colSpan={2} className="border-b border-r border-white/20 bg-purple-700 px-3 py-3 text-center font-bold uppercase tracking-wide text-white">③ RECEIVING STOCK<br /><span className="text-xs font-normal opacity-90">(Incoming to Warehouse)</span></th>
                   <th rowSpan={2} className="border-b border-slate-200 bg-[#102f76] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Overall<br />Status</th>
                 </tr>
                 <tr>
@@ -1001,16 +998,13 @@ const ReorderReport: React.FC = () => {
                   <th className="border-b border-r border-white/20 bg-orange-500 px-3 py-3 text-center font-bold uppercase tracking-wide text-white">PR Qty</th>
                   <th className="border-b border-r border-white/20 bg-[#175fd3] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">PO #</th>
                   <th className="border-b border-r border-white/20 bg-[#175fd3] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Ordered Qty</th>
-                  <th className="border-b border-r border-white/20 bg-[#175fd3] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">On Order</th>
-                  <th className="border-b border-r border-white/20 bg-[#175fd3] px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Outstanding</th>
                   <th className="border-b border-r border-white/20 bg-purple-700 px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Receiving #</th>
                   <th className="border-b border-r border-white/20 bg-purple-700 px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Received Qty</th>
-                  <th className="border-b border-r border-white/20 bg-purple-700 px-3 py-3 text-center font-bold uppercase tracking-wide text-white">Accepted Qty</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <tr><td colSpan={18} className="px-4 py-16 text-center text-sm text-slate-500">
+                  <tr><td colSpan={15} className="px-4 py-16 text-center text-sm text-slate-500">
                     {loading ? <CustomLoadingSpinner label="Loading" /> : 'No items match the current filters.'}
                   </td></tr>
                 ) : rows.map((row) => {
@@ -1031,11 +1025,8 @@ const ReorderReport: React.FC = () => {
                       <td className="border-r border-slate-100 px-3 py-3 text-center font-semibold text-orange-600">{formatQuantity(row.pr_requested_qty ?? row.open_pr_qty)}</td>
                       <td className="border-r border-slate-100 px-3 py-3 text-center">{renderPoDocuments(row)}</td>
                       <td className="border-r border-slate-100 px-3 py-3 text-center font-semibold text-[#175fd3]">{formatQuantity(row.po_ordered_qty)}</td>
-                      <td className="border-r border-slate-100 px-3 py-3 text-center font-bold text-[#175fd3]">{formatQuantity(row.open_po_qty)}</td>
-                      <td className="border-r border-slate-100 px-3 py-3 text-center font-bold text-rose-600">{formatQuantity(row.remaining_qty)}</td>
                       <td className="border-r border-slate-100 px-3 py-3 text-center">{renderRrDocuments(row)}</td>
                       <td className="border-r border-slate-100 px-3 py-3 text-center font-semibold text-purple-700">{formatQuantity(row.received_qty)}</td>
-                      <td className="border-r border-slate-100 px-3 py-3 text-center font-bold text-emerald-700">{formatQuantity(row.accepted_qty)}</td>
                       <td className="px-3 py-3 text-center">{renderStatusBadge(row.overall_status)}</td>
                     </tr>
                   );
@@ -1090,10 +1081,10 @@ const ReorderReport: React.FC = () => {
         </div>
         <table>
           <thead>
-            <tr><th rowSpan={2}>ITEM CODE</th><th rowSpan={2}>PART NO.</th><th rowSpan={2}>DESCRIPTION</th><th colSpan={2}>STOCK POSITION</th><th colSpan={2}>RECOMMENDED SUPPLIER</th><th colSpan={2}>① PR STAGE</th><th colSpan={4}>② PO STAGE</th><th colSpan={3}>③ RECEIVING STOCK</th><th rowSpan={2}>STATUS</th></tr>
-            <tr><th>AVAILABLE STOCK</th><th>REORDER QUANTITY</th><th>SUPPLIER</th><th>COST</th><th>PR #</th><th>OPEN PR</th><th>PO #</th><th>ORDERED</th><th>ON ORDER</th><th>OUTSTANDING</th><th>RR #</th><th>RECEIVED</th><th>ACCEPTED</th></tr>
+            <tr><th rowSpan={2}>ITEM CODE</th><th rowSpan={2}>PART NO.</th><th rowSpan={2}>DESCRIPTION</th><th colSpan={2}>STOCK POSITION</th><th colSpan={2}>RECOMMENDED SUPPLIER</th><th colSpan={2}>① PR STAGE</th><th colSpan={2}>② PO STAGE</th><th colSpan={2}>③ RECEIVING STOCK</th><th rowSpan={2}>STATUS</th></tr>
+            <tr><th>AVAILABLE STOCK</th><th>REORDER QUANTITY</th><th>SUPPLIER</th><th>COST</th><th>PR #</th><th>OPEN PR</th><th>PO #</th><th>ORDERED</th><th>RR #</th><th>RECEIVED</th></tr>
           </thead>
-          <tbody>{(printRows.length > 0 ? printRows : rows).map((row) => <tr key={`print-${row.product_session}`}><td>{row.item_code}</td><td>{row.part_no}</td><td>{row.description}</td><td>{formatQuantity(row.available_stock)}</td><td>{formatQuantity(row.reorder_qty)}</td><td>{row.preferred_supplier_name || '-'}</td><td>{row.preferred_supplier_cost > 0 ? formatCurrency(row.preferred_supplier_cost) : '-'}</td><td>{row.pr_documents.map((document) => document.number).join(', ') || '-'}</td><td>{formatQuantity(row.pr_requested_qty ?? row.open_pr_qty)}</td><td>{row.po_documents.map((document) => document.number).join(', ') || '-'}</td><td>{formatQuantity(row.po_ordered_qty)}</td><td>{formatQuantity(row.open_po_qty)}</td><td>{formatQuantity(row.remaining_qty)}</td><td>{row.rr_documents.map((document) => document.number).join(', ') || '-'}</td><td>{formatQuantity(row.received_qty)}</td><td>{formatQuantity(row.accepted_qty)}</td><td>{row.overall_status}</td></tr>)}</tbody>
+          <tbody>{(printRows.length > 0 ? printRows : rows).map((row) => <tr key={`print-${row.product_session}`}><td>{row.item_code}</td><td>{row.part_no}</td><td>{row.description}</td><td>{formatQuantity(row.available_stock)}</td><td>{formatQuantity(row.reorder_qty)}</td><td>{row.preferred_supplier_name || '-'}</td><td>{row.preferred_supplier_cost > 0 ? formatCurrency(row.preferred_supplier_cost) : '-'}</td><td>{row.pr_documents.map((document) => document.number).join(', ') || '-'}</td><td>{formatQuantity(row.pr_requested_qty ?? row.open_pr_qty)}</td><td>{row.po_documents.map((document) => document.number).join(', ') || '-'}</td><td>{formatQuantity(row.po_ordered_qty)}</td><td>{row.rr_documents.map((document) => document.number).join(', ') || '-'}</td><td>{formatQuantity(row.received_qty)}</td><td>{row.overall_status}</td></tr>)}</tbody>
         </table>
       </div>
     </div>

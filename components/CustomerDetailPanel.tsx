@@ -16,6 +16,7 @@ import { normalizePriceGroup } from '../constants/pricingGroups';
 import { formatCurrency } from '../utils/formatUtils';
 import CallCustomerButton from './CallCustomerButton';
 import CustomerCallHistoryCard from './CustomerCallHistoryCard';
+import IncidentReportTab from './IncidentReportTab';
 
 interface CustomerDetailPanelProps {
     contactId: string;
@@ -53,7 +54,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     onUpdate,
     onEditContact
 }) => {
-    const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'calls' | 'inquiries' | 'returns' | 'financials' | 'profile'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'calls' | 'inquiries' | 'incidents' | 'returns' | 'financials' | 'profile'>('overview');
     const [transactions, setTransactions] = useState<any[]>([]);
     const [metrics, setMetrics] = useState<any>(null);
     const [terms, setTerms] = useState<CustomerTermsRow[]>([]);
@@ -222,6 +223,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                         { id: 'history', label: 'Sales History', icon: ShoppingBag },
                         { id: 'calls', label: 'Calls', icon: Phone },
                         { id: 'inquiries', label: 'Inquiries', icon: MessageSquare },
+                        { id: 'incidents', label: 'Incidents', icon: AlertCircle },
                         { id: 'returns', label: 'Returns', icon: RotateCcw },
                         { id: 'financials', label: 'Financials', icon: DollarSign },
                         { id: 'profile', label: 'Profile', icon: User },
@@ -382,6 +384,13 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
 
                 {/* Placeholder for other tabs (Inquiries, Financials, etc.) reuse same table style or specialized components */}
                 {!loading && activeTab === 'inquiries' && <CustomerHistoryTab contactId={contactId} kind="inquiries" />}
+
+                {!loading && activeTab === 'incidents' && (
+                    <IncidentReportTab
+                        contactId={contactId}
+                        currentUser={getLocalAuthSession()?.userProfile || null}
+                    />
+                )}
 
                 {!loading && activeTab === 'profile' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
