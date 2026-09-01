@@ -134,6 +134,19 @@ describe('dailyCallMonitoringService', () => {
     expect(result.teamMessages[0]).toMatchObject({ id: 'msg-1', is_from_owner: true });
   });
 
+  it('falls back to the legacy customer endpoint when the aggregate snapshot is unavailable', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({ error: 'snapshot unavailable' }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: [{ id: '1', shop_name: 'Fallback Shop' }] }) } as Response);
+
+    const result = await fetchAgentSnapshotForDailyCall('63');
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(String(fetchSpy.mock.calls[1][0])).toContain('/daily-call-monitoring/excel?');
+    expect(result.contacts).toMatchObject([{ id: '1', shopName: 'Fallback Shop' }]);
+    expect(result.callLogs).toEqual([]);
+  });
+
   it('fetchAgentSnapshotForDailyCall normalizes snake_case contact rows from the API', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,

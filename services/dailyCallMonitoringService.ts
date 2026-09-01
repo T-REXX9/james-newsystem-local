@@ -653,16 +653,43 @@ export const fetchAgentSnapshotForDailyCall = async (
     main_id: String(mainId),
     viewer_user_id: String(viewerUserId),
   });
-  const payload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/agent-snapshot?${params.toString()}`, { signal: options?.signal });
-  const data = payload?.data || {};
+  try {
+    const payload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/agent-snapshot?${params.toString()}`, { signal: options?.signal });
+    const data = payload?.data || {};
 
-  return {
-    contacts: Array.isArray(data?.contacts) ? data.contacts.map(mapDailyCallCustomerRow) : [],
-    callLogs: Array.isArray(data?.call_logs) ? data.call_logs.map(mapCallLog) : [],
-    inquiries: Array.isArray(data?.inquiries) ? data.inquiries.map(mapInquiry) : [],
-    purchases: Array.isArray(data?.purchases) ? data.purchases.map(mapPurchase) : [],
-    teamMessages: Array.isArray(data?.team_messages) ? data.team_messages.map(mapTeamMessage) : [],
-  };
+    return {
+      contacts: Array.isArray(data?.contacts) ? data.contacts.map(mapDailyCallCustomerRow) : [],
+      callLogs: Array.isArray(data?.call_logs) ? data.call_logs.map(mapCallLog) : [],
+      inquiries: Array.isArray(data?.inquiries) ? data.inquiries.map(mapInquiry) : [],
+      purchases: Array.isArray(data?.purchases) ? data.purchases.map(mapPurchase) : [],
+      teamMessages: Array.isArray(data?.team_messages) ? data.team_messages.map(mapTeamMessage) : [],
+    };
+  } catch (error) {
+    if ((error as Error)?.name === 'AbortError') throw error;
+
+    // Older deployment API versions may not have the aggregate snapshot yet.
+    // Fall back to the established customer endpoint so the agent still gets
+    // an actionable customer list instead of an empty error dashboard.
+    const fallbackParams = new URLSearchParams({
+      main_id: String(mainId),
+      status: 'all',
+      search: '',
+      viewer_user_id: String(viewerUserId),
+    });
+    try {
+      const fallbackPayload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/excel?${fallbackParams.toString()}`, { signal: options?.signal });
+      const fallbackData = Array.isArray(fallbackPayload?.data) ? fallbackPayload.data : [];
+      return {
+        contacts: fallbackData.map(mapDailyCallCustomerRow),
+        callLogs: [],
+        inquiries: [],
+        purchases: [],
+        teamMessages: [],
+      };
+    } catch {
+      throw error;
+    }
+  }
 };
 
 export const fetchContactCallLogsForDailyCall = async (
