@@ -44,6 +44,7 @@ interface PurchaseOrderViewProps {
 
 const PAGE_SIZE = 10;
 const PURCHASE_ORDER_TAB_ID = 'purchases-transaction-purchase-order';
+const isPurchaseRequestItemConverted = (item: any) => String(item?.po_refno || '').trim() !== '';
 
 const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, initialPORefNo, initialPRId }) => {
   const { addToast } = useToast();
@@ -62,6 +63,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
 
   // View/Edit State
   const [selectedPO, setSelectedPO] = useState<PurchaseOrderWithDetails | null>(null);
+  const [linkedPRId, setLinkedPRId] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const consumedDeepLinkRef = useRef('');
 
@@ -78,6 +80,14 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   const [loadingPRs, setLoadingPRs] = useState(false);
   const [selectedPRId, setSelectedPRId] = useState<string>('');
   const [selectedPR, setSelectedPR] = useState<PurchaseRequestWithItems | null>(null);
+  const selectedPRConvertibleItems = useMemo(
+    () => (selectedPR?.items || []).filter((item: any) => {
+      if (isPurchaseRequestItemConverted(item)) return false;
+      const supplierId = String(createForm.supplier_id || '').trim();
+      return supplierId === '' || String(item.supplier_id || '').trim() === supplierId;
+    }),
+    [createForm.supplier_id, selectedPR]
+  );
 
   // Item Add State
   const [showAddItem, setShowAddItem] = useState(false);
@@ -89,6 +99,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   const [editItemQty, setEditItemQty] = useState(0);
   const [editItemUnitPrice, setEditItemUnitPrice] = useState(0);
   const [editItemEta, setEditItemEta] = useState('');
+  const [editOrderDate, setEditOrderDate] = useState('');
 
   const [printMode, setPrintMode] = useState(false);
   const [recoveryAction, setRecoveryAction] = useState<'unpost' | 'delete' | null>(null);
@@ -105,6 +116,10 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
 
   const openConfirm = (opts: Omit<typeof confirmModal, 'isOpen'>) => setConfirmModal({ ...opts, isOpen: true });
   const closeConfirm = () => setConfirmModal(prev => ({ ...prev, isOpen: false }));
+
+  useEffect(() => {
+    setEditOrderDate(selectedPO?.order_date?.slice(0, 10) || '');
+  }, [selectedPO?.id, selectedPO?.order_date]);
 
   const notifyPurchaseOrderEvent = async (
     title: string,
@@ -251,6 +266,26 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
     });
   }, [currentUser?.id, selectedPO?.id]);
 
+  useEffect(() => {
+    const prNumber = String(selectedPO?.pr_reference || '').trim();
+    setLinkedPRId('');
+    if (!prNumber) return;
+
+    let cancelled = false;
+    void purchaseRequestService.getPurchaseRequests({ search: prNumber }).then(requests => {
+      const matchingRequest = requests.find(request =>
+        String(request.pr_number || '').trim().toLowerCase() === prNumber.toLowerCase()
+      );
+      if (!cancelled) setLinkedPRId(String(matchingRequest?.id || '').trim());
+    }).catch(error => {
+      console.error('Failed to resolve purchase request link', error);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPO?.id, selectedPO?.pr_reference]);
+
   // Deep links must load the requested record directly. The record may be outside
   // the month/year/status filters used by the list in the left-hand panel.
   useEffect(() => {
@@ -303,26 +338,9 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   const fetchEligiblePRs = async () => {
     setLoadingPRs(true);
     try {
-      const allPRs = await purchaseRequestService.getPurchaseRequests({ status: 'Approved' });
-      // Filter for approved PRs
-      const approvedPRs = (allPRs || []).filter(pr => pr.status === 'Approved');
-
-      // Fetch full details for each approved PR to check items and existing PO link
-      const detailedPRs = await Promise.all(
-        approvedPRs.map(async pr => {
-          try {
-            return await purchaseRequestService.getPurchaseRequestById(pr.id);
-          } catch {
-            return pr;
-          }
-        })
-      );
-
-      // Exclude PRs that have no items or are already linked to a generated PO
-      const eligible = detailedPRs.filter(pr => {
-        if (!pr.items || pr.items.length === 0) return false;
-        const hasGeneratedPO = pr.items.some((item: any) => Boolean(item.po_number || item.po_refno));
-        return !hasGeneratedPO;
+      const eligible = await purchaseRequestService.getPurchaseRequests({
+        availableForPO: true,
+        includeSubmitted: canUnpost,
       });
 
       setEligiblePRs(eligible);
@@ -349,8 +367,8 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
       const prDetail = await purchaseRequestService.getPurchaseRequestById(prId);
       setSelectedPR(prDetail);
 
-      // Find supplier from PR items
-      const prSupplierId = prDetail.items?.find((i: any) => i.supplier_id)?.supplier_id || '';
+      // Find supplier from remaining PR items so one PO maps to one supplier.
+      const prSupplierId = prDetail.items?.find((i: any) => !isPurchaseRequestItemConverted(i) && i.supplier_id)?.supplier_id || '';
       const prNotes = prDetail.notes || '';
 
       setCreateForm(prev => ({
@@ -422,7 +440,9 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
       }
 
       // Convert PR to PO using backend conversion endpoint
-      const createdPORefNo = await purchaseRequestService.convertToPO([selectedPRId], '');
+      const createdPORefNo = await purchaseRequestService.convertToPO([selectedPRId], '', {
+        supplierId: String(createForm.supplier_id || ''),
+      });
 
       await fetchOrders();
 
@@ -470,6 +490,8 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
 
     if (!selectedPR || !selectedPR.items || selectedPR.items.length === 0) {
       errors.items = 'The selected Purchase Requisition has no items.';
+    } else if (selectedPRConvertibleItems.length === 0) {
+      errors.items = 'The selected Purchase Requisition has no remaining items for this supplier.';
     }
 
     setValidationErrors(errors);
@@ -522,11 +544,24 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
     });
   };
 
+  const saveOrderDate = async () => {
+    if (!selectedPO || !canUnpost || !['Pending', 'Unposted'].includes(selectedPO.status) || !editOrderDate) return;
+    try {
+      const updated = await purchaseOrderService.updatePurchaseOrder(selectedPO.id, { order_date: editOrderDate } as any);
+      const fullPO = await purchaseOrderService.getPurchaseOrderById(updated.id || selectedPO.id);
+      setSelectedPO(fullPO as unknown as PurchaseOrderWithDetails);
+      await fetchOrders();
+      addToast({ type: 'success', title: 'Purchase order date updated', description: `${selectedPO.po_number} is now dated ${editOrderDate}.` });
+    } catch (error) {
+      addToast({ type: 'error', title: 'Unable to update purchase order date', description: error instanceof Error ? error.message : 'Please try again.' });
+    }
+  };
+
   const handleUnpost = (reason: string) => {
     if (!selectedPO || !canUnpost) return;
     openConfirm({
       title: 'Unpost Purchase Order',
-      message: `Unpost ${selectedPO.po_number}? This is allowed only when no Receiving Report depends on it.`,
+      message: `Unpost ${selectedPO.po_number}? Any active Receiving Report from this PO will also be unposted so the quantities can be corrected.`,
       variant: 'warning',
       confirmLabel: 'Unpost',
       onConfirm: async () => {
@@ -801,9 +836,9 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 p-5 lg:p-8">
+      <main className="min-w-0 flex-1 p-4 lg:p-6">
         {isCreating ? (
-          <section className="mx-auto max-w-5xl rounded-xl border border-slate-200 bg-white shadow-sm">
+          <section className="w-full rounded-xl border border-slate-200 bg-white shadow-sm">
             <form onSubmit={handleCreateSubmit}>
               <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
                 <div className="flex items-center gap-4">
@@ -835,17 +870,24 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                       >
                         <option value="">Select PR</option>
                         {eligiblePRs.map(pr => {
-                          const supplierName = pr.items?.find((i: any) => i.supplier_name)?.supplier_name || 'No Supplier';
                           return (
                             <option key={pr.id} value={pr.id}>
-                              {pr.pr_number} — {supplierName}
+                              {pr.pr_number}{pr.status === 'Submitted' ? ' — Submitted (will be approved)' : ' — Approved'}
                             </option>
                           );
                         })}
+                        {eligiblePRs.length === 0 && (
+                          <option value="" disabled>No approved or submitted PRs available</option>
+                        )}
                       </select>
                     )}
                     {validationErrors.pr_id && (
                       <p className="mt-1 text-xs font-semibold text-rose-600">{validationErrors.pr_id}</p>
+                    )}
+                    {!loadingPRs && eligiblePRs.length === 0 && (
+                      <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-700">
+                        No PR has remaining unconverted items for a new PO.
+                      </p>
                     )}
                   </div>
 
@@ -862,7 +904,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                       type="text"
                       readOnly
                       disabled
-                      value={suppliers.find(s => s.id === createForm.supplier_id)?.company || selectedPR?.items?.find((i: any) => i.supplier_name)?.supplier_name || 'Auto-populated from PR'}
+                      value={suppliers.find(s => s.id === createForm.supplier_id)?.company || selectedPR?.items?.find((i: any) => !isPurchaseRequestItemConverted(i) && i.supplier_name)?.supplier_name || 'Auto-populated from remaining PR items'}
                       className="h-10 w-full rounded-md border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 cursor-not-allowed"
                     />
                   </div>
@@ -897,49 +939,63 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                     <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-center text-xs font-semibold text-rose-600">
                       The selected PR has no items.
                     </div>
+                  ) : selectedPRConvertibleItems.length === 0 ? (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-center text-xs font-semibold text-amber-700">
+                      This PR has no remaining items for the selected supplier.
+                    </div>
                   ) : (
-                    <div className="overflow-x-auto rounded-lg border border-slate-200">
-                      <table className="w-full min-w-[800px] border-collapse text-xs">
+                    <div className="overflow-hidden rounded-lg border border-slate-200">
+                      <table className="w-full table-fixed border-collapse text-xs leading-tight">
+                        <colgroup>
+                          <col className="w-[4%]" />
+                          <col className="w-[12%]" />
+                          <col className="w-[12%]" />
+                          <col className="w-[28%]" />
+                          <col className="w-[9%]" />
+                          <col className="w-[8%]" />
+                          <col className="w-[12%]" />
+                          <col className="w-[15%]" />
+                        </colgroup>
                         <thead>
                           <tr className="border-b border-slate-200 bg-slate-50 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                            <th className="px-4 py-3 text-center">#</th>
-                            <th className="px-4 py-3">Item Code</th>
-                            <th className="px-4 py-3">Part No.</th>
-                            <th className="px-4 py-3">Description</th>
-                            <th className="px-4 py-3 text-center">PR Qty</th>
-                            <th className="px-4 py-3 text-center">Unit</th>
-                            <th className="px-4 py-3 text-right">Unit Cost</th>
-                            <th className="px-4 py-3 text-right">Amount</th>
+                            <th className="break-words px-2 py-3 text-center">#</th>
+                            <th className="break-words px-2 py-3">Item Code</th>
+                            <th className="break-words px-2 py-3">Part No.</th>
+                            <th className="break-words px-2 py-3">Description</th>
+                            <th className="break-words px-2 py-3 text-center">PR Qty</th>
+                            <th className="break-words px-2 py-3 text-center">Unit</th>
+                            <th className="break-words px-2 py-3 text-right">Unit Cost</th>
+                            <th className="break-words px-2 py-3 text-right">Amount</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {selectedPR.items.map((item, index) => {
+                          {selectedPRConvertibleItems.map((item, index) => {
                             const qty = Number(item.quantity || 0);
                             const cost = Number(item.unit_cost || 0);
                             const amount = qty * cost;
                             return (
                               <tr key={item.id || index} className="border-b border-slate-100 hover:bg-slate-50">
-                                <td className="px-4 py-3 text-center font-semibold text-slate-500">{index + 1}</td>
-                                <td className="px-4 py-3 font-semibold text-slate-600">{item.item_code || '-'}</td>
-                                <td className="px-4 py-3 font-semibold text-[#173c83]">{item.part_number || '-'}</td>
-                                <td className="px-4 py-3 font-semibold text-slate-700">{item.description || '-'}</td>
-                                <td className="px-4 py-3 text-center font-bold text-slate-800">{qty}</td>
-                                <td className="px-4 py-3 text-center text-slate-500">{item.unit || 'PCS'}</td>
-                                <td className="px-4 py-3 text-right font-semibold text-slate-700">₱{cost.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                                <td className="px-4 py-3 text-right font-bold text-slate-800">₱{amount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                <td className="break-words px-2 py-3 text-center font-semibold text-slate-500">{index + 1}</td>
+                                <td className="break-words px-2 py-3 text-[13px] font-bold text-slate-700">{item.item_code || '-'}</td>
+                                <td className="break-words px-2 py-3 text-[13px] font-bold text-[#173c83]">{item.part_number || '-'}</td>
+                                <td className="break-words px-2 py-3 font-semibold text-slate-700">{item.description || '-'}</td>
+                                <td className="break-words px-2 py-3 text-center font-bold text-slate-800">{qty}</td>
+                                <td className="break-words px-2 py-3 text-center text-slate-500">{item.unit || 'PCS'}</td>
+                                <td className="break-words px-2 py-3 text-right font-semibold text-slate-700">₱{cost.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                <td className="break-words px-2 py-3 text-right font-bold text-slate-800">₱{amount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                               </tr>
                             );
                           })}
                         </tbody>
                         <tfoot>
                           <tr className="border-t-2 border-slate-200 bg-slate-50 text-xs font-bold text-slate-700">
-                            <td colSpan={4} className="px-4 py-3 text-left">Total Line Items: {selectedPR.items.length}</td>
+                            <td colSpan={4} className="px-4 py-3 text-left">Total Line Items: {selectedPRConvertibleItems.length}</td>
                             <td className="px-4 py-3 text-center">
-                              {selectedPR.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0)} PCS
+                              {selectedPRConvertibleItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0)} PCS
                             </td>
                             <td colSpan={2} className="px-4 py-3 text-right">Total Amount:</td>
                             <td className="px-4 py-3 text-right text-sm text-[#175fd3]">
-                              ₱{selectedPR.items.reduce((sum, item) => sum + (Number(item.quantity || 0) * Number(item.unit_cost || 0)), 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              ₱{selectedPRConvertibleItems.reduce((sum, item) => sum + (Number(item.quantity || 0) * Number(item.unit_cost || 0)), 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                           </tr>
                         </tfoot>
@@ -955,7 +1011,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
             </form>
           </section>
         ) : selectedPO ? (
-          <section className="mx-auto max-w-5xl rounded-xl border border-slate-200 bg-white shadow-sm">
+          <section className="w-full rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-6 py-5">
               <div className="flex items-center gap-3">
                 <button type="button" onClick={handleBackFromDetail} aria-label="Back" className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-300 text-slate-600 hover:bg-slate-50">
@@ -967,18 +1023,28 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                 <span className="text-sm font-bold text-slate-500">PO No:</span>
                 <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-bold text-slate-700">{selectedPO.po_number}</span>
                 <button onClick={() => setPrintMode(true)} className="ml-2 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Print</button>
-                {selectedPO.status === 'Pending' && <button onClick={() => handleStatusChange('Posted')} className="rounded-md bg-emerald-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-emerald-700">Post</button>}
-                {selectedPO.status === 'Posted' && canUnpost && <button onClick={() => setRecoveryAction('unpost')} className="rounded-md bg-amber-500 px-4 py-1.5 text-sm font-bold text-white hover:bg-amber-600">Unpost</button>}
+                {['Pending', 'Unposted'].includes(selectedPO.status) && <button onClick={() => handleStatusChange('Posted')} className="rounded-md bg-emerald-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-emerald-700">Post</button>}
+                {['Posted', 'Completed'].includes(selectedPO.status) && canUnpost && <button onClick={() => setRecoveryAction('unpost')} className="rounded-md bg-amber-500 px-4 py-1.5 text-sm font-bold text-white hover:bg-amber-600">Unpost</button>}
                 {['Pending', 'Unposted'].includes(selectedPO.status) && canUnpost && <button onClick={() => setRecoveryAction('delete')} className="rounded-md bg-rose-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-rose-700">Delete</button>}
                 {['Draft', 'Pending'].includes(selectedPO.status) && <button onClick={() => handleStatusChange('Cancelled')} className="rounded-md bg-rose-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-rose-700">Cancel</button>}
               </div>
             </div>
 
             <div className="p-6">
-              <div className="mb-8 grid grid-cols-4 gap-6 border-b border-slate-100 pb-6">
+              <div className="mb-6 grid gap-4 border-b border-slate-100 pb-6 sm:grid-cols-2 xl:grid-cols-4">
                 <div>
                   <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">PR No.</p>
-                  <p className="font-semibold text-[#175fd3]">{selectedPO.pr_reference || '-'}</p>
+                  {linkedPRId ? (
+                    <ModuleRecordLink
+                      tab="warehouse-purchasing-purchase-request"
+                      payload={{ prId: linkedPRId }}
+                      className="font-semibold text-[#175fd3] hover:underline"
+                    >
+                      {selectedPO.pr_reference}
+                    </ModuleRecordLink>
+                  ) : (
+                    <p className="font-semibold text-[#175fd3]">{selectedPO.pr_reference || '-'}</p>
+                  )}
                 </div>
                 <div>
                   <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">Supplier</p>
@@ -990,7 +1056,29 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                 </div>
                 <div>
                   <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">Created On</p>
-                  <p className="font-semibold text-slate-700">{new Date(selectedPO.order_date).toLocaleDateString('en-GB')}</p>
+                  {canUnpost && ['Pending', 'Unposted'].includes(selectedPO.status) ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        aria-label="Edit purchase order date"
+                        type="date"
+                        value={editOrderDate}
+                        onChange={(event) => setEditOrderDate(event.target.value)}
+                        className="h-9 min-w-0 rounded border border-slate-300 px-2 text-sm font-semibold text-slate-700"
+                      />
+                      <button
+                        type="button"
+                        onClick={saveOrderDate}
+                        disabled={!editOrderDate || editOrderDate === selectedPO.order_date?.slice(0, 10)}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded border border-blue-200 text-[#175fd3] hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        title="Save PO date"
+                        aria-label="Save purchase order date"
+                      >
+                        <Save className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="font-semibold text-slate-700">{new Date(selectedPO.order_date).toLocaleDateString('en-GB')}</p>
+                  )}
                 </div>
               </div>
 
@@ -998,21 +1086,34 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                 <h3 className="text-sm font-bold uppercase text-slate-700">Items</h3>
               </div>
 
-              <div className="overflow-x-auto rounded-lg border border-slate-200">
-                <table className="w-full min-w-[1000px] border-collapse text-xs">
+              <div className="overflow-hidden rounded-lg border border-slate-200">
+                <table className="w-full table-fixed border-collapse text-xs leading-tight">
+                  <colgroup>
+                    <col className="w-[4%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[11%]" />
+                    <col className="w-[9%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[16%]" />
+                    <col className="w-[9%]" />
+                    <col className="w-[7%]" />
+                  </colgroup>
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                      <th className="px-4 py-3 text-center">#</th>
-                      <th className="px-4 py-3 text-center">Quantity</th>
-                      <th className="px-4 py-3">Supplier</th>
-                      <th className="px-4 py-3">ETA</th>
-                      <th className="px-4 py-3">Original P/N</th>
-                      <th className="px-4 py-3">Part No.</th>
-                      <th className="px-4 py-3">Item Code</th>
-                      <th className="px-4 py-3">Brand</th>
-                      <th className="px-4 py-3">Description</th>
-                      <th className="px-4 py-3 text-right">COGS</th>
-                      <th className="px-4 py-3 text-center">Action</th>
+                      <th className="break-words px-2 py-3 text-center">#</th>
+                      <th className="break-words px-2 py-3 text-center">Qty</th>
+                      <th className="break-words px-2 py-3">Supplier</th>
+                      <th className="break-words px-2 py-3">ETA</th>
+                      <th className="break-words px-2 py-3">Original P/N</th>
+                      <th className="break-words px-2 py-3">Part No.</th>
+                      <th className="break-words px-2 py-3">Item Code</th>
+                      <th className="break-words px-2 py-3">Brand</th>
+                      <th className="break-words px-2 py-3">Description</th>
+                      <th className="break-words px-2 py-3 text-right">COGS</th>
+                      <th className="break-words px-2 py-3 text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1022,18 +1123,18 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                       const isEditing = editingItemId === item.id;
                       return (
                       <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
-                        <td className="px-4 py-3 text-center font-semibold text-slate-500">{index + 1}</td>
-                        <td className="px-4 py-3 text-center font-bold text-slate-700">{isEditing ? <input aria-label={`Edit quantity ${index + 1}`} type="number" min="1" value={editItemQty} onChange={event => setEditItemQty(Number(event.target.value))} className="h-8 w-20 rounded border border-slate-300 px-2 text-center" /> : item.qty}</td>
-                        <td className="px-4 py-3 font-semibold">{selectedPO.supplier?.company || '-'}</td>
-                        <td className="px-4 py-3 font-semibold text-slate-600">{isEditing ? <input aria-label={`Edit ETA ${index + 1}`} type="date" value={editItemEta} onChange={event => setEditItemEta(event.target.value)} className="h-8 w-36 rounded border border-slate-300 px-2" /> : item.eta_date ? new Date(item.eta_date).toLocaleDateString('en-GB') : '-'}</td>
-                        <td className="px-4 py-3 font-semibold text-slate-600">-</td>
-                        <td className="px-4 py-3 font-semibold text-[#173c83]">{item.product?.part_no || '-'}</td>
-                        <td className="px-4 py-3 font-semibold text-slate-600">{item.product?.item_code || '-'}</td>
-                        <td className="px-4 py-3 font-semibold text-slate-600">{item.product?.brand || '-'}</td>
-                        <td className="px-4 py-3 font-semibold text-slate-700">{item.product?.description || '-'}</td>
-                        <td className="px-4 py-3 text-right font-bold">{isEditing ? <input aria-label={`Edit COGS ${index + 1}`} type="number" min="0" step="0.01" value={editItemUnitPrice} onChange={event => setEditItemUnitPrice(Number(event.target.value))} className="h-8 w-28 rounded border border-slate-300 px-2 text-right" /> : item.unit_price ? item.unit_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
-                        <td className="px-4 py-3 text-center">
-                              {['Draft', 'Pending'].includes(selectedPO.status) && (
+                        <td className="break-words px-2 py-3 text-center font-semibold text-slate-500">{index + 1}</td>
+                        <td className="break-words px-2 py-3 text-center font-bold text-slate-700">{isEditing ? <input aria-label={`Edit quantity ${index + 1}`} type="number" min="1" value={editItemQty} onChange={event => setEditItemQty(Number(event.target.value))} className="h-8 w-full min-w-0 rounded border border-slate-300 px-1 text-center" /> : item.qty}</td>
+                        <td className="break-words px-2 py-3 font-semibold">{selectedPO.supplier?.company || '-'}</td>
+                        <td className="break-words px-2 py-3 font-semibold text-slate-600">{isEditing ? <input aria-label={`Edit ETA ${index + 1}`} type="date" value={editItemEta} onChange={event => setEditItemEta(event.target.value)} className="h-8 w-full min-w-0 rounded border border-slate-300 px-1" /> : item.eta_date ? new Date(item.eta_date).toLocaleDateString('en-GB') : '-'}</td>
+                        <td className="break-words px-2 py-3 font-semibold text-slate-600">-</td>
+                        <td className="break-words px-2 py-3 text-[13px] font-bold text-[#173c83]">{item.product?.part_no || '-'}</td>
+                        <td className="break-words px-2 py-3 text-[13px] font-bold text-slate-700">{item.product?.item_code || '-'}</td>
+                        <td className="break-words px-2 py-3 font-semibold text-slate-600">{item.product?.brand || '-'}</td>
+                        <td className="break-words px-2 py-3 font-semibold text-slate-700">{item.product?.description || '-'}</td>
+                        <td className="break-words px-2 py-3 text-right font-bold">{isEditing ? <input aria-label={`Edit COGS ${index + 1}`} type="number" min="0" step="0.01" value={editItemUnitPrice} onChange={event => setEditItemUnitPrice(Number(event.target.value))} className="h-8 w-full min-w-0 rounded border border-slate-300 px-1 text-right" /> : item.unit_price ? item.unit_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
+                        <td className="break-words px-2 py-3 text-center">
+                              {['Draft', 'Pending', 'Unposted'].includes(selectedPO.status) && (
                             isEditing ? (
                               <div className="flex items-center justify-center gap-2">
                                 <button type="button" onClick={saveEditItem} className="text-emerald-600 hover:text-emerald-800" title="Save item"><Save size={16} /></button>
@@ -1091,7 +1192,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
         isOpen={recoveryAction !== null}
         action={recoveryAction || 'unpost'}
         recordLabel={selectedPO?.po_number || 'Purchase Order'}
-        description={recoveryAction === 'unpost' ? 'This returns the purchase order to Unposted only when no receiving report or received quantities depend on it.' : 'This keeps an audit trail and removes this pending purchase order from active work.'}
+        description={recoveryAction === 'unpost' ? 'This returns the purchase order to Unposted and also unposts active receiving reports linked to it.' : 'This keeps an audit trail and removes this pending purchase order from active work.'}
         onClose={() => setRecoveryAction(null)}
         onConfirm={async (reason) => {
           if (recoveryAction === 'unpost') handleUnpost(reason);

@@ -522,12 +522,21 @@ const App: React.FC = () => {
             />
           </div>
         );
-      case 'warehouse-purchasing-return-to-supplier':
+      case 'warehouse-purchasing-return-to-supplier': {
+        const returnContext = moduleContext['warehouse-purchasing-return-to-supplier'] || {};
         return (
           <div className="h-full overflow-y-auto">
-            <ReturnToSupplier />
+            <ReturnToSupplier
+              initialSearch={returnContext.search}
+              initialDateFrom={returnContext.dateFrom}
+              initialDateTo={returnContext.dateTo}
+              initialItemRefno={returnContext.itemRefno}
+              initialItemCode={returnContext.itemCode}
+              initialStatus={returnContext.status}
+            />
           </div>
         );
+      }
       case 'warehouse-reports-inventory-report':
         return (
           <div className="h-full overflow-y-auto print:h-auto print:overflow-visible">
@@ -733,6 +742,9 @@ const App: React.FC = () => {
               initialSearch={context.search}
               initialDateFrom={context.dateFrom}
               initialDateTo={context.dateTo}
+              initialItemRefno={context.itemRefno}
+              initialItemCode={context.itemCode}
+              initialStatus={context.status}
             />
           </div>
         );

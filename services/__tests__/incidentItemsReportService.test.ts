@@ -84,6 +84,8 @@ describe('incidentItemsReportService', () => {
     expect(result.items[0].recent_incidents[0]).toEqual({
       incident_report_id: '99',
       date: '2026-08-01',
+      contact_id: '',
+      customer_name: 'Unknown customer',
       summary: '',
     });
     expect(result.summary).toMatchObject({
@@ -94,4 +96,3 @@ describe('incidentItemsReportService', () => {
     });
   });
 });
-

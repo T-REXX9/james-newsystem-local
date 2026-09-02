@@ -203,10 +203,10 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
     }
   };
 
-  const handleConvertPO = async () => {
+  const handleConvertPO = async (itemIds?: string[]) => {
     if (!selectedRequest) return;
     try {
-      const poId = await purchaseRequestService.convertToPO([selectedRequest.id], '');
+      const poId = await purchaseRequestService.convertToPO([selectedRequest.id], '', { itemIds });
       window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab: 'warehouse-purchasing-purchase-order', payload: { poId } } }));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';

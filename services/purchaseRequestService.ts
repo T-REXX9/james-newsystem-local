@@ -130,6 +130,8 @@ const mapDetail = (data: any): PurchaseRequestWithItems => {
       supplier_id: String(item?.supplier_id || ''),
       supplier_name: String(item?.supplier_name || ''),
       eta_date: String(item?.eta_date || ''),
+      po_refno: String(item?.po_refno || ''),
+      po_number: String(item?.po_number || ''),
       created_at: null,
       updated_at: null,
       sr_cases: toNumber(item?.sr_cases, 0),
@@ -155,7 +157,7 @@ const mapCreateItemPayload = (item: CreatePRItemPayload) => ({
 });
 
 export const purchaseRequestService = {
-  async getPurchaseRequests(filters?: { month?: number; year?: number; status?: string; search?: string }): Promise<PurchaseRequestWithItems[]> {
+  async getPurchaseRequests(filters?: { month?: number; year?: number; status?: string; search?: string; availableForPO?: boolean; includeSubmitted?: boolean }): Promise<PurchaseRequestWithItems[]> {
     const query = new URLSearchParams({
       main_id: String(API_MAIN_ID),
       page: '1',
@@ -165,6 +167,8 @@ export const purchaseRequestService = {
     if (filters?.year) query.set('year', String(filters.year));
     if (filters?.status && filters.status !== 'All' && filters.status !== 'All Statuses') query.set('status', filters.status);
     if (filters?.search?.trim()) query.set('search', filters.search.trim());
+    if (filters?.availableForPO) query.set('available_for_po', '1');
+    if (filters?.includeSubmitted) query.set('include_submitted', '1');
 
     const data = await requestApi(`${API_BASE_URL}/purchase-requests?${query.toString()}`);
     const rows = Array.isArray(data?.items) ? data.items : [];
@@ -319,7 +323,7 @@ export const purchaseRequestService = {
     return 0;
   },
 
-  async convertToPO(prIds: string[], approverId: string): Promise<string> {
+  async convertToPO(prIds: string[], approverId: string, options?: { supplierId?: string; itemIds?: string[] }): Promise<string> {
     const prId = String(prIds?.[0] || '');
     if (!prId) throw new Error('No purchase request selected for conversion');
     const ctx = getUserContext();
@@ -332,6 +336,8 @@ export const purchaseRequestService = {
           main_id: ctx.mainId,
           user_id: ctx.userId,
           approver_id: approverId || String(ctx.userId),
+          supplier_id: options?.supplierId || '',
+          item_ids: options?.itemIds || [],
         }),
       }
     );

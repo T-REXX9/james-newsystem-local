@@ -74,6 +74,7 @@ const toApiStatus = (uiStatus: unknown): string => {
     const normalized = String(uiStatus || '').trim().toLowerCase();
     if (normalized === 'posted' || normalized === 'delivered') return 'Delivered';
     if (normalized === 'cancelled' || normalized === 'canceled') return 'Cancelled';
+    if (normalized === 'unposted') return 'Unposted';
     return 'Pending';
 };
 

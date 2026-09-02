@@ -9,7 +9,6 @@ import {
   Crown,
   Info,
   Loader2,
-  MessageSquare,
   Phone,
   RefreshCw,
   Search,
@@ -741,16 +740,6 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                               className="rounded-full border border-emerald-200 p-1.5 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-60"
                             >
                               <Phone className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={`Message ${row.shopName}`}
-                              title={`Open communication history for ${row.shopName}`}
-                              onClick={() => openCustomerDetails(row, 'communication')}
-                              disabled={loadingCustomerId === row.id}
-                              className="rounded-full border border-blue-200 p-1.5 text-blue-600 transition hover:bg-blue-50 disabled:opacity-60"
-                            >
-                              <MessageSquare className="h-4 w-4" />
                             </button>
                           </div>
                         </td>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 
 import CreateIncidentReportModal from '../CreateIncidentReportModal';
 
@@ -89,5 +89,30 @@ describe('CreateIncidentReportModal', () => {
     rerender(<CreateIncidentReportModal {...props} isOpen />);
 
     expect((screen.getByLabelText(/Incident Date/) as HTMLInputElement).value).toBe(localDateValue(nextDate));
+  });
+
+  it('accepts today as the incident date and still rejects tomorrow', async () => {
+    const today = new Date(2026, 8, 2, 3, 20);
+    vi.setSystemTime(today);
+
+    render(
+      <CreateIncidentReportModal
+        contactId="contact-1"
+        isOpen
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        currentUser={{ full_name: 'Master User' } as any}
+      />
+    );
+
+    const incidentDate = screen.getByLabelText(/Incident Date/) as HTMLInputElement;
+
+    fireEvent.blur(incidentDate);
+    expect(screen.queryByText('Please choose an incident date that is not in the future.')).not.toBeInTheDocument();
+
+    fireEvent.change(incidentDate, { target: { value: '2026-09-03' } });
+    fireEvent.blur(incidentDate);
+
+    expect(screen.getAllByText('Please choose an incident date that is not in the future.').length).toBeGreaterThan(0);
   });
 });

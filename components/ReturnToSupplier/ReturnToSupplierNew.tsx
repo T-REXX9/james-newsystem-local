@@ -341,7 +341,7 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
                     {step === 2 && selectedRR && (
                         <div className="space-y-6">
                             {/* Header Info */}
-                            <div className="grid grid-cols-2 gap-4 bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg">
+                            <div className="grid grid-cols-1 gap-4 bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg md:grid-cols-2">
                                 <div>
                                     <label className="text-xs text-gray-500 uppercase">Supplier</label>
                                     <div className="font-medium dark:text-white">{selectedRR.supplier_name}</div>
@@ -432,15 +432,23 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
 
                                 {/* Table */}
                                 <div className="overflow-hidden border border-[#ddd]">
-                                    <table className="w-full text-sm">
+                                    <table className="w-full table-fixed text-xs leading-tight">
+                                        <colgroup>
+                                            <col className="w-[26%]" />
+                                            <col className="w-[22%]" />
+                                            <col className="w-[13%]" />
+                                            <col className="w-[15%]" />
+                                            <col className="w-[16%]" />
+                                            <col className="w-[8%]" />
+                                        </colgroup>
                                         <thead className="bg-white text-[#333]">
                                             <tr>
-                                                <th className="px-3 py-2 text-left">Item Code / Part No.</th>
-                                                <th className="px-3 py-2 text-left">Remark</th>
-                                                <th className="px-3 py-2 text-right">Quantity</th>
-                                                <th className="px-3 py-2 text-right">Unit Price</th>
-                                                <th className="px-3 py-2 text-right">Amount</th>
-                                                <th className="px-3 py-2"></th>
+                                                <th className="break-words px-2 py-2 text-left">Item Code / Part No.</th>
+                                                <th className="break-words px-2 py-2 text-left">Remark</th>
+                                                <th className="break-words px-2 py-2 text-right">Quantity</th>
+                                                <th className="break-words px-2 py-2 text-right">Unit Price</th>
+                                                <th className="break-words px-2 py-2 text-right">Amount</th>
+                                                <th className="px-2 py-2"></th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -448,15 +456,15 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
                                                 const max = availableMaxQty(item.rr_item_id || '');
                                                 return (
                                                     <tr key={idx}>
-                                                        <td className="px-3 py-2">
-                                                            <div className="font-medium dark:text-white">{item.part_no}</div>
-                                                            <div className="text-xs text-gray-500 truncate max-w-[200px]">{item.description}</div>
+                                                        <td className="break-words px-2 py-2">
+                                                            <div className="text-[13px] font-bold dark:text-white">{item.part_no}</div>
+                                                            <div className="text-xs font-semibold text-gray-600 dark:text-gray-400">{item.description}</div>
                                                         </td>
-                                                        <td className="px-3 py-2">
+                                                        <td className="px-2 py-2">
                                                             <select
                                                                 value={item.return_reason}
                                                                 onChange={(e) => updateItem(idx, 'return_reason', e.target.value)}
-                                                                className="w-full bg-transparent border-b border-gray-300 dark:border-gray-600 focus:border-blue-500 text-sm py-1"
+                                                                className="w-full min-w-0 bg-transparent border-b border-gray-300 dark:border-gray-600 focus:border-blue-500 text-[11px] py-1"
                                                             >
                                                                 <option value="Defective">Defective</option>
                                                                 <option value="Wrong Item">Wrong Item</option>
@@ -465,24 +473,24 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
                                                                 <option value="Other">Other</option>
                                                             </select>
                                                         </td>
-                                                        <td className="px-3 py-2 text-right">
+                                                        <td className="px-2 py-2 text-right">
                                                             <input
                                                                 type="number"
                                                                 min="1"
                                                                 max={max}
                                                                 value={item.qty_returned}
                                                                 onChange={(e) => updateItem(idx, 'qty_returned', Number(e.target.value))}
-                                                                className="w-16 text-right bg-transparent border-b border-gray-300 dark:border-gray-600 focus:border-blue-500 py-1"
+                                                                className="w-full min-w-0 text-right bg-transparent border-b border-gray-300 dark:border-gray-600 focus:border-blue-500 py-1"
                                                             />
                                                             <div className="text-[10px] text-gray-400">Max: {max}</div>
                                                         </td>
-                                                        <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-400">
+                                                        <td className="break-words px-2 py-2 text-right text-gray-600 dark:text-gray-400">
                                                             {item.unit_cost.toLocaleString()}
                                                         </td>
-                                                        <td className="px-3 py-2 text-right font-medium dark:text-white">
+                                                        <td className="break-words px-2 py-2 text-right font-medium dark:text-white">
                                                             {item.total_amount.toLocaleString()}
                                                         </td>
-                                                        <td className="px-3 py-2">
+                                                        <td className="px-2 py-2">
                                                             <button onClick={() => removeItem(idx)} className="text-red-500 hover:text-red-700">
                                                                 <Trash2 className="w-4 h-4" />
                                                             </button>

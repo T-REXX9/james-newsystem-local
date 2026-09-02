@@ -77,13 +77,14 @@ describe('purchaseRequestService (local API)', () => {
     );
 
     const { purchaseRequestService } = await import('../purchaseRequestService');
-    const result = await purchaseRequestService.convertToPO(['PRREF-9'], 'approver-1');
+    const result = await purchaseRequestService.convertToPO(['PRREF-9'], 'approver-1', { supplierId: 'SUP-1' });
 
     expect(result).toBe('POREF-9');
     expect((global.fetch as any).mock.calls[0][0]).toContain('/purchase-requests/PRREF-9/actions/convert-po');
     const body = JSON.parse((global.fetch as any).mock.calls[0][1].body);
     expect(body.user_id).toBe(9);
     expect(body.approver_id).toBe('approver-1');
+    expect(body.supplier_id).toBe('SUP-1');
   });
 
   it('convertToPO attaches a Bearer token from the local auth session', async () => {
@@ -130,14 +131,23 @@ describe('purchaseRequestService (local API)', () => {
     expect(String((global.fetch as any).mock.calls[0][0])).toContain('status=Approved');
   });
 
+  it('requests PRs eligible for PO creation, including submitted requests for purchasing managers', async () => {
+    (global.fetch as any).mockImplementation(() => okResponse({ items: [] }));
+    const { purchaseRequestService } = await import('../purchaseRequestService');
+    await purchaseRequestService.getPurchaseRequests({ availableForPO: true, includeSubmitted: true });
+    const url = String((global.fetch as any).mock.calls[0][0]);
+    expect(url).toContain('available_for_po=1');
+    expect(url).toContain('include_submitted=1');
+  });
+
   it('loads a purchase-request detail and normalizes item metadata', async () => {
     (global.fetch as any).mockImplementation(() => okResponse({
       request: { refno: 'PRREF-3', pr_number: 'PR-2603', request_date: '2026-03-28', status: 'Pending' },
-      items: [{ id: 8, item_id: 'P8', item_code: 'I8', part_number: 'PART-8', description: 'Part 8', quantity: '3', unit_cost: '12.5', eta_date: '2026-04-01', sr_cases: 1, ir_cases: 0 }],
+      items: [{ id: 8, item_id: 'P8', item_code: 'I8', part_number: 'PART-8', description: 'Part 8', quantity: '3', unit_cost: '12.5', eta_date: '2026-04-01', sr_cases: 1, ir_cases: 0, po_refno: 'POREF-8', po_number: 'PO-2608' }],
     }));
     const { purchaseRequestService } = await import('../purchaseRequestService');
     const detail = await purchaseRequestService.getPurchaseRequestById('PRREF-3');
-    expect(detail.items[0]).toMatchObject({ id: '8', quantity: 3, unit_cost: 12.5, eta_date: '2026-04-01', recommendation: 'Review Supplier' });
+    expect(detail.items[0]).toMatchObject({ id: '8', quantity: 3, unit_cost: 12.5, eta_date: '2026-04-01', recommendation: 'Review Supplier', po_refno: 'POREF-8', po_number: 'PO-2608' });
   });
 
   it('updates and deletes a purchase request', async () => {

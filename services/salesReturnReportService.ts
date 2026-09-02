@@ -38,6 +38,8 @@ export interface SalesReturnReportFilters {
   dateTo?: string;
   status?: string;
   search?: string;
+  itemRefno?: string;
+  itemCode?: string;
   page?: number;
   perPage?: number;
 }
@@ -99,6 +101,8 @@ export const fetchSalesReturnReport = async (
     if (filters.dateTo) query.set('date_to', filters.dateTo);
     if (filters.status) query.set('status', filters.status);
     if (filters.search) query.set('search', filters.search);
+    if (filters.itemRefno) query.set('item_refno', filters.itemRefno);
+    if (filters.itemCode) query.set('item_code', filters.itemCode);
 
     const data = await requestApi(`${API_BASE_URL}/sales-return-report?${query.toString()}`);
     const rows: SalesReturnReportRow[] = (Array.isArray(data?.items) ? data.items : []).map((row: any) => ({
@@ -131,18 +135,6 @@ export const fetchSalesReturnReport = async (
     };
   } catch (error) {
     console.error('Error fetching sales return report:', error);
-    return {
-      items: [],
-      summary: {
-        totalQty: 0,
-        totalAmount: 0,
-      },
-      meta: {
-        page: 1,
-        perPage: 100,
-        total: 0,
-        totalPages: 0,
-      },
-    };
+    throw error;
   }
 };

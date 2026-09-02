@@ -1,6 +1,6 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createWorkflowHistoryState } from '../../utils/workflowHistory';
 
 const service = {
@@ -62,6 +62,10 @@ const approvedPR = {
   ],
 };
 
+afterEach(() => {
+  cleanup();
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
   window.history.replaceState(null, '', '/');
@@ -90,6 +94,28 @@ describe('PurchaseOrderView', () => {
     fireEvent.click(screen.getByRole('button', { name: /generate purchase order/i }));
     expect(await screen.findByText('New Purchase Order')).toBeInTheDocument();
     expect(service.generatePONumber).toHaveBeenCalled();
+  });
+
+  it('makes the PR number link directly to the matching purchase request record', async () => {
+    const navigationSpy = vi.fn();
+    window.addEventListener('workflow:navigate', navigationSpy);
+    const { default: PurchaseOrderView } = await import('../PurchaseOrderView');
+
+    render(<PurchaseOrderView initialPOId="POREF-1" />);
+
+    const prLink = await screen.findByRole('link', { name: 'PR-2601' });
+    expect(prLink).toHaveAttribute('href', '#/warehouse-purchasing-purchase-request?prId=PRREF-1');
+
+    fireEvent.click(prLink);
+
+    expect(navigationSpy).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'workflow:navigate',
+      detail: {
+        tab: 'warehouse-purchasing-purchase-request',
+        payload: { prId: 'PRREF-1' },
+      },
+    }));
+    window.removeEventListener('workflow:navigate', navigationSpy);
   });
 
   it('supports all-month and all-year list filters', async () => {

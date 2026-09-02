@@ -6,22 +6,44 @@ import { returnToSupplierService } from '../../services/returnToSupplierService'
 import { SupplierReturn } from '../../returnToSupplier.types';
 import { CalendarDays, Plus } from 'lucide-react';
 
-const ReturnToSupplier: React.FC = () => {
+interface ReturnToSupplierProps {
+    initialSearch?: string;
+    initialDateFrom?: string;
+    initialDateTo?: string;
+    initialItemRefno?: string;
+    initialItemCode?: string;
+    initialStatus?: string;
+}
+
+const ReturnToSupplier: React.FC<ReturnToSupplierProps> = ({
+    initialSearch = '',
+    initialDateFrom = '',
+    initialDateTo = '',
+    initialItemRefno = '',
+    initialItemCode = '',
+    initialStatus = 'all',
+}) => {
     const [returns, setReturns] = useState<SupplierReturn[]>([]);
     const [loading, setLoading] = useState(false);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [showNewModal, setShowNewModal] = useState(false);
 
     // Filters
-    const [searchTerm, setSearchTerm] = useState('');
-    const [statusFilter, setStatusFilter] = useState('all');
-    const [month, setMonth] = useState(new Date().getMonth() + 1);
-    const [year, setYear] = useState(new Date().getFullYear());
+    const [searchTerm, setSearchTerm] = useState(initialSearch);
+    const [statusFilter, setStatusFilter] = useState(initialStatus || 'all');
+    const [month, setMonth] = useState<string>(String(new Date().getMonth() + 1));
+    const [year, setYear] = useState<string>(String(new Date().getFullYear()));
+    const yearOptions = Array.from({ length: 16 }, (_, index) => String(new Date().getFullYear() - 10 + index)).reverse();
 
     const fetchReturns = async () => {
         setLoading(true);
         try {
-            const data = await returnToSupplierService.getAllReturns();
+            const data = await returnToSupplierService.getAllReturns({
+                search: initialSearch,
+                itemRefno: initialItemRefno,
+                itemCode: initialItemCode,
+                status: initialStatus,
+            });
             setReturns(data);
         } catch (err) {
             console.error(err);
@@ -31,8 +53,9 @@ const ReturnToSupplier: React.FC = () => {
     };
 
     useEffect(() => {
+        setSearchTerm(initialSearch);
         fetchReturns();
-    }, []);
+    }, [initialItemCode, initialItemRefno, initialSearch, initialStatus]);
 
     const handleSelect = (r: SupplierReturn) => {
         setSelectedId(r.id);
@@ -48,12 +71,18 @@ const ReturnToSupplier: React.FC = () => {
 
     const periodReturns = returns.filter(r => {
         const date = new Date(r.return_date);
-        return date.getMonth() + 1 === month && date.getFullYear() === year;
+        if (initialDateFrom && initialDateTo) {
+            const recordDate = r.return_date.slice(0, 10);
+            return recordDate >= initialDateFrom && recordDate <= initialDateTo;
+        }
+        const matchesMonth = month === 'all' || date.getMonth() + 1 === Number(month);
+        const matchesYear = year === 'all' || date.getFullYear() === Number(year);
+        return matchesMonth && matchesYear;
     });
 
     const filteredReturns = periodReturns.filter(r => {
         if (statusFilter !== 'all' && r.status.toLowerCase() !== statusFilter.toLowerCase()) return false;
-        if (searchTerm) {
+        if (searchTerm && !initialItemRefno && !initialItemCode) {
             const lowerSearch = searchTerm.toLowerCase();
             return r.return_no.toLowerCase().includes(lowerSearch) ||
                    (r.supplier_name && r.supplier_name.toLowerCase().includes(lowerSearch));
@@ -90,14 +119,15 @@ const ReturnToSupplier: React.FC = () => {
                             <CalendarDays className="h-4 w-4 text-[#175fd3]" />
                             <span>Filter by Date</span>
                         </div>
-                        <div className="grid grid-cols-[minmax(0,1fr)_88px] gap-2">
+                        <div className="grid grid-cols-2 gap-2">
                             <label className="sr-only" htmlFor="return-to-supplier-month">Return month</label>
                             <select
                                 id="return-to-supplier-month"
                                 value={month}
-                                onChange={e => setMonth(Number(e.target.value))}
+                                onChange={e => setMonth(e.target.value)}
                                 className="h-10 min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-[#175fd3] focus:ring-2 focus:ring-blue-100"
                             >
+                                <option value="all">All Months</option>
                                 {Array.from({ length: 12 }, (_, index) => {
                                     const monthValue = index + 1;
                                     return (
@@ -108,17 +138,18 @@ const ReturnToSupplier: React.FC = () => {
                                 })}
                             </select>
                             <label className="sr-only" htmlFor="return-to-supplier-year">Return year</label>
-                            <input
+                            <select
                                 id="return-to-supplier-year"
-                                type="number"
-                                inputMode="numeric"
-                                min="2000"
-                                max="2100"
                                 value={year}
-                                onChange={e => setYear(Number(e.target.value))}
+                                onChange={e => setYear(e.target.value)}
                                 className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-[#175fd3] focus:ring-2 focus:ring-blue-100"
                                 aria-label="Return year"
-                            />
+                            >
+                                <option value="all">All Years</option>
+                                {yearOptions.map(yearOption => (
+                                    <option key={yearOption} value={yearOption}>{yearOption}</option>
+                                ))}
+                            </select>
                         </div>
                     </div>
 
@@ -142,7 +173,7 @@ const ReturnToSupplier: React.FC = () => {
                         <div className="space-y-2">
                             {filteredReturns.map(r => {
                                 const isSelected = selectedId === r.id;
-                                const statusColor = r.status === 'Draft' || r.status === 'Pending' ? 'bg-orange-100 text-orange-700'
+                                const statusColor = r.status === 'Pending' ? 'bg-orange-100 text-orange-700'
                                     : r.status === 'Posted' ? 'bg-emerald-100 text-emerald-700'
                                     : r.status === 'Cancelled' ? 'bg-rose-100 text-rose-700'
                                     : 'bg-slate-100 text-slate-700';
@@ -178,7 +209,7 @@ const ReturnToSupplier: React.FC = () => {
                 </div>
             </aside>
 
-            <main className="min-w-0 flex-1 p-5 lg:p-8">
+            <main className="min-w-0 flex-1 p-4 lg:p-6">
                 {showNewModal ? (
                     <ReturnToSupplierNew onClose={() => setShowNewModal(false)} onSuccess={handleSuccessNew} />
                 ) : selectedReturn ? (

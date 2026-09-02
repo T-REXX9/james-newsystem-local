@@ -193,7 +193,7 @@ const ReceivingStock: React.FC<ReceivingStockProps> = ({ initialRRId, initialRRR
                 </div>
             </aside>
 
-            <main className="min-w-0 flex-1 p-5 lg:p-8">
+            <main className="min-w-0 flex-1 p-4 lg:p-6">
                 {viewMode === 'view' && selectedRrId ? (
                     <ReceivingView rrId={selectedRrId} onBack={handleBackToList} onCreateNew={handleCreateNew} />
                 ) : (

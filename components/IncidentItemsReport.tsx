@@ -123,13 +123,14 @@ const IncidentItemsReport: React.FC<IncidentItemsReportProps> = ({
   const exportCsv = () => {
     if (!reportData?.items.length) return;
     const escape = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
-    const headers = ['Supplier', 'Item Code', 'Part No', 'Description', 'Incident Count', 'Latest Incident', 'Match Sources', 'Confidence'];
+    const headers = ['Supplier', 'Item Code', 'Part No', 'Description', 'Incident Count', 'Affected Clients', 'Latest Incident', 'Match Sources', 'Confidence'];
     const rows = reportData.items.map((row) => [
       row.supplier_name,
       row.item_code,
       row.part_no,
       row.description,
       row.incident_count,
+      row.affected_customer_count,
       formatDate(row.latest_incident_date),
       row.match_sources,
       `${Math.round(row.average_confidence * 100)}%`,
@@ -288,6 +289,7 @@ const IncidentItemsReport: React.FC<IncidentItemsReportProps> = ({
                   <th className="px-3 py-3">Part No</th>
                   <th className="px-3 py-3">Description</th>
                   <th className="px-3 py-3 text-center">Incidents</th>
+                  <th className="px-3 py-3 text-center">Clients</th>
                   <th className="px-3 py-3">Latest</th>
                   <th className="px-3 py-3">Source</th>
                   <th className="px-3 py-3 text-center">Confidence</th>
@@ -296,14 +298,14 @@ const IncidentItemsReport: React.FC<IncidentItemsReportProps> = ({
               <tbody className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="px-3 py-12 text-center text-slate-500">
+                    <td colSpan={9} className="px-3 py-12 text-center text-slate-500">
                       <Loader2 className="mx-auto mb-2 h-6 w-6 animate-spin" />
                       Loading report...
                     </td>
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-3 py-12 text-center text-slate-500">
+                    <td colSpan={9} className="px-3 py-12 text-center text-slate-500">
                       {reportData ? 'No incident items match the current filters.' : 'Generate the report to view incident items.'}
                     </td>
                   </tr>
@@ -330,6 +332,7 @@ const IncidentItemsReport: React.FC<IncidentItemsReportProps> = ({
                             {row.incident_count}
                           </span>
                         </td>
+                        <td className="px-3 py-3 text-center font-bold text-slate-700 dark:text-slate-200">{row.affected_customer_count}</td>
                         <td className="px-3 py-3 text-slate-600 dark:text-slate-300">{formatDate(row.latest_incident_date)}</td>
                         <td className="px-3 py-3 text-xs text-slate-600 dark:text-slate-300">{row.match_sources || '-'}</td>
                         <td className="px-3 py-3 text-center font-mono text-xs text-slate-600 dark:text-slate-300">
@@ -370,6 +373,7 @@ const IncidentItemsReport: React.FC<IncidentItemsReportProps> = ({
                   {selectedRow.recent_incidents.map((incident) => (
                     <div key={incident.incident_report_id} className="border-l-2 border-brand-blue pl-3">
                       <p className="text-xs font-semibold text-slate-900 dark:text-white">{incident.incident_report_id}</p>
+                      <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">{incident.customer_name}</p>
                       <p className="text-xs text-slate-500">{formatDate(incident.date)}</p>
                       <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{incident.summary || '-'}</p>
                     </div>

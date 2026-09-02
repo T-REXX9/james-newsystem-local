@@ -6,7 +6,6 @@ import {
   CalendarDays,
   CheckCircle2,
   ClipboardList,
-  Clock3,
   CreditCard,
   FileWarning,
   MessageSquare,
@@ -15,6 +14,7 @@ import {
   Plus,
   Send,
   ShieldCheck,
+  ShoppingCart,
   UserRound,
   WalletCards,
 } from 'lucide-react';
@@ -34,7 +34,6 @@ export type DetailTabId =
   | 'overview'
   | 'comments'
   | 'human'
-  | 'communication'
   | 'sales'
   | 'item-issues'
   | 'incident'
@@ -53,8 +52,7 @@ const tabs: Array<{
 }> = [
   { id: 'overview', label: 'Overview', icon: ShieldCheck },
   { id: 'comments', label: 'Management Instructions', icon: ClipboardList },
-  { id: 'human', label: 'Human Agent Activity', icon: UserRound },
-  { id: 'communication', label: 'Communication Timeline', icon: MessageSquare },
+  { id: 'human', label: 'Sales Agent Activity', icon: UserRound },
   { id: 'sales', label: 'Sales Inquiry', icon: BarChart3 },
   { id: 'item-issues', label: 'Item Issues', icon: PackageSearch },
   { id: 'incident', label: 'Incident Reports', icon: FileWarning },
@@ -223,7 +221,7 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
 
   const overview = (
     <div className="space-y-3 bg-slate-50 p-3">
-      <div className="grid gap-3 xl:grid-cols-[0.82fr_1.02fr_1.35fr]">
+      <div className="grid gap-3 xl:grid-cols-2">
         <div className="space-y-3">
           <PanelCard title="Management Instructions" icon={ClipboardList} tone="text-violet-700" action="+ Add Instruction" onAction={() => setActiveTab('comments')}>
             {latestInstruction ? (
@@ -260,9 +258,9 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
         </div>
 
         <div className="space-y-3">
-          <PanelCard title={`Human Agent Activity (${customer.assignedTo || 'Unassigned'})`} icon={UserRound} action="View All" onAction={() => setActiveTab('human')}>
-            <ActivityList activities={humanActivities} emptyLabel="No human-agent report has been recorded for this customer." compact />
-            <button type="button" onClick={() => setActiveTab('human')} className="mt-3 w-full text-center text-[11px] font-bold text-blue-700 hover:underline">View All Human Agent Activity →</button>
+          <PanelCard title={`Sales Agent Activity (${customer.assignedTo || 'Unassigned'})`} icon={UserRound} action="View All" onAction={() => setActiveTab('human')}>
+            <ActivityList activities={humanActivities} emptyLabel="No sales-agent report has been recorded for this customer." compact />
+            <button type="button" onClick={() => setActiveTab('human')} className="mt-3 w-full text-center text-[11px] font-bold text-blue-700 hover:underline">View All Sales Agent Activity →</button>
           </PanelCard>
 
           <PanelCard title="AI Agent Activity" icon={Bot} tone="text-violet-700">
@@ -270,10 +268,6 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
           </PanelCard>
         </div>
 
-        <PanelCard title="Communication Timeline (All)" icon={MessageSquare} tone="text-slate-700">
-          <ActivityList activities={activities} emptyLabel="No communication history is available for this customer." />
-          <button type="button" onClick={() => setActiveTab('communication')} className="mt-3 w-full text-center text-[11px] font-bold text-blue-700 hover:underline">View Full Communication History →</button>
-        </PanelCard>
       </div>
     </div>
   );
@@ -288,14 +282,14 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
       return <PersonalCommentsTab contactId={customer.id} currentUserId={currentUser?.id} currentUserName={currentUser?.full_name || currentUser?.email || 'Owner'} currentUserAvatar={currentUser?.avatar_url} mode="instruction" autoFocus />;
     }
     if (activeTab === 'human') {
-      return <div className="p-5"><PanelCard title={`Human Agent Activity (${customer.assignedTo || 'Unassigned'})`} icon={UserRound}>
+      return <div className="p-5"><PanelCard title={`Sales Agent Activity (${customer.assignedTo || 'Unassigned'})`} icon={UserRound}>
         <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-900">
-          Human agents submit the daily sales report from <strong>Sales → Daily Call Monitoring</strong>. Open the customer, select <strong>Call</strong>, complete the <strong>Conversation report</strong>, then select <strong>Submit Report</strong>.
+          Sales agents submit the daily sales report from <strong>Sales → Daily Call Monitoring</strong>. Open the customer, select <strong>Call</strong>, complete the <strong>Conversation report</strong>, then select <strong>Submit Report</strong>.
         </div>
-        <ActivityList activities={humanActivities} emptyLabel="No human-agent report has been recorded for this customer." />
+        <ActivityList activities={humanActivities} emptyLabel="No sales-agent report has been recorded for this customer." />
       </PanelCard></div>;
     }
-    return <div className="p-5"><PanelCard title="Communication Timeline (All)" icon={MessageSquare}><ActivityList activities={activities} emptyLabel="No activity is available for this customer." /></PanelCard></div>;
+    return null;
   }, [activeTab, activities, currentUser, customer, humanActivities, overview]);
 
   return (
@@ -357,9 +351,8 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
         <div className="mt-2 grid grid-cols-3 gap-2 lg:grid-cols-6">
           {[
             ['Add Instruction', Plus, 'text-cyan-700 border-cyan-200 bg-cyan-50', 'comments'],
-            ['Human Agent Reports', UserRound, 'text-emerald-700 border-emerald-200 bg-emerald-50', 'human'],
+            ['Sales Agent Reports', UserRound, 'text-emerald-700 border-emerald-200 bg-emerald-50', 'human'],
             ['Sales Inquiry', BarChart3, 'text-white border-blue-900 bg-blue-950', 'sales'],
-            ['Timeline', Clock3, 'text-slate-700 border-slate-200 bg-white', 'communication'],
           ].map(([label, Icon, tone, target]) => <button key={String(label)} type="button" onClick={() => setActiveTab(target as DetailTabId)} className={`flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-[10px] font-bold ${tone}`}><Icon className="h-3.5 w-3.5" />{String(label)}</button>)}
         </div>
       </footer>

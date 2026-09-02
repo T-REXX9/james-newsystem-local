@@ -8,6 +8,7 @@ import DailyCallMonitoringView from '../DailyCallMonitoringView';
 const addToastMock = vi.fn();
 const fetchAgentSnapshotForDailyCallMock = vi.fn();
 const fetchContactCustomerLogsForDailyCallMock = vi.fn();
+const fetchManagementInstructionsMock = vi.fn();
 const createCallLogForDailyCallMock = vi.fn();
 const claimCustomerCallForDailyCallMock = vi.fn();
 const releaseCustomerCallForDailyCallMock = vi.fn();
@@ -26,6 +27,7 @@ vi.mock('../ToastProvider', () => ({
 vi.mock('../../services/dailyCallMonitoringService', () => ({
   fetchAgentSnapshotForDailyCall: (...args: unknown[]) => fetchAgentSnapshotForDailyCallMock(...args),
   fetchContactCustomerLogsForDailyCall: (...args: unknown[]) => fetchContactCustomerLogsForDailyCallMock(...args),
+  fetchManagementInstructions: (...args: unknown[]) => fetchManagementInstructionsMock(...args),
   createCallLogForDailyCall: (...args: unknown[]) => createCallLogForDailyCallMock(...args),
   claimCustomerCallForDailyCall: (...args: unknown[]) => claimCustomerCallForDailyCallMock(...args),
   releaseCustomerCallForDailyCall: (...args: unknown[]) => releaseCustomerCallForDailyCallMock(...args),
@@ -119,6 +121,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     addToastMock.mockReset();
     fetchAgentSnapshotForDailyCallMock.mockReset();
     fetchContactCustomerLogsForDailyCallMock.mockReset();
+    fetchManagementInstructionsMock.mockReset();
     createCallLogForDailyCallMock.mockReset();
     claimCustomerCallForDailyCallMock.mockReset();
     releaseCustomerCallForDailyCallMock.mockReset();
@@ -131,6 +134,7 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue(baseSnapshot);
     fetchContactCustomerLogsForDailyCallMock.mockResolvedValue([]);
+    fetchManagementInstructionsMock.mockResolvedValue([]);
     fetchContactByIdMock.mockResolvedValue({
       id: 'contact-1',
       company: 'Test Shop',
@@ -388,6 +392,31 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(openSpy).not.toHaveBeenCalled();
     expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
     expect(callButton).toBeInTheDocument();
+  });
+
+  it('shows management instructions as soon as a sales agent opens a customer', async () => {
+    fetchContactCustomerLogsForDailyCallMock.mockResolvedValue([{
+      id: 'instruction-1',
+      contact_id: 'contact-1',
+      entry_type: 'Note',
+      topic: 'Comment',
+      status: 'Management Instruction',
+      note: 'Confirm the updated delivery address before discussing the quotation.',
+      promise_to_pay: '',
+      comments: '',
+      attachment: null,
+      occurred_at: '2026-04-04T00:00:00.000Z',
+      created_by: 'manager-1',
+      created_by_name: 'Maria Manager',
+    }]);
+    const user = userEvent.setup();
+
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+    await user.click(await screen.findByText('Test Shop'));
+
+    const panel = await screen.findByRole('region', { name: 'Management Instructions' });
+    expect(within(panel).getByText('Confirm the updated delivery address before discussing the quotation.')).toBeInTheDocument();
+    expect(within(panel).getByText(/Maria Manager/)).toBeInTheDocument();
   });
 
   it('blocks the contact window when another agent already claimed the customer', async () => {

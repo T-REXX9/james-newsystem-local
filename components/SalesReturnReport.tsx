@@ -13,15 +13,22 @@ interface SalesReturnReportProps {
   initialSearch?: string;
   initialDateFrom?: string;
   initialDateTo?: string;
+  initialItemRefno?: string;
+  initialItemCode?: string;
+  initialStatus?: string;
 }
 
 const SalesReturnReport: React.FC<SalesReturnReportProps> = ({
   initialSearch = '',
   initialDateFrom = '',
   initialDateTo = '',
+  initialItemRefno = '',
+  initialItemCode = '',
+  initialStatus = '',
 }) => {
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [searchInput, setSearchInput] = useState(initialSearch);
   const [statuses, setStatuses] = useState<string[]>([]);
   const [rows, setRows] = useState<SalesReturnReportRow[]>([]);
@@ -31,8 +38,10 @@ const SalesReturnReport: React.FC<SalesReturnReportProps> = ({
   const [filters, setFilters] = useState<SalesReturnReportFilters>({
     dateFrom: initialDateFrom || today,
     dateTo: initialDateTo || today,
-    status: '',
-    search: initialSearch,
+    status: initialStatus,
+    search: initialItemRefno || initialItemCode ? '' : initialSearch,
+    itemRefno: initialItemRefno,
+    itemCode: initialItemCode,
     page: 1,
     perPage: 100,
   });
@@ -59,11 +68,14 @@ const SalesReturnReport: React.FC<SalesReturnReportProps> = ({
 
   const loadReport = useCallback(async () => {
     setLoading(true);
+    setError('');
     try {
       const data = await fetchSalesReturnReport(filters);
       setRows(data.items);
       setSummary(data.summary);
       setMeta(data.meta);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load the sales return report.');
     } finally {
       setLoading(false);
     }
@@ -80,6 +92,8 @@ const SalesReturnReport: React.FC<SalesReturnReportProps> = ({
       dateTo: today,
       status: '',
       search: '',
+      itemRefno: '',
+      itemCode: '',
       page: 1,
       perPage: 100,
     });
@@ -178,7 +192,10 @@ const SalesReturnReport: React.FC<SalesReturnReportProps> = ({
           <input
             type="text"
             value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
+            onChange={(e) => {
+              setSearchInput(e.target.value);
+              setFilters((prev) => ({ ...prev, itemRefno: '', itemCode: '', page: 1 }));
+            }}
             placeholder="Search return no, customer, item code..."
             className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm dark:border-slate-700 dark:bg-slate-800"
           />
@@ -214,6 +231,12 @@ const SalesReturnReport: React.FC<SalesReturnReportProps> = ({
           <p className="text-xl font-bold text-slate-900 dark:text-slate-100">{peso.format(summary.totalAmount)}</p>
         </div>
       </div>
+
+      {error && (
+        <div role="alert" className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+          Sales return records could not be loaded: {error}
+        </div>
+      )}
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <table className="min-w-full text-sm">

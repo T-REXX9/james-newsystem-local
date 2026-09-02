@@ -69,13 +69,16 @@ const mapSupplierReturnItem = (raw: any): SupplierReturnItem => ({
 });
 
 export const returnToSupplierService = {
-  getAllReturns: async (): Promise<SupplierReturn[]> => {
+  getAllReturns: async (filters?: { search?: string; itemRefno?: string; itemCode?: string; status?: string }): Promise<SupplierReturn[]> => {
     const query = new URLSearchParams({
       main_id: String(API_MAIN_ID),
-      status: 'all',
+      status: filters?.status || 'all',
       page: '1',
       per_page: '200',
     });
+    if (filters?.search?.trim()) query.set('search', filters.search.trim());
+    if (filters?.itemRefno?.trim()) query.set('item_refno', filters.itemRefno.trim());
+    if (filters?.itemCode?.trim()) query.set('item_code', filters.itemCode.trim());
 
     const data = await requestApi(`${API_BASE_URL}/return-to-suppliers?${query.toString()}`);
     const rows = Array.isArray(data?.items) ? data.items : [];
@@ -181,12 +184,59 @@ export const returnToSupplierService = {
     }));
   },
 
-  searchRRs: async (query: string): Promise<any[]> => {
+  updateReturn: async (id: string, updates: { return_date?: string; remarks?: string; po_no?: string }): Promise<SupplierReturn> => {
+    const data = await requestApi(`${API_BASE_URL}/return-to-suppliers/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ main_id: API_MAIN_ID, ...updates }),
+    });
+    return mapSupplierReturn(data?.record || data || {});
+  },
+
+  updateReturnItem: async (
+    itemId: string,
+    updates: { qty_returned?: number; unit_cost?: number; remarks?: string; description?: string }
+  ): Promise<SupplierReturnItem> => {
+    const data = await requestApi(`${API_BASE_URL}/return-to-supplier-items/${encodeURIComponent(itemId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ main_id: API_MAIN_ID, ...updates }),
+    });
+    return mapSupplierReturnItem(data);
+  },
+
+  deleteReturnItem: async (itemId: string): Promise<void> => {
+    await requestApi(`${API_BASE_URL}/return-to-supplier-items/${encodeURIComponent(itemId)}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`, {
+      method: 'DELETE',
+    });
+  },
+
+  unpostReturn: async (returnId: string): Promise<void> => {
+    await requestApi(`${API_BASE_URL}/return-to-suppliers/${encodeURIComponent(returnId)}/actions/unpost`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ main_id: API_MAIN_ID }),
+    });
+  },
+
+  cancelReturn: async (returnId: string): Promise<void> => {
+    await requestApi(`${API_BASE_URL}/return-to-suppliers/${encodeURIComponent(returnId)}/actions/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ main_id: API_MAIN_ID }),
+    });
+  },
+
+  searchRRs: async (query: string, options?: { itemRefno?: string; itemCode?: string; supplierId?: string; supplierName?: string }): Promise<any[]> => {
     const params = new URLSearchParams({
       main_id: String(API_MAIN_ID),
       search: query,
       limit: '10',
     });
+    if (options?.itemRefno?.trim()) params.set('item_refno', options.itemRefno.trim());
+    if (options?.itemCode?.trim()) params.set('item_code', options.itemCode.trim());
+    if (options?.supplierId?.trim()) params.set('supplier_id', options.supplierId.trim());
+    if (options?.supplierName?.trim()) params.set('supplier_name', options.supplierName.trim());
 
     const rows = await requestApi(`${API_BASE_URL}/return-to-suppliers/rr/search?${params.toString()}`);
     const list = Array.isArray(rows) ? rows : [];

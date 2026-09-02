@@ -75,3 +75,41 @@ export const createDailyCallIncidentReport = async (input: CreateIncidentReportI
   }
   return payload.data as IncidentReport;
 };
+
+export const reviewDailyCallIncidentReport = async (
+  reportId: string,
+  input: {
+    decision: 'approved' | 'rejected';
+    disposition?: 'return_to_stock' | 'return_to_factory';
+    reviewerName: string;
+    note?: string;
+  }
+): Promise<IncidentReport> => {
+  const session = getLocalAuthSession();
+  if (!session?.token) {
+    throw new Error('Your session has expired. Please sign in again before reviewing this incident.');
+  }
+
+  const response = await fetch(`${API_BASE_URL}/daily-call-monitoring/incident-reports/${encodeURIComponent(reportId)}/decision`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.token}`,
+    },
+    body: JSON.stringify({
+      main_id: resolveMainId(),
+      decision: input.decision,
+      disposition: input.disposition,
+      reviewer_name: input.reviewerName,
+      note: input.note?.trim() || undefined,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(await parseApiErrorMessage(response));
+  }
+  const payload = await response.json();
+  if (!payload?.ok || !payload?.data?.id) {
+    throw new Error(payload?.error || 'The incident decision could not be saved.');
+  }
+  return payload.data as IncidentReport;
+};

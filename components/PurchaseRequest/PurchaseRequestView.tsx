@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   CheckCircle,
   CheckCircle2,
+  ExternalLink,
   FileOutput,
   Info,
   MessageSquare,
@@ -23,6 +24,7 @@ import type {
 import ConfirmModal from "../ConfirmModal";
 import RecoveryReasonModal from "../RecoveryReasonModal";
 import ProductAutocomplete from "../ProductAutocomplete";
+import ModuleRecordLink from "../ModuleRecordLink";
 import type { Product as SearchProduct } from "../../types";
 
 interface PurchaseRequestViewProps {
@@ -35,7 +37,7 @@ interface PurchaseRequestViewProps {
   ) => Promise<void>;
   onDeleteItem: (itemId: string) => Promise<void>;
   onAddItem: (item: Record<string, unknown>) => Promise<void>;
-  onConvert: () => void;
+  onConvert: (itemIds?: string[]) => void | Promise<void>;
   onPrint: () => void;
   onUnpost?: (reason: string) => Promise<void>;
   onDelete?: (reason: string) => Promise<void>;
@@ -55,6 +57,39 @@ type EnrichedItem = PurchaseRequestItem & {
   recommendation?: string;
 };
 
+const getLastTwelveMonthsRange = () => {
+  const dateTo = new Date();
+  const dateFrom = new Date(dateTo);
+  dateFrom.setFullYear(dateFrom.getFullYear() - 1);
+  return {
+    dateFrom: dateFrom.toISOString().slice(0, 10),
+    dateTo: dateTo.toISOString().slice(0, 10),
+  };
+};
+
+const openItemReturnHistory = (
+  item: EnrichedItem,
+  kind: "sales" | "supplier",
+) => {
+  const search = item.item_code || item.part_number || item.description || "";
+  const { dateFrom, dateTo } = getLastTwelveMonthsRange();
+  const params = new URLSearchParams({
+    search,
+    dateFrom,
+    dateTo,
+    itemRefno: String(item.item_id || ""),
+    itemCode: String(item.item_code || ""),
+    status: "Posted",
+  });
+  const route =
+    kind === "sales"
+      ? "accounting-reports-sales-return-report"
+      : "warehouse-purchasing-return-to-supplier";
+  const url = new URL(window.location.href);
+  url.hash = `#/${route}?${params.toString()}`;
+  window.open(url.toString(), "_blank", "noopener,noreferrer");
+};
+
 type ProductWithMetadata = SearchProduct & {
   original_pn?: string;
   original_part_no?: string;
@@ -67,6 +102,10 @@ const recommendationClass = (item: EnrichedItem) =>
   Number(item.sr_cases || 0) + Number(item.ir_cases || 0) === 0
     ? "text-emerald-700"
     : "text-amber-600";
+const isItemOnPurchaseOrder = (item: EnrichedItem) =>
+  String(item.po_refno || item.po_number || "").trim() !== "";
+const itemSupplierKey = (item: EnrichedItem) =>
+  String(item.supplier_id || item.supplier_name || item.preferred_supplier_name || "NO_SUPPLIER").trim();
 
 const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
   request,
@@ -106,8 +145,18 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
   const [selectedSupplierId, setSelectedSupplierId] = useState("");
   const [etaDate, setEtaDate] = useState("");
   const [recoveryAction, setRecoveryAction] = useState<"unpost" | "delete" | null>(null);
+  const [historyItem, setHistoryItem] = useState<EnrichedItem | null>(null);
+  const [selectedPOItemIds, setSelectedPOItemIds] = useState<string[]>([]);
 
   const items = (request.items || []) as EnrichedItem[];
+  const convertibleItems = useMemo(
+    () => items.filter((item) => item.id && !isItemOnPurchaseOrder(item)),
+    [items],
+  );
+  const convertibleItemIds = useMemo(
+    () => convertibleItems.map((item) => String(item.id)),
+    [convertibleItems],
+  );
   const totalQuantity = items.reduce(
     (sum, item) => sum + Number(item.quantity || 0),
     0,
@@ -119,6 +168,22 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
         Number(item.unit_cost || item.preferred_supplier_price || 0),
     0,
   );
+  const selectedPOItemIdSet = useMemo(() => new Set(selectedPOItemIds), [selectedPOItemIds]);
+  const convertibleItemCount = convertibleItems.length;
+  const selectedPOItems = useMemo(
+    () => convertibleItems.filter((item) => selectedPOItemIdSet.has(String(item.id || ""))),
+    [convertibleItems, selectedPOItemIdSet],
+  );
+  const selectedSupplierGroupCount = useMemo(
+    () => new Set(selectedPOItems.map(itemSupplierKey)).size,
+    [selectedPOItems],
+  );
+
+  useEffect(() => {
+    setSelectedPOItemIds((current) =>
+      current.filter((id) => convertibleItemIds.includes(id)),
+    );
+  }, [request.id, convertibleItemIds.join("|")]);
 
   const closeConfirm = () =>
     setConfirmModal((previous) => ({
@@ -129,9 +194,9 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
   const handleStatusChange = (newStatus: PRStatus) =>
     setConfirmModal({
       isOpen: true,
-      title: `${newStatus} Purchase Request`,
-      message: `Are you sure you want to change the status of ${request.pr_number} to ${newStatus}?`,
-      confirmLabel: newStatus === "Approved" ? "Approve" : "Confirm",
+      title: `${request.status === "Unposted" && newStatus === "Approved" ? "Post" : newStatus} Purchase Request`,
+      message: `Are you sure you want to ${request.status === "Unposted" && newStatus === "Approved" ? "post" : "change the status of"} ${request.pr_number}${request.status === "Unposted" && newStatus === "Approved" ? " again" : ` to ${newStatus}`}?`,
+      confirmLabel: request.status === "Unposted" && newStatus === "Approved" ? "Post" : newStatus === "Approved" ? "Approve" : "Confirm",
       variant: newStatus === "Cancelled" ? "danger" : "warning",
       onConfirm: async () => onUpdate(request.id, { status: newStatus }),
     });
@@ -148,10 +213,10 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
     setConfirmModal({
       isOpen: true,
       title: "Generate Purchase Order",
-      message: `Create a new Purchase Order from ${request.pr_number}? This will carry over the current request items.`,
+      message: `Create Purchase Order(s) from ${request.pr_number} using ${selectedPOItemIds.length} selected item${selectedPOItemIds.length === 1 ? "" : "s"}? The system will create ${selectedSupplierGroupCount || 1} PO${(selectedSupplierGroupCount || 1) === 1 ? "" : "s"}, one per supplier.`,
       confirmLabel: "Generate PO",
       variant: "info",
-      onConfirm: async () => onConvert(),
+      onConfirm: async () => onConvert(selectedPOItemIds),
     });
   const handleRecovery = (kind: "unpost" | "delete", reason: string) => {
     setConfirmModal({
@@ -214,12 +279,33 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
   };
 
   const generatedPOs = Array.from(
-    new Set(items.map((item: any) => item.po_number).filter(Boolean)),
+    items.reduce((orders, item: any) => {
+      const number = String(item.po_number || "").trim();
+      if (number && !orders.has(number)) {
+        orders.set(number, {
+          number,
+          refno: String(item.po_refno || "").trim(),
+        });
+      }
+      return orders;
+    }, new Map<string, { number: string; refno: string }>()).values(),
   );
+  const togglePOItemSelection = (itemId: string, checked: boolean) => {
+    setSelectedPOItemIds((current) => {
+      const item = convertibleItems.find((candidate) => String(candidate.id || "") === itemId);
+      if (!item) return current;
+      const selected = new Set(current);
+      if (checked) {
+        selected.add(itemId);
+      }
+      else selected.delete(itemId);
+      return convertibleItemIds.filter((id) => selected.has(id));
+    });
+  };
 
   return (
     <div className="min-h-full overflow-y-auto bg-[#f7f9fc] text-slate-900">
-      <div className="mx-auto max-w-[1500px] space-y-5 p-5 lg:p-8">
+      <div className="w-full space-y-5 p-4 lg:p-6">
         <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-4 border-b border-slate-100 pb-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
@@ -252,23 +338,24 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
               >
                 <Printer className="h-4 w-4" /> Print
               </button>
-              {request.status === "Pending" && isApprover && (
+              {["Pending", "Submitted", "Unposted"].includes(request.status || "") && isApprover && (generatedPOs.length === 0 || request.status === "Unposted") && (
                 <button
                   onClick={() => handleStatusChange("Approved")}
                   className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700"
                 >
-                  <CheckCircle className="h-4 w-4" /> Approve
+                  <CheckCircle className="h-4 w-4" /> {request.status === "Unposted" ? "Post" : "Approve"}
                 </button>
               )}
-              {request.status === "Approved" && (
+              {request.status === "Approved" && convertibleItemCount > 0 && (
                 <button
                   onClick={handleConvertRequest}
-                  className="inline-flex items-center gap-2 rounded-md bg-[#175fd3] px-3 py-2 text-sm font-bold text-white hover:bg-[#0e4fb7]"
+                  disabled={selectedPOItemIds.length === 0}
+                  className="inline-flex items-center gap-2 rounded-md bg-[#175fd3] px-3 py-2 text-sm font-bold text-white hover:bg-[#0e4fb7] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <FileOutput className="h-4 w-4" /> Generate Purchase Order
                 </button>
               )}
-              {["Pending", "Approved"].includes(request.status || "") && (
+              {["Pending", "Approved", "Unposted"].includes(request.status || "") && (
                 <button
                   onClick={() => handleStatusChange("Cancelled")}
                   className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-bold text-rose-600 hover:bg-rose-50"
@@ -331,22 +418,6 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
           </div>
         </section>
 
-        {generatedPOs.length > 0 && (
-          <section className="rounded-lg border border-amber-200 bg-amber-50 p-5 shadow-sm flex items-start gap-3">
-            <Info className="h-5 w-5 text-amber-600 mt-0.5" />
-            <div>
-              <h3 className="font-bold text-amber-800">
-                Purchase Order Generated
-              </h3>
-              <p className="text-sm text-amber-700 mt-1">
-                This Purchase Requisition is linked to the following Purchase
-                Order(s): <strong>{generatedPOs.join(", ")}</strong>.<br />
-                Editing or unposting is restricted to prevent inconsistencies.
-              </p>
-            </div>
-          </section>
-        )}
-
         <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
             <div>
@@ -358,7 +429,29 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                 procurement records.
               </p>
             </div>
-            {request.status === "Pending" && (
+            {request.status === "Approved" && convertibleItemCount > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-bold text-slate-500">
+                  {selectedPOItemIds.length} of {convertibleItemCount} open selected
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPOItemIds(convertibleItemIds)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-[#175fd3] hover:bg-blue-100"
+                >
+                  <CheckCircle2 className="h-4 w-4" /> Select all open items
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPOItemIds([])}
+                  disabled={selectedPOItemIds.length === 0}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <XCircle className="h-4 w-4" /> Clear
+                </button>
+              </div>
+            )}
+            {["Pending", "Unposted"].includes(request.status || "") && (
               <button
                 onClick={() => setShowAddItem(true)}
                 className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
@@ -461,25 +554,27 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
             </span>
           </div>
           <div className="w-full overflow-hidden">
-            <table className="w-full table-fixed border-collapse text-[10px] leading-tight">
+            <table className="w-full table-fixed border-collapse text-xs leading-tight">
               <colgroup>
                 <col className="w-[3%]" />
+                <col className="w-[5%]" />
                 <col className="w-[7%]" />
                 <col className="w-[7%]" />
-                <col className="w-[14%]" />
+                <col className="w-[13%]" />
                 <col className="w-[7%]" />
                 <col className="w-[4%]" />
-                <col className="w-[15%]" />
+                <col className="w-[14%]" />
                 <col className="w-[7%]" />
                 <col className="w-[7%]" />
                 <col className="w-[6%]" />
                 <col className="w-[6%]" />
-                <col className="w-[10%]" />
-                <col className="w-[7%]" />
+                <col className="w-[9%]" />
+                <col className="w-[5%]" />
               </colgroup>
               <thead>
                 <tr className="bg-[#102f76] text-left text-[9px] font-bold uppercase tracking-wide text-white">
                   <th className="px-1.5 py-2.5 text-center">#</th>
+                  <th className="px-1.5 py-2.5 text-center">PO</th>
                   <th className="px-1.5 py-2.5">
                     Item Code
                     <br />
@@ -528,7 +623,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                 {items.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={13}
+                      colSpan={14}
                       className="px-4 py-10 text-center text-sm text-slate-500"
                     >
                       No items have been added to this request.
@@ -544,6 +639,9 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                     const review =
                       Number(item.sr_cases || 0) + Number(item.ir_cases || 0) >
                       0;
+                    const itemId = String(item.id || "");
+                    const itemOnPO = isItemOnPurchaseOrder(item);
+                    const poLabel = String(item.po_number || item.po_refno || "").trim();
                     return (
                       <tr
                         key={item.id || `${item.item_code}-${index}`}
@@ -552,14 +650,50 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                         <td className="px-1.5 py-2.5 text-center text-slate-500">
                           {index + 1}
                         </td>
+                        <td className="px-1.5 py-2.5 text-center">
+                          {itemOnPO ? (
+                            <div className="flex flex-col items-center gap-1">
+                              <input
+                                type="checkbox"
+                                checked
+                                disabled
+                                aria-label={`${item.part_number || item.item_code || "Item"} already on PO ${poLabel}`}
+                                title={`Already on ${poLabel || "PO"}`}
+                                className="h-4 w-4 rounded border-slate-300 text-[#175fd3] disabled:cursor-not-allowed disabled:opacity-60"
+                              />
+                              <ModuleRecordLink
+                                openInNewTab
+                                tab="warehouse-purchasing-purchase-order"
+                                payload={{
+                                  poId: String(item.po_refno || "").trim() || undefined,
+                                  poRefNo: poLabel || undefined,
+                                }}
+                                aria-label={`Open line purchase order ${poLabel || "record"}`}
+                                className="max-w-full truncate text-[9px] font-extrabold text-[#175fd3] underline underline-offset-2 hover:text-[#0e4fb7] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                              >
+                                {poLabel || "Open PO"}
+                              </ModuleRecordLink>
+                            </div>
+                          ) : (
+                              <input
+                                type="checkbox"
+                                checked={selectedPOItemIdSet.has(itemId)}
+                              disabled={!itemId || request.status !== "Approved"}
+                              onChange={(event) => togglePOItemSelection(itemId, event.target.checked)}
+                              aria-label={`Select ${item.part_number || item.item_code || "item"} for PO`}
+                              title="Select for next PO"
+                              className="h-4 w-4 rounded border-slate-300 text-[#175fd3] disabled:cursor-not-allowed disabled:opacity-60"
+                            />
+                          )}
+                        </td>
                         <td
-                          className="truncate px-1.5 py-2.5 font-semibold text-slate-700"
+                          className="truncate px-1.5 py-2.5 text-[13px] font-bold text-slate-700"
                           title={item.item_code || ""}
                         >
                           {item.item_code || "-"}
                         </td>
                         <td
-                          className="truncate px-1.5 py-2.5 font-semibold text-[#173c83]"
+                          className="truncate px-1.5 py-2.5 text-[13px] font-bold text-[#173c83]"
                           title={item.part_number || ""}
                         >
                           {item.part_number || "-"}
@@ -571,7 +705,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                           {item.description || "-"}
                         </td>
                         <td className="px-1.5 py-2.5 text-center">
-                          {request.status === "Pending" ? (
+                          {["Pending", "Unposted"].includes(request.status || "") ? (
                             <input
                               aria-label={`Quantity ${item.part_number || index + 1}`}
                               type="number"
@@ -590,7 +724,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                         </td>
                         <td className="px-1.5 py-2.5">{item.unit || "PCS"}</td>
                         <td className="px-1.5 py-2.5">
-                          {request.status === "Pending" ? (
+                          {["Pending", "Unposted"].includes(request.status || "") ? (
                             <>
                               <select
                                 aria-label={`Supplier ${item.part_number || index + 1}`}
@@ -648,14 +782,22 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                         <td
                           className={`px-1.5 py-2.5 font-bold ${recommendationClass(item)}`}
                         >
-                          <span className="inline-flex items-center gap-1 whitespace-nowrap">
-                            {review ? (
+                          {review ? (
+                            <button
+                              type="button"
+                              onClick={() => setHistoryItem(item)}
+                              aria-label={`Review return history for ${item.part_number || item.item_code || "item"}`}
+                              className="inline-flex items-center gap-1 whitespace-nowrap rounded px-1 py-0.5 hover:bg-amber-50 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                            >
                               <Info className="h-4 w-4" />
-                            ) : (
+                              Review
+                            </button>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 whitespace-nowrap px-1 py-0.5">
                               <CheckCircle2 className="h-4 w-4" />
-                            )}{" "}
-                            {review ? "Review" : "Good"}
-                          </span>
+                              Good
+                            </span>
+                          )}
                         </td>
                         <td className="px-1.5 py-2.5 text-center">
                           {item.notes ? (
@@ -668,7 +810,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                               <MessageSquare className="inline h-4 w-4" />
                             </button>
                           ) : null}
-                          {request.status === "Pending" && (
+                          {["Pending", "Unposted"].includes(request.status || "") && (
                             <button
                               type="button"
                               aria-label={`Delete ${item.part_number || "item"}`}
@@ -691,7 +833,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold text-[#173c83]">
-                  <td colSpan={4} className="px-3 py-4 text-right uppercase">
+                  <td colSpan={5} className="px-3 py-4 text-right uppercase">
                     Total
                   </td>
                   <td className="px-3 py-4 text-center">{totalQuantity} PCS</td>
@@ -722,10 +864,75 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
         isOpen={recoveryAction !== null}
         action={recoveryAction || "unpost"}
         recordLabel={request.pr_number}
-        description={recoveryAction === "unpost" ? "This returns the purchase request to Unposted only when no active purchase order depends on it." : "This keeps an audit trail and removes this draft request from active work."}
+        description={recoveryAction === "unpost" ? "This returns the purchase request to Unposted once related purchase orders have also been unposted, cancelled, or deleted." : "This keeps an audit trail and removes this draft request from active work."}
         onClose={() => setRecoveryAction(null)}
         onConfirm={(reason) => handleRecovery(recoveryAction || "unpost", reason)}
       />
+      {historyItem && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="return-history-title"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setHistoryItem(null);
+          }}
+        >
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4">
+              <div>
+                <h3 id="return-history-title" className="text-lg font-bold text-slate-900">
+                  Return history
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  {historyItem.part_number || historyItem.item_code || historyItem.description}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHistoryItem(null)}
+                aria-label="Close return history"
+                className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-3 p-5">
+              <p className="text-sm text-slate-600">
+                These counts are distinct posted return documents from the previous 12 months. Open the matching records below.
+              </p>
+              <button
+                type="button"
+                disabled={Number(historyItem.sr_cases || 0) === 0}
+                onClick={() => openItemReturnHistory(historyItem, "sales")}
+                className="flex w-full items-center justify-between rounded-lg border border-slate-200 px-4 py-3 text-left hover:border-blue-300 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <span>
+                  <span className="block font-bold text-slate-800">Sales returns (SR)</span>
+                  <span className="text-xs text-slate-500">Customer sales-return documents</span>
+                </span>
+                <span className="inline-flex items-center gap-2 font-bold text-blue-700">
+                  {Number(historyItem.sr_cases || 0)} <ExternalLink className="h-4 w-4" />
+                </span>
+              </button>
+              <button
+                type="button"
+                disabled={Number(historyItem.ir_cases || 0) === 0}
+                onClick={() => openItemReturnHistory(historyItem, "supplier")}
+                className="flex w-full items-center justify-between rounded-lg border border-slate-200 px-4 py-3 text-left hover:border-blue-300 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <span>
+                  <span className="block font-bold text-slate-800">Supplier returns (IR)</span>
+                  <span className="text-xs text-slate-500">Inventory returned to suppliers</span>
+                </span>
+                <span className="inline-flex items-center gap-2 font-bold text-blue-700">
+                  {Number(historyItem.ir_cases || 0)} <ExternalLink className="h-4 w-4" />
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -219,7 +219,7 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
     return (
         <div className="min-h-full overflow-y-auto bg-[#f4f4f4] p-5 text-[#333]">
             {/* Header */}
-            <div className="mx-auto flex max-w-[1380px] items-center justify-between rounded-t border border-[#d5d5d5] bg-white px-5 py-4">
+            <div className="flex w-full items-center justify-between rounded-t border border-[#d5d5d5] bg-white px-5 py-4">
                 <div className="flex items-center gap-4">
                     <button
                         onClick={onClose}
@@ -241,7 +241,7 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                 </button>
             </div>
 
-            <div className="mx-auto w-full max-w-[1380px] space-y-5 rounded-b border-x border-b border-[#d5d5d5] bg-white p-5">
+            <div className="w-full space-y-5 rounded-b border-x border-b border-[#d5d5d5] bg-white p-5">
                 {/* Main Form */}
                 <div className="border-b border-[#ddd] bg-white p-2 pb-5">
                     <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
@@ -326,18 +326,28 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                         <p className="text-xs text-slate-500">Only remaining items from the selected posted PO are available.</p>
                     </div>
 
-                    <div className="overflow-x-auto min-h-[200px]">
-                        <table className="w-full text-sm text-left">
+                    <div className="min-h-[200px] overflow-hidden">
+                        <table className="w-full table-fixed text-left text-xs leading-tight">
+                            <colgroup>
+                                <col className="w-[16%]" />
+                                <col className="w-[28%]" />
+                                <col className="w-[9%]" />
+                                <col className="w-[11%]" />
+                                <col className="w-[10%]" />
+                                <col className="w-[11%]" />
+                                <col className="w-[11%]" />
+                                <col className="w-[4%]" />
+                            </colgroup>
                             <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-500 uppercase text-xs font-semibold">
                                 <tr>
-                                    <th className="pl-4 py-3 rounded-l-lg">Item</th>
-                                    <th className="px-4 py-3">Description</th>
-                                    <th className="px-4 py-3 w-28">Ordered</th>
-                                    <th className="px-4 py-3 w-28">Previously Received</th>
-                                    <th className="px-4 py-3 w-32">Qty Recv</th>
-                                    <th className="px-4 py-3 w-40">Unit Cost</th>
-                                    <th className="px-4 py-3 w-40 text-right">Total</th>
-                                    <th className="px-4 py-3 w-16 rounded-r-lg"></th>
+                                    <th className="break-words py-3 pl-3 rounded-l-lg">Item</th>
+                                    <th className="break-words px-2 py-3">Description</th>
+                                    <th className="break-words px-2 py-3">Ordered</th>
+                                    <th className="break-words px-2 py-3">Previously Received</th>
+                                    <th className="break-words px-2 py-3">Qty Recv</th>
+                                    <th className="break-words px-2 py-3">Unit Cost</th>
+                                    <th className="break-words px-2 py-3 text-right">Total</th>
+                                    <th className="px-2 py-3 rounded-r-lg"></th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
@@ -351,27 +361,27 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                                 ) : (
                                     items.map((item) => (
                                         <tr key={item.tempId} className="group hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                                            <td className="pl-4 py-3">
-                                                <div className="font-medium text-slate-900 dark:text-white">{item.part_no}</div>
-                                                <div className="text-xs text-slate-500">{item.item_code}</div>
+                                            <td className="break-words py-3 pl-3">
+                                                <div className="text-[13px] font-bold text-slate-900 dark:text-white">{item.part_no}</div>
+                                                <div className="text-xs font-semibold text-[#173c83]">{item.item_code}</div>
                                             </td>
-                                            <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                                            <td className="break-words px-2 py-3 text-slate-600 dark:text-slate-300">
                                                 {item.description}
                                             </td>
-                                            <td className="px-4 py-3">{item.qty_ordered}</td>
-                                            <td className="px-4 py-3">{item.qty_already_received}</td>
-                                            <td className="px-4 py-3">
+                                            <td className="break-words px-2 py-3">{item.qty_ordered}</td>
+                                            <td className="break-words px-2 py-3">{item.qty_already_received}</td>
+                                            <td className="px-2 py-3">
                                                 <input
                                                     type="number"
                                                     min="1"
                                                     value={item.qty_received || ''}
                                                     onChange={(e) => updateItem(item.tempId, 'qty_received', parseFloat(e.target.value) || 0)}
-                                                    className={`w-24 px-2 py-1 border rounded bg-white dark:bg-slate-900 focus:ring-2 focus:ring-blue-500 outline-none ${
+                                                    className={`w-full min-w-0 px-2 py-1 border rounded bg-white dark:bg-slate-900 focus:ring-2 focus:ring-blue-500 outline-none ${
                                                         validationErrors[`item-${item.tempId}-qty`] ? 'border-rose-400' : 'border-slate-300 dark:border-slate-600'
                                                     }`}
                                                 />
                                             </td>
-                                            <td className="px-4 py-3">
+                                            <td className="px-2 py-3">
                                                 <div className="relative">
                                                     <span className="absolute left-2 top-1.5 text-slate-400">₱</span>
                                                     <input
@@ -380,14 +390,14 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                                                         step="0.01"
                                                         value={item.unit_cost || ''}
                                                         onChange={(e) => updateItem(item.tempId, 'unit_cost', parseFloat(e.target.value) || 0)}
-                                                        className="w-full pl-6 pr-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-900 focus:ring-2 focus:ring-blue-500 outline-none"
+                                                        className="w-full min-w-0 pl-6 pr-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-900 focus:ring-2 focus:ring-blue-500 outline-none"
                                                     />
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-3 text-right font-medium text-slate-700 dark:text-white">
+                                            <td className="break-words px-2 py-3 text-right font-medium text-slate-700 dark:text-white">
                                                 ₱{(item.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                             </td>
-                                            <td className="px-4 py-3 text-right">
+                                            <td className="px-2 py-3 text-right">
                                                 <button
                                                     onClick={() => removeItem(item.tempId)}
                                                     className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
@@ -401,7 +411,7 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                             </tbody>
                             <tfoot className="border-t-2 border-slate-100 dark:border-slate-700">
                                 <tr>
-                                    <td colSpan={4} className="text-right py-4 px-4 font-bold text-slate-600 dark:text-slate-400 uppercase text-xs tracking-wider">
+                                    <td colSpan={6} className="text-right py-4 px-4 font-bold text-slate-600 dark:text-slate-400 uppercase text-xs tracking-wider">
                                         Grand Total
                                     </td>
                                     <td className="text-right py-4 px-4 font-bold text-xl text-blue-600 dark:text-blue-400">

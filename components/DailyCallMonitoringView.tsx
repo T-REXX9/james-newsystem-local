@@ -55,8 +55,10 @@ import {
   createCustomerLogForDailyCall,
   fetchAgentSnapshotForDailyCall,
   fetchContactCustomerLogsForDailyCall,
+  fetchManagementInstructions,
   subscribeToDailyCallMonitoringUpdates
 } from '../services/dailyCallMonitoringService';
+import type { ManagementInstruction } from '../services/dailyCallMonitoringService';
 import { createContact, fetchContactById, updateContact } from '../services/customerDatabaseLocalApiService';
 import { queueCallRequest } from '../services/callingSystemService';
 import {
@@ -132,6 +134,36 @@ type PurchaseHighlightColor = 'green' | 'yellow' | 'purple' | 'white' | 'red';
 const PIE_COLORS = ['#2563eb', '#0ea5e9', '#059669', '#f97316'];
 const CUSTOMER_LOG_TOPICS: CustomerLogTopic[] = ['Sales', 'Payment', 'Comment'];
 const CUSTOMER_LOG_STATUSES: CustomerLogStatus[] = ['Note', 'Call Back', "Can't be Reach", 'No Answer'];
+
+const ManagementInstructionsPanel: React.FC<{
+  instructions: ManagementInstruction[];
+  loading?: boolean;
+}> = ({ instructions, loading = false }) => (
+  <section className="rounded-xl border border-violet-200 bg-violet-50/80 p-4 dark:border-violet-900 dark:bg-violet-950/20" aria-label="Management Instructions">
+    <div className="flex items-center gap-2">
+      <ClipboardList className="h-4 w-4 text-violet-700 dark:text-violet-300" />
+      <h4 className="text-xs font-bold uppercase tracking-wide text-violet-800 dark:text-violet-200">Management Instructions</h4>
+    </div>
+    {loading ? (
+      <div className="mt-3 flex items-center gap-2 text-sm text-violet-700 dark:text-violet-300">
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading instructions…
+      </div>
+    ) : instructions.length > 0 ? (
+      <div className="mt-3 space-y-2">
+        {instructions.slice(0, 3).map((instruction) => (
+          <article key={instruction.id} className="rounded-lg border border-violet-100 bg-white p-3 dark:border-violet-900 dark:bg-slate-900">
+            <p className="text-sm font-medium leading-5 text-slate-800 dark:text-slate-100">{instruction.text}</p>
+            <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+              {instruction.author_name || 'Management'} • {formatDate(instruction.timestamp)}
+            </p>
+          </article>
+        ))}
+      </div>
+    ) : (
+      <p className="mt-3 text-sm text-violet-700 dark:text-violet-300">No management instructions have been added for this customer.</p>
+    )}
+  </section>
+);
 
 const getCurrentMonthPurchases = (purchases: Purchase[], referenceDate: Date) =>
   purchases.filter((purchase) => isWithinCurrentMonth(purchase.purchased_at, referenceDate) && purchase.status === 'paid');
@@ -510,6 +542,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [callReport, setCallReport] = useState('');
   const [callReportOutcome, setCallReportOutcome] = useState<CallOutcome>('note');
   const [submittingCallReport, setSubmittingCallReport] = useState(false);
+  const [callManagementInstructions, setCallManagementInstructions] = useState<ManagementInstruction[]>([]);
+  const [callInstructionsLoading, setCallInstructionsLoading] = useState(false);
   const [smsMessage, setSMSMessage] = useState('');
   const [sendingSMS, setSendingSMS] = useState(false);
   const [customerLogs, setCustomerLogs] = useState<CustomerLogEntry[]>([]);
@@ -662,6 +696,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     }
     setCallContact(contact);
     setCallContactLoading(true);
+    setCallInstructionsLoading(true);
+    setCallManagementInstructions([]);
     setCallReport('');
     setCallReportOutcome('note');
 
@@ -674,6 +710,14 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         addToast({ type: 'error', message: 'Full contact details could not be loaded.' });
       })
       .finally(() => setCallContactLoading(false));
+
+    void fetchManagementInstructions(contact.id)
+      .then(setCallManagementInstructions)
+      .catch((error) => {
+        console.error('Error loading management instructions:', error);
+        setCallManagementInstructions([]);
+      })
+      .finally(() => setCallInstructionsLoading(false));
   }, [addToast]);
 
   const handleDialRequest = useCallback(async (phone: string) => {
@@ -715,6 +759,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const handleCloseCallContact = useCallback(() => {
     const contactId = callContact?.id;
     setCallContact(null);
+    setCallManagementInstructions([]);
+    setCallInstructionsLoading(false);
     setCallReport('');
     if (contactId) {
       void releaseCustomerCallForDailyCall(contactId).catch((error) => {
@@ -1350,6 +1396,20 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     [customerLogs]
   );
 
+  const managementInstructions = useMemo<ManagementInstruction[]>(
+    () => customerLogs
+      .filter((entry) => entry.entry_type === 'Note' && entry.topic === 'Comment' && entry.status === 'Management Instruction')
+      .map((entry) => ({
+        id: entry.id,
+        contact_id: entry.contact_id,
+        author_id: entry.created_by,
+        author_name: entry.created_by_name || 'Management',
+        text: entry.note || entry.comments || '',
+        timestamp: entry.occurred_at,
+      })),
+    [customerLogs]
+  );
+
   const todayStart = useMemo(() => {
     const start = new Date(selectedReferenceDate);
     start.setHours(0, 0, 0, 0);
@@ -1948,6 +2008,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
+            <ManagementInstructionsPanel instructions={managementInstructions} loading={customerLogsLoading} />
             <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
               <span className={`px-2 py-0.5 rounded-full font-semibold ${statusBadgeClasses(selectedClient.status)}`}>
                 {selectedClient.status}
@@ -2343,6 +2404,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             </div>
 
             <div data-testid="call-contact-scroll-area" className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3 sm:p-5">
+              <ManagementInstructionsPanel instructions={callManagementInstructions} loading={callInstructionsLoading} />
               <div className="grid gap-4 md:grid-cols-2">
               <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
                 <div className="mb-3 flex items-center justify-between">

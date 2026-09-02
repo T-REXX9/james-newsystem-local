@@ -6,7 +6,7 @@ export type SupplierItemCost = Database['public']['Tables']['supplier_item_costs
 export type Product = Database['public']['Tables']['products']['Row'];
 export type Contact = Database['public']['Tables']['contacts']['Row'];
 
-export type PRStatus = 'Draft' | 'Pending' | 'Approved' | 'Submitted' | 'Cancelled';
+export type PRStatus = 'Draft' | 'Pending' | 'Approved' | 'Submitted' | 'Unposted' | 'Cancelled';
 
 export type PurchaseRequestRecommendation = 'Good' | 'Review Supplier';
 

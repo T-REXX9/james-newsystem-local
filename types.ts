@@ -796,6 +796,7 @@ export interface RelatedTransaction {
 
 export interface IncidentReport {
   id: string;
+  record_source?: 'incident_report' | 'customer_log';
   contact_id: string;
   report_date: string;
   incident_date: string;
@@ -807,7 +808,24 @@ export interface IncidentReport {
   approval_status: 'pending' | 'approved' | 'rejected';
   approved_by?: string;
   approval_date?: string;
+  decision_note?: string;
   notes?: string;
+  product_id?: string;
+  item_code?: string;
+  part_no?: string;
+  item_description?: string;
+  affected_quantity?: number;
+  supplier_id?: string;
+  supplier_name?: string;
+  customer_incident_count?: number;
+  item_incident_count?: number;
+  return_action?: {
+    id: string;
+    disposition: 'return_to_stock' | 'return_to_factory';
+    status: 'authorized' | 'completed' | 'cancelled';
+    authorized_by_name: string;
+    authorized_at: string;
+  } | null;
 }
 
 export interface CreateIncidentReportInput {

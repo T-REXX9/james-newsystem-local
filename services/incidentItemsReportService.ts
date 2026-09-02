@@ -35,12 +35,15 @@ export interface IncidentItemsReportRow {
   part_no: string;
   description: string;
   incident_count: number;
+  affected_customer_count: number;
   latest_incident_date: string;
   average_confidence: number;
   match_sources: string;
   recent_incidents: Array<{
     incident_report_id: string;
     date: string;
+    contact_id: string;
+    customer_name: string;
     summary: string;
   }>;
 }
@@ -114,6 +117,7 @@ const mapRow = (row: any): IncidentItemsReportRow => ({
   part_no: String(row?.part_no || ''),
   description: String(row?.description || ''),
   incident_count: toNumber(row?.incident_count, 0),
+  affected_customer_count: toNumber(row?.affected_customer_count, 0),
   latest_incident_date: String(row?.latest_incident_date || ''),
   average_confidence: toNumber(row?.average_confidence, 0),
   match_sources: String(row?.match_sources || ''),
@@ -121,6 +125,8 @@ const mapRow = (row: any): IncidentItemsReportRow => ({
     ? row.recent_incidents.map((incident: any) => ({
         incident_report_id: String(incident?.incident_report_id || ''),
         date: String(incident?.date || ''),
+        contact_id: String(incident?.contact_id || ''),
+        customer_name: String(incident?.customer_name || incident?.contact_id || 'Unknown customer'),
         summary: String(incident?.summary || ''),
       }))
     : [],

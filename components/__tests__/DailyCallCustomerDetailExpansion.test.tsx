@@ -81,8 +81,9 @@ describe('DailyCallCustomerDetailExpansion', () => {
     expect(screen.getByText('Payment & Credit')).toBeInTheDocument();
     expect(screen.getByText('Sales Snapshot (MTD)')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Management Instructions' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /Human Agent Activity/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /Communication Timeline/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Sales Agent Activity/i })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Communication Timeline' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /Communication Timeline/i })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Quick Actions' })).toBeInTheDocument();
     expect(await screen.findByText('UNLIMITED VIP')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Sales Inquiry' })).toBeInTheDocument();
@@ -127,7 +128,7 @@ describe('DailyCallCustomerDetailExpansion', () => {
       />
     );
 
-    await user.click(screen.getByRole('tab', { name: 'Human Agent Activity' }));
+    await user.click(screen.getByRole('tab', { name: 'Sales Agent Activity' }));
     expect(screen.getByText('Sales agent call report')).toBeInTheDocument();
     expect(screen.getByText('Customer requested updated quotation.')).toBeInTheDocument();
     expect(screen.getByText('Contacted by Jane Doe')).toBeInTheDocument();

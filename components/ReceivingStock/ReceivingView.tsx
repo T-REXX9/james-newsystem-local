@@ -114,7 +114,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
     const etaDate = rr.eta_date || rr.po?.items?.find(item => item.eta_date)?.eta_date || null;
 
     return (
-        <div className="mx-auto max-w-5xl rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="w-full rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-6 py-5">
                 <div className="flex items-center gap-3">
                     <h2 className="text-xl font-extrabold uppercase tracking-tight text-[#173c83]">Receiving Report: {rr.rr_no}</h2>
@@ -132,7 +132,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                     </button>
                     {['Posted', 'Delivered'].includes(rr.status) && <button onClick={() => setRecoveryAction('unpost')} className="inline-flex items-center gap-2 rounded-md bg-amber-500 px-4 py-2 text-sm font-bold text-white hover:bg-amber-600 print:hidden"><AlertCircle className="h-4 w-4" /> Unpost</button>}
                     {['Draft', 'Unposted'].includes(rr.status) && <button onClick={() => setRecoveryAction('delete')} className="inline-flex items-center gap-2 rounded-md bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 print:hidden"><Trash2 className="h-4 w-4" /> Delete</button>}
-                    {rr.status === 'Draft' ? (
+                    {['Draft', 'Unposted'].includes(rr.status) ? (
                         <button onClick={() => { setCloseShortReceipt(false); setShortReceiptReason(''); setShowFinalizeConfirm(true); }} className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 print:hidden">
                             <CheckCircle className="h-4 w-4" /> Post Receiving
                         </button>
@@ -141,7 +141,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
             </div>
 
             <div className="p-6">
-                <div className="mb-8 flex items-center justify-between rounded-xl border border-slate-200 p-6">
+                <div className="mb-6 flex flex-wrap items-center justify-between gap-5 rounded-xl border border-slate-200 p-5">
                     <div className="flex flex-col gap-1">
                         <span className="text-xs font-bold uppercase tracking-wide text-orange-500">PR No.</span>
                         <span className="text-2xl font-bold text-orange-500">{rr.po?.pr_reference || 'PR-UNKNOWN'}</span>
@@ -149,7 +149,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                         <span className="text-sm font-semibold text-slate-700">{rr.po?.order_date ? new Date(rr.po.order_date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '-'}</span>
                     </div>
 
-                    <ArrowLeft className="h-6 w-6 rotate-180 text-slate-300" />
+                    <ArrowLeft className="hidden h-6 w-6 rotate-180 text-slate-300 xl:block" />
 
                     <div className="flex flex-col gap-1">
                         <span className="text-xs font-bold uppercase tracking-wide text-[#175fd3]">PO No.</span>
@@ -158,7 +158,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                         <span className="text-sm font-semibold text-slate-700">{rr.po?.order_date ? new Date(rr.po.order_date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '-'}</span>
                     </div>
 
-                    <ArrowLeft className="h-6 w-6 rotate-180 text-slate-300" />
+                    <ArrowLeft className="hidden h-6 w-6 rotate-180 text-slate-300 xl:block" />
 
                     <div className="flex flex-col gap-1">
                         <span className="text-xs font-bold uppercase tracking-wide text-emerald-600">RR No.</span>
@@ -167,7 +167,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                         <span className="text-sm font-semibold text-slate-700">{new Date(rr.receive_date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}</span>
                     </div>
 
-                    <div className="h-24 w-px bg-slate-200"></div>
+                    <div className="hidden h-24 w-px bg-slate-200 xl:block"></div>
 
                     <div className="flex flex-col justify-center">
                         <div className="flex items-center gap-2">
@@ -182,7 +182,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                 <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-slate-800">Items Received</h3>
 
                 <div className="overflow-hidden rounded-lg border border-slate-200">
-                    <table className="w-full table-fixed border-collapse text-[11px]">
+                    <table className="w-full table-fixed border-collapse text-xs">
                         <colgroup>
                             <col className="w-[4%]" />
                             <col className="w-[11%]" />
@@ -215,10 +215,10 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                             ) : rr.items.map((item, index) => (
                                 <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
                                     <td className="break-words px-2 py-3 text-center font-semibold text-slate-500">{index + 1}</td>
-                                    <td className="break-words px-2 py-3 font-semibold text-slate-600">{item.item_code || '-'}</td>
+                                    <td className="break-words px-2 py-3 text-[13px] font-bold text-slate-700">{item.item_code || '-'}</td>
                                     <td className="break-words px-2 py-3 font-semibold text-slate-700">{item.description || '-'}</td>
                                     <td className="break-words px-2 py-3 font-semibold text-slate-600">{item.original_part_no || '-'}</td>
-                                    <td className="break-words px-2 py-3 font-semibold text-slate-600">{item.part_no || '-'}</td>
+                                    <td className="break-words px-2 py-3 text-[13px] font-bold text-[#173c83]">{item.part_no || '-'}</td>
                                     <td className="break-words px-2 py-3 font-semibold text-slate-600">{item.brand || item.product?.brand || '-'}</td>
                                     <td className="break-words px-2 py-3 text-center font-semibold text-slate-600">{item.qty_ordered || item.qty_received || 0}</td>
                                     <td className="break-words px-2 py-3 text-center font-bold text-slate-700">{item.qty_received || 0}</td>
@@ -267,7 +267,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                             Post Receiving Report?
                         </h3>
                         <p className="text-center text-slate-500 dark:text-slate-400 mb-6">
-                            This will post the report, update inventory stock quantities, and create inventory logs. This action cannot be undone.
+                            This will post the report, update inventory stock quantities, and create inventory logs. It can be reversed later by unposting with a reason.
                         </p>
                         {hasShortReceipt ? (
                             <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">

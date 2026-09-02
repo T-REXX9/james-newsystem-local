@@ -27,6 +27,12 @@ const getLocalDateInputValue = (date = new Date()): string => {
   return `${year}-${month}-${day}`;
 };
 
+const isDateInputAfterToday = (value: unknown): boolean => {
+  const dateValue = String(value || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) return false;
+  return dateValue > getLocalDateInputValue();
+};
+
 const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
   contactId,
   isOpen,
@@ -100,7 +106,7 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
       case 'incidentDate': {
         const requiredCheck = validateRequired(value, 'an incident date');
         if (!requiredCheck.isValid) return requiredCheck.message;
-        if (value && new Date(value as string) > new Date()) {
+        if (isDateInputAfterToday(value)) {
           return 'Please choose an incident date that is not in the future.';
         }
         return '';

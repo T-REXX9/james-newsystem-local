@@ -13,8 +13,8 @@ describe('purchase order generation and recovery controls', () => {
     expect(prSource).toMatch(/request\.status === ['"]Approved['"]/);
   });
 
-  it('shows Unpost only to permitted roles for a posted PO', () => {
-    expect(poSource).toContain("selectedPO.status === 'Posted' && canUnpost");
+  it('shows Unpost only to permitted roles for posted or completed POs', () => {
+    expect(poSource).toContain("['Posted', 'Completed'].includes(selectedPO.status) && canUnpost");
     expect(poSource).toContain('purchaseOrderService.unpostPurchaseOrder');
   });
 

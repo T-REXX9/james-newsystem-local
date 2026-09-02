@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle, Clock, Plus, FileText, Receipt, ShoppingCart, HelpCircle, Package } from 'lucide-react';
-import { fetchDailyCallIncidentReports } from '../services/dailyCallCustomerDetailService';
+import { AlertTriangle, CheckCircle, Clock, Plus, FileText, Receipt, ShoppingCart, HelpCircle, Package, XCircle, Loader2, RotateCcw, Factory } from 'lucide-react';
+import { fetchDailyCallIncidentReports, reviewDailyCallIncidentReport } from '../services/dailyCallCustomerDetailService';
 import CreateIncidentReportModal from './CreateIncidentReportModal';
-import { UserProfile } from '../types';
+import { IncidentReport, UserProfile } from '../types';
 
 interface IncidentReportTabProps {
   contactId: string;
@@ -10,9 +10,16 @@ interface IncidentReportTabProps {
 }
 
 const IncidentReportTab: React.FC<IncidentReportTabProps> = ({ contactId, currentUser }) => {
-  const [reports, setReports] = useState<any[]>([]);
+  const [reports, setReports] = useState<IncidentReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [dispositions, setDispositions] = useState<Record<string, 'return_to_stock' | 'return_to_factory'>>({});
+  const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
+
+  const role = String(currentUser?.role || '').toLowerCase();
+  const canReview = currentUser?.user_type === 1 || currentUser?.user_type === '1' || ['owner', 'master user', 'master_user'].includes(role);
 
   const loadReports = async () => {
     setLoading(true);
@@ -31,11 +38,41 @@ const IncidentReportTab: React.FC<IncidentReportTabProps> = ({ contactId, curren
     loadReports();
   }, [contactId]);
 
+  const handleReview = async (report: IncidentReport, decision: 'approved' | 'rejected') => {
+    setReviewingId(report.id);
+    setReviewError(null);
+    try {
+      await reviewDailyCallIncidentReport(report.id, {
+        decision,
+        disposition: decision === 'approved' ? (dispositions[report.id] || 'return_to_stock') : undefined,
+        reviewerName: currentUser?.full_name || currentUser?.email || 'Master User',
+        note: decisionNotes[report.id],
+      });
+      await loadReports();
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : 'The incident decision could not be saved.');
+    } finally {
+      setReviewingId(null);
+    }
+  };
+
+  const openPartHistory = (report: IncidentReport) => {
+    const search = report.part_no || report.item_code || report.product_id || '';
+    if (!search) return;
+    window.dispatchEvent(new CustomEvent('workflow:navigate', {
+      detail: {
+        tab: 'warehouse-reports-incident-items-report',
+        payload: { search, dateFrom: '', dateTo: '' },
+      },
+    }));
+  };
+
   const getIssueTypeBadge = (type: string) => {
     const types: Record<string, { bg: string; color: string; text: string }> = {
       'product_quality': { bg: 'bg-rose-100 dark:bg-rose-900/30', color: 'text-rose-700 dark:text-rose-300', text: 'Product Quality' },
       'service_quality': { bg: 'bg-orange-100 dark:bg-orange-900/30', color: 'text-orange-700 dark:text-orange-300', text: 'Service Quality' },
       'delivery': { bg: 'bg-blue-100 dark:bg-blue-900/30', color: 'text-blue-700 dark:text-blue-300', text: 'Delivery' },
+      'lbc_rto': { bg: 'bg-amber-100 dark:bg-amber-900/30', color: 'text-amber-700 dark:text-amber-300', text: 'LBC RTO' },
       'other': { bg: 'bg-slate-100 dark:bg-slate-800', color: 'text-slate-700 dark:text-slate-300', text: 'Other' }
     };
     const style = types[type] || types.other;
@@ -134,6 +171,23 @@ const IncidentReportTab: React.FC<IncidentReportTabProps> = ({ contactId, curren
             <p className="text-sm text-slate-700 dark:text-slate-300">{report.description}</p>
           </div>
 
+          <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 dark:border-slate-700 dark:bg-slate-900">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Client incidents</p>
+              <p className="mt-1 text-lg font-bold text-slate-900 dark:text-white">{report.customer_incident_count || reports.length}</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 dark:border-slate-700 dark:bg-slate-900">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Part incidents</p>
+              <p className="mt-1 text-lg font-bold text-slate-900 dark:text-white">{report.item_incident_count || 0}</p>
+              {(report.part_no || report.item_code || report.product_id) && <button type="button" onClick={() => openPartHistory(report)} className="mt-1 text-[11px] font-bold text-blue-700 hover:underline">View part history</button>}
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 sm:col-span-2 dark:border-slate-700 dark:bg-slate-900">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Affected item</p>
+              <p className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-100">{report.part_no || report.item_code || report.item_description || 'No item linked'}</p>
+              {report.affected_quantity != null && <p className="text-xs text-slate-500">Quantity: {report.affected_quantity}</p>}
+            </div>
+          </div>
+
           {report.notes && (
             <div className="mb-3 p-2 bg-slate-50 dark:bg-slate-900 rounded text-sm text-slate-600 dark:text-slate-300">
               <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Notes:</p>
@@ -182,9 +236,68 @@ const IncidentReportTab: React.FC<IncidentReportTabProps> = ({ contactId, curren
             </div>
           )}
 
-          {report.approval_status === 'pending' && (
-            <div className="pt-3 border-t border-slate-200 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
-              Approval actions are unavailable in local MySQL read mode.
+          {report.approval_status === 'approved' && report.return_action && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
+              <p className="flex items-center gap-2 font-bold"><CheckCircle className="h-4 w-4" /> Sales return accepted</p>
+              <p className="mt-1">Disposition: {report.return_action.disposition === 'return_to_stock' ? 'Return to stock' : 'Return to factory'}</p>
+              <p className="mt-1 text-xs">Authorization {report.return_action.id} • {report.return_action.status}</p>
+            </div>
+          )}
+
+          {report.approval_status === 'rejected' && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
+              <p className="flex items-center gap-2 font-bold"><XCircle className="h-4 w-4" /> Rejected - incident record only</p>
+              <p className="mt-1">No sales return, stock movement, or factory-return action was created.</p>
+              {report.decision_note && <p className="mt-2 text-xs">{report.decision_note}</p>}
+            </div>
+          )}
+
+          {report.approval_status === 'pending' && canReview && (
+            <div className="space-y-3 border-t border-slate-200 pt-3 dark:border-slate-700">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">Sales return decision</p>
+                <p className="mt-1 text-xs text-slate-500">Approval authorizes the return and records where the item must go. Rejection keeps only this incident record.</p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className={`flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-sm ${
+                  (dispositions[report.id] || 'return_to_stock') === 'return_to_stock' ? 'border-emerald-400 bg-emerald-50 text-emerald-900' : 'border-slate-200 text-slate-600'
+                }`}>
+                  <input type="radio" name={`disposition-${report.id}`} checked={(dispositions[report.id] || 'return_to_stock') === 'return_to_stock'} onChange={() => setDispositions((previous) => ({ ...previous, [report.id]: 'return_to_stock' }))} />
+                  <RotateCcw className="h-4 w-4" /> Return to stock
+                </label>
+                <label className={`flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-sm ${
+                  dispositions[report.id] === 'return_to_factory' ? 'border-amber-400 bg-amber-50 text-amber-900' : 'border-slate-200 text-slate-600'
+                }`}>
+                  <input type="radio" name={`disposition-${report.id}`} disabled={!report.supplier_id && !report.supplier_name} checked={dispositions[report.id] === 'return_to_factory'} onChange={() => setDispositions((previous) => ({ ...previous, [report.id]: 'return_to_factory' }))} />
+                  <Factory className="h-4 w-4" /> Return to factory
+                </label>
+              </div>
+              <textarea
+                aria-label={`Decision note for incident ${report.id}`}
+                value={decisionNotes[report.id] || ''}
+                onChange={(event) => setDecisionNotes((previous) => ({ ...previous, [report.id]: event.target.value }))}
+                rows={2}
+                maxLength={2000}
+                placeholder="Optional approval or rejection note"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+              />
+              {reviewError && <p role="alert" className="text-sm text-rose-600">{reviewError}</p>}
+              <div className="flex flex-wrap justify-end gap-2">
+                <button type="button" disabled={reviewingId === report.id} onClick={() => void handleReview(report, 'rejected')} className="inline-flex items-center gap-2 rounded-lg border border-rose-200 px-4 py-2 text-sm font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50">
+                  {reviewingId === report.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />} Reject
+                </button>
+                <button type="button" disabled={reviewingId === report.id || (!report.product_id && !report.part_no && !report.item_code)} onClick={() => void handleReview(report, 'approved')} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">
+                  {reviewingId === report.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />} Approve Sales Return
+                </button>
+              </div>
+              {!report.product_id && !report.part_no && !report.item_code && <p className="text-right text-xs text-amber-700">An affected item is required before a sales return can be approved.</p>}
+              {!report.supplier_id && !report.supplier_name && <p className="text-right text-xs text-amber-700">Link a supplier to enable Return to factory.</p>}
+            </div>
+          )}
+
+          {report.approval_status === 'pending' && !canReview && (
+            <div className="border-t border-slate-200 pt-3 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+              Awaiting Master User approval.
             </div>
           )}
         </div>
