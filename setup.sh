@@ -179,6 +179,7 @@ apply_required_database_migrations() {
     "$API_DIR/migrations/022_add_lbc_rto_to_incident_reports.sql"
     "$API_DIR/migrations/023_add_customer_product_soft_delete_columns.sql"
     "$API_DIR/migrations/024_create_incident_return_approval_workflow.sql"
+    "$API_DIR/migrations/025_optimize_daily_call_master_list_indexes.sql"
   )
 
   echo "Applying required database migrations..."
