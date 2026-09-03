@@ -431,6 +431,18 @@ const App: React.FC = () => {
                 moduleContext['warehouse-inventory-product-database']?.description ||
                 moduleContext.products?.description
               }
+              initialItemCode={
+                moduleContext['warehouse-inventory-product-database']?.itemCode ||
+                moduleContext.products?.itemCode
+              }
+              initialSuggestedInquiryItemId={
+                moduleContext['warehouse-inventory-product-database']?.suggestedInquiryItemId ||
+                moduleContext.products?.suggestedInquiryItemId
+              }
+              fromSuggestedStock={
+                (moduleContext['warehouse-inventory-product-database']?.suggestedFrom ||
+                  moduleContext.products?.suggestedFrom) === '1'
+              }
             />
           </div>
         );

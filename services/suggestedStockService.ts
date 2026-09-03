@@ -169,39 +169,64 @@ export const fetchCustomersWithNotListedInquiries = async (
   }
 };
 
+const mapSummaryRows = (rows: any[]): SuggestedStockItem[] =>
+  rows.map((item: any) => {
+    const customerBlob = String(item?.customers || '');
+    const customers = customerBlob
+      .split('||')
+      .map((entry: string) => {
+        const [id, ...nameParts] = entry.split('::');
+        return { id: (id || '').trim(), name: nameParts.join('::').trim() };
+      })
+      .filter((c) => c.id !== '' || c.name !== '');
+
+    return {
+      id: String(item?.id || ''),
+      partNo: String(item?.part_no || ''),
+      itemCode: String(item?.item_code || ''),
+      description: String(item?.description || ''),
+      brand: String(item?.brand || ''),
+      databaseItemCode: String(item?.database_item_code || ''),
+      databasePartNo: String(item?.database_part_no || ''),
+      isListed: String(item?.database_item_code || '') !== '' || String(item?.database_part_no || '') !== '',
+      inquiryCount: toNumber(item?.inquiry_count),
+      totalQty: toNumber(item?.total_qty),
+      customerCount: toNumber(item?.customer_count),
+      customers,
+      remark: String(item?.report_remark || ''),
+      lastInquiryDate: String(item?.last_inquiry_date || ''),
+    };
+  });
+
+export const fetchSuggestedStockSummaryPage = async (
+  filters: SuggestedStockFilters,
+  page = 1,
+  perPage = 50
+): Promise<{ items: SuggestedStockItem[]; hasMore: boolean }> => {
+  const query = buildFilters(filters, {
+    page: String(page),
+    per_page: String(perPage),
+  });
+  const data = await requestApi(`${API_BASE_URL}/suggested-stock-report/summary?${query.toString()}`);
+  const items = mapSummaryRows(Array.isArray(data?.items) ? data.items : []);
+  const hasMore = Boolean(data?.meta?.has_more);
+  return { items, hasMore };
+};
+
 export const fetchSuggestedStockSummary = async (
   filters: SuggestedStockFilters
 ): Promise<SuggestedStockItem[]> => {
   try {
-    const rows = await fetchAllReportPages('summary', filters, 200);
-
-    return rows.map((item: any) => {
-      const customerBlob = String(item?.customers || '');
-      const customers = customerBlob
-        .split('||')
-        .map((entry: string) => {
-          const [id, ...nameParts] = entry.split('::');
-          return { id: (id || '').trim(), name: nameParts.join('::').trim() };
-        })
-        .filter((c) => c.id !== '' || c.name !== '');
-
-      return {
-        id: String(item?.id || ''),
-        partNo: String(item?.part_no || ''),
-        itemCode: String(item?.item_code || ''),
-        description: String(item?.description || ''),
-        brand: String(item?.brand || ''),
-        databaseItemCode: String(item?.database_item_code || ''),
-        databasePartNo: String(item?.database_part_no || ''),
-        isListed: String(item?.database_item_code || '') !== '' || String(item?.database_part_no || '') !== '',
-        inquiryCount: toNumber(item?.inquiry_count),
-        totalQty: toNumber(item?.total_qty),
-        customerCount: toNumber(item?.customer_count),
-        customers,
-        remark: String(item?.report_remark || ''),
-        lastInquiryDate: String(item?.last_inquiry_date || ''),
-      };
-    });
+    const rows: SuggestedStockItem[] = [];
+    let page = 1;
+    let hasMore = true;
+    while (hasMore) {
+      const result = await fetchSuggestedStockSummaryPage(filters, page, 200);
+      rows.push(...result.items);
+      hasMore = result.hasMore;
+      page += 1;
+    }
+    return rows;
   } catch (err) {
     console.error('Error fetching suggested stock summary:', err);
     return [];
@@ -254,6 +279,32 @@ export const updateItemRemark = async (
     console.error('Error updating item remark:', err);
     return false;
   }
+};
+
+export const clearNotListedRemarks = async (input: {
+  inquiryItemId?: string | number;
+  partNo?: string;
+  itemCode?: string;
+}): Promise<number> => {
+  const inquiryItemId = Number(input.inquiryItemId || 0);
+  const partNo = String(input.partNo || '').trim();
+  const itemCode = String(input.itemCode || '').trim();
+  if (inquiryItemId <= 0 && partNo === '' && itemCode === '') {
+    throw new Error('inquiry item id, part number, or item code is required');
+  }
+
+  const data = await requestApi(`${API_BASE_URL}/suggested-stock-report/clear-not-listed`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      main_id: getMainId(),
+      inquiry_item_id: inquiryItemId > 0 ? inquiryItemId : undefined,
+      part_no: partNo || undefined,
+      item_code: itemCode || undefined,
+    }),
+  });
+
+  return toNumber(data?.cleared);
 };
 
 export const createPurchaseRequestFromSuggestions = async (

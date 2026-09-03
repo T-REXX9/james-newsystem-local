@@ -21,6 +21,15 @@ const IncidentReportTab: React.FC<IncidentReportTabProps> = ({ contactId, curren
   const role = String(currentUser?.role || '').toLowerCase();
   const canReview = currentUser?.user_type === 1 || currentUser?.user_type === '1' || ['owner', 'master user', 'master_user'].includes(role);
 
+  const formatReportDateTime = (dateValue?: string, timeValue?: string) => {
+    const date = String(dateValue || '').split('T')[0];
+    const time = String(timeValue || '').slice(0, 5);
+    if (!date && !time) return '-';
+    const parsed = date ? new Date(`${date}T${time || '00:00'}:00`) : null;
+    const dateLabel = parsed && !Number.isNaN(parsed.getTime()) ? parsed.toLocaleDateString('en-PH') : date;
+    return time ? `${dateLabel} ${time}` : dateLabel;
+  };
+
   const loadReports = async () => {
     setLoading(true);
     try {
@@ -144,7 +153,7 @@ const IncidentReportTab: React.FC<IncidentReportTabProps> = ({ contactId, curren
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-2">
                 <h4 className="font-semibold text-slate-800 dark:text-white">
-                  Incident - {new Date(report.report_date).toLocaleDateString()}
+                  Incident - {formatReportDateTime(report.report_date, report.report_time)}
                 </h4>
                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${
                   report.approval_status === 'approved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' :
@@ -158,10 +167,16 @@ const IncidentReportTab: React.FC<IncidentReportTabProps> = ({ contactId, curren
               </div>
               <div className="mb-2">{getIssueTypeBadge(report.issue_type)}</div>
               <p className="text-sm text-slate-600 dark:text-slate-400">
-                Incident Date: {new Date(report.incident_date).toLocaleDateString()}
+                Incident Date/Time: {formatReportDateTime(report.incident_date, report.incident_time)}
+              </p>
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                Report Date/Time: {formatReportDateTime(report.report_date, report.report_time)}
               </p>
               <p className="text-sm text-slate-600 dark:text-slate-400">
                 Reported By: {report.reported_by}
+              </p>
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                Done By: {report.done_by || report.reported_by}
               </p>
             </div>
           </div>

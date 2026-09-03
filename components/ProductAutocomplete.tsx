@@ -6,12 +6,30 @@ import { searchProducts } from '../services/productLocalApiService';
 import { useDebounce } from '../hooks/useDebounce';
 import { getCentralStock } from '../utils/productStock';
 
+const normalizeSearchValue = (value: string): string =>
+    value.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const productMatchesQuery = (product: Product, query: string): boolean => {
+    const trimmed = query.trim().toLowerCase();
+    if (!trimmed) return true;
+    const normalizedQuery = normalizeSearchValue(trimmed);
+    const fields = [product.part_no, product.item_code, product.description, product.brand];
+    return fields.some((field) => {
+        const value = String(field || '');
+        return value.toLowerCase().includes(trimmed)
+            || (normalizedQuery.length >= 4 && normalizeSearchValue(value).includes(normalizedQuery));
+    });
+};
+
 interface ProductAutocompleteProps {
     onSelect: (product: Product) => void;
     placeholder?: string;
     className?: string;
     autoFocus?: boolean;
     reorderOnly?: boolean;
+    searchFn?: (query: string) => Promise<Product[]>;
+    emptyMessage?: string;
+    emptyHint?: string;
 }
 
 const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
@@ -20,6 +38,9 @@ const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
     className = "",
     autoFocus = false,
     reorderOnly = false,
+    searchFn,
+    emptyMessage = 'No products found',
+    emptyHint = 'Try searching by part number, description, or item code.',
 }) => {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<Product[]>([]);
@@ -32,14 +53,22 @@ const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
     const listRef = useRef<HTMLUListElement>(null);
     const itemRefs = useRef<Array<HTMLLIElement | null>>([]);
     const allowAutoOpenRef = useRef(true);
+    const searchFnRef = useRef(searchFn);
+    const requestIdRef = useRef(0);
     const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+
+    searchFnRef.current = searchFn;
 
     // Debounce query to avoid too many requests
     const debouncedQuery = useDebounce(query, 300);
     const runProductSearch = useCallback(
-        (searchQuery: string) => reorderOnly
-            ? searchProducts(searchQuery, 'active', { reorderOnly: true })
-            : searchProducts(searchQuery),
+        (searchQuery: string) => {
+            const customSearch = searchFnRef.current;
+            if (customSearch) return customSearch(searchQuery);
+            return reorderOnly
+                ? searchProducts(searchQuery, 'active', { reorderOnly: true })
+                : searchProducts(searchQuery);
+        },
         [reorderOnly]
     );
 
@@ -101,29 +130,36 @@ const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
 
     // Effect for searching
     useEffect(() => {
+        const requestId = ++requestIdRef.current;
         const fetchProducts = async () => {
             setLoading(true);
             try {
-                // We now allow empty query to fetch default products
                 const data = await runProductSearch(debouncedQuery);
-                setResults(data);
-                setNoResults(data.length === 0);
+                if (requestId !== requestIdRef.current) return;
+                setResults(Array.isArray(data) ? data : []);
+                setNoResults((Array.isArray(data) ? data : []).length === 0);
 
-                if (allowAutoOpenRef.current && data.length > 0) {
+                if (allowAutoOpenRef.current && (Array.isArray(data) ? data : []).length > 0) {
                     setShowDropdown(true);
                     requestAnimationFrame(updatePosition);
                 }
                 setSelectedIndex(-1);
             } catch (error) {
+                if (requestId !== requestIdRef.current) return;
                 console.error('Error in autocomplete search:', error);
                 setResults([]);
+                setNoResults(true);
             } finally {
-                setLoading(false);
+                if (requestId === requestIdRef.current) setLoading(false);
             }
         };
 
         fetchProducts();
     }, [debouncedQuery, runProductSearch, updatePosition]);
+
+    const visibleResults = query.trim()
+        ? results.filter((product) => productMatchesQuery(product, query))
+        : results;
 
     // Focus management
     useEffect(() => {
@@ -147,14 +183,14 @@ const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
 
         if (e.key === 'ArrowDown') {
             e.preventDefault();
-            setSelectedIndex(prev => (prev < results.length - 1 ? prev + 1 : prev));
+            setSelectedIndex(prev => (prev < visibleResults.length - 1 ? prev + 1 : prev));
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
             setSelectedIndex(prev => (prev > 0 ? prev - 1 : prev));
         } else if (e.key === 'Enter') {
             e.preventDefault();
-            if (selectedIndex >= 0 && results[selectedIndex]) {
-                handleSelect(results[selectedIndex]);
+            if (selectedIndex >= 0 && visibleResults[selectedIndex]) {
+                handleSelect(visibleResults[selectedIndex]);
             }
         } else if (e.key === 'Escape') {
             allowAutoOpenRef.current = false;
@@ -196,8 +232,8 @@ const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
     const getMatchLabel = (product: Product): string => {
         const q = query.toLowerCase();
 
-        if (product.part_no.toLowerCase().includes(q)) return 'Part No';
-        if (product.item_code.toLowerCase().includes(q)) return 'Item Code';
+        if ((product.part_no || '').toLowerCase().includes(q)) return 'Part No';
+        if ((product.item_code || '').toLowerCase().includes(q)) return 'Item Code';
         if (product.description.toLowerCase().includes(q)) return 'Description';
 
         return 'Product';
@@ -225,17 +261,8 @@ const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
                     }}
                     onFocus={() => {
                         allowAutoOpenRef.current = true;
-                        // Trigger search on focus if we don't have results yet, or just show dropdown
-                        if (results.length === 0) {
-                            runProductSearch('').then(data => {
-                                setResults(data);
-                                setShowDropdown(true);
-                                requestAnimationFrame(updatePosition);
-                            });
-                        } else {
-                            setShowDropdown(true);
-                            requestAnimationFrame(updatePosition);
-                        }
+                        setShowDropdown(true);
+                        requestAnimationFrame(updatePosition);
                     }}
                     onKeyDown={handleKeyDown}
                     autoComplete="off"
@@ -289,9 +316,9 @@ const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
                         </div>
                     </div>
 
-                    {results.length > 0 ? (
+                    {visibleResults.length > 0 ? (
                         <ul ref={listRef} className="divide-y divide-slate-100 dark:divide-slate-800">
-                            {results.map((product, index) => {
+                            {visibleResults.map((product, index) => {
                                 const isSelected = index === selectedIndex;
                                 const matchType = getMatchLabel(product);
 
@@ -345,13 +372,13 @@ const ProductAutocomplete: React.FC<ProductAutocompleteProps> = ({
                                 );
                             })}
                         </ul>
-                    ) : noResults ? (
+                    ) : (noResults || query.trim() !== '') ? (
                         <div className="py-8 px-4 text-center text-slate-500 dark:text-slate-400">
                             <div className="flex justify-center mb-2">
                                 <AlertCircle className="h-8 w-8 text-slate-300 dark:text-slate-600" />
                             </div>
-                            <p className="text-sm font-medium">No products found</p>
-                            <p className="text-xs mt-1">Try searching by part number, description, or item code.</p>
+                            <p className="text-sm font-medium">{emptyMessage}</p>
+                            <p className="text-xs mt-1">{emptyHint}</p>
                         </div>
                     ) : null}
                 </div>,

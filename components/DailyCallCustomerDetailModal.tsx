@@ -1,9 +1,11 @@
-import React, { useEffect, useId, useRef } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ClipboardList, X } from 'lucide-react';
-import { DailyCallCustomerRow, UserProfile } from '../types';
+import { DailyCallCustomerRow, UserProfile, VipTierConfig } from '../types';
 import DailyCallCustomerDetailExpansion from './DailyCallCustomerDetailExpansion';
-import { isKnownPriceGroup, normalizePriceGroup } from '../constants/pricingGroups';
+import { getVipStandingSummary } from '../utils/vipStanding';
+import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
+import { getVipTierConfig } from '../services/vipTierSettingsService';
 import type { DetailTabId } from './DailyCallCustomerDetailExpansion';
 
 interface DailyCallCustomerDetailModalProps {
@@ -18,16 +20,6 @@ const focusableSelector =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 const vipBadgeIconUrl = new URL('../vip-svgrepo-com.svg', import.meta.url).href;
 
-const resolveDealerPriceTier = (customer: DailyCallCustomerRow) => {
-  const raw = String(customer.dealerPriceGroup || '');
-  if (isKnownPriceGroup(raw)) return normalizePriceGroup(raw);
-  if (customer.monthlyOrder >= 30000) return 'Gold';
-  if (customer.monthlyOrder >= 10000) return 'Silver';
-  return 'Regular';
-};
-
-const isVipDealerTier = (tier: string) => tier === 'Silver' || tier === 'Gold';
-
 const DailyCallCustomerDetailModal: React.FC<DailyCallCustomerDetailModalProps> = ({
   isOpen,
   customer,
@@ -39,7 +31,15 @@ const DailyCallCustomerDetailModal: React.FC<DailyCallCustomerDetailModalProps> 
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const previousFocusedElementRef = useRef<HTMLElement | null>(null);
   const titleId = useId();
-  const dealerPriceTier = customer ? resolveDealerPriceTier(customer) : 'Regular';
+  const [vipConfig, setVipConfig] = useState<VipTierConfig>(DEFAULT_VIP_TIER_CONFIG);
+
+  useEffect(() => {
+    void getVipTierConfig().then(setVipConfig).catch(() => setVipConfig(DEFAULT_VIP_TIER_CONFIG));
+  }, []);
+
+  const vipStanding = customer
+    ? getVipStandingSummary('', customer.lastMonthOrder, vipConfig)
+    : null;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -110,10 +110,10 @@ const DailyCallCustomerDetailModal: React.FC<DailyCallCustomerDetailModalProps> 
                 <ClipboardList className="h-4 w-4 text-blue-600" />
                 <span className="inline-flex items-center gap-2 min-w-0">
                   <span className="truncate">{customer.shopName}</span>
-                  {isVipDealerTier(dealerPriceTier) && (
+                  {vipStanding?.badgeVisible && (
                     <img
                       src={vipBadgeIconUrl}
-                      alt={`${dealerPriceTier} VIP badge`}
+                      alt={`${vipStanding.tierLabel} badge`}
                       className="flex-shrink-0"
                       style={{ width: '19.2px', height: '19.2px' }}
                     />

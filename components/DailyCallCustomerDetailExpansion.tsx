@@ -3,18 +3,13 @@ import {
   BarChart3,
   Bot,
   Building2,
-  CalendarDays,
   CheckCircle2,
   ClipboardList,
   CreditCard,
   FileWarning,
-  MessageSquare,
   PackageSearch,
-  Phone,
   Plus,
-  Send,
   ShieldCheck,
-  ShoppingCart,
   UserRound,
   WalletCards,
 } from 'lucide-react';
@@ -23,8 +18,9 @@ import ItemIssueReportTab from './ItemIssueReportTab';
 import IncidentReportTab from './IncidentReportTab';
 import CustomerRequestsTab from './CustomerRequestsTab';
 import PersonalCommentsTab from './PersonalCommentsTab';
-import { DailyActivityRecord, DailyCallCustomerRow, UserProfile, VipTierConfig } from '../types';
-import { isKnownPriceGroup, normalizePriceGroup } from '../constants/pricingGroups';
+import CallReportActivityPanel from './CallReportActivityPanel';
+import { DailyCallCustomerRow, UserProfile, VipTierConfig } from '../types';
+import { formatLegacyPriceGroupLabel } from '../constants/pricingGroups';
 import { getVipStandingSummary } from '../utils/vipStanding';
 import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
 import { getVipTierConfig } from '../services/vipTierSettingsService';
@@ -75,64 +71,6 @@ const formatDate = (value?: string) => {
 };
 
 const vipBadgeIconUrl = new URL('../vip-svgrepo-com.svg', import.meta.url).href;
-
-const isSalesAgentReport = (activity: DailyActivityRecord) =>
-  activity.activity_type === 'call' && activity.notes?.startsWith('[Sales Agent Report]');
-
-const activityLabel = (activity: DailyActivityRecord) => {
-  if (isSalesAgentReport(activity)) return 'Sales agent call report';
-  if (activity.activity_type === 'call') return 'Customer call';
-  if (activity.activity_type === 'text') return 'Customer message';
-  if (activity.activity_type === 'order') return 'Customer order';
-  return 'Customer activity';
-};
-
-const activityNotes = (activity: DailyActivityRecord) =>
-  activity.notes?.replace(/^\[Sales Agent Report\]\s*/, '') ||
-  `${activity.activity_count} ${activity.activity_type} interaction${activity.activity_count === 1 ? '' : 's'} recorded.`;
-
-const ActivityList: React.FC<{
-  activities: DailyActivityRecord[];
-  emptyLabel: string;
-  compact?: boolean;
-}> = ({ activities, emptyLabel, compact = false }) => {
-  if (activities.length === 0) {
-    return (
-      <div className="grid min-h-32 place-items-center rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 text-center text-xs text-slate-500">
-        {emptyLabel}
-      </div>
-    );
-  }
-
-  return (
-    <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
-      {activities.slice(0, compact ? 4 : 7).map((activity, index) => {
-        const isCall = activity.activity_type === 'call';
-        const Icon = isCall ? Phone : activity.activity_type === 'order' ? ShoppingCart : MessageSquare;
-        return (
-          <div key={`${activity.activity_date}-${index}`} className="flex gap-3 px-3 py-3">
-            <span className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full ${isCall ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
-              <Icon className="h-3.5 w-3.5" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center justify-between gap-2 text-[10px] text-slate-500">
-                <span>{formatDate(activity.activity_date)}</span>
-                <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-700">Recorded</span>
-              </div>
-              <p className="mt-1 text-xs font-bold text-slate-900">{activityLabel(activity)}</p>
-              {isSalesAgentReport(activity) && activity.agent_name && (
-                <p className="mt-0.5 text-[10px] font-semibold text-blue-700">Contacted by {activity.agent_name}</p>
-              )}
-              <p className="mt-0.5 line-clamp-2 text-[11px] text-slate-600">
-                {activityNotes(activity)}
-              </p>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-};
 
 const PanelCard: React.FC<{
   title: string;
@@ -198,23 +136,16 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [activeTab]);
 
-  const dealerPriceTier = useMemo(() => {
-    const raw = String(customer.dealerPriceGroup || '');
-    if (isKnownPriceGroup(raw)) return normalizePriceGroup(raw);
-    if (customer.monthlyOrder >= 30000) return 'Gold';
-    if (customer.monthlyOrder >= 10000) return 'Silver';
-    return 'Regular';
-  }, [customer.dealerPriceGroup, customer.monthlyOrder]);
+  const priceGroupLabel = useMemo(
+    () => formatLegacyPriceGroupLabel(customer.dealerPriceGroup || customer.codeDate?.split(' (')[0]),
+    [customer.codeDate, customer.dealerPriceGroup]
+  );
 
   const vipStanding = useMemo(
-    () => getVipStandingSummary(dealerPriceTier, customer.lastMonthOrder, vipConfig),
-    [dealerPriceTier, customer.lastMonthOrder, vipConfig]
+    () => getVipStandingSummary('', customer.lastMonthOrder, vipConfig),
+    [customer.lastMonthOrder, vipConfig]
   );
   const activities = useMemo(() => customer.dailyActivity || [], [customer.dailyActivity]);
-  const humanActivities = useMemo(
-    () => activities.filter((activity) => isSalesAgentReport(activity) || Boolean(activity.agent_name)),
-    [activities]
-  );
   const location = [customer.city, customer.province].filter((value) => value && value !== '—').join(', ') || customer.courier || '—';
   const isActive = String(customer.status).toLowerCase() === 'active';
   const totalActivity = activities.reduce((sum, activity) => sum + activity.activity_count, 0);
@@ -246,8 +177,9 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
             <ul className="space-y-2 text-xs text-slate-700">
               <li className="flex gap-2"><CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" /> {isActive ? 'Customer account is active.' : 'Customer account needs re-engagement.'}</li>
               <li className="flex gap-2"><CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" /> {totalActivity} recent interactions recorded.</li>
+              <li className="flex gap-2"><CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" /> Price group: {priceGroupLabel}.</li>
               <li className="flex gap-2"><CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" /> Last month sales: {formatCurrency(customer.lastMonthOrder)}.</li>
-              <li className="flex gap-2"><CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" /> VIP standing: {vipStanding.tierLabel}.</li>
+              <li className="flex gap-2"><CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" /> VIP discount: {vipStanding.tierLabel}.</li>
             </ul>
             <div className="mt-4 grid grid-cols-2 divide-x rounded-lg border border-slate-200 bg-white py-3 text-center">
               <div><p className="text-[10px] text-slate-500">Activity Score</p><p className="mt-1 text-xl font-bold text-emerald-700">{Math.min(100, 45 + totalActivity * 5)}%</p></div>
@@ -259,7 +191,12 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
 
         <div className="space-y-3">
           <PanelCard title={`Sales Agent Activity (${customer.assignedTo || 'Unassigned'})`} icon={UserRound} action="View All" onAction={() => setActiveTab('human')}>
-            <ActivityList activities={humanActivities} emptyLabel="No sales-agent report has been recorded for this customer." compact />
+            <CallReportActivityPanel
+              contactId={customer.id}
+              currentUser={currentUser}
+              assignedAgentName={customer.assignedTo}
+              compact
+            />
             <button type="button" onClick={() => setActiveTab('human')} className="mt-3 w-full text-center text-[11px] font-bold text-blue-700 hover:underline">View All Sales Agent Activity →</button>
           </PanelCard>
 
@@ -284,13 +221,17 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
     if (activeTab === 'human') {
       return <div className="p-5"><PanelCard title={`Sales Agent Activity (${customer.assignedTo || 'Unassigned'})`} icon={UserRound}>
         <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-900">
-          Sales agents submit the daily sales report from <strong>Sales → Daily Call Monitoring</strong>. Open the customer, select <strong>Call</strong>, complete the <strong>Conversation report</strong>, then select <strong>Submit Report</strong>.
+          Sales agents submit call reports from <strong>Sales → Daily Call Monitoring</strong>. Each report appears below as a conversation entry. Master Users can reply directly to each report.
         </div>
-        <ActivityList activities={humanActivities} emptyLabel="No sales-agent report has been recorded for this customer." />
+        <CallReportActivityPanel
+          contactId={customer.id}
+          currentUser={currentUser}
+          assignedAgentName={customer.assignedTo}
+        />
       </PanelCard></div>;
     }
     return null;
-  }, [activeTab, activities, currentUser, customer, humanActivities, overview]);
+  }, [activeTab, activities, currentUser, customer, overview]);
 
   return (
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-sm">
@@ -321,7 +262,9 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
             <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-4 text-xs">
               <div><dt className="flex items-center gap-1.5 text-slate-500"><CreditCard className="h-3.5 w-3.5 text-emerald-600" /> Term of Payment</dt><dd className="mt-1 font-bold">{customer.terms || customer.modeOfPayment || '—'}</dd></div>
               <div><dt className="flex items-center gap-1.5 text-slate-500"><WalletCards className="h-3.5 w-3.5 text-emerald-600" /> Credit Limit</dt><dd className="mt-1 font-bold">{formatCurrency(customer.quota)}</dd></div>
+              <div><dt className="text-slate-500">Price Group</dt><dd className="mt-1 font-bold">{priceGroupLabel}</dd></div>
               <div><dt className="text-slate-500">Outstanding Balance</dt><dd className="mt-1 font-bold text-rose-600">{formatCurrency(customer.outstandingBalance)}</dd></div>
+              <div><dt className="text-slate-500">VIP Discount</dt><dd className="mt-1 font-bold">{vipStanding.tierLabel}</dd></div>
               <div><dt className="text-slate-500">Account Status</dt><dd className={`mt-1 font-bold ${isActive ? 'text-emerald-700' : 'text-amber-600'}`}>{isActive ? 'Current' : 'Review'}</dd></div>
             </dl>
           </section>

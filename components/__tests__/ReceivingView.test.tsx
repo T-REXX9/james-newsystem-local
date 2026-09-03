@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const service = {
   getReceivingReportById: vi.fn(),
   finalizeReceivingReport: vi.fn(),
+  updateReceivingReportItem: vi.fn(),
 };
 const addToast = vi.fn();
 
@@ -27,6 +28,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   service.getReceivingReportById.mockResolvedValue(report);
   service.finalizeReceivingReport.mockResolvedValue(undefined);
+  service.updateReceivingReportItem.mockResolvedValue(report.items[0]);
   Object.defineProperty(window, 'print', { configurable: true, value: vi.fn() });
 });
 
@@ -54,5 +56,26 @@ describe('ReceivingView', () => {
     fireEvent.click(screen.getByRole('button', { name: /confirm & post/i }));
     await waitFor(() => expect(service.finalizeReceivingReport).toHaveBeenCalledWith('RRREF-1'));
     expect(service.getReceivingReportById).toHaveBeenCalledTimes(2);
+  });
+
+  it('lets an unposted receiving report be edited and posted again', async () => {
+    service.getReceivingReportById.mockResolvedValue({ ...report, status: 'Unposted' });
+    const { default: ReceivingView } = await import('../ReceivingStock/ReceivingView');
+    render(<ReceivingView rrId="RRREF-1" onBack={vi.fn()} onCreateNew={vi.fn()} />);
+
+    fireEvent.click(await screen.findByTitle('Edit item'));
+    fireEvent.change(screen.getByLabelText('Edit quantity received 1'), { target: { value: '4' } });
+    fireEvent.change(screen.getByLabelText('Edit unit cost 1'), { target: { value: '20' } });
+    fireEvent.click(screen.getByTitle('Save item'));
+
+    await waitFor(() => expect(service.updateReceivingReportItem).toHaveBeenCalledWith('RRITEM-1', expect.objectContaining({
+      rr_id: 'RRREF-1',
+      qty_received: 4,
+      unit_cost: 20,
+    })));
+
+    fireEvent.click(screen.getByRole('button', { name: /post receiving/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm & post/i }));
+    await waitFor(() => expect(service.finalizeReceivingReport).toHaveBeenCalledWith('RRREF-1'));
   });
 });

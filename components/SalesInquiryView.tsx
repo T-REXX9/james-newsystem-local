@@ -71,6 +71,7 @@ type LoadedFormSnapshot = {
   inquiryId: string;
   contactId: string;
   salesDate: string;
+  salesTime: string;
   salesPerson: string;
   deliveryAddress: string;
   referenceNo: string;
@@ -110,6 +111,19 @@ const inquiryListColumnWidths = [
   '10rem',
 ];
 const SALES_INQUIRY_TAB_ID = 'sales-transaction-sales-inquiry';
+
+const getLocalDateInputValue = (date = new Date()): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getLocalTimeInputValue = (date = new Date()): string => {
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+};
 
 const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   initialContactId,
@@ -186,7 +200,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   const [showSearchModal, setShowSearchModal] = useState(false);
 
   const getInquirySortTime = (inquiry: SalesInquiry) => {
-    const value = inquiry.sales_date || inquiry.created_at || '';
+    const value = inquiry.sales_date ? `${inquiry.sales_date}T${(inquiry.sales_time || '00:00').slice(0, 5)}` : inquiry.created_at || '';
     const time = new Date(value).getTime();
     return Number.isNaN(time) ? 0 : time;
   };
@@ -237,7 +251,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   const [submitCount, setSubmitCount] = useState(0);
   const [submitError, setSubmitError] = useState('');
   const [inquiryNo, setInquiryNo] = useState('');
-  const [salesDate, setSalesDate] = useState(new Date().toISOString().split('T')[0]);
+  const [salesDate, setSalesDate] = useState(getLocalDateInputValue());
+  const [salesTime, setSalesTime] = useState(getLocalTimeInputValue());
   const [salesPerson, setSalesPerson] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [referenceNo, setReferenceNo] = useState('');
@@ -520,7 +535,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
     setInquiryNo(newInquiryNo);
     setSelectedCustomer(null);
-    setSalesDate(new Date().toISOString().split('T')[0]);
+    setSalesDate(getLocalDateInputValue());
+    setSalesTime(getLocalTimeInputValue());
     setSalesPerson('');
     setDeliveryAddress('');
     setReferenceNo(generateLegacyReferenceNo());
@@ -547,6 +563,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   const loadInquiryIntoForm = useCallback((inquiry: SalesInquiry) => {
     const customer = customerMap.get(inquiry.contact_id) || null;
     const normalizedSalesDate = (inquiry.sales_date || '').split('T')[0];
+    const normalizedSalesTime = String(inquiry.sales_time || '').slice(0, 5);
     const rawPriceGroup = normalizePriceGroupToInternalKey(inquiry.price_group || customer?.priceGroup || '');
     setInquiryNo((prev) => inquiry.inquiry_no || prev);
 
@@ -561,7 +578,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     });
 
     setSelectedCustomer(customer);
-    setSalesDate(normalizedSalesDate || new Date().toISOString().split('T')[0]);
+    setSalesDate(normalizedSalesDate || getLocalDateInputValue());
+    setSalesTime(normalizedSalesTime || getLocalTimeInputValue());
     setSalesPerson(inquiry.sales_person || customer?.salesman || '');
     setDeliveryAddress(inquiry.delivery_address || customer?.deliveryAddress || customer?.address || '');
     setReferenceNo(inquiry.reference_no || inquiry.inquiry_no || '');
@@ -587,6 +605,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       inquiryId: inquiry.id,
       contactId: inquiry.contact_id,
       salesDate: normalizedSalesDate || '',
+      salesTime: normalizedSalesTime || '',
       salesPerson: inquiry.sales_person || '',
       deliveryAddress: inquiry.delivery_address || '',
       referenceNo: inquiry.reference_no || '',
@@ -842,6 +861,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       ...selectedInquiry,
       inquiry_no: inquiryNo || selectedInquiry.inquiry_no,
       sales_date: salesDate || selectedInquiry.sales_date,
+      sales_time: salesTime || selectedInquiry.sales_time,
       sales_person: salesPerson || selectedInquiry.sales_person,
       delivery_address: deliveryAddress || selectedInquiry.delivery_address,
       reference_no: referenceNo || selectedInquiry.reference_no,
@@ -875,6 +895,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     referenceNo,
     remarks,
     salesDate,
+    salesTime,
     salesPerson,
     selectedInquiry,
     sendBy,
@@ -920,6 +941,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       const inquiryData: SalesInquiryDTO = {
         contact_id: selectedCustomer.id,
         sales_date: salesDate,
+        sales_time: salesTime,
         sales_person: salesPerson,
         delivery_address: deliveryAddress,
         reference_no: referenceNo,
@@ -993,6 +1015,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     if (!customerCheck.isValid) errors.customer = customerCheck.message;
     const dateCheck = validateRequired(salesDate, 'a sales date');
     if (!dateCheck.isValid) errors.salesDate = dateCheck.message;
+    const timeCheck = validateRequired(salesTime, 'a sales time');
+    if (!timeCheck.isValid) errors.salesTime = timeCheck.message;
     if (items.length === 0) {
       errors.items = 'Please add at least one item to the inquiry.';
     }
@@ -1155,7 +1179,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
     const snapshotCustomer = customerMap.get(loadedSnapshot.contactId) || null;
     setSelectedCustomer(snapshotCustomer);
-    setSalesDate(loadedSnapshot.salesDate || new Date().toISOString().split('T')[0]);
+    setSalesDate(loadedSnapshot.salesDate || getLocalDateInputValue());
+    setSalesTime(loadedSnapshot.salesTime || getLocalTimeInputValue());
     setSalesPerson(loadedSnapshot.salesPerson);
     setDeliveryAddress(loadedSnapshot.deliveryAddress);
     setReferenceNo(loadedSnapshot.referenceNo);
@@ -1390,6 +1415,11 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     const [year, month, day] = normalized.split('-');
     return year && month && day ? `${month}/${day}/${year}` : formatDate(value);
   };
+  const formatLegacyListDateTime = (dateValue?: string | null, timeValue?: string | null) => {
+    const dateLabel = formatLegacyListDate(dateValue);
+    const timeLabel = String(timeValue || '').slice(0, 5);
+    return [dateLabel, timeLabel].filter(Boolean).join(' ');
+  };
   const clearInquiryFilters = () => {
     const today = new Date();
     setSearchTerm('');
@@ -1449,7 +1479,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                     const isActive = selectedInquiry?.id === inquiry.id && !isCreatingNew;
                     const rowColor = inquiry.status === SalesInquiryStatus.CANCELLED ? 'text-[#d33]' : isActive ? 'text-[#245d91]' : 'text-[#202020]';
                     return <tr key={inquiry.id} onClick={() => void selectInquiry(inquiry)} className={`cursor-pointer hover:bg-[#f7f7f7] ${rowColor}`}>
-                      <td className="border border-[#d7d7d7] px-2 py-[9px]">{formatLegacyListDate(inquiry.sales_date)}</td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px]">{formatLegacyListDateTime(inquiry.sales_date, inquiry.sales_time)}</td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] truncate" title={customer?.company || ''}>{customer?.company || ''}</td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px]"><ModuleRecordLink tab="sales-transaction-sales-inquiry" payload={{ inquiryId: inquiry.id }} onOpen={() => void selectInquiry(inquiry)} className="underline">{formatInquiryDisplayNo(inquiry.inquiry_no)}</ModuleRecordLink> <Copy className="ml-1 inline h-3.5 w-3.5 text-[#337ab7]" /></td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{inquiry.so_no || ''}</td>
@@ -1508,7 +1538,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
             <table className="w-full border-separate border-spacing-y-[9px] text-[13px]">
               <tbody>
-                <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[17%_40%_10.5%_10.5%_9.5%_12.5%]"><label className={legacyLabelClass}>Sold to :</label><div className="pl-3"><CustomerAutocomplete contacts={customers} selectedCustomer={selectedCustomer} disabled={isReadOnly} onSelect={(customer) => handleCustomerSelect(customer)} placeholder="Select Customer" inputClassName={`h-[34px] rounded-[4px] border-[#c9c9c9] bg-white text-center text-[13px] ${validationErrors.customer ? 'border-red-400' : ''}`} /></div><label className={legacyLabelClass}>Date :</label><div className="pl-2"><input type="date" required disabled={isReadOnly} value={salesDate} onChange={(event) => setSalesDate(event.target.value)} className={legacyInputClass} /></div><label className={legacyLabelClass}>Sales Person:</label><div className="pl-2"><input type="text" disabled={isReadOnly} value={salesPerson} onChange={(event) => setSalesPerson(event.target.value)} className={legacyInputClass} /></div></div></td></tr>
+                <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[15%_31%_9%_10%_9%_9%_8%_9%]"><label className={legacyLabelClass}>Sold to :</label><div className="pl-3"><CustomerAutocomplete contacts={customers} selectedCustomer={selectedCustomer} disabled={isReadOnly} onSelect={(customer) => handleCustomerSelect(customer)} placeholder="Select Customer" inputClassName={`h-[34px] rounded-[4px] border-[#c9c9c9] bg-white text-center text-[13px] ${validationErrors.customer ? 'border-red-400' : ''}`} /></div><label className={legacyLabelClass}>Date :</label><div className="pl-2"><input type="date" required disabled={isReadOnly} value={salesDate} onChange={(event) => setSalesDate(event.target.value)} className={legacyInputClass} /></div><label className={legacyLabelClass}>Time :</label><div className="pl-2"><input type="time" required disabled={isReadOnly} value={salesTime} onChange={(event) => setSalesTime(event.target.value)} className={legacyInputClass} /></div><label className={legacyLabelClass}>Sales Person:</label><div className="pl-2"><input type="text" disabled={isReadOnly} value={salesPerson} onChange={(event) => setSalesPerson(event.target.value)} className={legacyInputClass} /></div></div></td></tr>
                 <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[17%_40%_10.5%_10.5%_9.5%_12.5%]"><label className={legacyLabelClass}>Delivery Address :</label><div className="pl-3"><input type="text" disabled={isReadOnly} value={deliveryAddress} onChange={(event) => setDeliveryAddress(event.target.value)} className={legacyInputClass} /></div><label className={legacyLabelClass}>Our Reference:</label><div className="pl-2"><input type="text" readOnly value={referenceNo} className={legacyInputClass} /></div><label className={legacyLabelClass}>Your Reference:</label><div className="pl-2"><select disabled={isReadOnly || !selectedCustomer} value={customerReference} onChange={(event) => setCustomerReference(event.target.value)} className={legacyInputClass}><option value="">Select reference</option>{customerReferenceOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div></div></td></tr>
                 <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[12%_20%_10%_19%_10%_11%_9%_9%]"><label className={legacyLabelClass}>Send By:</label><div className="pl-3"><SearchableSelect value={sendBy} options={courierOptions.map((option) => ({ value: option.name, label: option.name }))} onChange={setSendBy} placeholder="Select..." searchPlaceholder="Search courier..." disabled={isReadOnly} /></div><label className={legacyLabelClass}>Price Group:</label><div className="pl-2"><select disabled={isReadOnly || !selectedCustomer} value={priceGroup} onChange={(event) => void handlePriceGroupChange(event.target.value)} className={legacyInputClass}>{!selectedCustomer && <option value="">Select</option>}{WRITABLE_PRICING_GROUP_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div><label className={legacyLabelClass}>Credit Limit:</label><div className="pl-2"><input type="text" readOnly value={creditLimit ? creditLimit.toLocaleString('en-US', { minimumFractionDigits: 2 }) : ''} className={legacyInputClass} /></div><label className={legacyLabelClass}>Terms Strictly:</label><div className="pl-2"><input type="text" readOnly value={terms} className={legacyInputClass} /></div></div></td></tr>
                 <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[17%_63%_10%_10%]"><label className={legacyLabelClass}>Promise to Pay:</label><div className="pl-3"><input type="text" disabled={isReadOnly} value={promiseToPay} onChange={(event) => setPromiseToPay(event.target.value)} placeholder="if applicable" className={legacyInputClass} /></div><label className={legacyLabelClass}>PO No.:</label><div className="pl-2"><input type="text" disabled={isReadOnly} value={poNumber} onChange={(event) => setPoNumber(event.target.value)} placeholder="if applicable" className={legacyInputClass} /></div></div></td></tr>
@@ -1826,7 +1856,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                   { label: 'Document No.', value: activeInquiryNumberDisplay },
                   { label: 'Status', value: !isCreatingNew && selectedInquiry?.status ? <StatusBadge status={selectedInquiry.status} /> : 'Draft' },
                   { label: 'Created By', value: selectedInquiry?.created_by || salesPerson || '-' },
-                  { label: 'Created Date', value: selectedInquiry?.created_at ? formatDate(selectedInquiry.created_at) : salesDate || '-' },
+                  { label: 'Created Date/Time', value: formatLegacyListDateTime(selectedInquiry?.sales_date || salesDate, selectedInquiry?.sales_time || salesTime) || '-' },
                 ]}
               />
             </div>
@@ -1899,15 +1929,26 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                     </td>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Date:</td>
                     <td>
-                      <input
-                        type="date"
-                        required
-                        disabled={isReadOnly}
-                        value={salesDate}
-                        onChange={(e) => setSalesDate(e.target.value)}
-                        className={`w-full px-2 py-1.5 border rounded bg-white dark:bg-slate-800 text-sm ${validationErrors.salesDate ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'} ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}`}
-                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="date"
+                          required
+                          disabled={isReadOnly}
+                          value={salesDate}
+                          onChange={(e) => setSalesDate(e.target.value)}
+                          className={`w-full px-2 py-1.5 border rounded bg-white dark:bg-slate-800 text-sm ${validationErrors.salesDate ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'} ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}`}
+                        />
+                        <input
+                          type="time"
+                          required
+                          disabled={isReadOnly}
+                          value={salesTime}
+                          onChange={(e) => setSalesTime(e.target.value)}
+                          className={`w-full px-2 py-1.5 border rounded bg-white dark:bg-slate-800 text-sm ${validationErrors.salesTime ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'} ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}`}
+                        />
+                      </div>
                       {validationErrors.salesDate && <p className="mt-1 text-[11px] text-rose-600">{validationErrors.salesDate}</p>}
+                      {validationErrors.salesTime && <p className="mt-1 text-[11px] text-rose-600">{validationErrors.salesTime}</p>}
                     </td>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Sales Person:</td>
                     <td>

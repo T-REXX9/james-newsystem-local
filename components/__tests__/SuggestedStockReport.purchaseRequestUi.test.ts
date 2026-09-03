@@ -7,20 +7,21 @@ const source = readFileSync(
   'utf8'
 );
 
-describe('Suggested Stock PR controls', () => {
-  it('offers one multi-select PR action and lists existing PR numbers for the selected period', () => {
-    expect(source).toContain('Create PR for Selected');
-    expect(source).toContain('createPurchaseRequestFromSuggestions(selectedSuggestions)');
-    expect(source).toContain('PR Numbers');
-    expect(source).toContain("purchaseRequestService.getPurchaseRequests({ status: 'All' })");
-    expect(source).toContain('pr.pr_number');
+describe('Suggested Stock unlisted-only workflow controls', () => {
+  it('is a create-to-catalog queue without Create PR or listing-status filters', () => {
+    expect(source).not.toContain('Create PR for Selected');
+    expect(source).not.toContain('createPurchaseRequestFromSuggestions');
+    expect(source).not.toContain('Filter by listing status');
+    expect(source).not.toContain('Already listed');
+    expect(source).toContain('Open Reorder Report');
+    expect(source).toContain('Catalog gaps only');
   });
 
-  it('links PR numbers to Purchase Request and opens missing items in a separate Product Database tab', () => {
-    expect(source).toContain("payload={{ prId: pr.id }}");
-    expect(source).toContain('ModuleRecordLink');
+  it('opens Product Database create with suggested-stock handoff params', () => {
     expect(source).toContain("window.open(productDatabaseUrl.toString(), '_blank'");
     expect(source).toContain("create: '1'");
+    expect(source).toContain("suggestedFrom: '1'");
+    expect(source).toContain('suggestedInquiryItemId: item.id');
     expect(source).toContain('partNo: item.partNo');
     expect(source).toContain('description: item.description');
     expect(source).not.toContain("import AddToPurchaseRequestModal");

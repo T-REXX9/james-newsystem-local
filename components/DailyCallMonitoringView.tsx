@@ -51,7 +51,6 @@ import {
 import {
   createCallLogForDailyCall,
   claimCustomerCallForDailyCall,
-  releaseCustomerCallForDailyCall,
   createCustomerLogForDailyCall,
   fetchAgentSnapshotForDailyCall,
   fetchContactCustomerLogsForDailyCall,
@@ -224,7 +223,7 @@ const getStaffPurchaseHighlight = (row: MasterRow, referenceDate: Date) => {
       color: 'red' as PurchaseHighlightColor,
       className: 'border-[#f94449]/35 bg-[#f94449]/20 text-red-950 hover:bg-[#f94449]/30',
       mutedClassName: 'text-red-800',
-      label: 'Approved do-not-contact',
+      label: 'blacklisted/rejected -do not contact',
     };
   }
 
@@ -537,6 +536,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [showSMSModal, setShowSMSModal] = useState(false);
   const [smsRecipient, setSMSRecipient] = useState<Contact | null>(null);
   const [callContact, setCallContact] = useState<Contact | null>(null);
+  const callStartedAtRef = useRef<number | null>(null);
   const [callContactLoading, setCallContactLoading] = useState(false);
   const [callNumberOptions, setCallNumberOptions] = useState<string[] | null>(null);
   const [callReport, setCallReport] = useState('');
@@ -624,8 +624,13 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   }, []);
 
   const loadAgentData = useCallback(async () => {
-    if (!agentDataName || !isSalesAgent) return;
-    if (isFetchingSnapshotRef.current) return;
+    if (!agentDataName || !isSalesAgent) {
+      return;
+    }
+    if (isFetchingSnapshotRef.current) {
+      setLoading(true);
+      return;
+    }
     isFetchingSnapshotRef.current = true;
 
     snapshotAbortControllerRef.current?.abort();
@@ -635,6 +640,9 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     setLoading(true);
     try {
       const snapshot = await fetchAgentSnapshotForDailyCall(currentUser?.id || '', { signal: controller.signal });
+      if (controller.signal.aborted || snapshotAbortControllerRef.current !== controller) {
+        return;
+      }
       const teamScopedContacts = snapshot.contacts.map(toContactModel);
 
       setContacts(teamScopedContacts);
@@ -645,11 +653,18 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       setLoadError(null);
       setHasLoadedData(true);
     } catch (error) {
-      if ((error as Error).name === 'AbortError') return;
+      if ((error as Error).name === 'AbortError') {
+        return;
+      }
       console.error('Error loading daily call monitoring data', error);
       setLoadError('Call activity could not be loaded. Please try again.');
     } finally {
+      const isLatestRequest = snapshotAbortControllerRef.current === controller;
+      if (!isLatestRequest) {
+        return;
+      }
       isFetchingSnapshotRef.current = false;
+      snapshotAbortControllerRef.current = null;
       setLoading(false);
     }
   }, [agentDataName, currentUser?.id, isSalesAgent]);
@@ -664,7 +679,10 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
   useEffect(() => {
     return () => {
-      snapshotAbortControllerRef.current?.abort();
+      const activeController = snapshotAbortControllerRef.current;
+      if (activeController) {
+        activeController.abort();
+      }
       snapshotAbortControllerRef.current = null;
       isFetchingSnapshotRef.current = false;
     };
@@ -695,6 +713,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       return;
     }
     setCallContact(contact);
+    callStartedAtRef.current = Date.now();
     setCallContactLoading(true);
     setCallInstructionsLoading(true);
     setCallManagementInstructions([]);
@@ -757,17 +776,13 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   }, [callContact, addToast]);
 
   const handleCloseCallContact = useCallback(() => {
-    const contactId = callContact?.id;
-    setCallContact(null);
-    setCallManagementInstructions([]);
-    setCallInstructionsLoading(false);
-    setCallReport('');
-    if (contactId) {
-      void releaseCustomerCallForDailyCall(contactId).catch((error) => {
-        console.error('Error releasing customer call claim:', error);
-      });
-    }
-  }, [callContact?.id]);
+    addToast({
+      type: 'error',
+      title: 'Report required',
+      description: 'Submit the conversation report before closing this customer call.',
+      durationMs: 5000,
+    });
+  }, [addToast]);
 
   useEffect(() => {
     if (!callContact) return;
@@ -784,25 +799,33 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
     setSubmittingCallReport(true);
     try {
+      const callEndedAt = new Date();
+      const durationSeconds = callStartedAtRef.current
+        ? Math.max(0, Math.floor((callEndedAt.getTime() - callStartedAtRef.current) / 1000))
+        : 0;
+
       await createCallLogForDailyCall({
         contact_id: callContact.id,
         agent_name: agentDataName || agentDisplayName,
         channel: 'call',
         direction: 'outbound',
-        duration_seconds: 0,
+        duration_seconds: durationSeconds,
         notes: `[Sales Agent Report] ${callReport.trim()}`,
         outcome: callReportOutcome,
-        occurred_at: new Date().toISOString(),
+        occurred_at: callEndedAt.toISOString(),
         next_action: null,
         next_action_due: null,
       });
       addToast({
         type: 'success',
         title: 'Call report submitted',
-        description: 'The Master User can now view this report in the customer activity timeline.',
+        description: 'The Master User can now view this report in the customer Sales Agent Activity tab.',
         durationMs: 4000,
       });
+      callStartedAtRef.current = null;
       setCallContact(null);
+      setCallManagementInstructions([]);
+      setCallInstructionsLoading(false);
       setCallReport('');
       setCallReportOutcome('note');
     } catch (error) {
@@ -1832,7 +1855,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               <option value="yellow">Yellow — 1 month no purchase</option>
               <option value="purple">Purple — 2 months no purchase</option>
               <option value="white">White — 3+ months / no purchase</option>
-              <option value="red">Red — approved do-not-contact</option>
+              <option value="red">Red — blacklisted/rejected -do not contact</option>
             </select>
           </label>
           <span className="shrink-0 text-sm font-bold text-slate-500 dark:text-slate-400">
@@ -1844,7 +1867,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           <span><i className="mr-1 inline-block h-3 w-3 rounded bg-yellow-400 align-middle" />1 month no purchase</span>
           <span><i className="mr-1 inline-block h-3 w-3 rounded bg-purple-500 align-middle" />2 months no purchase</span>
           <span><i className="mr-1 inline-block h-3 w-3 rounded border border-slate-300 bg-white align-middle" />3+ months / no purchase</span>
-          <span><i className="mr-1 inline-block h-3 w-3 rounded bg-[#f94449] align-middle" />Approved do-not-contact</span>
+          <span><i className="mr-1 inline-block h-3 w-3 rounded bg-[#f94449] align-middle" />blacklisted/rejected -do not contact</span>
         </div>
       </section>
 
@@ -2390,7 +2413,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                   <h3 id="call-contact-title" className="text-lg font-bold text-slate-900 dark:text-white">
                     Contact {callContact.company}
                   </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Review the details and submit your report after the conversation.</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">A conversation report is required before you can finish this call session.</p>
                 </div>
               </div>
               <button
@@ -2497,13 +2520,6 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               </p>
 
               <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={handleCloseCallContact}
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                >
-                  Close
-                </button>
                 <button
                   type="button"
                   disabled={!callReport.trim() || callContactLoading || submittingCallReport}

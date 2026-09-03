@@ -32,6 +32,14 @@ vi.mock('../DailyCallCustomerDetailModal', () => ({
   default: () => null,
 }));
 
+vi.mock('../../services/vipTierSettingsService', () => ({
+  getVipTierConfig: vi.fn().mockResolvedValue({
+    one_time_discount_threshold: 10000,
+    unlimited_discount_threshold: 30000,
+    discount_percentage: 10,
+  }),
+}));
+
 vi.mock('../AddContactModal', () => ({
   default: () => null,
 }));
@@ -46,8 +54,8 @@ describe('DailyCallExcelFormatView', () => {
 
     fetchCustomersForDailyCallMock.mockResolvedValue([
       {
-        id: 'gold-row',
-        shopName: 'Gold Shop',
+        id: 'vip2-row',
+        shopName: 'VIP 2 Shop',
         assignedTo: 'Jane Doe',
         assignedDate: '2026-04-01',
         province: 'Cebu',
@@ -55,7 +63,7 @@ describe('DailyCallExcelFormatView', () => {
         contactNumber: '09170000001',
         source: 'Manual',
         clientSince: '2026-01-01',
-        dealerPriceGroup: 'gold',
+        dealerPriceGroup: 'VIP2',
         dealerPriceDate: '2026-04-01',
         ishinomotoDealerSince: '2026-04-01',
         ishinomotoSignageSince: '2026-04-01',
@@ -68,12 +76,13 @@ describe('DailyCallExcelFormatView', () => {
         outstandingBalance: 0,
         averageMonthlyOrder: 12000,
         monthlyOrder: 32000,
+        lastMonthOrder: 110000,
         weeklyRangeTotals: [],
         dailyActivity: [],
       },
       {
-        id: 'silver-row',
-        shopName: 'Silver Shop',
+        id: 'vip1-row',
+        shopName: 'VIP 1 Shop',
         assignedTo: 'Jane Doe',
         assignedDate: '2026-04-01',
         province: 'Davao del Sur',
@@ -81,7 +90,7 @@ describe('DailyCallExcelFormatView', () => {
         contactNumber: '09170000002',
         source: 'Manual',
         clientSince: '2026-01-01',
-        dealerPriceGroup: 'silver',
+        dealerPriceGroup: 'VIP 1',
         dealerPriceDate: '2026-04-01',
         ishinomotoDealerSince: '2026-04-01',
         ishinomotoSignageSince: '2026-04-01',
@@ -94,6 +103,7 @@ describe('DailyCallExcelFormatView', () => {
         outstandingBalance: 0,
         averageMonthlyOrder: 9000,
         monthlyOrder: 12000,
+        lastMonthOrder: 15000,
         weeklyRangeTotals: [],
         dailyActivity: [],
       },
@@ -107,7 +117,7 @@ describe('DailyCallExcelFormatView', () => {
         contactNumber: '09170000003',
         source: 'Manual',
         clientSince: '2026-01-01',
-        dealerPriceGroup: 'regular',
+        dealerPriceGroup: 'aaa',
         dealerPriceDate: '2026-04-01',
         ishinomotoDealerSince: '2026-04-01',
         ishinomotoSignageSince: '2026-04-01',
@@ -120,6 +130,7 @@ describe('DailyCallExcelFormatView', () => {
         outstandingBalance: 0,
         averageMonthlyOrder: 5000,
         monthlyOrder: 5000,
+        lastMonthOrder: 8000,
         weeklyRangeTotals: [],
         dailyActivity: [],
       },
@@ -130,7 +141,7 @@ describe('DailyCallExcelFormatView', () => {
     cleanup();
   });
 
-  it('shows VIP badges only for silver and gold dealers', async () => {
+  it('shows price groups separately from VIP discount badges', async () => {
     render(
       <DailyCallExcelFormatView
         currentUser={{
@@ -143,9 +154,11 @@ describe('DailyCallExcelFormatView', () => {
       />
     );
 
-    expect(await screen.findByAltText('Gold VIP badge')).toBeInTheDocument();
-    expect(screen.getByAltText('Silver VIP badge')).toBeInTheDocument();
-    expect(screen.queryByAltText('Regular VIP badge')).not.toBeInTheDocument();
+    expect(await screen.findByText('VIP 2')).toBeInTheDocument();
+    expect(screen.getByText('VIP 1')).toBeInTheDocument();
+    expect(screen.getByText('Regular')).toBeInTheDocument();
+    expect(screen.getAllByAltText('VIP Gold badge').length).toBeGreaterThan(0);
+    expect(screen.getAllByAltText('VIP Silver badge').length).toBeGreaterThan(0);
   });
 
   it('shows customer since date when dealer dates are empty', async () => {

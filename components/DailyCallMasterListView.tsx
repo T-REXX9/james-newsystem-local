@@ -19,12 +19,15 @@ import {
 } from 'lucide-react';
 import { useDebounce } from '../hooks/useDebounce';
 import { fetchCustomersForDailyCall, fetchDailyCallMasterList, getCachedDailyCallMasterList } from '../services/dailyCallMonitoringService';
-import { createContact, updateContact } from '../services/customerDatabaseLocalApiService';
+import { createContact, fetchSalesAgents, updateContact } from '../services/customerDatabaseLocalApiService';
 import { getVipTierConfig } from '../services/vipTierSettingsService';
 import { Contact, CustomerStatus, DailyCallCustomerRow, DailyCallMasterCustomerRow, DailyCallMasterListMeta, UserProfile, VipTierConfig } from '../types';
 import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
+import { resolveVipDiscountLevel } from '../utils/vipStanding';
 import AddContactModal from './AddContactModal';
 import DailyCallCustomerDetailModal from './DailyCallCustomerDetailModal';
+import DailyCallInlineAgentSelect, { formatAssignmentDateLabel } from './DailyCallInlineAgentSelect';
+import { useToast } from './ToastProvider';
 import type { DetailTabId } from './DailyCallCustomerDetailExpansion';
 
 const fromDate = '2025-10-01';
@@ -142,7 +145,7 @@ const purchaseHighlight = (row: DailyCallMasterCustomerRow) => {
       color: 'red',
       row: 'bg-[#f94449]/20 text-red-950 backdrop-blur-sm hover:bg-[#f94449]/30',
       muted: 'text-red-800',
-      label: 'Approved do-not-contact',
+      label: 'blacklisted/rejected -do not contact',
     };
   }
 
@@ -168,6 +171,7 @@ const masterRowFallback = (row: DailyCallMasterCustomerRow): DailyCallCustomerRo
   id: row.id,
   source: 'Master List',
   assignedTo: row.assignedTo,
+  assignedDate: row.assignedDate,
   clientSince: '—',
   province: row.province,
   city: row.city,
@@ -184,25 +188,25 @@ const masterRowFallback = (row: DailyCallMasterCustomerRow): DailyCallCustomerRo
   outstandingBalance: 0,
   averageMonthlyOrder: row.purchaseCount ? row.totalSales / row.purchaseCount : 0,
   monthlyOrder: row.currentMonthSales,
-  lastMonthOrder: 0,
+  lastMonthOrder: row.lastMonthSales || 0,
   weeklyRangeTotals: [],
   dailyActivity: [],
 });
 
-const vipDetails = (row: DailyCallMasterCustomerRow) => {
-  const group = String(row.priceGroup || '').trim().toLowerCase();
-  if (group === 'vip2') {
+const vipDetails = (row: DailyCallMasterCustomerRow, config: VipTierConfig) => {
+  const level = resolveVipDiscountLevel(row.lastMonthSales || 0, config);
+  if (level === 'gold') {
     return {
       label: 'VIP Gold',
-      sublabel: '(10% Discount)',
+      sublabel: `(${config.discount_percentage}% Unlimited)`,
       Icon: Crown,
       className: 'border-amber-200 bg-amber-50 text-amber-700',
     };
   }
-  if (group === 'vip1') {
+  if (level === 'silver') {
     return {
       label: 'VIP Silver',
-      sublabel: '(10% Discount)',
+      sublabel: `(${config.discount_percentage}% One-Time)`,
       Icon: Star,
       className: 'border-slate-200 bg-slate-50 text-slate-600',
     };
@@ -231,6 +235,7 @@ interface DailyCallMasterListViewProps {
 }
 
 const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ currentUser }) => {
+  const { addToast } = useToast();
   const initialCachedResult = useMemo(() => getCachedDailyCallMasterList({ fromDate }), []);
   const [rows, setRows] = useState<DailyCallMasterCustomerRow[]>(() => initialCachedResult?.items || []);
   const [meta, setMeta] = useState<DailyCallMasterListMeta>(() => initialCachedResult?.meta || { fromDate, toDate: '', count: 0 });
@@ -251,6 +256,9 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const [lastPurchaseFilter, setLastPurchaseFilter] = useState('all');
   const [colorFilter, setColorFilter] = useState('all');
   const [vipConfig, setVipConfig] = useState<VipTierConfig>(DEFAULT_VIP_TIER_CONFIG);
+  const [salesAgents, setSalesAgents] = useState<UserProfile[]>([]);
+  const [loadingSalesAgents, setLoadingSalesAgents] = useState(true);
+  const [assigningCustomerId, setAssigningCustomerId] = useState<string | null>(null);
   const debouncedSearch = useDebounce(search, 400);
 
   const handleSelectCategory = useCallback((categoryId: CategoryId) => {
@@ -265,9 +273,9 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
       if (!fullCustomerRowsRef.current) {
         fullCustomerRowsRef.current = await fetchCustomersForDailyCall({});
       }
-      setSelectedCustomer(
-        fullCustomerRowsRef.current.find((customer) => customer.id === row.id) || masterRowFallback(row)
-      );
+      const detailRow =
+        fullCustomerRowsRef.current.find((customer) => customer.id === row.id) || masterRowFallback(row);
+      setSelectedCustomer(detailRow);
     } finally {
       setLoadingCustomerId(null);
     }
@@ -346,9 +354,88 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     void getVipTierConfig().then(setVipConfig);
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    setLoadingSalesAgents(true);
+    void fetchSalesAgents()
+      .then((agents) => {
+        if (active) setSalesAgents(agents);
+      })
+      .catch(() => {
+        if (active) {
+          addToast({
+            type: 'error',
+            title: 'Unable to load sales agents',
+            description: 'Agent assignment dropdown may be unavailable until you refresh.',
+          });
+        }
+      })
+      .finally(() => {
+        if (active) setLoadingSalesAgents(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [addToast]);
+
+  const handleAssignAgent = useCallback(async (customerId: string, agent: UserProfile | null) => {
+    const previousRows = rowsRef.current;
+    const assignedTo = agent?.full_name?.trim() || 'Unassigned';
+    const assignedAgentId = agent?.id || '';
+    const assignedDate = agent ? formatAssignmentDateLabel() : undefined;
+
+    setAssigningCustomerId(customerId);
+    setRows((prev) =>
+      prev.map((row) =>
+        row.id === customerId
+          ? {
+              ...row,
+              assignedTo,
+              assignedAgentId,
+              assignedDate,
+            }
+          : row
+      )
+    );
+
+    if (fullCustomerRowsRef.current) {
+      fullCustomerRowsRef.current = fullCustomerRowsRef.current.map((row) =>
+        row.id === customerId ? { ...row, assignedTo, assignedDate } : row
+      );
+    }
+
+    try {
+      await updateContact(
+        customerId,
+        {
+          __salesPersonId: assignedAgentId,
+          salesman: assignedTo === 'Unassigned' ? '' : assignedTo,
+          assignedAgent: assignedTo === 'Unassigned' ? '' : assignedTo,
+        },
+        currentUser?.id
+      );
+      addToast({
+        type: 'success',
+        title: agent ? 'Agent assigned' : 'Agent cleared',
+        description: agent
+          ? `${assignedTo} is now assigned to this customer.`
+          : 'This customer is now unassigned.',
+      });
+    } catch {
+      setRows(previousRows);
+      addToast({
+        type: 'error',
+        title: 'Unable to update agent',
+        description: 'Please try again or assign from Customer Database.',
+      });
+    } finally {
+      setAssigningCustomerId(null);
+    }
+  }, [addToast, currentUser?.id]);
+
   const getCurrentVip = (row: DailyCallMasterCustomerRow) => {
-    const group = String(row.priceGroup || '').trim().toLowerCase();
-    return group === 'vip2' ? 'gold' : group === 'vip1' ? 'silver' : 'regular';
+    return resolveVipDiscountLevel(row.lastMonthSales || 0, vipConfig);
   };
 
   const getNextVip = (row: DailyCallMasterCustomerRow) => {
@@ -365,7 +452,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     if (lastPurchaseFilter === 'older' && row.daysSinceLastPurchase <= 30) return false;
     if (colorFilter !== 'all' && purchaseHighlight(row).color !== colorFilter) return false;
     return true;
-  }), [colorFilter, currentVipFilter, lastPurchaseFilter, nextVipFilter, rows]);
+  }), [colorFilter, currentVipFilter, lastPurchaseFilter, nextVipFilter, rows, vipConfig]);
 
   const categoryData = useMemo(() => categories.map((category) => {
     const categoryRows = filteredRows.filter(category.matches);
@@ -398,7 +485,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     const threshold = current === 'silver'
       ? vipConfig.unlimited_discount_threshold
       : vipConfig.one_time_discount_threshold;
-    return Math.max(0, threshold - row.totalSales);
+    return Math.max(0, threshold - (row.lastMonthSales || 0));
   };
 
   const activeCategory = categoryData.find((category) => category.id === activeCategoryId) || categoryData[0];
@@ -511,7 +598,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
             <option value="yellow">Yellow — 1 month no purchase</option>
             <option value="purple">Purple — 2 months no purchase</option>
             <option value="white">White — 3+ months / no purchase</option>
-            <option value="red">Red — approved do-not-contact</option>
+            <option value="red">Red — blacklisted/rejected -do not contact</option>
           </select>
         </label>
       </section>
@@ -529,7 +616,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
         <span><i className="mr-1 inline-block h-3 w-3 rounded bg-yellow-400 align-middle" />1 month no purchase</span>
         <span><i className="mr-1 inline-block h-3 w-3 rounded bg-purple-500 align-middle" />2 months no purchase</span>
         <span><i className="mr-1 inline-block h-3 w-3 rounded border border-slate-300 bg-white align-middle" />3+ months / no purchase</span>
-        <span><i className="mr-1 inline-block h-3 w-3 rounded bg-[#f94449] align-middle" />Approved do-not-contact</span>
+        <span><i className="mr-1 inline-block h-3 w-3 rounded bg-[#f94449] align-middle" />blacklisted/rejected -do not contact</span>
       </div>
 
       {error && (
@@ -660,7 +747,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 <tbody>
                   {visibleRows.map((row, index) => {
                     const highlight = purchaseHighlight(row);
-                    const vip = vipDetails(row);
+                    const vip = vipDetails(row, vipConfig);
                     const trend = trendDetails(row);
                     const VipIcon = vip.Icon;
                     const TrendIcon = trend.Icon;
@@ -703,7 +790,19 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                           <p className="text-sm font-medium">{row.lastPurchaseDate}</p>
                           <p className="mt-0.5 text-[11px] text-slate-500">{ageLabel(row)}</p>
                         </td>
-                        <td className="break-words px-2 py-2.5 text-sm font-bold">{row.assignedTo}</td>
+                        <td className="break-words px-2 py-2.5 text-sm">
+                          <DailyCallInlineAgentSelect
+                            customerId={row.id}
+                            shopName={row.shopName}
+                            assignedTo={row.assignedTo}
+                            assignedAgentId={row.assignedAgentId}
+                            assignedDate={row.assignedDate}
+                            agents={salesAgents}
+                            loadingAgents={loadingSalesAgents}
+                            saving={assigningCustomerId === row.id}
+                            onAssign={handleAssignAgent}
+                          />
+                        </td>
                         <td className="break-words px-2 py-2.5 text-sm font-semibold text-slate-600">
                           {row.verification === 'Verified' ? (row.verifiedBy || 'Verification recorded') : '—'}
                         </td>

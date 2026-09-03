@@ -12,6 +12,8 @@ vi.mock('../../services/dailyCallCustomerDetailService', () => ({
 
 vi.mock('../../services/customerDatabaseLocalApiService', () => ({
   fetchContactTransactions: (...args: unknown[]) => fetchContactTransactionsMock(...args),
+  fetchPurchasedItems: vi.fn(async () => []),
+  purchasedItemToProduct: vi.fn(),
 }));
 
 vi.mock('../../services/incidentItemSyncService', () => ({

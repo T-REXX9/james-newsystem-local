@@ -118,13 +118,17 @@ describe('purchaseOrderService (local API)', () => {
             id: 11,
             po_refno: 'POREF3',
             product_session: 'P1',
-            qty: 5,
+            qty: 10,
             supplier_price: 99,
-            line_total: 495,
+            line_total: 990,
             description: 'Item',
+            original_part_no: 'OPN-1',
+            receiving_qty: 1,
+            receiving_refno: 'RRREF-3',
+            receiving_number: 'RR-2603',
           },
         ],
-        summary: { total_cogs: 495 },
+        summary: { total_cogs: 990 },
       })
     );
 
@@ -132,8 +136,14 @@ describe('purchaseOrderService (local API)', () => {
     const detail = await purchaseOrderService.getPurchaseOrderById('POREF3');
     expect(detail.id).toBe('POREF3');
     expect(detail.items).toHaveLength(1);
-    expect(detail.items[0].qty).toBe(5);
-    expect(detail.grand_total).toBe(495);
+    expect(detail.items[0].qty).toBe(10);
+    expect(detail.items[0]).toMatchObject({
+      quantity_received: 1,
+      original_part_no: 'OPN-1',
+      rr_refno: 'RRREF-3',
+      rr_number: 'RR-2603',
+    });
+    expect(detail.grand_total).toBe(990);
   });
 
   it('updatePurchaseOrder throws parsed API error', async () => {

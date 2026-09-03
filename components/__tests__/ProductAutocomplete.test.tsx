@@ -64,12 +64,54 @@ describe('ProductAutocomplete', () => {
     });
   });
 
+  it('uses a custom search function when complaints are limited to purchased items', async () => {
+    const searchFn = vi.fn(async () => [sampleProduct]);
+    render(
+      <ProductAutocomplete
+        onSelect={vi.fn()}
+        searchFn={searchFn}
+        emptyMessage="Not in this customer's purchase history"
+      />
+    );
+
+    fireEvent.focus(screen.getByRole('textbox'));
+    await waitFor(() => {
+      expect(searchFn).toHaveBeenCalled();
+      expect(searchProductsMock).not.toHaveBeenCalled();
+    });
+  });
+
   it('uses the reorder-only product search when requested by purchasing', async () => {
     render(<ProductAutocomplete reorderOnly onSelect={vi.fn()} />);
 
     await waitFor(() => {
       expect(searchProductsMock).toHaveBeenCalledWith('', 'active', { reorderOnly: true });
     });
+  });
+
+  it('hides unmatched default results as soon as a part number is typed', async () => {
+    searchProductsMock.mockResolvedValue([
+      sampleProduct,
+      {
+        ...sampleProduct,
+        id: 'prod-2',
+        part_no: 'P-G3S91',
+        item_code: 'QK2-1521',
+        description: 'NOZZLE',
+      },
+    ]);
+
+    render(<ProductAutocomplete onSelect={vi.fn()} emptyMessage="Not in this customer's purchase history" />);
+
+    const input = screen.getByRole('textbox');
+    fireEvent.focus(input);
+    expect(await screen.findByText('P-G3S91')).toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: 'DLLA147P788' } });
+
+    expect(screen.queryByText('P-G3S91')).not.toBeInTheDocument();
+    expect(screen.queryByText('PART-001')).not.toBeInTheDocument();
+    expect(await screen.findByText("Not in this customer's purchase history")).toBeInTheDocument();
   });
 
   it('stays closed after selecting a product even when the reset search resolves', async () => {

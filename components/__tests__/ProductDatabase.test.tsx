@@ -32,6 +32,10 @@ vi.mock('../../services/supplierService', () => ({
   fetchSuppliers: vi.fn().mockResolvedValue([]),
 }));
 
+vi.mock('../../services/suggestedStockService', () => ({
+  clearNotListedRemarks: vi.fn().mockResolvedValue(0),
+}));
+
 vi.mock('../ToastProvider', () => ({
   useToast: () => ({ addToast: vi.fn() }),
 }));

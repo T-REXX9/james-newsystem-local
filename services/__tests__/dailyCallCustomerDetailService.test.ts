@@ -26,10 +26,13 @@ describe('dailyCallCustomerDetailService incident reports', () => {
           id: 'incident-1',
           contact_id: 'contact-1',
           report_date: '2026-08-26',
+          report_time: '09:30:00',
           incident_date: '2026-08-25',
+          incident_time: '15:45:00',
           issue_type: 'delivery',
           description: 'Package arrived with missing items.',
           reported_by: 'Test User',
+          done_by: 'Test User',
           approval_status: 'pending',
         },
       }),
@@ -39,10 +42,13 @@ describe('dailyCallCustomerDetailService incident reports', () => {
       id: 'incident-1',
       contact_id: 'contact-1',
       report_date: '2026-08-26',
+      report_time: '09:30',
       incident_date: '2026-08-25',
+      incident_time: '15:45',
       issue_type: 'delivery',
       description: 'Package arrived with missing items.',
       reported_by: 'Test User',
+      done_by: 'Test User',
     });
 
     expect(created.id).toBe('incident-1');
@@ -62,10 +68,13 @@ describe('dailyCallCustomerDetailService incident reports', () => {
       id: 'incident-1',
       contact_id: 'contact-1',
       report_date: '2026-08-26',
+      report_time: '09:30',
       incident_date: '2026-08-25',
+      incident_time: '15:45',
       issue_type: 'other',
       description: 'A sufficiently detailed incident description.',
       reported_by: 'Test User',
+      done_by: 'Test User',
     })).rejects.toThrow('session has expired');
     expect(global.fetch).not.toHaveBeenCalled();
   });

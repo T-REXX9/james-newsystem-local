@@ -1,8 +1,8 @@
 import { VipTierConfig } from '../types';
 
 export const DEFAULT_VIP_TIER_CONFIG: VipTierConfig = {
-  one_time_discount_threshold: 50000,
-  unlimited_discount_threshold: 100000,
+  one_time_discount_threshold: 10000,
+  unlimited_discount_threshold: 30000,
   discount_percentage: 10,
 };
 

@@ -1,6 +1,6 @@
 import { DEFAULT_CUSTOMER_VAT_TYPE } from '../constants/customerVat';
 import { normalizePriceGroup } from '../constants/pricingGroups';
-import { Contact, ContactPerson, ContactTransaction, CustomerStatus, CustomerVatType, DealStage, UserProfile } from '../types';
+import { Contact, ContactPerson, ContactTransaction, CustomerStatus, CustomerVatType, DealStage, Product, UserProfile } from '../types';
 import { getLocalAuthSession } from './localAuthService';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
@@ -101,6 +101,23 @@ interface ApiTransactionRow {
 interface ApiPurchaseHistoryResponse {
   data?: {
     items?: ApiTransactionRow[];
+  };
+}
+
+export interface PurchasedItem {
+  item_code: string;
+  part_no: string;
+  description: string;
+  brand: string;
+  unit_price: number;
+  purchased_qty: number;
+  returned_qty: number;
+  remaining_qty: number;
+}
+
+interface ApiPurchasedItemsResponse {
+  data?: {
+    items?: Array<Partial<PurchasedItem>>;
   };
 }
 
@@ -631,6 +648,27 @@ export const bulkUpdateContacts = async (ids: string[], updates: Partial<Contact
 };
 
 export const fetchSalesAgents = async (): Promise<UserProfile[]> => {
+  try {
+    const payload = await requestJson<{ data?: UserProfile[] }>(
+      `${API_BASE_URL}/profiles/sales-agents?per_page=200`
+    );
+    const rows = Array.isArray(payload?.data) ? payload.data : [];
+    const agents = rows
+      .map((row, index) => ({
+        id: String(row?.id || `agent-${index + 1}`),
+        email: String(row?.email || ''),
+        full_name: String(row?.full_name || (row as { fullName?: string }).fullName || '').trim(),
+        role: String(row?.role || 'Sales Agent'),
+      }))
+      .filter((agent) => agent.full_name);
+
+    if (agents.length > 0) {
+      return agents.sort((a, b) => a.full_name.localeCompare(b.full_name));
+    }
+  } catch (err) {
+    console.error('Error loading sales agents from profiles API:', err);
+  }
+
   const contacts = await fetchContacts();
   const nameSet = new Set<string>();
   contacts.forEach((contact) => {
@@ -676,6 +714,66 @@ export const fetchContactTransactions = async (contactId: string): Promise<Conta
     return [];
   }
 };
+
+export const fetchPurchasedItems = async (
+  contactId: string,
+  search = '',
+  limit = 50,
+): Promise<PurchasedItem[]> => {
+  const query = new URLSearchParams({
+    limit: String(Math.max(1, Math.min(200, limit))),
+  });
+  if (search.trim()) query.set('search', search.trim());
+
+  const payload = await requestJson<ApiPurchasedItemsResponse>(
+    `${API_BASE_URL}/customers/${encodeURIComponent(String(contactId))}/purchased-items?${query.toString()}`
+  );
+  const rows = Array.isArray(payload?.data?.items) ? payload.data.items : [];
+  return rows.map((row) => ({
+    item_code: String(row?.item_code || ''),
+    part_no: String(row?.part_no || ''),
+    description: String(row?.description || ''),
+    brand: String(row?.brand || ''),
+    unit_price: toNumber(row?.unit_price, 0),
+    purchased_qty: toNumber(row?.purchased_qty, 0),
+    returned_qty: toNumber(row?.returned_qty, 0),
+    remaining_qty: toNumber(row?.remaining_qty, 0),
+  })).filter((row) => row.item_code || row.part_no);
+};
+
+export const purchasedItemToProduct = (item: PurchasedItem): Product => ({
+  id: `${item.item_code}:${item.part_no}`,
+  part_no: item.part_no,
+  oem_no: '',
+  brand: item.brand,
+  barcode: '',
+  no_of_pieces_per_box: 0,
+  item_code: item.item_code,
+  description: item.description,
+  size: '',
+  reorder_quantity: 0,
+  status: 'Active',
+  category: '',
+  descriptive_inquiry: '',
+  no_of_holes: '',
+  replenish_quantity: 0,
+  original_pn_no: '',
+  application: '',
+  no_of_cylinder: '',
+  price_aa: item.unit_price,
+  price_bb: 0,
+  price_cc: 0,
+  price_dd: 0,
+  price_vip1: 0,
+  price_vip2: 0,
+  stock_wh1: item.remaining_qty,
+  stock_wh2: 0,
+  stock_wh3: 0,
+  stock_wh4: 0,
+  stock_wh5: 0,
+  stock_wh6: 0,
+  total_stock: item.remaining_qty,
+});
 
 export interface LocalCustomerMetrics {
   contact_id: string;

@@ -37,7 +37,10 @@ const po = {
   id: 'POREF-1', po_number: 'PO-2601', order_date: '2026-08-20', supplier_id: 'S1', warehouse_id: 'WH1',
   remarks: '', pr_reference: 'PR-2601', status: 'Pending', grand_total: 20,
   supplier: { id: 'S1', company: 'Supplier 1', address: '', transactionType: 'PO' },
-  items: [{ id: 'ITEM-1', po_id: 'POREF-1', item_id: 'P1', qty: 2, unit_price: 10, amount: 20, eta_date: '2026-08-22', quantity_received: 0, product: { id: 'P1', part_no: 'PART-1', item_code: 'ITEM-1', description: 'Part 1', brand: 'Brand 1' } }],
+  items: [
+    { id: 'ITEM-1', po_id: 'POREF-1', item_id: 'P1', qty: 10, unit_price: 10, amount: 100, eta_date: '2026-08-22', quantity_received: 1, original_part_no: 'OPN-1', rr_refno: 'RRREF-1', rr_number: 'RR-2601', product: { id: 'P1', part_no: 'PART-1', item_code: 'ITEM-1', description: 'Part 1', brand: 'Brand 1' } },
+    { id: 'ITEM-2', po_id: 'POREF-1', item_id: 'P2', qty: 4, unit_price: 8, amount: 32, eta_date: '2026-08-23', quantity_received: 0, original_part_no: '', rr_refno: '', rr_number: '', product: { id: 'P2', part_no: 'PART-2', item_code: 'ITEM-2', description: 'Part 2', brand: 'Brand 2' } },
+  ],
   item_count: 1, total_qty: 2, first_eta_date: '2026-08-22', creator: null, approver: null,
 };
 
@@ -168,7 +171,18 @@ describe('PurchaseOrderView', () => {
       expect(poElement).toBeInTheDocument();
     });
     expect(service.getPurchaseOrderById).toHaveBeenCalledWith('POREF-1');
-    fireEvent.click(await screen.findByTitle('Edit item'));
+    const onRrCheckbox = screen.getByRole('checkbox', { name: /part-1 already on rr rr-2601, 10% completed/i });
+    expect(onRrCheckbox).toBeChecked();
+    expect(onRrCheckbox).toBeDisabled();
+    expect(screen.getByRole('link', { name: 'Open line receiving report RR-2601' })).toHaveAttribute(
+      'href',
+      '#/warehouse-purchasing-receiving-stock?rrId=RRREF-1&rrRefNo=RR-2601',
+    );
+    expect(screen.getByText('10%')).toBeInTheDocument();
+    const openRrCheckbox = screen.getByRole('checkbox', { name: /part-2 not on rr yet/i });
+    expect(openRrCheckbox).not.toBeChecked();
+    expect(openRrCheckbox).toBeDisabled();
+    fireEvent.click(screen.getAllByTitle('Edit item')[0]);
     fireEvent.change(screen.getAllByLabelText('Edit quantity 1')[0], { target: { value: '3' } });
     fireEvent.change(screen.getAllByLabelText('Edit COGS 1')[0], { target: { value: '12.5' } });
     fireEvent.click(screen.getByTitle('Save item'));

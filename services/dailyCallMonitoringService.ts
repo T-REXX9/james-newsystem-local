@@ -1,5 +1,7 @@
 import {
   CallLogEntry,
+  CallReportMessage,
+  CallReportThread,
   Contact,
   CustomerLogEntry,
   CustomerStatus,
@@ -472,6 +474,8 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
     city: cleanNullableText(row?.city, '—'),
     contactNumber: cleanNullableText(row?.contactNumber ?? row?.contact_number, '—'),
     assignedTo: cleanNullableText(row?.assignedTo ?? row?.assigned_to, 'Unassigned'),
+    assignedAgentId: cleanNullableText(row?.assignedAgentId ?? row?.assigned_agent_id),
+    assignedDate: cleanNullableText(row?.assignedDate ?? row?.assigned_date),
     profileType: cleanNullableText(row?.profileType ?? row?.profile_type),
     verification: cleanNullableText(row?.verification),
     customerStatus: Number(row?.customerStatus ?? row?.customer_status ?? 1),
@@ -492,6 +496,7 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
     })(),
     totalSales: Number(row?.totalSales ?? row?.total_sales ?? 0),
     currentMonthSales: Number(row?.currentMonthSales ?? row?.current_month_sales ?? 0),
+    lastMonthSales: Number(row?.lastMonthSales ?? row?.last_month_sales ?? 0),
     averageMonthlySales: Number(row?.averageMonthlySales ?? row?.average_monthly_sales ?? 0),
     averageMonthlySalesMonthCount: Number(row?.averageMonthlySalesMonthCount ?? row?.average_monthly_sales_month_count ?? 0),
     averageMonthlySalesYear: Number(row?.averageMonthlySalesYear ?? row?.average_monthly_sales_year ?? 0),
@@ -792,6 +797,7 @@ export const createCallLogForDailyCall = async (
       outcome: input.outcome,
       notes: input.notes || '',
       occurred_at: input.occurred_at,
+      duration_seconds: input.duration_seconds ?? 0,
     }),
   });
 
@@ -834,6 +840,76 @@ export const createCustomerLogForDailyCall = async (
   });
 
   return mapCustomerLog(payload?.data || {});
+};
+
+const mapCallReportMessage = (row: any): CallReportMessage => ({
+  id: String(row?.id || ''),
+  thread_id: String(row?.thread_id || ''),
+  sender_user_id: String(row?.sender_user_id || ''),
+  sender_name: String(row?.sender_name || ''),
+  sender_role: row?.sender_role === 'master' ? 'master' : 'agent',
+  body: String(row?.body || ''),
+  created_at: String(row?.created_at || ''),
+  is_from_current_user: Boolean(row?.is_from_current_user),
+  is_from_master: Boolean(row?.is_from_master ?? row?.sender_role === 'master'),
+});
+
+const mapCallReportThread = (row: any): CallReportThread => ({
+  id: String(row?.id || ''),
+  contact_id: String(row?.contact_id || ''),
+  call_log_entry_id: String(row?.call_log_entry_id || ''),
+  call_log_refno: String(row?.call_log_refno || ''),
+  agent_user_id: String(row?.agent_user_id || ''),
+  agent_name: String(row?.agent_name || ''),
+  outcome: (row?.outcome || 'note') as CallReportThread['outcome'],
+  report_body: String(row?.report_body || ''),
+  call_started_at: row?.call_started_at ? String(row.call_started_at) : undefined,
+  call_ended_at: row?.call_ended_at ? String(row.call_ended_at) : undefined,
+  duration_seconds: Number(row?.duration_seconds || 0),
+  created_at: String(row?.created_at || ''),
+  last_activity_at: String(row?.last_activity_at || row?.created_at || ''),
+  unread_count: Number(row?.unread_count || 0),
+  messages: Array.isArray(row?.messages) ? row.messages.map(mapCallReportMessage) : [],
+});
+
+export const fetchCallReportThreads = async (contactId: string): Promise<CallReportThread[]> => {
+  const mainId = resolveMainId();
+  const payload = await requestJson(
+    `${API_BASE_URL}/daily-call-monitoring/customers/${encodeURIComponent(contactId)}/call-report-threads?main_id=${mainId}`
+  );
+  const data = payload?.data;
+  return Array.isArray(data) ? data.map(mapCallReportThread) : [];
+};
+
+export const sendCallReportReply = async (input: {
+  threadId: string;
+  body: string;
+  senderName: string;
+}): Promise<CallReportMessage> => {
+  const payload = await requestJson(
+    `${API_BASE_URL}/daily-call-monitoring/call-report-threads/${encodeURIComponent(input.threadId)}/messages`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        main_id: resolveMainId(),
+        body: input.body,
+        sender_name: input.senderName,
+      }),
+    }
+  );
+  return mapCallReportMessage(payload?.data || {});
+};
+
+export const markCallReportThreadRead = async (threadId: string): Promise<void> => {
+  await requestJson(
+    `${API_BASE_URL}/daily-call-monitoring/call-report-threads/${encodeURIComponent(threadId)}/read`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ main_id: resolveMainId() }),
+    }
+  );
 };
 
 export const subscribeToDailyCallMonitoringUpdates = (

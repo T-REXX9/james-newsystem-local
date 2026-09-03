@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, AlertCircle, Loader2 } from 'lucide-react';
 import { createDailyCallIncidentReport } from '../services/dailyCallCustomerDetailService';
-import { fetchContactTransactions } from '../services/customerDatabaseLocalApiService';
+import { fetchContactTransactions, fetchPurchasedItems, purchasedItemToProduct } from '../services/customerDatabaseLocalApiService';
 import { syncIncidentReportItem } from '../services/incidentItemSyncService';
 import { useToast } from './ToastProvider';
 import { Product, UserProfile, ContactTransaction } from '../types';
@@ -25,6 +25,12 @@ const getLocalDateInputValue = (date = new Date()): string => {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+};
+
+const getLocalTimeInputValue = (date = new Date()): string => {
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
 };
 
 const isDateInputAfterToday = (value: unknown): boolean => {
@@ -52,13 +58,17 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
   const [submitCount, setSubmitCount] = useState(0);
 
   const today = getLocalDateInputValue();
+  const currentTime = getLocalTimeInputValue();
 
   const [formData, setFormData] = useState({
     reportDate: today,
+    reportTime: currentTime,
     incidentDate: today,
+    incidentTime: currentTime,
     issueType: '' as 'product_quality' | 'service_quality' | 'delivery' | 'lbc_rto' | 'other' | '',
     description: '',
     reportedBy: currentUser?.full_name || '',
+    doneBy: currentUser?.full_name || currentUser?.email || '',
     attachments: '',
     notes: '',
   });
@@ -66,18 +76,22 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     const currentDate = getLocalDateInputValue();
+    const currentTime = getLocalTimeInputValue();
     setFormData((previous) => ({
       ...previous,
       reportDate: currentDate,
+      reportTime: currentTime,
       incidentDate: currentDate,
+      incidentTime: currentTime,
     }));
-    setValidationErrors((previous) => ({ ...previous, incidentDate: '' }));
+    setValidationErrors((previous) => ({ ...previous, reportTime: '', incidentDate: '', incidentTime: '' }));
   }, [isOpen]);
 
   // Update reportedBy when currentUser changes
   useEffect(() => {
-    if (currentUser?.full_name) {
-      setFormData(prev => ({ ...prev, reportedBy: currentUser.full_name }));
+    const userName = currentUser?.full_name || currentUser?.email || '';
+    if (userName) {
+      setFormData(prev => ({ ...prev, reportedBy: userName, doneBy: userName }));
     }
   }, [currentUser]);
 
@@ -111,6 +125,14 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
         }
         return '';
       }
+      case 'reportTime': {
+        const result = validateRequired(value, 'a report time');
+        return result.isValid ? '' : result.message;
+      }
+      case 'incidentTime': {
+        const result = validateRequired(value, 'an incident time');
+        return result.isValid ? '' : result.message;
+      }
       case 'issueType': {
         const result = validateRequired(value, 'an issue type');
         return result.isValid ? '' : result.message;
@@ -123,6 +145,10 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
       }
       case 'reportedBy': {
         const result = validateRequired(value, 'a reporter name');
+        return result.isValid ? '' : result.message;
+      }
+      case 'doneBy': {
+        const result = validateRequired(value, 'a done by name');
         return result.isValid ? '' : result.message;
       }
       case 'affectedProduct': {
@@ -141,7 +167,7 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
-    (['incidentDate', 'issueType', 'description', 'reportedBy'] as const).forEach((field) => {
+    (['reportTime', 'incidentDate', 'incidentTime', 'issueType', 'description', 'reportedBy', 'doneBy'] as const).forEach((field) => {
       const message = validateField(field, (formData as Record<string, unknown>)[field]);
       if (message) errors[field] = message;
     });
@@ -189,10 +215,13 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
           id: draftIncidentReportId,
           contact_id: contactId,
           report_date: formData.reportDate,
+          report_time: formData.reportTime,
           incident_date: formData.incidentDate,
+          incident_time: formData.incidentTime,
           issue_type: formData.issueType as 'product_quality' | 'service_quality' | 'delivery' | 'lbc_rto' | 'other',
           description: formData.description.trim(),
           reported_by: formData.reportedBy.trim(),
+          done_by: formData.doneBy.trim(),
           attachments: attachmentsArray,
           related_transactions: relatedTransactions.length > 0 ? relatedTransactions : undefined,
           notes: formData.notes.trim() || undefined,
@@ -249,10 +278,13 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
     if (!isSubmitting) {
       setFormData({
         reportDate: getLocalDateInputValue(),
+        reportTime: getLocalTimeInputValue(),
         incidentDate: getLocalDateInputValue(),
+        incidentTime: getLocalTimeInputValue(),
         issueType: '',
         description: '',
         reportedBy: currentUser?.full_name || '',
+        doneBy: currentUser?.full_name || currentUser?.email || '',
         attachments: '',
         notes: '',
       });
@@ -322,6 +354,27 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
               />
             </div>
+            <div>
+              <label htmlFor="incident-report-time" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Report Time <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="incident-report-time"
+                type="time"
+                required
+                value={formData.reportTime}
+                onChange={(e) => {
+                  setFormData({ ...formData, reportTime: e.target.value });
+                  setValidationErrors({ ...validationErrors, reportTime: '' });
+                }}
+                onBlur={(e) => handleBlur('reportTime', e.target.value)}
+                disabled={isSubmitting}
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 ${
+                  validationErrors.reportTime ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-gray-600'
+                }`}
+              />
+              {validationErrors.reportTime && <p className="text-sm text-red-600 dark:text-red-400 mt-1">{validationErrors.reportTime}</p>}
+            </div>
 
             <div>
               <label htmlFor="incident-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -352,6 +405,27 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
                   {validationErrors.incidentDate}
                 </p>
               )}
+            </div>
+            <div>
+              <label htmlFor="incident-time" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Incident Time <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="incident-time"
+                type="time"
+                required
+                value={formData.incidentTime}
+                onChange={(e) => {
+                  setFormData({ ...formData, incidentTime: e.target.value });
+                  setValidationErrors({ ...validationErrors, incidentTime: '' });
+                }}
+                onBlur={(e) => handleBlur('incidentTime', e.target.value)}
+                disabled={isSubmitting}
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 ${
+                  validationErrors.incidentTime ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-gray-600'
+                }`}
+              />
+              {validationErrors.incidentTime && <p className="text-sm text-red-600 dark:text-red-400 mt-1">{validationErrors.incidentTime}</p>}
             </div>
           </div>
 
@@ -415,7 +489,13 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
                   setSelectedProduct(product);
                   setValidationErrors((prev) => ({ ...prev, affectedProduct: '', affectedQuantity: '' }));
                 }}
-                placeholder="Search by part number, item code, or description..."
+                placeholder="Search this customer's purchased part numbers..."
+                searchFn={async (query) => {
+                  const items = await fetchPurchasedItems(contactId, query, 40);
+                  return items.map(purchasedItemToProduct);
+                }}
+                emptyMessage="Not in this customer's purchase history"
+                emptyHint="Complaints can only use parts this customer has purchased."
               />
             )}
             {selectedProduct && (
@@ -444,7 +524,7 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
             )}
             {validationErrors.affectedProduct && <p className="text-sm text-red-600 dark:text-red-400 mt-1">{validationErrors.affectedProduct}</p>}
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Select the product for product-quality or delivery complaints so it appears in the warehouse incident report.
+              Select a product this customer has purchased. Parts that are not in purchase history cannot be used for a complaint.
             </p>
           </div>
 
@@ -473,6 +553,30 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               Automatically filled with your name
             </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Done By <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={formData.doneBy}
+              readOnly
+              disabled={isSubmitting}
+              placeholder="Current user"
+              className={`w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400 cursor-not-allowed ${
+                validationErrors.doneBy
+                  ? 'border-red-500 dark:border-red-500'
+                  : 'border-gray-300 dark:border-gray-600'
+              }`}
+              title="This field is automatically filled with your name"
+            />
+            {validationErrors.doneBy && (
+              <p className="text-sm text-red-600 dark:text-red-400 mt-1">
+                {validationErrors.doneBy}
+              </p>
+            )}
           </div>
 
           <div>

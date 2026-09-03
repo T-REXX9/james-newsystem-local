@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ReceivingReportWithDetails, RR_STATUS_COLORS } from '../../receiving.types';
 import { receivingService } from '../../services/receivingService';
 import { useToast } from '../ToastProvider';
-import { ArrowLeft, Printer, CheckCircle, Trash2, Calendar, User, FileText, Loader2, AlertCircle, Plus } from 'lucide-react';
+import { ArrowLeft, Printer, CheckCircle, Trash2, Calendar, User, FileText, Loader2, AlertCircle, Plus, Pencil, Save, XCircle } from 'lucide-react';
 import CustomLoadingSpinner from '../CustomLoadingSpinner';
 import RecoveryReasonModal from '../RecoveryReasonModal';
 
@@ -22,6 +22,9 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
     const [shortReceiptReason, setShortReceiptReason] = useState('');
     const [showHistory, setShowHistory] = useState(false);
     const [recoveryAction, setRecoveryAction] = useState<'unpost' | 'delete' | null>(null);
+    const [editingItemId, setEditingItemId] = useState<string | null>(null);
+    const [editItemQty, setEditItemQty] = useState(0);
+    const [editItemUnitCost, setEditItemUnitCost] = useState(0);
 
     const fetchRR = async () => {
         setLoading(true);
@@ -82,6 +85,50 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
             }
     };
 
+    const canEditItems = ['Draft', 'Pending', 'Unposted'].includes(rr?.status || '');
+
+    const startEditItem = (item: NonNullable<ReceivingReportWithDetails['items']>[number]) => {
+        setEditingItemId(item.id);
+        setEditItemQty(Number(item.qty_received || 0));
+        setEditItemUnitCost(Number(item.unit_cost || 0));
+    };
+
+    const cancelEditItem = () => {
+        setEditingItemId(null);
+        setEditItemQty(0);
+        setEditItemUnitCost(0);
+    };
+
+    const saveEditItem = async () => {
+        if (!rr || !editingItemId) return;
+        const item = rr.items?.find((candidate) => candidate.id === editingItemId);
+        const ordered = Number(item?.qty_ordered || 0);
+        if (!Number.isFinite(editItemQty) || editItemQty <= 0) {
+            addToast({ type: 'error', message: 'Quantity received must be greater than zero' });
+            return;
+        }
+        if (ordered > 0 && editItemQty > ordered) {
+            addToast({ type: 'error', message: `Quantity cannot exceed the ordered quantity (${ordered}).` });
+            return;
+        }
+        if (!Number.isFinite(editItemUnitCost) || editItemUnitCost < 0) {
+            addToast({ type: 'error', message: 'Unit cost cannot be negative' });
+            return;
+        }
+        try {
+            await receivingService.updateReceivingReportItem(editingItemId, {
+                rr_id: rr.id,
+                qty_received: editItemQty,
+                unit_cost: editItemUnitCost,
+            });
+            cancelEditItem();
+            await fetchRR();
+            addToast({ type: 'success', message: 'Receiving line updated' });
+        } catch (error: any) {
+            addToast({ type: 'error', message: error.message || 'Failed to update receiving line' });
+        }
+    };
+
     if (loading) {
         return (
             <div className="h-full flex flex-col items-center justify-center p-20">
@@ -104,6 +151,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
     }
 
     const statusColor = rr.status === 'Draft' || rr.status === 'Pending' ? 'bg-orange-100 text-orange-700'
+        : rr.status === 'Unposted' ? 'bg-amber-100 text-amber-800'
         : rr.status === 'Posted' ? 'bg-emerald-100 text-emerald-700'
         : rr.status === 'Cancelled' ? 'bg-rose-100 text-rose-700'
         : 'bg-slate-100 text-slate-700';
@@ -185,15 +233,16 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                     <table className="w-full table-fixed border-collapse text-xs">
                         <colgroup>
                             <col className="w-[4%]" />
-                            <col className="w-[11%]" />
-                            <col className="w-[18%]" />
-                            <col className="w-[11%]" />
-                            <col className="w-[11%]" />
                             <col className="w-[10%]" />
-                            <col className="w-[9%]" />
+                            <col className="w-[16%]" />
+                            <col className="w-[10%]" />
+                            <col className="w-[10%]" />
                             <col className="w-[9%]" />
                             <col className="w-[8%]" />
                             <col className="w-[9%]" />
+                            <col className="w-[8%]" />
+                            <col className="w-[8%]" />
+                            <col className="w-[8%]" />
                         </colgroup>
                         <thead>
                             <tr className="border-b border-slate-200 bg-slate-50 text-left text-[9px] font-bold uppercase leading-tight tracking-wide text-slate-500">
@@ -207,12 +256,15 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                                 <th className="break-words px-2 py-3 text-center">Qty Received</th>
                                 <th className="break-words px-2 py-3 text-right">Unit Cost</th>
                                 <th className="break-words px-2 py-3 text-right">Amount</th>
+                                <th className="break-words px-2 py-3 text-center">Action</th>
                             </tr>
                         </thead>
                         <tbody>
                             {!rr.items?.length ? (
-                                <tr><td colSpan={10} className="py-12 text-center text-sm text-slate-500">No items received.</td></tr>
-                            ) : rr.items.map((item, index) => (
+                                <tr><td colSpan={11} className="py-12 text-center text-sm text-slate-500">No items received.</td></tr>
+                            ) : rr.items.map((item, index) => {
+                                const isEditing = editingItemId === item.id;
+                                return (
                                 <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
                                     <td className="break-words px-2 py-3 text-center font-semibold text-slate-500">{index + 1}</td>
                                     <td className="break-words px-2 py-3 text-[13px] font-bold text-slate-700">{item.item_code || '-'}</td>
@@ -221,11 +273,24 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                                     <td className="break-words px-2 py-3 text-[13px] font-bold text-[#173c83]">{item.part_no || '-'}</td>
                                     <td className="break-words px-2 py-3 font-semibold text-slate-600">{item.brand || item.product?.brand || '-'}</td>
                                     <td className="break-words px-2 py-3 text-center font-semibold text-slate-600">{item.qty_ordered || item.qty_received || 0}</td>
-                                    <td className="break-words px-2 py-3 text-center font-bold text-slate-700">{item.qty_received || 0}</td>
-                                    <td className="break-words px-2 py-3 text-right font-semibold text-slate-600">{item.unit_cost ? item.unit_cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
+                                    <td className="break-words px-2 py-3 text-center font-bold text-slate-700">{isEditing ? <input aria-label={`Edit quantity received ${index + 1}`} type="number" min="1" value={editItemQty} onChange={(event) => setEditItemQty(Number(event.target.value))} className="h-8 w-full min-w-0 rounded border border-slate-300 px-1 text-center" /> : (item.qty_received || 0)}</td>
+                                    <td className="break-words px-2 py-3 text-right font-semibold text-slate-600">{isEditing ? <input aria-label={`Edit unit cost ${index + 1}`} type="number" min="0" step="0.01" value={editItemUnitCost} onChange={(event) => setEditItemUnitCost(Number(event.target.value))} className="h-8 w-full min-w-0 rounded border border-slate-300 px-1 text-right" /> : (item.unit_cost ? item.unit_cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-')}</td>
                                     <td className="break-words px-2 py-3 text-right font-bold text-slate-700">{item.total_amount ? item.total_amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
+                                    <td className="break-words px-2 py-3 text-center">
+                                        {canEditItems ? (
+                                            isEditing ? (
+                                                <div className="flex items-center justify-center gap-2">
+                                                    <button type="button" onClick={() => void saveEditItem()} className="text-emerald-600 hover:text-emerald-800" title="Save item"><Save size={16} /></button>
+                                                    <button type="button" onClick={cancelEditItem} className="text-slate-400 hover:text-slate-700" title="Cancel edit"><XCircle size={16} /></button>
+                                                </div>
+                                            ) : (
+                                                <button type="button" onClick={() => startEditItem(item)} className="text-[#175fd3] hover:text-[#0e4fb7]" title="Edit item"><Pencil size={16} /></button>
+                                            )
+                                        ) : null}
+                                    </td>
                                 </tr>
-                            ))}
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>

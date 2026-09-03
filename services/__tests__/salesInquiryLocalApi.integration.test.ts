@@ -75,6 +75,7 @@ describe.skipIf(process.env.RUN_LOCAL_API_INTEGRATION !== '1')('Sales Inquiry lo
       const inquiry = await createSalesInquiry({
         contact_id: contactId,
         sales_date: new Date().toISOString().slice(0, 10),
+        sales_time: '09:30',
         sales_person: 'Integration Test',
         delivery_address: 'Integration Address',
         reference_no: referenceNo,

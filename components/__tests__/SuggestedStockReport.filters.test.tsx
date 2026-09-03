@@ -5,42 +5,34 @@ import SuggestedStockReport from '../SuggestedStockReport';
 
 const {
   fetchSummaryMock,
-  fetchDetailsMock,
   fetchCustomersMock,
-  getPurchaseRequestsMock,
+  addToastMock,
 } = vi.hoisted(() => ({
   fetchSummaryMock: vi.fn(),
-  fetchDetailsMock: vi.fn(),
   fetchCustomersMock: vi.fn(),
-  getPurchaseRequestsMock: vi.fn(),
+  addToastMock: vi.fn(),
 }));
 
 vi.mock('../../services/suggestedStockService', () => ({
-  fetchSuggestedStockSummary: fetchSummaryMock,
-  fetchSuggestedStockDetails: fetchDetailsMock,
+  fetchSuggestedStockSummaryPage: fetchSummaryMock,
   fetchCustomersWithNotListedInquiries: fetchCustomersMock,
   createPurchaseRequestFromSuggestions: vi.fn(),
-}));
-
-vi.mock('../../services/purchaseRequestService', () => ({
-  purchaseRequestService: {
-    getPurchaseRequests: getPurchaseRequestsMock,
-  },
+  clearNotListedRemarks: vi.fn(),
 }));
 
 vi.mock('../ToastProvider', () => ({
-  useToast: () => ({ addToast: vi.fn() }),
+  useToast: () => ({ addToast: addToastMock }),
 }));
 
-const item = (id: string, description: string, inquiryCount: number, isListed: boolean) => ({
+const item = (id: string, description: string, inquiryCount: number) => ({
   id,
   partNo: `PN-${id}`,
   itemCode: '',
   description,
   brand: '',
-  databaseItemCode: isListed ? `ITEM-${id}` : '',
-  databasePartNo: isListed ? `DB-${id}` : '',
-  isListed,
+  databaseItemCode: '',
+  databasePartNo: '',
+  isListed: false,
   inquiryCount,
   totalQty: inquiryCount,
   customerCount: 1,
@@ -51,14 +43,15 @@ const item = (id: string, description: string, inquiryCount: number, isListed: b
 
 describe('SuggestedStockReport filters', () => {
   beforeEach(() => {
-    fetchSummaryMock.mockResolvedValue([
-      item('z', 'ZULU PART', 2, true),
-      item('a', 'ALPHA PART', 5, false),
-      item('m', 'MU PART', 1, false),
-    ]);
-    fetchDetailsMock.mockResolvedValue([]);
+    fetchSummaryMock.mockResolvedValue({
+      items: [
+        item('z', 'ZULU PART', 2),
+        item('a', 'ALPHA PART', 5),
+        item('m', 'MU PART', 1),
+      ],
+      hasMore: false,
+    });
     fetchCustomersMock.mockResolvedValue([]);
-    getPurchaseRequestsMock.mockResolvedValue([]);
     vi.stubGlobal('IntersectionObserver', class {
       observe() {}
       disconnect() {}
@@ -72,12 +65,15 @@ describe('SuggestedStockReport filters', () => {
     vi.clearAllMocks();
   });
 
-  it('sorts by description or customer-request count and filters listing status', async () => {
+  it('sorts by description or customer-request count for unlisted items only', async () => {
     render(<SuggestedStockReport />);
     await screen.findByText('ALPHA PART');
 
+    expect(screen.queryByRole('combobox', { name: 'Filter by listing status' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Create PR for Selected')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /Create/i }).length).toBeGreaterThan(0);
+
     const sort = screen.getByRole('combobox', { name: 'Sort suggested stock items' });
-    const status = screen.getByRole('combobox', { name: 'Filter by listing status' });
 
     fireEvent.change(sort, { target: { value: 'description-asc' } });
     const alphaRow = screen.getByText('ALPHA PART').closest('tr');
@@ -88,16 +84,6 @@ describe('SuggestedStockReport filters', () => {
 
     fireEvent.change(sort, { target: { value: 'inquiries-desc' } });
     expect(screen.getByText('ALPHA PART').closest('tr')?.compareDocumentPosition(screen.getByText('ZULU PART').closest('tr') as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-
-    fireEvent.change(status, { target: { value: 'listed' } });
-    expect(screen.getByText('ZULU PART')).toBeInTheDocument();
-    expect(screen.queryByText('ALPHA PART')).not.toBeInTheDocument();
-    expect(screen.queryByText('MU PART')).not.toBeInTheDocument();
-
-    fireEvent.change(status, { target: { value: 'not-listed' } });
-    expect(screen.queryByText('ZULU PART')).not.toBeInTheDocument();
-    expect(screen.getByText('ALPHA PART')).toBeInTheDocument();
-    expect(screen.getByText('MU PART')).toBeInTheDocument();
   });
 
   it('keeps custom dates editable, blocks an invalid range, and applies a valid range once', async () => {
@@ -108,22 +94,23 @@ describe('SuggestedStockReport filters', () => {
 
     const startDate = screen.getByLabelText('Start date');
     const endDate = screen.getByLabelText('End date');
-    const applyDates = screen.getByRole('button', { name: 'Apply Dates' });
+    const applyFilters = screen.getByRole('button', { name: 'Apply Filters' });
 
-    fireEvent.change(startDate, { target: { value: '2026-09-02' } });
+    fireEvent.change(endDate, { target: { value: '2026-09-01' } });
+    fireEvent.change(startDate, { target: { value: '2026-09-05' } });
     expect(screen.getByRole('alert')).toHaveTextContent('Start date must be on or before end date.');
-    expect(applyDates).toBeDisabled();
+    expect(applyFilters).toBeDisabled();
     expect(fetchSummaryMock).not.toHaveBeenCalled();
 
-    fireEvent.change(endDate, { target: { value: '2026-09-05' } });
+    fireEvent.change(endDate, { target: { value: '2026-09-10' } });
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(applyDates).toBeEnabled();
-    fireEvent.click(applyDates);
+    expect(applyFilters).toBeEnabled();
+    fireEvent.click(applyFilters);
 
     await waitFor(() => expect(fetchSummaryMock).toHaveBeenCalledWith(expect.objectContaining({
-      dateFrom: '2026-09-02',
-      dateTo: '2026-09-05',
-    })));
+      dateFrom: '2026-09-05',
+      dateTo: '2026-09-10',
+    }), 1, 50));
   });
 
   it('sets This Year from January 1 of the current year through today', async () => {
@@ -144,7 +131,7 @@ describe('SuggestedStockReport filters', () => {
     await waitFor(() => expect(fetchSummaryMock).toHaveBeenCalledWith(expect.objectContaining({
       dateFrom: `${today.getFullYear()}-01-01`,
       dateTo: expectedToday,
-    })));
+    }), 1, 50));
     expect(screen.getByLabelText('Start date')).toHaveValue(`${today.getFullYear()}-01-01`);
     expect(screen.getByLabelText('End date')).toHaveValue(expectedToday);
   });

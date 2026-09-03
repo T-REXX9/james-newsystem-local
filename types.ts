@@ -617,6 +617,36 @@ export interface TeamMessage {
   is_from_owner: boolean;
 }
 
+export interface CallReportMessage {
+  id: string;
+  thread_id: string;
+  sender_user_id: string;
+  sender_name: string;
+  sender_role: 'agent' | 'master';
+  body: string;
+  created_at: string;
+  is_from_current_user: boolean;
+  is_from_master: boolean;
+}
+
+export interface CallReportThread {
+  id: string;
+  contact_id: string;
+  call_log_entry_id: string;
+  call_log_refno: string;
+  agent_user_id: string;
+  agent_name: string;
+  outcome: CallOutcome;
+  report_body: string;
+  call_started_at?: string;
+  call_ended_at?: string;
+  duration_seconds: number;
+  created_at: string;
+  last_activity_at: string;
+  unread_count: number;
+  messages: CallReportMessage[];
+}
+
 export type DailyCallCustomerFilterStatus = 'all' | 'active' | 'inactive' | 'prospective';
 
 export interface DailyActivityRecord {
@@ -676,6 +706,8 @@ export interface DailyCallMasterCustomerRow {
   city: string;
   contactNumber: string;
   assignedTo: string;
+  assignedAgentId?: string;
+  assignedDate?: string;
   profileType?: string;
   verification?: string;
   verifiedBy?: string;
@@ -690,6 +722,7 @@ export interface DailyCallMasterCustomerRow {
   listCategory?: 'priority' | 'recovery' | 'no_purchase';
   totalSales: number;
   currentMonthSales: number;
+  lastMonthSales?: number;
   averageMonthlySales: number;
   averageMonthlySalesMonthCount: number;
   averageMonthlySalesYear?: number;
@@ -799,10 +832,13 @@ export interface IncidentReport {
   record_source?: 'incident_report' | 'customer_log';
   contact_id: string;
   report_date: string;
+  report_time: string;
   incident_date: string;
+  incident_time: string;
   issue_type: 'product_quality' | 'service_quality' | 'delivery' | 'lbc_rto' | 'other';
   description: string;
   reported_by: string;
+  done_by: string;
   attachments?: string[];
   related_transactions?: RelatedTransaction[];
   approval_status: 'pending' | 'approved' | 'rejected';
@@ -832,10 +868,13 @@ export interface CreateIncidentReportInput {
   id?: string;
   contact_id: string;
   report_date: string;
+  report_time: string;
   incident_date: string;
+  incident_time: string;
   issue_type: 'product_quality' | 'service_quality' | 'delivery' | 'lbc_rto' | 'other';
   description: string;
   reported_by: string;
+  done_by: string;
   attachments?: string[];
   related_transactions?: RelatedTransaction[];
   notes?: string;
@@ -1068,6 +1107,7 @@ export interface SalesInquiry {
   inquiry_no: string;
   contact_id: string;
   sales_date: string;
+  sales_time: string;
   sales_person: string;
   delivery_address: string;
   reference_no: string;
@@ -1113,6 +1153,7 @@ export interface InquiryReportData extends SalesInquiry {
 export interface SalesInquiryDTO {
   contact_id: string;
   sales_date: string;
+  sales_time: string;
   sales_person: string;
   delivery_address: string;
   reference_no: string;

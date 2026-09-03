@@ -1,10 +1,11 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import DailyCallMasterListView from '../DailyCallMasterListView';
 import { fetchCustomersForDailyCall, fetchDailyCallMasterList } from '../../services/dailyCallMonitoringService';
-import { updateContact } from '../../services/customerDatabaseLocalApiService';
+import { updateContact, fetchSalesAgents } from '../../services/customerDatabaseLocalApiService';
+import { getVipTierConfig } from '../../services/vipTierSettingsService';
 
 vi.mock('../../services/dailyCallMonitoringService', () => ({
   fetchDailyCallMasterList: vi.fn(),
@@ -15,12 +16,16 @@ vi.mock('../../services/dailyCallMonitoringService', () => ({
 vi.mock('../../services/customerDatabaseLocalApiService', () => ({
   createContact: vi.fn(),
   updateContact: vi.fn(),
+  fetchSalesAgents: vi.fn().mockResolvedValue([
+    { id: 'agent-1', full_name: 'Joan Jerusalem', email: '', role: 'Sales Agent' },
+    { id: 'agent-2', full_name: 'Apostol Ella', email: '', role: 'Sales Agent' },
+  ]),
 }));
 
 vi.mock('../../services/vipTierSettingsService', () => ({
   getVipTierConfig: vi.fn().mockResolvedValue({
-    one_time_discount_threshold: 50000,
-    unlimited_discount_threshold: 100000,
+    one_time_discount_threshold: 10000,
+    unlimited_discount_threshold: 30000,
     discount_percentage: 10,
   }),
 }));
@@ -74,6 +79,48 @@ describe('DailyCallMasterListView', () => {
     await user.click(await screen.findByRole('button', { name: 'Approve verification for Pending Prospect Shop' }));
 
     expect(updateContact).toHaveBeenCalledWith('pending-verified-1', { verification: 'Verified' });
+  });
+
+  it('classifies current VIP status from last month sales instead of stored price group', async () => {
+    vi.mocked(getVipTierConfig).mockResolvedValueOnce({
+      one_time_discount_threshold: 10000,
+      unlimited_discount_threshold: 30000,
+      discount_percentage: 10,
+    });
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: '2026-09-03', count: 1 },
+      items: [{
+        id: 'last-month-vip-1',
+        shopName: 'Last Month Qualified Shop',
+        province: 'Cebu',
+        city: 'Cebu City',
+        contactNumber: '0917',
+        assignedTo: 'Unassigned',
+        priceGroup: 'regular',
+        lastPurchaseDate: 'Aug 29, 2026',
+        lastPurchaseDateRaw: '2026-08-29',
+        purchaseCount: 2,
+        listCategory: 'priority',
+        totalSales: 35043,
+        currentMonthSales: 0,
+        lastMonthSales: 35043,
+        averageMonthlySales: 35043,
+        averageMonthlySalesMonthCount: 1,
+        recentThreeMonthSales: 35043,
+        previousThreeMonthSales: 0,
+        salesTrendPercent: 100,
+        daysSinceLastPurchase: 5,
+        monthsSinceLastPurchase: 0,
+        purchaseAgeGroup: 'recent',
+      }],
+    });
+
+    render(<DailyCallMasterListView />);
+
+    const row = (await screen.findByText('Last Month Qualified Shop')).closest('tr');
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getByText('VIP Gold')).toBeInTheDocument();
+    expect(within(row as HTMLElement).queryByText('Regular')).not.toBeInTheDocument();
   });
 
   it('separates October 2025 activity from historical recovery customers', async () => {
@@ -203,7 +250,7 @@ describe('DailyCallMasterListView', () => {
     expect(screen.getAllByText(/Verified Prospects/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Unverified Prospects/i).length).toBeGreaterThan(0);
     expect(screen.getByText('Verified By')).toBeInTheDocument();
-    expect(screen.getByText('Apostol Ella')).toBeInTheDocument();
+    expect(screen.getAllByText('Apostol Ella').length).toBeGreaterThan(0);
     expect(screen.queryByText(/Customer Case Overview/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Incident Report Flow/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Quick Go To/i)).toBeInTheDocument();
@@ -341,7 +388,7 @@ describe('DailyCallMasterListView', () => {
 
   });
 
-  it('wires the call and message action buttons to the customer popup flow', async () => {
+  it('wires the call action button to the customer popup flow', async () => {
     const user = userEvent.setup();
     const masterCustomer = {
       id: 'priority-1', shopName: 'Priority Buyer Shop', province: 'Manila', city: 'Manila',
@@ -368,28 +415,41 @@ describe('DailyCallMasterListView', () => {
     await user.click(await screen.findByRole('button', { name: 'Call Priority Buyer Shop' }));
     expect(fetchCustomersForDailyCall).toHaveBeenCalledWith({});
     expect(await screen.findByRole('dialog')).toHaveTextContent('Customer detail popup for Priority Buyer Shop');
+  });
 
-    cleanup();
-    vi.clearAllMocks();
-
+  it('assigns a sales agent inline from the Agent column dropdown', async () => {
+    const user = userEvent.setup();
+    const masterCustomer = {
+      id: 'priority-1', shopName: 'Priority Buyer Shop', province: 'Manila', city: 'Manila',
+      contactNumber: '0930', assignedTo: 'Unassigned', lastPurchaseDate: 'May 26, 2026',
+      lastPurchaseDateRaw: '2026-05-26', purchaseCount: 1, totalSales: 5000,
+      currentMonthSales: 0, daysSinceLastPurchase: 20, monthsSinceLastPurchase: 0,
+      purchaseAgeGroup: 'two_weeks_to_one_month' as const,
+    };
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
       meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 1 },
       items: [masterCustomer],
     });
-    vi.mocked(fetchCustomersForDailyCall).mockResolvedValue([{
-      ...masterCustomer,
-      source: 'Customer Database', clientSince: '2024-01-15', codeDate: 'Gold',
-      ishinomotoDealerSince: '2024-01-15', ishinomotoSignageSince: '2024-02-01',
-      quota: 30000, modeOfPayment: '30 Days', courier: 'Manila', status: 'Active',
-      outstandingBalance: 1000, averageMonthlyOrder: 5000, monthlyOrder: 5000,
-      weeklyRangeTotals: [], dailyActivity: [],
-    } as any]);
+    vi.mocked(updateContact).mockResolvedValue(undefined);
 
-    render(<DailyCallMasterListView />);
+    render(<DailyCallMasterListView currentUser={{ id: 'master-1', role: 'Master User' } as any} />);
 
-    await user.click(await screen.findByRole('button', { name: 'Message Priority Buyer Shop' }));
-    expect(fetchCustomersForDailyCall).toHaveBeenCalledWith({});
-    expect(await screen.findByRole('dialog')).toHaveTextContent('Customer detail popup for Priority Buyer Shop');
+    await user.selectOptions(
+      await screen.findByLabelText('Assign sales agent for Priority Buyer Shop'),
+      'agent-1'
+    );
+
+    await waitFor(() => {
+      expect(updateContact).toHaveBeenCalledWith(
+        'priority-1',
+        expect.objectContaining({
+          __salesPersonId: 'agent-1',
+          salesman: 'Joan Jerusalem',
+        }),
+        'master-1'
+      );
+    });
+    expect(screen.getByLabelText('Assign sales agent for Priority Buyer Shop')).toHaveValue('agent-1');
   });
 
   it('does not render the removed customer case and incident-flow footer area', async () => {

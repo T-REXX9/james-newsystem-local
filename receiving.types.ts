@@ -50,6 +50,7 @@ export type RRStatus = 'Draft' | 'Posted' | 'Cancelled';
 
 export const RR_STATUS_COLORS: Record<string, string> = {
     Draft: 'bg-gray-100 text-gray-800',
+    Unposted: 'bg-amber-100 text-amber-800',
     Posted: 'bg-green-100 text-green-800',
     Cancelled: 'bg-red-100 text-red-800',
 };

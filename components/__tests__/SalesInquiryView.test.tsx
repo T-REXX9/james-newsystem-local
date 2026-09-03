@@ -163,6 +163,7 @@ const makeInquiry = (overrides: Record<string, any> = {}) => ({
   inquiry_no: 'INQ26-1',
   contact_id: 'c-1',
   sales_date: '2026-01-01',
+  sales_time: '09:30:00',
   sales_person: 'Jane Doe',
   delivery_address: '123 Main St',
   reference_no: 'REF-1',

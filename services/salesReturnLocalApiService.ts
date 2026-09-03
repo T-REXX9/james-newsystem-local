@@ -11,6 +11,7 @@ export interface SalesReturnRecord {
   lstatus: string;
   ltype: string;
   customer_name: string;
+  customer_id: string;
   sales_person: string;
   tracking_no: string;
   ship_via: string;
@@ -132,6 +133,7 @@ const mapRecord = (row: any): SalesReturnRecord => ({
   lstatus: String(row?.lstatus || 'Pending'),
   ltype: String(row?.ltype || ''),
   customer_name: String(row?.customer_name || 'Unknown Customer'),
+  customer_id: String(row?.lcustomer || row?.customer_id || ''),
   sales_person: String(row?.sales_person || ''),
   tracking_no: String(row?.tracking_no || ''),
   ship_via: String(row?.ship_via || ''),

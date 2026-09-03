@@ -15,6 +15,7 @@ import {
   updateProduct,
   type ProductListStatus,
 } from '../services/productLocalApiService';
+import { clearNotListedRemarks } from '../services/suggestedStockService';
 import { fetchSuppliers } from '../services/supplierService';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { validateMinLength, validateRequired } from '../utils/formValidation';
@@ -26,6 +27,9 @@ interface ProductDatabaseProps {
   initialCreate?: boolean;
   initialPartNo?: string;
   initialDescription?: string;
+  initialItemCode?: string;
+  initialSuggestedInquiryItemId?: string;
+  fromSuggestedStock?: boolean;
 }
 
 type ProductForm = Omit<Product, 'id'>;
@@ -179,6 +183,9 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
   initialCreate = false,
   initialPartNo = '',
   initialDescription = '',
+  initialItemCode = '',
+  initialSuggestedInquiryItemId = '',
+  fromSuggestedStock = false,
 }) => {
   const { addToast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
@@ -309,6 +316,9 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
       supplier_costs: [],
       part_no: initialPartNo,
       description: initialDescription,
+      item_code: initialItemCode,
+      // Suggested Stock handoff: require a reorder level so the SKU can appear on Reorder Report.
+      reorder_quantity: fromSuggestedStock ? Math.max(1, Number(EMPTY_PRODUCT.reorder_quantity) || 1) : 0,
     });
     setSelectedSupplierRows([]);
     setApplyCostToAll(false);
@@ -316,7 +326,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
     setValidationErrors({});
     setHighlightedProductId(null);
     setDetailTab('details');
-  }, [initialCreate, initialDescription, initialPartNo, initialProductId]);
+  }, [fromSuggestedStock, initialCreate, initialDescription, initialItemCode, initialPartNo, initialProductId]);
 
   useEffect(() => {
     if (!initialPartNo || initialCreate || initialProductId) return;
@@ -369,6 +379,9 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
     if (mode === 'add' && !itemCode.isValid) errors.item_code = itemCode.message;
     if (!description.isValid) errors.description = description.message;
     else if (!descriptionLength.isValid) errors.description = descriptionLength.message;
+    if (mode === 'add' && fromSuggestedStock && Number(formData.reorder_quantity || 0) <= 0) {
+      errors.reorder_quantity = 'Set a reorder quantity greater than 0 so this item can appear on Reorder Report.';
+    }
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -398,7 +411,25 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
     try {
       if (mode === 'add') {
         await createProduct(buildPayload());
-        addToast({ type: 'success', title: 'Product added', description: 'Product record was added successfully.' });
+        if (fromSuggestedStock) {
+          try {
+            await clearNotListedRemarks({
+              inquiryItemId: initialSuggestedInquiryItemId,
+              partNo: String(formData.part_no || '').replace(/\s+/g, ''),
+              itemCode: String(formData.item_code || '').trim(),
+            });
+          } catch (clearError) {
+            console.error('Unable to clear NotListed remarks after product create:', clearError);
+          }
+          addToast({
+            type: 'success',
+            title: 'Product added',
+            description: 'Product listed successfully. It left Suggested Stock; use Reorder Report when stock is below the reorder quantity.',
+            durationMs: 7000,
+          });
+        } else {
+          addToast({ type: 'success', title: 'Product added', description: 'Product record was added successfully.' });
+        }
         clearEditor();
         await loadProducts(1, false);
       } else if (editingProduct) {
@@ -524,6 +555,11 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
 
           <div className="px-6 py-6">
             <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
+            {fromSuggestedStock && !editingProduct && (
+              <div className="mb-4 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                Creating from Suggested Stock. Set a reorder quantity greater than 0 so this item can move to Reorder Report after listing. Duplicate item codes or part numbers are blocked.
+              </div>
+            )}
             {submitError && <div className="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-red-700">{submitError}</div>}
             {editingProduct && (
               <div className="mb-4 text-xs text-blue-700">

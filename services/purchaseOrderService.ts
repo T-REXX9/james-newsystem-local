@@ -86,6 +86,9 @@ const toPurchaseOrderItem = (raw: any): PurchaseOrderItem => ({
   amount: toNumber(raw?.line_total),
   eta_date: raw?.eta_date || null,
   quantity_received: toNumber(raw?.receiving_qty),
+  original_part_no: String(raw?.original_part_no ?? ''),
+  rr_refno: String(raw?.receiving_refno ?? ''),
+  rr_number: String(raw?.receiving_number ?? raw?.rr_number ?? ''),
   product: toProduct(raw),
 });
 

@@ -9,8 +9,7 @@ import {
   salesReturnService,
 } from '../services/salesReturnLocalApiService';
 import { Contact } from '../types';
-import { fetchContacts } from '../services/customerDatabaseLocalApiService';
-import { fetchProducts } from '../services/productLocalApiService';
+import { fetchContacts, fetchPurchasedItems } from '../services/customerDatabaseLocalApiService';
 import CustomerAutocomplete from './CustomerAutocomplete';
 import { useDebounce } from '../hooks/useDebounce';
 
@@ -73,9 +72,11 @@ const SourceItemsModal: React.FC<{
   open: boolean;
   sourceItems: SourceItem[];
   loading: boolean;
+  emptyMessage?: string;
   onAdd: (item: SourceItem, qty: number) => void;
   onClose: () => void;
-}> = ({ open, sourceItems, loading, onAdd, onClose }) => {
+  onSearch?: (query: string) => void;
+}> = ({ open, sourceItems, loading, emptyMessage, onAdd, onClose, onSearch }) => {
   const [quantities, setQuantities] = useState<Record<number, number>>({});
   const [itemSearch, setItemSearch] = useState('');
 
@@ -109,13 +110,16 @@ const SourceItemsModal: React.FC<{
             <div className="text-center py-8 text-sm text-slate-500">Loading source items...</div>
           ) : sourceItems.length === 0 ? (
             <div className="text-center py-8 text-sm text-slate-500">
-              No available items to return. All items have been fully returned or no source document is linked.
+              {emptyMessage || 'No available items to return. All items have been fully returned or no source document is linked.'}
             </div>
           ) : (
             <>
             <input
               value={itemSearch}
-              onChange={(event) => setItemSearch(event.target.value)}
+              onChange={(event) => {
+                setItemSearch(event.target.value);
+                onSearch?.(event.target.value);
+              }}
               placeholder="Search item code, part number or description"
               className="mb-3 h-[36px] w-full rounded border border-slate-300 px-3 text-sm"
             />
@@ -681,6 +685,8 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
   const [showSourceItems, setShowSourceItems] = useState(false);
   const [sourceItems, setSourceItems] = useState<SourceItem[]>([]);
   const [loadingSource, setLoadingSource] = useState(false);
+  const [sourceSearch, setSourceSearch] = useState('');
+  const debouncedSourceSearch = useDebounce(sourceSearch, 250);
 
   useEffect(() => {
     if (!initialMonth || !initialYear) return;
@@ -778,26 +784,11 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
   const openSourceItemsModal = async () => {
     if (!selectedRefno) return;
     setShowSourceItems(true);
+    setSourceSearch('');
     setLoadingSource(true);
     try {
       if (selected?.ltype === 'No Reference') {
-        const products = await fetchProducts('active');
-        setSourceItems(products
-          .filter((product) => String(product.part_no || '').trim() || String(product.item_code || '').trim())
-          .map((product, index): SourceItem => ({
-            source_item_id: index + 1,
-            is_catalog_item: true,
-            linv_refno: String(product.id),
-            item_code: String(product.item_code || ''),
-            part_no: String(product.part_no || ''),
-            brand: String(product.brand || ''),
-            description: String(product.description || ''),
-            unit_price: Number(product.price_aa || 0),
-            original_qty: 0,
-            remaining_qty: 999999,
-            unit: '',
-            discount: 0,
-          })));
+        await loadPurchasedReturnItems('');
       } else {
         const sourceRows = await salesReturnService.sourceItems(selectedRefno);
         setSourceItems(sourceRows);
@@ -809,6 +800,43 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
       setLoadingSource(false);
     }
   };
+
+  const loadPurchasedReturnItems = async (search: string) => {
+    const customerId = selected?.customer_id || '';
+    if (!customerId) {
+      setSourceItems([]);
+      setError('A customer is required so return items can be limited to purchase history.');
+      return;
+    }
+    const products = await fetchPurchasedItems(customerId, search, 150);
+    setSourceItems(products
+      .filter((item) => item.remaining_qty > 0)
+      .map((item, index): SourceItem => ({
+        source_item_id: index + 1,
+        is_catalog_item: false,
+        linv_refno: '',
+        item_code: item.item_code,
+        part_no: item.part_no,
+        brand: item.brand,
+        description: item.description,
+        unit_price: item.unit_price,
+        original_qty: item.purchased_qty,
+        remaining_qty: item.remaining_qty,
+        unit: '',
+        discount: 0,
+      })));
+  };
+
+  useEffect(() => {
+    if (!showSourceItems || selected?.ltype !== 'No Reference') return;
+    setLoadingSource(true);
+    loadPurchasedReturnItems(debouncedSourceSearch)
+      .catch((err: any) => {
+        setError(err?.message || 'Failed to load purchased items');
+        setSourceItems([]);
+      })
+      .finally(() => setLoadingSource(false));
+  }, [debouncedSourceSearch, showSourceItems, selected?.ltype, selected?.customer_id]);
 
   const handleAddSourceItem = async (si: SourceItem, qty: number) => {
     setActionLoading(true);
@@ -828,7 +856,9 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
       // Refresh items and source items
       const updatedItems = await salesReturnService.items(selectedRefno);
       setItems(updatedItems);
-      if (!si.is_catalog_item) {
+      if (selected?.ltype === 'No Reference') {
+        await loadPurchasedReturnItems(debouncedSourceSearch);
+      } else if (!si.is_catalog_item) {
         setSourceItems(await salesReturnService.sourceItems(selectedRefno));
       }
       // Also refresh the list to update totals
@@ -1067,8 +1097,12 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
         open={showSourceItems}
         sourceItems={sourceItems}
         loading={loadingSource}
+        emptyMessage={selected?.ltype === 'No Reference'
+          ? 'No purchased items found for this customer. Only parts in purchase history can be returned.'
+          : undefined}
         onAdd={handleAddSourceItem}
         onClose={() => setShowSourceItems(false)}
+        onSearch={selected?.ltype === 'No Reference' ? setSourceSearch : undefined}
       />
 
       <ConfirmDialog

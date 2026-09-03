@@ -8,6 +8,14 @@ vi.mock('../DailyCallCustomerDetailExpansion', () => ({
   default: () => <div>Detail expansion</div>,
 }));
 
+vi.mock('../../services/vipTierSettingsService', () => ({
+  getVipTierConfig: vi.fn().mockResolvedValue({
+    one_time_discount_threshold: 10000,
+    unlimited_discount_threshold: 30000,
+    discount_percentage: 10,
+  }),
+}));
+
 const baseCustomer = {
   id: 'customer-1',
   source: 'Manual',
@@ -64,30 +72,30 @@ describe('DailyCallCustomerDetailModal', () => {
     expect(screen.getByTestId('customer-detail-backdrop')).toHaveClass('z-[2000]');
   });
 
-  it('shows a VIP badge beside the customer name for gold dealers', () => {
+  it('shows a VIP badge beside the customer name when last month spend earns a discount', () => {
     render(
       <DailyCallCustomerDetailModal
         isOpen
-        customer={{ ...baseCustomer, dealerPriceGroup: 'gold' }}
+        customer={{ ...baseCustomer, lastMonthOrder: 35000 }}
         currentUser={null}
         onClose={() => {}}
       />
     );
 
     expect(screen.getByRole('heading', { name: /vip parts center/i })).toBeInTheDocument();
-    expect(screen.getByAltText('Gold VIP badge')).toBeInTheDocument();
+    expect(screen.getByAltText(/VIP Gold badge|VIP Silver badge/i)).toBeInTheDocument();
   });
 
-  it('does not show a VIP badge beside the customer name for regular dealers', () => {
+  it('does not show a VIP badge when last month spend has no discount tier', () => {
     render(
       <DailyCallCustomerDetailModal
         isOpen
-        customer={{ ...baseCustomer, dealerPriceGroup: 'regular', monthlyOrder: 5000 }}
+        customer={{ ...baseCustomer, dealerPriceGroup: 'VIP 1', lastMonthOrder: 5000 }}
         currentUser={null}
         onClose={() => {}}
       />
     );
 
-    expect(screen.queryByAltText('Regular VIP badge')).not.toBeInTheDocument();
+    expect(screen.queryByAltText(/VIP Gold badge|VIP Silver badge/i)).not.toBeInTheDocument();
   });
 });

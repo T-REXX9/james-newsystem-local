@@ -9,7 +9,11 @@ import { createContact } from '../services/customerDatabaseLocalApiService';
 import { Contact, DailyCallCustomerFilterStatus, DailyCallCustomerRow, UserProfile } from '../types';
 import { useToast } from './ToastProvider';
 import DailyCallCustomerDetailModal from './DailyCallCustomerDetailModal';
-import { isKnownPriceGroup, normalizePriceGroup } from '../constants/pricingGroups';
+import { formatLegacyPriceGroupLabel } from '../constants/pricingGroups';
+import { getVipStandingSummary, resolveVipDiscountLevel } from '../utils/vipStanding';
+import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
+import { getVipTierConfig } from '../services/vipTierSettingsService';
+import { VipTierConfig } from '../types';
 import AddContactModal from './AddContactModal';
 
 interface DailyCallExcelFormatViewProps {
@@ -36,31 +40,23 @@ const toCurrency = (value: number) =>
 
 const toShortK = (value: number) => `${Math.round((value || 0) / 1000)}k`;
 
-const resolveDealerPriceTier = (row: DailyCallCustomerRow) => {
-  const raw = String(row.dealerPriceGroup || '');
-  if (isKnownPriceGroup(raw)) return normalizePriceGroup(raw);
-  if (row.monthlyOrder >= 30000) return 'Gold';
-  if (row.monthlyOrder >= 10000) return 'Silver';
-  return 'Regular';
-};
+const formatVipDiscountLabel = (lastMonthSales: number, config: VipTierConfig) =>
+  getVipStandingSummary('', lastMonthSales, config).tierLabel;
 
-const isVipDealerTier = (tier: string) => tier === 'Silver' || tier === 'Gold';
+const vipDiscountProgressLabel = (lastMonthSales: number, config: VipTierConfig) => {
+  const spend = Math.max(0, Number(lastMonthSales || 0));
+  const level = resolveVipDiscountLevel(spend, config);
+  if (level === 'gold') return 'VIP Gold active';
+  if (level === 'silver') return 'VIP Silver active';
+  const remaining = Math.max(0, config.one_time_discount_threshold - spend);
+  return remaining > 0 ? `-${toShortK(remaining)}/VIP Silver` : 'Regular';
+};
 
 const firstDisplayDate = (...values: Array<string | undefined>) =>
   values.find((value) => {
     const trimmed = String(value || '').trim();
     return trimmed !== '' && trimmed !== '—';
   }) || '—';
-
-const pricingTargetLabel = (monthlySales: number) => {
-  if (monthlySales >= 30000) {
-    return 'Gold';
-  }
-  if (monthlySales >= 10000) {
-    return `-${toShortK(30000 - monthlySales)}/Gold`;
-  }
-  return `-${toShortK(10000 - monthlySales)}/Silver`;
-};
 
 const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ currentUser }) => {
   const { addToast } = useToast();
@@ -72,8 +68,13 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
+  const [vipConfig, setVipConfig] = useState<VipTierConfig>(DEFAULT_VIP_TIER_CONFIG);
 
   const debouncedSearch = useDebounce(search, 400);
+
+  useEffect(() => {
+    void getVipTierConfig().then(setVipConfig).catch(() => setVipConfig(DEFAULT_VIP_TIER_CONFIG));
+  }, []);
 
   // Load all data once on mount
   const loadRows = useCallback(
@@ -339,11 +340,11 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
                   </th>
                   <th className="px-1.5 py-1.5 text-left font-semibold text-slate-600">LOCATION</th>
                   <th className="px-1.5 py-1.5 text-left font-semibold text-slate-600">ASSIGNED</th>
-                  <th className="px-1.5 py-1.5 text-left font-semibold text-slate-600">DEALER</th>
+                  <th className="px-1.5 py-1.5 text-left font-semibold text-slate-600">PRICE GROUP</th>
                   <th className="px-1.5 py-1.5 text-left font-semibold text-slate-600">STATUS</th>
                   <th className="px-1.5 py-1.5 text-right font-semibold text-slate-600">AVG</th>
                   <th className="px-1.5 py-1.5 text-right font-semibold text-slate-600">CURRENT</th>
-                  <th className="px-1.5 py-1.5 text-left font-semibold text-slate-600">PRICING</th>
+                  <th className="px-1.5 py-1.5 text-left font-semibold text-slate-600">VIP DISCOUNT</th>
                   <th className="px-1.5 py-1.5 text-left font-semibold text-slate-600">TERMS</th>
                   <th className="px-1.5 py-1.5 text-right font-semibold text-slate-600">BAL</th>
                 </tr>
@@ -352,7 +353,8 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {customers.map((row, index) => {
                   const isSelected = selectedCustomerId === row.id;
-                  const dealerPriceTier = resolveDealerPriceTier(row);
+                  const priceGroupLabel = formatLegacyPriceGroupLabel(row.dealerPriceGroup);
+                  const vipDiscount = getVipStandingSummary('', row.lastMonthOrder || 0, vipConfig);
                   const location = row.province || row.city || row.courier || '—';
                   const statusDate = row.statusDate || row.clientSince || '—';
                   const terms = row.terms || row.modeOfPayment || '—';
@@ -385,16 +387,8 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
                         <div className="text-[9px] text-slate-500 truncate" title={row.assignedDate || '—'}>{row.assignedDate || '—'}</div>
                       </td>
                       <td className="px-1.5 py-1.5 text-slate-600">
-                        <div className="flex items-center gap-1 font-medium text-slate-700 dark:text-slate-200 truncate">
-                          {isVipDealerTier(dealerPriceTier) && (
-                            <img
-                              src={vipBadgeIconUrl}
-                              alt={`${dealerPriceTier} VIP badge`}
-                              className="flex-shrink-0"
-                              style={{ width: '16.8px', height: '16.8px' }}
-                            />
-                          )}
-                          <span className="truncate">{dealerPriceTier}</span>
+                        <div className="font-medium text-slate-700 dark:text-slate-200 truncate" title={priceGroupLabel}>
+                          {priceGroupLabel}
                         </div>
                         <div className="text-[9px] text-slate-500 truncate" title={dealerDate}>{dealerDate}</div>
                       </td>
@@ -404,7 +398,19 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
                       </td>
                       <td className="px-1.5 py-1.5 text-right text-slate-700 truncate" title={toCurrency(row.averageMonthlyOrder)}>{toCurrency(row.averageMonthlyOrder)}</td>
                       <td className="px-1.5 py-1.5 text-right font-semibold text-slate-900 dark:text-white truncate" title={toCurrency(row.monthlyOrder)}>{toCurrency(row.monthlyOrder)}</td>
-                      <td className="px-1.5 py-1.5 text-slate-700 font-semibold truncate" title={pricingTargetLabel(row.monthlyOrder)}>{pricingTargetLabel(row.monthlyOrder)}</td>
+                      <td className="px-1.5 py-1.5 text-slate-700 font-semibold truncate" title={formatVipDiscountLabel(row.lastMonthOrder || 0, vipConfig)}>
+                        <div className="flex items-center gap-1 truncate">
+                          {vipDiscount.badgeVisible && (
+                            <img
+                              src={vipBadgeIconUrl}
+                              alt={`${vipDiscount.tierLabel} badge`}
+                              className="flex-shrink-0"
+                              style={{ width: '16.8px', height: '16.8px' }}
+                            />
+                          )}
+                          <span className="truncate">{vipDiscountProgressLabel(row.lastMonthOrder || 0, vipConfig)}</span>
+                        </div>
+                      </td>
                       <td className="px-1.5 py-1.5 text-slate-600 truncate" title={terms}>{terms}</td>
                       <td className="px-1.5 py-1.5 text-right text-slate-700 truncate" title={toCurrency(row.outstandingBalance)}>{toCurrency(row.outstandingBalance)}</td>
                     </tr>

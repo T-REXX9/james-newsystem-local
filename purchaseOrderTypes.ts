@@ -29,6 +29,10 @@ export interface PurchaseOrderWithDetails extends PurchaseOrder {
 
 export interface PurchaseOrderItemWithProduct extends PurchaseOrderItem {
     product: Product | null;
+    quantity_received?: number;
+    original_part_no?: string;
+    rr_refno?: string;
+    rr_number?: string;
 }
 
 export type POStatus = 'Draft' | 'Pending' | 'Posted' | 'Partial Delivery' | 'Cancelled';

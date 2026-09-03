@@ -165,6 +165,12 @@ const formatDateTime = (value?: string | null): string => {
   return parsed.toLocaleString('en-US');
 };
 
+const formatInquiryDateTime = (dateValue?: string | null, timeValue?: string | null): string => {
+  const dateLabel = formatDate(dateValue);
+  const timeLabel = String(timeValue || '').slice(0, 5);
+  return [dateLabel, timeLabel].filter(Boolean).join(' ');
+};
+
 const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
   inquiry,
   customer,
@@ -265,8 +271,8 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
               <tr>
                 <td className="sales-inquiry-label">Our Reference:</td>
                 <td><b>{inquiry.reference_no || '-'}</b></td>
-                <td className="sales-inquiry-label">Date:</td>
-                <td><b>{formatDate(inquiry.sales_date || inquiry.created_at)}</b></td>
+                <td className="sales-inquiry-label">Date/Time:</td>
+                <td><b>{formatInquiryDateTime(inquiry.sales_date || inquiry.created_at, inquiry.sales_time)}</b></td>
               </tr>
               <tr>
                 <td className="sales-inquiry-label">Terms Strictly:</td>
@@ -346,7 +352,7 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
 
           <div className="sales-inquiry-prepared">
             <b>Prepared By :</b> {preparedBy || inquiry.sales_person || '-'}{' '}
-            <b>Date/Time :</b> {formatDateTime(inquiry.created_at || inquiry.sales_date)}
+            <b>Date/Time :</b> {formatInquiryDateTime(inquiry.sales_date || inquiry.created_at, inquiry.sales_time) || formatDateTime(inquiry.created_at)}
           </div>
         </div>
       </div>

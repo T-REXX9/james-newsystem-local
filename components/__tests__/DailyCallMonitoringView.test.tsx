@@ -433,14 +433,19 @@ describe('DailyCallMonitoringView communication actions', () => {
     }));
   });
 
-  it('releases the claim when the agent closes without submitting a report', async () => {
+  it('requires a report before the agent can close the call window', async () => {
     const user = userEvent.setup();
     render(<DailyCallMonitoringView currentUser={currentUser} />);
 
     await user.click(await screen.findByRole('button', { name: 'Call Test Shop' }));
     await user.click(await screen.findByRole('button', { name: 'Close contact window' }));
 
-    await waitFor(() => expect(releaseCustomerCallForDailyCallMock).toHaveBeenCalledWith('contact-1'));
+    await waitFor(() => expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'error',
+      title: 'Report required',
+    })));
+    expect(releaseCustomerCallForDailyCallMock).not.toHaveBeenCalled();
+    expect(screen.getByRole('heading', { name: /Contact Test Shop/i })).toBeInTheDocument();
   });
 
   it('renders the customer details sheet responsively across screen sizes', async () => {

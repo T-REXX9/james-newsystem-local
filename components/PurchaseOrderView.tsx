@@ -46,6 +46,19 @@ const PAGE_SIZE = 10;
 const PURCHASE_ORDER_TAB_ID = 'purchases-transaction-purchase-order';
 const isPurchaseRequestItemConverted = (item: any) => String(item?.po_refno || '').trim() !== '';
 
+const poItemRrLabel = (item: PurchaseOrderWithDetails['items'][number]) =>
+  String(item.rr_number || item.rr_refno || '').trim();
+
+const isPoItemOnReceivingReport = (item: PurchaseOrderWithDetails['items'][number]) =>
+  poItemRrLabel(item) !== '' || Number(item.quantity_received || 0) > 0;
+
+const poItemReceivingPercent = (item: PurchaseOrderWithDetails['items'][number]) => {
+  const ordered = Number(item.qty || 0);
+  const received = Math.max(0, Number(item.quantity_received || 0));
+  if (ordered <= 0) return received > 0 ? 100 : 0;
+  return Math.max(0, Math.min(100, Math.round((received / ordered) * 100)));
+};
+
 const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, initialPORefNo, initialPRId }) => {
   const { addToast } = useToast();
   const currentUser = getLocalAuthSession()?.userProfile;
@@ -1091,19 +1104,21 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                   <colgroup>
                     <col className="w-[4%]" />
                     <col className="w-[8%]" />
-                    <col className="w-[10%]" />
-                    <col className="w-[11%]" />
-                    <col className="w-[9%]" />
-                    <col className="w-[10%]" />
-                    <col className="w-[8%]" />
-                    <col className="w-[8%]" />
-                    <col className="w-[16%]" />
-                    <col className="w-[9%]" />
                     <col className="w-[7%]" />
+                    <col className="w-[9%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[9%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[7%]" />
+                    <col className="w-[14%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[8%]" />
                   </colgroup>
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
                       <th className="break-words px-2 py-3 text-center">#</th>
+                      <th className="break-words px-2 py-3 text-center">RR</th>
                       <th className="break-words px-2 py-3 text-center">Qty</th>
                       <th className="break-words px-2 py-3">Supplier</th>
                       <th className="break-words px-2 py-3">ETA</th>
@@ -1118,16 +1133,60 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                   </thead>
                   <tbody>
                     {!selectedPO.items?.length ? (
-                      <tr><td colSpan={11} className="py-12 text-center text-sm text-slate-500">No items added yet.</td></tr>
+                      <tr><td colSpan={12} className="py-12 text-center text-sm text-slate-500">No items added yet.</td></tr>
                     ) : selectedPO.items.map((item, index) => {
                       const isEditing = editingItemId === item.id;
+                      const itemOnRR = isPoItemOnReceivingReport(item);
+                      const rrLabel = poItemRrLabel(item);
+                      const receivedPercent = poItemReceivingPercent(item);
+                      const partLabel = item.product?.part_no || item.product?.item_code || `Part ${index + 1}`;
                       return (
                       <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
                         <td className="break-words px-2 py-3 text-center font-semibold text-slate-500">{index + 1}</td>
+                        <td className="break-words px-1.5 py-3 text-center">
+                          {itemOnRR ? (
+                            <div className="flex flex-col items-center gap-1">
+                              <input
+                                type="checkbox"
+                                checked
+                                disabled
+                                aria-label={`${partLabel} already on RR${rrLabel ? ` ${rrLabel}` : ''}, ${receivedPercent}% completed`}
+                                title={`Already on ${rrLabel || 'RR'} · ${receivedPercent}% completed (${Number(item.quantity_received || 0)} of ${Number(item.qty || 0)})`}
+                                className="h-4 w-4 rounded border-slate-300 text-[#175fd3] disabled:cursor-not-allowed disabled:opacity-60"
+                              />
+                              {rrLabel ? (
+                                <ModuleRecordLink
+                                  openInNewTab
+                                  tab="warehouse-purchasing-receiving-stock"
+                                  payload={{
+                                    rrId: String(item.rr_refno || '').trim() || undefined,
+                                    rrRefNo: rrLabel || undefined,
+                                  }}
+                                  aria-label={`Open line receiving report ${rrLabel}`}
+                                  className="max-w-full truncate text-[9px] font-extrabold text-[#175fd3] underline underline-offset-2 hover:text-[#0e4fb7] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                                >
+                                  {rrLabel}
+                                </ModuleRecordLink>
+                              ) : (
+                                <span className="text-[9px] font-extrabold text-slate-500">On RR</span>
+                              )}
+                              <span className="text-[9px] font-bold text-slate-500">{receivedPercent}%</span>
+                            </div>
+                          ) : (
+                            <input
+                              type="checkbox"
+                              checked={false}
+                              disabled
+                              aria-label={`${partLabel} not on RR yet`}
+                              title="Not on RR yet"
+                              className="h-4 w-4 rounded border-slate-300 text-[#175fd3] disabled:cursor-not-allowed disabled:opacity-60"
+                            />
+                          )}
+                        </td>
                         <td className="break-words px-2 py-3 text-center font-bold text-slate-700">{isEditing ? <input aria-label={`Edit quantity ${index + 1}`} type="number" min="1" value={editItemQty} onChange={event => setEditItemQty(Number(event.target.value))} className="h-8 w-full min-w-0 rounded border border-slate-300 px-1 text-center" /> : item.qty}</td>
                         <td className="break-words px-2 py-3 font-semibold">{selectedPO.supplier?.company || '-'}</td>
                         <td className="break-words px-2 py-3 font-semibold text-slate-600">{isEditing ? <input aria-label={`Edit ETA ${index + 1}`} type="date" value={editItemEta} onChange={event => setEditItemEta(event.target.value)} className="h-8 w-full min-w-0 rounded border border-slate-300 px-1" /> : item.eta_date ? new Date(item.eta_date).toLocaleDateString('en-GB') : '-'}</td>
-                        <td className="break-words px-2 py-3 font-semibold text-slate-600">-</td>
+                        <td className="break-words px-2 py-3 font-semibold text-slate-600">{item.original_part_no || '-'}</td>
                         <td className="break-words px-2 py-3 text-[13px] font-bold text-[#173c83]">{item.product?.part_no || '-'}</td>
                         <td className="break-words px-2 py-3 text-[13px] font-bold text-slate-700">{item.product?.item_code || '-'}</td>
                         <td className="break-words px-2 py-3 font-semibold text-slate-600">{item.product?.brand || '-'}</td>
@@ -1155,7 +1214,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                   {selectedPO.items?.length > 0 && (
                     <tfoot>
                       <tr className="border-t-2 border-slate-200 bg-slate-50 text-sm font-bold text-slate-700">
-                        <td colSpan={2} className="px-4 py-4 text-left">Total Items: {selectedPO.items.length}</td>
+                        <td colSpan={3} className="px-4 py-4 text-left">Total Items: {selectedPO.items.length}</td>
                         <td colSpan={7} className="px-4 py-4 text-right">Total Quantity: {selectedPO.items.reduce((sum, item) => sum + (item.qty || 0), 0)}</td>
                         <td colSpan={2} className="px-4 py-4 text-right">Total Amount: ₱{selectedPO.grand_total?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}</td>
                       </tr>

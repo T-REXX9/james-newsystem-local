@@ -27,6 +27,12 @@ vi.mock('../PersonalCommentsTab', () => ({
   default: () => <div>Comments tab content</div>,
 }));
 
+vi.mock('../CallReportActivityPanel', () => ({
+  default: ({ compact }: { compact?: boolean }) => (
+    <div>{compact ? 'Compact sales agent reports' : 'Full sales agent reports'}</div>
+  ),
+}));
+
 vi.mock('../../services/vipTierSettingsService', () => ({
   getVipTierConfig: vi.fn(async () => ({
     silver_entry_threshold: 10000,
@@ -85,7 +91,7 @@ describe('DailyCallCustomerDetailExpansion', () => {
     expect(screen.queryByRole('tab', { name: 'Communication Timeline' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /Communication Timeline/i })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Quick Actions' })).toBeInTheDocument();
-    expect(await screen.findByText('UNLIMITED VIP')).toBeInTheDocument();
+    expect(await screen.findByText('VIP GOLD')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Sales Inquiry' })).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Orders' })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Collections' })).not.toBeInTheDocument();
@@ -112,27 +118,14 @@ describe('DailyCallCustomerDetailExpansion', () => {
     const user = userEvent.setup();
     render(
       <DailyCallCustomerDetailExpansion
-        customer={{
-          ...customer,
-          dailyActivity: [{
-            id: 'report-1',
-            contact_id: customer.id,
-            activity_date: '2026-06-21',
-            activity_type: 'call',
-            activity_count: 1,
-            notes: '[Sales Agent Report] Customer requested updated quotation.',
-            agent_name: 'Jane Doe',
-          }],
-        }}
-        currentUser={{ id: 'master-1', role: 'Master User', full_name: 'Master User' } as any}
+        customer={customer}
+        currentUser={{ id: 'master-1', role: 'Master User', full_name: 'Master User', user_type: '1' } as any}
       />
     );
 
     await user.click(screen.getByRole('tab', { name: 'Sales Agent Activity' }));
-    expect(screen.getByText('Sales agent call report')).toBeInTheDocument();
-    expect(screen.getByText('Customer requested updated quotation.')).toBeInTheDocument();
-    expect(screen.getByText('Contacted by Jane Doe')).toBeInTheDocument();
-    expect(screen.getByText(/Sales → Daily Call Monitoring/)).toBeInTheDocument();
+    expect(screen.getByText('Full sales agent reports')).toBeInTheDocument();
+    expect(screen.getByText(/Master Users can reply directly to each report/)).toBeInTheDocument();
   });
 
   it('opens the real management-instruction form and removes decorative quick actions', async () => {
