@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import html2canvas from 'html2canvas';
 import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
   Search,
   Printer,
+  Download,
   CheckCircle2,
   ClipboardList,
 } from 'lucide-react';
@@ -82,6 +84,7 @@ const formatCurrency = (value?: number | string | null): string => {
 
 const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSlipRefNo, initialMonth, initialYear, initialStatus }) => {
   const { addToast } = useToast();
+  const orderSlipExportRef = React.useRef<HTMLElement | null>(null);
   const [selectedSlip, setSelectedSlip] = useState<OrderSlip | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | OrderSlipStatus>(initialStatus || 'all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -105,6 +108,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
   const [trackingNoDraft, setTrackingNoDraft] = useState('');
   const [trackingSaveLoading, setTrackingSaveLoading] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
+  const [exportingJpeg, setExportingJpeg] = useState(false);
 
   useEffect(() => {
     if (!initialMonth || !initialYear) return;
@@ -678,6 +682,103 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
     return 'Unposted';
   };
   const selectedItems = selectedSlip?.items || [];
+  const handleExportJpeg = async () => {
+    const formElement = orderSlipExportRef.current;
+    if (!formElement || exportingJpeg) return;
+
+    setExportingJpeg(true);
+    try {
+      await document.fonts?.ready;
+      const formBounds = formElement.getBoundingClientRect();
+      const exportWidth = Math.ceil(Math.max(formElement.scrollWidth, formElement.clientWidth, formBounds.width, 1140));
+      const exportHeight = Math.ceil(Math.max(formElement.scrollHeight, formElement.clientHeight, formBounds.height, 456));
+      const canvas = await html2canvas(formElement, {
+        backgroundColor: '#ffffff',
+        scale: Math.min(2, window.devicePixelRatio || 1.5),
+        useCORS: true,
+        width: exportWidth,
+        height: exportHeight,
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: Math.max(document.documentElement.clientWidth, exportWidth),
+        windowHeight: Math.max(document.documentElement.clientHeight, exportHeight),
+        ignoreElements: (element) => element.hasAttribute('data-jpeg-export-ignore'),
+        onclone: (_document, clonedElement) => {
+          clonedElement.setAttribute(
+            'style',
+            `${clonedElement.getAttribute('style') || ''}; width: ${exportWidth}px; height: auto; min-height: ${exportHeight}px; overflow: visible;`
+          );
+          clonedElement.querySelectorAll<HTMLElement>('[data-jpeg-export-ignore]').forEach((element) => {
+            element.style.display = 'none';
+          });
+          clonedElement.querySelectorAll<HTMLElement>('.overflow-x-auto, .overflow-y-auto, form, table, tbody').forEach((element) => {
+            element.style.overflow = 'visible';
+            element.style.maxHeight = 'none';
+          });
+          clonedElement.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input, select, textarea').forEach((control) => {
+            if (control.type === 'hidden' || control.classList.contains('sr-only')) return;
+            const replacement = _document.createElement('div');
+            const selectedOption = control instanceof HTMLSelectElement
+              ? control.options[control.selectedIndex]?.text || control.value
+              : control.value;
+            replacement.textContent = String(selectedOption || control.getAttribute('placeholder') || '').trim() || '-';
+            replacement.className = control.className;
+            replacement.style.boxSizing = 'border-box';
+            replacement.style.display = 'flex';
+            replacement.style.alignItems = 'center';
+            replacement.style.minHeight = `${Math.max(control.offsetHeight || 0, 34)}px`;
+            replacement.style.height = 'auto';
+            replacement.style.overflow = 'visible';
+            replacement.style.whiteSpace = control instanceof HTMLTextAreaElement ? 'pre-wrap' : 'normal';
+            replacement.style.wordBreak = 'break-word';
+            replacement.style.lineHeight = '1.25';
+            control.replaceWith(replacement);
+          });
+          clonedElement.querySelectorAll<HTMLElement>('[data-jpeg-export-plain-value]').forEach((element) => {
+            element.style.display = 'inline-flex';
+            element.style.alignItems = 'center';
+            element.style.justifyContent = 'center';
+            element.style.minHeight = '24px';
+            element.style.height = 'auto';
+            element.style.overflow = 'visible';
+            element.style.lineHeight = '1.25';
+            element.style.paddingTop = '4px';
+            element.style.paddingBottom = '4px';
+          });
+        },
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            reject(new Error('Unable to create JPEG image.'));
+            return;
+          }
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          const safeSlipNo = (selectedSlip?.slip_no || 'order-slip').replace(/[^a-z0-9-]+/gi, '-');
+          link.href = url;
+          link.download = `${safeSlipNo}-order-slip.jpg`;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          URL.revokeObjectURL(url);
+          resolve();
+        }, 'image/jpeg', 0.92);
+      });
+
+      addToast({ type: 'success', message: 'Order slip JPEG exported.' });
+    } catch (error) {
+      console.error('Error exporting order slip JPEG:', error);
+      addToast({
+        type: 'error',
+        title: 'Unable to export JPEG',
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    } finally {
+      setExportingJpeg(false);
+    }
+  };
 
   const legacyLayout = (
     <div className="min-h-full overflow-y-auto bg-[#f4f4f4] px-5 py-10 text-[#202020] dark:bg-[#f4f4f4] dark:text-[#202020]" style={{ fontFamily: 'Arial, sans-serif' }}>
@@ -731,10 +832,22 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
           </div>
         </section>
 
-        <section className="min-h-[456px] overflow-hidden rounded-[5px] border border-[#d7d7d7] bg-white">
+        <section ref={orderSlipExportRef} className="min-h-[456px] overflow-hidden rounded-[5px] border border-[#d7d7d7] bg-white">
           <div className="flex h-[64px] items-center justify-between border-b border-[#d7d7d7] px-5">
             <div className="relative flex h-full items-center text-[18px] font-semibold text-[#29475f] after:absolute after:bottom-[-1px] after:left-0 after:h-px after:w-[113px] after:bg-[#6a92b3]">ORDER SLIP</div>
-            <div className="flex items-center gap-[40px]"><span className="text-[21px] font-semibold text-[#29475f]">Order No. :</span><input readOnly value={selectedSlip?.slip_no || ''} aria-label="Order number" className="h-[35px] w-[100px] rounded-[4px] border border-[#c9c9c9] bg-white px-3 text-[12px] text-[#444]" /></div>
+            <div className="flex items-center gap-[24px]">
+              <button
+                type="button"
+                onClick={handleExportJpeg}
+                disabled={exportingJpeg}
+                data-jpeg-export-ignore
+                className="inline-flex h-[35px] items-center gap-2 rounded-[4px] bg-[#5d82a2] px-3 text-[13px] font-semibold text-white hover:bg-[#50738f] disabled:opacity-60"
+              >
+                <Download className="h-4 w-4" />
+                {exportingJpeg ? 'Exporting...' : 'Export JPEG'}
+              </button>
+              <span className="text-[21px] font-semibold text-[#29475f]">Order No. :</span><input readOnly value={selectedSlip?.slip_no || ''} aria-label="Order number" className="h-[35px] w-[100px] rounded-[4px] border border-[#c9c9c9] bg-white px-3 text-[12px] text-[#444]" />
+            </div>
           </div>
 
           <div className="px-[25px] pb-[28px] pt-[29px]">
@@ -765,11 +878,11 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                 <tbody>{selectedItems.length > 0 ? selectedItems.map((item, index) => <tr key={item.id || `${item.item_code}-${index}`} className="bg-[#fafafa]">
                   <td className="px-2 py-[9px]"><input readOnly value={item.qty} className="h-[35px] w-[70px] rounded border border-[#ccc] bg-white px-2" /></td><td className="px-2 py-[9px]"><input readOnly value={item.description || ''} className={legacyInputClass} /></td><td className="px-2 py-[9px]"><select disabled value={String(item.unit_price || 0)} className={`${legacyInputClass} disabled:bg-white disabled:text-[#333]`}><option value={String(item.unit_price || 0)}>{Number(item.unit_price || 0).toFixed(2)}</option></select></td><td className="px-2 py-[9px]"><input readOnly value={Number(item.amount || 0).toFixed(2)} className="h-[35px] w-[70px] rounded border border-[#ccc] bg-white px-2" /></td>
                 </tr>) : <tr className="bg-[#fafafa]"><td className="px-2 py-[9px]"><input readOnly className="h-[35px] w-[70px] rounded border border-[#ccc] bg-white px-2" /></td><td className="px-2 py-[9px]"><input readOnly className={legacyInputClass} /></td><td className="px-2 py-[9px]"><select disabled className={`${legacyInputClass} disabled:bg-white`}><option /></select></td><td className="px-2 py-[9px]"><input readOnly className="h-[35px] w-[70px] rounded border border-[#ccc] bg-white px-2" /></td></tr>}</tbody>
-                <tfoot><tr><td colSpan={4} className="px-2 py-[9px] text-right font-bold">Total: <span className="rounded-full bg-[#6f91af] px-2 py-[2px] font-bold text-white">{Number(selectedSlip?.grand_total || 0).toFixed(2)}</span></td></tr></tfoot>
+                <tfoot><tr><td colSpan={4} className="px-2 py-[9px] text-right font-bold">Total: <span data-jpeg-export-plain-value className="inline-flex min-h-[24px] items-center rounded-full bg-[#6f91af] px-3 py-1 font-bold leading-tight text-white">{Number(selectedSlip?.grand_total || 0).toFixed(2)}</span></td></tr></tfoot>
               </table>
             </div>
 
-            {selectedSlip && <div className="mt-2 flex flex-wrap items-center justify-end gap-[5px] border-t border-[#e3e3e3] pt-3 print:hidden">
+            {selectedSlip && <div data-jpeg-export-ignore className="mt-2 flex flex-wrap items-center justify-end gap-[5px] border-t border-[#e3e3e3] pt-3 print:hidden">
               <select value={trackingNoDraft} onChange={(event) => setTrackingNoDraft(event.target.value)} aria-label="Tracking number" className="h-[34px] rounded border border-[#ccc] bg-white px-3 text-[13px]"><option value="">Select Tracking</option>{selectedSlip.tracking_no && !selectedSlip.tracking_options?.includes(selectedSlip.tracking_no) && <option value={selectedSlip.tracking_no}>{selectedSlip.tracking_no}</option>}{(selectedSlip.tracking_options || []).map((trackingNo) => <option key={trackingNo} value={trackingNo}>{trackingNo}</option>)}</select>
               <button type="button" onClick={() => void handleSaveTrackingNo()} disabled={trackingSaveLoading || trackingNoDraft === (selectedSlip.tracking_no || '')} className="rounded-[4px] bg-[#5d82a2] px-[15px] py-[9px] text-[13px] text-white disabled:opacity-50">{trackingSaveLoading ? 'Saving...' : 'Update Tracking'}</button>
               {selectedSlip.status === OrderSlipStatus.DRAFT && canProcessOrderSlip && <button type="button" onClick={() => void handleFinalize()} disabled={finalizing} className="rounded-[4px] bg-[#4caf50] px-[15px] py-[9px] text-[13px] text-white disabled:opacity-50">{finalizing ? 'Finalizing...' : 'Finalize'}</button>}

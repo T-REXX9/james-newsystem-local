@@ -1,14 +1,20 @@
 import React from 'react';
-import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import SalesOrderView from '../SalesOrderView';
 import { ToastProvider } from '../ToastProvider';
 
+const html2canvasMock = vi.hoisted(() => vi.fn());
 const getAllSalesOrdersMock = vi.fn();
 const getSalesOrderMock = vi.fn();
 const fetchContactsMock = vi.fn();
 const fetchContactByIdMock = vi.fn();
 const fetchProfilesMock = vi.fn();
+
+vi.mock('html2canvas', () => ({
+  default: (...args: any[]) => html2canvasMock(...args),
+}));
 
 vi.mock('../../services/salesOrderLocalApiService', () => ({
   confirmSalesOrder: vi.fn(),
@@ -79,9 +85,22 @@ describe('SalesOrderView', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    html2canvasMock.mockResolvedValue({
+      toBlob: (callback: BlobCallback) => callback(new Blob(['jpeg-data'], { type: 'image/jpeg' })),
+    });
+    Object.defineProperty(document, 'fonts', {
+      configurable: true,
+      value: { ready: Promise.resolve() },
+    });
+    URL.createObjectURL = vi.fn(() => 'blob:sales-order-jpeg');
+    URL.revokeObjectURL = vi.fn();
     fetchProfilesMock.mockResolvedValue([]);
     fetchContactByIdMock.mockResolvedValue(null);
     getSalesOrderMock.mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it('shows unfiltered sales orders newest to oldest by default', async () => {
@@ -197,6 +216,37 @@ describe('SalesOrderView', () => {
     await waitFor(() => {
       expect(screen.getByDisplayValue('SO-TARGET')).toBeInTheDocument();
     });
+  });
+
+  it('exports only the sales order form as a JPEG', async () => {
+    const user = userEvent.setup();
+    getAllSalesOrdersMock.mockResolvedValue([
+      makeOrder({ id: 'target-order', order_no: 'SO-TARGET', grand_total: 10.5 }),
+    ]);
+    getSalesOrderMock.mockResolvedValue(makeOrder({ id: 'target-order', order_no: 'SO-TARGET', grand_total: 10.5 }));
+    fetchContactsMock.mockResolvedValue([
+      {
+        id: 'contact-1',
+        company: 'Acme Corp',
+        transactionType: 'Invoice',
+      },
+    ]);
+
+    renderView({ initialOrderId: 'target-order' });
+
+    await screen.findByDisplayValue('SO-TARGET');
+    await user.click(screen.getByRole('button', { name: /export jpeg/i }));
+
+    await waitFor(() => expect(html2canvasMock).toHaveBeenCalledTimes(1));
+    const [capturedElement, options] = html2canvasMock.mock.calls[0];
+    expect(capturedElement).toHaveTextContent('SALES ORDER');
+    expect(capturedElement).toHaveTextContent('SO No. : SO-TARGET');
+    expect(capturedElement).not.toHaveTextContent('Filtered By:');
+    expect(options.backgroundColor).toBe('#ffffff');
+    expect(options.width).toBeGreaterThan(0);
+    expect(options.height).toBeGreaterThan(0);
+    expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:sales-order-jpeg');
   });
 
   it('shows the informational over-credit warning when balance exceeds credit limit', async () => {

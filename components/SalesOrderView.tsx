@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import html2canvas from 'html2canvas';
 import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
   Search,
   FileText,
+  Download,
 } from 'lucide-react';
 import {
   Contact,
@@ -104,6 +106,7 @@ const formatCurrency = (value?: number | string | null): string => {
 const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initialMonth, initialYear }) => {
   const { addToast } = useToast();
   const userId = String(getLocalAuthSession()?.userProfile?.id || '').trim();
+  const salesOrderExportRef = React.useRef<HTMLElement | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | string>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -129,6 +132,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
   const [unpostModalOpen, setUnpostModalOpen] = useState(false);
   const [unpostLoading, setUnpostLoading] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
+  const [exportingJpeg, setExportingJpeg] = useState(false);
 
   useEffect(() => {
     if (!initialMonth || !initialYear) return;
@@ -824,6 +828,103 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
     if (currency) return Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     return String(value);
   };
+  const handleExportJpeg = async () => {
+    const formElement = salesOrderExportRef.current;
+    if (!formElement || exportingJpeg) return;
+
+    setExportingJpeg(true);
+    try {
+      await document.fonts?.ready;
+      const formBounds = formElement.getBoundingClientRect();
+      const exportWidth = Math.ceil(Math.max(formElement.scrollWidth, formElement.clientWidth, formBounds.width, 1140));
+      const exportHeight = Math.ceil(Math.max(formElement.scrollHeight, formElement.clientHeight, formBounds.height, 576));
+      const canvas = await html2canvas(formElement, {
+        backgroundColor: '#ffffff',
+        scale: Math.min(2, window.devicePixelRatio || 1.5),
+        useCORS: true,
+        width: exportWidth,
+        height: exportHeight,
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: Math.max(document.documentElement.clientWidth, exportWidth),
+        windowHeight: Math.max(document.documentElement.clientHeight, exportHeight),
+        ignoreElements: (element) => element.hasAttribute('data-jpeg-export-ignore'),
+        onclone: (_document, clonedElement) => {
+          clonedElement.setAttribute(
+            'style',
+            `${clonedElement.getAttribute('style') || ''}; width: ${exportWidth}px; height: auto; min-height: ${exportHeight}px; overflow: visible;`
+          );
+          clonedElement.querySelectorAll<HTMLElement>('[data-jpeg-export-ignore]').forEach((element) => {
+            element.style.display = 'none';
+          });
+          clonedElement.querySelectorAll<HTMLElement>('.overflow-x-auto, .overflow-y-auto, form, table, tbody').forEach((element) => {
+            element.style.overflow = 'visible';
+            element.style.maxHeight = 'none';
+          });
+          clonedElement.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input, select, textarea').forEach((control) => {
+            if (control.type === 'hidden' || control.classList.contains('sr-only')) return;
+            const replacement = _document.createElement('div');
+            const selectedOption = control instanceof HTMLSelectElement
+              ? control.options[control.selectedIndex]?.text || control.value
+              : control.value;
+            replacement.textContent = String(selectedOption || control.getAttribute('placeholder') || '').trim() || '-';
+            replacement.className = control.className;
+            replacement.style.boxSizing = 'border-box';
+            replacement.style.display = 'flex';
+            replacement.style.alignItems = 'center';
+            replacement.style.minHeight = `${Math.max(control.offsetHeight || 0, 34)}px`;
+            replacement.style.height = 'auto';
+            replacement.style.overflow = 'visible';
+            replacement.style.whiteSpace = control instanceof HTMLTextAreaElement ? 'pre-wrap' : 'normal';
+            replacement.style.wordBreak = 'break-word';
+            replacement.style.lineHeight = '1.25';
+            control.replaceWith(replacement);
+          });
+          clonedElement.querySelectorAll<HTMLElement>('[data-jpeg-export-plain-value]').forEach((element) => {
+            element.style.display = 'inline-flex';
+            element.style.alignItems = 'center';
+            element.style.justifyContent = 'center';
+            element.style.minHeight = '24px';
+            element.style.height = 'auto';
+            element.style.overflow = 'visible';
+            element.style.lineHeight = '1.25';
+            element.style.paddingTop = '4px';
+            element.style.paddingBottom = '4px';
+          });
+        },
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            reject(new Error('Unable to create JPEG image.'));
+            return;
+          }
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          const safeOrderNo = (selectedOrder?.order_no || nextOrderNumber || 'sales-order').replace(/[^a-z0-9-]+/gi, '-');
+          link.href = url;
+          link.download = `${safeOrderNo}-sales-order.jpg`;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          URL.revokeObjectURL(url);
+          resolve();
+        }, 'image/jpeg', 0.92);
+      });
+
+      addToast({ type: 'success', message: 'Sales order JPEG exported.' });
+    } catch (error) {
+      console.error('Error exporting sales order JPEG:', error);
+      addToast({
+        type: 'error',
+        title: 'Unable to export JPEG',
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    } finally {
+      setExportingJpeg(false);
+    }
+  };
   const filteredByLabel = targetMonthYear.month && targetMonthYear.year
     ? `Year: ${targetMonthYear.year} Month: ${MONTH_OPTIONS[targetMonthYear.month - 1].slice(0, 3)},`
     : 'All Records';
@@ -891,10 +992,22 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
           </div>
         </section>
 
-        <section className="min-h-[576px] overflow-hidden rounded-[5px] border border-[#d7d7d7] bg-white">
+        <section ref={salesOrderExportRef} className="min-h-[576px] overflow-hidden rounded-[5px] border border-[#d7d7d7] bg-white">
           <div className="flex h-[64px] items-center justify-between border-b border-[#d7d7d7] px-5">
             <div className="relative flex h-full items-center text-[18px] font-semibold text-[#29475f] after:absolute after:bottom-[-1px] after:left-0 after:h-px after:w-[135px] after:bg-[#6a92b3]">SALES ORDER</div>
-            <div className="text-[23px] font-semibold text-[#29475f]">SO No. : {selectedOrder?.order_no || nextOrderNumber}</div>
+            <div className="flex items-center gap-[24px]">
+              <button
+                type="button"
+                onClick={handleExportJpeg}
+                disabled={exportingJpeg}
+                data-jpeg-export-ignore
+                className="inline-flex h-[35px] items-center gap-2 rounded-[4px] bg-[#5d82a2] px-3 text-[13px] font-semibold text-white hover:bg-[#50738f] disabled:opacity-60"
+              >
+                <Download className="h-4 w-4" />
+                {exportingJpeg ? 'Exporting...' : 'Export JPEG'}
+              </button>
+              <div className="text-[23px] font-semibold text-[#29475f]">SO No. : {selectedOrder?.order_no || nextOrderNumber}</div>
+            </div>
             {selectedOrder && <input readOnly value={selectedOrder.order_no} aria-label="Sales order number" className="sr-only" />}
           </div>
 
@@ -946,12 +1059,12 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                     <td className="px-2 py-2">{item.item_code || ''}</td><td className="px-2 py-2">{item.qty}</td><td className="px-2 py-2">{item.location || ''}</td><td className="px-2 py-2">{item.part_no || ''}</td><td className="px-2 py-2">{item.brand || ''}</td><td className="px-2 py-2 text-left">{item.description || ''}</td><td className="px-2 py-2 text-right">{Number(item.unit_price || 0).toFixed(2)}</td><td className="px-2 py-2">{item.remark || item.approval_status || ''}</td><td className="px-2 py-2 text-right">{Number(item.amount || 0).toFixed(2)}</td>
                   </tr>)}</tbody>
                   <tfoot><tr>
-                    <td className="px-2 py-3 text-right font-bold">Total Qty:</td><td className="px-2 py-3"><span className="rounded-full bg-[#6f91af] px-2 py-[2px] font-bold text-white">{totalQuantity.toFixed(2)}</span></td><td colSpan={5}></td><td className="px-2 py-3 text-right font-bold">Grand Total:</td><td className="px-2 py-3"><span className="rounded-full bg-[#ef4b4b] px-2 py-[2px] font-bold text-white">{Number(selectedOrder?.grand_total || 0).toFixed(2)}</span></td>
+                    <td className="px-2 py-3 text-right font-bold">Total Qty:</td><td className="px-2 py-3"><span data-jpeg-export-plain-value className="inline-flex min-h-[24px] items-center rounded-full bg-[#6f91af] px-3 py-1 font-bold leading-tight text-white">{totalQuantity.toFixed(2)}</span></td><td colSpan={5}></td><td className="px-2 py-3 text-right font-bold">Grand Total:</td><td className="px-2 py-3"><span data-jpeg-export-plain-value className="inline-flex min-h-[24px] items-center rounded-full bg-[#ef4b4b] px-3 py-1 font-bold leading-tight text-white">{Number(selectedOrder?.grand_total || 0).toFixed(2)}</span></td>
                   </tr></tfoot>
                 </table>
               </div>
 
-              {selectedOrder && <div className="mt-3 flex flex-wrap justify-end gap-[5px] border-t border-[#e3e3e3] pt-4 print:hidden">
+              {selectedOrder && <div data-jpeg-export-ignore className="mt-3 flex flex-wrap justify-end gap-[5px] border-t border-[#e3e3e3] pt-4 print:hidden">
                 {canConfirm && <button type="button" onClick={() => void handleConfirmOrder()} disabled={confirming} className="rounded-[4px] bg-[#4caf50] px-[18px] py-[9px] text-[13px] text-white disabled:opacity-50">{confirming ? 'Processing...' : confirmLabel}</button>}
                 {canGenerate && <button type="button" onClick={() => setConversionModalOpen(true)} className="rounded-[4px] bg-[#4caf50] px-[18px] py-[9px] text-[13px] text-white">Generate Sales Transaction</button>}
                 {canGenerate && <button type="button" onClick={() => window.print()} className="rounded-[4px] bg-[#5d82a2] px-[18px] py-[9px] text-[13px] text-white">Print SO</button>}
