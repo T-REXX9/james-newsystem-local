@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import html2canvas from 'html2canvas';
 import {
   Plus,
   Trash2,
   AlertCircle,
   Copy,
+  Download,
   RefreshCcw,
   Sun,
   Moon,
@@ -120,8 +122,10 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 }) => {
   const { addToast } = useToast();
   const lastAppliedPrefillRef = React.useRef<string | null>(null);
+  const salesInquiryExportRef = React.useRef<HTMLElement | null>(null);
   // Data
   const [loading, setLoading] = useState(false);
+  const [exportingJpeg, setExportingJpeg] = useState(false);
   const [selectedInquiry, setSelectedInquiry] = useState<SalesInquiry | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | SalesInquiryStatus>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -331,6 +335,11 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   const handleOpenProductModal = (rowTempId: string) => {
     setActiveRowId(rowTempId);
     setShowProductModal(true);
+  };
+
+  const handleCloseProductModal = () => {
+    setShowProductModal(false);
+    setActiveRowId(null);
   };
 
   const handleProductSelect = (product: any) => {
@@ -746,8 +755,9 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
   // Add new item row
   const addItemRow = () => {
-    setItems([
-      ...items,
+    const tempId = `temp-${Date.now()}`;
+    setItems((prev) => [
+      ...prev,
       {
         qty: 1,
         part_no: '',
@@ -759,11 +769,12 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         amount: 0,
         remark: '',
         approval_status: 'approved',
-        tempId: `temp-${Date.now()}`,
+        tempId,
         isNew: true,
         isManual: false,
       },
     ]);
+    handleOpenProductModal(tempId);
   };
 
   const addManualItemRow = () => {
@@ -1175,6 +1186,110 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     setShowPrintPreview(true);
     window.setTimeout(() => window.print(), 150);
   };
+  const handleExportJpeg = async () => {
+    const formElement = salesInquiryExportRef.current;
+    if (!formElement || exportingJpeg) return;
+
+    setExportingJpeg(true);
+    try {
+      await document.fonts?.ready;
+      const formBounds = formElement.getBoundingClientRect();
+      const exportWidth = Math.ceil(Math.max(formElement.scrollWidth, formElement.clientWidth, formBounds.width, 1140));
+      const exportHeight = Math.ceil(Math.max(formElement.scrollHeight, formElement.clientHeight, formBounds.height, 695));
+      const canvas = await html2canvas(formElement, {
+        backgroundColor: '#ffffff',
+        scale: Math.min(2, window.devicePixelRatio || 1.5),
+        useCORS: true,
+        width: exportWidth,
+        height: exportHeight,
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: Math.max(document.documentElement.clientWidth, exportWidth),
+        windowHeight: Math.max(document.documentElement.clientHeight, exportHeight),
+        ignoreElements: (element) => element.hasAttribute('data-jpeg-export-ignore'),
+        onclone: (_document, clonedElement) => {
+          clonedElement.setAttribute(
+            'style',
+            `${clonedElement.getAttribute('style') || ''}; width: ${exportWidth}px; height: auto; min-height: ${exportHeight}px; overflow: visible;`
+          );
+          clonedElement.querySelectorAll<HTMLElement>('[data-jpeg-export-ignore]').forEach((element) => {
+            element.style.display = 'none';
+          });
+          clonedElement.querySelectorAll<HTMLElement>('.overflow-x-auto, .overflow-y-auto, form, table, tbody').forEach((element) => {
+            element.style.overflow = 'visible';
+            element.style.maxHeight = 'none';
+          });
+          clonedElement.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input, select, textarea').forEach((control) => {
+            if (control.type === 'hidden' || control.classList.contains('sr-only')) return;
+            const replacement = _document.createElement('div');
+            const selectedOption = control instanceof HTMLSelectElement
+              ? control.options[control.selectedIndex]?.text || control.value
+              : control.value;
+            const displayValue = String(selectedOption || control.getAttribute('placeholder') || '').trim();
+            replacement.textContent = displayValue || '-';
+            replacement.className = control.className;
+            replacement.removeAttribute('id');
+            replacement.removeAttribute('name');
+            replacement.style.boxSizing = 'border-box';
+            replacement.style.display = 'flex';
+            replacement.style.alignItems = 'center';
+            replacement.style.minHeight = `${Math.max(control.offsetHeight || 0, 34)}px`;
+            replacement.style.height = 'auto';
+            replacement.style.overflow = 'visible';
+            replacement.style.whiteSpace = control instanceof HTMLTextAreaElement ? 'pre-wrap' : 'normal';
+            replacement.style.wordBreak = 'break-word';
+            replacement.style.lineHeight = '1.25';
+            if (control instanceof HTMLInputElement && (control.type === 'number' || control.type === 'date')) {
+              replacement.style.justifyContent = control.type === 'number' ? 'center' : 'flex-start';
+            }
+            control.replaceWith(replacement);
+          });
+          clonedElement.querySelectorAll<HTMLElement>('[data-jpeg-export-plain-value]').forEach((element) => {
+            element.style.display = 'inline-flex';
+            element.style.alignItems = 'center';
+            element.style.justifyContent = 'center';
+            element.style.minHeight = '24px';
+            element.style.height = 'auto';
+            element.style.overflow = 'visible';
+            element.style.lineHeight = '1.25';
+            element.style.paddingTop = '4px';
+            element.style.paddingBottom = '4px';
+          });
+        },
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            reject(new Error('Unable to create JPEG image.'));
+            return;
+          }
+
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          const safeInquiryNo = (activeInquiryNumberDisplay || referenceNo || 'sales-inquiry').replace(/[^a-z0-9-]+/gi, '-');
+          link.href = url;
+          link.download = `${safeInquiryNo}-sales-inquiry.jpg`;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          URL.revokeObjectURL(url);
+          resolve();
+        }, 'image/jpeg', 0.92);
+      });
+
+      addToast({ type: 'success', message: 'Sales inquiry JPEG exported.' });
+    } catch (error) {
+      console.error('Error exporting sales inquiry JPEG:', error);
+      addToast({
+        type: 'error',
+        title: 'Unable to export JPEG',
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    } finally {
+      setExportingJpeg(false);
+    }
+  };
   const priceGroupDisplay = normalizePriceGroup(priceGroup);
   const canGenerateSO = Boolean(
     selectedInquiry &&
@@ -1349,10 +1464,20 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
           </div>
         </section>
 
-        <section className="min-h-[695px] overflow-visible rounded-[5px] border border-[#d7d7d7] bg-white">
+        <section ref={salesInquiryExportRef} className="min-h-[695px] overflow-visible rounded-[5px] border border-[#d7d7d7] bg-white">
           <div className="flex h-[64px] items-center justify-between border-b border-[#d7d7d7] px-5">
             <div className="relative flex h-full items-center text-[18px] font-semibold text-[#29475f] after:absolute after:bottom-[-1px] after:left-0 after:h-px after:w-[135px] after:bg-[#6a92b3]">SALES INQUIRY</div>
             <div className="flex items-center gap-[28px]">
+              <button
+                type="button"
+                onClick={handleExportJpeg}
+                disabled={exportingJpeg}
+                data-jpeg-export-ignore
+                className="inline-flex h-[35px] items-center gap-2 rounded-[4px] bg-[#5d82a2] px-3 text-[13px] font-semibold text-white hover:bg-[#50738f] disabled:opacity-60"
+              >
+                <Download className="h-4 w-4" />
+                {exportingJpeg ? 'Exporting...' : 'Export JPEG'}
+              </button>
               <span className="text-[23px] font-semibold text-[#29475f]">INQ No. :</span>
               <input readOnly value={activeInquiryNumberDisplay} className="h-[35px] w-[116px] rounded-[4px] border border-[#c9c9c9] bg-[#f2f2f2] px-3 text-[12px] text-[#444]" />
             </div>
@@ -1393,7 +1518,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
               </tbody>
             </table>
 
-            <button type="button" aria-label="Add Item" onClick={addItemRow} disabled={isReadOnly} className="ml-[190px] mt-[9px] rounded-[3px] bg-[#91a9bd] px-[12px] py-[8px] text-[12px] text-white hover:bg-[#7e99b0] disabled:opacity-50">Add Inquiry</button>
+            <button type="button" aria-label="Add Item" onClick={addItemRow} disabled={isReadOnly} data-jpeg-export-ignore className="ml-[190px] mt-[9px] rounded-[3px] bg-[#91a9bd] px-[12px] py-[8px] text-[12px] text-white hover:bg-[#7e99b0] disabled:opacity-50">Add Inquiry</button>
             <button type="submit" aria-label="Create Inquiry" className="sr-only">Create Inquiry</button>
 
             <div className="mt-[24px] overflow-x-auto">
@@ -1412,11 +1537,11 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                   <td className={`px-2 py-2 text-center ${remarkClassName(item.remark)}`}>{item.remark || ''}</td>
                   <td className="px-2 py-2 text-center"><button type="button" onClick={() => removeItemRow(item.tempId)} disabled={isReadOnly} className="text-[#c84848] underline disabled:opacity-40">Remove</button></td>
                 </tr>)}</tbody>
-                <tfoot><tr><td colSpan={6} className="px-2 py-3 text-right font-bold">Grand Total:</td><td className="px-2 py-3"><span className="rounded-full bg-[#6f91af] px-2 py-[2px] font-bold text-white">{grandTotal.toFixed(2)}</span></td><td colSpan={2}></td></tr></tfoot>
+                <tfoot><tr><td colSpan={6} className="px-2 py-3 text-right font-bold">Grand Total:</td><td className="px-2 py-3"><span data-jpeg-export-plain-value className="inline-flex min-h-[24px] items-center rounded-full bg-[#6f91af] px-3 py-1 font-bold leading-tight text-white">{grandTotal.toFixed(2)}</span></td><td colSpan={2}></td></tr></tfoot>
               </table>
             </div>
 
-            {(items.length > 0 || (!isCreatingNew && selectedInquiry)) && <div className="mt-3 flex flex-wrap items-center gap-[5px] border-t border-[#e3e3e3] pt-4">
+            {(items.length > 0 || (!isCreatingNew && selectedInquiry)) && <div data-jpeg-export-ignore className="mt-3 flex flex-wrap items-center gap-[5px] border-t border-[#e3e3e3] pt-4">
               <button type="button" onClick={handleDeleteClick} className="rounded-[4px] bg-[#d64b47] px-[20px] py-[9px] text-[13px] text-white">{isCreatingNew ? 'Clear' : 'Cancel'}</button>
               {printableInquiry && <button type="button" onClick={handlePrint} className="rounded-[4px] bg-[#4caf50] px-[20px] py-[9px] text-[13px] text-white">Print</button>}
               <button type="submit" disabled={loading || isReadOnly} className="rounded-[4px] bg-[#4caf50] px-[20px] py-[9px] text-[13px] text-white disabled:opacity-50">{loading ? 'Saving...' : 'Save'}</button>
@@ -1440,7 +1565,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
       {showPrintPreview && printableInquiry && <SalesInquiryPrintPreview inquiry={printableInquiry} customer={selectedCustomer} inquiryNumberLabel={activeInquiryNumberDisplay} preparedBy={String(getLocalAuthSession()?.userProfile?.full_name || '').trim()} onClose={() => setShowPrintPreview(false)} />}
       {showDeleteModal && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"><div className="w-full max-w-sm rounded-[5px] bg-white p-5 shadow-xl"><h3 className="mb-3 text-[18px] font-semibold">{selectedInquiry && !isCreatingNew ? 'Cancel Sales Inquiry' : 'Clear Sales Inquiry'}</h3><p className="mb-5 text-[14px] text-[#555]">{selectedInquiry && !isCreatingNew ? 'Are you sure you want to cancel this Sales Inquiry?' : 'Are you sure you want to clear this draft?'}</p><div className="flex justify-end gap-2"><button type="button" onClick={() => setShowDeleteModal(false)} className="rounded border border-[#ccc] px-4 py-2 text-[13px]">Close</button><button type="button" onClick={handleDeleteConfirm} disabled={deleteConfirming} className="rounded bg-[#337ab7] px-4 py-2 text-[13px] text-white">{deleteConfirming ? 'Working...' : 'Proceed'}</button></div></div></div>}
-      <ProductSearchModal isOpen={showProductModal} onClose={() => setShowProductModal(false)} onSelect={handleProductSelect} />
+      <ProductSearchModal isOpen={showProductModal} onClose={handleCloseProductModal} onSelect={handleProductSelect} />
     </div>
   );
 
@@ -1663,7 +1788,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+      <div ref={salesInquiryExportRef as React.RefObject<HTMLDivElement>} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800">
           <h4 className="font-bold text-base uppercase text-slate-900 dark:text-slate-100">SALES INQUIRY</h4>
           <div className="flex items-center gap-2">
@@ -2152,7 +2277,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                         <td colSpan={7} className="px-3 py-3 border-t border-slate-200 dark:border-slate-800"></td>
                         <td className="px-3 py-3 text-right font-bold border-t border-slate-200 dark:border-slate-800">Grand Total</td>
                         <td className="px-3 py-3 border-t border-slate-200 dark:border-slate-800">
-                          <span className="inline-flex rounded-full bg-brand-blue/10 px-3 py-1 font-bold text-brand-blue">{formatCurrency(grandTotal)}</span>
+                          <span data-jpeg-export-plain-value className="inline-flex min-h-[24px] items-center rounded-full bg-brand-blue/10 px-3 py-1 font-bold leading-tight text-brand-blue">{formatCurrency(grandTotal)}</span>
                         </td>
                         <td colSpan={2} className="border-t border-slate-200 dark:border-slate-800"></td>
                       </tr>
@@ -2212,6 +2337,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
           <button
             type="button"
             onClick={handleDeleteClick}
+            data-jpeg-export-ignore
             className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors font-semibold"
           >
             <Trash2 className="w-4 h-4" />
@@ -2223,6 +2349,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
               <button
                 type="button"
                 onClick={handlePrint}
+                data-jpeg-export-ignore
                 className="px-4 py-2 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 font-semibold hover:bg-emerald-100 transition-colors inline-flex items-center gap-2"
               >
                 <Printer className="w-4 h-4" />
@@ -2231,7 +2358,18 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
             )}
             <button
               type="button"
+              onClick={handleExportJpeg}
+              disabled={exportingJpeg}
+              data-jpeg-export-ignore
+              className="px-4 py-2 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 font-semibold hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-2"
+            >
+              <Download className="w-4 h-4" />
+              {exportingJpeg ? 'EXPORTING...' : 'EXPORT JPEG'}
+            </button>
+            <button
+              type="button"
               onClick={handleDiscardChanges}
+              data-jpeg-export-ignore
               className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
             >
               DISCARD CHANGES
@@ -2240,6 +2378,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
               type="submit"
               form="salesInquiryForm"
               disabled={loading || isReadOnly}
+              data-jpeg-export-ignore
               className="px-4 py-2 rounded-lg bg-slate-900 text-white font-semibold hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {loading ? 'SAVING…' : selectedInquiry && !isCreatingNew ? 'UPDATE INQUIRY' : 'CREATE INQUIRY'}
@@ -2289,7 +2428,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       {/* Product Search Modal */}
       <ProductSearchModal
         isOpen={showProductModal}
-        onClose={() => setShowProductModal(false)}
+        onClose={handleCloseProductModal}
         onSelect={handleProductSelect}
       />
     </div>

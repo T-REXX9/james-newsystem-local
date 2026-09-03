@@ -4,6 +4,7 @@ import { render, screen, cleanup, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import SalesInquiryView from '../SalesInquiryView';
 
+const html2canvasMock = vi.hoisted(() => vi.fn());
 const addToastMock = vi.fn();
 const createSalesInquiryMock = vi.fn();
 const getAllSalesInquiriesMock = vi.fn();
@@ -16,6 +17,10 @@ const fetchProductByIdMock = vi.fn();
 const dispatchWorkflowNotificationMock = vi.fn();
 const markNotificationsAsReadByEntityKeyMock = vi.fn();
 const resolveNotificationUserIdMock = vi.fn();
+
+vi.mock('html2canvas', () => ({
+  default: (...args: any[]) => html2canvasMock(...args),
+}));
 
 vi.mock('../ToastProvider', () => ({
   useToast: () => ({
@@ -185,6 +190,15 @@ const makeInquiry = (overrides: Record<string, any> = {}) => ({
 describe('SalesInquiryView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    html2canvasMock.mockResolvedValue({
+      toBlob: (callback: BlobCallback) => callback(new Blob(['jpeg-data'], { type: 'image/jpeg' })),
+    });
+    Object.defineProperty(document, 'fonts', {
+      configurable: true,
+      value: { ready: Promise.resolve() },
+    });
+    URL.createObjectURL = vi.fn(() => 'blob:sales-inquiry-jpeg');
+    URL.revokeObjectURL = vi.fn();
     fetchContactsMock.mockResolvedValue(baseContacts);
     fetchContactByIdMock.mockImplementation(async (id: string) => baseContacts.find((contact) => contact.id === id) || null);
     getAllSalesInquiriesMock.mockResolvedValue([]);
@@ -250,6 +264,33 @@ describe('SalesInquiryView', () => {
     expect(createSalesInquiryMock).not.toHaveBeenCalled();
   });
 
+  it('exports only the sales inquiry form as a JPEG', async () => {
+    const user = userEvent.setup();
+
+    render(<SalesInquiryView />);
+
+    await waitFor(() => expect(fetchContactsMock).toHaveBeenCalled());
+    await user.click(screen.getByRole('button', { name: /export jpeg/i }));
+
+    await waitFor(() => expect(html2canvasMock).toHaveBeenCalledTimes(1));
+    const [capturedElement, options] = html2canvasMock.mock.calls[0];
+    expect(capturedElement).toHaveTextContent('SALES INQUIRY');
+    expect(capturedElement).toHaveTextContent('INQ No. :');
+    expect(capturedElement.querySelector('[data-jpeg-export-plain-value]')).toHaveTextContent('0.00');
+    expect(capturedElement).not.toHaveTextContent('Filtered By:');
+    expect(options.backgroundColor).toBe('#ffffff');
+    expect(options.width).toBeGreaterThan(0);
+    expect(options.height).toBeGreaterThan(0);
+    expect(options.ignoreElements(document.createElement('button'))).toBe(false);
+
+    const ignoredButton = document.createElement('button');
+    ignoredButton.setAttribute('data-jpeg-export-ignore', '');
+    expect(options.ignoreElements(ignoredButton)).toBe(true);
+    expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:sales-inquiry-jpeg');
+    expect(addToastMock).toHaveBeenCalledWith({ type: 'success', message: 'Sales inquiry JPEG exported.' });
+  });
+
   it('auto-selects the first customer contact and keeps PO No. editable when creating an inquiry', async () => {
     const user = userEvent.setup();
     createSalesInquiryMock.mockResolvedValue({ id: 'inq-1', contact_id: 'c-1' });
@@ -278,7 +319,7 @@ describe('SalesInquiryView', () => {
     expect(poInput).toHaveValue('PO-CUSTOM-001');
 
     await user.click(screen.getByRole('button', { name: /add item/i }));
-    await user.click(screen.getAllByText(/click to search product/i)[0]);
+    expect(screen.getByRole('button', { name: 'Select Product' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Select Product' }));
     await user.click(screen.getByRole('button', { name: /create inquiry/i }));
 
@@ -342,7 +383,7 @@ describe('SalesInquiryView', () => {
 
     await user.selectOptions(screen.getByLabelText('Customer'), 'c-1');
     await user.click(screen.getByRole('button', { name: /add item/i }));
-    await user.click(screen.getAllByText(/click to search product/i)[0]);
+    expect(screen.getByRole('button', { name: 'Select Product' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Select Product' }));
 
     expect(await screen.findByDisplayValue('300')).toBeInTheDocument();
