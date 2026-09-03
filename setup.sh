@@ -668,6 +668,23 @@ run_as_install_owner() {
   "$@"
 }
 
+clean_deployment_lockfile_drift() {
+  local target_dir="$1"
+  local repo_label="$2"
+  local dirty_lockfiles
+
+  dirty_lockfiles="$(run_as_install_owner git -C "$target_dir" status --porcelain -- package-lock.json 2>/dev/null || true)"
+  if [[ -z "$dirty_lockfiles" ]]; then
+    return 0
+  fi
+
+  echo "Notice: Discarding local package-lock.json drift in $repo_label before pulling updates."
+  run_as_install_owner git -C "$target_dir" restore -- package-lock.json || {
+    echo "ERROR: Unable to restore package-lock.json in $repo_label."
+    exit 1
+  }
+}
+
 git_safe_clone_or_pull() {
   local repo_url="$1"
   local target_dir="$2"
@@ -682,6 +699,7 @@ git_safe_clone_or_pull() {
       exit 1
     }
     run_as_install_owner git -C "$target_dir" checkout main
+    clean_deployment_lockfile_drift "$target_dir" "$repo_label"
     run_as_install_owner env GIT_TERMINAL_PROMPT=0 git -C "$target_dir" pull --ff-only origin main || {
       echo "ERROR: Unable to pull latest changes for $repo_label."
       echo "If repo is private, export GITHUB_TOKEN=<token-with-repo-scope> and re-run."
