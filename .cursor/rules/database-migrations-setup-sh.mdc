@@ -1,0 +1,34 @@
+---
+description: Require every new API migration to be registered in setup.sh for auto-run on deploy
+globs: api/migrations/**/*.sql,james-newsystem/setup.sh,**/setup.sh
+alwaysApply: false
+---
+
+# Database migrations must be registered in setup.sh
+
+Deployments only auto-apply migrations listed in `apply_required_database_migrations()` inside `james-newsystem/setup.sh`. A migration file under `api/migrations/` is **not** enough on its own.
+
+## When adding or changing a migration
+
+1. Add the SQL file under `api/migrations/` using the next sequential number (e.g. `030_description.sql`).
+2. **In the same change**, append that file to the `migrations=( ... )` array in `james-newsystem/setup.sh`, keeping numeric order.
+3. Prefer idempotent SQL (`IF NOT EXISTS`, safe `ALTER` patterns) because `setup.sh` may re-run migrations on update.
+
+## Example
+
+```bash
+# james-newsystem/setup.sh — inside apply_required_database_migrations()
+local migrations=(
+  ...
+  "$API_DIR/migrations/029_add_call_report_call_details.sql"
+  "$API_DIR/migrations/030_your_new_migration.sql"  # ← add every new migration here
+)
+```
+
+## Checklist before finishing
+
+- [ ] New file exists in `api/migrations/`
+- [ ] Same PR/commit updates `james-newsystem/setup.sh`
+- [ ] Migration filename matches the setup.sh entry exactly
+
+If you add a migration without updating `setup.sh`, call that out explicitly — deploy/update will skip it.

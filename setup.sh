@@ -180,6 +180,10 @@ apply_required_database_migrations() {
     "$API_DIR/migrations/023_add_customer_product_soft_delete_columns.sql"
     "$API_DIR/migrations/024_create_incident_return_approval_workflow.sql"
     "$API_DIR/migrations/025_optimize_daily_call_master_list_indexes.sql"
+    "$API_DIR/migrations/026_add_incident_report_times.sql"
+    "$API_DIR/migrations/027_optimize_suggested_stock_report_indexes.sql"
+    "$API_DIR/migrations/028_create_call_report_threads.sql"
+    "$API_DIR/migrations/029_add_call_report_call_details.sql"
   )
 
   echo "Applying required database migrations..."
