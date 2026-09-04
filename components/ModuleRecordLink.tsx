@@ -1,26 +1,26 @@
 import React from 'react';
+import {
+  buildModuleRecordHref,
+  navigateWorkflow,
+  type WorkflowNavigateMode,
+} from '../utils/workflowNavigate';
+
+export { buildModuleRecordHref, openModuleInNewWindow } from '../utils/workflowNavigate';
 
 interface ModuleRecordLinkProps extends Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'href' | 'onClick'> {
   tab: string;
   payload?: Record<string, string | undefined>;
   onOpen?: () => void;
   openInNewTab?: boolean;
+  mode?: WorkflowNavigateMode;
 }
-
-export const buildModuleRecordHref = (tab: string, payload: Record<string, string | undefined> = {}) => {
-  const params = new URLSearchParams();
-  Object.entries(payload).forEach(([key, value]) => {
-    if (value) params.set(key, value);
-  });
-  const query = params.toString();
-  return `#/${tab}${query ? `?${query}` : ''}`;
-};
 
 const ModuleRecordLink: React.FC<ModuleRecordLinkProps> = ({
   tab,
   payload,
   onOpen,
   openInNewTab = false,
+  mode,
   children,
   target = '_blank',
   rel = 'noopener noreferrer',
@@ -38,11 +38,12 @@ const ModuleRecordLink: React.FC<ModuleRecordLinkProps> = ({
       event.preventDefault();
       if (onOpen) {
         onOpen();
+        if (mode) {
+          navigateWorkflow(tab, payload, mode);
+        }
         return;
       }
-      window.dispatchEvent(new CustomEvent('workflow:navigate', {
-        detail: { tab, payload },
-      }));
+      navigateWorkflow(tab, payload, mode ?? 'push');
     }}
   >
     {children}

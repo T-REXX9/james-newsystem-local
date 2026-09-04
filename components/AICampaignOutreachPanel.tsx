@@ -273,7 +273,7 @@ const AICampaignOutreachPanel: React.FC<AICampaignOutreachPanelProps> = ({
                                             {item.language}
                                         </div>
                                         <p className="text-xs text-slate-400 mt-1">
-                                            {new Date(item.created_at).toLocaleDateString()}
+                                            {new Date(item.created_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
                                         </p>
                                     </div>
                                 </div>

@@ -6,18 +6,41 @@ export const formatCurrency = (value: number, withDecimals: boolean = false) =>
     maximumFractionDigits: withDecimals ? 2 : 0,
   }).format(value);
 
-export const formatDate = (value?: string | null) => {
-  if (!value) return '—';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return '—';
-  return parsed.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
+const parseDisplayDate = (value: string | Date): Date | null => {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+
+  // Date-only values are calendar dates, not UTC timestamps. Parsing them at
+  // local noon prevents a user's timezone from moving the displayed day.
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? new Date(`${value}T12:00:00`)
+    : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
-export const formatDateFull = (value?: string | null) => {
+/** The single date format used in all customer-facing screens and printouts. */
+export const formatDate = (value?: string | Date | null) => {
   if (!value) return '—';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return '—';
-  return parsed.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+  const parsed = parseDisplayDate(value);
+  if (!parsed) return '—';
+  return parsed.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+};
+
+export const formatDateFull = (value?: string | Date | null) => {
+  return formatDate(value);
+};
+
+/** Use this for records where the time is meaningful; the date remains standardized. */
+export const formatDateTime = (value?: string | Date | null) => {
+  if (!value) return '—';
+  const parsed = parseDisplayDate(value);
+  if (!parsed) return '—';
+  return parsed.toLocaleString('en-PH', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 };
 
 export const formatRelativeTime = (value?: string | null) => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildValidationMessage,
+  parseOptionalNumberInput,
   validateEmail,
   validateMinLength,
   validateNumeric,
@@ -39,5 +40,13 @@ describe('formValidation', () => {
     const message = buildValidationMessage('deal value', 'must be greater than 0.', 'Enter a positive amount.');
     expect(message).toContain('deal value');
     expect(message).toContain('greater than 0');
+  });
+
+  it('keeps number inputs empty instead of coercing them to 0', () => {
+    expect(parseOptionalNumberInput('')).toBe('');
+    expect(parseOptionalNumberInput('   ')).toBe('');
+    expect(parseOptionalNumberInput('0')).toBe(0);
+    expect(parseOptionalNumberInput('25')).toBe(25);
+    expect(parseOptionalNumberInput('abc')).toBe('');
   });
 });

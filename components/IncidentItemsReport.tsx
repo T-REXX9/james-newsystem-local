@@ -21,6 +21,7 @@ import {
   IncidentMatchSource,
 } from '../services/incidentItemsReportService';
 import IncidentItemIncidentsDialog from './IncidentItemIncidentsDialog';
+import { formatLocalDateInput, localDateDaysAgo } from '../utils/localDateInput';
 
 const matchSourceOptions: Array<{ value: IncidentMatchSource; label: string }> = [
   { value: 'all', label: 'All sources' },
@@ -58,12 +59,9 @@ const IncidentItemsReport: React.FC<IncidentItemsReportProps> = ({
   initialDateFrom = '',
   initialDateTo = '',
 }) => {
-  const today = new Date().toISOString().slice(0, 10);
-  const monthAgo = useMemo(() => {
-    const date = new Date();
-    date.setDate(date.getDate() - 30);
-    return date.toISOString().slice(0, 10);
-  }, []);
+  // Local calendar dates — toISOString() is UTC and drops "today" rows in UTC+08 mornings.
+  const today = useMemo(() => formatLocalDateInput(), []);
+  const monthAgo = useMemo(() => localDateDaysAgo(30), []);
 
   const [filters, setFilters] = useState<IncidentItemsReportFilters>({
     search: initialSearch,
@@ -142,7 +140,7 @@ const IncidentItemsReport: React.FC<IncidentItemsReportProps> = ({
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `incident-items-report-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `incident-items-report-${formatLocalDateInput()}.csv`;
     link.click();
   };
 

@@ -31,7 +31,7 @@ const formatDate = (dateValue: string): string => {
   if (!dateValue) return 'N/A';
   const dt = new Date(dateValue);
   if (Number.isNaN(dt.getTime())) return dateValue;
-  return dt.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
+  return dt.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
 };
 
 const OldNewCustomersReport: React.FC = () => {

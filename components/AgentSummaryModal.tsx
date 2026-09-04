@@ -195,7 +195,7 @@ const AgentSummaryModal: React.FC<AgentSummaryModalProps> = ({ isOpen, onClose, 
                         </div>
                         {customer.last_purchase_date && (
                           <p className="text-xs text-slate-500 dark:text-slate-400 ml-8">
-                            Last purchase: {new Date(customer.last_purchase_date).toLocaleDateString()}
+                            Last purchase: {new Date(customer.last_purchase_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
                           </p>
                         )}
                       </div>

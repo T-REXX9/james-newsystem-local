@@ -699,7 +699,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
         <div>
           <h1 className="text-3xl font-bold uppercase">Purchase Order</h1>
           <p className="mt-1 font-mono text-lg">{po.po_number}</p>
-          <p>Date: {new Date(po.order_date).toLocaleDateString()}</p>
+          <p>Date: {new Date(po.order_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
         </div>
         <div className="text-right">
           <h2 className="text-xl font-bold">TND OPC</h2>
@@ -824,12 +824,16 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                       <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${statusColor}`}>{po.status}</span>
                     </div>
                     <div className="mt-1 text-xs font-semibold text-slate-500">{po.pr_reference || '-'}</div>
+                    <div className="mt-1.5 flex items-center justify-between gap-2 text-[10px]">
+                      <span className="rounded bg-indigo-50 px-1.5 py-0.5 font-bold text-indigo-700">{po.cycle_status || 'Awaiting Delivery'}</span>
+                      <span className="font-semibold text-slate-600">Ordered {Number(po.total_qty || 0)} · Received {Number(po.received_qty || 0)} · Left {Number(po.remaining_qty ?? Math.max(0, Number(po.total_qty || 0) - Number(po.received_qty || 0)))}</span>
+                    </div>
                     <div className="mt-2 flex items-center justify-between text-xs">
                       <span className="text-slate-600">Supplier: <span className="font-semibold">{po.supplier?.company || '-'}</span></span>
                       <span className="font-semibold text-slate-700">{po.item_count ?? po.items?.length ?? 0} Items</span>
                     </div>
                     <div className="mt-1 text-[10px] text-slate-500">
-                      ETA: {etaDate ? new Date(etaDate).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : '-'}
+                      ETA: {etaDate ? new Date(etaDate).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : '-'}
                     </div>
                   </button>
                 );
@@ -1090,9 +1094,22 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                       </button>
                     </div>
                   ) : (
-                    <p className="font-semibold text-slate-700">{new Date(selectedPO.order_date).toLocaleDateString('en-GB')}</p>
+                    <p className="font-semibold text-slate-700">{new Date(selectedPO.order_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
                   )}
                 </div>
+              </div>
+
+              <div className="mb-5 rounded-lg border border-indigo-100 bg-indigo-50/50 p-4 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <span className="font-bold text-indigo-800">Purchasing cycle: {selectedPO.cycle_status || 'Awaiting Delivery'}</span>
+                  <span>Ordered <b>{Number(selectedPO.total_qty ?? selectedPO.items.reduce((sum, item) => sum + Number(item.qty || 0), 0))}</b> · Received <b>{Number(selectedPO.received_qty ?? selectedPO.items.reduce((sum, item) => sum + Number(item.quantity_received || 0), 0))}</b> · Remaining <b>{Number(selectedPO.remaining_qty ?? 0)}</b></span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                  <span className="font-bold text-slate-500">Related RR:</span>
+                  {(selectedPO.receiving_reports || []).map((rr) => <ModuleRecordLink key={rr.id} tab="warehouse-purchasing-receiving-stock" payload={{ rrId: rr.id, rrRefNo: rr.rr_number }} className="font-bold text-[#175fd3] hover:underline">{rr.rr_number}</ModuleRecordLink>)}
+                  {!selectedPO.receiving_reports?.length ? <span className="text-slate-500">None yet</span> : null}
+                </div>
+                {selectedPO.incomplete_delivery_reason ? <p className="mt-2 text-xs text-amber-800"><b>Reason for incomplete delivery:</b> {selectedPO.incomplete_delivery_reason}</p> : null}
               </div>
 
               <div className="mb-4 flex items-center justify-between">
@@ -1185,7 +1202,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                         </td>
                         <td className="break-words px-2 py-3 text-center font-bold text-slate-700">{isEditing ? <input aria-label={`Edit quantity ${index + 1}`} type="number" min="1" value={editItemQty} onChange={event => setEditItemQty(Number(event.target.value))} className="h-8 w-full min-w-0 rounded border border-slate-300 px-1 text-center" /> : item.qty}</td>
                         <td className="break-words px-2 py-3 font-semibold">{selectedPO.supplier?.company || '-'}</td>
-                        <td className="break-words px-2 py-3 font-semibold text-slate-600">{isEditing ? <input aria-label={`Edit ETA ${index + 1}`} type="date" value={editItemEta} onChange={event => setEditItemEta(event.target.value)} className="h-8 w-full min-w-0 rounded border border-slate-300 px-1" /> : item.eta_date ? new Date(item.eta_date).toLocaleDateString('en-GB') : '-'}</td>
+                        <td className="break-words px-2 py-3 font-semibold text-slate-600">{isEditing ? <input aria-label={`Edit ETA ${index + 1}`} type="date" value={editItemEta} onChange={event => setEditItemEta(event.target.value)} className="h-8 w-full min-w-0 rounded border border-slate-300 px-1" /> : item.eta_date ? new Date(item.eta_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : '-'}</td>
                         <td className="break-words px-2 py-3 font-semibold text-slate-600">{item.original_part_no || '-'}</td>
                         <td className="break-words px-2 py-3 text-[13px] font-bold text-[#173c83]">{item.product?.part_no || '-'}</td>
                         <td className="break-words px-2 py-3 text-[13px] font-bold text-slate-700">{item.product?.item_code || '-'}</td>

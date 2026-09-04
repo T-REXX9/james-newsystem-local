@@ -124,17 +124,27 @@ describe('SmsCampaignPreparationView', () => {
   });
 
   it('splits no-purchase customers into three ranges and applies each saved template', async () => {
-    const now = new Date();
-    const dateMonthsAgo = (months: number) => {
-      const date = new Date(now);
-      date.setDate(15);
-      date.setMonth(date.getMonth() - months);
-      return date.toISOString().slice(0, 10);
+    const pad = (value: number) => String(value).padStart(2, '0');
+    const toLocalDate = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+    const subtractCalendarMonths = (date: Date, months: number) => {
+      const result = new Date(date);
+      const originalDay = result.getDate();
+      result.setDate(1);
+      result.setMonth(result.getMonth() - months);
+      const lastDayOfTargetMonth = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
+      result.setDate(Math.min(originalDay, lastDayOfTargetMonth));
+      return result;
     };
+    const midpoint = (newer: Date, older: Date) => new Date((newer.getTime() + older.getTime()) / 2);
+    const today = new Date();
+    const oneMonthAgo = subtractCalendarMonths(today, 1);
+    const twoMonthsAgo = subtractCalendarMonths(today, 2);
+    const threeMonthsAgo = subtractCalendarMonths(today, 3);
+    const fourMonthsAgo = subtractCalendarMonths(today, 4);
     const customers = [
-      { ...sampleCustomer('01'), id: 'one-month', company: 'One Month Customer', lastContactDate: dateMonthsAgo(1) },
-      { ...sampleCustomer('01'), id: 'two-months', company: 'Two Months Customer', lastContactDate: dateMonthsAgo(2) },
-      { ...sampleCustomer('01'), id: 'three-plus-months', company: 'Three Plus Months Customer', lastContactDate: dateMonthsAgo(4) },
+      { ...sampleCustomer('01'), id: 'one-month', company: 'One Month Customer', lastContactDate: toLocalDate(midpoint(oneMonthAgo, twoMonthsAgo)) },
+      { ...sampleCustomer('01'), id: 'two-months', company: 'Two Months Customer', lastContactDate: toLocalDate(midpoint(twoMonthsAgo, threeMonthsAgo)) },
+      { ...sampleCustomer('01'), id: 'three-plus-months', company: 'Three Plus Months Customer', lastContactDate: toLocalDate(fourMonthsAgo) },
     ];
     mockedFetchContacts.mockResolvedValue(customers as any);
     mockedGetMessageTemplates.mockResolvedValue([

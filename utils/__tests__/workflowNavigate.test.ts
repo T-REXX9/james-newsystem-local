@@ -3,8 +3,11 @@ import {
   buildModuleRecordHref,
   buildModuleRecordUrl,
   compactWorkflowPayload,
+  closeSalesReportResults,
+  isSalesReportResultsView,
   navigateWorkflow,
   openModuleInNewWindow,
+  openSalesReportResults,
   WORKFLOW_NAVIGATE_EVENT,
 } from '../workflowNavigate';
 
@@ -44,5 +47,32 @@ describe('workflowNavigate', () => {
       '_blank',
       'noopener,noreferrer'
     );
+  });
+
+  it('pushes and closes sales report result views', () => {
+    const spy = vi.spyOn(window, 'dispatchEvent');
+    expect(isSalesReportResultsView('results')).toBe(true);
+    expect(isSalesReportResultsView('filters')).toBe(false);
+    openSalesReportResults('sales-reports-inquiry-report');
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({
+      type: WORKFLOW_NAVIGATE_EVENT,
+      detail: expect.objectContaining({
+        tab: 'sales-reports-inquiry-report',
+        payload: { view: 'results' },
+        mode: 'push',
+      }),
+    }));
+
+    const hideResults = vi.fn();
+    closeSalesReportResults('sales-reports-inquiry-report', hideResults);
+    expect(hideResults).toHaveBeenCalledOnce();
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({
+      type: WORKFLOW_NAVIGATE_EVENT,
+      detail: expect.objectContaining({
+        tab: 'sales-reports-inquiry-report',
+        payload: undefined,
+        mode: 'replace',
+      }),
+    }));
   });
 });

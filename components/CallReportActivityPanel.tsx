@@ -34,8 +34,8 @@ const formatTimestamp = (value?: string) => {
   if (!value) return '—';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
+  return new Intl.DateTimeFormat('en-PH', {
+    month: 'long',
     day: 'numeric',
     year: 'numeric',
     hour: 'numeric',

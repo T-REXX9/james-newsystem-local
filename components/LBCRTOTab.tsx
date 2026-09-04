@@ -132,7 +132,7 @@ const LBCRTOTab: React.FC<LBCRTOTabProps> = ({ contactId }) => {
             <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-900/30">
               {filteredRecords.map((record) => (
                 <tr key={record.id}>
-                  <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{new Date(record.date).toLocaleDateString('en-PH')}</td>
+                  <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{new Date(record.date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}</td>
                   <td className="px-3 py-2 font-medium text-slate-900 dark:text-white">{record.tracking_number}</td>
                   <td className="px-3 py-2 text-slate-700 dark:text-slate-300">{record.reason}</td>
                   <td className="px-3 py-2">

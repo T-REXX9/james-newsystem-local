@@ -38,6 +38,7 @@ import CallAccountabilityPanel from './CallAccountabilityPanel';
 import ContactDetails from './ContactDetails';
 import AddContactModal from './AddContactModal';
 import CreateIncidentReportModal from './CreateIncidentReportModal';
+import ModuleRecordAction from './ModuleRecordAction';
 import { useToast } from './ToastProvider';
 import {
   countCallLogsByChannelInRange,
@@ -60,6 +61,7 @@ import {
 import type { ManagementInstruction } from '../services/dailyCallMonitoringService';
 import { createContact, fetchContactById, updateContact } from '../services/customerDatabaseLocalApiService';
 import { queueCallRequest } from '../services/callingSystemService';
+import { navigateWorkflow } from '../utils/workflowNavigate';
 import {
   CallLogEntry,
   CallOutcome,
@@ -441,12 +443,12 @@ const MasterTableRow = React.memo(({
         </span>
       </td>
       <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding}`}>
-        <p className="text-[12px] font-bold text-[#10244c] dark:text-slate-200" title={row.lastContact ? new Date(row.lastContact).toLocaleDateString() : 'No activity yet'}>
+        <p className="text-[12px] font-bold text-[#10244c] dark:text-slate-200" title={row.lastContact ? new Date(row.lastContact).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : 'No activity yet'}>
           {formatRelativeTime(row.lastContact)}
         </p>
       </td>
       <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding}`}>
-        <p className="text-[12px] font-medium text-slate-600 dark:text-slate-300" title={row.lastPurchase ? new Date(row.lastPurchase).toLocaleDateString() : 'No purchases'}>
+        <p className="text-[12px] font-medium text-slate-600 dark:text-slate-300" title={row.lastPurchase ? new Date(row.lastPurchase).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : 'No purchases'}>
           {formatDate(row.lastPurchase)}
         </p>
       </td>
@@ -591,6 +593,15 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const isFetchingSnapshotRef = useRef(false);
   const snapshotAbortControllerRef = useRef<AbortController | null>(null);
 
+  const buildSalesInquiryPayload = useCallback((contactId?: string) => {
+    const targetContactId = contactId || selectedClientId || undefined;
+    return {
+      ...(targetContactId ? { contactId: targetContactId } : {}),
+      prefillToken: Date.now().toString(),
+      openMode: 'new'
+    };
+  }, [selectedClientId]);
+
   const handleOpenSalesInquiry = useCallback((contactId?: string) => {
     const targetContactId = contactId || selectedClientId || undefined;
     const targetContact = contacts.find((contact) => contact.id === targetContactId);
@@ -603,17 +614,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       });
       return;
     }
-    window.dispatchEvent(new CustomEvent('workflow:navigate', {
-      detail: {
-        tab: 'salesinquiry',
-        payload: {
-          ...(targetContactId ? { contactId: targetContactId } : {}),
-          prefillToken: Date.now().toString(),
-          openMode: 'new'
-        }
-      }
-    }));
-  }, [addToast, contacts, selectedClientId]);
+    navigateWorkflow('sales-transaction-sales-inquiry', buildSalesInquiryPayload(contactId));
+  }, [addToast, buildSalesInquiryPayload, contacts, selectedClientId]);
 
   const notifyDoNotContact = useCallback((contact: Contact) => {
     addToast({
@@ -1766,7 +1768,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             All customers assigned to <span className="font-semibold">{agentDisplayName}</span>, ordered by priority
           </p>
           {initialSelectedDate && <p className="mt-1 text-xs font-semibold text-blue-700 dark:text-blue-300">
-            Opened from dashboard date: {new Date(`${initialSelectedDate}T12:00:00`).toLocaleDateString('en-US')}
+            Opened from dashboard date: {new Date(`${initialSelectedDate}T12:00:00`).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
           </p>}
         </div>
         <div className="flex items-center gap-2">
@@ -2114,13 +2116,16 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 <Mail className="w-4 h-4" />
                 Email
               </button>
-              <button
-                onClick={() => handleOpenSalesInquiry(selectedClient.id)}
+              <ModuleRecordAction
+                tab="sales-transaction-sales-inquiry"
+                payload={buildSalesInquiryPayload(selectedClient.id)}
+                onOpen={() => handleOpenSalesInquiry(selectedClient.id)}
                 className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+                newWindowLabel="Open Sales Inquiry in new window"
               >
                 <FileText className="w-4 h-4" />
                 Sales Inquiry
-              </button>
+              </ModuleRecordAction>
               <button
                 type="button"
                 onClick={() => setShowIncidentReportModal(true)}

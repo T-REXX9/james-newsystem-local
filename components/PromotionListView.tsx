@@ -205,7 +205,7 @@ const PromotionListView: React.FC<Props> = ({ currentUser }) => {
                                         <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
                                             <span className="flex items-center gap-1">
                                                 <Calendar className="w-3.5 h-3.5" />
-                                                Ends {new Date(promotion.end_date).toLocaleDateString()}
+                                                Ends {new Date(promotion.end_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
                                             </span>
                                             <span className="flex items-center gap-1">
                                                 <Package className="w-3.5 h-3.5" />

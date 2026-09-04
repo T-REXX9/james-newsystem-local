@@ -70,8 +70,8 @@ describe('InventoryReport description filter', () => {
     expect(locationHeader.nextElementSibling).toHaveTextContent('LAST TRANSACTION DATE');
     expect(locationHeader.nextElementSibling?.nextElementSibling).toHaveTextContent('LAST RR DATE');
     expect(locationHeader.nextElementSibling?.nextElementSibling?.nextElementSibling).toHaveTextContent('REORDER QUANTITY');
-    expect(screen.getByText('Aug 27, 2026')).toBeInTheDocument();
-    expect(screen.getByText('Aug 12, 2026')).toBeInTheDocument();
+    expect(screen.getByText('August 27, 2026')).toBeInTheDocument();
+    expect(screen.getByText('August 12, 2026')).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: '15' })).toBeInTheDocument();
 
     // Verify the Product Database VIP 1 price, value, and footer total value.

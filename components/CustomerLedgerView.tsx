@@ -24,7 +24,7 @@ const formatDate = (value: string | null | undefined): string => {
   if (dateOnly) return `${Number(dateOnly[2])}/${Number(dateOnly[3])}/${dateOnly[1]}`;
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString('en-US');
+  return d.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
 };
 
 const vipLabel = (status: string | null | undefined): string => {
@@ -466,7 +466,7 @@ const LedgerReport: React.FC<{
               </span>
             )}
           </h3>
-          <p className="text-xs text-[#555]">System generated: {new Date().toLocaleString()}</p>
+          <p className="text-xs text-[#555]">System generated: {new Date().toLocaleString('en-PH', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</p>
         </div>
         <div className="mt-3 flex flex-wrap justify-end gap-3">
           <ReportControls

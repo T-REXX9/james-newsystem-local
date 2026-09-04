@@ -1,3 +1,5 @@
+import { navigateWorkflow } from '../utils/workflowNavigate';
+
 export interface DailyCallSalesReportProductLine {
   name: string;
   quantity: number;
@@ -62,15 +64,10 @@ export const normalizeSalesReportRecords = (data: unknown): DailyCallSalesReport
 export const openDailyCallSalesInquiry = (contactId: string, inquiryId: string) => {
   if (!inquiryId) return;
 
-  window.dispatchEvent(new CustomEvent('workflow:navigate', {
-    detail: {
-      tab: 'salesinquiry',
-      payload: {
-        inquiryId,
-        contactId,
-        prefillToken: Date.now().toString(),
-        openMode: 'existing',
-      },
-    },
-  }));
+  navigateWorkflow('sales-transaction-sales-inquiry', {
+    inquiryId,
+    contactId,
+    prefillToken: Date.now().toString(),
+    openMode: 'existing',
+  });
 };

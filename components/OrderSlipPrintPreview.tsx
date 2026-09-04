@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { Printer, XCircle } from 'lucide-react';
 import { Contact, OrderSlip } from '../types';
 import { getLocalAuthSession } from '../services/localAuthService';
@@ -7,6 +7,9 @@ interface OrderSlipPrintPreviewProps {
   orderSlip: OrderSlip;
   customer: Contact | null;
   onClose: () => void;
+  /** When true, hide preview chrome and mount off-screen for JPEG capture. */
+  captureMode?: boolean;
+  onSheetReady?: (sheet: HTMLElement) => void;
 }
 
 const numberFormatter = new Intl.NumberFormat('en-PH', {
@@ -136,6 +139,11 @@ const printStyles = `
       background: #fff !important;
       padding: 0 !important;
       overflow: visible !important;
+      left: 0 !important;
+      top: 0 !important;
+      opacity: 1 !important;
+      pointer-events: auto !important;
+      z-index: 1 !important;
     }
 
     .order-slip-preview-controls,
@@ -161,11 +169,18 @@ const formatDateTime = (value?: string | null): string => {
   if (Number.isNaN(parsed.getTime())) return value;
   const hasTime = /T|\d{1,2}:\d{2}/.test(value);
   return hasTime
-    ? parsed.toLocaleString('en-US')
-    : parsed.toLocaleDateString('en-US');
+    ? parsed.toLocaleString('en-PH', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+    : parsed.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
 };
 
-const OrderSlipPrintPreview: React.FC<OrderSlipPrintPreviewProps> = ({ orderSlip, customer, onClose }) => {
+const OrderSlipPrintPreview: React.FC<OrderSlipPrintPreviewProps> = ({
+  orderSlip,
+  customer,
+  onClose,
+  captureMode = false,
+  onSheetReady,
+}) => {
+  const sheetRef = useRef<HTMLDivElement | null>(null);
   const currentUserName = useMemo(() => {
     const session = getLocalAuthSession();
     return String(session?.userProfile?.full_name || '').trim();
@@ -181,43 +196,71 @@ const OrderSlipPrintPreview: React.FC<OrderSlipPrintPreviewProps> = ({ orderSlip
   const referenceLabel = currentUserName || orderSlip.sales_person || '';
   const dateLabel = formatDateTime(orderSlip.sales_date || orderSlip.created_at);
 
+  useEffect(() => {
+    if (!captureMode || !onSheetReady) return;
+    const sheet = sheetRef.current;
+    if (!sheet) return;
+    const frame = window.requestAnimationFrame(() => onSheetReady(sheet));
+    return () => window.cancelAnimationFrame(frame);
+  }, [captureMode, onSheetReady, orderSlip]);
+
   return (
-    <div className="order-slip-print-root fixed inset-0 z-[80] overflow-y-auto bg-slate-950/50 p-6 pt-24 print:bg-white print:p-0">
+    <div
+      className={
+        captureMode
+          ? 'order-slip-print-root pointer-events-none fixed top-0 z-[-1] bg-white p-0'
+          : 'order-slip-print-root fixed inset-0 z-[80] overflow-y-auto bg-slate-950/50 p-6 pt-24 print:bg-white print:p-0'
+      }
+      aria-hidden={captureMode || undefined}
+      style={captureMode ? { left: '-10000px' } : undefined}
+    >
       <style>{printStyles}</style>
 
-      <div className="order-slip-preview-controls mx-auto mb-4 flex max-w-[1100px] items-center justify-between gap-3 rounded-2xl bg-white/95 px-4 py-3 shadow-xl backdrop-blur dark:bg-slate-900/95">
-        <div>
-          <h2 className="text-base font-semibold text-slate-900 dark:text-white">Legacy Order Slip Print Template</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            React port of the old system order slip print layout.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-sm font-medium text-white"
-          >
-            <Printer className="h-4 w-4" />
-            Print Now
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:text-slate-200"
-          >
-            <XCircle className="h-4 w-4" />
-            Close
-          </button>
-        </div>
-      </div>
+      {!captureMode && (
+        <>
+          <div className="order-slip-preview-controls mx-auto mb-4 flex max-w-[1100px] items-center justify-between gap-3 rounded-2xl bg-white/95 px-4 py-3 shadow-xl backdrop-blur dark:bg-slate-900/95">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900 dark:text-white">Legacy Order Slip Print Template</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                React port of the old system order slip print layout.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-sm font-medium text-white"
+              >
+                <Printer className="h-4 w-4" />
+                Print Now
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:text-slate-200"
+              >
+                <XCircle className="h-4 w-4" />
+                Close
+              </button>
+            </div>
+          </div>
 
-      <div className="order-slip-preview-note mx-auto mb-4 max-w-[1100px] rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
-        This version follows the old PHP order slip print template, including the simple header block, striped item
-        table, and right-aligned total amount row.
-      </div>
+          <div className="order-slip-preview-note mx-auto mb-4 max-w-[1100px] rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+            This version follows the old PHP order slip print template, including the simple header block, striped item
+            table, and right-aligned total amount row.
+          </div>
+        </>
+      )}
 
-      <div className="order-slip-print-sheet mx-auto border border-dashed border-slate-300 shadow-2xl">
+      <div
+        ref={sheetRef}
+        className={
+          captureMode
+            ? 'order-slip-print-sheet'
+            : 'order-slip-print-sheet mx-auto border border-dashed border-slate-300 shadow-2xl'
+        }
+        style={captureMode ? { width: '1100px' } : undefined}
+      >
         <div className="order-slip-print-body">
           <h1 className="order-slip-title">ORDER SLIP</h1>
           <p className="order-slip-number">

@@ -182,7 +182,7 @@ const ReceivingStock: React.FC<ReceivingStockProps> = ({ initialRRId, initialRRR
                                         <div className="mt-2 text-xs text-slate-600">PO No.: {rr.po_no || '-'}</div>
                                         <div className="mt-1 text-xs text-slate-600">Supplier: {rr.supplier_name || '-'}</div>
                                         <div className="mt-2 flex items-center justify-between text-xs">
-                                            <span className="text-slate-500">{rr.status === 'Posted' ? 'Received' : rr.status === 'Cancelled' ? 'Cancelled' : 'Expected'}: {new Date(rr.receive_date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}</span>
+                                            <span className="text-slate-500">{rr.status === 'Posted' ? 'Received' : rr.status === 'Cancelled' ? 'Cancelled' : 'Expected'}: {new Date(rr.receive_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
                                             <span className="font-semibold text-slate-700">{rr.item_count ?? rr.items?.length ?? 0} Items ❯</span>
                                         </div>
                                     </button>

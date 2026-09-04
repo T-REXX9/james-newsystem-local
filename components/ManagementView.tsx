@@ -137,7 +137,7 @@ export const ManagementView: React.FC<ManagementViewProps> = ({ currentUser }) =
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Management-only analytics</p>
             <h1 className="mt-1 flex items-center gap-2 text-2xl font-extrabold tracking-tight md:text-3xl"><BarChart3 className="h-7 w-7 text-blue-700" /> Sales Performance Dashboard</h1>
-            <p className="mt-1 flex items-center gap-2 text-sm text-slate-600"><CalendarDays className="h-4 w-4" /> Welcome, <strong>{userName}</strong>. Today is {new Date().toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: '2-digit', year: 'numeric' })}.</p>
+            <p className="mt-1 flex items-center gap-2 text-sm text-slate-600"><CalendarDays className="h-4 w-4" /> Welcome, <strong>{userName}</strong>. Today is {new Date().toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}.</p>
           </div>
           <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold shadow-sm">
             <span className="text-slate-600">Filter by Year</span>

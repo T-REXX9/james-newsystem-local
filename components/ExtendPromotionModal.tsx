@@ -77,7 +77,7 @@ const ExtendPromotionModal: React.FC<Props> = ({ promotion, onClose, onExtended 
                         </h3>
                         <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1">
                             <Calendar className="w-4 h-4" />
-                            Current end date: {new Date(promotion.end_date).toLocaleDateString()}
+                            Current end date: {new Date(promotion.end_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
                         </p>
                     </div>
 

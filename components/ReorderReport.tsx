@@ -788,7 +788,7 @@ const ReorderReport: React.FC = () => {
           <ModuleRecordLink openInNewTab tab="warehouse-purchasing-purchase-order" payload={{ poId: document.refno, poRefNo: document.number }} className="font-bold text-brand-blue hover:underline">
             {document.number || document.refno}
           </ModuleRecordLink>
-          <div className="text-[11px] text-slate-500">Ordered {formatQuantity(document.ordered_qty)} · {document.status}</div>
+          <div className="text-[11px] text-slate-500">Ordered {formatQuantity(row.po_ordered_qty)} · {document.status}</div>
         </div>
       ))}
     </div>

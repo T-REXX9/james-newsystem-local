@@ -122,7 +122,7 @@ const formatBlueprintDate = (value?: string): string => {
   if (match) return `${match[3]}/${match[2]}/${match[1]}`;
   const parsed = new Date(text);
   if (Number.isNaN(parsed.getTime())) return text;
-  return parsed.toLocaleDateString('en-GB');
+  return parsed.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
 };
 
 const compactQuantity = (value?: number): string => {
@@ -379,9 +379,6 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
     if (mode === 'add' && !itemCode.isValid) errors.item_code = itemCode.message;
     if (!description.isValid) errors.description = description.message;
     else if (!descriptionLength.isValid) errors.description = descriptionLength.message;
-    if (mode === 'add' && fromSuggestedStock && Number(formData.reorder_quantity || 0) <= 0) {
-      errors.reorder_quantity = 'Set a reorder quantity greater than 0 so this item can appear on Reorder Report.';
-    }
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -415,8 +412,10 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
           try {
             await clearNotListedRemarks({
               inquiryItemId: initialSuggestedInquiryItemId,
-              partNo: String(formData.part_no || '').replace(/\s+/g, ''),
-              itemCode: String(formData.item_code || '').trim(),
+              // Keep the original suggestion linked even if the user adjusts
+              // product fields while completing its catalog record.
+              partNo: String(initialPartNo || formData.part_no || '').replace(/\s+/g, ''),
+              itemCode: String(initialItemCode || formData.item_code || '').trim(),
             });
           } catch (clearError) {
             console.error('Unable to clear NotListed remarks after product create:', clearError);
@@ -424,7 +423,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
           addToast({
             type: 'success',
             title: 'Product added',
-            description: 'Product listed successfully. It left Suggested Stock; use Reorder Report when stock is below the reorder quantity.',
+            description: 'Product created. Return to Item Suggested for Stock to select it and add it to a purchase request.',
             durationMs: 7000,
           });
         } else {

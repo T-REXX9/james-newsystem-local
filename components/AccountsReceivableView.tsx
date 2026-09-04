@@ -35,7 +35,7 @@ const formatDate = (value?: string | null): string => {
   if (dateOnly) return `${Number(dateOnly[2])}/${Number(dateOnly[3])}/${dateOnly[1]}`;
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString('en-US');
+  return d.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
 };
 
 const buildDateRangeLabel = (report: ArResponse | null): string => {
@@ -203,7 +203,7 @@ const AccountsReceivableView: React.FC<AccountsReceivableViewProps> = ({ initial
         </section>
 
         {report && <section className="rounded border border-[#d5d5d5] bg-white p-5 shadow-sm">
-          <div className="mb-5 flex items-start justify-between border-b border-[#ddd] pb-4"><div><h3 className="font-serif text-lg font-bold uppercase">Accounts Receivable</h3><p className="text-sm font-semibold">{buildDateRangeLabel(report)}</p><p className="text-xs">As of: {new Date().toLocaleDateString('en-US')}</p>{isSingleCustomer && selectedCustomerName && <p className="mt-1 text-sm">{selectedCustomerName}</p>}</div><button onClick={() => window.print()} className="rounded border border-[#ccc] px-3 py-2 text-sm">Print</button></div>
+          <div className="mb-5 flex items-start justify-between border-b border-[#ddd] pb-4"><div><h3 className="font-serif text-lg font-bold uppercase">Accounts Receivable</h3><p className="text-sm font-semibold">{buildDateRangeLabel(report)}</p><p className="text-xs">As of: {new Date().toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}</p>{isSingleCustomer && selectedCustomerName && <p className="mt-1 text-sm">{selectedCustomerName}</p>}</div><button onClick={() => window.print()} className="rounded border border-[#ccc] px-3 py-2 text-sm">Print</button></div>
           {flattenedRows.length === 0 ? <p className="py-8 text-center text-sm text-gray-500">No outstanding balances found.</p> :
           <div className="overflow-auto border border-[#ddd]">
             <table className="min-w-full text-sm">

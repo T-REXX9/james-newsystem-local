@@ -165,9 +165,9 @@ const PromotionDetailsModal: React.FC<Props> = ({
                                     <div className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
                                         <Calendar className="w-4 h-4 text-slate-400" />
                                         {promotion.start_date
-                                            ? new Date(promotion.start_date).toLocaleDateString()
+                                            ? new Date(promotion.start_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })
                                             : 'Immediate'}{' '}
-                                        - {new Date(promotion.end_date).toLocaleDateString()}
+                                        - {new Date(promotion.end_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
                                     </div>
                                 </div>
                                 <div>
@@ -289,7 +289,7 @@ const PromotionDetailsModal: React.FC<Props> = ({
                                             {posting.posted_by && (
                                                 <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
                                                     Posted by {posting.poster?.full_name || 'Unknown'} •{' '}
-                                                    {new Date(posting.updated_at).toLocaleDateString()}
+                                                    {new Date(posting.updated_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
                                                 </p>
                                             )}
 

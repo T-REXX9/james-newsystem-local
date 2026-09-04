@@ -170,6 +170,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
   );
   const selectedPOItemIdSet = useMemo(() => new Set(selectedPOItemIds), [selectedPOItemIds]);
   const convertibleItemCount = convertibleItems.length;
+  const itemsOnPOCount = items.length - convertibleItemCount;
   const selectedPOItems = useMemo(
     () => convertibleItems.filter((item) => selectedPOItemIdSet.has(String(item.id || ""))),
     [convertibleItems, selectedPOItemIdSet],
@@ -385,6 +386,18 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                 )}
             </div>
           </div>
+          <div className="mt-4 rounded-lg border border-indigo-100 bg-indigo-50/50 p-3 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span className="font-bold text-indigo-800">Purchasing cycle: {request.cycle_status || (itemsOnPOCount ? 'PO Created' : 'Pending')}</span>
+              <span className="text-slate-700">Ordered <b>{Number(request.ordered_qty ?? totalQuantity)}</b> · Received <b>{Number(request.received_qty ?? 0)}</b> · Remaining <b>{Number(request.remaining_qty ?? Math.max(0, totalQuantity - Number(request.received_qty ?? 0)))}</b></span>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+              <span className="font-bold text-slate-500">Related PO:</span>
+              {items.filter(isItemOnPurchaseOrder).map((item) => <ModuleRecordLink key={item.id} tab="purchases-transaction-purchase-order" payload={{ poId: item.po_refno }} className="font-bold text-[#175fd3] hover:underline">{item.po_number || item.po_refno}</ModuleRecordLink>)}
+              {items.filter(isItemOnPurchaseOrder).length === 0 ? <span className="text-slate-500">Not created</span> : null}
+            </div>
+            {request.incomplete_delivery_reason ? <p className="mt-2 text-xs text-amber-800"><b>Reason for incomplete delivery:</b> {request.incomplete_delivery_reason}</p> : null}
+          </div>
           <div className="mt-5 grid gap-4 text-sm md:grid-cols-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
@@ -392,7 +405,22 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
               </p>
               <p className="mt-2">Reference: {request.reference_no || "-"}</p>
               <p>Items: {items.length}</p>
-              <p>Total Quantity: {totalQuantity} PCS</p>
+              {items.length > 0 ? (
+                <div
+                  className="mt-2 flex flex-wrap gap-1.5"
+                  role="status"
+                  aria-label={`PO status: ${itemsOnPOCount} on PO, ${convertibleItemCount} not on PO`}
+                >
+                  <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                    {itemsOnPOCount} on PO
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-700">
+                    {convertibleItemCount} not on PO
+                  </span>
+                </div>
+              ) : null}
+              <p className="mt-1">Total Quantity: {totalQuantity} PCS</p>
             </div>
             <div>
               <p className="text-xs font-bold uppercase tracking-wide text-slate-500">

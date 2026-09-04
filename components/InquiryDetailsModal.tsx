@@ -19,9 +19,9 @@ const InquiryDetailsModal: React.FC<InquiryDetailsModalProps> = ({ isOpen, onClo
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-PH', {
-      year: 'numeric',
       month: 'long',
       day: 'numeric',
+      year: 'numeric',
     });
   };
 

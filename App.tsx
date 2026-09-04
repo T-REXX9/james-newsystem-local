@@ -9,7 +9,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { canRetraceWorkflowHistory, createWorkflowHistoryState, ensureWorkflowHistoryState, preserveCurrentHistoryState } from './utils/workflowHistory';
-import { compactWorkflowPayload, type WorkflowNavigateDetail } from './utils/workflowNavigate';
+import { compactWorkflowPayload, isSalesReportResultsView, type WorkflowNavigateDetail } from './utils/workflowNavigate';
 import TopNav from './components/TopNav';
 import Login from './components/Login';
 import DailyCallMonitoringView from './components/DailyCallMonitoringView';
@@ -32,7 +32,6 @@ import InventoryReport from './components/InventoryReport';
 import SuggestedStockReport from './components/SuggestedStockReport';
 import IncidentItemsReport from './components/IncidentItemsReport';
 import WarehouseIncidentReportDetail from './components/WarehouseIncidentReportDetail';
-
 import AccessControlSettings from './components/AccessControlSettings';
 import ManagementView from './components/ManagementView';
 import RecycleBinView from './components/RecycleBinView';
@@ -721,7 +720,7 @@ const App: React.FC = () => {
       case 'sales-reports-inquiry-report':
         return (
           <div className="h-full overflow-y-auto">
-            <InquiryReportFilter initialView={moduleContext['sales-reports-inquiry-report']?.view} />
+            <InquiryReportFilter initialView={isSalesReportResultsView(moduleContext['sales-reports-inquiry-report']?.view) ? 'results' : undefined} />
           </div>
         );
       case 'sales-reports-sales-report':
@@ -729,7 +728,7 @@ const App: React.FC = () => {
           <div className="h-full overflow-y-auto">
             <SalesReport
               currentUser={userProfile}
-              initialView={moduleContext['sales-reports-sales-report']?.view}
+              initialView={isSalesReportResultsView(moduleContext['sales-reports-sales-report']?.view) ? 'results' : undefined}
             />
           </div>
         );
@@ -738,7 +737,7 @@ const App: React.FC = () => {
           <div className="h-full overflow-y-auto">
             <SalesDevelopmentReport
               currentUser={userProfile}
-              initialView={moduleContext['sales-reports-sales-development-report']?.view}
+              initialView={isSalesReportResultsView(moduleContext['sales-reports-sales-development-report']?.view) ? 'results' : undefined}
             />
           </div>
         );

@@ -83,6 +83,12 @@ export const validateNumeric = (
   return { isValid: true, message: '' };
 };
 
+export const parseOptionalNumberInput = (raw: string): number | '' => {
+  if (raw.trim() === '') return '';
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : '';
+};
+
 export const validateMinLength = (
   value: unknown,
   fieldName: string,

@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import IncidentItemsReport from '../IncidentItemsReport';
+import { formatLocalDateInput, localDateDaysAgo } from '../../utils/localDateInput';
 
 const fetchReportMock = vi.fn();
 const fetchIncidentsMock = vi.fn();
@@ -78,6 +79,20 @@ describe('IncidentItemsReport pick list', () => {
     cleanup();
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it('loads with local calendar date defaults so today UTC+08 rows are not cut off', async () => {
+    render(<IncidentItemsReport />);
+
+    await waitFor(() => expect(fetchReportMock).toHaveBeenCalled());
+    expect(fetchReportMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dateFrom: localDateDaysAgo(30),
+        dateTo: formatLocalDateInput(),
+      })
+    );
+    expect(await screen.findByText('PN-1')).toBeInTheDocument();
+    expect(screen.getAllByText('Nozzle').length).toBeGreaterThan(0);
   });
 
   it('opens a themed Incident Report pick list on double-click and keeps it open after selecting one', async () => {

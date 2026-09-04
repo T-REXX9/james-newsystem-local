@@ -32,6 +32,21 @@ const normalizePurchaseOrderStatus = (value: unknown): string => {
   return String(value ?? 'Pending');
 };
 
+const purchasingCycleStatus = (ordered: number, received: number, workflowStatus: unknown): PurchaseOrderWithDetails['cycle_status'] => {
+  const status = String(workflowStatus || '').trim().toLowerCase();
+  if (status === 'completed' && received < ordered) return 'Incomplete Delivery';
+  if (ordered > 0 && received >= ordered) return 'Fully Received';
+  if (received > 0) return 'Partially Received';
+  return 'Awaiting Delivery';
+};
+
+const parseIncompleteDeliveryReason = (raw: unknown): string => {
+  const text = String(raw || '');
+  const match = text.match(/(?:Incomplete delivery reason|Short receipt reason):\s*(.*?)(?:\s*\|\s*|$)/i);
+  if (match?.[1]) return match[1].trim();
+  return text.replace(/^(?:Incomplete delivery reason|Short receipt reason):\s*/i, '').trim();
+};
+
 const parseApiErrorMessage = async (response: Response): Promise<string> => {
   try {
     const payload = await response.json();
@@ -96,6 +111,8 @@ const toPurchaseOrder = (raw: any): PurchaseOrderWithDetails => {
   const supplierName = String(raw?.supplier_name ?? '');
   const supplierAddress = String(raw?.address ?? '');
 
+  const totalQty = toNumber(raw?.total_qty);
+  const receivedQty = toNumber(raw?.received_qty);
   return {
     id: String(raw?.refno ?? raw?.id ?? ''),
     po_number: String(raw?.po_number ?? ''),
@@ -104,6 +121,7 @@ const toPurchaseOrder = (raw: any): PurchaseOrderWithDetails => {
     warehouse_id: 'WH1',
     remarks: String(raw?.reference ?? ''),
     pr_reference: String(raw?.pr_number ?? ''),
+    pr_refno: String(raw?.pr_refno ?? ''),
     status: normalizePurchaseOrderStatus(raw?.status ?? 'Pending'),
     grand_total: toNumber(raw?.total_cogs ?? 0),
     supplier: {
@@ -116,9 +134,12 @@ const toPurchaseOrder = (raw: any): PurchaseOrderWithDetails => {
     creator: null,
     approver: null,
     item_count: toNumber(raw?.item_count),
-    total_qty: toNumber(raw?.total_qty),
+    total_qty: totalQty,
     received_lines: toNumber(raw?.received_lines),
-    received_qty: toNumber(raw?.received_qty),
+    received_qty: receivedQty,
+    remaining_qty: Math.max(0, totalQty - receivedQty),
+    cycle_status: purchasingCycleStatus(totalQty, receivedQty, raw?.status),
+    incomplete_delivery_reason: parseIncompleteDeliveryReason(raw?.incomplete_delivery_reason || raw?.reference || ''),
     first_eta_date: raw?.first_eta_date ? String(raw.first_eta_date) : null,
     last_eta_date: raw?.last_eta_date ? String(raw.last_eta_date) : null,
   } as PurchaseOrderWithDetails;
@@ -129,6 +150,8 @@ const toPurchaseOrderDetail = (payload: any): PurchaseOrderWithDetails => {
   const items = Array.isArray(payload?.items) ? payload.items : [];
   const summary = payload?.summary || {};
 
+  const totalQty = toNumber(summary?.total_qty ?? items.reduce((sum: number, item: any) => sum + toNumber(item?.qty), 0));
+  const receivedQty = toNumber(summary?.received_qty ?? items.reduce((sum: number, item: any) => sum + toNumber(item?.receiving_qty), 0));
   return {
     id: String(order?.refno ?? order?.id ?? ''),
     po_number: String(order?.po_number ?? ''),
@@ -137,6 +160,7 @@ const toPurchaseOrderDetail = (payload: any): PurchaseOrderWithDetails => {
     warehouse_id: 'WH1',
     remarks: String(order?.reference ?? ''),
     pr_reference: String(order?.pr_number ?? ''),
+    pr_refno: String(order?.pr_refno ?? ''),
     status: normalizePurchaseOrderStatus(order?.status ?? 'Pending'),
     grand_total: toNumber(summary?.total_cogs ?? 0),
     supplier: {
@@ -148,6 +172,16 @@ const toPurchaseOrderDetail = (payload: any): PurchaseOrderWithDetails => {
     items: items.map(toPurchaseOrderItem),
     creator: null,
     approver: null,
+    item_count: toNumber(summary?.item_count, items.length),
+    total_qty: totalQty,
+    received_qty: receivedQty,
+    received_lines: toNumber(summary?.received_lines),
+    remaining_qty: Math.max(0, totalQty - receivedQty),
+    cycle_status: purchasingCycleStatus(totalQty, receivedQty, order?.status),
+    incomplete_delivery_reason: parseIncompleteDeliveryReason(order?.reference || ''),
+    receiving_reports: (Array.isArray(payload?.receiving_reports) ? payload.receiving_reports : []).map((rr: any) => ({
+      id: String(rr?.refno || rr?.id || ''), rr_number: String(rr?.rr_number || ''), status: String(rr?.status || ''),
+    })),
   } as PurchaseOrderWithDetails;
 };
 

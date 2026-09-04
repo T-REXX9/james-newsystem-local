@@ -4,11 +4,13 @@ import {
   X,
   ChevronDown,
   HelpCircle,
+  ExternalLink,
 } from 'lucide-react';
 import type { UserProfile } from '../types';
 import { useKeyboardShortcuts, getShortcutDisplay } from '../hooks/useKeyboardShortcuts';
 import { useSmartDropdownPosition } from '../hooks/useSmartDropdownPosition';
 import { isCompanyOwnerRole, MODULE_ID_ALIASES } from '../constants';
+import { openModuleInNewWindow } from '../utils/workflowNavigate';
 import {
   TOPBAR_MENU_CONFIG,
   TopbarMainMenu,
@@ -126,6 +128,18 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
     },
     [navigateTo]
   );
+
+  const openRouteInNewWindow = useCallback((event: React.MouseEvent, route: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openModuleInNewWindow(route);
+    setOpenMenuId(null);
+    setIsMobileMenuOpen(false);
+    if (menuCloseTimeout.current) {
+      window.clearTimeout(menuCloseTimeout.current);
+      menuCloseTimeout.current = null;
+    }
+  }, []);
 
   const closeMenus = useCallback(() => {
     setOpenMenuId(null);
@@ -310,26 +324,38 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
                             </div>
                             <div className="space-y-1">
                               {submenu.items.map((item) => (
-                                <a
-                                  key={item.id}
-                                  href={routeHref(item.route)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={(event) => handleRouteLinkClick(event, item.route)}
-                                  onKeyDown={(event) => {
-                                    if (event.key === 'Escape') {
-                                      closeMenus();
-                                    }
-                                  }}
-                                  className={`
-                                    w-full flex items-center gap-2 px-3 py-2 text-sm text-left rounded-md leading-snug
-                                    ${item.route === normalizedActiveTab ? 'bg-brand-blue/10 text-brand-blue' : 'hover:bg-white/70 dark:hover:bg-slate-900'}
-                                  `}
-                                  role="menuitem"
-                                >
-                                  <item.icon className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-                                  {item.label}
-                                </a>
+                                <div key={item.id} className="flex items-center gap-1">
+                                  <a
+                                    href={routeHref(item.route)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(event) => handleRouteLinkClick(event, item.route)}
+                                    onKeyDown={(event) => {
+                                      if (event.key === 'Escape') {
+                                        closeMenus();
+                                      }
+                                    }}
+                                    className={`
+                                      min-w-0 flex-1 flex items-center gap-2 px-3 py-2 text-sm text-left rounded-md leading-snug
+                                      ${item.route === normalizedActiveTab ? 'bg-brand-blue/10 text-brand-blue' : 'hover:bg-white/70 dark:hover:bg-slate-900'}
+                                    `}
+                                    role="menuitem"
+                                  >
+                                    <item.icon className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                                    {item.label}
+                                  </a>
+                                  {menu.id === 'sales' && (
+                                    <button
+                                      type="button"
+                                      title={`Open ${item.label} in new window`}
+                                      aria-label={`Open ${item.label} in new window`}
+                                      onClick={(event) => openRouteInNewWindow(event, item.route)}
+                                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-500 transition hover:bg-white/70 hover:text-brand-blue"
+                                    >
+                                      <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                                    </button>
+                                  )}
+                                </div>
                               ))}
                             </div>
                           </div>
@@ -371,17 +397,29 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
                         </div>
                         <div className="space-y-1" role="menu">
                           {submenu.items.map((item) => (
-                            <a
-                              key={item.id}
-                              href={routeHref(item.route)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(event) => handleRouteLinkClick(event, item.route)}
-                              className="w-full text-left text-sm py-2 px-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 min-h-[44px] flex items-center"
-                              role="menuitem"
-                            >
-                              {item.label}
-                            </a>
+                            <div key={item.id} className="flex items-center gap-1">
+                              <a
+                                href={routeHref(item.route)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(event) => handleRouteLinkClick(event, item.route)}
+                                className="min-w-0 flex-1 text-left text-sm py-2 px-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 min-h-[44px] flex items-center"
+                                role="menuitem"
+                              >
+                                {item.label}
+                              </a>
+                              {menu.id === 'sales' && (
+                                <button
+                                  type="button"
+                                  title={`Open ${item.label} in new window`}
+                                  aria-label={`Open ${item.label} in new window`}
+                                  onClick={(event) => openRouteInNewWindow(event, item.route)}
+                                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-brand-blue"
+                                >
+                                  <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                                </button>
+                              )}
+                            </div>
                           ))}
                         </div>
                       </div>

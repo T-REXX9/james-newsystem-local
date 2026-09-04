@@ -47,7 +47,7 @@ const ReturnToSupplierList: React.FC<ReturnToSupplierListProps> = ({
             {filteredReturns.length === 0 && <tr><td colSpan={6} className="py-10 text-center text-gray-500">No records found.</td></tr>}
             {filteredReturns.map(r => (
                 <tr key={r.id} onClick={() => onSelect(r)} className={`cursor-pointer border-b border-[#e5e5e5] hover:bg-[#f5f5f5] ${selectedId === r.id ? 'bg-[#eef6fb]' : ''}`}>
-                    <td className="px-2 py-3">{new Date(r.return_date).toLocaleDateString()}</td>
+                    <td className="px-2 py-3">{new Date(r.return_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}</td>
                     <td className="px-2 py-3 font-semibold text-[#337ab7]">{r.return_no}</td>
                     <td className="px-2 py-3">{r.rr_no || '-'}</td>
                     <td className="px-2 py-3">{r.supplier_name || '-'}</td>

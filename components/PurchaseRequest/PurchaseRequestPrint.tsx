@@ -19,7 +19,7 @@ const PurchaseRequestPrint: React.FC<PurchaseRequestPrintProps> = ({ request, on
                     <div>
                         <h1 className="text-3xl font-bold uppercase">Purchase Request</h1>
                         <p className="mt-1 font-mono text-lg">{request.pr_number}</p>
-                        <p>Date: {new Date(request.request_date || '').toLocaleDateString()}</p>
+                        <p>Date: {new Date(request.request_date || '').toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
                         <p className="text-sm">Status: {request.status}</p>
                     </div>
                     <div className="text-right">

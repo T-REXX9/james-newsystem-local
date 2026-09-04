@@ -606,7 +606,7 @@ const InventoryReport: React.FC = () => {
                 </div>
               )}
               <div className="mt-1 text-sm">
-                System generated <strong>{generatedAt.toLocaleString()}</strong>
+                System generated <strong>{generatedAt.toLocaleString('en-PH', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</strong>
               </div>
             </div>
 

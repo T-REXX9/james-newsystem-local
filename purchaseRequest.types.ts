@@ -16,6 +16,11 @@ export interface PurchaseRequestWithItems extends PurchaseRequest {
     total_qty?: number;
     total_cost?: number;
     created_by_name?: string;
+    cycle_status?: 'Pending' | 'PO Created' | 'Partially Fulfilled' | 'Completed';
+    ordered_qty?: number;
+    received_qty?: number;
+    remaining_qty?: number;
+    incomplete_delivery_reason?: string;
 }
 
 export interface CreatePRItemPayload {

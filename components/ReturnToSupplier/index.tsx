@@ -195,7 +195,7 @@ const ReturnToSupplier: React.FC<ReturnToSupplierProps> = ({
                                         </div>
                                         <div className="mt-2 text-xs font-semibold text-slate-600">{r.supplier_name || '-'}</div>
                                         <div className="mt-2 flex items-center justify-between text-xs">
-                                            <span className="text-slate-500">📅 {new Date(r.return_date).toLocaleDateString('en-GB')}</span>
+                                            <span className="text-slate-500">📅 {new Date(r.return_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
                                             <span className="font-bold text-slate-800">₱{r.grand_total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                         </div>
                                     </button>

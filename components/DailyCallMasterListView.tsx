@@ -723,7 +723,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
             key={activeCategory.id}
             tabIndex={-1}
             data-testid={`category-table-${activeCategory.id}`}
-            className="flex min-h-[430px] scroll-mt-4 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-blue-500 2xl:min-h-[500px]"
+            className="flex min-h-[430px] scroll-mt-4 flex-col overflow-visible rounded-xl border border-slate-200 bg-white shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-blue-500 2xl:min-h-[500px]"
           >
             <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-4 py-3">
               <h3 className={`text-xl font-bold uppercase ${activeCategory.accent}`}>
@@ -737,12 +737,12 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
               </div>
             </div>
             <div
-              className="min-h-0 flex-1 overflow-auto"
+              className="min-h-0 flex-1"
               data-testid="daily-call-table-scroll"
               onScroll={handleTableScroll}
             >
-              <table className="w-full table-fixed text-left text-sm">
-                <thead className="bg-slate-50 text-xs text-slate-600">
+              <table className="w-full table-fixed border-separate border-spacing-0 text-left text-sm">
+                <thead className="sticky top-0 z-20 bg-slate-50 text-xs text-slate-600 shadow-sm [&_th]:sticky [&_th]:top-0 [&_th]:z-20 [&_th]:border-b [&_th]:border-slate-200 [&_th]:bg-slate-50">
                   <tr>
                     <th className="w-12 px-3 py-2.5">#</th>
                     <th className="w-[250px] px-2 py-2.5">Customer / Mobile</th>

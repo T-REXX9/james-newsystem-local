@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import html2canvas from 'html2canvas';
 import {
   Plus,
   Trash2,
@@ -20,6 +19,8 @@ import {
   SalesInquiryStatus,
 } from '../types';
 import ModuleRecordLink from './ModuleRecordLink';
+import ModuleRecordAction from './ModuleRecordAction';
+import { navigateWorkflow } from '../utils/workflowNavigate';
 import { fetchContactById, fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { getLocalAuthSession } from '../services/localAuthService';
 import {
@@ -44,6 +45,7 @@ import { useToast } from './ToastProvider';
 import ValidationSummary from './ValidationSummary';
 import { validateNumeric, validateRequired } from '../utils/formValidation';
 import { parseSupabaseError } from '../utils/errorHandler';
+import { exportPrintSheetAsJpeg } from '../utils/exportPrintSheetJpeg';
 import {
   normalizePriceGroup,
   normalizePriceGroupToInternalKey,
@@ -141,6 +143,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   // Data
   const [loading, setLoading] = useState(false);
   const [exportingJpeg, setExportingJpeg] = useState(false);
+  const [jpegCaptureMode, setJpegCaptureMode] = useState(false);
   const [selectedInquiry, setSelectedInquiry] = useState<SalesInquiry | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | SalesInquiryStatus>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -435,7 +438,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     if (!value) return '-';
     const parsed = new Date(value);
     if (Number.isNaN(parsed.getTime())) return value;
-    return parsed.toLocaleDateString();
+    return parsed.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
   };
 
   const notifyInquiryEvent = useCallback(async (
@@ -641,6 +644,11 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     loadInquiryIntoForm(selected);
   }, [loadInquiryIntoForm]);
 
+  const selectInquiryAndSync = useCallback((inquiry: SalesInquiry) => {
+    void selectInquiry(inquiry);
+    navigateWorkflow(SALES_INQUIRY_TAB_ID, { inquiryId: inquiry.id }, 'replace');
+  }, [selectInquiry]);
+
   // Removed auto-select of first inquiry to prevent pre-filling forms with test data
   // useEffect(() => {
   //   if (isCreatingNew) return;
@@ -734,6 +742,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
   useEffect(() => {
     if (!initialInquiryId) return;
+    if (selectedInquiry?.id === initialInquiryId && !isCreatingNew) return;
 
     const inquiryInList = inquiries.find((entry) => entry.id === initialInquiryId);
     if (inquiryInList) {
@@ -771,7 +780,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     return () => {
       active = false;
     };
-  }, [initialInquiryId, inquiries, loadInquiryIntoForm, selectInquiry]);
+  }, [initialInquiryId, inquiries, isCreatingNew, loadInquiryIntoForm, selectInquiry, selectedInquiry?.id]);
 
   // Add new item row
   const addItemRow = () => {
@@ -1144,12 +1153,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   };
 
   const navigateToSalesOrder = (orderId: string) => {
-    window.dispatchEvent(new CustomEvent('workflow:navigate', {
-      detail: {
-        tab: 'salesorder',
-        payload: { orderId }
-      }
-    }));
+    navigateWorkflow('sales-transaction-sales-order', { orderId });
   };
 
   const handleOpenConvertedOrder = async () => {
@@ -1209,101 +1213,32 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   const isReadOnly = selectedInquiry?.status === SalesInquiryStatus.CANCELLED || isConversionLocked;
   const handlePrint = () => {
     if (!printableInquiry) return;
+    setJpegCaptureMode(false);
     setShowPrintPreview(true);
     window.setTimeout(() => window.print(), 150);
   };
-  const handleExportJpeg = async () => {
-    const formElement = salesInquiryExportRef.current;
-    if (!formElement || exportingJpeg) return;
-
+  const handleExportJpeg = () => {
+    if (!printableInquiry) {
+      addToast({
+        type: 'warning',
+        title: 'Nothing to export',
+        description: 'Select a saved sales inquiry first.',
+      });
+      return;
+    }
+    if (exportingJpeg) return;
     setExportingJpeg(true);
+    setJpegCaptureMode(true);
+    setShowPrintPreview(true);
+  };
+  const handlePrintSheetReady = useCallback(async (sheet: HTMLElement) => {
+    if (!jpegCaptureMode) return;
     try {
-      await document.fonts?.ready;
-      const formBounds = formElement.getBoundingClientRect();
-      const exportWidth = Math.ceil(Math.max(formElement.scrollWidth, formElement.clientWidth, formBounds.width, 1140));
-      const exportHeight = Math.ceil(Math.max(formElement.scrollHeight, formElement.clientHeight, formBounds.height, 695));
-      const canvas = await html2canvas(formElement, {
-        backgroundColor: '#ffffff',
-        scale: Math.min(2, window.devicePixelRatio || 1.5),
-        useCORS: true,
-        width: exportWidth,
-        height: exportHeight,
-        scrollX: 0,
-        scrollY: 0,
-        windowWidth: Math.max(document.documentElement.clientWidth, exportWidth),
-        windowHeight: Math.max(document.documentElement.clientHeight, exportHeight),
-        ignoreElements: (element) => element.hasAttribute('data-jpeg-export-ignore'),
-        onclone: (_document, clonedElement) => {
-          clonedElement.setAttribute(
-            'style',
-            `${clonedElement.getAttribute('style') || ''}; width: ${exportWidth}px; height: auto; min-height: ${exportHeight}px; overflow: visible;`
-          );
-          clonedElement.querySelectorAll<HTMLElement>('[data-jpeg-export-ignore]').forEach((element) => {
-            element.style.display = 'none';
-          });
-          clonedElement.querySelectorAll<HTMLElement>('.overflow-x-auto, .overflow-y-auto, form, table, tbody').forEach((element) => {
-            element.style.overflow = 'visible';
-            element.style.maxHeight = 'none';
-          });
-          clonedElement.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input, select, textarea').forEach((control) => {
-            if (control.type === 'hidden' || control.classList.contains('sr-only')) return;
-            const replacement = _document.createElement('div');
-            const selectedOption = control instanceof HTMLSelectElement
-              ? control.options[control.selectedIndex]?.text || control.value
-              : control.value;
-            const displayValue = String(selectedOption || control.getAttribute('placeholder') || '').trim();
-            replacement.textContent = displayValue || '-';
-            replacement.className = control.className;
-            replacement.removeAttribute('id');
-            replacement.removeAttribute('name');
-            replacement.style.boxSizing = 'border-box';
-            replacement.style.display = 'flex';
-            replacement.style.alignItems = 'center';
-            replacement.style.minHeight = `${Math.max(control.offsetHeight || 0, 34)}px`;
-            replacement.style.height = 'auto';
-            replacement.style.overflow = 'visible';
-            replacement.style.whiteSpace = control instanceof HTMLTextAreaElement ? 'pre-wrap' : 'normal';
-            replacement.style.wordBreak = 'break-word';
-            replacement.style.lineHeight = '1.25';
-            if (control instanceof HTMLInputElement && (control.type === 'number' || control.type === 'date')) {
-              replacement.style.justifyContent = control.type === 'number' ? 'center' : 'flex-start';
-            }
-            control.replaceWith(replacement);
-          });
-          clonedElement.querySelectorAll<HTMLElement>('[data-jpeg-export-plain-value]').forEach((element) => {
-            element.style.display = 'inline-flex';
-            element.style.alignItems = 'center';
-            element.style.justifyContent = 'center';
-            element.style.minHeight = '24px';
-            element.style.height = 'auto';
-            element.style.overflow = 'visible';
-            element.style.lineHeight = '1.25';
-            element.style.paddingTop = '4px';
-            element.style.paddingBottom = '4px';
-          });
-        },
+      const safeInquiryNo = (activeInquiryNumberDisplay || referenceNo || 'sales-inquiry').replace(/[^a-z0-9-]+/gi, '-');
+      await exportPrintSheetAsJpeg({
+        element: sheet,
+        filename: `${safeInquiryNo}-sales-inquiry.jpg`,
       });
-
-      await new Promise<void>((resolve, reject) => {
-        canvas.toBlob((blob) => {
-          if (!blob) {
-            reject(new Error('Unable to create JPEG image.'));
-            return;
-          }
-
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          const safeInquiryNo = (activeInquiryNumberDisplay || referenceNo || 'sales-inquiry').replace(/[^a-z0-9-]+/gi, '-');
-          link.href = url;
-          link.download = `${safeInquiryNo}-sales-inquiry.jpg`;
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
-          URL.revokeObjectURL(url);
-          resolve();
-        }, 'image/jpeg', 0.92);
-      });
-
       addToast({ type: 'success', message: 'Sales inquiry JPEG exported.' });
     } catch (error) {
       console.error('Error exporting sales inquiry JPEG:', error);
@@ -1313,9 +1248,11 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         description: error instanceof Error ? error.message : 'Please try again.',
       });
     } finally {
+      setShowPrintPreview(false);
+      setJpegCaptureMode(false);
       setExportingJpeg(false);
     }
-  };
+  }, [activeInquiryNumberDisplay, addToast, jpegCaptureMode, referenceNo]);
   const priceGroupDisplay = normalizePriceGroup(priceGroup);
   const canGenerateSO = Boolean(
     selectedInquiry &&
@@ -1368,7 +1305,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       tone: 'info' as const,
     };
   })();
-  const canOpenConvertedOrder = false;
+  const convertedOrderId = String(selectedInquiry?.so_refno || '').trim();
+  const canOpenConvertedOrder = Boolean(!isCreatingNew && selectedInquiry && convertedOrderId);
   const currentMonthLabel = new Date(salesDate || Date.now()).toLocaleDateString('en-PH', { month: 'long' });
   const summaryCustomer = selectedCustomer as (Contact & {
     dealershipSales?: number;
@@ -1431,14 +1369,6 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     setDateFilterApplied(false);
     void refetchInquiries();
   };
-  const openProspectiveCustomer = () => {
-    window.dispatchEvent(new CustomEvent('workflow:navigate', {
-      detail: {
-        tab: 'maintenance-customer-customer-database',
-        payload: { action: 'create', status: 'Prospective' },
-      },
-    }));
-  };
   const filteredByLabel = `Year: ${filterYear || 'All'} Month: ${filterMonth ? monthOptions[Number(filterMonth) - 1]?.slice(0, 3) : 'All'},${filterDay ? ` Day: ${filterDay}` : ''}`;
 
   const legacyLayout = (
@@ -1450,7 +1380,14 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
               <button type="button" onClick={() => setShowSearchModal(true)} className="rounded-[4px] bg-[#5d82a2] px-[13px] py-[9px] text-[14px] text-white hover:bg-[#50738f]">Search</button>
               <button type="button" onClick={clearInquiryFilters} className="rounded-[4px] bg-[#4caf50] px-[13px] py-[9px] text-[14px] text-white hover:bg-[#43a047]">Refresh</button>
               <button type="button" onClick={startNewInquiry} className="rounded-[4px] bg-[#4caf50] px-[13px] py-[9px] text-[14px] text-white hover:bg-[#43a047]">Create New</button>
-              <button type="button" onClick={openProspectiveCustomer} className="rounded-[4px] bg-[#5d82a2] px-[13px] py-[9px] text-[14px] text-white hover:bg-[#50738f]">Prospective</button>
+              <ModuleRecordAction
+                tab="maintenance-customer-customer-database"
+                payload={{ action: 'create', status: 'Prospective' }}
+                className="rounded-[4px] bg-[#5d82a2] px-[13px] py-[9px] text-[14px] text-white hover:bg-[#50738f]"
+                newWindowLabel="Open Prospective customer in new window"
+              >
+                Prospective
+              </ModuleRecordAction>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-0">
               <span className="mr-[30px] text-[20px] font-semibold text-[#29475f]">By Month:</span>
@@ -1479,11 +1416,11 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                     const customer = customerMap.get(inquiry.contact_id);
                     const isActive = selectedInquiry?.id === inquiry.id && !isCreatingNew;
                     const rowColor = inquiry.status === SalesInquiryStatus.CANCELLED ? 'text-[#d33]' : isActive ? 'text-[#245d91]' : 'text-[#202020]';
-                    return <tr key={inquiry.id} onClick={() => void selectInquiry(inquiry)} className={`cursor-pointer hover:bg-[#f7f7f7] ${rowColor}`}>
+                    return <tr key={inquiry.id} onClick={() => selectInquiryAndSync(inquiry)} className={`cursor-pointer hover:bg-[#f7f7f7] ${rowColor}`}>
                       <td className="border border-[#d7d7d7] px-2 py-[9px]">{formatLegacyListDateTime(inquiry.sales_date, inquiry.sales_time)}</td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] truncate" title={customer?.company || ''}>{customer?.company || ''}</td>
-                      <td className="border border-[#d7d7d7] px-2 py-[9px]"><ModuleRecordLink tab="sales-transaction-sales-inquiry" payload={{ inquiryId: inquiry.id }} onOpen={() => void selectInquiry(inquiry)} className="underline">{formatInquiryDisplayNo(inquiry.inquiry_no)}</ModuleRecordLink> <Copy className="ml-1 inline h-3.5 w-3.5 text-[#337ab7]" /></td>
-                      <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{inquiry.so_no || ''}</td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px]"><ModuleRecordLink tab="sales-transaction-sales-inquiry" payload={{ inquiryId: inquiry.id }} mode="replace" onOpen={() => void selectInquiry(inquiry)} className="underline">{formatInquiryDisplayNo(inquiry.inquiry_no)}</ModuleRecordLink> <Copy className="ml-1 inline h-3.5 w-3.5 text-[#337ab7]" /></td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{inquiry.so_refno ? <ModuleRecordAction tab="sales-transaction-sales-order" payload={{ orderId: inquiry.so_refno }} className="underline" newWindowLabel="Open sales order in new window">{inquiry.so_no || inquiry.so_refno}</ModuleRecordAction> : (inquiry.so_no || '')}</td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{inquiry.invoice_no || inquiry.dr_no || ''}</td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] truncate">{inquiry.sales_person || ''}</td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px]">{inquiry.status}</td>
@@ -1578,6 +1515,17 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
               {printableInquiry && <button type="button" onClick={handlePrint} className="rounded-[4px] bg-[#4caf50] px-[20px] py-[9px] text-[13px] text-white">Print</button>}
               <button type="submit" disabled={loading || isReadOnly} className="rounded-[4px] bg-[#4caf50] px-[20px] py-[9px] text-[13px] text-white disabled:opacity-50">{loading ? 'Saving...' : 'Save'}</button>
               {canGenerateSO && <button type="button" onClick={handleFinalizeInquiry} disabled={loading} className="ml-auto rounded-[4px] bg-[#4caf50] px-[20px] py-[9px] text-[13px] text-white disabled:opacity-50">Generate SO</button>}
+              {canOpenConvertedOrder && (
+                <ModuleRecordAction
+                  tab="sales-transaction-sales-order"
+                  payload={{ orderId: convertedOrderId }}
+                  onOpen={() => void handleOpenConvertedOrder()}
+                  className="rounded-[4px] border border-[#ccc] px-[16px] py-[9px] text-[13px]"
+                  newWindowLabel="Open sales order in new window"
+                >
+                  Open Sales Order
+                </ModuleRecordAction>
+              )}
               <button type="button" onClick={addManualItemRow} disabled={isReadOnly} className="rounded-[4px] bg-[#5d82a2] px-[16px] py-[9px] text-[13px] text-white disabled:opacity-50">Not Listed Product</button>
             </div>}
           </form>
@@ -1595,7 +1543,21 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         </div>
       </div>}
 
-      {showPrintPreview && printableInquiry && <SalesInquiryPrintPreview inquiry={printableInquiry} customer={selectedCustomer} inquiryNumberLabel={activeInquiryNumberDisplay} preparedBy={String(getLocalAuthSession()?.userProfile?.full_name || '').trim()} onClose={() => setShowPrintPreview(false)} />}
+      {showPrintPreview && printableInquiry && (
+        <SalesInquiryPrintPreview
+          inquiry={printableInquiry}
+          customer={selectedCustomer}
+          inquiryNumberLabel={activeInquiryNumberDisplay}
+          preparedBy={String(getLocalAuthSession()?.userProfile?.full_name || '').trim()}
+          captureMode={jpegCaptureMode}
+          onSheetReady={handlePrintSheetReady}
+          onClose={() => {
+            setShowPrintPreview(false);
+            setJpegCaptureMode(false);
+            setExportingJpeg(false);
+          }}
+        />
+      )}
       {showDeleteModal && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"><div className="w-full max-w-sm rounded-[5px] bg-white p-5 shadow-xl"><h3 className="mb-3 text-[18px] font-semibold">{selectedInquiry && !isCreatingNew ? 'Cancel Sales Inquiry' : 'Clear Sales Inquiry'}</h3><p className="mb-5 text-[14px] text-[#555]">{selectedInquiry && !isCreatingNew ? 'Are you sure you want to cancel this Sales Inquiry?' : 'Are you sure you want to clear this draft?'}</p><div className="flex justify-end gap-2"><button type="button" onClick={() => setShowDeleteModal(false)} className="rounded border border-[#ccc] px-4 py-2 text-[13px]">Close</button><button type="button" onClick={handleDeleteConfirm} disabled={deleteConfirming} className="rounded bg-[#337ab7] px-4 py-2 text-[13px] text-white">{deleteConfirming ? 'Working...' : 'Proceed'}</button></div></div></div>}
       <ProductSearchModal isOpen={showProductModal} onClose={handleCloseProductModal} onSelect={handleProductSelect} />
     </div>
@@ -1767,7 +1729,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                           onClick={() => void selectInquiry(inquiry)}
                           className={`cursor-pointer border-b border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40 ${rowTone}`}
                         >
-                          <td className="px-3 py-2">{inquiry.sales_date ? new Date(inquiry.sales_date).toLocaleDateString() : '—'}</td>
+                          <td className="px-3 py-2">{inquiry.sales_date ? new Date(inquiry.sales_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : '—'}</td>
                           <td className="px-3 py-2">
                             <div className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" title={customer?.company || '—'}>
                               {customer?.company || '—'}
@@ -2375,9 +2337,15 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                           <td colSpan={8} className="border-t border-slate-200 dark:border-slate-800"></td>
                           <td className="px-3 py-3 text-right font-semibold border-t border-slate-200 dark:border-slate-800">SO No.</td>
                           <td className="px-3 py-3 border-t border-slate-200 dark:border-slate-800">
-                            <button type="button" onClick={handleOpenConvertedOrder} className="text-brand-blue font-semibold hover:underline">
+                            <ModuleRecordAction
+                              tab="sales-transaction-sales-order"
+                              payload={{ orderId: convertedOrderId }}
+                              onOpen={() => void handleOpenConvertedOrder()}
+                              className="text-brand-blue font-semibold hover:underline"
+                              newWindowLabel="Open sales order in new window"
+                            >
                               Open Sales Order
-                            </button>
+                            </ModuleRecordAction>
                           </td>
                           <td className="border-t border-slate-200 dark:border-slate-800"></td>
                         </tr>

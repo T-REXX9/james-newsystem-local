@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, ShoppingBag, User, MapPin, Loader2 } from 'lucide-react';
 import { Contact, CustomerStatus } from '../types';
+import ModuleRecordAction from './ModuleRecordAction';
 
 interface SalesMapSidebarProps {
     provinceName: string | null;
@@ -64,12 +65,9 @@ const SalesMapSidebar: React.FC<SalesMapSidebarProps> = ({ provinceName, contact
                 ) : (
                     <div className="space-y-4">
                         {contacts.map((contact) => {
-                            const handleClick = () => {
-                                if (onCustomerSelect) onCustomerSelect(contact.id);
-                            };
-                            const isButton = Boolean(onCustomerSelect) && contact.id;
+                            const isLink = Boolean(onCustomerSelect) && contact.id;
                             const commonClass = "w-full text-left bg-white border border-slate-100 rounded-xl p-4 transition-shadow group " +
-                                (isButton ? 'hover:shadow-md hover:border-indigo-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-300' : 'hover:shadow-md cursor-pointer');
+                                (isLink ? 'hover:shadow-md hover:border-indigo-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-300' : 'hover:shadow-md cursor-pointer');
                             const inner = (
                                 <>
                                     <div className="flex justify-between items-start mb-3">
@@ -104,16 +102,20 @@ const SalesMapSidebar: React.FC<SalesMapSidebarProps> = ({ provinceName, contact
                                     </div>
                                 </>
                             );
-                            return isButton ? (
-                                <button
+                            return isLink ? (
+                                <ModuleRecordAction
                                     key={contact.id}
-                                    type="button"
-                                    onClick={handleClick}
+                                    tab="sales-database-customer-database"
+                                    payload={{ contactId: contact.id }}
+                                    onOpen={() => onCustomerSelect?.(contact.id)}
                                     className={commonClass}
+                                    wrapperClassName="relative block w-full"
+                                    newWindowClassName="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition hover:bg-indigo-50 hover:text-indigo-600"
+                                    newWindowLabel={`Open ${contact.company} in a new window`}
                                     aria-label={`Open ${contact.company} in customer database`}
                                 >
                                     {inner}
-                                </button>
+                                </ModuleRecordAction>
                             ) : (
                                 <div key={contact.id} className={commonClass}>
                                     {inner}

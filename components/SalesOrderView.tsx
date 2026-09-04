@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import html2canvas from 'html2canvas';
 import {
   RefreshCw,
   ChevronLeft,
@@ -15,6 +14,8 @@ import {
   SalesOrder,
 } from '../types';
 import ModuleRecordLink from './ModuleRecordLink';
+import ModuleRecordAction from './ModuleRecordAction';
+import { navigateWorkflow } from '../utils/workflowNavigate';
 import {
   confirmSalesOrder,
   convertToDocument,
@@ -38,6 +39,8 @@ import { normalizePriceGroup } from '../constants/pricingGroups';
 import { useToast } from './ToastProvider';
 import { PageHeader, RecordTrustStrip, WorkflowGuidance } from './common/PageScaffold';
 import CallCustomerButton from './CallCustomerButton';
+import SalesOrderPrintPreview from './SalesOrderPrintPreview';
+import { exportPrintSheetAsJpeg } from '../utils/exportPrintSheetJpeg';
 
 interface SalesOrderViewProps {
   initialOrderId?: string;
@@ -95,7 +98,7 @@ const formatDate = (value?: string | null): string => {
   if (!value) return '-';
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString();
+  return parsed.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
 };
 
 const formatCurrency = (value?: number | string | null): string => {
@@ -133,6 +136,8 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
   const [unpostLoading, setUnpostLoading] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [exportingJpeg, setExportingJpeg] = useState(false);
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
+  const [jpegCaptureMode, setJpegCaptureMode] = useState(false);
 
   useEffect(() => {
     if (!initialMonth || !initialYear) return;
@@ -308,10 +313,6 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
     });
   }, []);
 
-  const navigateToModule = useCallback((tab: string, payload?: Record<string, string>) => {
-    window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab, payload } }));
-  }, []);
-
   const getCustomerLabel = useCallback(
     (order: SalesOrder, fallbackCustomer?: Contact | null) =>
       fallbackCustomer?.company || customerMap.get(order.contact_id)?.company || order.contact_id,
@@ -331,14 +332,6 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
     )
   ), []);
 
-  const openDocumentFromLink = useCallback((link: { type: 'orderslip' | 'invoice'; id: string }) => {
-    if (link.type === 'orderslip') {
-      navigateToModule('orderslip', { orderSlipId: link.id });
-      return;
-    }
-    navigateToModule('invoice', { invoiceId: link.id });
-  }, [navigateToModule]);
-
   const selectOrder = useCallback(async (order: SalesOrder) => {
     setSelectedOrder(order);
     try {
@@ -351,8 +344,14 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
     }
   }, []);
 
+  const selectOrderAndSync = useCallback((order: SalesOrder) => {
+    void selectOrder(order);
+    navigateWorkflow(SALES_ORDER_TAB_ID, { orderId: order.id }, 'replace');
+  }, [selectOrder]);
+
   useEffect(() => {
     if (!initialOrderId) return;
+    if (selectedOrder?.id === initialOrderId) return;
 
     const initial = orders.find(order => order.id === initialOrderId);
     if (initial) {
@@ -385,7 +384,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
     return () => {
       active = false;
     };
-  }, [initialOrderId, orders]);
+  }, [initialOrderId, orders, selectedOrder?.id]);
 
   useEffect(() => {
     setPage(1);
@@ -828,91 +827,41 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
     if (currency) return Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     return String(value);
   };
-  const handleExportJpeg = async () => {
-    const formElement = salesOrderExportRef.current;
-    if (!formElement || exportingJpeg) return;
-
+  const handlePrint = () => {
+    if (!selectedOrder) {
+      addToast({
+        type: 'warning',
+        title: 'Nothing to print',
+        description: 'Select a sales order first.',
+      });
+      return;
+    }
+    setJpegCaptureMode(false);
+    setShowPrintPreview(true);
+    window.setTimeout(() => window.print(), 150);
+  };
+  const handleExportJpeg = () => {
+    if (!selectedOrder) {
+      addToast({
+        type: 'warning',
+        title: 'Nothing to export',
+        description: 'Select a sales order first.',
+      });
+      return;
+    }
+    if (exportingJpeg) return;
     setExportingJpeg(true);
+    setJpegCaptureMode(true);
+    setShowPrintPreview(true);
+  };
+  const handlePrintSheetReady = useCallback(async (sheet: HTMLElement) => {
+    if (!jpegCaptureMode) return;
     try {
-      await document.fonts?.ready;
-      const formBounds = formElement.getBoundingClientRect();
-      const exportWidth = Math.ceil(Math.max(formElement.scrollWidth, formElement.clientWidth, formBounds.width, 1140));
-      const exportHeight = Math.ceil(Math.max(formElement.scrollHeight, formElement.clientHeight, formBounds.height, 576));
-      const canvas = await html2canvas(formElement, {
-        backgroundColor: '#ffffff',
-        scale: Math.min(2, window.devicePixelRatio || 1.5),
-        useCORS: true,
-        width: exportWidth,
-        height: exportHeight,
-        scrollX: 0,
-        scrollY: 0,
-        windowWidth: Math.max(document.documentElement.clientWidth, exportWidth),
-        windowHeight: Math.max(document.documentElement.clientHeight, exportHeight),
-        ignoreElements: (element) => element.hasAttribute('data-jpeg-export-ignore'),
-        onclone: (_document, clonedElement) => {
-          clonedElement.setAttribute(
-            'style',
-            `${clonedElement.getAttribute('style') || ''}; width: ${exportWidth}px; height: auto; min-height: ${exportHeight}px; overflow: visible;`
-          );
-          clonedElement.querySelectorAll<HTMLElement>('[data-jpeg-export-ignore]').forEach((element) => {
-            element.style.display = 'none';
-          });
-          clonedElement.querySelectorAll<HTMLElement>('.overflow-x-auto, .overflow-y-auto, form, table, tbody').forEach((element) => {
-            element.style.overflow = 'visible';
-            element.style.maxHeight = 'none';
-          });
-          clonedElement.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input, select, textarea').forEach((control) => {
-            if (control.type === 'hidden' || control.classList.contains('sr-only')) return;
-            const replacement = _document.createElement('div');
-            const selectedOption = control instanceof HTMLSelectElement
-              ? control.options[control.selectedIndex]?.text || control.value
-              : control.value;
-            replacement.textContent = String(selectedOption || control.getAttribute('placeholder') || '').trim() || '-';
-            replacement.className = control.className;
-            replacement.style.boxSizing = 'border-box';
-            replacement.style.display = 'flex';
-            replacement.style.alignItems = 'center';
-            replacement.style.minHeight = `${Math.max(control.offsetHeight || 0, 34)}px`;
-            replacement.style.height = 'auto';
-            replacement.style.overflow = 'visible';
-            replacement.style.whiteSpace = control instanceof HTMLTextAreaElement ? 'pre-wrap' : 'normal';
-            replacement.style.wordBreak = 'break-word';
-            replacement.style.lineHeight = '1.25';
-            control.replaceWith(replacement);
-          });
-          clonedElement.querySelectorAll<HTMLElement>('[data-jpeg-export-plain-value]').forEach((element) => {
-            element.style.display = 'inline-flex';
-            element.style.alignItems = 'center';
-            element.style.justifyContent = 'center';
-            element.style.minHeight = '24px';
-            element.style.height = 'auto';
-            element.style.overflow = 'visible';
-            element.style.lineHeight = '1.25';
-            element.style.paddingTop = '4px';
-            element.style.paddingBottom = '4px';
-          });
-        },
+      const safeOrderNo = (selectedOrder?.order_no || 'sales-order').replace(/[^a-z0-9-]+/gi, '-');
+      await exportPrintSheetAsJpeg({
+        element: sheet,
+        filename: `${safeOrderNo}-sales-order.jpg`,
       });
-
-      await new Promise<void>((resolve, reject) => {
-        canvas.toBlob((blob) => {
-          if (!blob) {
-            reject(new Error('Unable to create JPEG image.'));
-            return;
-          }
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          const safeOrderNo = (selectedOrder?.order_no || nextOrderNumber || 'sales-order').replace(/[^a-z0-9-]+/gi, '-');
-          link.href = url;
-          link.download = `${safeOrderNo}-sales-order.jpg`;
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
-          URL.revokeObjectURL(url);
-          resolve();
-        }, 'image/jpeg', 0.92);
-      });
-
       addToast({ type: 'success', message: 'Sales order JPEG exported.' });
     } catch (error) {
       console.error('Error exporting sales order JPEG:', error);
@@ -922,9 +871,11 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
         description: error instanceof Error ? error.message : 'Please try again.',
       });
     } finally {
+      setShowPrintPreview(false);
+      setJpegCaptureMode(false);
       setExportingJpeg(false);
     }
-  };
+  }, [addToast, jpegCaptureMode, selectedOrder?.order_no]);
   const filteredByLabel = targetMonthYear.month && targetMonthYear.year
     ? `Year: ${targetMonthYear.year} Month: ${MONTH_OPTIONS[targetMonthYear.month - 1].slice(0, 3)},`
     : 'All Records';
@@ -976,11 +927,11 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                     const customer = customerMap.get(order.contact_id);
                     const selected = selectedOrder?.id === order.id;
                     const rowColor = normalizeStatus(order.status) === 'cancelled' ? 'text-[#d33]' : selected ? 'text-[#245d91]' : 'text-[#202020]';
-                    return <tr key={order.id} onClick={() => void selectOrder(order)} className={`cursor-pointer hover:bg-[#f7f7f7] ${rowColor}`}>
+                    return <tr key={order.id} onClick={() => selectOrderAndSync(order)} className={`cursor-pointer hover:bg-[#f7f7f7] ${rowColor}`}>
                       <td className="border border-[#d7d7d7] px-2 py-[9px]">{legacyListDate(order.sales_date)}</td>
                       <td className="truncate border border-[#d7d7d7] px-2 py-[9px]" title={customer?.company || ''}>{customer?.company || ''}</td>
-                      <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{order.inquiry_no || ''}</td>
-                      <td className="border border-[#d7d7d7] px-2 py-[9px] underline"><ModuleRecordLink tab="sales-transaction-sales-order" payload={{ orderId: order.id }} onOpen={() => void selectOrder(order)}>{order.order_no || ''}</ModuleRecordLink></td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{order.inquiry_id ? <ModuleRecordAction tab="sales-transaction-sales-inquiry" payload={{ inquiryId: order.inquiry_id }} className="underline" newWindowLabel="Open sales inquiry in new window">{order.inquiry_no || ''}</ModuleRecordAction> : (order.inquiry_no || '')}</td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px] underline"><ModuleRecordLink tab="sales-transaction-sales-order" payload={{ orderId: order.id }} mode="replace" onOpen={() => void selectOrder(order)}>{order.order_no || ''}</ModuleRecordLink></td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{order.invoice_no || order.order_slip_no || ''}</td>
                       <td className="truncate border border-[#d7d7d7] px-2 py-[9px]">{order.sales_person || ''}</td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px]">{legacyStatus(order.status)}</td>
@@ -1067,7 +1018,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
               {selectedOrder && <div data-jpeg-export-ignore className="mt-3 flex flex-wrap justify-end gap-[5px] border-t border-[#e3e3e3] pt-4 print:hidden">
                 {canConfirm && <button type="button" onClick={() => void handleConfirmOrder()} disabled={confirming} className="rounded-[4px] bg-[#4caf50] px-[18px] py-[9px] text-[13px] text-white disabled:opacity-50">{confirming ? 'Processing...' : confirmLabel}</button>}
                 {canGenerate && <button type="button" onClick={() => setConversionModalOpen(true)} className="rounded-[4px] bg-[#4caf50] px-[18px] py-[9px] text-[13px] text-white">Generate Sales Transaction</button>}
-                {canGenerate && <button type="button" onClick={() => window.print()} className="rounded-[4px] bg-[#5d82a2] px-[18px] py-[9px] text-[13px] text-white">Print SO</button>}
+                {canGenerate && <button type="button" onClick={handlePrint} className="rounded-[4px] bg-[#5d82a2] px-[18px] py-[9px] text-[13px] text-white">Print SO</button>}
                 {canGenerate && <button type="button" onClick={() => setCancelModalOpen(true)} className="rounded-[4px] bg-[#d64b47] px-[18px] py-[9px] text-[13px] text-white">Cancel SO</button>}
                 {selectedOrderStatus === 'posted' && <button type="button" onClick={() => setUnpostModalOpen(true)} disabled={unpostLoading} className="rounded-[4px] bg-[#d64b47] px-[18px] py-[9px] text-[13px] text-white disabled:opacity-50">{unpostLoading ? 'Unposting...' : 'Unpost'}</button>}
               </div>}
@@ -1075,7 +1026,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
           </div>
         </section>
 
-        {documentMessage && <div className="flex items-center justify-between rounded-[5px] border border-[#b7dfbf] bg-[#edf9ef] p-3 text-[13px] text-[#367342]"><span>{documentMessage}</span>{documentLink && <button type="button" onClick={() => openDocumentFromLink(documentLink)} className="rounded bg-[#4caf50] px-3 py-1 text-white">View {documentLink.type === 'orderslip' ? 'Order Slip' : 'Invoice'}</button>}</div>}
+        {documentMessage && <div className="flex items-center justify-between rounded-[5px] border border-[#b7dfbf] bg-[#edf9ef] p-3 text-[13px] text-[#367342]"><span>{documentMessage}</span>{documentLink && <ModuleRecordAction tab={documentLink.type === 'orderslip' ? 'sales-transaction-order-slip' : 'sales-transaction-invoice'} payload={documentLink.type === 'orderslip' ? { orderSlipId: documentLink.id } : { invoiceId: documentLink.id }} className="rounded bg-[#4caf50] px-3 py-1 text-white" newWindowLabel={`Open ${documentLink.type === 'orderslip' ? 'order slip' : 'invoice'} in new window`}>View {documentLink.type === 'orderslip' ? 'Order Slip' : 'Invoice'}</ModuleRecordAction>}</div>}
       </div>
 
       {showSearchModal && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
@@ -1094,6 +1045,20 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
       {conversionModalOpen && selectedOrder && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"><div className="w-full max-w-md rounded-[5px] bg-white p-5 shadow-xl"><h3 className="mb-3 text-[18px] font-semibold">Convert to Document</h3><p className="text-[13px] text-[#555]">This order will be converted based on the customer&apos;s transaction type. Suggested document: <strong>{documentSuggestion}</strong>.</p><div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setConversionModalOpen(false)} className="rounded border border-[#ccc] px-4 py-2 text-[13px]">Cancel</button><button type="button" onClick={() => void handleConversion()} disabled={conversionLoading} className="rounded bg-[#337ab7] px-4 py-2 text-[13px] text-white disabled:opacity-50">{conversionLoading ? 'Converting...' : 'Convert'}</button></div></div></div>}
 
       <ConfirmModal isOpen={unpostModalOpen && Boolean(selectedOrder)} onClose={() => { if (!unpostLoading) setUnpostModalOpen(false); }} onConfirm={handleUnpost} title="Unpost Sales Order" message={`Unpost Sales Order ${selectedOrder?.order_no || selectedOrder?.reference_no || selectedOrder?.id || ''}? This will remove its linked invoice or order slip and return the sales order to pending.`} confirmLabel={unpostLoading ? 'Unposting...' : 'Unpost'} cancelLabel="Cancel" variant="warning" />
+
+      {showPrintPreview && selectedOrder && (
+        <SalesOrderPrintPreview
+          order={selectedOrder}
+          customer={selectedCustomer}
+          captureMode={jpegCaptureMode}
+          onSheetReady={handlePrintSheetReady}
+          onClose={() => {
+            setShowPrintPreview(false);
+            setJpegCaptureMode(false);
+            setExportingJpeg(false);
+          }}
+        />
+      )}
     </div>
   );
 
@@ -1547,7 +1512,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                 {canGenerate && (
                   <button
                     type="button"
-                    onClick={() => window.print()}
+                    onClick={handlePrint}
                     className="px-3 py-2 rounded bg-slate-500 text-white text-sm"
                   >
                     Print SO
@@ -1580,13 +1545,14 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
             <div className="bg-emerald-50 border border-emerald-100 text-emerald-700 rounded-lg p-3 text-sm flex items-center justify-between">
               <span>{documentMessage}</span>
               {documentLink && (
-                <button
-                  type="button"
-                  onClick={() => openDocumentFromLink(documentLink)}
+                <ModuleRecordAction
+                  tab={documentLink.type === 'orderslip' ? 'sales-transaction-order-slip' : 'sales-transaction-invoice'}
+                  payload={documentLink.type === 'orderslip' ? { orderSlipId: documentLink.id } : { invoiceId: documentLink.id }}
                   className="px-3 py-1 rounded bg-emerald-600 text-white"
+                  newWindowLabel={`Open ${documentLink.type === 'orderslip' ? 'order slip' : 'invoice'} in new window`}
                 >
                   View {documentLink.type === 'orderslip' ? 'Order Slip' : 'Invoice'}
-                </button>
+                </ModuleRecordAction>
               )}
             </div>
           )}

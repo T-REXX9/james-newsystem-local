@@ -258,7 +258,8 @@ describe('ReorderReport automatic loading', () => {
       items: [{
         ...reportRow('linked', 'ITEM-LINKED'),
         pr_documents: [{ refno: 'pr-ref', number: 'PR-100', requested_qty: 5, request_date: '2026-08-28', status: 'Approved', supplier_id: 'SUP-1', supplier_name: 'Supplier One', po_refno: 'po-ref' }],
-        po_documents: [{ refno: 'po-ref', number: 'PO-100', status: 'Posted', supplier_id: 'SUP-1', supplier_name: 'Supplier One', ordered_qty: 5, accepted_qty: 0, outstanding_qty: 5, unit_cost: 25, order_date: '2026-08-28', expected_delivery_date: '2026-08-30', pr_refno: 'pr-ref', pr_number: 'PR-100' }],
+        po_ordered_qty: 4972,
+        po_documents: [{ refno: 'po-ref', number: 'PO-100', status: 'Posted', supplier_id: 'SUP-1', supplier_name: 'Supplier One', ordered_qty: 100, accepted_qty: 0, outstanding_qty: 100, unit_cost: 25, order_date: '2026-08-28', expected_delivery_date: '2026-08-30', pr_refno: 'pr-ref', pr_number: 'PR-100' }],
         rr_documents: [{ refno: 'rr-ref', number: 'RR-100', status: 'Pending', po_refno: 'po-ref', po_number: 'PO-100', received_qty: 5, accepted_qty: 0, receiving_date: '2026-08-28', received_by: 'User' }],
       }],
       meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
@@ -272,6 +273,7 @@ describe('ReorderReport automatic loading', () => {
       expect(link).toHaveAttribute('rel', 'noopener noreferrer');
       expect(fireEvent.click(link)).toBe(true);
     }
+    expect(screen.getByText('Ordered 4,972 · Posted')).toBeInTheDocument();
     expect(dispatchSpy).not.toHaveBeenCalled();
   });
 

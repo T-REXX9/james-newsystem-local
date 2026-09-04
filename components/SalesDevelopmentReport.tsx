@@ -2,12 +2,14 @@ import React from 'react';
 import { BarChart3 } from 'lucide-react';
 import { UserProfile } from '../types';
 import SalesDevelopmentReportFilterView from './SalesDevelopmentReportFilter';
+import type { SalesReportRouteView } from '../utils/workflowNavigate';
 
 interface SalesDevelopmentReportProps {
   currentUser?: UserProfile;
+  initialView?: SalesReportRouteView;
 }
 
-const SalesDevelopmentReport: React.FC<SalesDevelopmentReportProps> = ({ currentUser }) => {
+const SalesDevelopmentReport: React.FC<SalesDevelopmentReportProps> = ({ currentUser, initialView }) => {
   void currentUser;
 
   return (
@@ -28,7 +30,7 @@ const SalesDevelopmentReport: React.FC<SalesDevelopmentReportProps> = ({ current
       </div>
 
       <div className="flex-1 min-h-0 overflow-hidden">
-        <SalesDevelopmentReportFilterView />
+        <SalesDevelopmentReportFilterView initialView={initialView} />
       </div>
     </div>
   );

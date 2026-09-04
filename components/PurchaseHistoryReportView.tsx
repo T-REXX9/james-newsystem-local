@@ -23,7 +23,7 @@ const formatDate = (value?: string | null): string => {
   if (!value) return '-';
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString('en-US');
+  return d.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
 };
 
 const PurchaseHistoryReportView: React.FC = () => {

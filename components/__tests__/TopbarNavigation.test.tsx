@@ -65,4 +65,29 @@ describe('TopbarNavigation responsive layout', () => {
     await user.click(menuLink);
     expect(onNavigate).toHaveBeenCalledWith(route);
   });
+
+  it('opens a sales menu page in a new window without leaving the current screen', async () => {
+    const user = userEvent.setup();
+    const onNavigate = vi.fn();
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    render(
+      <TopbarNavigation
+        activeTab="home"
+        onNavigate={onNavigate}
+        user={owner}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Toggle navigation' }));
+    const compactMenu = document.querySelector('[data-responsive-nav="compact"]') as HTMLElement;
+    await user.click(within(compactMenu).getByRole('button', { name: 'Open Sales Inquiry in new window' }));
+
+    expect(onNavigate).not.toHaveBeenCalled();
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.stringContaining('#/sales-transaction-sales-inquiry'),
+      '_blank',
+      'noopener,noreferrer'
+    );
+    openSpy.mockRestore();
+  });
 });

@@ -6,6 +6,7 @@ import {
   type InquiryReportCustomer,
   inquiryReportLocalApiService,
 } from '../services/inquiryReportLocalApiService';
+import { closeSalesReportResults, isSalesReportResultsView, openSalesReportResults, type SalesReportRouteView } from '../utils/workflowNavigate';
 
 const todayInput = () => new Date().toISOString().slice(0, 10);
 
@@ -18,7 +19,9 @@ const startForPeriod = (type: InquiryReportFilters['reportType']): string => {
   return start.toISOString().slice(0, 10);
 };
 
-const InquiryReportFilter: React.FC = () => {
+const INQUIRY_REPORT_TAB = 'sales-reports-inquiry-report';
+
+const InquiryReportFilter: React.FC<{ initialView?: SalesReportRouteView }> = ({ initialView }) => {
   const [reportType, setReportType] = useState<InquiryReportFilters['reportType']>('today');
   const [dateFrom, setDateFrom] = useState(todayInput);
   const [dateTo, setDateTo] = useState(todayInput);
@@ -26,7 +29,11 @@ const InquiryReportFilter: React.FC = () => {
   const [customers, setCustomers] = useState<InquiryReportCustomer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [showView, setShowView] = useState(false);
+  const [showView, setShowView] = useState(isSalesReportResultsView(initialView));
+
+  useEffect(() => {
+    setShowView(isSalesReportResultsView(initialView));
+  }, [initialView]);
 
   useEffect(() => {
     const loadCustomers = async () => {
@@ -57,6 +64,15 @@ const InquiryReportFilter: React.FC = () => {
     setSelectedCustomerId('');
   };
 
+  const handleGenerate = () => {
+    setShowView(true);
+    openSalesReportResults(INQUIRY_REPORT_TAB);
+  };
+
+  const handleBack = () => {
+    closeSalesReportResults(INQUIRY_REPORT_TAB, () => setShowView(false));
+  };
+
   if (loadError) {
     return <div role="alert" className="p-6 text-red-700">Unable to load inquiry report filters: {loadError}</div>;
   }
@@ -70,7 +86,7 @@ const InquiryReportFilter: React.FC = () => {
           customerId: selectedCustomerId || undefined,
           reportType,
         }}
-        onBack={() => setShowView(false)}
+        onBack={handleBack}
       />
     );
   }
@@ -101,7 +117,7 @@ const InquiryReportFilter: React.FC = () => {
             className="mx-auto max-w-[900px] space-y-[15px] text-[13px]"
             onSubmit={(event) => {
               event.preventDefault();
-              setShowView(true);
+              handleGenerate();
             }}
           >
             <div className="grid items-center gap-4 md:grid-cols-[220px_1fr]">

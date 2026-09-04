@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { FileText, Calendar, ArrowRight, Search } from 'lucide-react';
 import { InquiryReportFilters } from '../types';
 import SalesDevelopmentReportDataView from './SalesDevelopmentReportFilterView';
+import { closeSalesReportResults, isSalesReportResultsView, openSalesReportResults, type SalesReportRouteView } from '../utils/workflowNavigate';
 
-const SalesDevelopmentReportFilterView: React.FC = () => {
+const SALES_DEVELOPMENT_REPORT_TAB = 'sales-reports-sales-development-report';
+
+const SalesDevelopmentReportFilterView: React.FC<{ initialView?: SalesReportRouteView }> = ({ initialView }) => {
   const [reportType, setReportType] = useState<InquiryReportFilters['reportType']>('month');
   const [reportCategory, setReportCategory] = useState<'not_purchase' | 'no_stock'>('not_purchase');
 
@@ -14,7 +17,11 @@ const SalesDevelopmentReportFilterView: React.FC = () => {
   });
 
   const [dateTo, setDateTo] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [showView, setShowView] = useState(false);
+  const [showView, setShowView] = useState(isSalesReportResultsView(initialView));
+
+  useEffect(() => {
+    setShowView(isSalesReportResultsView(initialView));
+  }, [initialView]);
 
   const handleReportTypeChange = (type: InquiryReportFilters['reportType']) => {
     setReportType(type);
@@ -44,6 +51,11 @@ const SalesDevelopmentReportFilterView: React.FC = () => {
 
   const handleGenerateReport = () => {
     setShowView(true);
+    openSalesReportResults(SALES_DEVELOPMENT_REPORT_TAB);
+  };
+
+  const handleBack = () => {
+    closeSalesReportResults(SALES_DEVELOPMENT_REPORT_TAB, () => setShowView(false));
   };
 
   if (showView) {
@@ -52,7 +64,7 @@ const SalesDevelopmentReportFilterView: React.FC = () => {
         dateFrom={dateFrom}
         dateTo={dateTo}
         reportCategory={reportCategory}
-        onBack={() => setShowView(false)}
+        onBack={handleBack}
       />
     );
   }

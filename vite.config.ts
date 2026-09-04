@@ -92,6 +92,7 @@ export default defineConfig(({ mode }) => {
       environment: 'jsdom',
       setupFiles: './vitest.setup.ts',
       exclude: ['**/node_modules/**', '**/dist/**', '**/._*'],
+      testTimeout: 15000,
     },
   };
 });

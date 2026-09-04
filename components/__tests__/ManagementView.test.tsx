@@ -63,6 +63,6 @@ describe('ManagementView', () => {
     const yearSelect = await screen.findByRole('combobox');
     await user.selectOptions(yearSelect, '2025');
 
-    await waitFor(() => expect(fetchManagementDashboardData).toHaveBeenLastCalledWith(1, 2025, 8));
+    await waitFor(() => expect(fetchManagementDashboardData).toHaveBeenLastCalledWith(1, 2025, new Date().getMonth() + 1));
   });
 });

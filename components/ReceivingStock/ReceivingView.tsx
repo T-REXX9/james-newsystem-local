@@ -1,10 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { ReceivingReportWithDetails, RR_STATUS_COLORS } from '../../receiving.types';
+import {
+    ReceivingReportWithDetails,
+    INCOMPLETE_DELIVERY_REASONS,
+    PARTIAL_DELIVERY_REASON,
+    remainingQuantityAfterReceipt,
+    shouldCloseRemainingPoQty,
+} from '../../receiving.types';
 import { receivingService } from '../../services/receivingService';
+import { parseOptionalNumberInput } from '../../utils/formValidation';
 import { useToast } from '../ToastProvider';
-import { ArrowLeft, Printer, CheckCircle, Trash2, Calendar, User, FileText, Loader2, AlertCircle, Plus, Pencil, Save, XCircle } from 'lucide-react';
+import { ArrowLeft, Printer, CheckCircle, Trash2, Calendar, FileText, Loader2, AlertCircle, Plus } from 'lucide-react';
 import CustomLoadingSpinner from '../CustomLoadingSpinner';
 import RecoveryReasonModal from '../RecoveryReasonModal';
+import ModuleRecordLink from '../ModuleRecordLink';
 
 interface ReceivingViewProps {
     rrId: string;
@@ -12,25 +20,80 @@ interface ReceivingViewProps {
     onCreateNew: () => void;
 }
 
+type LineDraft = { qty: number | ''; unitCost: number | '' };
+
+const seedLineDrafts = (items: ReceivingReportWithDetails['items'] | undefined): Record<string, LineDraft> => {
+    const drafts: Record<string, LineDraft> = {};
+    for (const item of items || []) {
+        const qty = Number(item.qty_received);
+        const unitCost = Number(item.unit_cost);
+        drafts[item.id] = {
+            qty: Number.isFinite(qty) && qty > 0 ? qty : '',
+            unitCost: Number.isFinite(unitCost) ? unitCost : '',
+        };
+    }
+    return drafts;
+};
+
+const applyLineDrafts = (
+    report: ReceivingReportWithDetails,
+    drafts: Record<string, LineDraft>
+): ReceivingReportWithDetails => ({
+    ...report,
+    items: (report.items || []).map((item) => {
+        const draft = drafts[item.id];
+        const qty = draft?.qty === '' || draft?.qty == null ? 0 : Number(draft.qty);
+        const unitCost = draft?.unitCost === '' || draft?.unitCost == null
+            ? Number(item.unit_cost || 0)
+            : Number(draft.unitCost);
+        return {
+            ...item,
+            qty_received: qty,
+            unit_cost: unitCost,
+            total_amount: qty * unitCost,
+        };
+    }),
+});
+
+const validateLineDrafts = (
+    report: ReceivingReportWithDetails,
+    drafts: Record<string, LineDraft>
+): string | null => {
+    for (const item of report.items || []) {
+        const draft = drafts[item.id];
+        const qty = Number(draft?.qty);
+        const ordered = Number(item.qty_ordered || 0);
+        if (draft?.qty === '' || !Number.isFinite(qty) || qty <= 0) {
+            return 'Quantity received must be greater than zero';
+        }
+        if (ordered > 0 && qty > ordered) {
+            return `Quantity cannot exceed the ordered quantity (${ordered}).`;
+        }
+        const unitCost = draft?.unitCost === '' ? 0 : Number(draft?.unitCost);
+        if (!Number.isFinite(unitCost) || unitCost < 0) {
+            return 'Unit cost cannot be negative';
+        }
+    }
+    return null;
+};
+
 const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew }) => {
     const { addToast } = useToast();
     const [loading, setLoading] = useState(true);
     const [rr, setRr] = useState<ReceivingReportWithDetails | null>(null);
     const [finalizing, setFinalizing] = useState(false);
     const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
-    const [closeShortReceipt, setCloseShortReceipt] = useState(false);
-    const [shortReceiptReason, setShortReceiptReason] = useState('');
+    const [incompleteDeliveryReason, setIncompleteDeliveryReason] = useState('');
     const [showHistory, setShowHistory] = useState(false);
     const [recoveryAction, setRecoveryAction] = useState<'unpost' | 'delete' | null>(null);
-    const [editingItemId, setEditingItemId] = useState<string | null>(null);
-    const [editItemQty, setEditItemQty] = useState(0);
-    const [editItemUnitCost, setEditItemUnitCost] = useState(0);
+    const [lineDrafts, setLineDrafts] = useState<Record<string, LineDraft>>({});
 
     const fetchRR = async () => {
         setLoading(true);
         try {
             const data = await receivingService.getReceivingReportById(rrId);
             setRr(data);
+            setLineDrafts(seedLineDrafts(data.items));
         } catch (error) {
             console.error("Error fetching RR:", error);
             addToast({ type: 'error', message: "Failed to load Receiving Report" });
@@ -47,16 +110,38 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
 
     const handleFinalize = async () => {
         if (!rr) return;
-        if (closeShortReceipt && !shortReceiptReason.trim()) {
-            addToast({ type: 'error', message: 'Enter the reason the supplier cannot deliver the remaining quantity.' });
+        const lineError = validateLineDrafts(rr, lineDrafts);
+        if (lineError) {
+            addToast({ type: 'error', message: lineError });
+            return;
+        }
+        const drafted = applyLineDrafts(rr, lineDrafts);
+        const remainingQty = remainingQuantityAfterReceipt(drafted);
+        const isIncompleteDelivery = remainingQty > 0;
+        if (isIncompleteDelivery && !incompleteDeliveryReason) {
+            addToast({ type: 'error', message: 'Select a reason for the incomplete delivery.' });
             return;
         }
         setFinalizing(true);
         try {
-            if (closeShortReceipt) {
+            for (const item of drafted.items || []) {
+                const original = rr.items?.find((candidate) => candidate.id === item.id);
+                if (
+                    Number(original?.qty_received || 0) !== Number(item.qty_received || 0)
+                    || Number(original?.unit_cost || 0) !== Number(item.unit_cost || 0)
+                ) {
+                    await receivingService.updateReceivingReportItem(item.id, {
+                        rr_id: rr.id,
+                        qty_received: Number(item.qty_received),
+                        unit_cost: Number(item.unit_cost),
+                    });
+                }
+            }
+            if (isIncompleteDelivery) {
                 await receivingService.finalizeReceivingReport(rr.id, {
-                    closeRemainingPoQty: true,
-                    shortReceiptReason: shortReceiptReason.trim(),
+                    // Partial delivery keeps the remaining PO quantity open; other reasons close it.
+                    closeRemainingPoQty: shouldCloseRemainingPoQty(incompleteDeliveryReason),
+                    incompleteDeliveryReason,
                 });
             } else {
                 await receivingService.finalizeReceivingReport(rr.id);
@@ -64,6 +149,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
             addToast({ type: 'success', message: "Receiving Report finalized and inventory updated!" });
             await fetchRR(); // Refresh to see updated status
             setShowFinalizeConfirm(false);
+            setIncompleteDeliveryReason('');
         } catch (error: any) {
             console.error("Error finalizing RR:", error);
             addToast({ type: 'error', message: error.message || "Failed to finalize Receiving Report" });
@@ -87,46 +173,26 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
 
     const canEditItems = ['Draft', 'Pending', 'Unposted'].includes(rr?.status || '');
 
-    const startEditItem = (item: NonNullable<ReceivingReportWithDetails['items']>[number]) => {
-        setEditingItemId(item.id);
-        setEditItemQty(Number(item.qty_received || 0));
-        setEditItemUnitCost(Number(item.unit_cost || 0));
+    const updateLineDraft = (itemId: string, field: keyof LineDraft, value: number | '') => {
+        setLineDrafts((current) => ({
+            ...current,
+            [itemId]: {
+                qty: current[itemId]?.qty ?? '',
+                unitCost: current[itemId]?.unitCost ?? '',
+                [field]: value,
+            },
+        }));
     };
 
-    const cancelEditItem = () => {
-        setEditingItemId(null);
-        setEditItemQty(0);
-        setEditItemUnitCost(0);
-    };
-
-    const saveEditItem = async () => {
-        if (!rr || !editingItemId) return;
-        const item = rr.items?.find((candidate) => candidate.id === editingItemId);
-        const ordered = Number(item?.qty_ordered || 0);
-        if (!Number.isFinite(editItemQty) || editItemQty <= 0) {
-            addToast({ type: 'error', message: 'Quantity received must be greater than zero' });
+    const openPostModal = () => {
+        if (!rr) return;
+        const lineError = validateLineDrafts(rr, lineDrafts);
+        if (lineError) {
+            addToast({ type: 'error', message: lineError });
             return;
         }
-        if (ordered > 0 && editItemQty > ordered) {
-            addToast({ type: 'error', message: `Quantity cannot exceed the ordered quantity (${ordered}).` });
-            return;
-        }
-        if (!Number.isFinite(editItemUnitCost) || editItemUnitCost < 0) {
-            addToast({ type: 'error', message: 'Unit cost cannot be negative' });
-            return;
-        }
-        try {
-            await receivingService.updateReceivingReportItem(editingItemId, {
-                rr_id: rr.id,
-                qty_received: editItemQty,
-                unit_cost: editItemUnitCost,
-            });
-            cancelEditItem();
-            await fetchRR();
-            addToast({ type: 'success', message: 'Receiving line updated' });
-        } catch (error: any) {
-            addToast({ type: 'error', message: error.message || 'Failed to update receiving line' });
-        }
+        setIncompleteDeliveryReason('');
+        setShowFinalizeConfirm(true);
     };
 
     if (loading) {
@@ -156,10 +222,13 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
         : rr.status === 'Cancelled' ? 'bg-rose-100 text-rose-700'
         : 'bg-slate-100 text-slate-700';
 
-    const totalOrdered = rr.items?.reduce((sum, item) => sum + (item.qty_ordered || item.qty_received || 0), 0) || 0;
-    const totalReceived = rr.items?.reduce((sum, item) => sum + (item.qty_received || 0), 0) || 0;
-    const hasShortReceipt = totalReceived < totalOrdered;
+    const drafted = applyLineDrafts(rr, lineDrafts);
+    const totalOrdered = drafted.items?.reduce((sum, item) => sum + (item.qty_ordered || item.qty_received || 0), 0) || 0;
+    const totalReceived = drafted.items?.reduce((sum, item) => sum + (item.qty_received || 0), 0) || 0;
+    const remainingQty = remainingQuantityAfterReceipt(drafted);
+    const hasIncompleteDelivery = remainingQty > 0;
     const etaDate = rr.eta_date || rr.po?.items?.find(item => item.eta_date)?.eta_date || null;
+    const liveGrandTotal = drafted.items?.reduce((sum, item) => sum + Number(item.total_amount || 0), 0) || 0;
 
     return (
         <div className="w-full rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -181,7 +250,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                     {['Posted', 'Delivered'].includes(rr.status) && <button onClick={() => setRecoveryAction('unpost')} className="inline-flex items-center gap-2 rounded-md bg-amber-500 px-4 py-2 text-sm font-bold text-white hover:bg-amber-600 print:hidden"><AlertCircle className="h-4 w-4" /> Unpost</button>}
                     {['Draft', 'Unposted'].includes(rr.status) && <button onClick={() => setRecoveryAction('delete')} className="inline-flex items-center gap-2 rounded-md bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 print:hidden"><Trash2 className="h-4 w-4" /> Delete</button>}
                     {['Draft', 'Unposted'].includes(rr.status) ? (
-                        <button onClick={() => { setCloseShortReceipt(false); setShortReceiptReason(''); setShowFinalizeConfirm(true); }} className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 print:hidden">
+                        <button onClick={openPostModal} className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 print:hidden">
                             <CheckCircle className="h-4 w-4" /> Post Receiving
                         </button>
                     ) : null}
@@ -189,12 +258,25 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
             </div>
 
             <div className="p-6">
+                <div className="mb-5 rounded-lg border border-indigo-100 bg-indigo-50/50 p-4 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <span className="font-bold text-indigo-800">Delivery status: {rr.cycle_status || (hasIncompleteDelivery ? 'Incomplete Delivery' : 'Complete Delivery')}</span>
+                        <span>Ordered <b>{Number(rr.ordered_qty ?? totalOrdered)}</b> · Received <b>{Number(rr.received_qty ?? totalReceived)}</b> · Remaining <b>{Number(rr.remaining_qty ?? Math.max(0, totalOrdered - totalReceived))}</b></span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                        <span className="font-bold text-slate-500">Related documents:</span>
+                        {rr.po?.pr_reference ? (rr.po.pr_refno ? <ModuleRecordLink tab="warehouse-purchasing-purchase-request" payload={{ prId: rr.po.pr_refno }} className="font-bold text-[#175fd3] hover:underline">PR {rr.po.pr_reference}</ModuleRecordLink> : <span>PR <b className="text-[#175fd3]">{rr.po.pr_reference}</b></span>) : null}
+                        {rr.po_refno ? <ModuleRecordLink tab="purchases-transaction-purchase-order" payload={{ poId: rr.po_refno }} className="font-bold text-[#175fd3] hover:underline">PO {rr.po_no}</ModuleRecordLink> : <span>PO {rr.po_no || '—'}</span>}
+                        {(rr.return_records || []).map((returnRecord) => <ModuleRecordLink key={returnRecord.id} tab="warehouse-purchasing-return-to-supplier" payload={{ returnId: returnRecord.id }} className="font-bold text-[#175fd3] hover:underline">Return {returnRecord.return_no}</ModuleRecordLink>)}
+                    </div>
+                    {rr.incomplete_delivery_reason ? <p className="mt-2 text-xs text-amber-800"><b>Reason for incomplete delivery:</b> {rr.incomplete_delivery_reason}</p> : null}
+                </div>
                 <div className="mb-6 flex flex-wrap items-center justify-between gap-5 rounded-xl border border-slate-200 p-5">
                     <div className="flex flex-col gap-1">
                         <span className="text-xs font-bold uppercase tracking-wide text-orange-500">PR No.</span>
                         <span className="text-2xl font-bold text-orange-500">{rr.po?.pr_reference || 'PR-UNKNOWN'}</span>
                         <span className="mt-2 text-xs font-semibold text-slate-500">PR Date</span>
-                        <span className="text-sm font-semibold text-slate-700">{rr.po?.order_date ? new Date(rr.po.order_date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '-'}</span>
+                        <span className="text-sm font-semibold text-slate-700">{rr.po?.order_date ? new Date(rr.po.order_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : '-'}</span>
                     </div>
 
                     <ArrowLeft className="hidden h-6 w-6 rotate-180 text-slate-300 xl:block" />
@@ -203,7 +285,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                         <span className="text-xs font-bold uppercase tracking-wide text-[#175fd3]">PO No.</span>
                         <span className="text-2xl font-bold text-[#175fd3]">{rr.po_no || '-'}</span>
                         <span className="mt-2 text-xs font-semibold text-slate-500">PO Date</span>
-                        <span className="text-sm font-semibold text-slate-700">{rr.po?.order_date ? new Date(rr.po.order_date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '-'}</span>
+                        <span className="text-sm font-semibold text-slate-700">{rr.po?.order_date ? new Date(rr.po.order_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : '-'}</span>
                     </div>
 
                     <ArrowLeft className="hidden h-6 w-6 rotate-180 text-slate-300 xl:block" />
@@ -212,7 +294,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                         <span className="text-xs font-bold uppercase tracking-wide text-emerald-600">RR No.</span>
                         <span className="text-2xl font-bold text-emerald-600">{rr.rr_no}</span>
                         <span className="mt-2 text-xs font-semibold text-slate-500">RR Date</span>
-                        <span className="text-sm font-semibold text-slate-700">{new Date(rr.receive_date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}</span>
+                        <span className="text-sm font-semibold text-slate-700">{new Date(rr.receive_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
                     </div>
 
                     <div className="hidden h-24 w-px bg-slate-200 xl:block"></div>
@@ -222,7 +304,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                             <Calendar className="h-5 w-5 text-slate-400" />
                             <span className="text-xs font-bold uppercase tracking-wide text-slate-500">ETA Date</span>
                         </div>
-                        <span className="mt-1 text-lg font-bold text-slate-800">{etaDate ? new Date(etaDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '-'}</span>
+                        <span className="mt-1 text-lg font-bold text-slate-800">{etaDate ? new Date(etaDate).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : '-'}</span>
                         <span className="text-xs font-semibold text-slate-500">(Estimated Arrival)</span>
                     </div>
                 </div>
@@ -233,14 +315,13 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                     <table className="w-full table-fixed border-collapse text-xs">
                         <colgroup>
                             <col className="w-[4%]" />
-                            <col className="w-[10%]" />
-                            <col className="w-[16%]" />
-                            <col className="w-[10%]" />
+                            <col className="w-[11%]" />
+                            <col className="w-[18%]" />
+                            <col className="w-[11%]" />
+                            <col className="w-[11%]" />
                             <col className="w-[10%]" />
                             <col className="w-[9%]" />
-                            <col className="w-[8%]" />
-                            <col className="w-[9%]" />
-                            <col className="w-[8%]" />
+                            <col className="w-[10%]" />
                             <col className="w-[8%]" />
                             <col className="w-[8%]" />
                         </colgroup>
@@ -256,14 +337,13 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                                 <th className="break-words px-2 py-3 text-center">Qty Received</th>
                                 <th className="break-words px-2 py-3 text-right">Unit Cost</th>
                                 <th className="break-words px-2 py-3 text-right">Amount</th>
-                                <th className="break-words px-2 py-3 text-center">Action</th>
                             </tr>
                         </thead>
                         <tbody>
                             {!rr.items?.length ? (
-                                <tr><td colSpan={11} className="py-12 text-center text-sm text-slate-500">No items received.</td></tr>
-                            ) : rr.items.map((item, index) => {
-                                const isEditing = editingItemId === item.id;
+                                <tr><td colSpan={10} className="py-12 text-center text-sm text-slate-500">No items received.</td></tr>
+                            ) : drafted.items.map((item, index) => {
+                                const draft = lineDrafts[item.id] || { qty: item.qty_received || '', unitCost: item.unit_cost || '' };
                                 return (
                                 <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
                                     <td className="break-words px-2 py-3 text-center font-semibold text-slate-500">{index + 1}</td>
@@ -273,21 +353,9 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                                     <td className="break-words px-2 py-3 text-[13px] font-bold text-[#173c83]">{item.part_no || '-'}</td>
                                     <td className="break-words px-2 py-3 font-semibold text-slate-600">{item.brand || item.product?.brand || '-'}</td>
                                     <td className="break-words px-2 py-3 text-center font-semibold text-slate-600">{item.qty_ordered || item.qty_received || 0}</td>
-                                    <td className="break-words px-2 py-3 text-center font-bold text-slate-700">{isEditing ? <input aria-label={`Edit quantity received ${index + 1}`} type="number" min="1" value={editItemQty} onChange={(event) => setEditItemQty(Number(event.target.value))} className="h-8 w-full min-w-0 rounded border border-slate-300 px-1 text-center" /> : (item.qty_received || 0)}</td>
-                                    <td className="break-words px-2 py-3 text-right font-semibold text-slate-600">{isEditing ? <input aria-label={`Edit unit cost ${index + 1}`} type="number" min="0" step="0.01" value={editItemUnitCost} onChange={(event) => setEditItemUnitCost(Number(event.target.value))} className="h-8 w-full min-w-0 rounded border border-slate-300 px-1 text-right" /> : (item.unit_cost ? item.unit_cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-')}</td>
+                                    <td className="break-words px-2 py-3 text-center font-bold text-slate-700">{canEditItems ? <input aria-label={`Edit quantity received ${index + 1}`} type="number" min="1" value={draft.qty} onChange={(event) => updateLineDraft(item.id, 'qty', parseOptionalNumberInput(event.target.value))} className="h-8 w-full min-w-0 rounded border border-slate-300 px-1 text-center" /> : (item.qty_received || 0)}</td>
+                                    <td className="break-words px-2 py-3 text-right font-semibold text-slate-600">{canEditItems ? <input aria-label={`Edit unit cost ${index + 1}`} type="number" min="0" step="0.01" value={draft.unitCost} onChange={(event) => updateLineDraft(item.id, 'unitCost', parseOptionalNumberInput(event.target.value))} className="h-8 w-full min-w-0 rounded border border-slate-300 px-1 text-right" /> : (item.unit_cost ? item.unit_cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-')}</td>
                                     <td className="break-words px-2 py-3 text-right font-bold text-slate-700">{item.total_amount ? item.total_amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
-                                    <td className="break-words px-2 py-3 text-center">
-                                        {canEditItems ? (
-                                            isEditing ? (
-                                                <div className="flex items-center justify-center gap-2">
-                                                    <button type="button" onClick={() => void saveEditItem()} className="text-emerald-600 hover:text-emerald-800" title="Save item"><Save size={16} /></button>
-                                                    <button type="button" onClick={cancelEditItem} className="text-slate-400 hover:text-slate-700" title="Cancel edit"><XCircle size={16} /></button>
-                                                </div>
-                                            ) : (
-                                                <button type="button" onClick={() => startEditItem(item)} className="text-[#175fd3] hover:text-[#0e4fb7]" title="Edit item"><Pencil size={16} /></button>
-                                            )
-                                        ) : null}
-                                    </td>
                                 </tr>
                                 );
                             })}
@@ -307,7 +375,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                         </div>
                         <div className="flex justify-between font-semibold text-slate-600">
                             <span>Total Amount:</span>
-                            <span>{rr.grand_total ? rr.grand_total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}</span>
+                            <span>{liveGrandTotal ? liveGrandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}</span>
                         </div>
                         <div className="flex justify-between font-semibold text-slate-600">
                             <span>Total COGS:</span>
@@ -315,7 +383,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                         </div>
                         <div className="mt-2 flex justify-between border-t border-slate-300 pt-3 text-base font-extrabold text-slate-800">
                             <span>Grand Total:</span>
-                            <span className="text-[#175fd3]">{rr.grand_total ? rr.grand_total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}</span>
+                            <span className="text-[#175fd3]">{liveGrandTotal ? liveGrandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}</span>
                         </div>
                     </div>
                 </div>
@@ -334,14 +402,34 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                         <p className="text-center text-slate-500 dark:text-slate-400 mb-6">
                             This will post the report, update inventory stock quantities, and create inventory logs. It can be reversed later by unposting with a reason.
                         </p>
-                        {hasShortReceipt ? (
+                        {hasIncompleteDelivery ? (
                             <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                                <label className="flex cursor-pointer items-start gap-2 font-semibold">
-                                    <input type="checkbox" checked={closeShortReceipt} onChange={(event) => setCloseShortReceipt(event.target.checked)} className="mt-1" />
-                                    <span>Supplier cannot deliver the remaining {totalOrdered - totalReceived} unit(s). Close the remaining PO quantity as a short receipt.</span>
-                                </label>
-                                {closeShortReceipt ? (
-                                    <textarea value={shortReceiptReason} onChange={(event) => setShortReceiptReason(event.target.value)} placeholder="Reason (e.g. factory shortage, lost/damaged in transit)" className="mt-3 w-full rounded-md border border-amber-300 bg-white p-2 text-sm text-slate-800" rows={3} />
+                                <p className="font-semibold">Incomplete Delivery</p>
+                                <p className="mt-1 text-amber-800">
+                                    Received quantity is less than the PO quantity. Select a reason for the remaining {remainingQty} unit(s) before posting.
+                                </p>
+                                <fieldset className="mt-3">
+                                    <legend className="font-semibold">Reason</legend>
+                                    <div className="mt-2 flex flex-col gap-2">
+                                        {INCOMPLETE_DELIVERY_REASONS.map((reason) => (
+                                            <label key={reason} className="flex cursor-pointer items-start gap-2 rounded-md border border-amber-200 bg-white p-2 text-slate-800">
+                                                <input
+                                                    type="radio"
+                                                    name="incomplete-delivery-reason"
+                                                    value={reason}
+                                                    checked={incompleteDeliveryReason === reason}
+                                                    onChange={() => setIncompleteDeliveryReason(reason)}
+                                                    className="mt-1"
+                                                />
+                                                <span>{reason}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </fieldset>
+                                {incompleteDeliveryReason === PARTIAL_DELIVERY_REASON ? (
+                                    <p className="mt-2 text-xs text-amber-800">The remaining PO quantity will stay open for a follow-up delivery.</p>
+                                ) : incompleteDeliveryReason ? (
+                                    <p className="mt-2 text-xs text-amber-800">The remaining PO quantity will be closed.</p>
                                 ) : null}
                             </div>
                         ) : null}
@@ -354,8 +442,8 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                             </button>
                             <button
                                 onClick={handleFinalize}
-                                disabled={finalizing}
-                                className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex justify-center items-center gap-2"
+                                disabled={finalizing || (hasIncompleteDelivery && !incompleteDeliveryReason)}
+                                className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex justify-center items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 {finalizing && <Loader2 className="w-4 h-4 animate-spin" />}
                                 Confirm & Post
@@ -380,8 +468,8 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                             <div className="flex justify-between gap-4 px-4 py-3"><dt className="font-semibold text-slate-500">Report date</dt><dd className="text-right text-slate-800">{rr.receive_date || '—'}</dd></div>
                             <div className="flex justify-between gap-4 px-4 py-3"><dt className="font-semibold text-slate-500">Current status</dt><dd className="text-right font-semibold text-slate-800">{rr.status || 'Draft'}</dd></div>
                             <div className="flex justify-between gap-4 px-4 py-3"><dt className="font-semibold text-slate-500">Items received</dt><dd className="text-right text-slate-800">{rr.item_count ?? rr.items?.length ?? 0}</dd></div>
-                            {rr.remarks ? <div className="flex justify-between gap-4 px-4 py-3"><dt className="font-semibold text-slate-500">Receiving / short-receipt note</dt><dd className="max-w-xs text-right text-slate-800">{rr.remarks}</dd></div> : null}
-                            <div className="flex justify-between gap-4 px-4 py-3"><dt className="font-semibold text-slate-500">Last recorded timestamp</dt><dd className="text-right text-slate-800">{rr.created_at ? new Date(rr.created_at).toLocaleString('en-PH') : '—'}</dd></div>
+                            {rr.remarks ? <div className="flex justify-between gap-4 px-4 py-3"><dt className="font-semibold text-slate-500">Receiving / incomplete delivery note</dt><dd className="max-w-xs text-right text-slate-800">{rr.remarks}</dd></div> : null}
+                            <div className="flex justify-between gap-4 px-4 py-3"><dt className="font-semibold text-slate-500">Last recorded timestamp</dt><dd className="text-right text-slate-800">{rr.created_at ? new Date(rr.created_at).toLocaleString('en-PH', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'}</dd></div>
                         </dl>
                         <div className="mt-5 flex justify-end"><button type="button" onClick={() => setShowHistory(false)} className="rounded-md bg-[#175fd3] px-4 py-2 text-sm font-bold text-white hover:bg-[#0e4fb7]">Close</button></div>
                     </div>

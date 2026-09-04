@@ -185,7 +185,7 @@ describe('SalesReportTab', () => {
     expect(dispatchEventSpy).toHaveBeenCalledWith(expect.objectContaining({
       type: 'workflow:navigate',
       detail: expect.objectContaining({
-        tab: 'salesinquiry',
+        tab: 'sales-transaction-sales-inquiry',
         payload: expect.objectContaining({
           inquiryId: 'rep-2',
           contactId: 'contact-1',

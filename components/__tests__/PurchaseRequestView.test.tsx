@@ -216,6 +216,55 @@ describe('PurchaseRequestView', () => {
     );
   });
 
+  it('shows how many items are on PO versus not on PO', () => {
+    render(
+      <PurchaseRequestView
+        request={{
+          ...baseRequest,
+          status: 'Submitted',
+          items: [
+            {
+              id: '101',
+              part_number: 'PART-PO',
+              description: 'Already ordered',
+              quantity: 1,
+              po_refno: 'POREF-1',
+              po_number: 'PO-1',
+            },
+            {
+              id: '102',
+              part_number: 'PART-OPEN',
+              description: 'Still open',
+              quantity: 2,
+            },
+            {
+              id: '103',
+              part_number: 'PART-OPEN-2',
+              description: 'Also open',
+              quantity: 3,
+            },
+          ],
+        } as any}
+        onBack={vi.fn()}
+        onUpdate={vi.fn()}
+        onUpdateItem={vi.fn()}
+        onDeleteItem={vi.fn()}
+        onAddItem={vi.fn()}
+        onConvert={vi.fn()}
+        onPrint={vi.fn()}
+        products={[]}
+        suppliers={[]}
+      />
+    );
+
+    expect(screen.getByText('Items: 3')).toBeInTheDocument();
+    expect(screen.getByText('1 on PO')).toBeInTheDocument();
+    expect(screen.getByText('2 not on PO')).toBeInTheDocument();
+    expect(
+      screen.getByLabelText('PO status: 1 on PO, 2 not on PO'),
+    ).toBeInTheDocument();
+  });
+
   it('links a PR item to the exact purchase order record', () => {
     render(
       <PurchaseRequestView

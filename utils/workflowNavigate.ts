@@ -1,3 +1,5 @@
+import { retraceWorkflowHistory } from './workflowHistory';
+
 export const WORKFLOW_NAVIGATE_EVENT = 'workflow:navigate';
 
 export type WorkflowNavigateMode = 'push' | 'replace';
@@ -12,9 +14,10 @@ export const compactWorkflowPayload = (
   payload?: Record<string, string | undefined>
 ): Record<string, string> | undefined => {
   if (!payload) return undefined;
-  const next = Object.fromEntries(
-    Object.entries(payload).filter(([, value]) => Boolean(value))
-  ) as Record<string, string>;
+  const next: Record<string, string> = {};
+  for (const [key, value] of Object.entries(payload)) {
+    if (value) next[key] = value;
+  }
   return Object.keys(next).length > 0 ? next : undefined;
 };
 
@@ -51,4 +54,20 @@ export const openModuleInNewWindow = (
   payload?: Record<string, string | undefined>
 ) => {
   window.open(buildModuleRecordUrl(tab, payload), '_blank', 'noopener,noreferrer');
+};
+
+export type SalesReportRouteView = 'results';
+
+export const isSalesReportResultsView = (view?: string): view is SalesReportRouteView =>
+  view === 'results';
+
+export const openSalesReportResults = (tab: string) => {
+  navigateWorkflow(tab, { view: 'results' }, 'push');
+};
+
+export const closeSalesReportResults = (tab: string, hideResults: () => void) => {
+  retraceWorkflowHistory(() => {
+    hideResults();
+    navigateWorkflow(tab, undefined, 'replace');
+  });
 };

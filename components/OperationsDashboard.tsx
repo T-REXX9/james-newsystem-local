@@ -58,7 +58,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({ onNavigate })
     finally { setLoading(false); }
   }, [selectedDate]);
   useEffect(() => { void load(); }, [load]);
-  const displayDate = useMemo(() => new Intl.DateTimeFormat('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: '2-digit' }).format(new Date(`${selectedDate}T12:00:00`)), [selectedDate]);
+  const displayDate = useMemo(() => new Intl.DateTimeFormat('en-PH', { year: 'numeric', month: 'long', day: 'numeric' }).format(new Date(`${selectedDate}T12:00:00`)), [selectedDate]);
   const selectedPeriod = useMemo(() => {
     const date = new Date(`${selectedDate}T12:00:00`);
     const month = String(date.getMonth() + 1).padStart(2, '0');

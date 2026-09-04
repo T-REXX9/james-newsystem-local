@@ -75,7 +75,7 @@ describe('SalesMapSidebar — customer selection wiring', () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
-  it('renders a button per contact when onCustomerSelect is provided', () => {
+  it('renders a customer database link per contact when onCustomerSelect is provided', () => {
     const onSelect = vi.fn();
     const contacts: Contact[] = [
       makeContact({ id: 'c-1', company: 'Acme Hardware' }),
@@ -89,11 +89,11 @@ describe('SalesMapSidebar — customer selection wiring', () => {
         onCustomerSelect={onSelect}
       />
     );
-    // The customer card is now a button, accessible by its aria-label
-    const acme = screen.getByRole('button', { name: /open acme hardware in customer database/i });
-    const beta = screen.getByRole('button', { name: /open beta trading in customer database/i });
+    const acme = screen.getByRole('link', { name: /open acme hardware in customer database/i });
+    const beta = screen.getByRole('link', { name: /open beta trading in customer database/i });
     expect(acme).toBeInTheDocument();
     expect(beta).toBeInTheDocument();
+    expect(acme).toHaveAttribute('href', '#/sales-database-customer-database?contactId=c-1');
   });
 
   it('invokes onCustomerSelect with the contact id when a card is clicked', async () => {
@@ -111,10 +111,33 @@ describe('SalesMapSidebar — customer selection wiring', () => {
         onCustomerSelect={onSelect}
       />
     );
-    const acme = screen.getByRole('button', { name: /open acme hardware in customer database/i });
+    const acme = screen.getByRole('link', { name: /open acme hardware in customer database/i });
     await user.click(acme);
     expect(onSelect).toHaveBeenCalledTimes(1);
     expect(onSelect).toHaveBeenCalledWith('c-42');
+  });
+
+  it('opens a customer in a new window without selecting in the current map', async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    render(
+      <SalesMapSidebar
+        provinceName="Quezon"
+        contacts={[makeContact({ id: 'c-42', company: 'Acme Hardware' })]}
+        onClose={() => {}}
+        onCustomerSelect={onSelect}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /open acme hardware in a new window/i }));
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.stringContaining('#/sales-database-customer-database?contactId=c-42'),
+      '_blank',
+      'noopener,noreferrer'
+    );
+    openSpy.mockRestore();
   });
 
   it('falls back to a non-clickable card when onCustomerSelect is not provided', () => {

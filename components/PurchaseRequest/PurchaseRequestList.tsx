@@ -34,7 +34,7 @@ const statuses = ['All Statuses', 'Draft', 'Pending', 'Submitted', 'Approved', '
 const formatDate = (value: string | null | undefined) => {
   if (!value) return '-';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-GB');
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
 };
 
 const statusClass = (status: string) => {
@@ -140,6 +140,10 @@ const PurchaseRequestList: React.FC<PurchaseRequestListProps> = ({
                 {request.pr_number || 'Unnamed PR'}
               </ModuleRecordLink>
               <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${statusClass(request.status)}`}>{request.status}</span>
+            </div>
+            <div className="mt-1.5 flex items-center justify-between gap-2">
+              <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700">{request.cycle_status || 'Pending'}</span>
+              <span className="text-[10px] font-semibold text-slate-600">Ordered {Number(request.ordered_qty ?? request.total_qty ?? 0)} · Received {Number(request.received_qty ?? 0)} · Left {Number(request.remaining_qty ?? request.total_qty ?? 0)}</span>
             </div>
             <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-slate-500">
               <span>{formatDate(request.request_date)}</span>

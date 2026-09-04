@@ -283,7 +283,7 @@ const ItemIssueReportTab: React.FC<ItemIssueReportTabProps> = ({ contactId }) =>
               <div>
                 <div className="mb-1 flex items-center gap-2">
                   <h4 className="font-semibold text-slate-800 dark:text-white">
-                    {ISSUE_CATEGORY_CONFIG[activeCategory].label} - {new Date(row.inquiryDate).toLocaleDateString()} {row.inquiryTime}
+                    {ISSUE_CATEGORY_CONFIG[activeCategory].label} - {new Date(row.inquiryDate).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })} {row.inquiryTime}
                   </h4>
                   <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${
                     row.approvalStatus === 'approved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' :

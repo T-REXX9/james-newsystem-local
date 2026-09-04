@@ -23,7 +23,7 @@ const formatDate = (value?: string | null): string => {
   if (!value) return '-';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString('en-US');
+  return date.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
 };
 
 const buildRangeLabel = (report: FreightChargesReportResponse | null): string => {

@@ -23,7 +23,7 @@ const isMasterUser = (user: UserProfile | null) => {
 const displayDate = (value?: string | null) => {
   if (!value) return 'Not available';
   const date = new Date(value.replace(' ', 'T'));
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('en-PH', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 };
 
 export const CallAutoReplySettingsView: React.FC<CallAutoReplySettingsViewProps> = ({ currentUser }) => {

@@ -93,7 +93,7 @@ describe('PurchaseOrderView', () => {
     const { default: PurchaseOrderView } = await import('../PurchaseOrderView');
     render(<PurchaseOrderView />);
     expect(await screen.findByText('1 Items')).toBeInTheDocument();
-    expect(screen.getByText(/ETA: Aug 22, 2026/i)).toBeInTheDocument();
+    expect(screen.getByText(/ETA: August 22, 2026/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /generate purchase order/i }));
     expect(await screen.findByText('New Purchase Order')).toBeInTheDocument();
     expect(service.generatePONumber).toHaveBeenCalled();
@@ -111,12 +111,11 @@ describe('PurchaseOrderView', () => {
 
     fireEvent.click(prLink);
 
-    expect(navigationSpy).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'workflow:navigate',
-      detail: {
-        tab: 'warehouse-purchasing-purchase-request',
-        payload: { prId: 'PRREF-1' },
-      },
+    const navigationEvent = navigationSpy.mock.calls[0][0] as CustomEvent;
+    expect(navigationEvent.type).toBe('workflow:navigate');
+    expect(navigationEvent.detail).toEqual(expect.objectContaining({
+      tab: 'warehouse-purchasing-purchase-request',
+      payload: { prId: 'PRREF-1' },
     }));
     window.removeEventListener('workflow:navigate', navigationSpy);
   });

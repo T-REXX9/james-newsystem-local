@@ -21,12 +21,12 @@ const money = new Intl.NumberFormat('en-US', {
 
 const formatDate = (value: string): string => {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-US');
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
 };
 
 const displayReportHeading = (reportType: SalesReportPeriod, dateFrom: string, dateTo: string) => {
   const from = new Date(dateFrom);
-  const fromLong = from.toLocaleDateString('en-US', { month: 'long', day: '2-digit', year: 'numeric' }).toUpperCase();
+  const fromLong = from.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase();
   if (reportType === 'today') {
     return <><p className="text-[18px] font-semibold">DAILY SALES</p><p className="-mt-1 text-[16px] font-semibold">{fromLong}</p></>;
   }

@@ -15,8 +15,11 @@ const API_TIMEOUT_MS = 20_000;
 const getUserContext = () => {
   const session = getLocalAuthSession();
   const userId = Number(session?.context?.user?.id || 1);
+  const sessionMainId = Number(session?.context?.user?.main_userid || 0);
   return {
-    mainId: API_MAIN_ID,
+    // Suggested Stock resolves its tenant from the signed-in session. Use the
+    // same tenant here so its newly created PR belongs to the same company.
+    mainId: Number.isFinite(sessionMainId) && sessionMainId > 0 ? sessionMainId : API_MAIN_ID,
     userId: Number.isFinite(userId) && userId > 0 ? userId : 1,
   };
 };
@@ -83,6 +86,8 @@ const normalizeStatus = (value: unknown): string => {
 
 const mapSummaryRow = (row: any): PurchaseRequestWithItems => {
   const itemCount = toNumber(row?.item_count, 0);
+  const orderedQty = toNumber(row?.total_qty, 0);
+  const receivedQty = toNumber(row?.received_qty, 0);
   return {
     id: String(row?.refno || row?.id || ''),
     pr_number: String(row?.pr_number || ''),
@@ -98,12 +103,21 @@ const mapSummaryRow = (row: any): PurchaseRequestWithItems => {
     item_count: itemCount,
     total_qty: toNumber(row?.total_qty, 0),
     total_cost: toNumber(row?.total_cost, 0),
+    ordered_qty: orderedQty,
+    received_qty: receivedQty,
+    remaining_qty: toNumber(row?.remaining_qty, Math.max(0, orderedQty - receivedQty)),
+    cycle_status: row?.cycle_status || (toNumber(row?.po_count, 0) > 0 ? 'PO Created' : 'Pending'),
+    incomplete_delivery_reason: String(row?.incomplete_delivery_reason || ''),
+    po_refno: String(row?.po_refno || ''),
+    po_numbers: String(row?.po_numbers || ''),
   } as PurchaseRequestWithItems;
 };
 
 const mapDetail = (data: any): PurchaseRequestWithItems => {
   const request = data?.request || {};
   const items = Array.isArray(data?.items) ? data.items : [];
+  const orderedQty = toNumber(request?.ordered_qty, items.reduce((sum: number, item: any) => sum + toNumber(item?.quantity), 0));
+  const receivedQty = toNumber(request?.received_qty, 0);
   return {
     id: String(request?.refno || request?.id || ''),
     pr_number: String(request?.pr_number || ''),
@@ -115,6 +129,10 @@ const mapDetail = (data: any): PurchaseRequestWithItems => {
     created_by_name: String(request?.created_by_name || ''),
     created_at: String(request?.request_datetime || ''),
     updated_at: null,
+    ordered_qty: orderedQty,
+    received_qty: receivedQty,
+    remaining_qty: Math.max(0, orderedQty - receivedQty),
+    cycle_status: request?.cycle_status || (items.some((item: any) => item?.po_refno) ? 'PO Created' : 'Pending'),
     items: items.map((item: any) => ({
       id: String(item?.id || ''),
       pr_id: String(request?.refno || ''),

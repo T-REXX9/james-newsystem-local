@@ -177,6 +177,27 @@ describe('receivingService', () => {
     await expect(receivingService.deleteReceivingReport('RRREF-4')).resolves.toBeUndefined();
     await expect(receivingService.finalizeReceivingReport('RRREF-4')).resolves.toBeUndefined();
     expect((global.fetch as any).mock.calls.map((call: any[]) => call[1]?.method)).toEqual(['PATCH', 'DELETE', 'POST']);
+    const finalizeBody = JSON.parse((global.fetch as any).mock.calls[2][1].body);
+    expect(finalizeBody).toMatchObject({
+      main_id: 1,
+      status: 'Delivered',
+      close_remaining_po_qty: false,
+      incomplete_delivery_reason: '',
+    });
+  });
+
+  it('finalizes incomplete delivery and keeps remaining PO open for partial delivery', async () => {
+    (global.fetch as any).mockImplementation(() => okResponse({}));
+    const { receivingService } = await import('../receivingService');
+    await expect(receivingService.finalizeReceivingReport('RRREF-4', {
+      closeRemainingPoQty: false,
+      incompleteDeliveryReason: 'Partial delivery — remaining quantity to follow',
+    })).resolves.toBeUndefined();
+    const finalizeBody = JSON.parse((global.fetch as any).mock.calls[0][1].body);
+    expect(finalizeBody).toMatchObject({
+      close_remaining_po_qty: false,
+      incomplete_delivery_reason: 'Partial delivery — remaining quantity to follow',
+    });
   });
 
   it('adds, updates, and deletes receiving report items', async () => {

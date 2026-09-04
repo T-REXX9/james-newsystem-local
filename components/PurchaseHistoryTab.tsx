@@ -59,7 +59,7 @@ const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ contactId }) =>
             <div className="flex items-start justify-between mb-3">
               <div>
                 <p className="font-semibold text-slate-800 dark:text-white">
-                  {new Date(purchase.purchase_date).toLocaleDateString()}
+                  {new Date(purchase.purchase_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
                 </p>
                 {purchase.invoice_number && (
                   <p className="text-xs text-slate-500 dark:text-slate-400">Invoice: {purchase.invoice_number}</p>

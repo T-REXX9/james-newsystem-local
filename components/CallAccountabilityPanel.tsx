@@ -38,7 +38,7 @@ const formatDateTime = (value?: string | null) => {
   const timestamp = value.trim();
   const hasTimeZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(timestamp);
   const parsed = new Date(`${timestamp.replace(' ', 'T')}${hasTimeZone ? '' : 'Z'}`);
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString('en-PH', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 };
 
 const statusLabel = (status?: string) => {

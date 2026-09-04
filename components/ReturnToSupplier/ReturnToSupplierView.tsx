@@ -256,7 +256,7 @@ const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecor
                         <span className="text-sm font-bold text-slate-500">Date <span className="text-rose-500">*</span></span>
                         <input
                             type={isEditable ? 'date' : 'text'}
-                            value={isEditable ? draftHeader.return_date : new Date(returnRecord.return_date).toLocaleDateString('en-GB')}
+                            value={isEditable ? draftHeader.return_date : new Date(returnRecord.return_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
                             disabled={!isEditable}
                             onChange={(event) => setDraftHeader((current) => ({ ...current, return_date: event.target.value }))}
                             className={`h-10 w-full rounded-md border px-3 text-sm font-semibold text-slate-700 ${isEditable ? 'border-slate-300 bg-white' : 'border-slate-200 bg-slate-50'}`}
@@ -405,7 +405,7 @@ const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecor
                     <span className="font-semibold text-slate-500">Prepared By:</span>
                     <span className="font-bold text-slate-700">Master</span>
                     <span className="font-semibold text-slate-500">Prepared Date:</span>
-                    <span className="font-bold text-slate-700">{new Date(returnRecord.return_date).toLocaleDateString('en-GB')}</span>
+                    <span className="font-bold text-slate-700">{new Date(returnRecord.return_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
                 </div>
             </div>
 

@@ -88,6 +88,19 @@ const toApiStatusFilter = (status: string | undefined): string => {
     return normalized;
 };
 
+const receivingCycleStatus = (ordered: number, received: number, returned: boolean): ReceivingReportWithDetails['cycle_status'] => {
+    if (returned) return 'Returned to Supplier';
+    return ordered > 0 && received < ordered ? 'Incomplete Delivery' : 'Complete Delivery';
+};
+
+const parseIncompleteDeliveryReason = (raw: unknown): string => {
+    const text = String(raw || '');
+    const match = text.match(/(?:Incomplete delivery reason|Short receipt reason):\s*(.*?)(?:\s*\|\s*|$)/i);
+    if (match?.[1]) return match[1].trim();
+    // List SQL may alias the full reference field; strip a leading prefix if present.
+    return text.replace(/^(?:Incomplete delivery reason|Short receipt reason):\s*/i, '').trim();
+};
+
 const toSupplier = (raw: any): Supplier => ({
     id: String(raw?.id ?? ''),
     company: String(raw?.name ?? raw?.company ?? ''),
@@ -128,6 +141,9 @@ const toReceivingItem = (raw: any, rrId: string): ReceivingReportItem => {
 
 const toReceivingListItem = (raw: any): ReceivingReportWithDetails => {
     const rrId = String(raw?.refno ?? raw?.id ?? '');
+    const receivedQty = toNumber(raw?.total_qty ?? raw?.received_qty ?? 0);
+    const orderedQty = toNumber(raw?.ordered_qty ?? receivedQty);
+    const hasReturn = toNumber(raw?.return_count) > 0;
     return {
         id: rrId,
         rr_no: String(raw?.rr_number ?? ''),
@@ -143,6 +159,11 @@ const toReceivingListItem = (raw: any): ReceivingReportWithDetails => {
         eta_date: raw?.eta_date ? String(raw.eta_date) : null,
         item_count: toNumber(raw?.item_count ?? 0),
         total_qty: toNumber(raw?.total_qty ?? 0),
+        ordered_qty: orderedQty,
+        received_qty: receivedQty,
+        remaining_qty: Math.max(0, orderedQty - receivedQty),
+        cycle_status: receivingCycleStatus(orderedQty, receivedQty, hasReturn),
+        incomplete_delivery_reason: parseIncompleteDeliveryReason(raw?.incomplete_delivery_reason || raw?.reference || ''),
         created_at: raw?.posted_date
             ? new Date(raw.posted_date).toISOString()
             : new Date().toISOString(),
@@ -176,6 +197,9 @@ const toReceivingDetail = (payload: any, purchaseOrder: Awaited<ReturnType<typeo
             brand: mapped.brand || String(poItem?.product?.brand || ''),
         };
     });
+    const receivedQty = mappedItems.reduce((sum, item) => sum + toNumber(item.qty_received), 0);
+    const orderedQty = mappedItems.reduce((sum, item) => sum + toNumber(item.qty_ordered ?? item.qty_received), 0);
+    const returnRecords = Array.isArray(payload?.return_records) ? payload.return_records : [];
 
     return {
         id: rrId,
@@ -196,15 +220,23 @@ const toReceivingDetail = (payload: any, purchaseOrder: Awaited<ReturnType<typeo
         eta_date: record?.eta_date ? String(record.eta_date) : null,
         item_count: toNumber(summary?.item_count ?? mappedItems.length),
         total_qty: toNumber(summary?.total_qty ?? 0),
+        ordered_qty: orderedQty,
+        received_qty: receivedQty,
+        remaining_qty: Math.max(0, orderedQty - receivedQty),
+        cycle_status: receivingCycleStatus(orderedQty, receivedQty, returnRecords.length > 0),
+        incomplete_delivery_reason: parseIncompleteDeliveryReason(record?.reference || ''),
+        return_records: returnRecords.map((record: any) => ({ id: String(record?.refno || record?.id || ''), return_no: String(record?.return_no || ''), status: String(record?.status || '') })),
         po: purchaseOrder ? {
             id: String(purchaseOrder.id),
             po_number: String(purchaseOrder.po_number || ''),
+            pr_refno: String((purchaseOrder as any).pr_refno || ''),
             order_date: String(purchaseOrder.order_date || ''),
             pr_reference: String(purchaseOrder.pr_reference || ''),
             status: String(purchaseOrder.status || ''),
             items: poItems.map((item) => ({
                 id: String(item.id),
                 qty: Number(item.qty || 0),
+                quantity_received: Number(item.quantity_received || 0),
                 eta_date: item.eta_date || null,
             })),
         } : null,
@@ -408,8 +440,11 @@ export const receivingService = {
 
     async finalizeReceivingReport(
         id: string,
-        options?: { closeRemainingPoQty?: boolean; shortReceiptReason?: string }
+        options?: { closeRemainingPoQty?: boolean; incompleteDeliveryReason?: string; shortReceiptReason?: string }
     ): Promise<void> {
+        const incompleteDeliveryReason = String(
+            options?.incompleteDeliveryReason || options?.shortReceiptReason || ''
+        ).trim();
         const response = await fetch(`${API_BASE_URL}/receiving-stocks/${encodeURIComponent(String(id))}/finalize`, {
             method: 'POST',
             headers: getAuthHeaders(),
@@ -417,7 +452,9 @@ export const receivingService = {
                 main_id: API_MAIN_ID,
                 status: 'Delivered',
                 close_remaining_po_qty: Boolean(options?.closeRemainingPoQty),
-                short_receipt_reason: String(options?.shortReceiptReason || ''),
+                incomplete_delivery_reason: incompleteDeliveryReason,
+                // Legacy key retained for older API clients.
+                short_receipt_reason: incompleteDeliveryReason,
             }),
         });
         if (!response.ok) throw new Error(await parseApiErrorMessage(response));

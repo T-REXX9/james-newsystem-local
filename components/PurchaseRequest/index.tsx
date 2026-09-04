@@ -206,7 +206,8 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
   const handleConvertPO = async (itemIds?: string[]) => {
     if (!selectedRequest) return;
     try {
-      const poId = await purchaseRequestService.convertToPO([selectedRequest.id], '', { itemIds });
+      const selectedItemIds = Array.isArray(itemIds) ? itemIds : undefined;
+      const poId = await purchaseRequestService.convertToPO([selectedRequest.id], '', { itemIds: selectedItemIds });
       window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab: 'warehouse-purchasing-purchase-order', payload: { poId } } }));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';

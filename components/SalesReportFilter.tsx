@@ -2,9 +2,11 @@ import React, { useEffect, useState } from 'react';
 import type { CustomerOption, UserProfile } from '../types';
 import { getCustomerList } from '../services/salesReportService';
 import SalesReportDataView from './SalesReportDataView';
+import { closeSalesReportResults, isSalesReportResultsView, openSalesReportResults, type SalesReportRouteView } from '../utils/workflowNavigate';
 
 interface SalesReportFilterProps {
   currentUser?: UserProfile;
+  initialView?: SalesReportRouteView;
 }
 
 export type SalesReportPeriod = 'all' | 'today' | 'week' | 'month' | 'year' | 'custom';
@@ -21,14 +23,20 @@ const startForPeriod = (type: SalesReportPeriod): string => {
   return start.toISOString().slice(0, 10);
 };
 
-const SalesReportFilter: React.FC<SalesReportFilterProps> = ({ currentUser }) => {
+const SALES_REPORT_TAB = 'sales-reports-sales-report';
+
+const SalesReportFilter: React.FC<SalesReportFilterProps> = ({ currentUser, initialView }) => {
   const [reportType, setReportType] = useState<SalesReportPeriod>('all');
   const [selectedCustomer, setSelectedCustomer] = useState('all');
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(true);
   const [dateFrom, setDateFrom] = useState('2013-06-01');
   const [dateTo, setDateTo] = useState(todayInput);
-  const [showView, setShowView] = useState(false);
+  const [showView, setShowView] = useState(isSalesReportResultsView(initialView));
+
+  useEffect(() => {
+    setShowView(isSalesReportResultsView(initialView));
+  }, [initialView]);
 
   useEffect(() => {
     const loadCustomers = async () => {
@@ -57,6 +65,15 @@ const SalesReportFilter: React.FC<SalesReportFilterProps> = ({ currentUser }) =>
     setDateTo(todayInput());
   };
 
+  const handleGenerate = () => {
+    setShowView(true);
+    openSalesReportResults(SALES_REPORT_TAB);
+  };
+
+  const handleBack = () => {
+    closeSalesReportResults(SALES_REPORT_TAB, () => setShowView(false));
+  };
+
   if (showView) {
     return (
       <SalesReportDataView
@@ -64,7 +81,7 @@ const SalesReportFilter: React.FC<SalesReportFilterProps> = ({ currentUser }) =>
         dateTo={dateTo}
         customerId={selectedCustomer}
         reportType={reportType}
-        onBack={() => setShowView(false)}
+        onBack={handleBack}
         currentUser={currentUser}
       />
     );
@@ -88,7 +105,7 @@ const SalesReportFilter: React.FC<SalesReportFilterProps> = ({ currentUser }) =>
             className="mx-auto max-w-[900px] space-y-[15px] text-[13px]"
             onSubmit={(event) => {
               event.preventDefault();
-              setShowView(true);
+              handleGenerate();
             }}
           >
             <div className="grid items-center gap-4 md:grid-cols-[220px_1fr]">

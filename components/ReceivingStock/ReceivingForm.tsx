@@ -8,7 +8,7 @@ import SearchableSelect from '../SearchableSelect';
 import { Product } from '../../types'; // Import from main types for compatibility with ProductAutocomplete
 import ValidationSummary from '../ValidationSummary';
 import FieldHelp from '../FieldHelp';
-import { validateNumeric, validateRequired } from '../../utils/formValidation';
+import { validateNumeric, validateRequired, parseOptionalNumberInput } from '../../utils/formValidation';
 
 interface ReceivingFormProps {
     onClose: () => void;
@@ -375,7 +375,7 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                                                     type="number"
                                                     min="1"
                                                     value={item.qty_received || ''}
-                                                    onChange={(e) => updateItem(item.tempId, 'qty_received', parseFloat(e.target.value) || 0)}
+                                                    onChange={(e) => updateItem(item.tempId, 'qty_received', parseOptionalNumberInput(e.target.value))}
                                                     className={`w-full min-w-0 px-2 py-1 border rounded bg-white dark:bg-slate-900 focus:ring-2 focus:ring-blue-500 outline-none ${
                                                         validationErrors[`item-${item.tempId}-qty`] ? 'border-rose-400' : 'border-slate-300 dark:border-slate-600'
                                                     }`}
@@ -389,7 +389,7 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                                                         min="0"
                                                         step="0.01"
                                                         value={item.unit_cost || ''}
-                                                        onChange={(e) => updateItem(item.tempId, 'unit_cost', parseFloat(e.target.value) || 0)}
+                                                        onChange={(e) => updateItem(item.tempId, 'unit_cost', parseOptionalNumberInput(e.target.value))}
                                                         className="w-full min-w-0 pl-6 pr-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-900 focus:ring-2 focus:ring-blue-500 outline-none"
                                                     />
                                                 </div>

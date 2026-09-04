@@ -265,28 +265,75 @@ describe('SalesInquiryView', () => {
     expect(createSalesInquiryMock).not.toHaveBeenCalled();
   });
 
-  it('exports only the sales inquiry form as a JPEG', async () => {
+  it('exports the sales inquiry print layout as a JPEG', async () => {
     const user = userEvent.setup();
+    getAllSalesInquiriesMock.mockResolvedValue([
+      makeInquiry({
+        id: 'inq-export',
+        inquiry_no: 'INQ26-99',
+        contact_id: 'c-1',
+        sales_date: '2026-04-08',
+        created_at: '2026-04-08',
+        items: [
+          {
+            id: 'item-1',
+            inquiry_id: 'inq-export',
+            item_id: 'p-1',
+            qty: 2,
+            part_no: 'PN-1',
+            item_code: 'IC-1',
+            location: '',
+            description: 'Widget',
+            unit_price: 100,
+            amount: 200,
+            remark: '',
+            approval_status: 'approved',
+          },
+        ],
+      }),
+    ]);
+    getSalesInquiryMock.mockResolvedValue(
+      makeInquiry({
+        id: 'inq-export',
+        inquiry_no: 'INQ26-99',
+        contact_id: 'c-1',
+        sales_date: '2026-04-08',
+        created_at: '2026-04-08',
+        items: [
+          {
+            id: 'item-1',
+            inquiry_id: 'inq-export',
+            item_id: 'p-1',
+            qty: 2,
+            part_no: 'PN-1',
+            item_code: 'IC-1',
+            location: '',
+            description: 'Widget',
+            unit_price: 100,
+            amount: 200,
+            remark: '',
+            approval_status: 'approved',
+          },
+        ],
+      })
+    );
 
     render(<SalesInquiryView />);
 
     await waitFor(() => expect(fetchContactsMock).toHaveBeenCalled());
+    await user.click(await screen.findByText('INQ26-99'));
+    await waitFor(() => expect(getSalesInquiryMock).toHaveBeenCalled());
     await user.click(screen.getByRole('button', { name: /export jpeg/i }));
 
     await waitFor(() => expect(html2canvasMock).toHaveBeenCalledTimes(1));
     const [capturedElement, options] = html2canvasMock.mock.calls[0];
-    expect(capturedElement).toHaveTextContent('SALES INQUIRY');
-    expect(capturedElement).toHaveTextContent('INQ No. :');
-    expect(capturedElement.querySelector('[data-jpeg-export-plain-value]')).toHaveTextContent('0.00');
+    expect(capturedElement).toHaveTextContent('CUSTOMER INQUIRY');
+    expect(capturedElement).toHaveTextContent('INQ26-99');
+    expect(capturedElement).not.toHaveTextContent('TND OPC');
     expect(capturedElement).not.toHaveTextContent('Filtered By:');
     expect(options.backgroundColor).toBe('#ffffff');
     expect(options.width).toBeGreaterThan(0);
     expect(options.height).toBeGreaterThan(0);
-    expect(options.ignoreElements(document.createElement('button'))).toBe(false);
-
-    const ignoredButton = document.createElement('button');
-    ignoredButton.setAttribute('data-jpeg-export-ignore', '');
-    expect(options.ignoreElements(ignoredButton)).toBe(true);
     expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:sales-inquiry-jpeg');
     expect(addToastMock).toHaveBeenCalledWith({ type: 'success', message: 'Sales inquiry JPEG exported.' });

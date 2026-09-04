@@ -16,7 +16,7 @@ const numberFormat = new Intl.NumberFormat('en-US', {
 
 const displayDate = (value: unknown): string => {
   const date = new Date(String(value || ''));
-  return Number.isNaN(date.getTime()) ? String(value || '') : date.toLocaleDateString('en-US');
+  return Number.isNaN(date.getTime()) ? String(value || '') : date.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
 };
 
 const displayTime = (value: unknown): string => {
@@ -109,7 +109,7 @@ const InquiryReportView: React.FC<InquiryReportViewProps> = ({ filters, onBack }
                 <br />
                 Date from <strong>{filters.dateFrom}</strong> date to <strong>{filters.dateTo}</strong>
                 <br />
-                System generated <strong>{new Date().toLocaleString('en-US')}</strong>
+                System generated <strong>{new Date().toLocaleString('en-PH', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</strong>
               </div>
 
               <table className="w-full border-collapse text-[13px]">

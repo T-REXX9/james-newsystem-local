@@ -315,7 +315,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                         <div className="flex-1 min-w-0">
                                             <div className="flex justify-between">
                                                 <span className="font-medium text-sm text-slate-800 dark:text-slate-200">{tx.label}</span>
-                                                <span className="text-xs text-slate-400">{new Date(tx.date).toLocaleDateString()}</span>
+                                                <span className="text-xs text-slate-400">{new Date(tx.date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
                                             </div>
                                             <div className="flex justify-between mt-1">
                                                 <div className="text-xs text-slate-500 capitalize">{tx.type.replace('_', ' ')} • <span className={
@@ -353,7 +353,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                 {transactions.filter(t => ['invoice', 'order_slip', 'sales_order'].includes(t.type)).map((tx) => (
                                     <tr key={tx.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                                        <td className="p-4 text-sm text-slate-600 dark:text-slate-400">{new Date(tx.date).toLocaleDateString()}</td>
+                                        <td className="p-4 text-sm text-slate-600 dark:text-slate-400">{new Date(tx.date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}</td>
                                         <td className="p-4">
                                             <div className="flex items-center gap-2">
                                                 {getTransactionIcon(tx.type)}
@@ -668,7 +668,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                         <AlertCircle className="w-4 h-4 text-rose-500" />
                                         <div>
                                             <div className="font-bold text-sm">{tx.label}</div>
-                                            <div className="text-xs text-slate-400">Due: {new Date(tx.date).toLocaleDateString()}</div>
+                                            <div className="text-xs text-slate-400">Due: {new Date(tx.date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}</div>
                                         </div>
                                     </div>
                                     <div className="text-right">

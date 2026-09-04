@@ -8,7 +8,7 @@ interface CustomerCallHistoryCardProps {
 
 const formatDate = (value: string) => {
   const parsed = new Date(String(value || '').replace(' ', 'T'));
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString('en-PH', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 };
 
 const formatDuration = (value: number | string) => {

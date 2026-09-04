@@ -70,7 +70,7 @@ const formatDate = (value?: string) => {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
     ? value
-    : new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
+    : new Intl.DateTimeFormat('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }).format(date);
 };
 
 const vipBadgeIconUrl = new URL('../vip-svgrepo-com.svg', import.meta.url).href;

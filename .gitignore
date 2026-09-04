@@ -31,14 +31,34 @@ dist-ssr
 *.sln
 *.sw?
 
-# Auto Claude data directory
+# AI coding agents, skills, and local tool state
+.agents/
+.claude/
+.cursor/
+.codex/
+.codex-docx/
+.kilocode/
+.kiro/
+.continue/
+.aider/
+.gemini/
+.opencode/
+.windsurf/
 .auto-claude/
-
-# Local code intelligence index
+.reasonix/
+.scratch/
 .gitnexus/
-
-# Isolated development worktrees
 .worktrees/
+.mcp.json
+.cursorrules
+skills-lock.json
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+COPILOT.md
+conductor/
+docs/agents/
+dist-codex*/
 
 # Large local database dumps
 *.sql

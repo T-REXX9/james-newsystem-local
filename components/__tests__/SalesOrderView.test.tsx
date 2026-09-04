@@ -218,7 +218,7 @@ describe('SalesOrderView', () => {
     });
   });
 
-  it('exports only the sales order form as a JPEG', async () => {
+  it('exports the sales order print layout as a JPEG', async () => {
     const user = userEvent.setup();
     getAllSalesOrdersMock.mockResolvedValue([
       makeOrder({ id: 'target-order', order_no: 'SO-TARGET', grand_total: 10.5 }),
@@ -240,7 +240,9 @@ describe('SalesOrderView', () => {
     await waitFor(() => expect(html2canvasMock).toHaveBeenCalledTimes(1));
     const [capturedElement, options] = html2canvasMock.mock.calls[0];
     expect(capturedElement).toHaveTextContent('SALES ORDER');
-    expect(capturedElement).toHaveTextContent('SO No. : SO-TARGET');
+    expect(capturedElement).toHaveTextContent('SO No.:');
+    expect(capturedElement).toHaveTextContent('SO-TARGET');
+    expect(capturedElement).not.toHaveTextContent('TND OPC');
     expect(capturedElement).not.toHaveTextContent('Filtered By:');
     expect(options.backgroundColor).toBe('#ffffff');
     expect(options.width).toBeGreaterThan(0);

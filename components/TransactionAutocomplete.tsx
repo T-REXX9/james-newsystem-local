@@ -100,7 +100,7 @@ const TransactionAutocomplete: React.FC<TransactionAutocompleteProps> = ({
                 {transaction.number}
               </span>
               <span className="text-gray-500 dark:text-gray-400 text-xs">
-                {new Date(transaction.date).toLocaleDateString()}
+                {new Date(transaction.date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
               </span>
               {!disabled && (
                 <button
@@ -154,7 +154,7 @@ const TransactionAutocomplete: React.FC<TransactionAutocompleteProps> = ({
                       {transaction.number}
                     </div>
                     <div className="text-xs text-gray-500 dark:text-gray-400">
-                      {new Date(transaction.date).toLocaleDateString()} • ₱{transaction.amount.toLocaleString()}
+                      {new Date(transaction.date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })} • ₱{transaction.amount.toLocaleString()}
                     </div>
                   </div>
                 </div>
@@ -175,4 +175,3 @@ const TransactionAutocomplete: React.FC<TransactionAutocompleteProps> = ({
 };
 
 export default TransactionAutocomplete;
-
