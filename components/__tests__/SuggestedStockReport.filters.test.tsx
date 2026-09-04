@@ -21,15 +21,19 @@ const {
   removeFromKivMock: vi.fn(),
 }));
 
-vi.mock('../../services/suggestedStockService', () => ({
-  fetchSuggestedStockSummaryPage: fetchSummaryMock,
-  fetchCustomersWithNotListedInquiries: fetchCustomersMock,
-  createPurchaseRequestFromSuggestions: createPrMock,
-  markSuggestedStockItemsAddedToPr: markAddedToPrMock,
-  clearNotListedRemarks: vi.fn(),
-  addSuggestedStockItemsToKiv: addToKivMock,
-  removeSuggestedStockItemsFromKiv: removeFromKivMock,
-}));
+vi.mock('../../services/suggestedStockService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../services/suggestedStockService')>();
+  return {
+    ...actual,
+    fetchSuggestedStockSummaryPage: fetchSummaryMock,
+    fetchCustomersWithNotListedInquiries: fetchCustomersMock,
+    createPurchaseRequestFromSuggestions: createPrMock,
+    markSuggestedStockItemsAddedToPr: markAddedToPrMock,
+    clearNotListedRemarks: vi.fn(),
+    addSuggestedStockItemsToKiv: addToKivMock,
+    removeSuggestedStockItemsFromKiv: removeFromKivMock,
+  };
+});
 
 vi.mock('../ToastProvider', () => ({
   useToast: () => ({ addToast: addToastMock }),
@@ -55,14 +59,25 @@ const item = (id: string, description: string, inquiryCount: number, totalQty = 
   productCreated: false,
 });
 
+const qtyDescPage = [
+  item('z', 'ZULU PART', 2, 9),
+  item('a', 'ALPHA PART', 5, 4),
+  item('m', 'MU PART', 1, 1),
+];
+
+const descriptionDescPage = [
+  item('z', 'ZULU PART', 2, 9),
+  item('m', 'MU PART', 1, 1),
+  item('a', 'ALPHA PART', 5, 4),
+];
+
+const rowOrder = (...labels: string[]) =>
+  labels.map((label) => screen.getByText(label).closest('tr'));
+
 describe('SuggestedStockReport filters', () => {
   beforeEach(() => {
     fetchSummaryMock.mockResolvedValue({
-      items: [
-        item('z', 'ZULU PART', 2, 9),
-        item('a', 'ALPHA PART', 5, 4),
-        item('m', 'MU PART', 1, 1),
-      ],
+      items: qtyDescPage,
       hasMore: false,
     });
     fetchCustomersMock.mockResolvedValue([]);
@@ -83,28 +98,104 @@ describe('SuggestedStockReport filters', () => {
     vi.clearAllMocks();
   });
 
-  it('sorts by description or customer-request count for unlisted items only', async () => {
+  it('opens sorted by highest qty requested and keeps the server row order', async () => {
     render(<SuggestedStockReport />);
-    await screen.findByText('ALPHA PART');
+    await screen.findByText('ZULU PART');
 
-    expect(screen.queryByRole('combobox', { name: 'Filter by listing status' })).not.toBeInTheDocument();
-    expect(screen.queryByText('Create PR for Selected')).not.toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /Create/i }).length).toBeGreaterThan(0);
+    await waitFor(() => expect(fetchSummaryMock).toHaveBeenCalledWith(
+      expect.objectContaining({ sortBy: 'qty-desc', kivFolder: false }),
+      1,
+      50
+    ));
 
     const sort = screen.getByRole('combobox', { name: 'Sort suggested stock items' });
+    expect(sort).toHaveValue('qty-desc');
+    expect(sort).not.toHaveTextContent('KIV folder');
+    expect(Array.from((sort as HTMLSelectElement).options).map((option) => option.value)).toEqual([
+      'qty-desc',
+      'description-asc',
+      'inquiries-desc',
+      'inquiries-asc',
+      'description-desc',
+    ]);
 
-    fireEvent.change(sort, { target: { value: 'description-asc' } });
-    const alphaRow = screen.getByText('ALPHA PART').closest('tr');
-    const muRow = screen.getByText('MU PART').closest('tr');
-    const zuluRow = screen.getByText('ZULU PART').closest('tr');
-    expect(alphaRow?.compareDocumentPosition(muRow as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(muRow?.compareDocumentPosition(zuluRow as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const [zulu, alpha, mu] = rowOrder('ZULU PART', 'ALPHA PART', 'MU PART');
+    expect(zulu?.compareDocumentPosition(alpha as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(alpha?.compareDocumentPosition(mu as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 
-    fireEvent.change(sort, { target: { value: 'inquiries-desc' } });
-    expect(screen.getByText('ALPHA PART').closest('tr')?.compareDocumentPosition(screen.getByText('ZULU PART').closest('tr') as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  it('requests description A→Z from the API and renders that server page without re-sorting', async () => {
+    render(<SuggestedStockReport />);
+    await screen.findByText('ZULU PART');
+    fetchSummaryMock.mockClear();
+    fetchSummaryMock.mockResolvedValue({
+      items: [item('z', 'ZULU PART', 2, 9), item('m', 'MU PART', 1, 1), item('a', 'ALPHA PART', 5, 4)],
+      hasMore: false,
+    });
 
-    fireEvent.change(sort, { target: { value: 'qty-desc' } });
-    expect(screen.getByText('ZULU PART').closest('tr')?.compareDocumentPosition(screen.getByText('ALPHA PART').closest('tr') as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Sort suggested stock items' }), {
+      target: { value: 'description-asc' },
+    });
+
+    await waitFor(() => expect(fetchSummaryMock).toHaveBeenCalledWith(
+      expect.objectContaining({ sortBy: 'description-asc', kivFolder: false }),
+      1,
+      50
+    ));
+    await screen.findByText('ZULU PART');
+
+    const [zulu, mu, alpha] = rowOrder('ZULU PART', 'MU PART', 'ALPHA PART');
+    expect(zulu?.compareDocumentPosition(mu as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(mu?.compareDocumentPosition(alpha as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('requests description Z→A from the API and keeps paging on that sort', async () => {
+    let notifyIntersect: ((intersecting: boolean) => void) | undefined;
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor(private readonly callback: IntersectionObserverCallback) {
+        notifyIntersect = (intersecting: boolean) => {
+          this.callback(
+            [{ isIntersecting: intersecting } as IntersectionObserverEntry],
+            this as unknown as IntersectionObserver
+          );
+        };
+      }
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    });
+
+    fetchSummaryMock
+      .mockResolvedValueOnce({ items: qtyDescPage, hasMore: false })
+      .mockResolvedValueOnce({ items: [descriptionDescPage[0], descriptionDescPage[1]], hasMore: true })
+      .mockResolvedValueOnce({ items: [descriptionDescPage[2]], hasMore: false });
+
+    render(<SuggestedStockReport />);
+    await screen.findByText('ZULU PART');
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Sort suggested stock items' }), {
+      target: { value: 'description-desc' },
+    });
+
+    await waitFor(() => expect(fetchSummaryMock).toHaveBeenCalledWith(
+      expect.objectContaining({ sortBy: 'description-desc' }),
+      1,
+      50
+    ));
+    await screen.findByText('MU PART');
+    expect(screen.queryByText('ALPHA PART')).not.toBeInTheDocument();
+
+    notifyIntersect?.(true);
+
+    await waitFor(() => expect(fetchSummaryMock).toHaveBeenCalledWith(
+      expect.objectContaining({ sortBy: 'description-desc' }),
+      2,
+      50
+    ));
+    await screen.findByText('ALPHA PART');
+    const [zulu, mu, alpha] = rowOrder('ZULU PART', 'MU PART', 'ALPHA PART');
+    expect(zulu?.compareDocumentPosition(mu as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(mu?.compareDocumentPosition(alpha as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('keeps custom dates editable, blocks an invalid range, and applies a valid range once', async () => {
@@ -157,11 +248,25 @@ describe('SuggestedStockReport filters', () => {
     expect(screen.getByLabelText('End date')).toHaveValue(expectedToday);
   });
 
-  it('searches by part number and requests matching rows from the report API', async () => {
+  it('does not hide loaded rows while typing a part number', async () => {
     render(<SuggestedStockReport />);
-    await screen.findByText('ALPHA PART');
-    await waitFor(() => expect(fetchSummaryMock).toHaveBeenCalled());
+    await screen.findByText('ZULU PART');
     fetchSummaryMock.mockClear();
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search by part number' }), {
+      target: { value: 'PN-a' },
+    });
+
+    expect(screen.getByText('ZULU PART')).toBeInTheDocument();
+    expect(screen.getByText('ALPHA PART')).toBeInTheDocument();
+    expect(fetchSummaryMock).not.toHaveBeenCalled();
+  });
+
+  it('searches the full dataset through the API when Enter or Apply Filters is used', async () => {
+    render(<SuggestedStockReport />);
+    await screen.findByText('ZULU PART');
+    fetchSummaryMock.mockClear();
+    fetchSummaryMock.mockResolvedValue({ items: [item('a', 'ALPHA PART', 5, 4)], hasMore: false });
 
     const search = screen.getByRole('textbox', { name: 'Search by part number' });
     fireEvent.change(search, { target: { value: 'PN-a' } });
@@ -169,9 +274,21 @@ describe('SuggestedStockReport filters', () => {
 
     await waitFor(() => expect(fetchSummaryMock).toHaveBeenCalledWith(expect.objectContaining({
       partNo: 'PN-a',
+      sortBy: 'qty-desc',
     }), 1, 50));
+    await screen.findByText('ALPHA PART');
     expect(screen.queryByText('ZULU PART')).not.toBeInTheDocument();
-    expect(screen.getByText('ALPHA PART')).toBeInTheDocument();
+
+    fetchSummaryMock.mockClear();
+    fetchSummaryMock.mockResolvedValue({ items: [item('z', 'ZULU PART', 2, 9)], hasMore: false });
+    fireEvent.change(search, { target: { value: 'PN-z' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply Filters' }));
+
+    await waitFor(() => expect(fetchSummaryMock).toHaveBeenCalledWith(expect.objectContaining({
+      partNo: 'PN-z',
+    }), 1, 50));
+    await screen.findByText('ZULU PART');
+    expect(screen.queryByText('ALPHA PART')).not.toBeInTheDocument();
   });
 
   it('adds only a Product Created selection to a PR with its editable quantity', async () => {
@@ -182,9 +299,11 @@ describe('SuggestedStockReport filters', () => {
     render(<SuggestedStockReport />);
     await screen.findByText('CREATED PART');
 
+    expect(screen.getAllByRole('button', { name: /Add Selected Items to PR/i })).toHaveLength(1);
+
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select PN-created' }));
     fireEvent.change(screen.getByRole('spinbutton', { name: 'PR quantity for PN-created' }), { target: { value: '7' } });
-    fireEvent.click(screen.getAllByRole('button', { name: /Add Selected Items to PR \(1\)/i })[0]);
+    fireEvent.click(screen.getByRole('button', { name: /Add Selected Items to PR \(1\)/i }));
 
     await waitFor(() => expect(createPrMock).toHaveBeenCalledWith(
       [expect.objectContaining({ id: 'created', databaseItemId: 'product-session' })],
@@ -194,7 +313,7 @@ describe('SuggestedStockReport filters', () => {
     await waitFor(() => expect(screen.queryByText('CREATED PART')).not.toBeInTheDocument());
   });
 
-  it('moves selected items into the KIV folder and can open that folder', async () => {
+  it('opens the KIV folder as a view without changing the current sort', async () => {
     render(<SuggestedStockReport />);
     await screen.findByText('ALPHA PART');
 
@@ -205,13 +324,22 @@ describe('SuggestedStockReport filters', () => {
       expect.objectContaining({ partNo: 'PN-a', description: 'ALPHA PART' }),
     ]));
 
-    const sort = screen.getByRole('combobox', { name: 'Sort suggested stock items' });
-    fireEvent.change(sort, { target: { value: 'kiv-folder' } });
+    fetchSummaryMock.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'KIV folder' }));
 
     await waitFor(() => expect(fetchSummaryMock).toHaveBeenCalledWith(expect.objectContaining({
       kivFolder: true,
+      sortBy: 'qty-desc',
     }), 1, 50));
+    expect(screen.getByRole('combobox', { name: 'Sort suggested stock items' })).toHaveValue('qty-desc');
     expect(screen.getByText('3 items in KIV folder')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Restore selected from KIV/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select PN-a' }));
+    fireEvent.click(screen.getByRole('button', { name: /Restore selected from KIV/i }));
+
+    await waitFor(() => expect(removeFromKivMock).toHaveBeenCalledWith([
+      expect.objectContaining({ partNo: 'PN-a', description: 'ALPHA PART' }),
+    ]));
   });
 });

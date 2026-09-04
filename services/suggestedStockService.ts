@@ -5,12 +5,21 @@ import type { PurchaseRequestWithItems } from '../purchaseRequest.types';
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
 
+export type SuggestedStockSortOption =
+  | 'qty-desc'
+  | 'description-asc'
+  | 'description-desc'
+  | 'inquiries-desc'
+  | 'inquiries-asc';
+
+export const SUGGESTED_STOCK_DEFAULT_SORT: SuggestedStockSortOption = 'qty-desc';
+
 export interface SuggestedStockFilters {
   dateFrom: string;
   dateTo: string;
   customerId?: string;
   partNo?: string;
-  sortBy?: string;
+  sortBy?: SuggestedStockSortOption;
   kivFolder?: boolean;
 }
 
@@ -325,10 +334,10 @@ export const clearNotListedRemarks = async (input: {
   return toNumber(data?.cleared);
 };
 
-export const addSuggestedStockItemsToKiv = async (
-  items: Array<Pick<SuggestedStockItem, 'partNo' | 'itemCode' | 'description'>>
-): Promise<number> => {
-  const payload = items
+type SuggestedStockKivItem = Pick<SuggestedStockItem, 'partNo' | 'itemCode' | 'description'>;
+
+const toKivPayload = (items: SuggestedStockKivItem[]) =>
+  items
     .map((item) => ({
       part_no: String(item.partNo || '').trim(),
       item_code: String(item.itemCode || '').trim(),
@@ -336,6 +345,10 @@ export const addSuggestedStockItemsToKiv = async (
     }))
     .filter((item) => item.part_no !== '' || item.item_code !== '' || item.description !== '');
 
+export const addSuggestedStockItemsToKiv = async (
+  items: SuggestedStockKivItem[]
+): Promise<number> => {
+  const payload = toKivPayload(items);
   if (payload.length === 0) {
     throw new Error('Select at least one item to move to the KIV folder');
   }
@@ -354,16 +367,9 @@ export const addSuggestedStockItemsToKiv = async (
 };
 
 export const removeSuggestedStockItemsFromKiv = async (
-  items: Array<Pick<SuggestedStockItem, 'partNo' | 'itemCode' | 'description'>>
+  items: SuggestedStockKivItem[]
 ): Promise<number> => {
-  const payload = items
-    .map((item) => ({
-      part_no: String(item.partNo || '').trim(),
-      item_code: String(item.itemCode || '').trim(),
-      description: String(item.description || '').trim(),
-    }))
-    .filter((item) => item.part_no !== '' || item.item_code !== '' || item.description !== '');
-
+  const payload = toKivPayload(items);
   if (payload.length === 0) {
     throw new Error('Select at least one item to restore from the KIV folder');
   }
