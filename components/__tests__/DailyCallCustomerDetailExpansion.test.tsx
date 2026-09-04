@@ -102,6 +102,31 @@ describe('DailyCallCustomerDetailExpansion', () => {
     expect(screen.getByText('Item issue tab content')).toBeInTheDocument();
   });
 
+  it('shows preferred brand on the master customer profile', () => {
+    render(
+      <DailyCallCustomerDetailExpansion
+        customer={{ ...customer, preferredBrand: 'Ishinomoto' }}
+        currentUser={null}
+      />
+    );
+
+    const label = screen.getByText('Preferred Brand');
+    expect(label).toBeInTheDocument();
+    expect(label.parentElement).toHaveTextContent('Ishinomoto');
+  });
+
+  it('shows a dash when preferred brand is unset', () => {
+    render(
+      <DailyCallCustomerDetailExpansion
+        customer={{ ...customer, preferredBrand: '' }}
+        currentUser={null}
+      />
+    );
+
+    const label = screen.getByText('Preferred Brand');
+    expect(label.parentElement).toHaveTextContent('—');
+  });
+
   it('points staff to the dedicated maintenance page for vip threshold changes', () => {
     render(
       <DailyCallCustomerDetailExpansion

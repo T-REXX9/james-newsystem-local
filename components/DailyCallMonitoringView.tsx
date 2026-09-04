@@ -84,6 +84,8 @@ import {
   matchesSearch,
   getPhoneNumber
 } from '../utils/formatUtils';
+import { DO_NOT_CONTACT_LABEL, isBlockedContact } from '../utils/dailyCallBlockedCustomer';
+import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import {
   BUTTON_BASE,
   BUTTON_PRIMARY,
@@ -223,7 +225,7 @@ const getStaffPurchaseHighlight = (row: MasterRow, referenceDate: Date) => {
       color: 'red' as PurchaseHighlightColor,
       className: 'border-[#f94449]/35 bg-[#f94449]/20 text-red-950 hover:bg-[#f94449]/30',
       mutedClassName: 'text-red-800',
-      label: 'blacklisted/rejected -do not contact',
+      label: DO_NOT_CONTACT_LABEL,
     };
   }
 
@@ -286,6 +288,7 @@ const toContactModel = (row: any): Contact => ({
   dealershipSince: String(row?.ishinomotoDealerSince || ''),
   dealershipQuota: Number(row?.quota || 0),
   creditLimit: 0,
+  preferredBrand: String(row?.preferredBrand || ''),
   ishinomotoDealerSince: String(row?.ishinomotoDealerSince || ''),
   ishinomotoSignageSince: String(row?.ishinomotoSignageSince || ''),
   codeText: String(row?.dealerPriceGroup || ''),
@@ -590,6 +593,16 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
   const handleOpenSalesInquiry = useCallback((contactId?: string) => {
     const targetContactId = contactId || selectedClientId || undefined;
+    const targetContact = contacts.find((contact) => contact.id === targetContactId);
+    if (targetContact && isBlockedContact(targetContact)) {
+      addToast({
+        type: 'warning',
+        title: 'Do not contact',
+        description: `${DO_NOT_CONTACT_LABEL}. Sales inquiries cannot be created for this customer.`,
+        durationMs: 5000,
+      });
+      return;
+    }
     window.dispatchEvent(new CustomEvent('workflow:navigate', {
       detail: {
         tab: 'salesinquiry',
@@ -600,7 +613,16 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         }
       }
     }));
-  }, [selectedClientId]);
+  }, [addToast, contacts, selectedClientId]);
+
+  const notifyDoNotContact = useCallback((contact: Contact) => {
+    addToast({
+      type: 'warning',
+      title: 'Do not contact',
+      description: `${contact.company} is ${DO_NOT_CONTACT_LABEL}. Contact actions are disabled.`,
+      durationMs: 5000,
+    });
+  }, [addToast]);
 
   const agentDataName = currentUser?.full_name?.trim() || null;
   const agentDisplayName = useMemo(() => {
@@ -706,6 +728,10 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   }, [searchValue]);
 
   const handleOpenCallContact = useCallback(async (contact: Contact) => {
+    if (isBlockedContact(contact)) {
+      notifyDoNotContact(contact);
+      return;
+    }
     try {
       await claimCustomerCallForDailyCall(contact.id);
     } catch (error) {
@@ -737,7 +763,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         setCallManagementInstructions([]);
       })
       .finally(() => setCallInstructionsLoading(false));
-  }, [addToast]);
+  }, [addToast, notifyDoNotContact]);
 
   const handleDialRequest = useCallback(async (phone: string) => {
     if (!phone || !callContact) return;
@@ -880,6 +906,10 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   }, [addToast, agentDisplayName, currentUser?.email, currentUser?.full_name, currentUser?.id, currentUser?.team, loadAgentData]);
 
   const handleEmailContact = (contact: Contact) => {
+    if (isBlockedContact(contact)) {
+      notifyDoNotContact(contact);
+      return;
+    }
     const email = contact.email || contact.contactPersons[0]?.email;
     if (!email) {
       addToast({ type: 'error', message: 'No email address available for this contact' });
@@ -889,6 +919,10 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   };
 
   const handleOpenSMSModal = (contact: Contact) => {
+    if (isBlockedContact(contact)) {
+      notifyDoNotContact(contact);
+      return;
+    }
     setSMSRecipient(contact);
     setSMSMessage('');
     setShowSMSModal(true);
@@ -1058,6 +1092,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     () => contacts.find((contact) => contact.id === selectedClientId) || null,
     [contacts, selectedClientId]
   );
+  const selectedClientBlocked = selectedClient ? isBlockedContact(selectedClient) : false;
   const callContactPerson = useMemo(
     () => callContact?.contactPersons?.find((person) => person.enabled !== false) || callContact?.contactPersons?.[0] || null,
     [callContact]
@@ -1298,10 +1333,10 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const customerListSummaries = useMemo(() => {
     const summarize = (
       rows: MasterRow[],
-      id: 'priority' | 'recovery' | 'verified' | 'unverified',
+      id: 'priority' | 'recovery' | 'verified' | 'unverified' | 'blocked',
       label: string,
       note: string,
-      tone: 'emerald' | 'rose' | 'blue' | 'orange',
+      tone: 'emerald' | 'rose' | 'blue' | 'orange' | 'red',
       metricLabel: string
     ) => {
       const sales = rows.reduce((sum, row) => sum + row.totalSales, 0);
@@ -1309,10 +1344,11 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       return { id, label, note, tone, rows, sales, average, metricLabel };
     };
 
-    const priorityRows = masterRows.filter((row) => isPriorityListPurchase(row.lastPurchase));
-    const recoveryRows = masterRows.filter((row) => isRecoveryListPurchase(row.lastPurchase));
+    const blockedRows = masterRows.filter((row) => isBlockedContact(row.contact));
+    const priorityRows = masterRows.filter((row) => !isBlockedContact(row.contact) && isPriorityListPurchase(row.lastPurchase));
+    const recoveryRows = masterRows.filter((row) => !isBlockedContact(row.contact) && isRecoveryListPurchase(row.lastPurchase));
     const noPurchaseProspectRows = masterRows.filter((row) =>
-      getPurchaseAgeGroup(row.lastPurchase) === 'unverified' && isProspectContact(row.contact)
+      !isBlockedContact(row.contact) && getPurchaseAgeGroup(row.lastPurchase) === 'unverified' && isProspectContact(row.contact)
     );
     const verifiedRows = noPurchaseProspectRows.filter((row) => row.contact.verification === 'Verified');
     const unverifiedRows = noPurchaseProspectRows.filter((row) => row.contact.verification !== 'Verified');
@@ -1322,6 +1358,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       summarize(recoveryRows, 'recovery', 'Recovery List', 'Purchase history before October 2025, with none since', 'rose', 'Average Monthly Sales'),
       summarize(verifiedRows, 'verified', 'Verified Prospects', 'Verified, awaiting first purchase', 'blue', 'Average Monthly Purchase'),
       summarize(unverifiedRows, 'unverified', 'Unverified Prospects', 'No purchases yet', 'orange', 'Average Monthly Purchase'),
+      summarize(blockedRows, 'blocked', DO_NOT_CONTACT_LABEL, 'View only — no contact or sales inquiry', 'red', 'Average Monthly Sales'),
     ];
   }, [masterRows]);
 
@@ -1697,6 +1734,12 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       icon: 'bg-orange-500',
       value: 'text-orange-600',
     },
+    red: {
+      card: 'border-red-200 bg-red-50/60',
+      title: 'text-red-700',
+      icon: 'bg-[#f94449]',
+      value: 'text-red-700',
+    },
   } as const;
 
   return (
@@ -1794,7 +1837,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         </div>
       )}
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-4" aria-label="Customer category summaries">
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5" aria-label="Customer category summaries">
         {customerListSummaries.map((summary) => {
           const tone = summaryToneClasses[summary.tone];
           return (
@@ -1871,7 +1914,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-4" aria-label="Segregated customer category tables">
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5" aria-label="Segregated customer category tables">
         {customerListSummaries.map((summary) => {
           const tone = summaryToneClasses[summary.tone];
           return (
@@ -1945,30 +1988,34 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                     <UserCheck className="h-3 w-3" />
                                   </button>
                                 )}
-                                <button
-                                  type="button"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    handleMasterRowCall(row.contact);
-                                  }}
-                                  className="grid h-6 w-6 place-items-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
-                                  title="Call"
-                                  aria-label={`Call ${row.contact.company}`}
-                                >
-                                  <Phone className="h-3 w-3" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    handleMasterRowSMS(row.contact);
-                                  }}
-                                  className="grid h-6 w-6 place-items-center rounded-full border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
-                                  title="SMS"
-                                  aria-label={`Send SMS to ${row.contact.company}`}
-                                >
-                                  <MessageSquare className="h-3 w-3" />
-                                </button>
+                                {summary.id !== 'blocked' && !isBlockedContact(row.contact) && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        handleMasterRowCall(row.contact);
+                                      }}
+                                      className="grid h-6 w-6 place-items-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                                      title="Call"
+                                      aria-label={`Call ${row.contact.company}`}
+                                    >
+                                      <Phone className="h-3 w-3" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        handleMasterRowSMS(row.contact);
+                                      }}
+                                      className="grid h-6 w-6 place-items-center rounded-full border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
+                                      title="SMS"
+                                      aria-label={`Send SMS to ${row.contact.company}`}
+                                    >
+                                      <MessageSquare className="h-3 w-3" />
+                                    </button>
+                                  </>
+                                )}
                               </span>
                             </div>
                             </td>
@@ -2032,12 +2079,19 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
             <ManagementInstructionsPanel instructions={managementInstructions} loading={customerLogsLoading} />
-            <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+            {selectedClientBlocked && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
+                {DO_NOT_CONTACT_LABEL} — view only. Contact and sales inquiry actions are disabled.
+              </div>
+            )}
+            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
               <span className={`px-2 py-0.5 rounded-full font-semibold ${statusBadgeClasses(selectedClient.status)}`}>
                 {selectedClient.status}
               </span>
               <span>Assigned: {selectedClient.salesman}</span>
+              <span>Preferred Brand: {formatPreferredBrand(selectedClient.preferredBrand)}</span>
             </div>
+            {!selectedClientBlocked && (
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => handleOpenCallContact(selectedClient)}
@@ -2077,6 +2131,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 Incident Report
               </button>
             </div>
+            )}
+            {!selectedClientBlocked && (
             <div className="space-y-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/40 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -2261,6 +2317,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 </div>
               </div>
             </div>
+            )}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-slate-700 dark:text-slate-200 text-xs">Communication History</span>

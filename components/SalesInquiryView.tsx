@@ -49,6 +49,7 @@ import {
   normalizePriceGroupToInternalKey,
   WRITABLE_PRICING_GROUP_OPTIONS,
 } from '../constants/pricingGroups';
+import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import { fetchCouriers, CourierRecord } from '../services/courierLocalApiService';
 import { fetchRemarkTemplates, RemarkTemplateRecord } from '../services/remarkTemplateLocalApiService';
 import {
@@ -1520,7 +1521,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
             <div className="mb-[35px] overflow-x-auto">
               <table className="w-full min-w-[900px] table-fixed border-collapse text-center text-[13px]">
-                <thead><tr>{['Dealership Since', 'Dealership Sales', 'Dealership Quota', `Total Sales for ${currentMonthLabel}`, 'Customer Since', 'Credit Limit', 'Terms', 'Balance'].map((label) => <th key={label} className="border border-[#d7d7d7] px-2 py-[10px] font-normal">{label}</th>)}</tr></thead>
+                <thead><tr>{['Dealership Since', 'Dealership Sales', 'Dealership Quota', `Total Sales for ${currentMonthLabel}`, 'Customer Since', 'Credit Limit', 'Terms', 'Balance', 'Preferred Brand'].map((label) => <th key={label} className="border border-[#d7d7d7] px-2 py-[10px] font-normal">{label}</th>)}</tr></thead>
                 <tbody><tr>
                   <td className="border border-[#d7d7d7] px-2 py-2">{displayMetricValue(summaryCustomer?.dealershipSince)}</td>
                   <td className="border border-[#d7d7d7] px-2 py-2">{displayMetricValue(summaryCustomer?.dealershipSales, true)}</td>
@@ -1530,6 +1531,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                   <td className="border border-[#d7d7d7] px-2 py-2">{displayMetricValue(creditLimit, true)}</td>
                   <td className="border border-[#d7d7d7] px-2 py-2">{displayMetricValue(terms)}</td>
                   <td className="border border-[#d7d7d7] px-2 py-2">{displayMetricValue(summaryCustomer?.balance, true)}</td>
+                  <td className="border border-[#d7d7d7] px-2 py-2">{formatPreferredBrand(summaryCustomer?.preferredBrand)}</td>
                 </tr></tbody>
               </table>
             </div>
@@ -1873,6 +1875,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                     <th className="bg-slate-50 dark:bg-slate-800 font-semibold py-2 px-2 border border-slate-200 dark:border-slate-800">Credit Limit</th>
                     <th className="bg-slate-50 dark:bg-slate-800 font-semibold py-2 px-2 border border-slate-200 dark:border-slate-800">Terms</th>
                     <th className="bg-slate-50 dark:bg-slate-800 font-semibold py-2 px-2 border border-slate-200 dark:border-slate-800">Balance</th>
+                    <th className="bg-slate-50 dark:bg-slate-800 font-semibold py-2 px-2 border border-slate-200 dark:border-slate-800">Preferred Brand</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1885,6 +1888,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                     <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(creditLimit, true)}</td>
                     <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(terms)}</td>
                     <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(summaryCustomer?.balance, true)}</td>
+                    <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{formatPreferredBrand(summaryCustomer?.preferredBrand)}</td>
                   </tr>
                 </tbody>
               </table>
@@ -2027,6 +2031,18 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                     <td>
                       <input type="text" readOnly value={terms} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" />
                     </td>
+                  </tr>
+                  <tr>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Preferred Brand:</td>
+                    <td>
+                      <input
+                        type="text"
+                        readOnly
+                        value={selectedCustomer ? formatPreferredBrand(summaryCustomer?.preferredBrand) : ''}
+                        className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm"
+                      />
+                    </td>
+                    <td colSpan={4}></td>
                   </tr>
                   <tr>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Promise to Pay:</td>

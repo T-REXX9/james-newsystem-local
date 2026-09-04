@@ -13,6 +13,7 @@ import { getLocalAuthSession } from '../services/localAuthService';
 import CompanyName from './CompanyName';
 import { toast } from 'sonner';
 import { normalizePriceGroup } from '../constants/pricingGroups';
+import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import { formatCurrency } from '../utils/formatUtils';
 import CallCustomerButton from './CallCustomerButton';
 import CustomerCallHistoryCard from './CustomerCallHistoryCard';
@@ -478,6 +479,10 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                 <div>
                                     <label className="text-xs font-bold text-slate-400 uppercase">Price Group</label>
                                     <div className="mt-1">{normalizedPriceGroup || '-'}</div>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-400 uppercase">Preferred Brand</label>
+                                    <div className="mt-1">{formatPreferredBrand(contact.preferredBrand)}</div>
                                 </div>
                                 <div>
                                     <label className="text-xs font-bold text-slate-400 uppercase">Customer Since</label>

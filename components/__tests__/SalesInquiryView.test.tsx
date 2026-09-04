@@ -505,4 +505,28 @@ describe('SalesInquiryView', () => {
     const referenceOptions = within(yourReferenceSelect).getAllByRole('option').map((option) => option.textContent);
     expect(referenceOptions).toEqual(expect.arrayContaining(['Legacy Ref', 'Alice', 'Bob']));
   });
+
+  it('shows preferred brand from the selected customer profile', async () => {
+    const user = userEvent.setup();
+    fetchContactsMock.mockResolvedValue([
+      {
+        ...baseContacts[0],
+        preferredBrand: 'Ishinomoto',
+      },
+    ]);
+    fetchContactByIdMock.mockResolvedValue({
+      ...baseContacts[0],
+      preferredBrand: 'Ishinomoto',
+    });
+
+    render(<SalesInquiryView />);
+
+    await waitFor(() => expect(fetchContactsMock).toHaveBeenCalled());
+    await user.selectOptions(screen.getByLabelText('Customer'), 'c-1');
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Preferred Brand').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Ishinomoto').length).toBeGreaterThan(0);
+    });
+  });
 });

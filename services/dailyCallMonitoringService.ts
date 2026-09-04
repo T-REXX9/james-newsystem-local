@@ -441,6 +441,7 @@ const mapDailyCallCustomerRow = (row: any): DailyCallCustomerRow => ({
   dealerPriceDate: cleanNullableText(row?.dealerPriceDate ?? row?.dealer_price_date),
   ishinomotoDealerSince: cleanNullableText(row?.ishinomotoDealerSince ?? row?.dealerSince ?? row?.dealer_since),
   ishinomotoSignageSince: cleanNullableText(row?.ishinomotoSignageSince ?? row?.signageSince ?? row?.signage_since),
+  preferredBrand: cleanNullableText(row?.preferredBrand ?? row?.preferred_brand),
   quota: Number(row?.quota || 0),
   terms: cleanNullableText(row?.terms),
   modeOfPayment: cleanNullableText(row?.modeOfPayment ?? row?.mode_of_payment, '—'),

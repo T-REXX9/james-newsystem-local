@@ -21,6 +21,7 @@ import { updateContact } from '../services/customerDatabaseLocalApiService';
 import { requestCustomerUpdate } from '../services/customerWorkflowLocalApiService';
 import CustomerRequestsTab from './CustomerRequestsTab';
 import { isCompanyOwnerRole } from '../constants';
+import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import { normalizePriceGroup } from '../constants/pricingGroups';
 
 interface ContactDetailsProps {
@@ -228,6 +229,8 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
                           <span className="flex items-center gap-1.5 font-mono">TIN: {contact.tin || 'N/A'}</span>
                           <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600"></span>
                           <span className="flex items-center gap-1.5 font-bold">Price Group: <span className="text-brand-blue">{normalizedPriceGroup || 'N/A'}</span></span>
+                          <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600"></span>
+                          <span className="flex items-center gap-1.5 font-bold">Preferred Brand: <span className="text-brand-blue">{formatPreferredBrand(contact.preferredBrand)}</span></span>
                       </div>
                   </div>
               </div>

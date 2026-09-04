@@ -5,6 +5,7 @@ import { CustomerStatus, DealStage, Contact, ContactPerson, type CustomerVatType
 import ValidationSummary from './ValidationSummary';
 import FieldHelp from './FieldHelp';
 import { CUSTOMER_VAT_TYPES, DEFAULT_CUSTOMER_VAT_TYPE } from '../constants/customerVat';
+import { CUSTOMER_PREFERRED_BRANDS, type CustomerPreferredBrand } from '../constants/customerPreferredBrand';
 import { WRITABLE_PRICING_GROUP_OPTIONS, normalizePriceGroupToInternalKey } from '../constants/pricingGroups';
 import { validateMaxLength, validateOptionalEmail, validateOptionalPhone, validateRequired } from '../utils/formValidation';
 import { parseSupabaseError } from '../utils/errorHandler';
@@ -54,12 +55,13 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
   const [submitCount, setSubmitCount] = useState(0);
   const { addToast } = useToast();
   
-  type ContactPersonDraft = Omit<ContactPerson, 'id'>;
+  type ContactPersonDraft = Omit<ContactPerson, 'id'> & { id?: string };
 
   const today = new Date().toISOString().split('T')[0];
   const isEditMode = mode === 'edit';
 
   const createEmptyContactPerson = (): ContactPersonDraft => ({
+    id: undefined,
     enabled: true,
     name: '',
     position: '',
@@ -68,6 +70,9 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     mobile: '',
     email: '',
   });
+
+  const phoneValueUnchanged = (current: string, original: string | undefined): boolean =>
+    String(current || '').trim() === String(original || '').trim();
 
   const buildInitialFormData = (): Partial<Contact> => ({
     company: '',
@@ -92,6 +97,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     dealershipSince: '',
     dealershipQuota: 0,
     creditLimit: 0,
+    preferredBrand: '',
     status: ((CustomerStatus && CustomerStatus.PROSPECTIVE) || 'Prospective') as CustomerStatus,
     verification: defaultVerification,
     isHidden: false,
@@ -131,6 +137,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     dealershipSince: contact?.dealershipSince || '',
     dealershipQuota: contact?.dealershipQuota ?? 0,
     creditLimit: contact?.creditLimit ?? 0,
+    preferredBrand: contact?.preferredBrand || '',
     status: (contact?.status as CustomerStatus) || (((CustomerStatus && CustomerStatus.PROSPECTIVE) || 'Prospective') as CustomerStatus),
     verification: contact?.verification || defaultVerification,
     isHidden: !!contact?.isHidden,
@@ -149,6 +156,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     const persons = contact?.contactPersons || [];
     if (persons.length === 0) return [createEmptyContactPerson()];
     return persons.map(person => ({
+      id: person.id,
       enabled: person.enabled ?? true,
       name: person.name || '',
       position: person.position || '',
@@ -215,12 +223,19 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
       // Construct final object
       const fullContactPersons: ContactPerson[] = contactPersons.map((cp, idx) => ({
           ...cp,
-          id: `cp-${Date.now()}-${idx}`,
+          id: cp.id || initialData?.contactPersons?.[idx]?.id || `cp-${Date.now()}-${idx}`,
           enabled: true
       })) as ContactPerson[];
 
       const resolvedDeliveryAddress =
         (formData.deliveryAddress || '').trim() || (formData.address || '').trim();
+
+      // Customer-level phone columns are VARCHAR(15). Contact-person mobiles can be longer
+      // legacy values (lc_mobile is VARCHAR(225)). Keep the full value on contactPersons only.
+      const primaryTelephone = fullContactPersons[0]?.telephone || '';
+      const primaryMobile = fullContactPersons[0]?.mobile || '';
+      const customerPhone = primaryTelephone.length <= 15 ? primaryTelephone : (isEditMode ? (initialData?.phone || '') : '');
+      const customerMobile = primaryMobile.length <= 15 ? primaryMobile : (isEditMode ? (initialData?.mobile || '') : '');
 
       const newContact: Omit<Contact, 'id'> = {
         // Core Identifiers
@@ -251,6 +266,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
         dealershipSince: formData.dealershipSince || '',
         dealershipQuota: formData.dealershipQuota ?? 0,
         creditLimit: formData.creditLimit ?? 0,
+        preferredBrand: formData.preferredBrand || '',
 
         // Status & Logic
         status:
@@ -268,8 +284,8 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
         name: fullContactPersons[0]?.name || 'Unknown Contact',
         title: fullContactPersons[0]?.position || '',
         email: fullContactPersons[0]?.email || '',
-        phone: fullContactPersons[0]?.telephone || '',
-        mobile: fullContactPersons[0]?.mobile || '',
+        phone: customerPhone.length <= 15 ? customerPhone : '',
+        mobile: customerMobile.length <= 15 ? customerMobile : '',
         avatar: formData.avatar || `https://i.pravatar.cc/150?u=${Date.now()}`,
         dealValue: formData.dealValue ?? 0,
         stage: (formData.stage as DealStage) || DealStage.NEW,
@@ -323,17 +339,29 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
       const emailValidation = validateOptionalEmail(primaryPerson.email);
       if (!emailValidation.isValid) errors.primaryEmail = emailValidation.message;
 
-      const phoneValidation = validateOptionalPhone(primaryPerson.mobile);
-      if (!phoneValidation.isValid) errors.primaryMobile = phoneValidation.message;
+      const originalMobile =
+        initialData?.contactPersons?.[0]?.mobile || initialData?.mobile || '';
+      const originalTelephone =
+        initialData?.contactPersons?.[0]?.telephone || initialData?.phone || '';
+      const enforceMobileRules =
+        !isEditMode || !phoneValueUnchanged(primaryPerson.mobile, originalMobile);
+      const enforceTelephoneRules =
+        !isEditMode || !phoneValueUnchanged(primaryPerson.telephone, originalTelephone);
 
-      if (primaryPerson.telephone) {
-        const telephoneLengthValidation = validateMaxLength(primaryPerson.telephone, 'telephone number', 15);
-        if (!telephoneLengthValidation.isValid) errors.primaryTelephone = telephoneLengthValidation.message;
+      // Do not block edits (e.g. preferred brand) when legacy DB phones were already oversize.
+      if (enforceMobileRules) {
+        const phoneValidation = validateOptionalPhone(primaryPerson.mobile);
+        if (!phoneValidation.isValid) errors.primaryMobile = phoneValidation.message;
+
+        if (primaryPerson.mobile) {
+          const mobileLengthValidation = validateMaxLength(primaryPerson.mobile, 'mobile number', 15);
+          if (!mobileLengthValidation.isValid) errors.primaryMobile = mobileLengthValidation.message;
+        }
       }
 
-      if (primaryPerson.mobile) {
-        const mobileLengthValidation = validateMaxLength(primaryPerson.mobile, 'mobile number', 15);
-        if (!mobileLengthValidation.isValid) errors.primaryMobile = mobileLengthValidation.message;
+      if (enforceTelephoneRules && primaryPerson.telephone) {
+        const telephoneLengthValidation = validateMaxLength(primaryPerson.telephone, 'telephone number', 15);
+        if (!telephoneLengthValidation.isValid) errors.primaryTelephone = telephoneLengthValidation.message;
       }
     }
 
@@ -530,6 +558,20 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                       <div>
                           <label className="label">Credit Limit</label>
                           <input type="number" className="input" value={formData.creditLimit} onChange={e => setFormData({...formData, creditLimit: Number(e.target.value)})} />
+                      </div>
+                      <div>
+                          <label className="label">Preferred Brand</label>
+                          <select
+                            aria-label="Preferred Brand"
+                            className="input"
+                            value={formData.preferredBrand || ''}
+                            onChange={e => setFormData({ ...formData, preferredBrand: e.target.value as CustomerPreferredBrand | '' })}
+                          >
+                            <option value="">Select preferred brand</option>
+                            {CUSTOMER_PREFERRED_BRANDS.map((brand) => (
+                              <option key={brand} value={brand}>{brand}</option>
+                            ))}
+                          </select>
                       </div>
                       
                       {isEditMode ? (

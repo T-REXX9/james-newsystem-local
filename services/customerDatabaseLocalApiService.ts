@@ -1,4 +1,5 @@
 import { DEFAULT_CUSTOMER_VAT_TYPE } from '../constants/customerVat';
+import { normalizePreferredBrand } from '../constants/customerPreferredBrand';
 import { normalizePriceGroup } from '../constants/pricingGroups';
 import { Contact, ContactPerson, ContactTransaction, CustomerStatus, CustomerVatType, DealStage, Product, UserProfile } from '../types';
 import { getLocalAuthSession } from './localAuthService';
@@ -69,6 +70,7 @@ interface ApiCustomerRow {
   latest_balance?: string | number | null;
   status?: ApiCustomerStatus | null;
   debt_type?: string | null;
+  preferred_brand?: string | null;
   profile_type?: string | null;
   notes?: string | null;
   contacts?: ApiContactPersonRow[] | null;
@@ -253,7 +255,7 @@ const mapApiContactPerson = (row: ApiContactPersonRow, index: number): ContactPe
   };
 };
 
-const mapApiCustomerToContact = (row: ApiCustomerRow): LocalContact => {
+export const mapApiCustomerToContact = (row: ApiCustomerRow): LocalContact => {
   const contactPersonsRaw = Array.isArray(row?.contacts)
     ? row.contacts
     : Array.isArray(row?.contact_persons)
@@ -293,6 +295,7 @@ const mapApiCustomerToContact = (row: ApiCustomerRow): LocalContact => {
     dealershipSince: sanitizeLegacyString(row?.dealer_since || ''),
     dealershipQuota: toNumber(row?.dealer_quota, 0),
     creditLimit: toNumber(row?.credit_limit, 0),
+    preferredBrand: normalizePreferredBrand(row?.preferred_brand) || undefined,
     status,
     verification: sanitizeLegacyString(row?.verification || ''),
     isHidden: toNumber(row?.status, 1) === 0,
@@ -322,7 +325,7 @@ const mapApiCustomerToContact = (row: ApiCustomerRow): LocalContact => {
   };
 };
 
-const mapContactPayloadToApi = (contact: ContactPayloadWithSalesPersonId) => {
+export const mapContactPayloadToApi = (contact: ContactPayloadWithSalesPersonId) => {
   const status = mapUiStatusToApi(contact?.status as CustomerStatus | undefined);
   const debtType = String(contact?.debtType || 'Good');
   const resolvedSalesPerson = String(contact?.__salesPersonId || contact?.salesman || '').trim();
@@ -349,6 +352,7 @@ const mapContactPayloadToApi = (contact: ContactPayloadWithSalesPersonId) => {
     dealer_since: String(contact?.dealershipSince || ''),
     dealer_quota: toNumber(contact?.dealershipQuota, 0),
     credit_limit: toNumber(contact?.creditLimit, 0),
+    preferred_brand: normalizePreferredBrand(contact?.preferredBrand),
     status,
     notes: String(contact?.comment || ''),
     debt_type: debtType,
@@ -387,6 +391,7 @@ export const mapContactUpdatesToApi = (contact: Partial<ContactPayloadWithSalesP
   if (hasOwn(contact, 'dealershipSince')) payload.dealer_since = String(contact.dealershipSince || '');
   if (hasOwn(contact, 'dealershipQuota')) payload.dealer_quota = toNumber(contact.dealershipQuota, 0);
   if (hasOwn(contact, 'creditLimit')) payload.credit_limit = toNumber(contact.creditLimit, 0);
+  if (hasOwn(contact, 'preferredBrand')) payload.preferred_brand = normalizePreferredBrand(contact.preferredBrand);
   if (hasOwn(contact, 'comment')) payload.notes = String(contact.comment || '');
   if (hasOwn(contact, 'debtType')) payload.debt_type = String(contact.debtType || 'Good');
   if (hasOwn(contact, 'verification')) payload.verification = String(contact.verification || '');
@@ -587,6 +592,24 @@ export const updateContact = async (id: string, updates: Partial<Contact>, actor
     user_id: actorId || String(getUserContext().userId),
     ...mapContactUpdatesToApi(updates),
   };
+
+  // tblpatient.lphone/lmobile are VARCHAR(15). Legacy contact-person phones can be longer
+  // (tblcontact_person.lc_mobile is VARCHAR(225)). Never push oversize values into patient columns,
+  // and do not clear patient phones just because the contact-person value was too long to copy.
+  const contactPersonMobile = String(updates.contactPersons?.[0]?.mobile || '').trim();
+  const contactPersonTelephone = String(updates.contactPersons?.[0]?.telephone || '').trim();
+  if (typeof payload.mobile === 'string') {
+    const mobile = String(payload.mobile).trim();
+    if (mobile.length > 15 || (mobile === '' && contactPersonMobile.length > 15)) {
+      delete payload.mobile;
+    }
+  }
+  if (typeof payload.phone === 'string') {
+    const phone = String(payload.phone).trim();
+    if (phone.length > 15 || (phone === '' && contactPersonTelephone.length > 15)) {
+      delete payload.phone;
+    }
+  }
 
   await requestJson(`${API_BASE_URL}/customer-database/${encodeURIComponent(String(id))}`, {
     method: 'PATCH',

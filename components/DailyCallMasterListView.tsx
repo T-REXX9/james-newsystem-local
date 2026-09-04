@@ -7,6 +7,7 @@ import {
   ArrowUp,
   ClipboardList,
   Crown,
+  Eye,
   Info,
   Loader2,
   Phone,
@@ -24,6 +25,7 @@ import { getVipTierConfig } from '../services/vipTierSettingsService';
 import { Contact, CustomerStatus, DailyCallCustomerRow, DailyCallMasterCustomerRow, DailyCallMasterListMeta, UserProfile, VipTierConfig } from '../types';
 import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
 import { resolveVipDiscountLevel } from '../utils/vipStanding';
+import { DO_NOT_CONTACT_LABEL, isBlockedDailyCallMasterRow } from '../utils/dailyCallBlockedCustomer';
 import AddContactModal from './AddContactModal';
 import DailyCallCustomerDetailModal from './DailyCallCustomerDetailModal';
 import DailyCallInlineAgentSelect, { formatAssignmentDateLabel } from './DailyCallInlineAgentSelect';
@@ -47,7 +49,7 @@ const compactPeso = new Intl.NumberFormat('en-PH', {
   maximumFractionDigits: 2,
 });
 
-type CategoryId = 'priority' | 'recovery' | 'verified' | 'unverified' | 'all';
+type CategoryId = 'priority' | 'recovery' | 'verified' | 'unverified' | 'blocked' | 'all';
 
 interface CategoryDefinition {
   id: CategoryId;
@@ -73,7 +75,7 @@ const categories: CategoryDefinition[] = [
     border: 'border-emerald-200',
     softBg: 'bg-emerald-50/60',
     dot: 'bg-emerald-500',
-    matches: (row) => row.listCategory ? row.listCategory === 'priority' : row.purchaseCount > 0,
+    matches: (row) => !isBlockedDailyCallMasterRow(row) && (row.listCategory ? row.listCategory === 'priority' : row.purchaseCount > 0),
   },
   {
     id: 'recovery',
@@ -85,7 +87,7 @@ const categories: CategoryDefinition[] = [
     border: 'border-rose-200',
     softBg: 'bg-rose-50/60',
     dot: 'bg-rose-500',
-    matches: (row) => row.listCategory ? row.listCategory === 'recovery' : row.purchaseAgeGroup === 'over_one_month',
+    matches: (row) => !isBlockedDailyCallMasterRow(row) && (row.listCategory ? row.listCategory === 'recovery' : row.purchaseAgeGroup === 'over_one_month'),
   },
   {
     id: 'verified',
@@ -97,7 +99,7 @@ const categories: CategoryDefinition[] = [
     border: 'border-blue-200',
     softBg: 'bg-blue-50/60',
     dot: 'bg-blue-500',
-    matches: (row) => row.purchaseAgeGroup === 'no_purchase' && isProspectRow(row) && row.verification === 'Verified',
+    matches: (row) => !isBlockedDailyCallMasterRow(row) && row.purchaseAgeGroup === 'no_purchase' && isProspectRow(row) && row.verification === 'Verified',
   },
   {
     id: 'unverified',
@@ -109,7 +111,19 @@ const categories: CategoryDefinition[] = [
     border: 'border-orange-200',
     softBg: 'bg-orange-50/60',
     dot: 'bg-orange-400',
-    matches: (row) => row.purchaseAgeGroup === 'no_purchase' && isProspectRow(row) && row.verification !== 'Verified',
+    matches: (row) => !isBlockedDailyCallMasterRow(row) && row.purchaseAgeGroup === 'no_purchase' && isProspectRow(row) && row.verification !== 'Verified',
+  },
+  {
+    id: 'blocked',
+    label: DO_NOT_CONTACT_LABEL,
+    note: 'View only — no contact or sales inquiry',
+    state: 'Do Not Contact',
+    accent: 'text-red-700',
+    iconBg: 'bg-[#f94449]',
+    border: 'border-red-200',
+    softBg: 'bg-red-50/60',
+    dot: 'bg-[#f94449]',
+    matches: (row) => isBlockedDailyCallMasterRow(row),
   },
   {
     id: 'all',
@@ -139,13 +153,12 @@ const ageLabel = (row: DailyCallMasterCustomerRow) => {
 };
 
 const purchaseHighlight = (row: DailyCallMasterCustomerRow) => {
-  const blocked = Number(row.customerStatus) === 4 || String(row.debtType || '').toLowerCase() === 'bad';
-  if (blocked) {
+  if (isBlockedDailyCallMasterRow(row)) {
     return {
       color: 'red',
       row: 'bg-[#f94449]/20 text-red-950 backdrop-blur-sm hover:bg-[#f94449]/30',
       muted: 'text-red-800',
-      label: 'blacklisted/rejected -do not contact',
+      label: DO_NOT_CONTACT_LABEL,
     };
   }
 
@@ -180,10 +193,13 @@ const masterRowFallback = (row: DailyCallMasterCustomerRow): DailyCallCustomerRo
   codeDate: '—',
   ishinomotoDealerSince: '—',
   ishinomotoSignageSince: '—',
+  preferredBrand: '',
   quota: 0,
   modeOfPayment: '—',
   courier: [row.city, row.province].filter((value) => value && value !== '—').join(', ') || '—',
-  status: (row.purchaseAgeGroup === 'no_purchase' ? 'Prospective' : row.purchaseAgeGroup === 'over_one_month' ? 'Inactive' : 'Active') as DailyCallCustomerRow['status'],
+  status: isBlockedDailyCallMasterRow(row)
+    ? CustomerStatus.BLACKLISTED
+    : ((row.purchaseAgeGroup === 'no_purchase' ? 'Prospective' : row.purchaseAgeGroup === 'over_one_month' ? 'Inactive' : 'Active') as DailyCallCustomerRow['status']),
   statusDate: row.lastPurchaseDate,
   outstandingBalance: 0,
   averageMonthlyOrder: row.purchaseCount ? row.totalSales / row.purchaseCount : 0,
@@ -248,6 +264,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const [selectedCustomer, setSelectedCustomer] = useState<DailyCallCustomerRow | null>(null);
   const [showAddProspectModal, setShowAddProspectModal] = useState(false);
   const [detailInitialTab, setDetailInitialTab] = useState<DetailTabId>('overview');
+  const [detailViewOnly, setDetailViewOnly] = useState(false);
   const [loadingCustomerId, setLoadingCustomerId] = useState<string | null>(null);
   const [activeCategoryId, setActiveCategoryId] = useState<CategoryId>('priority');
   const [visibleLimit, setVisibleLimit] = useState(INITIAL_VISIBLE_ROWS);
@@ -269,6 +286,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const openCustomerDetails = useCallback(async (row: DailyCallMasterCustomerRow, initialTab: DetailTabId = 'overview') => {
     setLoadingCustomerId(row.id);
     setDetailInitialTab(initialTab);
+    setDetailViewOnly(isBlockedDailyCallMasterRow(row));
     try {
       if (!fullCustomerRowsRef.current) {
         fullCustomerRowsRef.current = await fetchCustomersForDailyCall({});
@@ -628,7 +646,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
         </div>
       )}
 
-      <section className="grid grid-cols-4 gap-3 2xl:gap-4" aria-label="Customer category summaries">
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5 2xl:gap-4" aria-label="Customer category summaries">
         {summaryCategoryData.map((category) => (
           <article key={category.id} className={`rounded-xl border ${category.border} ${category.softBg} p-3 shadow-sm 2xl:p-4`}>
             <h3 className={`text-sm font-bold uppercase ${category.accent}`}>
@@ -661,6 +679,9 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 {compactPeso.format(category.id === 'priority' || category.id === 'recovery' ? category.averageSales : category.potentialSales)}
               </strong>
             </div>
+            {activeCategory.id === 'blocked' && (
+              <p className="mt-2 border-t border-red-200 pt-2 text-xs font-semibold text-red-700">View only. Contact and sales inquiry actions are disabled.</p>
+            )}
             {category.id === 'unverified' && (
               <p className="mt-2 border-t border-orange-200 pt-2 text-xs font-semibold text-orange-700">Found: {unverifiedCreatedCounts.today} today · {unverifiedCreatedCounts.week} this week · {unverifiedCreatedCounts.month} this month</p>
             )}
@@ -746,6 +767,8 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 </thead>
                 <tbody>
                   {visibleRows.map((row, index) => {
+                    const rowBlocked = isBlockedDailyCallMasterRow(row);
+                    const viewOnlyRow = activeCategory.id === 'blocked' || rowBlocked;
                     const highlight = purchaseHighlight(row);
                     const vip = vipDetails(row, vipConfig);
                     const trend = trendDetails(row);
@@ -800,6 +823,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                             agents={salesAgents}
                             loadingAgents={loadingSalesAgents}
                             saving={assigningCustomerId === row.id}
+                            disabled={viewOnlyRow}
                             onAssign={handleAssignAgent}
                           />
                         </td>
@@ -830,16 +854,29 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                                 <XCircle className="h-4 w-4" />
                               </button></>
                             )}
-                            <button
-                              type="button"
-                              aria-label={`Call ${row.shopName}`}
-                              title={`Open call details for ${row.shopName}`}
-                              onClick={() => openCustomerDetails(row, 'overview')}
-                              disabled={loadingCustomerId === row.id}
-                              className="rounded-full border border-emerald-200 p-1.5 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-60"
-                            >
-                              <Phone className="h-4 w-4" />
-                            </button>
+                            {viewOnlyRow ? (
+                              <button
+                                type="button"
+                                aria-label={`View ${row.shopName}`}
+                                title={`View-only record for ${row.shopName}`}
+                                onClick={() => openCustomerDetails(row, 'overview')}
+                                disabled={loadingCustomerId === row.id}
+                                className="rounded-full border border-red-200 p-1.5 text-red-600 transition hover:bg-red-50 disabled:opacity-60"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                aria-label={`Call ${row.shopName}`}
+                                title={`Open call details for ${row.shopName}`}
+                                onClick={() => openCustomerDetails(row, 'overview')}
+                                disabled={loadingCustomerId === row.id}
+                                className="rounded-full border border-emerald-200 p-1.5 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-60"
+                              >
+                                <Phone className="h-4 w-4" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -864,7 +901,11 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
         customer={selectedCustomer}
         currentUser={currentUser || null}
         initialTab={detailInitialTab}
-        onClose={() => setSelectedCustomer(null)}
+        viewOnlyDoNotContact={detailViewOnly}
+        onClose={() => {
+          setSelectedCustomer(null);
+          setDetailViewOnly(false);
+        }}
       />
     </div>
     </div>

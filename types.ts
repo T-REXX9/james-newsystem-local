@@ -319,6 +319,7 @@ export interface Contact {
   dealershipSince: string;
   dealershipQuota: number;
   creditLimit: number;
+  preferredBrand?: string;
   ishinomotoDealerSince?: string;
   ishinomotoSignageSince?: string;
   signageSince?: string;
@@ -684,6 +685,7 @@ export interface DailyCallCustomerRow {
   dealerPriceDate?: string;
   ishinomotoDealerSince: string;
   ishinomotoSignageSince: string;
+  preferredBrand?: string;
   quota: number;
   terms?: string;
   modeOfPayment: string;

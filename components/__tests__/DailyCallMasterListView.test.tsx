@@ -452,6 +452,33 @@ describe('DailyCallMasterListView', () => {
     expect(screen.getByLabelText('Assign sales agent for Priority Buyer Shop')).toHaveValue('agent-1');
   });
 
+  it('shows the blocked do-not-contact quick go to category', async () => {
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 1 },
+      items: [{
+        id: 'blocked-1',
+        shopName: 'Blocked Shop',
+        province: 'Manila',
+        city: 'Manila',
+        contactNumber: '0911',
+        assignedTo: 'Unassigned',
+        customerStatus: 4,
+        debtType: 'Bad',
+        lastPurchaseDate: 'May 1, 2026',
+        lastPurchaseDateRaw: '2026-05-01',
+        purchaseCount: 1,
+        currentMonthSales: 0,
+        daysSinceLastPurchase: 30,
+        monthsSinceLastPurchase: 1,
+        purchaseAgeGroup: 'two_weeks_to_one_month' as const,
+      }],
+    });
+
+    render(<DailyCallMasterListView />);
+
+    expect(await screen.findByRole('button', { name: /blacklisted\/rejected -do not contact \(1\)/i })).toBeInTheDocument();
+  });
+
   it('does not render the removed customer case and incident-flow footer area', async () => {
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
       meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 0 },

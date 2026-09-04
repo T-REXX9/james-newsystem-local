@@ -21,10 +21,12 @@ import PersonalCommentsTab from './PersonalCommentsTab';
 import CallReportActivityPanel from './CallReportActivityPanel';
 import { DailyCallCustomerRow, UserProfile, VipTierConfig } from '../types';
 import { formatLegacyPriceGroupLabel } from '../constants/pricingGroups';
+import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import { getVipStandingSummary } from '../utils/vipStanding';
 import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
 import { getVipTierConfig } from '../services/vipTierSettingsService';
 import { fetchManagementInstructions } from '../services/dailyCallMonitoringService';
+import { DO_NOT_CONTACT_LABEL, isBlockedDailyCallCustomerRow } from '../utils/dailyCallBlockedCustomer';
 
 export type DetailTabId =
   | 'overview'
@@ -39,6 +41,7 @@ interface DailyCallCustomerDetailExpansionProps {
   customer: DailyCallCustomerRow;
   currentUser: UserProfile | null;
   initialTab?: DetailTabId;
+  viewOnlyDoNotContact?: boolean;
 }
 
 const tabs: Array<{
@@ -99,7 +102,13 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
   customer,
   currentUser,
   initialTab = 'overview',
+  viewOnlyDoNotContact = false,
 }) => {
+  const readOnly = viewOnlyDoNotContact || isBlockedDailyCallCustomerRow(customer);
+  const visibleTabs = useMemo(
+    () => (readOnly ? tabs.filter((tab) => tab.id !== 'sales') : tabs),
+    [readOnly]
+  );
   const [activeTab, setActiveTab] = useState<DetailTabId>(initialTab);
   const [vipConfig, setVipConfig] = useState<VipTierConfig>(DEFAULT_VIP_TIER_CONFIG);
   const [latestInstruction, setLatestInstruction] = useState<any | null>(null);
@@ -107,6 +116,12 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
   useEffect(() => {
     setActiveTab(initialTab);
   }, [initialTab, customer.id]);
+
+  useEffect(() => {
+    if (readOnly && activeTab === 'sales') {
+      setActiveTab('overview');
+    }
+  }, [activeTab, readOnly]);
 
   useEffect(() => {
     let disposed = false;
@@ -128,13 +143,13 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
-      const index = tabs.findIndex((tab) => tab.id === activeTab);
+      const index = visibleTabs.findIndex((tab) => tab.id === activeTab);
       const offset = event.key === 'ArrowRight' ? 1 : -1;
-      setActiveTab(tabs[(index + offset + tabs.length) % tabs.length].id);
+      setActiveTab(visibleTabs[(index + offset + visibleTabs.length) % visibleTabs.length].id);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [activeTab]);
+  }, [activeTab, visibleTabs]);
 
   const priceGroupLabel = useMemo(
     () => formatLegacyPriceGroupLabel(customer.dealerPriceGroup || customer.codeDate?.split(' (')[0]),
@@ -211,7 +226,20 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
 
   const panel = useMemo(() => {
     if (activeTab === 'overview') return overview;
-    if (activeTab === 'sales') return <SalesReportTab contactId={customer.id} currentUserId={currentUser?.id} />;
+    if (activeTab === 'sales') {
+      if (readOnly) {
+        return (
+          <div className="p-5">
+            <PanelCard title="Sales Inquiry" icon={BarChart3}>
+              <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800">
+                {DO_NOT_CONTACT_LABEL}. Sales inquiries cannot be created for this customer.
+              </p>
+            </PanelCard>
+          </div>
+        );
+      }
+      return <SalesReportTab contactId={customer.id} currentUserId={currentUser?.id} />;
+    }
     if (activeTab === 'item-issues') return <ItemIssueReportTab contactId={customer.id} />;
     if (activeTab === 'incident') return <IncidentReportTab contactId={customer.id} currentUser={currentUser} />;
     if (activeTab === 'requests') return <CustomerRequestsTab contactId={customer.id} currentUser={currentUser} />;
@@ -231,7 +259,7 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
       </PanelCard></div>;
     }
     return null;
-  }, [activeTab, activities, currentUser, customer, overview]);
+  }, [activeTab, activities, currentUser, customer, overview, readOnly]);
 
   return (
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-sm">
@@ -263,6 +291,7 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
               <div><dt className="flex items-center gap-1.5 text-slate-500"><CreditCard className="h-3.5 w-3.5 text-emerald-600" /> Term of Payment</dt><dd className="mt-1 font-bold">{customer.terms || customer.modeOfPayment || '—'}</dd></div>
               <div><dt className="flex items-center gap-1.5 text-slate-500"><WalletCards className="h-3.5 w-3.5 text-emerald-600" /> Credit Limit</dt><dd className="mt-1 font-bold">{formatCurrency(customer.quota)}</dd></div>
               <div><dt className="text-slate-500">Price Group</dt><dd className="mt-1 font-bold">{priceGroupLabel}</dd></div>
+              <div><dt className="text-slate-500">Preferred Brand</dt><dd className="mt-1 font-bold">{formatPreferredBrand(customer.preferredBrand)}</dd></div>
               <div><dt className="text-slate-500">Outstanding Balance</dt><dd className="mt-1 font-bold text-rose-600">{formatCurrency(customer.outstandingBalance)}</dd></div>
               <div><dt className="text-slate-500">VIP Discount</dt><dd className="mt-1 font-bold">{vipStanding.tierLabel}</dd></div>
               <div><dt className="text-slate-500">Account Status</dt><dd className={`mt-1 font-bold ${isActive ? 'text-emerald-700' : 'text-amber-600'}`}>{isActive ? 'Current' : 'Review'}</dd></div>
@@ -272,14 +301,16 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
           <section className="rounded-xl border border-slate-200 p-4">
             <h3 className="flex items-center gap-2 text-xs font-bold uppercase text-slate-800"><BarChart3 className="h-4 w-4 text-blue-700" /> Sales Snapshot (MTD)</h3>
             <dl className="mt-5 grid grid-cols-3 gap-4 text-xs"><div><dt className="text-slate-500">Current Month Sales</dt><dd className="mt-2 text-xl font-bold">{formatCurrency(customer.monthlyOrder)}</dd></div><div><dt className="text-slate-500">Last Month Sales</dt><dd className="mt-2 text-xl font-bold">{formatCurrency(customer.lastMonthOrder)}</dd></div><div><dt className="text-slate-500">Average Monthly Sales</dt><dd className="mt-2 text-xl font-bold">{formatCurrency(customer.averageMonthlyOrder)}</dd></div></dl>
-            <button type="button" onClick={() => setActiveTab('sales')} className="mt-5 w-full rounded-lg border border-slate-200 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50">View Sales Inquiries</button>
+            {!readOnly && (
+              <button type="button" onClick={() => setActiveTab('sales')} className="mt-5 w-full rounded-lg border border-slate-200 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50">View Sales Inquiries</button>
+            )}
           </section>
         </div>
       </header>
 
       <nav className="border-b border-slate-200 bg-white px-3" aria-label="Customer detail sections">
         <div className="flex overflow-x-auto" role="tablist">
-          {tabs.map((tab) => {
+          {visibleTabs.map((tab) => {
             const Icon = tab.icon;
             const selected = activeTab === tab.id;
             return <button key={tab.id} type="button" role="tab" aria-selected={selected} onClick={() => setActiveTab(tab.id)} className={`flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-3 text-[11px] font-semibold transition ${selected ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-600 hover:text-blue-700'}`}><Icon className="h-3.5 w-3.5" />{tab.label}</button>;
@@ -295,7 +326,7 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
           {[
             ['Add Instruction', Plus, 'text-cyan-700 border-cyan-200 bg-cyan-50', 'comments'],
             ['Sales Agent Reports', UserRound, 'text-emerald-700 border-emerald-200 bg-emerald-50', 'human'],
-            ['Sales Inquiry', BarChart3, 'text-white border-blue-900 bg-blue-950', 'sales'],
+            ...(!readOnly ? [['Sales Inquiry', BarChart3, 'text-white border-blue-900 bg-blue-950', 'sales']] : []),
           ].map(([label, Icon, tone, target]) => <button key={String(label)} type="button" onClick={() => setActiveTab(target as DetailTabId)} className={`flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-[10px] font-bold ${tone}`}><Icon className="h-3.5 w-3.5" />{String(label)}</button>)}
         </div>
       </footer>
