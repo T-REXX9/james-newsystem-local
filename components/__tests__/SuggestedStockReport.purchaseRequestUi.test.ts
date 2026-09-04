@@ -7,14 +7,16 @@ const source = readFileSync(
   'utf8'
 );
 
-describe('Suggested Stock unlisted-only workflow controls', () => {
-  it('is a create-to-catalog queue without Create PR or listing-status filters', () => {
-    expect(source).not.toContain('Create PR for Selected');
-    expect(source).not.toContain('createPurchaseRequestFromSuggestions');
+describe('Suggested Stock product-to-PR workflow controls', () => {
+  it('keeps product-created suggestions available for direct PR creation', () => {
+    expect(source).toContain('createPurchaseRequestFromSuggestions');
+    expect(source).toContain('markSuggestedStockItemsAddedToPr');
+    expect(source).toContain('Add Selected Items to PR');
+    expect(source).toContain('Product Created');
+    expect(source).toContain('PR Qty');
     expect(source).not.toContain('Filter by listing status');
     expect(source).not.toContain('Already listed');
-    expect(source).toContain('Open Reorder Report');
-    expect(source).toContain('Catalog gaps only');
+    expect(source).not.toContain('Open Reorder Report');
   });
 
   it('opens Product Database create with suggested-stock handoff params', () => {

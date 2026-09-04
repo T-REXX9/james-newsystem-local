@@ -411,7 +411,7 @@ const SuggestedStockDataView: React.FC<SuggestedStockDataViewProps> = ({
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
                         {item.lastInquiryDate
-                          ? new Date(item.lastInquiryDate).toLocaleDateString('en-PH')
+                          ? new Date(item.lastInquiryDate).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })
                           : '-'}
                       </td>
                       <td className="px-4 py-3">
@@ -514,7 +514,7 @@ const SuggestedStockDataView: React.FC<SuggestedStockDataViewProps> = ({
                     >
                       <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400 whitespace-nowrap">
                         {item.inquiryDate
-                          ? new Date(item.inquiryDate).toLocaleDateString('en-PH')
+                          ? new Date(item.inquiryDate).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })
                           : '-'}
                       </td>
                       <td className="px-4 py-3 text-sm font-medium text-slate-800 dark:text-white">

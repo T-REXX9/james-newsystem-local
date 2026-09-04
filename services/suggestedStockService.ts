@@ -9,6 +9,9 @@ export interface SuggestedStockFilters {
   dateFrom: string;
   dateTo: string;
   customerId?: string;
+  partNo?: string;
+  sortBy?: string;
+  kivFolder?: boolean;
 }
 
 export interface SuggestedStockItem {
@@ -17,6 +20,7 @@ export interface SuggestedStockItem {
   itemCode: string;
   description: string;
   brand: string;
+  databaseItemId: string;
   databaseItemCode: string;
   databasePartNo: string;
   isListed: boolean;
@@ -26,6 +30,8 @@ export interface SuggestedStockItem {
   customers: { id: string; name: string }[];
   remark: string;
   lastInquiryDate: string;
+  isKiv: boolean;
+  productCreated: boolean;
 }
 
 export interface SuggestedStockDetail {
@@ -112,6 +118,15 @@ const buildFilters = (filters: SuggestedStockFilters, extra: Record<string, stri
   if (filters.customerId && filters.customerId !== 'all') {
     query.set('customer_id', filters.customerId);
   }
+  if (filters.partNo && filters.partNo.trim() !== '') {
+    query.set('part_no', filters.partNo.trim());
+  }
+  if (filters.sortBy && filters.sortBy.trim() !== '') {
+    query.set('sort_by', filters.sortBy.trim());
+  }
+  if (filters.kivFolder) {
+    query.set('kiv', '1');
+  }
 
   return query;
 };
@@ -186,6 +201,7 @@ const mapSummaryRows = (rows: any[]): SuggestedStockItem[] =>
       itemCode: String(item?.item_code || ''),
       description: String(item?.description || ''),
       brand: String(item?.brand || ''),
+      databaseItemId: String(item?.database_item_id || ''),
       databaseItemCode: String(item?.database_item_code || ''),
       databasePartNo: String(item?.database_part_no || ''),
       isListed: String(item?.database_item_code || '') !== '' || String(item?.database_part_no || '') !== '',
@@ -195,6 +211,8 @@ const mapSummaryRows = (rows: any[]): SuggestedStockItem[] =>
       customers,
       remark: String(item?.report_remark || ''),
       lastInquiryDate: String(item?.last_inquiry_date || ''),
+      isKiv: String(item?.is_kiv || '') === '1' || Boolean(item?.is_kiv),
+      productCreated: String(item?.product_created || '') === '1' || Boolean(item?.product_created),
     };
   });
 
@@ -307,10 +325,69 @@ export const clearNotListedRemarks = async (input: {
   return toNumber(data?.cleared);
 };
 
+export const addSuggestedStockItemsToKiv = async (
+  items: Array<Pick<SuggestedStockItem, 'partNo' | 'itemCode' | 'description'>>
+): Promise<number> => {
+  const payload = items
+    .map((item) => ({
+      part_no: String(item.partNo || '').trim(),
+      item_code: String(item.itemCode || '').trim(),
+      description: String(item.description || '').trim(),
+    }))
+    .filter((item) => item.part_no !== '' || item.item_code !== '' || item.description !== '');
+
+  if (payload.length === 0) {
+    throw new Error('Select at least one item to move to the KIV folder');
+  }
+
+  const data = await requestApi(`${API_BASE_URL}/suggested-stock-report/kiv`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      main_id: getMainId(),
+      user_id: getUserId() || undefined,
+      items: payload,
+    }),
+  });
+
+  return toNumber(data?.added, payload.length);
+};
+
+export const removeSuggestedStockItemsFromKiv = async (
+  items: Array<Pick<SuggestedStockItem, 'partNo' | 'itemCode' | 'description'>>
+): Promise<number> => {
+  const payload = items
+    .map((item) => ({
+      part_no: String(item.partNo || '').trim(),
+      item_code: String(item.itemCode || '').trim(),
+      description: String(item.description || '').trim(),
+    }))
+    .filter((item) => item.part_no !== '' || item.item_code !== '' || item.description !== '');
+
+  if (payload.length === 0) {
+    throw new Error('Select at least one item to restore from the KIV folder');
+  }
+
+  const data = await requestApi(`${API_BASE_URL}/suggested-stock-report/kiv/remove`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      main_id: getMainId(),
+      items: payload,
+    }),
+  });
+
+  return toNumber(data?.removed, payload.length);
+};
+
 export const createPurchaseRequestFromSuggestions = async (
-  items: SuggestedStockItem[]
+  items: SuggestedStockItem[],
+  quantities: Record<string, number> = {}
 ): Promise<PurchaseRequestWithItems> => {
   if (items.length === 0) throw new Error('Select at least one suggested item');
+  if (items.some((item) => !item.productCreated || !item.databaseItemId)) {
+    throw new Error('Each selected item must have a matching Product Created record before it can be added to a PR. Refresh the report after creating the product.');
+  }
 
   const sourceIds = items.map((item) => item.id).filter(Boolean);
   return purchaseRequestService.createPurchaseRequest({
@@ -319,13 +396,32 @@ export const createPurchaseRequestFromSuggestions = async (
     notes: `Created from Item Suggested for Stock (${sourceIds.length} suggestion${sourceIds.length === 1 ? '' : 's'})`,
     reference_no: `Suggested Stock:${sourceIds.join(',')}`,
     items: items.map((item) => ({
+      // The API provides the exact inventory session for Product Created rows.
+      // Persist it on tblpr_item to retain the product/history relationship.
+      item_id: item.databaseItemId || undefined,
       item_code: item.databaseItemCode || item.itemCode || undefined,
       part_number: item.databasePartNo || item.partNo || undefined,
       description: item.description || undefined,
-      quantity: Math.max(1, Number(item.totalQty) || 1),
+      quantity: Math.max(1, Number(quantities[item.id] ?? item.totalQty) || 1),
       unit_cost: 0,
     })),
   });
+};
+
+export const markSuggestedStockItemsAddedToPr = async (
+  items: SuggestedStockItem[]
+): Promise<number> => {
+  const payload = items.map((item) => ({
+    part_no: item.partNo,
+    item_code: item.itemCode,
+    description: item.description,
+  }));
+  const data = await requestApi(`${API_BASE_URL}/suggested-stock-report/added-to-pr`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ main_id: getMainId(), items: payload }),
+  });
+  return toNumber(data?.removed);
 };
 
 export const fetchSuppliers = async (): Promise<SupplierOption[]> => {
