@@ -74,6 +74,77 @@ export interface IncidentItemsReportData {
   meta: IncidentItemsReportMeta;
 }
 
+export interface IncidentItemIncidentSummary {
+  incident_report_id: string;
+  date: string;
+  contact_id: string;
+  customer_name: string;
+  summary: string;
+}
+
+export interface IncidentItemIncidentsFilters {
+  supplierId?: string;
+  supplierName?: string;
+  productId?: string;
+  itemCode?: string;
+  partNo?: string;
+  description?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  matchSource?: IncidentMatchSource;
+  search?: string;
+  supplier?: string;
+}
+
+export interface WarehouseIncidentReport {
+  id: string;
+  record_source?: 'incident_report' | 'customer_log';
+  contact_id: string;
+  customer_name?: string;
+  report_date: string;
+  report_time: string;
+  incident_date: string;
+  incident_time: string;
+  issue_type: 'product_quality' | 'service_quality' | 'delivery' | 'lbc_rto' | 'other';
+  description: string;
+  reported_by: string;
+  done_by: string;
+  attachments?: string[];
+  related_transactions?: Array<{
+    transaction_type: string;
+    transaction_id: string;
+    transaction_number: string;
+    transaction_date: string;
+  }>;
+  approval_status: 'pending' | 'approved' | 'rejected';
+  approved_by?: string;
+  approval_date?: string;
+  decision_note?: string;
+  notes?: string;
+  product_id?: string;
+  item_code?: string;
+  part_no?: string;
+  item_description?: string;
+  affected_quantity?: number | null;
+  supplier_id?: string;
+  supplier_name?: string;
+  customer_incident_count?: number;
+  item_incident_count?: number;
+  return_action?: {
+    id: string;
+    disposition: string;
+    status: string;
+    authorized_by_name?: string;
+    authorized_at?: string;
+  } | null;
+}
+
+export const formatIncidentReportShortId = (incidentReportId: string): string => {
+  const id = String(incidentReportId || '').trim();
+  if (!id) return '';
+  return id.slice(0, 8);
+};
+
 const parseApiErrorMessage = async (response: Response): Promise<string> => {
   try {
     const payload = await response.json();
@@ -173,5 +244,98 @@ export const fetchIncidentItemsReport = async (
       match_source: String(meta?.match_source || filters.matchSource || 'all') as IncidentMatchSource,
       min_count: toNumber(meta?.min_count, filters.minCount || 1),
     },
+  };
+};
+
+const mapIncidentSummary = (incident: Record<string, unknown> | null | undefined): IncidentItemIncidentSummary => ({
+  incident_report_id: String(incident?.incident_report_id || ''),
+  date: String(incident?.date || ''),
+  contact_id: String(incident?.contact_id || ''),
+  customer_name: String(incident?.customer_name || incident?.contact_id || 'Unknown customer'),
+  summary: String(incident?.summary || ''),
+});
+
+export const fetchIncidentItemIncidents = async (
+  filters: IncidentItemIncidentsFilters
+): Promise<IncidentItemIncidentSummary[]> => {
+  const params = new URLSearchParams({
+    main_id: String(resolveMainId()),
+    match_source: filters.matchSource || 'all',
+  });
+
+  if (filters.supplierId?.trim()) params.set('supplier_id', filters.supplierId.trim());
+  if (filters.supplierName?.trim()) params.set('supplier_name', filters.supplierName.trim());
+  if (filters.productId?.trim()) params.set('product_id', filters.productId.trim());
+  if (filters.itemCode?.trim()) params.set('item_code', filters.itemCode.trim());
+  if (filters.partNo?.trim()) params.set('part_no', filters.partNo.trim());
+  if (filters.description?.trim()) params.set('description', filters.description.trim());
+  if (filters.search?.trim()) params.set('search', filters.search.trim());
+  if (filters.supplier?.trim()) params.set('supplier', filters.supplier.trim());
+  if (filters.dateFrom) params.set('date_from', filters.dateFrom);
+  if (filters.dateTo) params.set('date_to', filters.dateTo);
+
+  const data = await requestApi(`${API_BASE_URL}/incident-items-report/incidents?${params.toString()}`);
+  return Array.isArray(data?.incidents)
+    ? data.incidents.map((incident: Record<string, unknown>) => mapIncidentSummary(incident))
+    : [];
+};
+
+export const fetchWarehouseIncidentReport = async (
+  reportId: string
+): Promise<WarehouseIncidentReport> => {
+  const id = String(reportId || '').trim();
+  if (!id) {
+    throw new Error('Incident Report ID is required.');
+  }
+
+  const params = new URLSearchParams({ main_id: String(resolveMainId()) });
+  const data = await requestApi(
+    `${API_BASE_URL}/incident-items-report/incidents/${encodeURIComponent(id)}?${params.toString()}`
+  );
+
+  return {
+    id: String(data?.id || id),
+    record_source: data?.record_source === 'customer_log' ? 'customer_log' : 'incident_report',
+    contact_id: String(data?.contact_id || ''),
+    customer_name: String(data?.customer_name || ''),
+    report_date: String(data?.report_date || ''),
+    report_time: String(data?.report_time || ''),
+    incident_date: String(data?.incident_date || ''),
+    incident_time: String(data?.incident_time || ''),
+    issue_type: (data?.issue_type || 'other') as WarehouseIncidentReport['issue_type'],
+    description: String(data?.description || ''),
+    reported_by: String(data?.reported_by || ''),
+    done_by: String(data?.done_by || ''),
+    attachments: Array.isArray(data?.attachments) ? data.attachments.map(String) : [],
+    related_transactions: Array.isArray(data?.related_transactions) ? data.related_transactions : [],
+    approval_status: (data?.approval_status || 'pending') as WarehouseIncidentReport['approval_status'],
+    approved_by: data?.approved_by ? String(data.approved_by) : undefined,
+    approval_date: data?.approval_date ? String(data.approval_date) : undefined,
+    decision_note: data?.decision_note ? String(data.decision_note) : undefined,
+    notes: data?.notes ? String(data.notes) : undefined,
+    product_id: data?.product_id ? String(data.product_id) : undefined,
+    item_code: data?.item_code ? String(data.item_code) : undefined,
+    part_no: data?.part_no ? String(data.part_no) : undefined,
+    item_description: data?.item_description ? String(data.item_description) : undefined,
+    affected_quantity: data?.affected_quantity == null || data?.affected_quantity === ''
+      ? null
+      : toNumber(data.affected_quantity),
+    supplier_id: data?.supplier_id ? String(data.supplier_id) : undefined,
+    supplier_name: data?.supplier_name ? String(data.supplier_name) : undefined,
+    customer_incident_count: toNumber(data?.customer_incident_count, 0),
+    item_incident_count: toNumber(data?.item_incident_count, 0),
+    return_action: data?.return_action
+      ? {
+          id: String(data.return_action.id || ''),
+          disposition: String(data.return_action.disposition || ''),
+          status: String(data.return_action.status || ''),
+          authorized_by_name: data.return_action.authorized_by_name
+            ? String(data.return_action.authorized_by_name)
+            : undefined,
+          authorized_at: data.return_action.authorized_at
+            ? String(data.return_action.authorized_at)
+            : undefined,
+        }
+      : null,
   };
 };

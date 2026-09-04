@@ -14,11 +14,13 @@ import {
 } from 'lucide-react';
 import {
   fetchIncidentItemsReport,
+  formatIncidentReportShortId,
   IncidentItemsReportData,
   IncidentItemsReportFilters,
   IncidentItemsReportRow,
   IncidentMatchSource,
 } from '../services/incidentItemsReportService';
+import IncidentItemIncidentsDialog from './IncidentItemIncidentsDialog';
 
 const matchSourceOptions: Array<{ value: IncidentMatchSource; label: string }> = [
   { value: 'all', label: 'All sources' },
@@ -32,7 +34,7 @@ const formatDate = (value: string) => {
   if (!value) return '-';
   const date = new Date(value.replace(' ', 'T'));
   if (Number.isNaN(date.getTime())) return value.slice(0, 10);
-  return date.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
+  return date.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
 };
 
 const StatBox: React.FC<{ label: string; value: string | number; icon: React.ReactNode }> = ({ label, value, icon }) => (
@@ -75,6 +77,7 @@ const IncidentItemsReport: React.FC<IncidentItemsReportProps> = ({
   });
   const [reportData, setReportData] = useState<IncidentItemsReportData | null>(null);
   const [selectedRow, setSelectedRow] = useState<IncidentItemsReportRow | null>(null);
+  const [pickListRow, setPickListRow] = useState<IncidentItemsReportRow | null>(null);
   const initialLoadRef = useRef(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -84,6 +87,9 @@ const IncidentItemsReport: React.FC<IncidentItemsReportProps> = ({
     setError(null);
     try {
       const data = await fetchIncidentItemsReport(nextFilters);
+      // #region agent log
+      fetch('http://127.0.0.1:7586/ingest/8c501c88-a103-4e50-912c-b3b44d4a265a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'924957'},body:JSON.stringify({sessionId:'924957',runId:'post-fix',hypothesisId:'A',location:'IncidentItemsReport.tsx:loadReport',message:'problem confidence vs independent reports',data:{itemCount:data.items.length,rows:data.items.slice(0,15).map((row)=>({item_code:row.item_code,part_no:row.part_no,incident_count:row.incident_count,affected_customer_count:row.affected_customer_count,average_confidence:row.average_confidence,confidence_pct:Math.round(row.average_confidence*100),rises_with_clients:row.affected_customer_count<=1||row.average_confidence>=0.5,match_sources:row.match_sources}))},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       setReportData(data);
       setSelectedRow(data.items[0] ?? null);
     } catch (err: any) {
@@ -292,7 +298,12 @@ const IncidentItemsReport: React.FC<IncidentItemsReportProps> = ({
                   <th className="px-3 py-3 text-center">Clients</th>
                   <th className="px-3 py-3">Latest</th>
                   <th className="px-3 py-3">Source</th>
-                  <th className="px-3 py-3 text-center">Confidence</th>
+                  <th
+                    className="px-3 py-3 text-center"
+                    title="How sure we are this item is a real problem. Rises as more distinct customers report it."
+                  >
+                    Confidence
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
@@ -317,6 +328,11 @@ const IncidentItemsReport: React.FC<IncidentItemsReportProps> = ({
                       <tr
                         key={`${row.supplier_id}-${row.product_id}-${row.item_code}-${row.part_no}`}
                         onClick={() => setSelectedRow(row)}
+                        onDoubleClick={() => {
+                          setSelectedRow(row);
+                          setPickListRow(row);
+                        }}
+                        title="Double-click to open Incident Reports for this item"
                         className={`cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60 ${
                           selected ? 'bg-blue-50 dark:bg-blue-950/30' : ''
                         }`}
@@ -335,7 +351,10 @@ const IncidentItemsReport: React.FC<IncidentItemsReportProps> = ({
                         <td className="px-3 py-3 text-center font-bold text-slate-700 dark:text-slate-200">{row.affected_customer_count}</td>
                         <td className="px-3 py-3 text-slate-600 dark:text-slate-300">{formatDate(row.latest_incident_date)}</td>
                         <td className="px-3 py-3 text-xs text-slate-600 dark:text-slate-300">{row.match_sources || '-'}</td>
-                        <td className="px-3 py-3 text-center font-mono text-xs text-slate-600 dark:text-slate-300">
+                        <td
+                          className="px-3 py-3 text-center font-mono text-xs text-slate-600 dark:text-slate-300"
+                          title="How sure we are this item is a real problem. Rises as more distinct customers report it."
+                        >
                           {Math.round(row.average_confidence * 100)}%
                         </td>
                       </tr>
@@ -367,12 +386,25 @@ const IncidentItemsReport: React.FC<IncidentItemsReportProps> = ({
                 <p className="mt-1 text-sm text-slate-700 dark:text-slate-300">{selectedRow.description}</p>
                 <p className="mt-1 text-xs font-mono text-slate-500">{selectedRow.item_code || '-'} / {selectedRow.part_no || '-'}</p>
               </div>
+              <div>
+                <p className="text-xs font-bold uppercase text-slate-500">Problem confidence</p>
+                <p className="mt-1 text-lg font-bold text-slate-900 dark:text-white">
+                  {Math.round(selectedRow.average_confidence * 100)}%
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Based on {selectedRow.affected_customer_count || selectedRow.incident_count} independent
+                  {(selectedRow.affected_customer_count || selectedRow.incident_count) === 1 ? ' customer report' : ' customer reports'}.
+                  More distinct customers increase confidence that this is a real product problem.
+                </p>
+              </div>
               <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800/70">
                 <p className="text-xs font-bold uppercase text-slate-500">Recent Incidents</p>
                 <div className="mt-3 space-y-3">
                   {selectedRow.recent_incidents.map((incident) => (
                     <div key={incident.incident_report_id} className="border-l-2 border-brand-blue pl-3">
-                      <p className="text-xs font-semibold text-slate-900 dark:text-white">{incident.incident_report_id}</p>
+                      <p className="text-xs font-semibold text-slate-900 dark:text-white" title={incident.incident_report_id}>
+                        {formatIncidentReportShortId(incident.incident_report_id)}
+                      </p>
                       <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">{incident.customer_name}</p>
                       <p className="text-xs text-slate-500">{formatDate(incident.date)}</p>
                       <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{incident.summary || '-'}</p>
@@ -386,6 +418,19 @@ const IncidentItemsReport: React.FC<IncidentItemsReportProps> = ({
           )}
         </aside>
       </div>
+
+      <IncidentItemIncidentsDialog
+        isOpen={Boolean(pickListRow)}
+        row={pickListRow}
+        listFilters={{
+          dateFrom: filters.dateFrom,
+          dateTo: filters.dateTo,
+          matchSource: filters.matchSource,
+          search: filters.search,
+          supplier: filters.supplier,
+        }}
+        onClose={() => setPickListRow(null)}
+      />
     </div>
   );
 };

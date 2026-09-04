@@ -9,6 +9,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { canRetraceWorkflowHistory, createWorkflowHistoryState, ensureWorkflowHistoryState, preserveCurrentHistoryState } from './utils/workflowHistory';
+import { compactWorkflowPayload, type WorkflowNavigateDetail } from './utils/workflowNavigate';
 import TopNav from './components/TopNav';
 import Login from './components/Login';
 import DailyCallMonitoringView from './components/DailyCallMonitoringView';
@@ -30,6 +31,7 @@ import InventoryAuditReport from './components/InventoryAuditReport';
 import InventoryReport from './components/InventoryReport';
 import SuggestedStockReport from './components/SuggestedStockReport';
 import IncidentItemsReport from './components/IncidentItemsReport';
+import WarehouseIncidentReportDetail from './components/WarehouseIncidentReportDetail';
 
 import AccessControlSettings from './components/AccessControlSettings';
 import ManagementView from './components/ManagementView';
@@ -236,16 +238,18 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const handler = (event: Event) => {
-      const customEvent = event as CustomEvent<{ tab: string; payload?: Record<string, string> }>;
+      const customEvent = event as CustomEvent<WorkflowNavigateDetail>;
       if (!customEvent.detail?.tab) return;
       const canonicalTab = normalizeModuleId(customEvent.detail.tab);
+      const payload = compactWorkflowPayload(customEvent.detail.payload);
+      const mode = customEvent.detail.mode === 'replace' ? 'replace' : 'push';
       setModuleContext((prev) => ({
         ...prev,
-        [canonicalTab]: customEvent.detail.payload || {},
-        [customEvent.detail.tab]: customEvent.detail.payload || {},
+        [canonicalTab]: payload || {},
+        [customEvent.detail.tab]: payload || {},
       }));
       setActiveTab(canonicalTab);
-      writeRouteStateToLocation(canonicalTab, customEvent.detail.payload, 'push');
+      writeRouteStateToLocation(canonicalTab, payload, mode);
       setCanNavigateBack(canRetraceWorkflowHistory());
     };
 
@@ -569,6 +573,16 @@ const App: React.FC = () => {
         );
       case 'warehouse-reports-incident-items-report': {
         const context = moduleContext['warehouse-reports-incident-items-report'] || {};
+        if (context.reportId) {
+          return (
+            <div className="h-full overflow-y-auto">
+              <WarehouseIncidentReportDetail
+                reportId={context.reportId}
+                currentUser={userProfile}
+              />
+            </div>
+          );
+        }
         return (
           <div className="h-full overflow-y-auto">
             <IncidentItemsReport
@@ -707,19 +721,25 @@ const App: React.FC = () => {
       case 'sales-reports-inquiry-report':
         return (
           <div className="h-full overflow-y-auto">
-            <InquiryReportFilter />
+            <InquiryReportFilter initialView={moduleContext['sales-reports-inquiry-report']?.view} />
           </div>
         );
       case 'sales-reports-sales-report':
         return (
           <div className="h-full overflow-y-auto">
-            <SalesReport currentUser={userProfile} />
+            <SalesReport
+              currentUser={userProfile}
+              initialView={moduleContext['sales-reports-sales-report']?.view}
+            />
           </div>
         );
       case 'sales-reports-sales-development-report':
         return (
           <div className="h-full overflow-y-auto">
-            <SalesDevelopmentReport currentUser={userProfile} />
+            <SalesDevelopmentReport
+              currentUser={userProfile}
+              initialView={moduleContext['sales-reports-sales-development-report']?.view}
+            />
           </div>
         );
       case 'sales-reports-sales-map':
