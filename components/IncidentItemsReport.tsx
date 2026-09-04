@@ -87,9 +87,6 @@ const IncidentItemsReport: React.FC<IncidentItemsReportProps> = ({
     setError(null);
     try {
       const data = await fetchIncidentItemsReport(nextFilters);
-      // #region agent log
-      fetch('http://127.0.0.1:7586/ingest/8c501c88-a103-4e50-912c-b3b44d4a265a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'924957'},body:JSON.stringify({sessionId:'924957',runId:'post-fix',hypothesisId:'A',location:'IncidentItemsReport.tsx:loadReport',message:'problem confidence vs independent reports',data:{itemCount:data.items.length,rows:data.items.slice(0,15).map((row)=>({item_code:row.item_code,part_no:row.part_no,incident_count:row.incident_count,affected_customer_count:row.affected_customer_count,average_confidence:row.average_confidence,confidence_pct:Math.round(row.average_confidence*100),rises_with_clients:row.affected_customer_count<=1||row.average_confidence>=0.5,match_sources:row.match_sources}))},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       setReportData(data);
       setSelectedRow(data.items[0] ?? null);
     } catch (err: any) {
