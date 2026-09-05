@@ -198,8 +198,9 @@ apply_required_database_migrations() {
       return 1
     fi
 
-    if mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" "-p$DB_PASS" "$DB_NAME" < "$migration" 2>/dev/null \
-      || sudo mysql "$DB_NAME" < "$migration"; then
+    echo "  Applying $(basename "$migration")..."
+    if mysql --batch --raw --skip-column-names -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" "-p$DB_PASS" "$DB_NAME" < "$migration" \
+      || sudo mysql --batch --raw --skip-column-names "$DB_NAME" < "$migration"; then
       echo "  [OK] $(basename "$migration")"
       continue
     fi
