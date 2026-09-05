@@ -186,6 +186,8 @@ apply_required_database_migrations() {
     "$API_DIR/migrations/029_add_call_report_call_details.sql"
     "$API_DIR/migrations/030_add_customer_preferred_brand.sql"
     "$API_DIR/migrations/031_create_suggested_stock_kiv.sql"
+    "$API_DIR/migrations/032_backfill_product_created_suggested_stock.sql"
+    "$API_DIR/migrations/033_restore_uncovered_added_to_pr_suggested_stock.sql"
   )
 
   echo "Applying required database migrations..."
