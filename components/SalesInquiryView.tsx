@@ -166,6 +166,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   const [filterYear, setFilterYear] = useState(initialFilterYear || String(new Date().getFullYear()));
   const [dateFilterApplied, setDateFilterApplied] = useState(Boolean(initialDateFilterApplied));
   const [isCreatingNew, setIsCreatingNew] = useState(false);
+  const [clearedRouteInquiryId, setClearedRouteInquiryId] = useState<string | null>(null);
   const [loadedSnapshot, setLoadedSnapshot] = useState<LoadedFormSnapshot | null>(null);
 
   useEffect(() => {
@@ -696,12 +697,15 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
   const startNewInquiry = useCallback(() => {
     setIsCreatingNew(true);
+    setClearedRouteInquiryId(initialInquiryId || null);
     setSelectedInquiry(null);
     resetFormForNew();
-  }, [resetFormForNew]);
+    navigateWorkflow(SALES_INQUIRY_TAB_ID, undefined, 'replace');
+  }, [initialInquiryId, resetFormForNew]);
 
   const selectInquiry = useCallback(async (inquiry: SalesInquiry) => {
     setIsCreatingNew(false);
+    setClearedRouteInquiryId(null);
     const detailed = await getSalesInquiry(inquiry.id);
     const selected = detailed || inquiry;
     setSelectedInquiry(selected);
@@ -806,6 +810,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
   useEffect(() => {
     if (!initialInquiryId) return;
+    if (initialInquiryId === clearedRouteInquiryId) return;
     if (selectedInquiry?.id === initialInquiryId && !isCreatingNew) return;
 
     const inquiryInList = inquiries.find((entry) => entry.id === initialInquiryId);
@@ -844,7 +849,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     return () => {
       active = false;
     };
-  }, [initialInquiryId, inquiries, isCreatingNew, loadInquiryIntoForm, selectInquiry, selectedInquiry?.id]);
+  }, [clearedRouteInquiryId, initialInquiryId, inquiries, isCreatingNew, loadInquiryIntoForm, selectInquiry, selectedInquiry?.id]);
 
   // Add new item row
   const addItemRow = () => {

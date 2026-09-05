@@ -17,6 +17,8 @@ const fetchProductByIdMock = vi.fn();
 const dispatchWorkflowNotificationMock = vi.fn();
 const markNotificationsAsReadByEntityKeyMock = vi.fn();
 const resolveNotificationUserIdMock = vi.fn();
+const fetchCouriersMock = vi.fn();
+const fetchRemarkTemplatesMock = vi.fn();
 
 vi.mock('html2canvas', () => ({
   default: (...args: any[]) => html2canvasMock(...args),
@@ -59,6 +61,14 @@ vi.mock('../../services/notificationLocalApiService', () => ({
   dispatchWorkflowNotification: (...args: any[]) => dispatchWorkflowNotificationMock(...args),
   markNotificationsAsReadByEntityKey: (...args: any[]) => markNotificationsAsReadByEntityKeyMock(...args),
   resolveNotificationUserId: (...args: any[]) => resolveNotificationUserIdMock(...args),
+}));
+
+vi.mock('../../services/courierLocalApiService', () => ({
+  fetchCouriers: (...args: any[]) => fetchCouriersMock(...args),
+}));
+
+vi.mock('../../services/remarkTemplateLocalApiService', () => ({
+  fetchRemarkTemplates: (...args: any[]) => fetchRemarkTemplatesMock(...args),
 }));
 
 vi.mock('../../services/salesOrderLocalApiService', () => ({
@@ -221,6 +231,8 @@ describe('SalesInquiryView', () => {
     dispatchWorkflowNotificationMock.mockResolvedValue(undefined);
     markNotificationsAsReadByEntityKeyMock.mockResolvedValue(undefined);
     resolveNotificationUserIdMock.mockResolvedValue('user-2');
+    fetchCouriersMock.mockResolvedValue({ items: [] });
+    fetchRemarkTemplatesMock.mockResolvedValue({ items: [] });
     fetchProductByIdMock.mockImplementation(async (id: string) => (
       id
         ? {
@@ -276,6 +288,45 @@ describe('SalesInquiryView', () => {
 
     expect(newest.compareDocumentPosition(middle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(middle.compareDocumentPosition(oldest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('opens a blank draft from Create New when routed to an existing inquiry', async () => {
+    const user = userEvent.setup();
+    const existingInquiry = makeInquiry({
+      id: 'inq-route',
+      inquiry_no: 'INQ26-77',
+      contact_id: 'c-1',
+      delivery_address: 'Existing delivery address',
+      po_number: 'PO-EXISTING',
+      sales_person: 'Existing Salesperson',
+      sales_date: '2026-04-08',
+      sales_time: '11:45:00',
+      created_at: '2026-04-08',
+    });
+    const workflowEvents: Array<{ tab: string; payload?: Record<string, string>; mode?: string }> = [];
+    window.addEventListener('workflow:navigate', ((event: CustomEvent) => {
+      workflowEvents.push(event.detail);
+    }) as EventListener);
+    getAllSalesInquiriesMock.mockResolvedValue([existingInquiry]);
+    getSalesInquiryMock.mockResolvedValue(existingInquiry);
+
+    render(<SalesInquiryView initialInquiryId="inq-route" />);
+
+    await waitFor(() => expect(getSalesInquiryMock).toHaveBeenCalledWith('inq-route'));
+    await waitFor(() => expect(screen.getByLabelText('Customer')).toHaveValue('c-1'));
+    expect(screen.getByDisplayValue('PO-EXISTING')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /create new/i }));
+
+    await waitFor(() => expect(screen.getByLabelText('Customer')).toHaveValue(''));
+    expect(screen.queryByDisplayValue('PO-EXISTING')).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue('Existing delivery address')).not.toBeInTheDocument();
+    expect(getSalesInquiryMock).toHaveBeenCalledTimes(1);
+    expect(workflowEvents).toContainEqual({
+      tab: 'sales-transaction-sales-inquiry',
+      payload: undefined,
+      mode: 'replace',
+    });
   });
 
   it('shows a validation toast when submitting without a customer', async () => {
