@@ -21,6 +21,7 @@ export interface SuggestedStockFilters {
   partNo?: string;
   sortBy?: SuggestedStockSortOption;
   kivFolder?: boolean;
+  cartFolder?: boolean;
 }
 
 export interface SuggestedStockItem {
@@ -41,6 +42,8 @@ export interface SuggestedStockItem {
   lastInquiryDate: string;
   isKiv: boolean;
   productCreated: boolean;
+  coveringPrId: string;
+  coveringPrNumber: string;
 }
 
 export interface SuggestedStockDetail {
@@ -133,7 +136,9 @@ const buildFilters = (filters: SuggestedStockFilters, extra: Record<string, stri
   if (filters.sortBy && filters.sortBy.trim() !== '') {
     query.set('sort_by', filters.sortBy.trim());
   }
-  if (filters.kivFolder) {
+  if (filters.cartFolder) {
+    query.set('cart', '1');
+  } else if (filters.kivFolder) {
     query.set('kiv', '1');
   }
 
@@ -222,6 +227,8 @@ const mapSummaryRows = (rows: any[]): SuggestedStockItem[] =>
       lastInquiryDate: String(item?.last_inquiry_date || ''),
       isKiv: String(item?.is_kiv || '') === '1' || Boolean(item?.is_kiv),
       productCreated: String(item?.product_created || '') === '1' || Boolean(item?.product_created),
+      coveringPrId: String(item?.covering_pr_id || ''),
+      coveringPrNumber: String(item?.covering_pr_number || ''),
     };
   });
 

@@ -11,6 +11,7 @@ import {
 } from '../services/suggestedStockService';
 
 type SuggestedStockPeriod = 'today' | 'week' | 'month' | 'year' | 'custom';
+type SuggestedStockReportView = 'active' | 'kiv' | 'cart';
 
 interface SuggestedStockAppliedFilters {
   dateFrom: string;
@@ -84,7 +85,9 @@ export const useSuggestedStockReportQuery = () => {
   const [summaryPage, setSummaryPage] = useState(1);
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(true);
   const [sortOption, setSortOption] = useState<SuggestedStockSortOption>(SUGGESTED_STOCK_DEFAULT_SORT);
-  const [kivFolder, setKivFolder] = useState(false);
+  const [reportView, setReportView] = useState<SuggestedStockReportView>('active');
+  const kivFolder = reportView === 'kiv';
+  const cartFolder = reportView === 'cart';
   const [visibleCount, setVisibleCount] = useState(LOAD_BATCH_SIZE);
   const [refreshRequest, setRefreshRequest] = useState(0);
   const [reportLoadId, setReportLoadId] = useState(0);
@@ -118,8 +121,9 @@ export const useSuggestedStockReportQuery = () => {
       partNo: appliedFilters.partNo,
       sortBy: sortOption,
       kivFolder,
+      cartFolder,
     }),
-    [appliedFilters.customerId, appliedFilters.dateFrom, appliedFilters.dateTo, appliedFilters.partNo, kivFolder, sortOption]
+    [appliedFilters.customerId, appliedFilters.dateFrom, appliedFilters.dateTo, appliedFilters.partNo, cartFolder, kivFolder, sortOption]
   );
 
   const loadReport = useCallback(async () => {
@@ -200,7 +204,7 @@ export const useSuggestedStockReportQuery = () => {
 
   useEffect(() => {
     setVisibleCount(LOAD_BATCH_SIZE);
-  }, [appliedFilters, sortOption, kivFolder, summaryData.length]);
+  }, [appliedFilters, cartFolder, kivFolder, sortOption, summaryData.length]);
 
   useEffect(() => {
     const sentinel = loadMoreRef.current;
@@ -309,8 +313,10 @@ export const useSuggestedStockReportQuery = () => {
     hasMorePages,
     sortOption,
     setSortOption,
+    reportView,
+    setReportView,
     kivFolder,
-    setKivFolder,
+    cartFolder,
     visibleSummary,
     visibleItemCount,
     hasMoreRows,

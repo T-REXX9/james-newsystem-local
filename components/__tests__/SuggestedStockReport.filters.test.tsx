@@ -57,6 +57,8 @@ const item = (id: string, description: string, inquiryCount: number, totalQty = 
   lastInquiryDate: '2026-08-20',
   isKiv: false,
   productCreated: false,
+  coveringPrId: '',
+  coveringPrNumber: '',
 });
 
 const qtyDescPage = [
@@ -378,5 +380,54 @@ describe('SuggestedStockReport filters', () => {
     await waitFor(() => expect(removeFromKivMock).toHaveBeenCalledWith([
       expect.objectContaining({ partNo: 'PN-a', description: 'ALPHA PART' }),
     ]));
+  });
+
+  it('opens Cart folder as a review-only view of items already on a Purchase Request', async () => {
+    fetchSummaryMock.mockResolvedValue({
+      items: [{
+        ...item('created', 'CREATED PART', 2, 4),
+        productCreated: true,
+        coveringPrId: 'PRREF-CART',
+        coveringPrNumber: 'PR-CART-1',
+      }],
+      hasMore: false,
+    });
+    const navigationSpy = vi.fn();
+    window.addEventListener('workflow:navigate', navigationSpy);
+    render(<SuggestedStockReport />);
+    await screen.findByText('CREATED PART');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cart folder' }));
+
+    await waitFor(() => expect(fetchSummaryMock).toHaveBeenCalledWith(expect.objectContaining({
+      cartFolder: true,
+      kivFolder: false,
+      sortBy: 'qty-desc',
+    }), 1, 50));
+
+    expect(screen.getByText(/item in Cart folder/i)).toBeInTheDocument();
+    expect(screen.getByText('PR-CART-1')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Add Selected Items to PR/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Move selected to KIV folder/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Select PN-created' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('spinbutton', { name: 'PR quantity for PN-created' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open PR-CART-1' }));
+    expect(navigationSpy).toHaveBeenCalled();
+    const navigationEvent = navigationSpy.mock.calls[0][0] as CustomEvent<{
+      tab: string;
+      payload?: { prId?: string };
+    }>;
+    expect(navigationEvent.detail).toEqual(expect.objectContaining({
+      tab: 'warehouse-purchasing-purchase-request',
+      payload: { prId: 'PRREF-CART' },
+    }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'KIV folder' }));
+    await waitFor(() => expect(fetchSummaryMock).toHaveBeenCalledWith(expect.objectContaining({
+      kivFolder: true,
+      cartFolder: false,
+    }), 1, 50));
+    window.removeEventListener('workflow:navigate', navigationSpy);
   });
 });

@@ -63,8 +63,10 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
     isLoadingMore,
     sortOption,
     setSortOption,
+    reportView,
+    setReportView,
     kivFolder,
-    setKivFolder,
+    cartFolder,
     visibleSummary,
     visibleItemCount,
     hasMoreRows,
@@ -218,6 +220,7 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
       'Customers',
       'Last Requested',
       'KIV',
+      ...(cartFolder ? ['Covering PR'] : []),
     ];
     const rows = summaryData.map((item) => [
       item.partNo,
@@ -229,6 +232,7 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
       item.customerCount,
       item.lastInquiryDate,
       kivFolder || item.isKiv ? 'Yes' : 'No',
+      ...(cartFolder ? [item.coveringPrNumber] : []),
     ]);
     const csv = [header, ...rows].map((row) => row.map(escape).join(',')).join('\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -262,14 +266,18 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
     }
   };
 
-  const emptyMessage = kivFolder
-    ? 'No items in the KIV folder for this date range.'
-    : appliedFilters.partNo
-      ? 'No active items match that part number.'
-      : 'No active suggested stock items found.';
-  const emptyHint = kivFolder
-    ? 'Select items on the main report and move them here when you are not ready to buy.'
-    : 'Create the product first, then select the Product Created row to add it to a PR.';
+  const emptyMessage = cartFolder
+    ? 'No items in the Cart folder for this date range.'
+    : kivFolder
+      ? 'No items in the KIV folder for this date range.'
+      : appliedFilters.partNo
+        ? 'No active items match that part number.'
+        : 'No active suggested stock items found.';
+  const emptyHint = cartFolder
+    ? 'Product Created rows move here after you add them to a Purchase Request.'
+    : kivFolder
+      ? 'Select items on the main report and move them here when you are not ready to buy.'
+      : 'Create the product first, then select the Product Created row to add it to a PR.';
 
   return (
     <div className="h-full overflow-y-auto bg-[#f7f9fc] text-slate-900">
@@ -290,9 +298,11 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
             >
               <Download className="h-4 w-4" /> Export CSV
             </button>
+            {!cartFolder && (
             <button type="button" onClick={() => void handleAddSelectedItemsToPr()} disabled={selectedItems.length === 0 || selectedItems.length !== prSelectedItems.length || isAddingToPr} title={selectedItems.length > prSelectedItems.length ? 'Create every selected product before adding the selection to a PR.' : undefined} className="inline-flex items-center gap-2 rounded-md bg-[#173c83] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#102f76] disabled:cursor-not-allowed disabled:opacity-50">
               {isAddingToPr ? 'Adding to PR...' : `Add Selected Items to PR (${prSelectedItems.length})`}
             </button>
+            )}
           </div>
         </header>
 
@@ -304,12 +314,13 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
               <li><span className="font-bold text-[#173c83]">2.</span> Create the product in Product Database.</li>
               <li><span className="font-bold text-[#173c83]">3.</span> Park items you are not buying now in the KIV folder.</li>
               <li><span className="font-bold text-[#173c83]">4.</span> Select Product Created rows, then add them to a PR.</li>
+              <li><span className="font-bold text-[#173c83]">5.</span> Review items already on a PR in the Cart folder.</li>
             </ol>
           </aside>
 
           <main className="min-w-0 xl:order-2">
             <section className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{kivFolder ? 'Items in KIV folder' : 'Active items in report'}</p><p className="mt-1 text-2xl font-extrabold text-[#173c83]">{uniqueItemCount}</p></div>
+              <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{cartFolder ? 'Items in Cart folder' : kivFolder ? 'Items in KIV folder' : 'Active items in report'}</p><p className="mt-1 text-2xl font-extrabold text-[#173c83]">{uniqueItemCount}</p></div>
               <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Total inquiries</p><p className="mt-1 text-2xl font-extrabold text-[#175fd3]">{totalInquiries}</p></div>
               <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Quantity requested</p><p className="mt-1 text-2xl font-extrabold text-slate-700">{totalQty}</p></div>
               <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Customers / prospects</p><p className="mt-1 text-2xl font-extrabold text-emerald-700">{uniqueCustomers}</p></div>
@@ -337,19 +348,47 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
                   <span className="mb-1.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-600">
                     <FolderOpen className="h-4 w-4 text-[#175fd3]" /> View
                   </span>
-                  <button
-                    type="button"
-                    aria-label="KIV folder"
-                    aria-pressed={kivFolder}
-                    onClick={() => setKivFolder((current) => !current)}
-                    className={`h-10 w-full rounded-md border px-3 text-sm font-semibold transition ${
-                      kivFolder
-                        ? 'border-amber-300 bg-amber-50 text-amber-800'
-                        : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    KIV folder
-                  </button>
+                  <div className="flex flex-col gap-2">
+                    <button
+                      type="button"
+                      aria-label="Active"
+                      aria-pressed={reportView === 'active'}
+                      onClick={() => setReportView('active')}
+                      className={`h-10 w-full rounded-md border px-3 text-sm font-semibold transition ${
+                        reportView === 'active'
+                          ? 'border-blue-300 bg-blue-50 text-[#173c83]'
+                          : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      Active
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="KIV folder"
+                      aria-pressed={kivFolder}
+                      onClick={() => setReportView('kiv')}
+                      className={`h-10 w-full rounded-md border px-3 text-sm font-semibold transition ${
+                        kivFolder
+                          ? 'border-amber-300 bg-amber-50 text-amber-800'
+                          : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      KIV folder
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Cart folder"
+                      aria-pressed={cartFolder}
+                      onClick={() => setReportView('cart')}
+                      className={`h-10 w-full rounded-md border px-3 text-sm font-semibold transition ${
+                        cartFolder
+                          ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                          : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      Cart folder
+                    </button>
+                  </div>
                 </div>
 
                 <label className="block">
@@ -460,6 +499,7 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
                     Showing {formatSuggestedStockDate(appliedFilters.dateFrom)} through {formatSuggestedStockDate(appliedFilters.dateTo)}
                     {appliedFilters.partNo ? ` • Part number: ${appliedFilters.partNo}` : ''}
                     {kivFolder ? ' • KIV folder' : ''}
+                    {cartFolder ? ' • Cart folder' : ''}
                   </p>
                 )}
               </div>
@@ -468,11 +508,14 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
             <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
               <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white/95 px-5 py-3 shadow-sm backdrop-blur">
                 <p className="text-sm font-bold text-slate-700">
-                  {kivFolder
-                    ? `${uniqueItemCount} item${uniqueItemCount === 1 ? '' : 's'} in KIV folder`
-                    : `${uniqueItemCount} active item${uniqueItemCount === 1 ? '' : 's'} in the product-to-PR workflow`}
+                  {cartFolder
+                    ? `${uniqueItemCount} item${uniqueItemCount === 1 ? '' : 's'} in Cart folder`
+                    : kivFolder
+                      ? `${uniqueItemCount} item${uniqueItemCount === 1 ? '' : 's'} in KIV folder`
+                      : `${uniqueItemCount} active item${uniqueItemCount === 1 ? '' : 's'} in the product-to-PR workflow`}
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
+                  {!cartFolder && (
                   <button
                     type="button"
                     onClick={() => void handleKivSelection()}
@@ -486,8 +529,13 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
                         ? `Restore selected from KIV (${selectedItems.length})`
                         : `Move selected to KIV folder (${selectedItems.length})`}
                   </button>
+                  )}
                   <div className="flex items-center gap-2 rounded bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
-                    {kivFolder ? (
+                    {cartFolder ? (
+                      <>
+                        <FolderOpen className="h-3.5 w-3.5 text-emerald-600" /> Items already on a Purchase Request. Open the PR to change quantity.
+                      </>
+                    ) : kivFolder ? (
                       <>
                         <FolderOpen className="h-3.5 w-3.5 text-amber-500" /> Restore items when you are ready to buy them.
                       </>
@@ -515,6 +563,7 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
                   <table className="w-full min-w-[56rem] border-collapse text-xs">
                     <thead>
                       <tr>
+                        {!cartFolder && (
                         <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-center font-bold uppercase tracking-wide text-white">
                           <label className="inline-flex items-center justify-center gap-1">
                             <input
@@ -527,6 +576,7 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
                             All
                           </label>
                         </th>
+                        )}
                         <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-left font-bold uppercase tracking-wide text-white">Part No</th>
                         <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-left font-bold uppercase tracking-wide text-white">Description</th>
                         <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-center font-bold uppercase tracking-wide text-white">Customer Requests</th>
@@ -534,7 +584,7 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
                         <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-center font-bold uppercase tracking-wide text-white">Customers</th>
                         <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-center font-bold uppercase tracking-wide text-white">Last Requested</th>
                         <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-center font-bold uppercase tracking-wide text-white">Status</th>
-                        <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-center font-bold uppercase tracking-wide text-white">PR Qty</th>
+                        <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-center font-bold uppercase tracking-wide text-white">{cartFolder ? 'Purchase Request' : 'PR Qty'}</th>
                         <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-center font-bold uppercase tracking-wide text-white">Action</th>
                       </tr>
                     </thead>
@@ -543,6 +593,7 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
                         const rowKey = suggestedStockRowKey(item);
                         return (
                           <tr key={rowKey} className="border-b border-slate-100 hover:bg-slate-50">
+                            {!cartFolder && (
                             <td className="px-4 py-3 text-center">
                               <input
                                 type="checkbox"
@@ -559,6 +610,7 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
                                 className="h-4 w-4 rounded border-slate-300"
                               />
                             </td>
+                            )}
                             <td className="px-4 py-3 font-semibold text-[#e85c41]">{item.partNo || '-'}</td>
                             <td className="px-4 py-3 font-semibold text-[#173c83]">{item.description || '-'}</td>
                             <td className="px-4 py-3 text-center font-bold text-[#175fd3]">{item.inquiryCount} requests</td>
@@ -566,14 +618,18 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
                             <td className="px-4 py-3 text-center font-semibold text-slate-600">{item.customerCount} customers</td>
                             <td className="px-4 py-3 text-center font-semibold text-slate-600">{item.lastInquiryDate ? new Date(item.lastInquiryDate).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : '-'}</td>
                             <td className="px-4 py-3 text-center">
-                              {item.productCreated ? (
+                              {cartFolder ? (
+                                <span className="inline-flex rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-800">On a PR</span>
+                              ) : item.productCreated ? (
                                 <span className="inline-flex rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-800">Product Created</span>
                               ) : (
                                 <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-800">Needs Product</span>
                               )}
                             </td>
                             <td className="px-4 py-3 text-center">
-                              {item.productCreated ? (
+                              {cartFolder ? (
+                                <span className="font-bold text-[#173c83]">{item.coveringPrNumber || '—'}</span>
+                              ) : item.productCreated ? (
                                 <input
                                   aria-label={`PR quantity for ${item.partNo || item.description || 'item'}`}
                                   type="number"
@@ -586,7 +642,19 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
                               ) : <span className="text-slate-400">—</span>}
                             </td>
                             <td className="px-4 py-3 text-center">
-                              {item.productCreated ? (
+                              {cartFolder ? (
+                                item.coveringPrId ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => navigateWorkflow('warehouse-purchasing-purchase-request', { prId: item.coveringPrId })}
+                                    className="inline-flex items-center gap-1 rounded-md border border-[#175fd3] bg-white px-3 py-1.5 text-xs font-bold text-[#175fd3] transition hover:bg-blue-50"
+                                  >
+                                    Open {item.coveringPrNumber || 'PR'}
+                                  </button>
+                                ) : (
+                                  <span className="text-slate-400">—</span>
+                                )
+                              ) : item.productCreated ? (
                                 <span className="text-xs font-semibold text-emerald-700">Ready for PR</span>
                               ) : (
                                 <button type="button" onClick={() => handleCreateProduct(item)} className="inline-flex items-center gap-1 rounded-md border border-[#175fd3] bg-white px-3 py-1.5 text-xs font-bold text-[#175fd3] transition hover:bg-blue-50">
