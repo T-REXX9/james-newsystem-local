@@ -23,6 +23,7 @@ vi.mock('../../services/dailyCallCustomerDetailService', () => ({
 
 const pendingReport = {
   id: 'aaaa1111-bbbb-cccc-dddd-eeeeffff0001',
+  ir_number: 'IR-2601',
   contact_id: 'c-1',
   customer_name: 'Alpha Co',
   report_date: '2026-09-02',
@@ -75,7 +76,7 @@ describe('WarehouseIncidentReportDetail', () => {
       />
     );
 
-    expect(await screen.findByText('aaaa1111')).toBeInTheDocument();
+    expect(await screen.findByText('IR-2601')).toBeInTheDocument();
     expect(screen.getByText('Alpha Co')).toBeInTheDocument();
     expect(screen.getByText('Nozzle leak during calibration.')).toBeInTheDocument();
     expect(screen.getByText('PN-1')).toBeInTheDocument();

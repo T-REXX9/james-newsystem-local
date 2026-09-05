@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import {
   fetchIncidentItemsReport,
-  formatIncidentReportShortId,
+  formatIncidentReportNumber,
   IncidentItemsReportData,
   IncidentItemsReportFilters,
   IncidentItemsReportRow,
@@ -397,8 +397,8 @@ const IncidentItemsReport: React.FC<IncidentItemsReportProps> = ({
                 <div className="mt-3 space-y-3">
                   {selectedRow.recent_incidents.map((incident) => (
                     <div key={incident.incident_report_id} className="border-l-2 border-brand-blue pl-3">
-                      <p className="text-xs font-semibold text-slate-900 dark:text-white" title={incident.incident_report_id}>
-                        {formatIncidentReportShortId(incident.incident_report_id)}
+                      <p className="text-xs font-semibold text-slate-900 dark:text-white" title={incident.ir_number || incident.incident_report_id}>
+                        {formatIncidentReportNumber(incident.ir_number)}
                       </p>
                       <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">{incident.customer_name}</p>
                       <p className="text-xs text-slate-500">{formatDate(incident.date)}</p>

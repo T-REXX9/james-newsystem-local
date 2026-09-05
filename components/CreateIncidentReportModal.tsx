@@ -54,6 +54,7 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [affectedQuantity, setAffectedQuantity] = useState('1');
   const savedIncidentReportIdRef = useRef<string | null>(null);
+  const savedIncidentReportNumberRef = useRef('');
   const [loadingTransactions, setLoadingTransactions] = useState(false);
   const [submitCount, setSubmitCount] = useState(0);
 
@@ -232,6 +233,7 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
         }
         savedIncidentReportIdRef.current = createdIncidentReport.id;
         incidentReportId = createdIncidentReport.id;
+        savedIncidentReportNumberRef.current = String(createdIncidentReport.ir_number || '').trim();
       }
 
       const supplier = selectedProduct?.supplier_costs?.find((entry) => !entry.is_blacklisted) || selectedProduct?.supplier_costs?.[0];
@@ -250,10 +252,13 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
         report_date: formData.reportDate,
       });
 
+      const irNumber = savedIncidentReportNumberRef.current;
       addToast({
         type: 'success',
         title: 'Incident report submitted',
-        description: 'The customer record and warehouse incident report have both been saved.',
+        description: irNumber
+          ? `Incident Report Number ${irNumber} saved. The customer record and warehouse incident report have both been saved.`
+          : 'The customer record and warehouse incident report have both been saved.',
       });
       onSuccess();
       handleClose();
@@ -292,6 +297,7 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
       setAffectedQuantity('1');
       setSelectedTransactions([]);
       savedIncidentReportIdRef.current = null;
+      savedIncidentReportNumberRef.current = '';
       setValidationErrors({});
       setError(null);
       onClose();

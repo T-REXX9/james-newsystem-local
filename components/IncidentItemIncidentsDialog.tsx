@@ -3,7 +3,7 @@ import { Loader2, X } from 'lucide-react';
 import { useDialogAccessibility } from '../hooks/useDialogAccessibility';
 import {
   fetchIncidentItemIncidents,
-  formatIncidentReportShortId,
+  formatIncidentReportNumber,
   IncidentItemIncidentSummary,
   IncidentItemIncidentsFilters,
   IncidentItemsReportRow,
@@ -140,7 +140,7 @@ const IncidentItemIncidentsDialog: React.FC<IncidentItemIncidentsDialogProps> = 
                   >
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
                       <span className="font-mono text-sm font-bold text-slate-900 dark:text-white">
-                        {formatIncidentReportShortId(incident.incident_report_id)}
+                        {formatIncidentReportNumber(incident.ir_number)}
                       </span>
                       <span className="text-xs text-slate-500">{formatDate(incident.date)}</span>
                     </div>

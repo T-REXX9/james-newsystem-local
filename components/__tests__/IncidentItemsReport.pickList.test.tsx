@@ -34,6 +34,7 @@ const sampleRow = {
   recent_incidents: [
     {
       incident_report_id: 'aaaa1111-bbbb-cccc-dddd-eeeeffff0001',
+      ir_number: 'IR-2601',
       date: '2026-09-02',
       contact_id: 'c-1',
       customer_name: 'Alpha Co',
@@ -59,6 +60,7 @@ describe('IncidentItemsReport pick list', () => {
     fetchIncidentsMock.mockResolvedValue([
       {
         incident_report_id: 'aaaa1111-bbbb-cccc-dddd-eeeeffff0001',
+        ir_number: 'IR-2601',
         date: '2026-09-02',
         contact_id: 'c-1',
         customer_name: 'Alpha Co',
@@ -66,6 +68,7 @@ describe('IncidentItemsReport pick list', () => {
       },
       {
         incident_report_id: 'bbbb2222-cccc-dddd-eeee-ffff00001111',
+        ir_number: 'IR-2602',
         date: '2026-08-15',
         contact_id: 'c-2',
         customer_name: 'Beta Inc',
@@ -106,8 +109,8 @@ describe('IncidentItemsReport pick list', () => {
 
     const dialog = await screen.findByRole('dialog', { name: /Incident Reports/i });
     expect(dialog).toBeInTheDocument();
-    expect(await screen.findByText('bbbb2222')).toBeInTheDocument();
-    expect(screen.getAllByText('aaaa1111').length).toBeGreaterThan(0);
+    expect(await screen.findByText('IR-2602')).toBeInTheDocument();
+    expect(screen.getAllByText('IR-2601').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Alpha Co').length).toBeGreaterThan(0);
     expect(screen.getByText('Nozzle leak')).toBeInTheDocument();
 
@@ -120,7 +123,7 @@ describe('IncidentItemsReport pick list', () => {
       description: 'Nozzle',
     })));
 
-    await user.click(screen.getByRole('button', { name: /aaaa1111/i }));
+    await user.click(screen.getByRole('button', { name: /IR-2601/i }));
 
     expect(window.open).toHaveBeenCalledWith(
       expect.stringContaining('warehouse-reports-incident-items-report?reportId=aaaa1111-bbbb-cccc-dddd-eeeeffff0001'),

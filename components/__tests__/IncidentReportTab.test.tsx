@@ -16,6 +16,7 @@ vi.mock('../CreateIncidentReportModal', () => ({ default: () => null }));
 
 const pendingReport = {
   id: 'incident-1',
+  ir_number: 'IR-2601',
   record_source: 'incident_report',
   contact_id: 'customer-1',
   report_date: '2026-09-01',
@@ -55,6 +56,7 @@ describe('IncidentReportTab approval workflow', () => {
     render(<IncidentReportTab contactId="customer-1" currentUser={{ id: 'master-1', role: 'Master User', full_name: 'Master User' } as any} />);
 
     expect(await screen.findByText('PN-100')).toBeInTheDocument();
+    expect(screen.getByText(/IR-2601/)).toBeInTheDocument();
     expect(screen.getByText('5')).toBeInTheDocument();
     expect(screen.getByText('8')).toBeInTheDocument();
     await user.click(screen.getByText('Return to factory'));

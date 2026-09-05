@@ -153,7 +153,7 @@ const IncidentReportTab: React.FC<IncidentReportTabProps> = ({ contactId, curren
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-2">
                 <h4 className="font-semibold text-slate-800 dark:text-white">
-                  Incident - {formatReportDateTime(report.report_date, report.report_time)}
+                  {report.record_source !== 'customer_log' && report.ir_number ? `${report.ir_number} · ` : ''}Incident - {formatReportDateTime(report.report_date, report.report_time)}
                 </h4>
                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${
                   report.approval_status === 'approved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' :

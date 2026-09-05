@@ -831,6 +831,7 @@ export interface RelatedTransaction {
 
 export interface IncidentReport {
   id: string;
+  ir_number?: string;
   record_source?: 'incident_report' | 'customer_log';
   contact_id: string;
   report_date: string;

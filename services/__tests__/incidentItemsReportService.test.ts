@@ -3,7 +3,7 @@ import {
   fetchIncidentItemIncidents,
   fetchIncidentItemsReport,
   fetchWarehouseIncidentReport,
-  formatIncidentReportShortId,
+  formatIncidentReportNumber,
 } from '../incidentItemsReportService';
 
 const okResponse = (data: unknown) =>
@@ -23,10 +23,13 @@ describe('incidentItemsReportService', () => {
     vi.restoreAllMocks();
   });
 
-  it('formats an Incident Report ID as the first eight characters', () => {
-    expect(formatIncidentReportShortId('a1b2c3d4-e5f6-7890-abcd-ef1234567890')).toBe('a1b2c3d4');
-    expect(formatIncidentReportShortId('short')).toBe('short');
-    expect(formatIncidentReportShortId('')).toBe('');
+  it('formats an Incident Report Number and leaves customer-log IDs as a short label', () => {
+    expect(formatIncidentReportNumber('IR-2601')).toBe('IR-2601');
+    expect(formatIncidentReportNumber('')).toBe('');
+    expect(formatIncidentReportNumber(null, {
+      recordSource: 'customer_log',
+      incidentReportId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+    })).toBe('a1b2c3d4');
   });
 
   it('loads every matching Incident Report for an Incident Item', async () => {
@@ -82,6 +85,7 @@ describe('incidentItemsReportService', () => {
     expect(result).toEqual([
       {
         incident_report_id: 'aaaa1111-bbbb-cccc-dddd-eeeeffff0001',
+        ir_number: '',
         date: '2026-09-02',
         contact_id: 'c-1',
         customer_name: 'Alpha Co',
@@ -89,6 +93,7 @@ describe('incidentItemsReportService', () => {
       },
       {
         incident_report_id: 'bbbb2222-cccc-dddd-eeee-ffff00001111',
+        ir_number: '',
         date: '2026-08-15',
         contact_id: 'c-2',
         customer_name: 'Beta Inc',
@@ -105,6 +110,7 @@ describe('incidentItemsReportService', () => {
     (global.fetch as any).mockImplementation(() =>
       okResponse({
         id: 'aaaa1111-bbbb-cccc-dddd-eeeeffff0001',
+        ir_number: 'IR-2601',
         contact_id: 'c-1',
         report_date: '2026-09-02',
         report_time: '09:30:00',
@@ -127,6 +133,7 @@ describe('incidentItemsReportService', () => {
     expect(String(url)).toContain('/incident-items-report/incidents/aaaa1111-bbbb-cccc-dddd-eeeeffff0001');
     expect(new URL(String(url), window.location.origin).searchParams.get('main_id')).toBe('42');
     expect(result.id).toBe('aaaa1111-bbbb-cccc-dddd-eeeeffff0001');
+    expect(result.ir_number).toBe('IR-2601');
     expect(result.customer_name).toBe('Alpha Co');
     expect(result.approval_status).toBe('pending');
   });
@@ -196,6 +203,7 @@ describe('incidentItemsReportService', () => {
     });
     expect(result.items[0].recent_incidents[0]).toEqual({
       incident_report_id: '99',
+      ir_number: '',
       date: '2026-08-01',
       contact_id: '',
       customer_name: 'Unknown customer',

@@ -16,7 +16,7 @@ import {
 import { reviewDailyCallIncidentReport } from '../services/dailyCallCustomerDetailService';
 import {
   fetchWarehouseIncidentReport,
-  formatIncidentReportShortId,
+  formatIncidentReportNumber,
   WarehouseIncidentReport,
 } from '../services/incidentItemsReportService';
 import { UserProfile } from '../types';
@@ -145,7 +145,7 @@ const WarehouseIncidentReportDetail: React.FC<WarehouseIncidentReportDetailProps
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Incident Report</p>
           <h1 className="mt-1 flex flex-wrap items-center gap-2 text-2xl font-bold text-slate-900 dark:text-white">
-            <span className="font-mono">{formatIncidentReportShortId(report.id)}</span>
+            <span className="font-mono">{formatIncidentReportNumber(report.ir_number, { recordSource: report.record_source, incidentReportId: report.id })}</span>
             <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${
               report.approval_status === 'approved'
                 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'

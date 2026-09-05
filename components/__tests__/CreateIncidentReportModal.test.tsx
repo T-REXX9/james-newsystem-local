@@ -1,10 +1,13 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 import CreateIncidentReportModal from '../CreateIncidentReportModal';
+import { createDailyCallIncidentReport } from '../../services/dailyCallCustomerDetailService';
+import { syncIncidentReportItem } from '../../services/incidentItemSyncService';
 
 const fetchContactTransactionsMock = vi.fn();
+const addToastMock = vi.fn();
 
 vi.mock('../../services/dailyCallCustomerDetailService', () => ({
   createDailyCallIncidentReport: vi.fn(),
@@ -21,7 +24,7 @@ vi.mock('../../services/incidentItemSyncService', () => ({
 }));
 
 vi.mock('../ToastProvider', () => ({
-  useToast: () => ({ addToast: vi.fn() }),
+  useToast: () => ({ addToast: addToastMock }),
 }));
 
 vi.mock('../ProductAutocomplete', () => ({
@@ -116,5 +119,47 @@ describe('CreateIncidentReportModal', () => {
     fireEvent.blur(incidentDate);
 
     expect(screen.getAllByText('Please choose an incident date that is not in the future.').length).toBeGreaterThan(0);
+  });
+
+  it('includes the Incident Report Number in the success toast', async () => {
+    vi.useRealTimers();
+    vi.mocked(createDailyCallIncidentReport).mockResolvedValue({
+      id: 'incident-uuid-1',
+      ir_number: 'IR-2601',
+      contact_id: 'contact-1',
+      report_date: '2026-09-02',
+      report_time: '09:30:00',
+      incident_date: '2026-09-02',
+      incident_time: '09:30:00',
+      issue_type: 'other',
+      description: 'Package arrived with missing items.',
+      reported_by: 'Master User',
+      done_by: 'Master User',
+      approval_status: 'pending',
+    } as any);
+    vi.mocked(syncIncidentReportItem).mockResolvedValue({ id: 'item-1', created: true } as any);
+
+    render(
+      <CreateIncidentReportModal
+        contactId="contact-1"
+        isOpen
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        currentUser={{ full_name: 'Master User' } as any}
+      />
+    );
+
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'other' } });
+    fireEvent.change(screen.getByPlaceholderText(/Describe the incident/), {
+      target: { value: 'Package arrived with missing items.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create Report' }));
+
+    await waitFor(() => {
+      expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'success',
+        description: expect.stringContaining('IR-2601'),
+      }));
+    });
   });
 });

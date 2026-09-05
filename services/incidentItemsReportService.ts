@@ -41,6 +41,7 @@ export interface IncidentItemsReportRow {
   match_sources: string;
   recent_incidents: Array<{
     incident_report_id: string;
+    ir_number?: string;
     date: string;
     contact_id: string;
     customer_name: string;
@@ -76,6 +77,7 @@ export interface IncidentItemsReportData {
 
 export interface IncidentItemIncidentSummary {
   incident_report_id: string;
+  ir_number?: string;
   date: string;
   contact_id: string;
   customer_name: string;
@@ -98,6 +100,7 @@ export interface IncidentItemIncidentsFilters {
 
 export interface WarehouseIncidentReport {
   id: string;
+  ir_number?: string;
   record_source?: 'incident_report' | 'customer_log';
   contact_id: string;
   customer_name?: string;
@@ -139,10 +142,16 @@ export interface WarehouseIncidentReport {
   } | null;
 }
 
-export const formatIncidentReportShortId = (incidentReportId: string): string => {
-  const id = String(incidentReportId || '').trim();
-  if (!id) return '';
-  return id.slice(0, 8);
+export const formatIncidentReportNumber = (
+  irNumber?: string | null,
+  options?: { recordSource?: string; incidentReportId?: string }
+): string => {
+  const number = String(irNumber || '').trim();
+  if (number) return number;
+  if (options?.recordSource === 'customer_log') {
+    return String(options.incidentReportId || '').trim().slice(0, 8);
+  }
+  return '';
 };
 
 const parseApiErrorMessage = async (response: Response): Promise<string> => {
@@ -195,6 +204,7 @@ const mapRow = (row: any): IncidentItemsReportRow => ({
   recent_incidents: Array.isArray(row?.recent_incidents)
     ? row.recent_incidents.map((incident: any) => ({
         incident_report_id: String(incident?.incident_report_id || ''),
+        ir_number: String(incident?.ir_number || ''),
         date: String(incident?.date || ''),
         contact_id: String(incident?.contact_id || ''),
         customer_name: String(incident?.customer_name || incident?.contact_id || 'Unknown customer'),
@@ -249,6 +259,7 @@ export const fetchIncidentItemsReport = async (
 
 const mapIncidentSummary = (incident: Record<string, unknown> | null | undefined): IncidentItemIncidentSummary => ({
   incident_report_id: String(incident?.incident_report_id || ''),
+  ir_number: String(incident?.ir_number || ''),
   date: String(incident?.date || ''),
   contact_id: String(incident?.contact_id || ''),
   customer_name: String(incident?.customer_name || incident?.contact_id || 'Unknown customer'),
@@ -295,6 +306,7 @@ export const fetchWarehouseIncidentReport = async (
 
   return {
     id: String(data?.id || id),
+    ir_number: data?.ir_number ? String(data.ir_number) : undefined,
     record_source: data?.record_source === 'customer_log' ? 'customer_log' : 'incident_report',
     contact_id: String(data?.contact_id || ''),
     customer_name: String(data?.customer_name || ''),
