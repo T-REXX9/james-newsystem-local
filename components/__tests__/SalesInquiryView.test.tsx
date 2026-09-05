@@ -689,8 +689,8 @@ describe('SalesInquiryView', () => {
         id: 'inq-vip',
         inquiry_no: 'INQ26-20478',
         contact_id: 'c-1',
-        sales_date: '2026-04-08',
-        created_at: '2026-04-08',
+        sales_date: '2026-09-05',
+        created_at: '2026-09-05',
         grand_total: 7560,
         items: [
           {
@@ -715,8 +715,8 @@ describe('SalesInquiryView', () => {
         id: 'inq-vip',
         inquiry_no: 'INQ26-20478',
         contact_id: 'c-1',
-        sales_date: '2026-04-08',
-        created_at: '2026-04-08',
+        sales_date: '2026-09-05',
+        created_at: '2026-09-05',
         grand_total: 7560,
         items: [
           {
@@ -737,7 +737,7 @@ describe('SalesInquiryView', () => {
       })
     );
 
-    render(<SalesInquiryView />);
+    render(<SalesInquiryView today={new Date('2026-09-06T00:00:00')} />);
 
     await user.click(await screen.findByText('INQ26-20478'));
     await waitFor(() => expect(getLedgerMock).toHaveBeenCalled());
@@ -745,6 +745,90 @@ describe('SalesInquiryView', () => {
       expect(screen.getByText('10% VIP SILVER = 756.00')).toBeInTheDocument();
       expect(screen.getByText('TOTAL to pay :')).toBeInTheDocument();
       expect(screen.getByText('6804.00')).toBeInTheDocument();
+    });
+  });
+
+  it('shows VIP Gold discount and TOTAL to pay on a new qualifying inquiry', async () => {
+    const user = userEvent.setup();
+    getLedgerMock.mockResolvedValue({
+      metrics: {
+        dealership_sales: 125000,
+        monthly_sales: 2500,
+        last_month_sales: 30000,
+        customer_since: '2019-03-01',
+        credit_limit: 10000,
+        terms: '30 days',
+        balance: 0,
+      },
+      summary_rows: [{ year: 2026, month: 1, debit: 1000 }],
+    });
+    const { container } = render(<SalesInquiryView today={new Date('2026-09-06T00:00:00')} />);
+
+    await waitFor(() => expect(fetchContactsMock).toHaveBeenCalled());
+    await user.selectOptions(screen.getByLabelText('Customer'), 'c-1');
+    const dateInput = container.querySelector('input[type="date"]') as HTMLInputElement;
+    await user.clear(dateInput);
+    await user.type(dateInput, '2026-09-05');
+    await user.click(screen.getByRole('button', { name: /add item/i }));
+    await user.click(screen.getByRole('button', { name: 'Select Product' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('10% VIP GOLD = 10.00')).toBeInTheDocument();
+      expect(screen.getByText('TOTAL to pay :')).toBeInTheDocument();
+      expect(screen.getByText('90.00')).toBeInTheDocument();
+    });
+  });
+
+  it('shows VIP Gold when summary rows are non-empty but last month is absent', async () => {
+    const user = userEvent.setup();
+    const goldInquiryItems = [
+      {
+        id: 'item-1',
+        inquiry_id: 'inq-gold',
+        item_id: 'p-1',
+        qty: 1,
+        part_no: 'PN-1',
+        item_code: 'IC-1',
+        location: '',
+        description: 'Widget',
+        unit_price: 1000,
+        amount: 1000,
+        remark: '',
+        approval_status: 'approved',
+      },
+    ];
+    const goldInquiry = makeInquiry({
+      id: 'inq-gold',
+      inquiry_no: 'INQ26-30000',
+      contact_id: 'c-1',
+      sales_date: '2026-09-05',
+      created_at: '2026-09-05',
+      grand_total: 1000,
+      items: goldInquiryItems,
+    });
+    getLedgerMock.mockResolvedValue({
+      metrics: {
+        dealership_sales: 125000,
+        monthly_sales: 2500,
+        last_month_sales: 30000,
+        customer_since: '2019-03-01',
+        credit_limit: 10000,
+        terms: '30 days',
+        balance: 0,
+      },
+      summary_rows: [{ year: 2026, month: 1, debit: 1000 }],
+    });
+    getAllSalesInquiriesMock.mockResolvedValue([goldInquiry]);
+    getSalesInquiryMock.mockResolvedValue(goldInquiry);
+
+    render(<SalesInquiryView today={new Date('2026-09-06T00:00:00')} />);
+
+    await user.click(await screen.findByText('INQ26-30000'));
+    await waitFor(() => expect(getLedgerMock).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(screen.getByText('10% VIP GOLD = 100.00')).toBeInTheDocument();
+      expect(screen.getByText('TOTAL to pay :')).toBeInTheDocument();
+      expect(screen.getByText('900.00')).toBeInTheDocument();
     });
   });
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   computeVipDocumentDiscount,
   lastMonthSpendFromSummary,
+  resolveLastMonthSpendForVipDocument,
   shouldApplyVipOnDocument,
   type VipDealDocument,
 } from '../vipDocumentDiscount';
@@ -117,5 +118,51 @@ describe('lastMonthSpendFromSummary', () => {
         { year: 2026, month: 9, debit: 4000 },
       ])
     ).toBe(12000);
+  });
+});
+
+describe('resolveLastMonthSpendForVipDocument', () => {
+  it('uses the Daily Call last-month sales metric when summary rows disagree', () => {
+    expect(
+      resolveLastMonthSpendForVipDocument({
+        salesDate: '2026-09-05',
+        lastMonthSales: 30000,
+        summaryRows: [{ year: 2026, month: 8, debit: 0 }],
+        today: new Date('2026-09-06T00:00:00'),
+      })
+    ).toBe(30000);
+  });
+
+  it('does not let non-empty summary rows without last month zero a Gold customer', () => {
+    expect(
+      resolveLastMonthSpendForVipDocument({
+        salesDate: '2026-09-05',
+        lastMonthSales: 30000,
+        summaryRows: [{ year: 2026, month: 1, debit: 1000 }],
+        today: new Date('2026-09-06T00:00:00'),
+      })
+    ).toBe(30000);
+  });
+
+  it('uses summary rows for documents outside the current benefit month', () => {
+    expect(
+      resolveLastMonthSpendForVipDocument({
+        salesDate: '2026-08-05',
+        lastMonthSales: 30000,
+        summaryRows: [{ year: 2026, month: 7, debit: 12000 }],
+        today: new Date('2026-09-06T00:00:00'),
+      })
+    ).toBe(12000);
+  });
+
+  it('does not use the current last-month sales metric for non-current documents without summary rows', () => {
+    expect(
+      resolveLastMonthSpendForVipDocument({
+        salesDate: '2026-08-05',
+        lastMonthSales: 30000,
+        summaryRows: [],
+        today: new Date('2026-09-06T00:00:00'),
+      })
+    ).toBe(0);
   });
 });

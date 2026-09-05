@@ -59,7 +59,7 @@ import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
 import { buildSalesInquiryCustomerSummary } from '../utils/salesInquirySummary';
 import {
   benefitMonthKey,
-  lastMonthSpendFromSummary,
+  resolveLastMonthSpendForVipDocument,
   resolveDocumentVipDiscount,
   toVipSavePayload,
   type VipDealDocument,
@@ -115,6 +115,7 @@ interface SalesInquiryViewProps {
   initialFilterMonth?: string;
   initialFilterYear?: string;
   initialDateFilterApplied?: boolean;
+  today?: Date;
 }
 
 const inquiryListColumnWidths = [
@@ -149,6 +150,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   initialFilterMonth,
   initialFilterYear,
   initialDateFilterApplied,
+  today,
 }) => {
   const { addToast } = useToast();
   const lastAppliedPrefillRef = React.useRef<string | null>(null);
@@ -940,9 +942,12 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         deleted: Boolean(inquiry.is_deleted),
       }));
 
-    const lastMonthSpend = postedSales.summaryRows.length > 0
-      ? lastMonthSpendFromSummary(salesDate, postedSales.summaryRows)
-      : postedSales.lastMonthSales || 0;
+    const lastMonthSpend = resolveLastMonthSpendForVipDocument({
+      salesDate,
+      lastMonthSales: postedSales.lastMonthSales,
+      summaryRows: postedSales.summaryRows,
+      today,
+    });
 
     return resolveDocumentVipDiscount({
       grandTotal,
@@ -961,6 +966,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     selectedInquiry?.id,
     selectedInquiry?.is_deleted,
     selectedInquiry?.status,
+    today,
     vipConfig,
   ]);
   const printableInquiry = useMemo<SalesInquiry | null>(() => {

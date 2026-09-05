@@ -110,6 +110,20 @@ export const lastMonthSpendFromSummary = (
   return roundMoney(match?.debit || 0);
 };
 
+export const resolveLastMonthSpendForVipDocument = (input: {
+  salesDate: string;
+  lastMonthSales?: number | null;
+  summaryRows: Array<{ year: number; month: number; debit: number }>;
+  today?: Date;
+}): number => {
+  const salesMonth = benefitMonthKey(input.salesDate);
+  const reference = input.today || new Date();
+  const currentMonth = benefitMonthKey(`${reference.getFullYear()}-${String(reference.getMonth() + 1).padStart(2, '0')}-01`);
+  const metricSpend = input.lastMonthSales == null ? null : roundMoney(input.lastMonthSales);
+  if (metricSpend !== null && salesMonth === currentMonth) return metricSpend;
+  return lastMonthSpendFromSummary(input.salesDate, input.summaryRows);
+};
+
 export const computeVipDocumentDiscount = (input: {
   grandTotal: number;
   standing: VipDiscountLevel;
