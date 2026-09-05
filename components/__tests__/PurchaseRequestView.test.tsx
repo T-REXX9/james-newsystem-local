@@ -265,6 +265,57 @@ describe('PurchaseRequestView', () => {
     ).toBeInTheDocument();
   });
 
+  it('lists each related purchase order once in the purchasing cycle', () => {
+    render(
+      <PurchaseRequestView
+        request={{
+          ...baseRequest,
+          status: 'Submitted',
+          items: [
+            {
+              id: '101',
+              part_number: 'PART-A',
+              description: 'Same PO first line',
+              quantity: 1,
+              po_refno: 'POREF-309',
+              po_number: 'PO-26309',
+            },
+            {
+              id: '102',
+              part_number: 'PART-B',
+              description: 'Same PO second line',
+              quantity: 1,
+              po_refno: 'POREF-309',
+              po_number: 'PO-26309',
+            },
+            {
+              id: '103',
+              part_number: 'PART-C',
+              description: 'Different PO',
+              quantity: 1,
+              po_refno: 'POREF-310',
+              po_number: 'PO-26310',
+            },
+          ],
+        } as any}
+        onBack={vi.fn()}
+        onUpdate={vi.fn()}
+        onUpdateItem={vi.fn()}
+        onDeleteItem={vi.fn()}
+        onAddItem={vi.fn()}
+        onConvert={vi.fn()}
+        onPrint={vi.fn()}
+        products={[]}
+        suppliers={[]}
+      />
+    );
+
+    expect(screen.getAllByRole('link', { name: 'PO-26309' })).toHaveLength(1);
+    expect(screen.getAllByRole('link', { name: 'PO-26310' })).toHaveLength(1);
+    expect(screen.getAllByRole('link', { name: 'Open line purchase order PO-26309' })).toHaveLength(2);
+    expect(screen.getByRole('link', { name: 'Open line purchase order PO-26310' })).toBeInTheDocument();
+  });
+
   it('links a PR item to the exact purchase order record', () => {
     render(
       <PurchaseRequestView

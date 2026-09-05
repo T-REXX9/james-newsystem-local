@@ -393,8 +393,17 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
             </div>
             <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
               <span className="font-bold text-slate-500">Related PO:</span>
-              {items.filter(isItemOnPurchaseOrder).map((item) => <ModuleRecordLink key={item.id} tab="purchases-transaction-purchase-order" payload={{ poId: item.po_refno }} className="font-bold text-[#175fd3] hover:underline">{item.po_number || item.po_refno}</ModuleRecordLink>)}
-              {items.filter(isItemOnPurchaseOrder).length === 0 ? <span className="text-slate-500">Not created</span> : null}
+              {generatedPOs.map((po) => (
+                <ModuleRecordLink
+                  key={po.refno || po.number}
+                  tab="purchases-transaction-purchase-order"
+                  payload={{ poId: po.refno || undefined }}
+                  className="font-bold text-[#175fd3] hover:underline"
+                >
+                  {po.number}
+                </ModuleRecordLink>
+              ))}
+              {generatedPOs.length === 0 ? <span className="text-slate-500">Not created</span> : null}
             </div>
             {request.incomplete_delivery_reason ? <p className="mt-2 text-xs text-amber-800"><b>Reason for incomplete delivery:</b> {request.incomplete_delivery_reason}</p> : null}
           </div>
