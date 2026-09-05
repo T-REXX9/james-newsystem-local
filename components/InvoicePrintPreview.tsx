@@ -288,11 +288,10 @@ const InvoicePrintPreview: React.FC<InvoicePrintPreviewProps> = ({
     <div
       className={
         captureMode
-          ? 'invoice-print-root pointer-events-none fixed top-0 z-[-1] bg-white p-0'
+          ? 'invoice-print-root pointer-events-none fixed left-0 top-0 z-[-1] bg-white p-0'
           : 'invoice-print-root fixed inset-0 z-[80] overflow-y-auto bg-slate-950/50 p-6 pt-24 print:bg-white print:p-0'
       }
       aria-hidden={captureMode || undefined}
-      style={captureMode ? { left: '-10000px' } : undefined}
     >
       <style>{printStyles}</style>
 

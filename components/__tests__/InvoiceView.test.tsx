@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import InvoiceView from '../InvoiceView';
 import { InvoiceStatus } from '../../types';
 
@@ -8,6 +8,8 @@ const getAllInvoicesMock = vi.fn();
 const getInvoiceMock = vi.fn();
 const fetchContactsMock = vi.fn();
 const fetchContactByIdMock = vi.fn();
+const exportPrintSheetAsJpegMock = vi.fn();
+const addToastMock = vi.fn();
 
 vi.mock('../../services/invoiceLocalApiService', () => ({
   getInvoice: (...args: any[]) => getInvoiceMock(...args),
@@ -41,8 +43,13 @@ vi.mock('../../services/notificationLocalApiService', () => ({
   resolveNotificationUserId: vi.fn(),
 }));
 
+vi.mock('../../utils/exportPrintSheetJpeg', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../utils/exportPrintSheetJpeg')>()),
+  exportPrintSheetAsJpeg: (...args: any[]) => exportPrintSheetAsJpegMock(...args),
+}));
+
 vi.mock('../ToastProvider', () => ({
-  useToast: () => ({ addToast: vi.fn() }),
+  useToast: () => ({ addToast: addToastMock }),
 }));
 
 vi.mock('../ModuleRecordAction', () => ({
@@ -54,16 +61,25 @@ vi.mock('../ModuleRecordLink', () => ({
 }));
 
 describe('InvoiceView', () => {
+  let offsetWidthSpy: ReturnType<typeof vi.spyOn>;
+  let offsetHeightSpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    offsetWidthSpy = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(100);
+    offsetHeightSpy = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(100);
     fetchContactsMock.mockResolvedValue([
       { id: 'c-1', company: 'E&G DIESEL CALIBRATION', transactionType: 'Invoice' },
     ]);
     fetchContactByIdMock.mockResolvedValue(null);
     getInvoiceMock.mockResolvedValue(null);
+    exportPrintSheetAsJpegMock.mockResolvedValue(undefined);
+    addToastMock.mockClear();
   });
 
   afterEach(() => {
+    offsetWidthSpy.mockRestore();
+    offsetHeightSpy.mockRestore();
     cleanup();
   });
 
@@ -103,5 +119,100 @@ describe('InvoiceView', () => {
     expect(await screen.findByText('SO26-20478')).toBeInTheDocument();
     expect(screen.getByText('T-01542')).toBeInTheDocument();
     expect(screen.queryByText('20260827172321')).not.toBeInTheDocument();
+  });
+
+  it('warns and does not download when Export JPEG is clicked without a selected invoice', async () => {
+    getAllInvoicesMock.mockResolvedValue([]);
+
+    render(<InvoiceView />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /export jpeg/i }));
+
+    expect(addToastMock).toHaveBeenCalledWith({
+      type: 'warning',
+      title: 'Nothing to export',
+      description: 'Select an invoice first.',
+    });
+    expect(exportPrintSheetAsJpegMock).not.toHaveBeenCalled();
+  });
+
+  it('exports the A5 invoice print sheet instead of the on-screen invoice form', async () => {
+    const invoice = {
+      id: 'inv-1',
+      invoice_no: 'INV26-1001',
+      order_id: 'so-1',
+      sales_no: 'SO26-1001',
+      contact_id: 'c-1',
+      sales_date: '2026-09-05',
+      sales_person: 'Jane',
+      delivery_address: 'Taguig',
+      reference_no: 'REF-1',
+      customer_reference: '',
+      send_by: '',
+      price_group: 'regular',
+      credit_limit: 0,
+      terms: '30 days',
+      promise_to_pay: '',
+      po_number: 'PO-9',
+      debit_memo_no: '',
+      tracking_no: '',
+      inquiry_type: '',
+      urgency: '',
+      grand_total: 7560,
+      vip_applied: true,
+      vip_tier: 'silver' as const,
+      vip_percentage: 10,
+      vip_discount_amount: 756,
+      total_to_pay: 6804,
+      status: InvoiceStatus.SENT,
+      created_by: '',
+      created_at: '2026-09-05',
+      items: [
+        {
+          id: 'item-1',
+          invoice_id: 'inv-1',
+          item_id: 'p-1',
+          qty: 1,
+          part_no: 'PN-1',
+          item_code: 'IC-1',
+          location: '',
+          description: 'Widget',
+          unit_price: 7560,
+          amount: 7560,
+          remark: '',
+        },
+      ],
+    };
+
+    getAllInvoicesMock.mockResolvedValue([invoice]);
+    getInvoiceMock.mockResolvedValue(invoice);
+    fetchContactByIdMock.mockResolvedValue({
+      id: 'c-1',
+      company: 'WT GOMEZ',
+      address: 'Taguig',
+      vatType: 'Inclusive',
+      tin: '123-456',
+      terms: '30 days',
+      transactionType: 'Invoice',
+    });
+
+    render(<InvoiceView />);
+
+    fireEvent.click(await screen.findByText('INV26-1001'));
+    fireEvent.click(await screen.findByRole('button', { name: /export jpeg/i }));
+
+    await waitFor(() => expect(exportPrintSheetAsJpegMock).toHaveBeenCalledTimes(1));
+
+    const [{ element, filename }] = exportPrintSheetAsJpegMock.mock.calls[0];
+    expect(filename).toBe('INV26-1001-invoice.jpg');
+    expect(element).toHaveClass('invoice-print-sheet');
+    expect(element).toHaveTextContent('TND OPC');
+    expect(element).toHaveTextContent('SALES INVOICE');
+    expect(element).toHaveTextContent('WT GOMEZ');
+    expect(element).toHaveTextContent('Less: Discount (VIP SILVER)');
+    expect(element).toHaveTextContent('TOTAL AMOUNT DUE');
+    expect(element.closest('.invoice-print-root')).not.toHaveStyle({ left: '-10000px' });
+    expect(element).not.toHaveTextContent('Export JPEG');
+    expect(element).not.toHaveTextContent('Print INV');
   });
 });

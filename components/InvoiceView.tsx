@@ -28,7 +28,7 @@ import {
   resolveNotificationUserId,
 } from '../services/notificationLocalApiService';
 import { PageHeader, RecordTrustStrip, WorkflowGuidance } from './common/PageScaffold';
-import { exportPrintSheetAsJpeg } from '../utils/exportPrintSheetJpeg';
+import { exportPrintSheetAsJpeg, waitForPrintSheet } from '../utils/exportPrintSheetJpeg';
 
 interface InvoiceViewProps {
   initialInvoiceId?: string;
@@ -650,9 +650,10 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
   const handlePrintSheetReady = useCallback(async (sheet: HTMLElement) => {
     if (!jpegCaptureMode) return;
     try {
+      const printSheet = await waitForPrintSheet(() => sheet);
       const safeInvoiceNo = (selectedInvoice?.invoice_no || 'invoice').replace(/[^a-z0-9-]+/gi, '-');
       await exportPrintSheetAsJpeg({
-        element: sheet,
+        element: printSheet,
         filename: `${safeInvoiceNo}-invoice.jpg`,
       });
       addToast({ type: 'success', message: 'Invoice JPEG exported.' });
@@ -694,7 +695,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
             <button
               type="button"
               onClick={handleExportJpeg}
-              disabled={exportingJpeg || !selectedInvoice}
+              disabled={exportingJpeg}
               className="inline-flex h-[35px] items-center gap-2 rounded-[4px] bg-[#5d82a2] px-3 text-[13px] font-semibold text-white hover:bg-[#50738f] disabled:opacity-60"
             >
               <Download className="h-4 w-4" />
