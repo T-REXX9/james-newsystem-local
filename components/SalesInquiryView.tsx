@@ -17,12 +17,15 @@ import {
   SalesInquiryDTO,
   SalesInquiryItem,
   SalesInquiryStatus,
+  VipTierConfig,
 } from '../types';
 import ModuleRecordLink from './ModuleRecordLink';
 import ModuleRecordAction from './ModuleRecordAction';
 import { navigateWorkflow } from '../utils/workflowNavigate';
 import { fetchContactById, fetchContacts } from '../services/customerDatabaseLocalApiService';
+import { customerLedgerService } from '../services/customerLedgerService';
 import { getLocalAuthSession } from '../services/localAuthService';
+import { getVipTierConfig } from '../services/vipTierSettingsService';
 import {
   approveInquiry,
   convertToOrder,
@@ -52,6 +55,8 @@ import {
   WRITABLE_PRICING_GROUP_OPTIONS,
 } from '../constants/pricingGroups';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
+import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
+import { buildSalesInquiryCustomerSummary } from '../utils/salesInquirySummary';
 import { fetchCouriers, CourierRecord } from '../services/courierLocalApiService';
 import { fetchRemarkTemplates, RemarkTemplateRecord } from '../services/remarkTemplateLocalApiService';
 import {
@@ -251,6 +256,11 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
   // Form State
   const [selectedCustomer, setSelectedCustomer] = useState<Contact | null>(null);
+  const [vipConfig, setVipConfig] = useState<VipTierConfig>(DEFAULT_VIP_TIER_CONFIG);
+  const [postedSales, setPostedSales] = useState<{ ishinomotoSales: number | null; currentMonthSales: number | null }>({
+    ishinomotoSales: null,
+    currentMonthSales: null,
+  });
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [submitCount, setSubmitCount] = useState(0);
   const [submitError, setSubmitError] = useState('');
@@ -293,6 +303,39 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     };
     loadDropdownData();
   }, []);
+
+  useEffect(() => {
+    void getVipTierConfig().then(setVipConfig).catch(() => setVipConfig(DEFAULT_VIP_TIER_CONFIG));
+  }, []);
+
+  useEffect(() => {
+    const customerId = selectedCustomer?.id;
+    if (!customerId) {
+      setPostedSales({ ishinomotoSales: null, currentMonthSales: null });
+      return;
+    }
+
+    let cancelled = false;
+    setPostedSales({ ishinomotoSales: null, currentMonthSales: null });
+    void customerLedgerService
+      .getLedger(customerId, { reportType: 'summary', dateType: 'all' })
+      .then((ledger) => {
+        if (cancelled) return;
+        setPostedSales({
+          ishinomotoSales: ledger.metrics.dealership_sales,
+          currentMonthSales: ledger.metrics.monthly_sales,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPostedSales({ ishinomotoSales: null, currentMonthSales: null });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCustomer?.id]);
 
   // Items Table
   const [items, setItems] = useState<InquiryItemRow[]>([]);
@@ -1309,13 +1352,39 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   const canOpenConvertedOrder = Boolean(!isCreatingNew && selectedInquiry && convertedOrderId);
   const currentMonthLabel = new Date(salesDate || Date.now()).toLocaleDateString('en-PH', { month: 'long' });
   const summaryCustomer = selectedCustomer as (Contact & {
-    dealershipSales?: number;
-    monthlySales?: number;
     since?: string;
   }) | null;
   const selectedCustomerCreditLimit = Number(creditLimit || summaryCustomer?.creditLimit || 0);
   const selectedCustomerBalance = Number(summaryCustomer?.balance || 0);
   const exceedsCreditLimit = selectedCustomerCreditLimit > 0 && selectedCustomerBalance > selectedCustomerCreditLimit;
+  const summaryCells = useMemo(
+    () =>
+      buildSalesInquiryCustomerSummary({
+        selected: Boolean(selectedCustomer),
+        ishinomotoSales: postedSales.ishinomotoSales,
+        currentMonthSales: postedSales.currentMonthSales,
+        customerSince: summaryCustomer?.since || summaryCustomer?.customerSince || null,
+        creditLimit,
+        terms,
+        balance: selectedCustomer ? selectedCustomerBalance : null,
+        preferredBrand: selectedCustomer ? formatPreferredBrand(summaryCustomer?.preferredBrand) : null,
+        monthLabel: currentMonthLabel,
+        vipConfig,
+      }),
+    [
+      creditLimit,
+      currentMonthLabel,
+      postedSales.currentMonthSales,
+      postedSales.ishinomotoSales,
+      selectedCustomer,
+      selectedCustomerBalance,
+      summaryCustomer?.customerSince,
+      summaryCustomer?.preferredBrand,
+      summaryCustomer?.since,
+      terms,
+      vipConfig,
+    ]
+  );
   const displayMetricValue = (value: number | string | undefined | null, isCurrency = false) => {
     if (value === '' || value === null || value === undefined) return '—';
     if (typeof value === 'number') return isCurrency ? formatCurrency(value) : String(value);
@@ -1458,18 +1527,20 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
             <div className="mb-[35px] overflow-x-auto">
               <table className="w-full min-w-[900px] table-fixed border-collapse text-center text-[13px]">
-                <thead><tr>{['Dealership Since', 'Dealership Sales', 'Dealership Quota', `Total Sales for ${currentMonthLabel}`, 'Customer Since', 'Credit Limit', 'Terms', 'Balance', 'Preferred Brand'].map((label) => <th key={label} className="border border-[#d7d7d7] px-2 py-[10px] font-normal">{label}</th>)}</tr></thead>
-                <tbody><tr>
-                  <td className="border border-[#d7d7d7] px-2 py-2">{displayMetricValue(summaryCustomer?.dealershipSince)}</td>
-                  <td className="border border-[#d7d7d7] px-2 py-2">{displayMetricValue(summaryCustomer?.dealershipSales, true)}</td>
-                  <td className="border border-[#d7d7d7] px-2 py-2">{displayMetricValue(summaryCustomer?.dealershipQuota, true)}</td>
-                  <td className="border border-[#d7d7d7] px-2 py-2">{displayMetricValue(summaryCustomer?.monthlySales, true)}</td>
-                  <td className="border border-[#d7d7d7] px-2 py-2">{displayMetricValue(summaryCustomer?.since || summaryCustomer?.customerSince)}</td>
-                  <td className="border border-[#d7d7d7] px-2 py-2">{displayMetricValue(creditLimit, true)}</td>
-                  <td className="border border-[#d7d7d7] px-2 py-2">{displayMetricValue(terms)}</td>
-                  <td className="border border-[#d7d7d7] px-2 py-2">{displayMetricValue(summaryCustomer?.balance, true)}</td>
-                  <td className="border border-[#d7d7d7] px-2 py-2">{formatPreferredBrand(summaryCustomer?.preferredBrand)}</td>
-                </tr></tbody>
+                <thead>
+                  <tr>
+                    {summaryCells.map((cell) => (
+                      <th key={cell.label} className="border border-[#d7d7d7] px-2 py-[10px] font-normal">{cell.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    {summaryCells.map((cell) => (
+                      <td key={cell.label} className="border border-[#d7d7d7] px-2 py-2">{displayMetricValue(cell.value, cell.isCurrency)}</td>
+                    ))}
+                  </tr>
+                </tbody>
               </table>
             </div>
 
@@ -1829,28 +1900,16 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
               <table className="w-full table-fixed border border-slate-200 dark:border-slate-800 text-sm text-center mb-4">
                 <thead>
                   <tr>
-                    <th className="bg-slate-50 dark:bg-slate-800 font-semibold py-2 px-2 border border-slate-200 dark:border-slate-800">Dealership Since</th>
-                    <th className="bg-slate-50 dark:bg-slate-800 font-semibold py-2 px-2 border border-slate-200 dark:border-slate-800">Dealership Sales</th>
-                    <th className="bg-slate-50 dark:bg-slate-800 font-semibold py-2 px-2 border border-slate-200 dark:border-slate-800">Dealership Quota</th>
-                    <th className="bg-slate-50 dark:bg-slate-800 font-semibold py-2 px-2 border border-slate-200 dark:border-slate-800">Total Sales for {currentMonthLabel}</th>
-                    <th className="bg-slate-50 dark:bg-slate-800 font-semibold py-2 px-2 border border-slate-200 dark:border-slate-800">Customer Since</th>
-                    <th className="bg-slate-50 dark:bg-slate-800 font-semibold py-2 px-2 border border-slate-200 dark:border-slate-800">Credit Limit</th>
-                    <th className="bg-slate-50 dark:bg-slate-800 font-semibold py-2 px-2 border border-slate-200 dark:border-slate-800">Terms</th>
-                    <th className="bg-slate-50 dark:bg-slate-800 font-semibold py-2 px-2 border border-slate-200 dark:border-slate-800">Balance</th>
-                    <th className="bg-slate-50 dark:bg-slate-800 font-semibold py-2 px-2 border border-slate-200 dark:border-slate-800">Preferred Brand</th>
+                    {summaryCells.map((cell) => (
+                      <th key={cell.label} className="bg-slate-50 dark:bg-slate-800 font-semibold py-2 px-2 border border-slate-200 dark:border-slate-800">{cell.label}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
                   <tr className="text-slate-700 dark:text-slate-200">
-                    <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(summaryCustomer?.dealershipSince)}</td>
-                    <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(summaryCustomer?.dealershipSales, true)}</td>
-                    <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(summaryCustomer?.dealershipQuota, true)}</td>
-                    <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(summaryCustomer?.monthlySales, true)}</td>
-                    <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(summaryCustomer?.since || summaryCustomer?.customerSince)}</td>
-                    <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(creditLimit, true)}</td>
-                    <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(terms)}</td>
-                    <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(summaryCustomer?.balance, true)}</td>
-                    <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{formatPreferredBrand(summaryCustomer?.preferredBrand)}</td>
+                    {summaryCells.map((cell) => (
+                      <td key={cell.label} className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(cell.value, cell.isCurrency)}</td>
+                    ))}
                   </tr>
                 </tbody>
               </table>

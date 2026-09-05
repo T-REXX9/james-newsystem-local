@@ -69,6 +69,19 @@ vi.mock('../../services/salesOrderService', () => ({
   getSalesOrder: vi.fn(),
 }));
 
+const getVipTierConfigMock = vi.fn();
+const getLedgerMock = vi.fn();
+
+vi.mock('../../services/vipTierSettingsService', () => ({
+  getVipTierConfig: (...args: any[]) => getVipTierConfigMock(...args),
+}));
+
+vi.mock('../../services/customerLedgerService', () => ({
+  customerLedgerService: {
+    getLedger: (...args: any[]) => getLedgerMock(...args),
+  },
+}));
+
 vi.mock('../CustomerAutocomplete', () => ({
   default: ({
     contacts,
@@ -226,6 +239,21 @@ describe('SalesInquiryView', () => {
       if (priceGroup === 'gold') return 300;
       if (priceGroup === 'silver') return 200;
       return 100;
+    });
+    getVipTierConfigMock.mockResolvedValue({
+      one_time_discount_threshold: 10000,
+      unlimited_discount_threshold: 30000,
+      discount_percentage: 10,
+    });
+    getLedgerMock.mockResolvedValue({
+      metrics: {
+        dealership_sales: 125000,
+        monthly_sales: 2500,
+        customer_since: '2019-03-01',
+        credit_limit: 10000,
+        terms: '30 days',
+        balance: 0,
+      },
     });
   });
 
@@ -574,6 +602,35 @@ describe('SalesInquiryView', () => {
     await waitFor(() => {
       expect(screen.getAllByText('Preferred Brand').length).toBeGreaterThan(0);
       expect(screen.getAllByText('Ishinomoto').length).toBeGreaterThan(0);
+    });
+  });
+
+  it('shows Ishinomoto Sales and VIP remaining instead of dealership quota', async () => {
+    render(<SalesInquiryView />);
+
+    await waitFor(() => expect(fetchContactsMock).toHaveBeenCalled());
+
+    expect(screen.getByText('Ishinomoto Sales')).toBeInTheDocument();
+    expect(screen.getByText('VIP Silver remaining')).toBeInTheDocument();
+    expect(screen.getByText('VIP Gold remaining')).toBeInTheDocument();
+    expect(screen.getByText('Customer Since')).toBeInTheDocument();
+    expect(screen.queryByText('Dealership Since')).not.toBeInTheDocument();
+    expect(screen.queryByText('Dealership Sales')).not.toBeInTheDocument();
+    expect(screen.queryByText('Dealership Quota')).not.toBeInTheDocument();
+  });
+
+  it('shows how much more this month is needed for VIP Silver and VIP Gold', async () => {
+    const user = userEvent.setup();
+    render(<SalesInquiryView />);
+
+    await waitFor(() => expect(fetchContactsMock).toHaveBeenCalled());
+    await user.selectOptions(screen.getByLabelText('Customer'), 'c-1');
+
+    await waitFor(() => {
+      expect(getLedgerMock).toHaveBeenCalled();
+      expect(screen.getByText('₱7,500.00')).toBeInTheDocument();
+      expect(screen.getByText('₱27,500.00')).toBeInTheDocument();
+      expect(screen.getByText('₱125,000.00')).toBeInTheDocument();
     });
   });
 });
