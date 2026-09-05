@@ -168,6 +168,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
         filtered = filtered.filter((invoice) => {
           // Always search invoice_no, reference_no, and remarks
           const refMatch = (invoice.invoice_no || '').toLowerCase().includes(query) ||
+                          (invoice.sales_no || '').toLowerCase().includes(query) ||
                           (invoice.reference_no || '').toLowerCase().includes(query) ||
                           (invoice.remarks || '').toLowerCase().includes(query);
 
@@ -682,7 +683,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
             <div className="mb-[10px] text-[13px]"><strong>Filtered By:</strong> {filteredByLabel}</div>
             <table className="w-full table-fixed border-collapse text-[12px]"><colgroup>{INVOICE_LIST_COLUMN_WIDTHS.map((width, index) => <col key={`${width}-${index}`} style={{ width }} />)}</colgroup><thead><tr className="border-b-2 border-[#d5d5d5] text-left text-[14px] font-semibold"><th className="px-2 pb-2">Date</th><th className="px-2 pb-2">Customer</th><th className="px-2 pb-2">SO No.</th><th className="px-2 pb-2">INV No.</th><th className="px-2 pb-2">DM No.</th><th className="px-2 pb-2">Tracking No.</th><th className="px-2 pb-2">CR No.</th><th className="px-2 pb-2">Sales Person</th><th className="px-2 pb-2">Status</th></tr></thead></table>
             <div className="max-h-[104px] overflow-y-auto"><table className="w-full table-fixed border-collapse text-[13px]"><colgroup>{INVOICE_LIST_COLUMN_WIDTHS.map((width, index) => <col key={`${width}-${index}`} style={{ width }} />)}</colgroup><tbody>
-              {loading ? <tr><td colSpan={9} className="border border-[#d7d7d7] px-2 py-4 text-center text-[#777]">Loading invoices...</td></tr> : invoices.length === 0 ? <tr><td colSpan={9} className="border border-[#d7d7d7] px-2 py-4 text-center text-[#777]">No invoices found.</td></tr> : invoices.map((invoice) => { const customer = customerMap.get(invoice.contact_id); const selected = selectedInvoice?.id === invoice.id; const rowColor = invoice.status === InvoiceStatus.CANCELLED ? 'text-[#d33]' : selected ? 'text-[#245d91]' : 'text-[#202020]'; return <tr key={invoice.id} onClick={() => selectInvoiceAndSync(invoice)} className={`cursor-pointer hover:bg-[#f7f7f7] ${rowColor}`}><td className="border border-[#d7d7d7] px-2 py-[9px]">{legacyListDate(invoice.sales_date)}</td><td className="truncate border border-[#d7d7d7] px-2 py-[9px]" title={customer?.company || ''}>{customer?.company || ''}</td><td className="truncate border border-[#d7d7d7] px-2 py-[9px] underline">{invoice.order_id ? <ModuleRecordAction tab="sales-transaction-sales-order" payload={{ orderId: invoice.order_id }} className="underline" newWindowLabel="Open sales order in new window">{invoice.order_id}</ModuleRecordAction> : ''}</td><td className="truncate border border-[#d7d7d7] px-2 py-[9px] underline"><ModuleRecordLink tab="sales-transaction-invoice" payload={{ invoiceId: invoice.id, invoiceRefNo: invoice.invoice_no }} mode="replace" onOpen={() => void selectInvoice(invoice)}>{invoice.invoice_no || ''}</ModuleRecordLink></td><td className="truncate border border-[#d7d7d7] px-2 py-[9px]">{invoice.debit_memo_no || ''}</td><td className="truncate border border-[#d7d7d7] px-2 py-[9px]">{invoice.tracking_no || ''}</td><td className="truncate border border-[#d7d7d7] px-2 py-[9px]">{invoice.customer_reference || ''}</td><td className="truncate border border-[#d7d7d7] px-2 py-[9px]">{invoice.sales_person || ''}</td><td className="border border-[#d7d7d7] px-2 py-[9px]">{displayInvoiceStatus(invoice.status)}</td></tr>; })}
+              {loading ? <tr><td colSpan={9} className="border border-[#d7d7d7] px-2 py-4 text-center text-[#777]">Loading invoices...</td></tr> : invoices.length === 0 ? <tr><td colSpan={9} className="border border-[#d7d7d7] px-2 py-4 text-center text-[#777]">No invoices found.</td></tr> : invoices.map((invoice) => { const customer = customerMap.get(invoice.contact_id); const selected = selectedInvoice?.id === invoice.id; const rowColor = invoice.status === InvoiceStatus.CANCELLED ? 'text-[#d33]' : selected ? 'text-[#245d91]' : 'text-[#202020]'; return <tr key={invoice.id} onClick={() => selectInvoiceAndSync(invoice)} className={`cursor-pointer hover:bg-[#f7f7f7] ${rowColor}`}><td className="border border-[#d7d7d7] px-2 py-[9px]">{legacyListDate(invoice.sales_date)}</td><td className="truncate border border-[#d7d7d7] px-2 py-[9px]" title={customer?.company || ''}>{customer?.company || ''}</td><td className="truncate border border-[#d7d7d7] px-2 py-[9px] underline">{invoice.order_id ? <ModuleRecordAction tab="sales-transaction-sales-order" payload={{ orderId: invoice.order_id }} className="underline" newWindowLabel="Open sales order in new window">{invoice.sales_no || invoice.order_id}</ModuleRecordAction> : (invoice.sales_no || '')}</td><td className="truncate border border-[#d7d7d7] px-2 py-[9px] underline"><ModuleRecordLink tab="sales-transaction-invoice" payload={{ invoiceId: invoice.id, invoiceRefNo: invoice.invoice_no }} mode="replace" onOpen={() => void selectInvoice(invoice)}>{invoice.invoice_no || ''}</ModuleRecordLink></td><td className="truncate border border-[#d7d7d7] px-2 py-[9px]">{invoice.debit_memo_no || ''}</td><td className="truncate border border-[#d7d7d7] px-2 py-[9px]">{invoice.tracking_no || ''}</td><td className="truncate border border-[#d7d7d7] px-2 py-[9px]">{invoice.customer_reference || ''}</td><td className="truncate border border-[#d7d7d7] px-2 py-[9px]">{invoice.sales_person || ''}</td><td className="border border-[#d7d7d7] px-2 py-[9px]">{displayInvoiceStatus(invoice.status)}</td></tr>; })}
             </tbody></table></div>
           </div>
         </section>
@@ -871,8 +872,8 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                           </div>
                         </td>
                         <td className="px-3 py-2">
-                          <div className="min-w-0 truncate leading-4" title={invoice.order_id || '-'}>
-                            {invoice.order_id || '-'}
+                          <div className="min-w-0 truncate leading-4" title={invoice.sales_no || invoice.order_id || '-'}>
+                            {invoice.sales_no || invoice.order_id || '-'}
                           </div>
                         </td>
                         <td className="px-3 py-2">
@@ -1046,7 +1047,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                           )}
                         </div>
                         {selectedInvoice.order_id && (
-                          <span className="text-xs text-slate-500">from SO: {selectedInvoice.order_id}</span>
+                          <span className="text-xs text-slate-500">from SO: {selectedInvoice.sales_no || selectedInvoice.order_id}</span>
                         )}
                         {isCancelled && (
                           <span className="text-xs text-red-500 font-bold ml-2">(CANCELLED)</span>

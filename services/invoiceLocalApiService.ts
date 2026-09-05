@@ -70,6 +70,7 @@ const mapInvoiceSummary = (raw: any): Invoice => {
     id: invoiceId,
     invoice_no: String(raw?.invoice_no || ''),
     order_id: String(raw?.order_id || ''),
+    sales_no: String(raw?.sales_no || ''),
     contact_id: String(raw?.contact_id || ''),
     sales_date: String(raw?.sales_date || new Date().toISOString().slice(0, 10)),
     sales_person: String(raw?.sales_person || ''),
