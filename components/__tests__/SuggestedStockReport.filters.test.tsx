@@ -81,7 +81,7 @@ describe('SuggestedStockReport filters', () => {
       hasMore: false,
     });
     fetchCustomersMock.mockResolvedValue([]);
-    createPrMock.mockResolvedValue({ pr_number: 'PR-TEST' });
+    createPrMock.mockResolvedValue({ id: 'PRREF-SS', pr_number: 'PR-TEST' });
     markAddedToPrMock.mockResolvedValue(1);
     addToKivMock.mockResolvedValue(1);
     removeFromKivMock.mockResolvedValue(1);
@@ -296,10 +296,13 @@ describe('SuggestedStockReport filters', () => {
       items: [{ ...item('created', 'CREATED PART', 2, 4), productCreated: true, databaseItemId: 'product-session' }],
       hasMore: false,
     });
+    const navigationSpy = vi.fn();
+    window.addEventListener('workflow:navigate', navigationSpy);
     render(<SuggestedStockReport />);
     await screen.findByText('CREATED PART');
 
     expect(screen.getAllByRole('button', { name: /Add Selected Items to PR/i })).toHaveLength(1);
+    expect(screen.getByRole('spinbutton', { name: 'PR quantity for PN-created' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select PN-created' }));
     fireEvent.change(screen.getByRole('spinbutton', { name: 'PR quantity for PN-created' }), { target: { value: '7' } });
@@ -311,6 +314,40 @@ describe('SuggestedStockReport filters', () => {
     ));
     expect(markAddedToPrMock).toHaveBeenCalledWith([expect.objectContaining({ id: 'created' })]);
     await waitFor(() => expect(screen.queryByText('CREATED PART')).not.toBeInTheDocument());
+    await waitFor(() => expect(navigationSpy).toHaveBeenCalled());
+    const navigationEvent = navigationSpy.mock.calls[0][0] as CustomEvent<{
+      tab: string;
+      payload?: { prId?: string };
+    }>;
+    expect(navigationEvent.detail).toEqual(expect.objectContaining({
+      tab: 'warehouse-purchasing-purchase-request',
+      payload: { prId: 'PRREF-SS' },
+    }));
+    window.removeEventListener('workflow:navigate', navigationSpy);
+  });
+
+  it('stays on the report when adding to a PR fails', async () => {
+    fetchSummaryMock.mockResolvedValueOnce({
+      items: [{ ...item('created', 'CREATED PART', 2, 4), productCreated: true, databaseItemId: 'product-session' }],
+      hasMore: false,
+    });
+    createPrMock.mockRejectedValueOnce(new Error('PR service unavailable'));
+    const navigationSpy = vi.fn();
+    window.addEventListener('workflow:navigate', navigationSpy);
+    render(<SuggestedStockReport />);
+    await screen.findByText('CREATED PART');
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select PN-created' }));
+    fireEvent.click(screen.getByRole('button', { name: /Add Selected Items to PR \(1\)/i }));
+
+    await waitFor(() => expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'error',
+      title: 'Unable to add items to PR',
+    })));
+    expect(markAddedToPrMock).not.toHaveBeenCalled();
+    expect(screen.getByText('CREATED PART')).toBeInTheDocument();
+    expect(navigationSpy).not.toHaveBeenCalled();
+    window.removeEventListener('workflow:navigate', navigationSpy);
   });
 
   it('opens the KIV folder as a view without changing the current sort', async () => {

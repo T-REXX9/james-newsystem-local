@@ -25,6 +25,7 @@ import {
   useSuggestedStockReportQuery,
 } from '../hooks/useSuggestedStockReportQuery';
 import { useToast } from './ToastProvider';
+import { navigateWorkflow } from '../utils/workflowNavigate';
 
 interface SuggestedStockReportProps {
   currentUser?: UserProfile | null;
@@ -145,15 +146,21 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
     try {
       const request = await createPurchaseRequestFromSuggestions(prSelectedItems, prQuantities);
       await markSuggestedStockItemsAddedToPr(prSelectedItems);
+      const addedKeys = new Set(prSelectedItems.map((item) => suggestedStockRowKey(item)));
       setSelectedKeys(new Set());
       setPrQuantities({});
-      await loadReport();
+      removeSummaryKeys(addedKeys);
       addToast({
         type: 'success',
         title: 'Items added to purchase request',
         description: `${prSelectedItems.length} item${prSelectedItems.length === 1 ? '' : 's'} added to ${request.pr_number || 'the new PR'}.`,
         durationMs: 7000,
       });
+      if (request.id) {
+        navigateWorkflow('warehouse-purchasing-purchase-request', { prId: request.id });
+        return;
+      }
+      await loadReport();
     } catch (error) {
       addToast({ type: 'error', title: 'Unable to add items to PR', description: error instanceof Error ? error.message : 'Please try again.' });
     } finally {
