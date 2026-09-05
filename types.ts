@@ -1126,6 +1126,11 @@ export interface SalesInquiry {
   urgency: string;
   urgency_date?: string;
   grand_total: number;
+  vip_applied?: boolean;
+  vip_tier?: 'regular' | 'silver' | 'gold';
+  vip_percentage?: number;
+  vip_discount_amount?: number;
+  total_to_pay?: number;
   created_by: string;
   created_at: string;
   updated_at?: string;
@@ -1172,6 +1177,11 @@ export interface SalesInquiryDTO {
   urgency: string;
   urgency_date?: string;
   status?: SalesInquiryStatus;
+  vip_applied?: boolean;
+  vip_tier?: 'regular' | 'silver' | 'gold';
+  vip_percentage?: number;
+  vip_discount_amount?: number;
+  total_to_pay?: number;
   items: Omit<SalesInquiryItem, 'id' | 'inquiry_id'>[];
 }
 
@@ -1211,6 +1221,11 @@ export interface SalesOrder {
   urgency: string;
   urgency_date?: string;
   grand_total: number;
+  vip_applied?: boolean;
+  vip_tier?: 'regular' | 'silver' | 'gold';
+  vip_percentage?: number;
+  vip_discount_amount?: number;
+  total_to_pay?: number;
   status: SalesOrderStatus;
   can_approve?: boolean;
   approved_by?: string;
@@ -1291,6 +1306,11 @@ export interface OrderSlip {
   urgency: string;
   urgency_date?: string;
   grand_total: number;
+  vip_applied?: boolean;
+  vip_tier?: 'regular' | 'silver' | 'gold';
+  vip_percentage?: number;
+  vip_discount_amount?: number;
+  total_to_pay?: number;
   status: OrderSlipStatus;
   printed_at?: string;
   printed_by?: string;
@@ -1369,6 +1389,11 @@ export interface Invoice {
   urgency: string;
   urgency_date?: string;
   grand_total: number;
+  vip_applied?: boolean;
+  vip_tier?: 'regular' | 'silver' | 'gold';
+  vip_percentage?: number;
+  vip_discount_amount?: number;
+  total_to_pay?: number;
   status: InvoiceStatus;
   due_date?: string;
   payment_date?: string;

@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef } from 'react';
 import { Printer, XCircle } from 'lucide-react';
 import { Contact, OrderSlip } from '../types';
 import { getLocalAuthSession } from '../services/localAuthService';
+import { persistedVipDiscount } from '../utils/vipDocumentDiscount';
+import VipDocumentTotals from './VipDocumentTotals';
 
 interface OrderSlipPrintPreviewProps {
   orderSlip: OrderSlip;
@@ -315,6 +317,18 @@ const OrderSlipPrintPreview: React.FC<OrderSlipPrintPreviewProps> = ({
                   <span className="order-slip-total-pill">{formatMoney(totalAmount)}</span>
                 </td>
               </tr>
+              <VipDocumentTotals
+                discount={persistedVipDiscount({
+                  grand_total: totalAmount,
+                  vip_applied: orderSlip.vip_applied,
+                  vip_tier: orderSlip.vip_tier,
+                  vip_percentage: orderSlip.vip_percentage,
+                  vip_discount_amount: orderSlip.vip_discount_amount,
+                })}
+                formatMoney={formatMoney}
+                grandTotalColSpan={3}
+                amountClassName="order-slip-amount"
+              />
             </tfoot>
           </table>
 

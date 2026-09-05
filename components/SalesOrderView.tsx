@@ -41,6 +41,8 @@ import { PageHeader, RecordTrustStrip, WorkflowGuidance } from './common/PageSca
 import CallCustomerButton from './CallCustomerButton';
 import SalesOrderPrintPreview from './SalesOrderPrintPreview';
 import { exportPrintSheetAsJpeg } from '../utils/exportPrintSheetJpeg';
+import { persistedVipDiscount } from '../utils/vipDocumentDiscount';
+import VipDocumentTotals from './VipDocumentTotals';
 
 interface SalesOrderViewProps {
   initialOrderId?: string;
@@ -810,6 +812,13 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
   }) | null;
   const legacyItems = (selectedOrder?.items || []) as Array<SalesOrder['items'][number] & { brand?: string }>;
   const totalQuantity = legacyItems.reduce((sum, item) => sum + Number(item.qty || 0), 0);
+  const vipDiscount = persistedVipDiscount({
+    grand_total: Number(selectedOrder?.grand_total || 0),
+    vip_applied: selectedOrder?.vip_applied,
+    vip_tier: selectedOrder?.vip_tier,
+    vip_percentage: selectedOrder?.vip_percentage,
+    vip_discount_amount: selectedOrder?.vip_discount_amount,
+  });
   const legacyListDate = (value?: string | null) => {
     if (!value) return '';
     const normalized = String(value).split('T')[0];
@@ -1009,9 +1018,16 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                   <tbody>{legacyItems.map((item, index) => <tr key={item.id || `${item.item_code}-${index}`} className="border-b border-[#e1e1e1] text-center">
                     <td className="px-2 py-2">{item.item_code || ''}</td><td className="px-2 py-2">{item.qty}</td><td className="px-2 py-2">{item.location || ''}</td><td className="px-2 py-2">{item.part_no || ''}</td><td className="px-2 py-2">{item.brand || ''}</td><td className="px-2 py-2 text-left">{item.description || ''}</td><td className="px-2 py-2 text-right">{Number(item.unit_price || 0).toFixed(2)}</td><td className="px-2 py-2">{item.remark || item.approval_status || ''}</td><td className="px-2 py-2 text-right">{Number(item.amount || 0).toFixed(2)}</td>
                   </tr>)}</tbody>
-                  <tfoot><tr>
+                  <tfoot>
+                    <tr>
                     <td className="px-2 py-3 text-right font-bold">Total Qty:</td><td className="px-2 py-3"><span data-jpeg-export-plain-value className="inline-flex min-h-[24px] items-center rounded-full bg-[#6f91af] px-3 py-1 font-bold leading-tight text-white">{totalQuantity.toFixed(2)}</span></td><td colSpan={5}></td><td className="px-2 py-3 text-right font-bold">Grand Total:</td><td className="px-2 py-3"><span data-jpeg-export-plain-value className="inline-flex min-h-[24px] items-center rounded-full bg-[#ef4b4b] px-3 py-1 font-bold leading-tight text-white">{Number(selectedOrder?.grand_total || 0).toFixed(2)}</span></td>
-                  </tr></tfoot>
+                    </tr>
+                    <VipDocumentTotals
+                      discount={vipDiscount}
+                      formatMoney={(value) => value.toFixed(2)}
+                      grandTotalColSpan={8}
+                    />
+                  </tfoot>
                 </table>
               </div>
 
@@ -1439,6 +1455,11 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                       </td>
                       <td className="border-t border-slate-200 dark:border-slate-700"></td>
                     </tr>
+                    <VipDocumentTotals
+                      discount={vipDiscount}
+                      formatMoney={formatCurrency}
+                      grandTotalColSpan={7}
+                    />
                   </tfoot>
                 </table>
               </div>

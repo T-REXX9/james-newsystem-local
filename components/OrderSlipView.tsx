@@ -29,6 +29,8 @@ import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 import { getLocalAuthSession } from '../services/localAuthService';
 import { normalizePriceGroup } from '../constants/pricingGroups';
 import OrderSlipPrintPreview from './OrderSlipPrintPreview';
+import { persistedVipDiscount } from '../utils/vipDocumentDiscount';
+import VipDocumentTotals from './VipDocumentTotals';
 import {
   dispatchWorkflowNotification,
   markNotificationsAsReadByEntityKey,
@@ -693,6 +695,13 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
     return 'Unposted';
   };
   const selectedItems = selectedSlip?.items || [];
+  const vipDiscount = persistedVipDiscount({
+    grand_total: Number(selectedSlip?.grand_total || 0),
+    vip_applied: selectedSlip?.vip_applied,
+    vip_tier: selectedSlip?.vip_tier,
+    vip_percentage: selectedSlip?.vip_percentage,
+    vip_discount_amount: selectedSlip?.vip_discount_amount,
+  });
   const handleExportJpeg = () => {
     if (!selectedSlip) {
       addToast({
@@ -828,7 +837,18 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                 <tbody>{selectedItems.length > 0 ? selectedItems.map((item, index) => <tr key={item.id || `${item.item_code}-${index}`} className="bg-[#fafafa]">
                   <td className="px-2 py-[9px]"><input readOnly value={item.qty} className="h-[35px] w-[70px] rounded border border-[#ccc] bg-white px-2" /></td><td className="px-2 py-[9px]"><input readOnly value={item.description || ''} className={legacyInputClass} /></td><td className="px-2 py-[9px]"><select disabled value={String(item.unit_price || 0)} className={`${legacyInputClass} disabled:bg-white disabled:text-[#333]`}><option value={String(item.unit_price || 0)}>{Number(item.unit_price || 0).toFixed(2)}</option></select></td><td className="px-2 py-[9px]"><input readOnly value={Number(item.amount || 0).toFixed(2)} className="h-[35px] w-[70px] rounded border border-[#ccc] bg-white px-2" /></td>
                 </tr>) : <tr className="bg-[#fafafa]"><td className="px-2 py-[9px]"><input readOnly className="h-[35px] w-[70px] rounded border border-[#ccc] bg-white px-2" /></td><td className="px-2 py-[9px]"><input readOnly className={legacyInputClass} /></td><td className="px-2 py-[9px]"><select disabled className={`${legacyInputClass} disabled:bg-white`}><option /></select></td><td className="px-2 py-[9px]"><input readOnly className="h-[35px] w-[70px] rounded border border-[#ccc] bg-white px-2" /></td></tr>}</tbody>
-                <tfoot><tr><td colSpan={4} className="px-2 py-[9px] text-right font-bold">Total: <span data-jpeg-export-plain-value className="inline-flex min-h-[24px] items-center rounded-full bg-[#6f91af] px-3 py-1 font-bold leading-tight text-white">{Number(selectedSlip?.grand_total || 0).toFixed(2)}</span></td></tr></tfoot>
+                <tfoot>
+                  <tr>
+                    <td colSpan={4} className="px-2 py-[9px] text-right font-bold">
+                      Total: <span data-jpeg-export-plain-value className="inline-flex min-h-[24px] items-center rounded-full bg-[#6f91af] px-3 py-1 font-bold leading-tight text-white">{Number(selectedSlip?.grand_total || 0).toFixed(2)}</span>
+                    </td>
+                  </tr>
+                  <VipDocumentTotals
+                    discount={vipDiscount}
+                    formatMoney={(value) => value.toFixed(2)}
+                    grandTotalColSpan={3}
+                  />
+                </tfoot>
               </table>
             </div>
 
@@ -1214,6 +1234,11 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                       <span className="inline-flex rounded-full bg-brand-blue/10 px-3 py-1 font-bold text-brand-blue">{formatCurrency(selectedSlip.grand_total)}</span>
                     </td>
                   </tr>
+                  <VipDocumentTotals
+                    discount={vipDiscount}
+                    formatMoney={formatCurrency}
+                    grandTotalColSpan={7}
+                  />
                 </tfoot>
               </table>
             </div>

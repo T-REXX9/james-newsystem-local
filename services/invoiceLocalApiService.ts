@@ -1,5 +1,6 @@
 import { Invoice, InvoiceStatus, InvoiceItem } from '../types';
 import { getLocalAuthSession } from './localAuthService';
+import { readPersistedVip } from '../utils/vipDocumentDiscount';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
@@ -88,6 +89,7 @@ const mapInvoiceSummary = (raw: any): Invoice => {
     urgency: '',
     urgency_date: '',
     grand_total: toNumber(raw?.grand_total, 0),
+    ...readPersistedVip(raw),
     status: mapApiStatusToUi(raw?.status),
     due_date: undefined,
     payment_date: undefined,
@@ -114,6 +116,7 @@ const mapInvoiceDetail = (payload: any): Invoice => {
     ...mapped,
     items: items.map((row: any) => mapApiItem(row, mapped.id)),
     grand_total: toNumber(summary?.grand_total, mapped.grand_total),
+    ...readPersistedVip({ ...mapped, ...summary, ...invoice }),
   };
 };
 

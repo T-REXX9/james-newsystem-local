@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Printer, XCircle } from 'lucide-react';
 import { Contact, Invoice } from '../types';
+import { buildInvoiceVipSummary } from '../utils/invoiceVipTotals';
+import { vipTierPrintLabel } from '../utils/vipDocumentDiscount';
 
 interface InvoicePrintPreviewProps {
   invoice: Invoice;
@@ -22,17 +24,17 @@ const dateFormatter = new Intl.DateTimeFormat('en-PH', {
   year: 'numeric',
 });
 
-const LEGACY_COMPANY = {
+const COMPANY = {
   name: 'TND OPC',
   city: 'Taguig City',
 };
 
-const MAX_ITEM_ROWS = 18;
+const MAX_ITEM_ROWS = 12;
 
 const printStyles = `
   @page {
-    size: 24.4cm 27.8cm;
-    margin: 0.5cm;
+    size: A5 portrait;
+    margin: 0.4cm;
   }
 
   .invoice-print-root {
@@ -40,102 +42,144 @@ const printStyles = `
   }
 
   .invoice-print-sheet {
-    width: 24.4cm;
-    min-height: 27.8cm;
+    width: 14.8cm;
+    min-height: 21cm;
     background: #fff;
     color: #000;
-    padding: 0.25cm 0.4cm 0.2cm;
+    padding: 0.35cm 0.4cm 0.3cm;
     box-sizing: border-box;
   }
 
-  .invoice-old-print-body {
-    font-size: 13px;
-    line-height: 1.1;
+  .invoice-a5-body {
+    font-size: 0.7rem;
+    line-height: 1.2;
   }
 
-  .invoice-old-print-body table {
+  .invoice-a5-body table {
     border-collapse: collapse;
     width: 100%;
   }
 
   .invoice-company-header {
     text-align: center;
-    font-size: 15px;
+  }
+
+  .invoice-company-header h1 {
+    margin: 0;
+    font-size: 1.05rem;
+    letter-spacing: 0.04em;
   }
 
   .invoice-company-header p {
     margin: 0;
   }
 
-  .invoice-meta-table td {
-    vertical-align: top;
-    padding: 0;
+  .invoice-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin: 0.35rem 0 0.4rem;
+    gap: 0.5rem;
   }
 
-  .invoice-item-list {
-    border: none;
-    width: 100%;
-    text-align: left;
-  }
-
-  .invoice-item-list td,
-  .invoice-item-list th {
-    border: none;
-  }
-
-  .invoice-item-list tbody td {
-    font-size: 13px;
-  }
-
-  .invoice-item-list thead th {
-    color: transparent;
-    font-size: 12pt;
-    font-weight: bold;
-    text-align: center;
-    height: 0;
-    line-height: 0;
-    padding: 0;
-  }
-
-  .invoice-item-row {
-    height: 15px;
-  }
-
-  .invoice-item-description {
-    text-align: center;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .invoice-grand-total {
-    text-decoration: overline;
-  }
-
-  .invoice-summary-float {
-    float: right;
-    text-align: right;
-    margin-top: 0.1cm;
-  }
-
-  .invoice-summary-float p {
-    font-size: 8pt;
+  .invoice-doc-title {
     margin: 0;
-    font-weight: bold;
-    line-height: 1.2;
+    font-size: 0.95rem;
+    letter-spacing: 0.08em;
   }
 
-  .invoice-preview-controls,
-  .invoice-preview-note,
-  .invoice-preview-warning {
-    print-color-adjust: exact;
-    -webkit-print-color-adjust: exact;
+  .invoice-sale-type {
+    display: flex;
+    gap: 0.75rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .invoice-box {
+    display: inline-block;
+    min-width: 0.7rem;
+    text-align: center;
+    border: 1px solid #000;
+    margin-right: 0.2rem;
+    font-weight: 700;
+  }
+
+  .invoice-meta-grid {
+    width: 100%;
+    margin-bottom: 0.35rem;
+  }
+
+  .invoice-meta-grid td {
+    vertical-align: top;
+    padding: 0.08rem 0.15rem;
+  }
+
+  .invoice-label {
+    font-weight: 700;
+    white-space: nowrap;
+    width: 18%;
+  }
+
+  .invoice-item-grid {
+    border: 1px solid #000;
+  }
+
+  .invoice-item-grid th,
+  .invoice-item-grid td {
+    border: 1px solid #000;
+    padding: 0.12rem 0.18rem;
+  }
+
+  .invoice-item-grid th {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+  }
+
+  .invoice-item-grid .qty,
+  .invoice-item-grid .price,
+  .invoice-item-grid .amount {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .invoice-bottom {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 0.35rem;
+    align-items: flex-start;
+  }
+
+  .invoice-tax-box,
+  .invoice-totals-box {
+    border: 1px solid #000;
+    padding: 0.3rem 0.35rem;
+  }
+
+  .invoice-tax-box {
+    width: 42%;
+  }
+
+  .invoice-totals-box {
+    width: 58%;
+  }
+
+  .invoice-totals-box table td {
+    padding: 0.08rem 0.1rem;
+  }
+
+  .invoice-totals-box .amount {
+    text-align: right;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .invoice-signature {
+    margin-top: 0.55rem;
+    text-align: center;
   }
 
   @media print {
     html, body {
-      margin: 0 !important;
-      padding: 0 !important;
       background: #fff !important;
       color: #000 !important;
       -webkit-print-color-adjust: exact;
@@ -187,7 +231,7 @@ const formatDate = (value?: string | null): string => {
   return dateFormatter.format(parsed);
 };
 
-const legacyItemAmount = (item: Invoice['items'][number]): number => {
+const lineAmount = (item: Invoice['items'][number]): number => {
   const amount = Number(item.amount);
   if (Number.isFinite(amount) && amount > 0) return amount;
   return Number(item.qty || 0) * Number(item.unit_price || 0);
@@ -202,80 +246,35 @@ const InvoicePrintPreview: React.FC<InvoicePrintPreviewProps> = ({
 }) => {
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const lineGrandTotal = useMemo(
-    () => invoice.items.reduce((sum, item) => sum + legacyItemAmount(item), 0),
+    () => invoice.items.reduce((sum, item) => sum + lineAmount(item), 0),
     [invoice.items]
   );
 
-  const vatType = customer?.vatType || 'Exclusive';
   const displayedItems = invoice.items.slice(0, MAX_ITEM_ROWS);
   const overflowCount = Math.max(0, invoice.items.length - MAX_ITEM_ROWS);
   const totalQty = invoice.items.reduce((sum, item) => sum + Number(item.qty || 0), 0);
+  const isCash = /cash|cod/i.test(String(invoice.terms || customer?.terms || ''));
 
-  const summary = useMemo(() => {
-    if (vatType === 'Inclusive') {
-      const totalSales = lineGrandTotal;
-      const lessVat = lineGrandTotal - lineGrandTotal / 1.12;
-      const total = lineGrandTotal - lessVat;
-      const totalAmountDue = lineGrandTotal;
-      const vatableSale = total;
-      const addVat = Math.abs(lessVat);
-      const finalTotal = lineGrandTotal;
-      return {
-        taxName: '(VAT Inclusive)',
-        totalSales,
-        lessVat,
-        total,
-        totalAmountDue,
-        vatableSale,
-        addVat,
-        finalTotal,
-      };
-    }
+  const summary = useMemo(
+    () =>
+      buildInvoiceVipSummary({
+        lineGrandTotal,
+        vatType: customer?.vatType,
+        vip_applied: invoice.vip_applied,
+        vip_tier: invoice.vip_tier,
+        vip_percentage: invoice.vip_percentage,
+        vip_discount_amount: invoice.vip_discount_amount,
+      }),
+    [customer?.vatType, invoice.vip_applied, invoice.vip_discount_amount, invoice.vip_percentage, invoice.vip_tier, lineGrandTotal]
+  );
 
-    if (vatType === 'Exclusive') {
-      const totalSales = lineGrandTotal;
-      const lessVat = 0;
-      const total = lineGrandTotal;
-      const totalAmountDue = lineGrandTotal;
-      const vatableSale = total;
-      const addVat = lineGrandTotal * 1.12 - totalSales;
-      const finalTotal = lineGrandTotal * 1.12;
-      return {
-        taxName: '(VAT Exclusive)',
-        totalSales,
-        lessVat,
-        total,
-        totalAmountDue,
-        vatableSale,
-        addVat,
-        finalTotal,
-      };
-    }
-
-    return {
-      taxName: '( )',
-      totalSales: 0,
-      lessVat: 0,
-      total: 0,
-      totalAmountDue: 0,
-      vatableSale: 0,
-      addVat: 0,
-      finalTotal: 0,
-    };
-  }, [lineGrandTotal, vatType]);
-
-  const productType = customer?.businessLine || invoice.price_group || '';
   const soldTo = customer?.company || '';
   const soldToAddress = customer?.address || invoice.delivery_address || '';
-  const deliverTo = invoice.delivery_address || customer?.deliveryAddress || '';
-  const yourReference = invoice.customer_reference || '';
-  const ourReference = invoice.reference_no || '';
-  const terms = invoice.terms || '';
-  const poNumber = invoice.po_number || '';
   const tin = customer?.tin || '';
-  const businessLine = customer?.businessLine || '';
-  const salesman = invoice.sales_person || customer?.salesman || '';
-  const shippedVia = invoice.send_by || '';
+  const businessLine = customer?.businessLine || invoice.price_group || '';
+  const discountLabel = summary.discount.applied
+    ? `Less: Discount (${vipTierPrintLabel(summary.discount.tier)})`
+    : 'Less: Discount';
 
   useEffect(() => {
     if (!captureMode || !onSheetReady) return;
@@ -299,11 +298,11 @@ const InvoicePrintPreview: React.FC<InvoicePrintPreviewProps> = ({
 
       {!captureMode && (
         <>
-          <div className="invoice-preview-controls mx-auto mb-4 flex max-w-[1100px] items-center justify-between gap-3 rounded-2xl bg-white/95 px-4 py-3 shadow-xl backdrop-blur dark:bg-slate-900/95">
+          <div className="invoice-preview-controls mx-auto mb-4 flex max-w-[40rem] items-center justify-between gap-3 rounded-2xl bg-white/95 px-4 py-3 shadow-xl backdrop-blur dark:bg-slate-900/95">
             <div>
-              <h2 className="text-base font-semibold text-slate-900 dark:text-white">Legacy Invoice Print Template</h2>
+              <h2 className="text-base font-semibold text-slate-900 dark:text-white">A5 TND OPC Sales Invoice</h2>
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                React port of the old system invoice print layout.
+                BIR-style A5 print. JPEG capture uses this same sheet.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -326,14 +325,9 @@ const InvoicePrintPreview: React.FC<InvoicePrintPreviewProps> = ({
             </div>
           </div>
 
-          <div className="invoice-preview-note mx-auto mb-4 max-w-[1100px] rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
-            This version follows the old PHP invoice template much more directly, including the same table widths,
-            line spacing, VAT summary order, and item row rhythm.
-          </div>
-
           {overflowCount > 0 && (
-            <div className="invoice-preview-warning mx-auto mb-4 max-w-[1100px] rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              {overflowCount} additional item{overflowCount === 1 ? '' : 's'} exceed the first-page legacy layout.
+            <div className="invoice-preview-warning mx-auto mb-4 max-w-[40rem] rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {overflowCount} additional item{overflowCount === 1 ? '' : 's'} exceed the first-page A5 layout.
             </div>
           )}
         </>
@@ -347,221 +341,161 @@ const InvoicePrintPreview: React.FC<InvoicePrintPreviewProps> = ({
             : 'invoice-print-sheet mx-auto border border-dashed border-slate-300 shadow-2xl'
         }
       >
-        <div className="invoice-old-print-body">
-          <div style={{ height: '0.8cm' }} />
-
+        <div className="invoice-a5-body">
           <div className="invoice-company-header">
-            <p>{LEGACY_COMPANY.name}</p>
-            <p>{LEGACY_COMPANY.city}</p>
+            <h1>{COMPANY.name}</h1>
+            <p>{COMPANY.city}</p>
+            <p>VAT REGISTERED</p>
           </div>
 
-          <div style={{ height: '0.7cm' }} />
-          <div style={{ height: '0.7cm' }} />
+          <div className="invoice-title-row">
+            <h2 className="invoice-doc-title">SALES INVOICE</h2>
+            <div className="invoice-sale-type">
+              <span>
+                <span className="invoice-box">{isCash ? 'X' : ''}</span>
+                CASH SALES
+              </span>
+              <span>
+                <span className="invoice-box">{isCash ? '' : 'X'}</span>
+                CHARGE SALES
+              </span>
+            </div>
+          </div>
 
-          <table className="invoice-meta-table" style={{ fontSize: 13, width: '100%' }}>
+          <table className="invoice-meta-grid">
             <tbody>
               <tr>
-                <td style={{ width: '70%', paddingLeft: '3.1cm', fontWeight: 400 }}>{soldTo}</td>
-                <td colSpan={2} />
+                <td className="invoice-label">Sold To:</td>
+                <td>{soldTo}</td>
+                <td className="invoice-label">Date:</td>
+                <td>{formatDate(invoice.sales_date || invoice.created_at)}</td>
               </tr>
               <tr>
-                <td style={{ width: '70%', paddingLeft: '4.1cm' }}>{soldToAddress}</td>
-                <td style={{ width: '15%', paddingLeft: '1.1cm' }}>{formatDate(invoice.sales_date || invoice.created_at)}</td>
-                <td style={{ width: '15%', paddingLeft: '0.5cm' }}>{yourReference}</td>
+                <td className="invoice-label">Address:</td>
+                <td>{soldToAddress}</td>
+                <td className="invoice-label">Terms:</td>
+                <td>{invoice.terms || customer?.terms || ''}</td>
               </tr>
               <tr>
-                <td style={{ width: '70%', color: '#fff' }}>.</td>
-                <td style={{ width: '15%' }} />
-                <td style={{ width: '15%' }} />
+                <td className="invoice-label">TIN:</td>
+                <td>{tin}</td>
+                <td className="invoice-label">P.O. No.:</td>
+                <td>{invoice.po_number || ''}</td>
               </tr>
               <tr>
-                <td style={{ width: '70%', color: '#fff' }}>.</td>
-                <td style={{ width: '15%' }}>{ourReference}</td>
-                <td style={{ width: '15%', paddingLeft: '1.3cm' }}>{terms}</td>
-              </tr>
-              <tr>
-                <td style={{ width: '70%', paddingLeft: '5.2cm' }}>{businessLine}</td>
-                <td style={{ width: '15%' }} />
-                <td style={{ width: '15%' }} />
-              </tr>
-              <tr>
-                <td style={{ width: '70%', paddingLeft: '4cm' }}>{tin}</td>
-                <td style={{ width: '15%' }}>{poNumber}</td>
-                <td style={{ width: '15%' }} />
-              </tr>
-              <tr>
-                <td style={{ width: '70%', color: '#fff' }}>.</td>
-                <td style={{ width: '15%' }} />
-                <td style={{ width: '15%' }} />
-              </tr>
-              <tr>
-                <td style={{ width: '70%', paddingLeft: '2.9cm' }}>{deliverTo}</td>
-                <td style={{ width: '15%' }}>{shippedVia}</td>
-                <td style={{ width: '15%', paddingLeft: '0.8cm' }}>{salesman}</td>
+                <td className="invoice-label">Bus. Style:</td>
+                <td>{businessLine}</td>
+                <td className="invoice-label">INV No.:</td>
+                <td>{invoice.invoice_no || ''}</td>
               </tr>
             </tbody>
           </table>
 
-          <div style={{ height: '0.35cm' }} />
-          <div style={{ height: '0.55cm' }} />
+          <table className="invoice-item-grid">
+            <thead>
+              <tr>
+                <th style={{ width: '12%' }}>Qty</th>
+                <th style={{ width: '14%' }}>Unit</th>
+                <th>Articles</th>
+                <th style={{ width: '18%' }}>Unit Price</th>
+                <th style={{ width: '18%' }}>Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayedItems.map((item, index) => (
+                <tr key={item.id || `${item.item_code || item.part_no || 'item'}-${index}`}>
+                  <td className="qty">{item.qty}</td>
+                  <td>PC</td>
+                  <td>{item.description || item.item_code || item.part_no || '-'}</td>
+                  <td className="price">{formatMoney(Number(item.unit_price || 0))}</td>
+                  <td className="amount">{formatMoney(lineAmount(item))}</td>
+                </tr>
+              ))}
+              {Array.from({ length: Math.max(0, MAX_ITEM_ROWS - displayedItems.length) }).map((_, index) => (
+                <tr key={`blank-${index}`}>
+                  <td>&nbsp;</td>
+                  <td />
+                  <td />
+                  <td />
+                  <td />
+                </tr>
+              ))}
+              <tr>
+                <td colSpan={4} style={{ textAlign: 'right' }}>
+                  <strong>Grand Total</strong>
+                </td>
+                <td className="amount">
+                  <strong>{formatMoney(lineGrandTotal)}</strong>
+                </td>
+              </tr>
+            </tbody>
+          </table>
 
-          <div style={{ minHeight: '300px', maxHeight: '300px' }}>
-            <table className="invoice-item-list">
-              <thead>
-                <tr>
-                  <th />
-                  <th />
-                  <th />
-                  <th />
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td />
-                  <td />
-                  <td style={{ textAlign: 'center', fontSize: 14, fontWeight: 700, textTransform: 'uppercase' }}>
-                    <u>{productType || '-'}</u>
-                  </td>
-                  <td style={{ textAlign: 'right', fontSize: 14, fontWeight: 700 }}>
-                    <u>PESOS</u>
-                  </td>
-                  <td style={{ textAlign: 'right', fontSize: 14, fontWeight: 700 }}>
-                    <u>PESOS</u>
-                  </td>
-                </tr>
-              </tbody>
-              <tbody>
-                {displayedItems.map((item, index) => {
-                  const rowAmount = legacyItemAmount(item);
-                  return (
-                    <tr key={item.id || `${item.item_code}-${index}`} className="invoice-item-row">
-                      <td style={{ textAlign: 'left', width: '10%' }}>{item.qty}</td>
-                      <td style={{ textAlign: 'center', width: '10%' }}>{item.item_code}</td>
-                      <td className="invoice-item-description" style={{ width: '40%' }}>
-                        {[item.part_no, item.description].filter(Boolean).join(' ')}
-                      </td>
-                      <td style={{ textAlign: 'right', width: '20%' }}>{formatMoney(Number(item.unit_price) || 0)}</td>
-                      <td style={{ textAlign: 'right', width: '20%', fontWeight: 700 }}>{formatMoney(rowAmount)}</td>
-                    </tr>
-                  );
-                })}
-                {Array.from({ length: Math.max(0, MAX_ITEM_ROWS - displayedItems.length) }).map((_, index) => (
-                  <tr key={`blank-${index}`} className="invoice-item-row">
-                    <td style={{ width: '10%' }} />
-                    <td style={{ width: '10%' }} />
-                    <td style={{ width: '40%' }} />
-                    <td style={{ width: '20%' }} />
-                    <td style={{ width: '20%' }} />
+          <div className="invoice-bottom">
+            <div className="invoice-tax-box">
+              <div><strong>SC/PWD ID No.:</strong></div>
+              <div><strong>SC/PWD TIN:</strong></div>
+              <div><strong>OSCA/PWD ID No.:</strong></div>
+              <p style={{ margin: '0.35rem 0 0' }}>
+                Total Qty: {totalQty}
+              </p>
+            </div>
+            <div className="invoice-totals-box">
+              <table>
+                <tbody>
+                  <tr>
+                    <td>Total Sales {summary.taxName}</td>
+                    <td className="amount">{formatMoney(summary.totalSales)}</td>
                   </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colSpan={4} />
-                  <td className="invoice-grand-total" style={{ textAlign: 'right', width: '20%', fontWeight: 700 }}>
-                    {formatMoney(lineGrandTotal)}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
+                  <tr>
+                    <td>Less VAT</td>
+                    <td className="amount">{formatMoney(summary.lessVat)}</td>
+                  </tr>
+                  <tr>
+                    <td>Total</td>
+                    <td className="amount">{formatMoney(summary.total)}</td>
+                  </tr>
+                  <tr>
+                    <td>{discountLabel}</td>
+                    <td className="amount">{formatMoney(summary.discount.discountAmount)}</td>
+                  </tr>
+                  <tr>
+                    <td><strong>TOTAL AMOUNT DUE</strong></td>
+                    <td className="amount">{formatMoney(summary.totalAmountDue)}</td>
+                  </tr>
+                  <tr>
+                    <td>VATable Sale</td>
+                    <td className="amount">{formatMoney(summary.vatableSale)}</td>
+                  </tr>
+                  <tr>
+                    <td>VAT Exempt Sale</td>
+                    <td className="amount">0.00</td>
+                  </tr>
+                  <tr>
+                    <td>VAT Zero Rated Sale</td>
+                    <td className="amount">0.00</td>
+                  </tr>
+                  <tr>
+                    <td>Add : 12% VAT</td>
+                    <td className="amount">{formatMoney(summary.addVat)}</td>
+                  </tr>
+                  <tr>
+                    <td>Less : W/H Tax</td>
+                    <td className="amount">0.00</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Total</strong></td>
+                    <td className="amount">{formatMoney(summary.finalTotal)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          <div className="invoice-summary-float">
-            <p>{formatMoney(summary.totalSales)}</p>
-            <p>{formatMoney(summary.lessVat)}</p>
-            <p>{formatMoney(summary.total)}</p>
-            <p>0.00</p>
-            <p>{formatMoney(summary.totalAmountDue)}</p>
-            <p>{formatMoney(summary.vatableSale)}</p>
-            <p>0.00</p>
-            <p>{formatMoney(summary.addVat)}</p>
-            <p>0.00</p>
-            <p>{formatMoney(summary.finalTotal)}</p>
-          </div>
-
-          <div style={{ clear: 'both' }} />
-
-          <table style={{ width: '100%', marginTop: '0.1cm' }}>
-            <tbody>
-              <tr>
-                <td style={{ width: '70%', fontSize: 9, color: '#fff' }}>
-                  condition placeholder
-                </td>
-                <td style={{ width: '30%' }}>
-                  <table style={{ fontSize: 9, fontWeight: 700, borderCollapse: 'separate', borderSpacing: '8px' }}>
-                    <tbody>
-                      <tr>
-                        <td style={{ width: '140px' }}>Total Sales {summary.taxName}</td>
-                        <td style={{ fontSize: 11, textAlign: 'right' }}>{formatMoney(summary.totalSales)}</td>
-                      </tr>
-                      <tr>
-                        <td>Less VAT</td>
-                        <td style={{ fontSize: 11, textAlign: 'right' }}>{formatMoney(summary.lessVat)}</td>
-                      </tr>
-                      <tr>
-                        <td>Total</td>
-                        <td style={{ fontSize: 11, textAlign: 'right' }}>{formatMoney(summary.total)}</td>
-                      </tr>
-                      <tr>
-                        <td>Less: SC/PWD Discount</td>
-                        <td style={{ fontSize: 11, textAlign: 'right' }}>0.00</td>
-                      </tr>
-                      <tr>
-                        <td>Total Amount Due</td>
-                        <td style={{ fontSize: 11, textAlign: 'right' }}>{formatMoney(summary.totalAmountDue)}</td>
-                      </tr>
-                      <tr>
-                        <td>VATable Sale</td>
-                        <td style={{ fontSize: 11, textAlign: 'right' }}>{formatMoney(summary.vatableSale)}</td>
-                      </tr>
-                      <tr>
-                        <td>VAT Exemt Sale</td>
-                        <td style={{ fontSize: 11, textAlign: 'right' }}>0.00</td>
-                      </tr>
-                      <tr>
-                        <td>VAT Zero Rated Sale</td>
-                        <td style={{ fontSize: 11, textAlign: 'right' }}>0.00</td>
-                      </tr>
-                      <tr>
-                        <td>Add : 12% VAT</td>
-                        <td style={{ fontSize: 11, textAlign: 'right' }}>{formatMoney(summary.addVat)}</td>
-                      </tr>
-                      <tr>
-                        <td>Less :W/H Tax</td>
-                        <td style={{ fontSize: 11, textAlign: 'right' }}>0.00</td>
-                      </tr>
-                      <tr>
-                        <td>Total</td>
-                        <td style={{ fontSize: 11, textAlign: 'right' }}>{formatMoney(summary.finalTotal)}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-
-          <div style={{ marginTop: '0.5cm', fontSize: 9 }}>
-            <table style={{ width: '100%' }}>
-              <tbody>
-                <tr>
-                  <td style={{ width: '15%' }} />
-                  <td style={{ width: '40%', textAlign: 'center' }}>
-                    <strong>Receivied the above in good order and condition.</strong>
-                  </td>
-                  <td style={{ width: '40%', textAlign: 'center' }}>
-                    <strong>Receivied the above in good order and condition.</strong>
-                    <div style={{ marginTop: '0.45cm' }}>______________________</div>
-                    <h6 style={{ margin: '0.15cm 0 0', fontSize: 9 }}>AUTHORIZED SIGNATURE</h6>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div style={{ marginTop: '0.25cm', fontSize: 10, fontWeight: 700 }}>
-            Total Qty: {totalQty}
+          <div className="invoice-signature">
+            <div>Received the above in good order and condition.</div>
+            <div style={{ marginTop: '0.7rem' }}>______________________</div>
+            <div>AUTHORIZED SIGNATURE</div>
           </div>
         </div>
       </div>

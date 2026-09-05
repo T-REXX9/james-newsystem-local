@@ -1,5 +1,6 @@
 import { Contact, Invoice, InvoiceStatus, OrderSlip, OrderSlipStatus, SalesOrder, SalesOrderItem, SalesOrderStatus } from '../types';
 import { getLocalAuthSession } from './localAuthService';
+import { readPersistedVip } from '../utils/vipDocumentDiscount';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
@@ -87,6 +88,7 @@ const mapApiOrderSummary = (raw: any): SalesOrder => {
     urgency: '',
     urgency_date: '',
     grand_total: toNumber(raw?.grand_total, 0),
+    ...readPersistedVip(raw),
     status: normalizeOldSystemStatus(raw?.status || raw?.transaction_status) as SalesOrderStatus,
     can_approve: Boolean(raw?.viewer_is_approver),
     approved_by: '',
@@ -116,6 +118,7 @@ const mapApiOrderDetail = (payload: any): SalesOrder => {
     ...mapped,
     items: items.map((item: any) => mapApiItem(item, mapped.id)),
     grand_total: toNumber(summary?.grand_total, mapped.grand_total),
+    ...readPersistedVip({ ...mapped, ...summary, ...order }),
   };
 };
 

@@ -1,5 +1,6 @@
 import { OrderSlip, OrderSlipItem, OrderSlipStatus } from '../types';
 import { getLocalAuthSession } from './localAuthService';
+import { readPersistedVip } from '../utils/vipDocumentDiscount';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
@@ -98,6 +99,7 @@ const mapOrderSlipSummary = (raw: any): OrderSlip => {
     urgency: '',
     urgency_date: '',
     grand_total: toNumber(raw?.grand_total, 0),
+    ...readPersistedVip(raw),
     status: mapApiStatusToUi(raw?.status),
     printed_at: toNumber(raw?.is_printed, 0) > 0 ? String(raw?.created_at || '') : undefined,
     printed_by: '',
@@ -123,6 +125,7 @@ const mapOrderSlipDetail = (payload: any): OrderSlip => {
     ...mapped,
     items: items.map((row: any) => mapApiItem(row, mapped.id)),
     grand_total: toNumber(summary?.grand_total, mapped.grand_total),
+    ...readPersistedVip({ ...mapped, ...summary, ...orderSlip }),
     tracking_options: Array.isArray(payload?.tracking_options)
       ? payload.tracking_options.map((value: unknown) => String(value || '')).filter(Boolean)
       : [],

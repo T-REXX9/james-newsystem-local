@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { Printer, XCircle } from 'lucide-react';
 import { Contact, SalesOrder } from '../types';
+import { persistedVipDiscount } from '../utils/vipDocumentDiscount';
+import VipDocumentTotals from './VipDocumentTotals';
 
 interface SalesOrderPrintPreviewProps {
   order: SalesOrder;
@@ -332,6 +334,18 @@ const SalesOrderPrintPreview: React.FC<SalesOrderPrintPreviewProps> = ({
                   <strong>{formatMoney(Number(order.grand_total || totalAmount))}</strong>
                 </td>
               </tr>
+              <VipDocumentTotals
+                discount={persistedVipDiscount({
+                  grand_total: Number(order.grand_total || totalAmount),
+                  vip_applied: order.vip_applied,
+                  vip_tier: order.vip_tier,
+                  vip_percentage: order.vip_percentage,
+                  vip_discount_amount: order.vip_discount_amount,
+                })}
+                formatMoney={formatMoney}
+                grandTotalColSpan={8}
+                amountClassName="amount"
+              />
             </tbody>
           </table>
         </div>

@@ -18,6 +18,7 @@ export type CustomerLedgerMetrics = {
   dealership_sales: number;
   dealership_quota: number;
   monthly_sales: number;
+  last_month_sales: number;
   customer_since: string | null;
   credit_limit: number;
   terms: string;
@@ -180,6 +181,7 @@ export const customerLedgerService = {
         dealership_sales: toNumber(data?.metrics?.dealership_sales),
         dealership_quota: toNumber(data?.metrics?.dealership_quota),
         monthly_sales: toNumber(data?.metrics?.monthly_sales),
+        last_month_sales: toNumber(data?.metrics?.last_month_sales),
         customer_since: data?.metrics?.customer_since || null,
         credit_limit: toNumber(data?.metrics?.credit_limit),
         terms: String(data?.metrics?.terms || ''),

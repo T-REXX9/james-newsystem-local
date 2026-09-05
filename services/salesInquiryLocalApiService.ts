@@ -1,5 +1,6 @@
 import { SalesInquiry, SalesInquiryDTO, SalesInquiryItem, SalesInquiryStatus, SalesOrder } from '../types';
 import { getLocalAuthSession } from './localAuthService';
+import { readPersistedVip } from '../utils/vipDocumentDiscount';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
@@ -97,6 +98,7 @@ const mapApiInquiry = (row: any): SalesInquiry => {
     urgency: String(row?.urgency || ''),
     urgency_date: String(row?.urgency_date || ''),
     grand_total: toNumber(row?.grand_total, 0),
+    ...readPersistedVip(row),
     created_by: String(row?.sales_person_id || ''),
     created_at: [row?.sales_date, row?.sales_time].filter(Boolean).join(' '),
     updated_at: undefined,
@@ -132,6 +134,11 @@ const buildInquiryPayload = (dto: SalesInquiryDTO) => ({
   urgency: dto.urgency,
   urgency_date: dto.urgency_date || null,
   status: mapUiStatusToApi(dto.status),
+  vip_applied: dto.vip_applied ? 1 : 0,
+  vip_tier: dto.vip_tier || 'regular',
+  vip_percentage: dto.vip_percentage || 0,
+  vip_discount_amount: dto.vip_discount_amount || 0,
+  total_to_pay: dto.total_to_pay,
   items: dto.items.map((item) => ({
     item_id: item.item_id || '',
     item_refno: item.item_id || '',

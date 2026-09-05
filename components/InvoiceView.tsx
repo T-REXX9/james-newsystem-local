@@ -6,6 +6,9 @@ import ModuleRecordAction from './ModuleRecordAction';
 import { navigateWorkflow } from '../utils/workflowNavigate';
 import WorkflowStepper from './WorkflowStepper';
 import InvoicePrintPreview from './InvoicePrintPreview';
+import { buildInvoiceVipSummary } from '../utils/invoiceVipTotals';
+import { vipTierPrintLabel } from '../utils/vipDocumentDiscount';
+import VipDocumentTotals from './VipDocumentTotals';
 import {
   getInvoice,
   getAllInvoices,
@@ -305,6 +308,14 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
   const subtotal = selectedInvoice?.items.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
   const vatAmount = subtotal * VAT_RATE;
   const grandTotal = selectedInvoice?.grand_total || subtotal + vatAmount;
+  const invoiceVipSummary = buildInvoiceVipSummary({
+    lineGrandTotal: Number(selectedInvoice?.grand_total || subtotal || 0),
+    vatType: selectedCustomer?.vatType,
+    vip_applied: selectedInvoice?.vip_applied,
+    vip_tier: selectedInvoice?.vip_tier,
+    vip_percentage: selectedInvoice?.vip_percentage,
+    vip_discount_amount: selectedInvoice?.vip_discount_amount,
+  });
   const canProcessInvoice = isInvoiceAllowedForTransactionType(selectedCustomer?.transactionType);
   const totalQty = selectedInvoice?.items.reduce((sum, item) => sum + item.qty, 0) || 0;
 
@@ -698,7 +709,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
               <div className="grid grid-cols-[7%_38%_10%_18%_9%_18%] items-center"><div className="col-span-2"></div><label className={legacyLabelClass}>Del. to:</label><div className="pl-2"><input readOnly value="" className={legacyInputClass} /></div><label className={legacyLabelClass}>PO No.:</label><div><input readOnly value={selectedInvoice?.po_number || ''} className={legacyInputClass} /></div></div>
             </div>
 
-            <div className="mt-[39px] border-t border-[#e5e5e5] pt-[29px] overflow-x-auto"><table className="w-full min-w-[950px] table-fixed border-collapse text-[12px]"><thead><tr className="border-b-2 border-[#d5d5d5] text-center text-[14px] font-semibold"><th className="px-2 pb-2">Item Code</th><th className="px-2 pb-2">Quantity</th><th className="px-2 pb-2">Location.</th><th className="px-2 pb-2">Part No.</th><th className="px-2 pb-2">Brand</th><th className="px-2 pb-2">Description</th><th className="px-2 pb-2">Unit price</th><th className="px-2 pb-2">Remark</th><th className="px-2 pb-2">Amount</th></tr></thead><tbody>{legacyItems.map((item, index) => <tr key={item.id || `${item.item_code}-${index}`} className="border-b border-[#e1e1e1] text-center"><td className="px-2 py-2">{item.item_code || ''}</td><td className="px-2 py-2">{item.qty}</td><td className="px-2 py-2">{item.location || ''}</td><td className="px-2 py-2">{item.part_no || ''}</td><td className="px-2 py-2">{item.brand || ''}</td><td className="px-2 py-2 text-left">{item.description || ''}</td><td className="px-2 py-2 text-right">{Number(item.unit_price || 0).toFixed(2)}</td><td className="px-2 py-2">{item.remark || ''}</td><td className="px-2 py-2 text-right">{Number(item.amount || 0).toFixed(2)}</td></tr>)}</tbody><tfoot><tr><td className="px-2 py-[9px] text-right font-bold">Total Qty:</td><td className="px-2 py-[9px]"><span className="rounded-full bg-[#6f91af] px-2 py-[2px] font-bold text-white">{totalQty}</span></td><td colSpan={5}></td><td className="px-2 py-[9px] text-right font-bold">Grand Total:</td><td className="px-2 py-[9px]"><span className="rounded-full bg-[#ef4b4b] px-2 py-[2px] font-bold text-white">{Number(selectedInvoice?.grand_total || 0).toFixed(2)}</span></td></tr></tfoot></table></div>
+            <div className="mt-[39px] border-t border-[#e5e5e5] pt-[29px] overflow-x-auto"><table className="w-full min-w-[950px] table-fixed border-collapse text-[12px]"><thead><tr className="border-b-2 border-[#d5d5d5] text-center text-[14px] font-semibold"><th className="px-2 pb-2">Item Code</th><th className="px-2 pb-2">Quantity</th><th className="px-2 pb-2">Location.</th><th className="px-2 pb-2">Part No.</th><th className="px-2 pb-2">Brand</th><th className="px-2 pb-2">Description</th><th className="px-2 pb-2">Unit price</th><th className="px-2 pb-2">Remark</th><th className="px-2 pb-2">Amount</th></tr></thead><tbody>{legacyItems.map((item, index) => <tr key={item.id || `${item.item_code}-${index}`} className="border-b border-[#e1e1e1] text-center"><td className="px-2 py-2">{item.item_code || ''}</td><td className="px-2 py-2">{item.qty}</td><td className="px-2 py-2">{item.location || ''}</td><td className="px-2 py-2">{item.part_no || ''}</td><td className="px-2 py-2">{item.brand || ''}</td><td className="px-2 py-2 text-left">{item.description || ''}</td><td className="px-2 py-2 text-right">{Number(item.unit_price || 0).toFixed(2)}</td><td className="px-2 py-2">{item.remark || ''}</td><td className="px-2 py-2 text-right">{Number(item.amount || 0).toFixed(2)}</td></tr>)}</tbody><tfoot><tr><td className="px-2 py-[9px] text-right font-bold">Total Qty:</td><td className="px-2 py-[9px]"><span className="rounded-full bg-[#6f91af] px-2 py-[2px] font-bold text-white">{totalQty}</span></td><td colSpan={5}></td><td className="px-2 py-[9px] text-right font-bold">Grand Total:</td><td className="px-2 py-[9px]"><span className="rounded-full bg-[#ef4b4b] px-2 py-[2px] font-bold text-white">{Number(selectedInvoice?.grand_total || 0).toFixed(2)}</span></td></tr><VipDocumentTotals discount={invoiceVipSummary.discount} formatMoney={(value) => value.toFixed(2)} grandTotalColSpan={8} variant="invoice" amountDue={invoiceVipSummary.totalAmountDue} /></tfoot></table></div>
 
             {selectedInvoice && <div className="mt-2 flex flex-wrap justify-end gap-[5px] border-t border-[#e3e3e3] pt-3 print:hidden"><button type="button" onClick={() => void handlePrint()} disabled={printing || !canProcessInvoice} className="rounded-[4px] bg-[#5d82a2] px-[15px] py-[9px] text-[13px] text-white disabled:opacity-50">{printing ? 'Printing...' : 'Print INV'}</button>{isPostedOrSent && <button type="button" onClick={() => setUnpostModalOpen(true)} className="rounded-[4px] bg-[#d64b47] px-[15px] py-[9px] text-[13px] text-white">UNPOST</button>}{!isCancelled && <button type="button" onClick={() => setCancelModalOpen(true)} className="rounded-[4px] bg-[#d64b47] px-[15px] py-[9px] text-[13px] text-white">Cancel INV</button>}<button type="button" onClick={() => { setJpegCaptureMode(false); setShowPrintPreview(true); }} className="rounded-[4px] bg-[#5d82a2] px-[15px] py-[9px] text-[13px] text-white">Preview Layout</button>{isAdminOrOwner && <button type="button" onClick={() => { setEditInvoiceNo(selectedInvoice.invoice_no); setEditInvoiceDate(selectedInvoice.sales_date); setEditReason(''); setEditTrackingNo(selectedInvoice.send_by || ''); setEditNumberModalOpen(true); }} className="rounded-[4px] border border-[#ccc] px-[15px] py-[8px] text-[13px]">Edit Number</button>}{selectedInvoice.order_id && <ModuleRecordAction tab="sales-transaction-sales-order" payload={{ orderId: selectedInvoice.order_id }} className="rounded-[4px] border border-[#ccc] px-[15px] py-[8px] text-[13px]" newWindowLabel="Open sales order in new window">View Sales Order</ModuleRecordAction>}</div>}
           </div>
@@ -1138,11 +1149,11 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                 <div className="min-w-[280px] space-y-3">
                   {/* Block 1: VAT Inclusive breakdown */}
                   <div className="space-y-1 text-sm text-slate-700 dark:text-slate-200">
-                    <div className="flex justify-between"><span>Total Sales (VAT Inclusive)</span><span>₱0.00</span></div>
-                    <div className="flex justify-between"><span>Less: VAT</span><span>₱0.00</span></div>
-                    <div className="flex justify-between"><span>Total</span><span>₱0.00</span></div>
-                    <div className="flex justify-between"><span>Less: SC/PWD Discount</span><span>₱0.00</span></div>
-                    <div className="flex justify-between font-semibold"><span>Total Amount Due</span><span>₱0.00</span></div>
+                    <div className="flex justify-between"><span>Total Sales {invoiceVipSummary.taxName}</span><span>{formatCurrency(invoiceVipSummary.totalSales)}</span></div>
+                    <div className="flex justify-between"><span>Less: VAT</span><span>{formatCurrency(invoiceVipSummary.lessVat)}</span></div>
+                    <div className="flex justify-between"><span>Total</span><span>{formatCurrency(invoiceVipSummary.total)}</span></div>
+                    <div className="flex justify-between"><span>{invoiceVipSummary.discount.applied ? `Less: Discount (${vipTierPrintLabel(invoiceVipSummary.discount.tier)})` : 'Less: SC/PWD Discount'}</span><span>{formatCurrency(invoiceVipSummary.discount.discountAmount)}</span></div>
+                    <div className="flex justify-between font-semibold"><span>Total Amount Due</span><span>{formatCurrency(invoiceVipSummary.totalAmountDue)}</span></div>
                   </div>
 
                   <div className="border-t border-slate-200 dark:border-slate-700"></div>
@@ -1155,7 +1166,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                     <div className="flex justify-between"><span>Less: W/H Tax</span><span>₱0.00</span></div>
                     <div className="flex justify-between font-bold text-base pt-1 border-t border-slate-200 dark:border-slate-700">
                       <span>TOTAL</span>
-                      <span>{formatCurrency(grandTotal)}</span>
+                      <span>{formatCurrency(invoiceVipSummary.finalTotal)}</span>
                     </div>
                   </div>
                 </div>

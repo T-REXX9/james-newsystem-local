@@ -619,6 +619,84 @@ describe('SalesInquiryView', () => {
     expect(screen.queryByText('Dealership Quota')).not.toBeInTheDocument();
   });
 
+  it('shows VIP Silver discount and TOTAL to pay on a qualifying first inquiry', async () => {
+    const user = userEvent.setup();
+    getLedgerMock.mockResolvedValue({
+      metrics: {
+        dealership_sales: 125000,
+        monthly_sales: 2500,
+        last_month_sales: 15000,
+        customer_since: '2019-03-01',
+        credit_limit: 10000,
+        terms: '30 days',
+        balance: 0,
+      },
+      summary_rows: [],
+    });
+    getAllSalesInquiriesMock.mockResolvedValue([
+      makeInquiry({
+        id: 'inq-vip',
+        inquiry_no: 'INQ26-20478',
+        contact_id: 'c-1',
+        sales_date: '2026-04-08',
+        created_at: '2026-04-08',
+        grand_total: 7560,
+        items: [
+          {
+            id: 'item-1',
+            inquiry_id: 'inq-vip',
+            item_id: 'p-1',
+            qty: 1,
+            part_no: 'PN-1',
+            item_code: 'IC-1',
+            location: '',
+            description: 'Widget',
+            unit_price: 7560,
+            amount: 7560,
+            remark: '',
+            approval_status: 'approved',
+          },
+        ],
+      }),
+    ]);
+    getSalesInquiryMock.mockResolvedValue(
+      makeInquiry({
+        id: 'inq-vip',
+        inquiry_no: 'INQ26-20478',
+        contact_id: 'c-1',
+        sales_date: '2026-04-08',
+        created_at: '2026-04-08',
+        grand_total: 7560,
+        items: [
+          {
+            id: 'item-1',
+            inquiry_id: 'inq-vip',
+            item_id: 'p-1',
+            qty: 1,
+            part_no: 'PN-1',
+            item_code: 'IC-1',
+            location: '',
+            description: 'Widget',
+            unit_price: 7560,
+            amount: 7560,
+            remark: '',
+            approval_status: 'approved',
+          },
+        ],
+      })
+    );
+
+    render(<SalesInquiryView />);
+
+    await user.click(await screen.findByText('INQ26-20478'));
+    await waitFor(() => expect(getLedgerMock).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(screen.getByText('10% VIP SILVER = 756.00')).toBeInTheDocument();
+      expect(screen.getByText('TOTAL to pay :')).toBeInTheDocument();
+      expect(screen.getByText('6804.00')).toBeInTheDocument();
+    });
+  });
+
   it('shows how much more this month is needed for VIP Silver and VIP Gold', async () => {
     const user = userEvent.setup();
     render(<SalesInquiryView />);

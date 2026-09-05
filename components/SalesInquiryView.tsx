@@ -57,6 +57,14 @@ import {
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
 import { buildSalesInquiryCustomerSummary } from '../utils/salesInquirySummary';
+import {
+  benefitMonthKey,
+  lastMonthSpendFromSummary,
+  resolveDocumentVipDiscount,
+  toVipSavePayload,
+  type VipDealDocument,
+} from '../utils/vipDocumentDiscount';
+import VipDocumentTotals from './VipDocumentTotals';
 import { fetchCouriers, CourierRecord } from '../services/courierLocalApiService';
 import { fetchRemarkTemplates, RemarkTemplateRecord } from '../services/remarkTemplateLocalApiService';
 import {
@@ -257,9 +265,16 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   // Form State
   const [selectedCustomer, setSelectedCustomer] = useState<Contact | null>(null);
   const [vipConfig, setVipConfig] = useState<VipTierConfig>(DEFAULT_VIP_TIER_CONFIG);
-  const [postedSales, setPostedSales] = useState<{ ishinomotoSales: number | null; currentMonthSales: number | null }>({
+  const [postedSales, setPostedSales] = useState<{
+    ishinomotoSales: number | null;
+    currentMonthSales: number | null;
+    lastMonthSales: number | null;
+    summaryRows: Array<{ year: number; month: number; debit: number }>;
+  }>({
     ishinomotoSales: null,
     currentMonthSales: null,
+    lastMonthSales: null,
+    summaryRows: [],
   });
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [submitCount, setSubmitCount] = useState(0);
@@ -311,12 +326,12 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   useEffect(() => {
     const customerId = selectedCustomer?.id;
     if (!customerId) {
-      setPostedSales({ ishinomotoSales: null, currentMonthSales: null });
+      setPostedSales({ ishinomotoSales: null, currentMonthSales: null, lastMonthSales: null, summaryRows: [] });
       return;
     }
 
     let cancelled = false;
-    setPostedSales({ ishinomotoSales: null, currentMonthSales: null });
+    setPostedSales({ ishinomotoSales: null, currentMonthSales: null, lastMonthSales: null, summaryRows: [] });
     void customerLedgerService
       .getLedger(customerId, { reportType: 'summary', dateType: 'all' })
       .then((ledger) => {
@@ -324,11 +339,17 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         setPostedSales({
           ishinomotoSales: ledger.metrics.dealership_sales,
           currentMonthSales: ledger.metrics.monthly_sales,
+          lastMonthSales: ledger.metrics.last_month_sales,
+          summaryRows: (ledger.summary_rows || []).map((row) => ({
+            year: Number(row.year || 0),
+            month: Number(row.month || 0),
+            debit: Number(row.debit || 0),
+          })),
         });
       })
       .catch(() => {
         if (!cancelled) {
-          setPostedSales({ ishinomotoSales: null, currentMonthSales: null });
+          setPostedSales({ ishinomotoSales: null, currentMonthSales: null, lastMonthSales: null, summaryRows: [] });
         }
       });
 
@@ -892,6 +913,51 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
   // Calculate grand total
   const grandTotal = items.reduce((sum, item) => sum + (item.amount || 0), 0);
+  const vipDiscount = useMemo(() => {
+    const current: VipDealDocument = {
+      id: selectedInquiry?.id || 'new-inquiry',
+      kind: 'sales_inquiry',
+      salesDate,
+      cancelled: selectedInquiry?.status === SalesInquiryStatus.CANCELLED,
+      deleted: Boolean(selectedInquiry?.is_deleted),
+    };
+    const monthKey = benefitMonthKey(salesDate);
+    const customerDocumentsInBenefitMonth: VipDealDocument[] = inquiries
+      .filter((inquiry) => {
+        if (!selectedCustomer?.id || inquiry.contact_id !== selectedCustomer.id) return false;
+        return benefitMonthKey(inquiry.sales_date) === monthKey;
+      })
+      .map((inquiry) => ({
+        id: inquiry.id,
+        kind: 'sales_inquiry' as const,
+        salesDate: inquiry.sales_date,
+        cancelled: inquiry.status === SalesInquiryStatus.CANCELLED,
+        deleted: Boolean(inquiry.is_deleted),
+      }));
+
+    const lastMonthSpend = postedSales.summaryRows.length > 0
+      ? lastMonthSpendFromSummary(salesDate, postedSales.summaryRows)
+      : postedSales.lastMonthSales || 0;
+
+    return resolveDocumentVipDiscount({
+      grandTotal,
+      lastMonthSpend,
+      vipConfig,
+      current,
+      customerDocumentsInBenefitMonth,
+    });
+  }, [
+    grandTotal,
+    inquiries,
+    postedSales.lastMonthSales,
+    postedSales.summaryRows,
+    salesDate,
+    selectedCustomer?.id,
+    selectedInquiry?.id,
+    selectedInquiry?.is_deleted,
+    selectedInquiry?.status,
+    vipConfig,
+  ]);
   const printableInquiry = useMemo<SalesInquiry | null>(() => {
     if (!selectedInquiry || isCreatingNew) return null;
 
@@ -930,6 +996,11 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       urgency: urgency || selectedInquiry.urgency,
       urgency_date: urgencyDate || selectedInquiry.urgency_date,
       grand_total: grandTotal,
+      vip_applied: vipDiscount.applied,
+      vip_tier: vipDiscount.tier,
+      vip_percentage: vipDiscount.percentage,
+      vip_discount_amount: vipDiscount.discountAmount,
+      total_to_pay: vipDiscount.totalToPay,
       items: printableItems,
     };
   }, [
@@ -956,6 +1027,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     terms,
     urgency,
     urgencyDate,
+    vipDiscount,
   ]);
 
   // Handle submit
@@ -1010,6 +1082,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         urgency: urgency,
         urgency_date: urgency !== 'N/A' ? urgencyDate : undefined,
         status: selectedInquiry && !isCreatingNew ? selectedInquiry.status : SalesInquiryStatus.DRAFT,
+        ...toVipSavePayload(vipDiscount),
         items: items.map(({ tempId, isManual, brand, ...rest }) => ({
           ...rest,
           qty: rest.qty === '' ? 1 : Number(rest.qty) || 1,
@@ -1577,7 +1650,20 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                   <td className={`px-2 py-2 text-center ${remarkClassName(item.remark)}`}>{item.remark || ''}</td>
                   <td className="px-2 py-2 text-center"><button type="button" onClick={() => removeItemRow(item.tempId)} disabled={isReadOnly} className="text-[#c84848] underline disabled:opacity-40">Remove</button></td>
                 </tr>)}</tbody>
-                <tfoot><tr><td colSpan={6} className="px-2 py-3 text-right font-bold">Grand Total:</td><td className="px-2 py-3"><span data-jpeg-export-plain-value className="inline-flex min-h-[24px] items-center rounded-full bg-[#6f91af] px-3 py-1 font-bold leading-tight text-white">{grandTotal.toFixed(2)}</span></td><td colSpan={2}></td></tr></tfoot>
+                <tfoot>
+                  <tr>
+                    <td colSpan={6} className="px-2 py-3 text-right font-bold">Grand Total:</td>
+                    <td className="px-2 py-3">
+                      <span data-jpeg-export-plain-value className="inline-flex min-h-[24px] items-center rounded-full bg-[#6f91af] px-3 py-1 font-bold leading-tight text-white">{grandTotal.toFixed(2)}</span>
+                    </td>
+                    <td colSpan={2}></td>
+                  </tr>
+                  <VipDocumentTotals
+                    discount={vipDiscount}
+                    formatMoney={(value) => value.toFixed(2)}
+                    grandTotalColSpan={6}
+                  />
+                </tfoot>
               </table>
             </div>
 
@@ -2359,6 +2445,11 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                         </td>
                         <td colSpan={2} className="border-t border-slate-200 dark:border-slate-800"></td>
                       </tr>
+                      <VipDocumentTotals
+                        discount={vipDiscount}
+                        formatMoney={formatCurrency}
+                        grandTotalColSpan={8}
+                      />
                       <tr>
                         <td colSpan={6} className="px-3 py-3 border-t border-slate-200 dark:border-slate-800">
                           <div className="flex flex-wrap items-center gap-2">
