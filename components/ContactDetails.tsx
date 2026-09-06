@@ -303,7 +303,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
                           </div>
                           <div className="flex justify-between">
                               <span className="text-slate-500">Since</span>
-                              <span className="font-medium text-slate-700 dark:text-slate-200">{contact.dealershipSince || contact.customerSince}</span>
+                              <span className="font-medium text-slate-700 dark:text-slate-200">{contact.dealershipSince || '—'}</span>
                           </div>
                           <div className="flex justify-between">
                               <span className="text-slate-500">Credit Limit</span>

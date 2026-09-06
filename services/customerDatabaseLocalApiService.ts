@@ -46,6 +46,9 @@ interface ApiCustomerRow {
   dealer_since?: string | null;
   date_registered?: string | null;
   ldatereg?: string | null;
+  since?: string | null;
+  customer_since?: string | null;
+  lsince?: string | null;
   team?: string | null;
   sales_person_name?: string | null;
   salesman?: string | null;
@@ -183,6 +186,16 @@ const sanitizeLegacyString = (value: unknown): string => {
   return normalized;
 };
 
+const EMPTY_DATE_SENTINELS = new Set(['1970-01-01', '0000-00-00', '0000-00-00 00:00:00']);
+
+const sanitizeCustomerDate = (value: unknown): string => {
+  const normalized = sanitizeLegacyString(value);
+  if (!normalized) return '';
+  const dateOnly = normalized.slice(0, 10);
+  if (EMPTY_DATE_SENTINELS.has(normalized) || EMPTY_DATE_SENTINELS.has(dateOnly)) return '';
+  return normalized;
+};
+
 const parseApiErrorMessage = async (response: Response): Promise<string> => {
   try {
     const payload = await response.json();
@@ -284,7 +297,7 @@ export const mapApiCustomerToContact = (row: ApiCustomerRow): LocalContact => {
   return {
     id: String(row?.session_id ?? row?.lsessionid ?? row?.id ?? ''),
     company,
-    customerSince: sanitizeLegacyString(row?.dealer_since || row?.date_registered || row?.ldatereg || ''),
+    customerSince: sanitizeCustomerDate(row?.since || row?.customer_since || row?.lsince || ''),
     team: sanitizeLegacyString(row?.team || ''),
     salesman: resolvedSalesName,
     referBy: sanitizeLegacyString(row?.refer_by || ''),
@@ -303,7 +316,7 @@ export const mapApiCustomerToContact = (row: ApiCustomerRow): LocalContact => {
     vatType: normalizeVatType(row?.vat_type),
     vatPercentage: String(toNumber(row?.vat_percent, 0.12) * 100),
     dealershipTerms: sanitizeLegacyString(row?.dealer_terms || ''),
-    dealershipSince: sanitizeLegacyString(row?.dealer_since || ''),
+    dealershipSince: sanitizeCustomerDate(row?.dealer_since || ''),
     dealershipQuota: toNumber(row?.dealer_quota, 0),
     creditLimit: toNumber(row?.credit_limit, 0),
     preferredBrand: normalizePreferredBrand(row?.preferred_brand) || undefined,
@@ -361,7 +374,8 @@ export const mapContactPayloadToApi = (contact: ContactPayloadWithSalesPersonId)
     transaction_type: String(contact?.transactionType || 'Order Slip'),
     vat_type: String(contact?.vatType || DEFAULT_CUSTOMER_VAT_TYPE),
     vat_percent: toNumber(contact?.vatPercentage, 12) / 100,
-    dealer_since: String(contact?.dealershipSince || ''),
+    since: sanitizeCustomerDate(contact?.customerSince || ''),
+    dealer_since: sanitizeCustomerDate(contact?.dealershipSince || ''),
     dealer_quota: toNumber(contact?.dealershipQuota, 0),
     credit_limit: toNumber(contact?.creditLimit, 0),
     preferred_brand: normalizePreferredBrand(contact?.preferredBrand),
@@ -401,7 +415,8 @@ export const mapContactUpdatesToApi = (contact: Partial<ContactPayloadWithSalesP
   if (hasOwn(contact, 'transactionType')) payload.transaction_type = String(contact.transactionType || '');
   if (hasOwn(contact, 'vatType')) payload.vat_type = String(contact.vatType || '');
   if (hasOwn(contact, 'vatPercentage')) payload.vat_percent = toNumber(contact.vatPercentage, 12) / 100;
-  if (hasOwn(contact, 'dealershipSince')) payload.dealer_since = String(contact.dealershipSince || '');
+  if (hasOwn(contact, 'customerSince')) payload.since = sanitizeCustomerDate(contact.customerSince || '');
+  if (hasOwn(contact, 'dealershipSince')) payload.dealer_since = sanitizeCustomerDate(contact.dealershipSince || '');
   if (hasOwn(contact, 'dealershipQuota')) payload.dealer_quota = toNumber(contact.dealershipQuota, 0);
   if (hasOwn(contact, 'creditLimit')) payload.credit_limit = toNumber(contact.creditLimit, 0);
   if (hasOwn(contact, 'preferredBrand')) payload.preferred_brand = normalizePreferredBrand(contact.preferredBrand);

@@ -116,7 +116,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
   const buildFormDataFromContact = (contact?: Contact): Partial<Contact> => ({
     ...buildInitialFormData(),
     company: contact?.company || '',
-    customerSince: contact?.customerSince || today,
+    customerSince: contact?.customerSince || '',
     lastContactDate: contact?.lastContactDate || today,
     team: contact?.team || '',
     salesman: contact?.salesman || '',
@@ -240,7 +240,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
       const newContact: Omit<Contact, 'id'> = {
         // Core Identifiers
         company: (formData.company || '').trim(),
-        customerSince: formData.customerSince || today,
+        customerSince: isEditMode ? (formData.customerSince || '') : (formData.customerSince || today),
         team: formData.team || '',
         salesman: formData.salesman || '',
         referBy: formData.referBy || '',
@@ -439,7 +439,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                        </div>
                        <div>
                            <label className="label">Customer Since</label>
-                           <input type="date" className="input" value={formData.customerSince} onChange={e => setFormData({...formData, customerSince: e.target.value})} />
+                           <input type="date" aria-label="Customer Since" className="input" value={formData.customerSince} onChange={e => setFormData({...formData, customerSince: e.target.value})} />
                        </div>
                        <div>
                            <label className="label">Team</label>
