@@ -73,19 +73,20 @@ const mapApiItem = (row: any, inquiryId: string): SalesInquiryItem => ({
 
 const mapApiInquiry = (row: any): SalesInquiry => {
   const inquiryId = String(row?.inquiry_refno || row?.id || '');
+  const inquiryNo = String(row?.inquiry_no || '').trim();
   const mappedItems: SalesInquiryItem[] = Array.isArray(row?.items)
     ? row.items.map((item: any) => mapApiItem(item, inquiryId))
     : [];
 
   return {
     id: inquiryId,
-    inquiry_no: String(row?.inquiry_no || ''),
+    inquiry_no: inquiryNo,
     contact_id: String(row?.contact_id || ''),
     sales_date: String(row?.sales_date || ''),
     sales_time: String(row?.sales_time || ''),
     sales_person: String(row?.sales_person || ''),
     delivery_address: String(row?.delivery_address || ''),
-    reference_no: String(row?.reference_no || ''),
+    reference_no: inquiryNo,
     customer_reference: String(row?.customer_reference || ''),
     send_by: '',
     price_group: String(row?.price_group || ''),

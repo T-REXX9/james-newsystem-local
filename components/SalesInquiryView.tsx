@@ -397,15 +397,6 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     return `INQ${String(date.getFullYear()).slice(-2)}-${nextCounter}`;
   }, [getNextLegacyInquiryCounter]);
 
-  const generateLegacyReferenceNo = useCallback(() => {
-    const date = new Date();
-    const year = String(date.getFullYear()).slice(-2);
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const dateValue = Number.parseInt(`${year}${month}${day}`, 10);
-    return `REF${dateValue + getNextLegacyInquiryCounter()}`;
-  }, [getNextLegacyInquiryCounter]);
-
   const formatInquiryDisplayNo = useCallback((value: string | undefined | null): string => {
     const raw = String(value || '').trim().toUpperCase();
     if (!raw) return '';
@@ -608,8 +599,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   useEffect(() => {
     const newInquiryNo = generateInquiryNumber();
     setInquiryNo(newInquiryNo);
-    setReferenceNo(generateLegacyReferenceNo());
-  }, [generateInquiryNumber, generateLegacyReferenceNo]);
+    setReferenceNo(newInquiryNo);
+  }, [generateInquiryNumber]);
 
   const resetFormForNew = useCallback(() => {
     const newInquiryNo = generateInquiryNumber();
@@ -620,7 +611,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     setSalesTime(getLocalTimeInputValue());
     setSalesPerson('');
     setDeliveryAddress('');
-    setReferenceNo(generateLegacyReferenceNo());
+    setReferenceNo(newInquiryNo);
     setCustomerReference('');
     setSendBy('');
     setPriceGroup('');
@@ -639,7 +630,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     setSubmitError('');
     setSubmitCount(0);
     setLoadedSnapshot(null);
-  }, [generateInquiryNumber, generateLegacyReferenceNo]);
+  }, [generateInquiryNumber]);
 
   const loadInquiryIntoForm = useCallback((inquiry: SalesInquiry) => {
     const customer = customerMap.get(inquiry.contact_id) || null;
@@ -663,7 +654,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     setSalesTime(normalizedSalesTime || getLocalTimeInputValue());
     setSalesPerson(inquiry.sales_person || customer?.salesman || '');
     setDeliveryAddress(inquiry.delivery_address || customer?.deliveryAddress || customer?.address || '');
-    setReferenceNo(inquiry.reference_no || inquiry.inquiry_no || '');
+    setReferenceNo(inquiry.inquiry_no || '');
     setCustomerReference(inquiry.customer_reference || '');
     setSendBy(inquiry.send_by || '');
     setPoNumber(inquiry.po_number || '');
@@ -689,7 +680,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       salesTime: normalizedSalesTime || '',
       salesPerson: inquiry.sales_person || '',
       deliveryAddress: inquiry.delivery_address || '',
-      referenceNo: inquiry.reference_no || '',
+      referenceNo: inquiry.inquiry_no || '',
       customerReference: inquiry.customer_reference || '',
       sendBy: inquiry.send_by || '',
       poNumber: inquiry.po_number || '',
@@ -979,6 +970,10 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     today,
     vipConfig,
   ]);
+  const activeInquiryNumber = !isCreatingNew && selectedInquiry?.inquiry_no ? selectedInquiry.inquiry_no : inquiryNo;
+  const activeInquiryNumberDisplay = formatInquiryDisplayNo(activeInquiryNumber);
+  const activeInquiryReferenceNo = activeInquiryNumber;
+
   const printableInquiry = useMemo<SalesInquiry | null>(() => {
     if (!selectedInquiry || isCreatingNew) return null;
 
@@ -1004,7 +999,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       sales_time: salesTime || selectedInquiry.sales_time,
       sales_person: salesPerson || selectedInquiry.sales_person,
       delivery_address: deliveryAddress || selectedInquiry.delivery_address,
-      reference_no: referenceNo || selectedInquiry.reference_no,
+      reference_no: activeInquiryReferenceNo,
       customer_reference: customerReference || selectedInquiry.customer_reference,
       send_by: sendBy || selectedInquiry.send_by,
       price_group: priceGroup || selectedInquiry.price_group,
@@ -1029,6 +1024,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     customerReference,
     deliveryAddress,
     grandTotal,
+    activeInquiryReferenceNo,
     inquiryNo,
     inquiryType,
     isCreatingNew,
@@ -1037,7 +1033,6 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     poNumber,
     priceGroup,
     promiseToPay,
-    referenceNo,
     remarks,
     salesDate,
     salesTime,
@@ -1090,7 +1085,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         sales_time: salesTime,
         sales_person: salesPerson,
         delivery_address: deliveryAddress,
-        reference_no: referenceNo,
+        reference_no: activeInquiryReferenceNo,
         customer_reference: customerReference,
         send_by: sendBy,
         price_group: priceGroup,
@@ -1130,7 +1125,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       if (created?.id && (created as SalesInquiry).contact_id) {
         await notifyInquiryEvent(
           'Sales Inquiry Created',
-          `Sales inquiry ${(created as SalesInquiry).inquiry_no || referenceNo} has been created.`,
+          `Sales inquiry ${(created as SalesInquiry).inquiry_no || activeInquiryReferenceNo} has been created.`,
           'create',
           'pending',
           created.id,
@@ -1344,8 +1339,6 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     setSubmitError('');
     setSubmitCount(0);
   };
-  const activeInquiryNumber = !isCreatingNew && selectedInquiry?.inquiry_no ? selectedInquiry.inquiry_no : inquiryNo;
-  const activeInquiryNumberDisplay = formatInquiryDisplayNo(activeInquiryNumber);
   const isConversionLocked = Boolean(selectedInquiry && !isCreatingNew && selectedInquiry.is_editable === false);
   const isReadOnly = selectedInquiry?.status === SalesInquiryStatus.CANCELLED || isConversionLocked;
   const handlePrint = () => {
@@ -1371,7 +1364,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   const handlePrintSheetReady = useCallback(async (sheet: HTMLElement) => {
     if (!jpegCaptureMode) return;
     try {
-      const safeInquiryNo = (activeInquiryNumberDisplay || referenceNo || 'sales-inquiry').replace(/[^a-z0-9-]+/gi, '-');
+      const safeInquiryNo = (activeInquiryNumberDisplay || 'sales-inquiry').replace(/[^a-z0-9-]+/gi, '-');
       await exportPrintSheetAsJpeg({
         element: sheet,
         filename: `${safeInquiryNo}-sales-inquiry.jpg`,
@@ -1389,7 +1382,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       setJpegCaptureMode(false);
       setExportingJpeg(false);
     }
-  }, [activeInquiryNumberDisplay, addToast, jpegCaptureMode, referenceNo]);
+  }, [activeInquiryNumberDisplay, addToast, jpegCaptureMode]);
   const priceGroupDisplay = priceGroup || normalizePriceGroup(priceGroup);
   const canGenerateSO = Boolean(
     selectedInquiry &&
@@ -1648,7 +1641,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
             <table className="w-full border-separate border-spacing-y-[9px] text-[13px]">
               <tbody>
                 <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[15%_31%_9%_10%_9%_9%_8%_9%]"><label className={legacyLabelClass}>Sold to :</label><div className="pl-3"><CustomerAutocomplete contacts={customers} selectedCustomer={selectedCustomer} disabled={isReadOnly} onSelect={(customer) => handleCustomerSelect(customer)} placeholder="Select Customer" inputClassName={`h-[34px] rounded-[4px] border-[#c9c9c9] bg-white text-center text-[13px] ${validationErrors.customer ? 'border-red-400' : ''}`} /></div><label className={legacyLabelClass}>Date :</label><div className="pl-2"><input type="date" required disabled={isReadOnly} value={salesDate} onChange={(event) => setSalesDate(event.target.value)} className={legacyInputClass} /></div><label className={legacyLabelClass}>Time :</label><div className="pl-2"><input type="time" required disabled={isReadOnly} value={salesTime} onChange={(event) => setSalesTime(event.target.value)} className={legacyInputClass} /></div><label className={legacyLabelClass}>Sales Person:</label><div className="pl-2"><input type="text" disabled={isReadOnly} value={salesPerson} onChange={(event) => setSalesPerson(event.target.value)} className={legacyInputClass} /></div></div></td></tr>
-                <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[17%_40%_10.5%_10.5%_9.5%_12.5%]"><label className={legacyLabelClass}>Delivery Address :</label><div className="pl-3"><input type="text" disabled={isReadOnly} value={deliveryAddress} onChange={(event) => setDeliveryAddress(event.target.value)} className={legacyInputClass} /></div><label className={legacyLabelClass}>Our Reference:</label><div className="pl-2"><input type="text" readOnly value={referenceNo} className={legacyInputClass} /></div><label className={legacyLabelClass}>Your Reference:</label><div className="pl-2"><select disabled={isReadOnly || !selectedCustomer} value={customerReference} onChange={(event) => setCustomerReference(event.target.value)} className={legacyInputClass}><option value="">Select reference</option>{customerReferenceOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div></div></td></tr>
+                <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[17%_40%_10.5%_10.5%_9.5%_12.5%]"><label className={legacyLabelClass}>Delivery Address :</label><div className="pl-3"><input type="text" disabled={isReadOnly} value={deliveryAddress} onChange={(event) => setDeliveryAddress(event.target.value)} className={legacyInputClass} /></div><label className={legacyLabelClass}>Our Reference:</label><div className="pl-2"><input type="text" readOnly value={activeInquiryReferenceNo} className={legacyInputClass} /></div><label className={legacyLabelClass}>Your Reference:</label><div className="pl-2"><select disabled={isReadOnly || !selectedCustomer} value={customerReference} onChange={(event) => setCustomerReference(event.target.value)} className={legacyInputClass}><option value="">Select reference</option>{customerReferenceOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div></div></td></tr>
                 <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[12%_20%_10%_19%_10%_11%_9%_9%]"><label className={legacyLabelClass}>Send By:</label><div className="pl-3"><SearchableSelect value={sendBy} options={courierOptions.map((option) => ({ value: option.name, label: option.name }))} onChange={setSendBy} placeholder="Select..." searchPlaceholder="Search courier..." disabled={isReadOnly} /></div><label className={legacyLabelClass}>Price Code:</label><div className="pl-2"><select disabled={isReadOnly || !selectedCustomer} value={priceGroup} onChange={(event) => void handlePriceGroupChange(event.target.value)} className={legacyInputClass}>{!selectedCustomer && <option value="">Select</option>}{WRITABLE_PRICING_GROUP_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div><label className={legacyLabelClass}>Credit Limit:</label><div className="pl-2"><input type="text" readOnly value={creditLimit ? creditLimit.toLocaleString('en-US', { minimumFractionDigits: 2 }) : ''} className={legacyInputClass} /></div><label className={legacyLabelClass}>Terms Strictly:</label><div className="pl-2"><input type="text" readOnly value={terms} className={legacyInputClass} /></div></div></td></tr>
                 <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[17%_63%_10%_10%]"><label className={legacyLabelClass}>Promise to Pay:</label><div className="pl-3"><input type="text" disabled={isReadOnly} value={promiseToPay} onChange={(event) => setPromiseToPay(event.target.value)} placeholder="if applicable" className={legacyInputClass} /></div><label className={legacyLabelClass}>PO No.:</label><div className="pl-2"><input type="text" disabled={isReadOnly} value={poNumber} onChange={(event) => setPoNumber(event.target.value)} placeholder="if applicable" className={legacyInputClass} /></div></div></td></tr>
                 <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[17%_63%_10%_10%]"><label className={legacyLabelClass}>Remarks:</label><div className="pl-3"><SearchableSelect value={remarks} options={remarkTemplateOptions.map((option) => ({ value: option.name, label: option.name }))} onChange={setRemarks} placeholder="No Remark" searchPlaceholder="Search remarks..." disabled={isReadOnly} /></div><label className={legacyLabelClass}>Inquiry Type:</label><div className="pl-2"><select disabled={isReadOnly} value={showNewInquiryType ? 'AddNew' : inquiryType} onChange={(event) => { if (event.target.value === 'AddNew') { setShowNewInquiryType(true); setInquiryType('General'); } else { setInquiryType(event.target.value); setShowNewInquiryType(false); } }} className={legacyInputClass}><option value="General">Phone Call</option><option value="Bulk Order">Bulk Order</option><option value="AddNew">Add New Type</option></select></div></div></td></tr>
@@ -2099,7 +2092,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                     </td>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Our Reference:</td>
                     <td>
-                      <input type="text" readOnly value={referenceNo} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" />
+                      <input type="text" readOnly value={activeInquiryReferenceNo} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" />
                     </td>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Your Reference:</td>
                     <td>

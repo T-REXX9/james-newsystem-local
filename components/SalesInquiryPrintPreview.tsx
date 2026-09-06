@@ -299,7 +299,7 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
               </tr>
               <tr>
                 <td className="sales-inquiry-label">Our Reference:</td>
-                <td><b>{inquiry.reference_no || '-'}</b></td>
+                <td><b>{inquiryNumberLabel || inquiry.inquiry_no || '-'}</b></td>
                 <td className="sales-inquiry-label">Date/Time:</td>
                 <td><b>{formatInquiryDateTime(inquiry.sales_date || inquiry.created_at, inquiry.sales_time)}</b></td>
               </tr>

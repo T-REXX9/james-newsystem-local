@@ -7,6 +7,7 @@ import SalesInquiryView from '../SalesInquiryView';
 const html2canvasMock = vi.hoisted(() => vi.fn());
 const addToastMock = vi.fn();
 const createSalesInquiryMock = vi.fn();
+const updateSalesInquiryMock = vi.fn();
 const getAllSalesInquiriesMock = vi.fn();
 const getSalesInquiryMock = vi.fn();
 const approveInquiryMock = vi.fn();
@@ -40,7 +41,7 @@ vi.mock('../../services/salesInquiryLocalApiService', () => ({
   getAllSalesInquiries: (...args: any[]) => getAllSalesInquiriesMock(...args),
   approveInquiry: (...args: any[]) => approveInquiryMock(...args),
   convertToOrder: vi.fn(),
-  updateSalesInquiry: vi.fn(),
+  updateSalesInquiry: (...args: any[]) => updateSalesInquiryMock(...args),
   getSalesInquiry: (...args: any[]) => getSalesInquiryMock(...args),
   deleteSalesInquiry: vi.fn(),
 }));
@@ -351,6 +352,7 @@ describe('SalesInquiryView', () => {
       makeInquiry({
         id: 'inq-export',
         inquiry_no: 'INQ26-99',
+        reference_no: 'REF-STALE-99',
         contact_id: 'c-1',
         sales_date: '2026-04-08',
         created_at: '2026-04-08',
@@ -376,6 +378,7 @@ describe('SalesInquiryView', () => {
       makeInquiry({
         id: 'inq-export',
         inquiry_no: 'INQ26-99',
+        reference_no: 'REF-STALE-99',
         contact_id: 'c-1',
         sales_date: '2026-04-08',
         created_at: '2026-04-08',
@@ -409,6 +412,7 @@ describe('SalesInquiryView', () => {
     const [capturedElement, options] = html2canvasMock.mock.calls[0];
     expect(capturedElement).toHaveTextContent('CUSTOMER INQUIRY');
     expect(capturedElement).toHaveTextContent('INQ26-99');
+    expect(capturedElement).not.toHaveTextContent('REF-STALE-99');
     expect(capturedElement).not.toHaveTextContent('TND OPC');
     expect(capturedElement).not.toHaveTextContent('Filtered By:');
     expect(options.backgroundColor).toBe('#ffffff');
@@ -421,7 +425,12 @@ describe('SalesInquiryView', () => {
 
   it('auto-selects the first customer contact and keeps PO No. editable when creating an inquiry', async () => {
     const user = userEvent.setup();
-    createSalesInquiryMock.mockResolvedValue({ id: 'inq-1', contact_id: 'c-1' });
+    createSalesInquiryMock.mockImplementation(async (data: { contact_id: string; reference_no: string }) => ({
+      id: 'inq-1',
+      contact_id: data.contact_id,
+      inquiry_no: data.reference_no,
+      reference_no: data.reference_no,
+    }));
 
     render(<SalesInquiryView />);
 
@@ -457,6 +466,21 @@ describe('SalesInquiryView', () => {
     expect(payload.contact_id).toBe('c-1');
     expect(payload.customer_reference).toBe('Bob');
     expect(payload.po_number).toBe('PO-CUSTOM-001');
+    expect(payload.reference_no).toMatch(/^INQ\d{2}-\d+$/);
+
+    const ourReferenceAfterSave = await waitFor(() => screen.getByText('Our Reference:').closest('tr'));
+    expect(within(ourReferenceAfterSave as HTMLElement).getByDisplayValue(payload.reference_no)).toBeInTheDocument();
+  });
+
+  it('shows the generated inquiry number as Our Reference on a new inquiry', async () => {
+    render(<SalesInquiryView />);
+
+    await waitFor(() => expect(fetchContactsMock).toHaveBeenCalled());
+
+    const ourReferenceRow = screen.getByText('Our Reference:').closest('tr');
+    expect(ourReferenceRow).toBeTruthy();
+    expect(within(ourReferenceRow as HTMLElement).getByDisplayValue(/^INQ\d{2}-\d+$/)).toBeInTheDocument();
+    expect(screen.queryByDisplayValue(/^REF/)).not.toBeInTheDocument();
   });
 
   it('defaults the inquiry price group from the selected customer', async () => {
@@ -649,6 +673,69 @@ describe('SalesInquiryView', () => {
     expect(yourReferenceSelect).toHaveValue('Legacy Ref');
     const referenceOptions = within(yourReferenceSelect).getAllByRole('option').map((option) => option.textContent);
     expect(referenceOptions).toEqual(expect.arrayContaining(['Legacy Ref', 'Alice', 'Bob']));
+  });
+
+  it('shows the inquiry number as Our Reference when a saved reference differs', async () => {
+    getAllSalesInquiriesMock.mockResolvedValue([
+      makeInquiry({
+        id: 'inq-stale-reference',
+        inquiry_no: 'INQ26-500',
+        reference_no: 'REF2603241',
+      }),
+    ]);
+    getSalesInquiryMock.mockResolvedValue(
+      makeInquiry({
+        id: 'inq-stale-reference',
+        inquiry_no: 'INQ26-500',
+        reference_no: 'REF2603241',
+      })
+    );
+
+    render(<SalesInquiryView />);
+
+    await userEvent.click(await screen.findByText('INQ26-500'));
+    await waitFor(() => expect(getSalesInquiryMock).toHaveBeenCalledWith('inq-stale-reference'));
+
+    const ourReferenceRow = await waitFor(() => screen.getByText('Our Reference:').closest('tr'));
+    expect(within(ourReferenceRow as HTMLElement).getByDisplayValue('INQ26-500')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('REF2603241')).not.toBeInTheDocument();
+  });
+
+  it('saves the inquiry number as the reference for existing inquiries', async () => {
+    const user = userEvent.setup();
+    const inquiry = makeInquiry({
+      id: 'inq-save-reference',
+      inquiry_no: 'INQ26-501',
+      reference_no: 'REF2603242',
+      items: [
+        {
+          id: 'item-1',
+          inquiry_id: 'inq-save-reference',
+          item_id: 'p-1',
+          qty: 1,
+          part_no: 'PN-1',
+          item_code: 'IC-1',
+          location: '',
+          description: 'Widget',
+          unit_price: 100,
+          amount: 100,
+          remark: '',
+          approval_status: 'approved',
+        },
+      ],
+    });
+    getAllSalesInquiriesMock.mockResolvedValue([inquiry]);
+    getSalesInquiryMock.mockResolvedValue(inquiry);
+    updateSalesInquiryMock.mockResolvedValue(inquiry);
+
+    render(<SalesInquiryView />);
+
+    await user.click(await screen.findByText('INQ26-501'));
+    await waitFor(() => expect(getSalesInquiryMock).toHaveBeenCalledWith('inq-save-reference'));
+    await user.click(screen.getByRole('button', { name: /create inquiry/i }));
+
+    await waitFor(() => expect(updateSalesInquiryMock).toHaveBeenCalledTimes(1));
+    expect(updateSalesInquiryMock.mock.calls[0][1].reference_no).toBe('INQ26-501');
   });
 
   it('shows preferred brand from the selected customer profile', async () => {
