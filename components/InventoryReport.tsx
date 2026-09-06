@@ -68,6 +68,7 @@ const InventoryRow = memo(({ row, index }: { row: InventoryReportRow; index: num
     <td className={tableCellClass}>{row.location || '—'}</td>
     <td className={`${tableCellClass} whitespace-nowrap`}>{formatDateFull(row.lastTransactionDate)}</td>
     <td className={`${tableCellClass} whitespace-nowrap`}>{formatDateFull(row.lastRrDate)}</td>
+    <td className={`${tableCellClass} text-center font-mono`}>{row.lastRrQty ?? 0}</td>
     <td className={`${tableCellClass} text-center font-mono`}>{row.reorderQuantity}</td>
     <td className={`${tableCellClass} text-center font-mono`}>{row.totalStock}</td>
     <td className={`${tableCellClass} inventory-report-currency text-right font-mono`}>
@@ -86,6 +87,7 @@ const ProductRow = memo(({ row, index }: { row: InventoryReportRow; index: numbe
     <td className={tableCellClass}>{row.location || '—'}</td>
     <td className={`${tableCellClass} whitespace-nowrap`}>{formatDateFull(row.lastTransactionDate)}</td>
     <td className={`${tableCellClass} whitespace-nowrap`}>{formatDateFull(row.lastRrDate)}</td>
+    <td className={`${tableCellClass} text-center font-mono`}>{row.lastRrQty ?? 0}</td>
     <td className={`${tableCellClass} text-center font-mono`}>{row.reorderQuantity}</td>
     <td className={`${tableCellClass} text-center font-mono`}>{row.totalStock}</td>
   </tr>
@@ -214,7 +216,7 @@ const InventoryReport: React.FC = () => {
     let csvRows: string[];
 
     if (isInventoryView) {
-      headers = ['Part No', 'Item Code', 'Description', 'Location', 'Last Transaction Date', 'Last RR Date', 'Reorder Quantity', 'VIP 1 Price', 'Total Stock', 'Value'];
+      headers = ['Part No', 'Item Code', 'Description', 'Location', 'Last Transaction Date', 'Last RR Date', 'Last RR Qty', 'Reorder Quantity', 'VIP 1 Price', 'Total Stock', 'Value'];
       csvRows = [
         headers.join(','),
         ...reportData.map((row) => {
@@ -225,6 +227,7 @@ const InventoryReport: React.FC = () => {
             row.location || '',
             row.lastTransactionDate || '',
             row.lastRrDate || '',
+            row.lastRrQty ?? 0,
             row.reorderQuantity,
             row.vip1Price ?? 0,
             row.totalStock,
@@ -234,11 +237,11 @@ const InventoryReport: React.FC = () => {
         }),
       ];
     } else {
-      headers = ['Part No', 'Category', 'Item Code', 'Description', 'Location', 'Last Transaction Date', 'Last RR Date', 'Reorder Quantity', 'Total Stock'];
+      headers = ['Part No', 'Category', 'Item Code', 'Description', 'Location', 'Last Transaction Date', 'Last RR Date', 'Last RR Qty', 'Reorder Quantity', 'Total Stock'];
       csvRows = [
         headers.join(','),
         ...reportData.map((row) => {
-          const values = [row.partNo, row.category, row.itemCode, row.description, row.location || '', row.lastTransactionDate || '', row.lastRrDate || '', row.reorderQuantity, row.totalStock];
+          const values = [row.partNo, row.category, row.itemCode, row.description, row.location || '', row.lastTransactionDate || '', row.lastRrDate || '', row.lastRrQty ?? 0, row.reorderQuantity, row.totalStock];
           return values.map(escapeCSV).join(',');
         }),
       ];
@@ -623,16 +626,17 @@ const InventoryReport: React.FC = () => {
                 <table className="inventory-report-print-table w-full min-w-[1360px] border-collapse text-left print:min-w-0">
                   <colgroup>
                     <col style={{ width: '3%' }} />
-                    <col style={{ width: '15%' }} />
                     <col style={{ width: '14%' }} />
+                    <col style={{ width: '13%' }} />
                     <col style={{ width: '8%' }} />
-                    <col style={{ width: '9%' }} />
+                    <col style={{ width: '8%' }} />
                     <col style={{ width: '5%' }} />
-                    <col style={{ width: '12%' }} />
-                    <col style={{ width: '10%' }} />
+                    <col style={{ width: '11%' }} />
                     <col style={{ width: '9%' }} />
                     <col style={{ width: '7%' }} />
                     <col style={{ width: '8%' }} />
+                    <col style={{ width: '7%' }} />
+                    <col style={{ width: '7%' }} />
                   </colgroup>
                   <thead>
                     <tr>
@@ -644,6 +648,7 @@ const InventoryReport: React.FC = () => {
                       <th className={tableHeadClass}>LOC</th>
                       <th className={tableHeadClass}>LAST TRANSACTION DATE</th>
                       <th className={tableHeadClass}>LAST RR DATE</th>
+                      <th className={tableHeadClass}>LAST RR QTY</th>
                       <th className={tableHeadClass}>REORDER QUANTITY</th>
                       <th className={tableHeadClass}>BALANCE</th>
                       <th className={tableHeadClass}>Value</th>
@@ -654,7 +659,7 @@ const InventoryReport: React.FC = () => {
                       <InventoryRow key={row.id || `${row.partNo}-${index}`} row={row} index={index} />
                     ))}
                     <tr>
-                      <td colSpan={10} className={`${tableCellClass} text-right font-semibold`}>
+                      <td colSpan={11} className={`${tableCellClass} text-right font-semibold`}>
                         Total Value:
                       </td>
                       <td className={`${tableCellClass} inventory-report-currency text-right font-mono font-semibold`}>
@@ -669,13 +674,14 @@ const InventoryReport: React.FC = () => {
                 <table className="inventory-report-print-table w-full min-w-[1100px] border-collapse text-left print:min-w-0">
                   <colgroup>
                     <col style={{ width: '3%' }} />
-                    <col style={{ width: '16%' }} />
-                    <col style={{ width: '12%' }} />
                     <col style={{ width: '15%' }} />
-                    <col style={{ width: '10%' }} />
-                    <col style={{ width: '6%' }} />
-                    <col style={{ width: '13%' }} />
                     <col style={{ width: '11%' }} />
+                    <col style={{ width: '14%' }} />
+                    <col style={{ width: '9%' }} />
+                    <col style={{ width: '5%' }} />
+                    <col style={{ width: '12%' }} />
+                    <col style={{ width: '10%' }} />
+                    <col style={{ width: '7%' }} />
                     <col style={{ width: '8%' }} />
                     <col style={{ width: '6%' }} />
                   </colgroup>
@@ -689,6 +695,7 @@ const InventoryReport: React.FC = () => {
                       <th className={tableHeadClass}>LOC</th>
                       <th className={tableHeadClass}>LAST TRANSACTION DATE</th>
                       <th className={tableHeadClass}>LAST RR DATE</th>
+                      <th className={tableHeadClass}>LAST RR QTY</th>
                       <th className={tableHeadClass}>REORDER QUANTITY</th>
                       <th className={tableHeadClass}>STOCK</th>
                     </tr>
