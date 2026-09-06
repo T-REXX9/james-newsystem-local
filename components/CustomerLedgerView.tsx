@@ -15,6 +15,7 @@ import {
   LedgerDateType,
   LedgerReportType,
 } from '../services/customerLedgerService';
+import { formatCustomerSince } from '../utils/formatUtils';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
@@ -492,7 +493,7 @@ const LedgerReport: React.FC<{
             <div className="grid min-w-[980px] grid-cols-7">
               <LedgerMetricCard
                 label="Customer Since:"
-                value={formatDate(ledgerData.metrics.customer_since)}
+                value={formatCustomerSince(ledgerData.metrics.customer_since) || '-'}
                 color="text-[#1261b5]"
                 icon={<CalendarDays size={28} />}
               />

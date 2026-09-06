@@ -42,6 +42,7 @@ import CallCustomerButton from './CallCustomerButton';
 import SalesOrderPrintPreview from './SalesOrderPrintPreview';
 import { exportPrintSheetAsJpeg } from '../utils/exportPrintSheetJpeg';
 import { persistedVipDiscount } from '../utils/vipDocumentDiscount';
+import { formatCustomerSince } from '../utils/formatUtils';
 import VipDocumentTotals from './VipDocumentTotals';
 
 interface SalesOrderViewProps {
@@ -1326,7 +1327,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                       <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(summaryCustomer?.dealershipSales, true)}</td>
                       <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(summaryCustomer?.dealershipQuota, true)}</td>
                       <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(summaryCustomer?.monthlySales, true)}</td>
-                      <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(summaryCustomer?.since || summaryCustomer?.customerSince)}</td>
+                      <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(formatCustomerSince(summaryCustomer?.since || summaryCustomer?.customerSince) || null)}</td>
                       <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(selectedOrder.credit_limit || selectedCustomer?.creditLimit, true)}</td>
                       <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(selectedOrder.terms || selectedCustomer?.terms)}</td>
                       <td className="py-2 px-2 border border-slate-200 dark:border-slate-800">{displayMetricValue(summaryCustomer?.balance, true)}</td>

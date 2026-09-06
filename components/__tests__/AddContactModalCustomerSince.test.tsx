@@ -94,10 +94,37 @@ describe('AddContactModal Customer Since', () => {
       </ToastProvider>
     );
 
-    expect(screen.getByLabelText('Customer Since')).toHaveValue('2019-05-24');
+    expect(screen.getByLabelText('Customer Since')).toHaveValue('May 24 2019');
 
     await user.click(screen.getByRole('button', { name: /update customer/i }));
     await waitFor(() => expect(onSubmit).toHaveBeenCalled());
     expect(onSubmit.mock.calls[0][0].customerSince).toBe('2019-05-24');
+  });
+
+  it('shows that the customer is already recorded and does not close', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn(async () => {
+      throw new Error('This customer is already recorded: Acme Corp.');
+    });
+    const onClose = vi.fn();
+
+    render(
+      <ToastProvider>
+        <AddContactModal
+          isOpen
+          onClose={onClose}
+          onSubmit={onSubmit}
+          title="Add Prospect"
+          submitLabel="Save Prospect"
+        />
+      </ToastProvider>
+    );
+
+    await user.type(screen.getByPlaceholderText('e.g. Acme Corp'), 'Acme Corp');
+    await user.click(screen.getByRole('button', { name: /save prospect/i }));
+
+    expect(await screen.findByText('This customer is already recorded: Acme Corp.')).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByText('Add Prospect')).toBeInTheDocument();
   });
 });

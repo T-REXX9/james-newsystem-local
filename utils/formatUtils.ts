@@ -1,3 +1,5 @@
+import { format } from 'date-fns';
+
 export const formatCurrency = (value: number, withDecimals: boolean = false) =>
   new Intl.NumberFormat('en-PH', {
     style: 'currency',
@@ -23,6 +25,14 @@ export const formatDate = (value?: string | Date | null) => {
   const parsed = parseDisplayDate(value);
   if (!parsed) return '—';
   return parsed.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+};
+
+/** Staff-facing Customer Since: abbreviated month, day without leading zero, year. */
+export const formatCustomerSince = (value?: string | Date | null): string => {
+  if (!value) return '';
+  const parsed = parseDisplayDate(typeof value === 'string' ? value.slice(0, 10) : value);
+  if (!parsed) return '';
+  return format(parsed, 'MMM d yyyy');
 };
 
 export const formatDateFull = (value?: string | Date | null) => {

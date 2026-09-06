@@ -7,6 +7,7 @@ import {
   purchaseHistoryReportService,
 } from '../services/purchaseHistoryReportService';
 import { retraceWorkflowHistory } from '../utils/workflowHistory';
+import { formatCustomerSince } from '../utils/formatUtils';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
@@ -225,7 +226,7 @@ const PurchaseHistoryReportView: React.FC = () => {
             {report ? (
               <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 divide-x divide-y xl:divide-y-0 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
                 {[
-                  { label: 'Customer Since', value: formatDate(report.customer.customer_since), icon: Calendar, tone: 'text-blue-700' },
+                  { label: 'Customer Since', value: formatCustomerSince(report.customer.customer_since) || '-', icon: Calendar, tone: 'text-blue-700' },
                   { label: 'VIP Status', value: report.customer.vip_status || '-', icon: Crown, tone: 'text-amber-600' },
                   { label: 'Price Code', value: report.customer.price_code.replace(/VIP\s*([0-9]+)/i, 'VIP-$1') || '-', icon: Tags, tone: 'text-purple-700' },
                   { label: 'Total Sales (Current Month)', value: peso.format(report.customer.current_month_sales), icon: TrendingUp, tone: 'text-green-700' },

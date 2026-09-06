@@ -83,7 +83,7 @@ describe('buildSalesInquiryCustomerSummary', () => {
   it('fills Ishinomoto Sales and the kept customer metrics', () => {
     expect(cell('Ishinomoto Sales')?.value).toBe(125000);
     expect(cell('Total Sales for September')?.value).toBe(2500);
-    expect(cell('Customer Since')?.value).toBe('2019-03-01');
+    expect(cell('Customer Since')?.value).toBe('Mar 1 2019');
     expect(cell('Credit Limit')?.value).toBe(50000);
     expect(cell('Terms')?.value).toBe('30 days');
     expect(cell('Balance')?.value).toBe(12000);

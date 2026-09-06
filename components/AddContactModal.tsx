@@ -9,6 +9,7 @@ import { CUSTOMER_PREFERRED_BRANDS, type CustomerPreferredBrand } from '../const
 import { WRITABLE_PRICING_GROUP_OPTIONS, normalizePriceGroupToInternalKey } from '../constants/pricingGroups';
 import { validateMaxLength, validateOptionalEmail, validateOptionalPhone, validateRequired } from '../utils/formValidation';
 import { parseSupabaseError } from '../utils/errorHandler';
+import { formatCustomerSince } from '../utils/formatUtils';
 import { useToast } from './ToastProvider';
 
 const TRANSACTION_TYPE_OPTIONS = ['Order Slip', 'Invoice'] as const;
@@ -439,7 +440,23 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                        </div>
                        <div>
                            <label className="label">Customer Since</label>
-                           <input type="date" aria-label="Customer Since" className="input" value={formData.customerSince} onChange={e => setFormData({...formData, customerSince: e.target.value})} />
+                           <div className="relative">
+                             <input
+                               type="text"
+                               readOnly
+                               aria-label="Customer Since"
+                               className="input w-full"
+                               value={formData.customerSince ? formatCustomerSince(formData.customerSince) : ''}
+                               placeholder="Sep 9 2026"
+                             />
+                             <input
+                               type="date"
+                               aria-label="Choose Customer Since date"
+                               className="absolute inset-0 cursor-pointer opacity-0"
+                               value={formData.customerSince}
+                               onChange={e => setFormData({...formData, customerSince: e.target.value})}
+                             />
+                           </div>
                        </div>
                        <div>
                            <label className="label">Team</label>

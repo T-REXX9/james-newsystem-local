@@ -1,4 +1,5 @@
 import { VipTierConfig } from '../types';
+import { formatCustomerSince } from './formatUtils';
 import { normalizeVipTierConfig } from './vipTierConfig';
 
 export type SalesInquirySummaryCell = {
@@ -49,7 +50,7 @@ export const buildSalesInquiryCustomerSummary = (
       isCurrency: true,
     },
     { label: `Total Sales for ${input.monthLabel}`, value: currentMonthSales, isCurrency: true },
-    { label: 'Customer Since', value: input.customerSince, isCurrency: false },
+    { label: 'Customer Since', value: formatCustomerSince(input.customerSince) || null, isCurrency: false },
     { label: 'Credit Limit', value: input.creditLimit, isCurrency: true },
     { label: 'Terms', value: input.terms, isCurrency: false },
     { label: 'Balance', value: input.balance, isCurrency: true },

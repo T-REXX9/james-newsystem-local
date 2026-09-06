@@ -2,6 +2,7 @@ import React from 'react';
 import { X, ShoppingBag, User, MapPin, Loader2 } from 'lucide-react';
 import { Contact, CustomerStatus } from '../types';
 import ModuleRecordAction from './ModuleRecordAction';
+import { formatCustomerSince } from '../utils/formatUtils';
 
 interface SalesMapSidebarProps {
     provinceName: string | null;
@@ -97,7 +98,7 @@ const SalesMapSidebar: React.FC<SalesMapSidebarProps> = ({ provinceName, contact
                                         </div>
                                         <div className="text-right">
                                             <p className="text-[10px] text-slate-400 uppercase">Since</p>
-                                            <p className="font-medium text-slate-700 text-sm">{contact.customerSince || '—'}</p>
+                                            <p className="font-medium text-slate-700 text-sm">{formatCustomerSince(contact.customerSince) || '—'}</p>
                                         </div>
                                     </div>
                                 </>

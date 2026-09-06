@@ -26,6 +26,7 @@ import {
 } from '@mui/material';
 import { Download, Printer, RefreshCw, RotateCcw, Search } from 'lucide-react';
 import { fetchOldNewCustomersReport, OldNewCustomerRow } from '../services/oldNewCustomersReportService';
+import { formatCustomerSince } from '../utils/formatUtils';
 
 const formatDate = (dateValue: string): string => {
   if (!dateValue) return 'N/A';
@@ -179,7 +180,7 @@ const OldNewCustomersReport: React.FC = () => {
         <TableCell>{row.customerName || '-'}</TableCell>
         <TableCell>{row.customerCode || row.customerGroup || '-'}</TableCell>
         <TableCell>{row.salesPerson || '-'}</TableCell>
-        <TableCell>{formatDate(row.customerSince)}</TableCell>
+        <TableCell>{formatCustomerSince(row.customerSince) || 'N/A'}</TableCell>
       </TableRow>
     ));
   };

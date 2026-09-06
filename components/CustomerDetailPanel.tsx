@@ -14,7 +14,7 @@ import CompanyName from './CompanyName';
 import { toast } from 'sonner';
 import { normalizePriceGroup } from '../constants/pricingGroups';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
-import { formatCurrency } from '../utils/formatUtils';
+import { formatCurrency, formatCustomerSince } from '../utils/formatUtils';
 import CallCustomerButton from './CallCustomerButton';
 import CustomerCallHistoryCard from './CustomerCallHistoryCard';
 import IncidentReportTab from './IncidentReportTab';
@@ -486,7 +486,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                 </div>
                                 <div>
                                     <label className="text-xs font-bold text-slate-400 uppercase">Customer Since</label>
-                                    <div className="mt-1">{contact.customerSince || '-'}</div>
+                                    <div className="mt-1">{formatCustomerSince(contact.customerSince) || '-'}</div>
                                 </div>
                                 <div>
                                     <label className="text-xs font-bold text-slate-400 uppercase">Refer By</label>
