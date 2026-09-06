@@ -7,6 +7,10 @@ import {
   getReorderWorkflowStages,
   hideReorderReportItems,
   isReorderWorkflowActive,
+  itemSupplierCogs,
+  mapReorderItemToPrLine,
+  sharedSupplierCogOptions,
+  supplierCogOptionLabel,
   ReorderReportEntry,
   ReorderSearchOption,
   ReorderWarehouseType,
@@ -18,31 +22,27 @@ import ModuleRecordLink from './ModuleRecordLink';
 
 interface AddToPrModalProps {
   items: ReorderReportEntry[];
+  supplierChoiceById: Record<string, string>;
   onClose: () => void;
   onSaved: (created: { id: string; number: string }) => void;
 }
 
-const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, onClose, onSaved }) => {
+const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, supplierChoiceById, onClose, onSaved }) => {
   const { addToast } = useToast();
   const [mode, setMode] = useState<'existing' | 'new'>('new');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [existingPrId, setExistingPrId] = useState('');
   const [supplierId, setSupplierId] = useState('');
-  const [supplierSearch, setSupplierSearch] = useState('');
-  const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
   const [openAfterSave, setOpenAfterSave] = useState(true);
   const [pendingPRs, setPendingPRs] = useState<Array<{ id: string; pr_number: string }>>([]);
-  const [suppliers, setSuppliers] = useState<Array<{ id: string; company: string }>>([]);
+  const sharedSupplierCogs = useMemo(() => sharedSupplierCogOptions(items), [items]);
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
-        const [prs, supplierRows] = await Promise.all([
-          purchaseRequestService.getPurchaseRequests({ status: 'Pending' }),
-          purchaseRequestService.getSuppliers(),
-        ]);
+        const prs = await purchaseRequestService.getPurchaseRequests({ status: 'Pending' });
         const pending = (prs || [])
           .filter((row) => String(row?.status || '').toLowerCase() === 'pending')
           .map((row) => ({
@@ -50,13 +50,8 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, onClose, onSaved }) 
             pr_number: String(row.pr_number || ''),
           }))
           .filter((row) => row.id);
-        const supp = (supplierRows || []).map((row: any) => ({
-          id: String(row?.id || ''),
-          company: String(row?.company || ''),
-        }));
 
         setPendingPRs(pending);
-        setSuppliers(supp);
         if (pending.length > 0) setExistingPrId(pending[0].id);
       } finally {
         setLoading(false);
@@ -66,36 +61,18 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, onClose, onSaved }) 
   }, []);
 
   const mapItemsForPR = useCallback(
-    (selectedSupplierId: string, selectedSupplierName: string) =>
-      items.map((item) => {
-        const useOverride = selectedSupplierId !== '';
-        return {
-          item_id: item.product_session,
-          item_code: item.item_code,
-          part_number: item.part_no,
-          description: item.description,
-          quantity: Math.max(1, item.suggested_reorder_qty),
-          unit_cost: useOverride ? 0 : item.preferred_supplier_cost,
-          supplier_id: useOverride ? selectedSupplierId : item.preferred_supplier_id,
-          supplier_name: useOverride ? selectedSupplierName : item.preferred_supplier_name,
-          eta_date: '',
-        };
-      }),
-    [items]
+    (selectedSupplierId: string) =>
+      items.map((item) => mapReorderItemToPrLine(
+        item,
+        selectedSupplierId || supplierChoiceById[item.id] || '',
+      )),
+    [items, supplierChoiceById]
   );
 
   const unresolvedSupplierCount = useMemo(
-    () => supplierId ? 0 : items.filter((item) => !item.preferred_supplier_id).length,
-    [items, supplierId]
+    () => items.filter((item) => itemSupplierCogs(item).length === 0).length,
+    [items]
   );
-
-  const filteredSuppliers = useMemo(() => {
-    const query = supplierSearch.trim().toLowerCase();
-    if (!query) return suppliers.slice(0, 50);
-    return suppliers
-      .filter((supplier) => supplier.company.toLowerCase().includes(query))
-      .slice(0, 50);
-  }, [supplierSearch, suppliers]);
 
   const navigateToPR = (prId: string) => {
     if (!prId) return;
@@ -114,9 +91,7 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, onClose, onSaved }) 
     try {
       let targetPrId = existingPrId;
       let targetPrNumber = pendingPRs.find((row) => row.id === existingPrId)?.pr_number || existingPrId;
-      const selectedSupplier = suppliers.find((row) => row.id === supplierId);
-      const supplierName = selectedSupplier?.company || '';
-      const prItems = mapItemsForPR(supplierId, supplierName);
+      const prItems = mapItemsForPR(supplierId);
 
       if (mode === 'new') {
         const prNumber = await purchaseRequestService.generatePRNumber();
@@ -192,49 +167,26 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, onClose, onSaved }) 
             {mode === 'new' ? (
               <div>
                 <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Supplier override (optional)</label>
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-slate-400" size={16} />
-                  <input
-                    value={supplierSearch}
-                    onChange={(e) => {
-                      setSupplierSearch(e.target.value);
-                      setSupplierId('');
-                      setShowSupplierDropdown(true);
-                    }}
-                    onFocus={() => setShowSupplierDropdown(true)}
-                    onBlur={() => window.setTimeout(() => setShowSupplierDropdown(false), 150)}
-                    placeholder="Use each item’s recommended supplier"
-                    className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-10 pr-3 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                  />
-                  {showSupplierDropdown ? (
-                    <div className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                      {filteredSuppliers.length === 0 ? (
-                        <div className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">No suppliers found</div>
-                      ) : (
-                        filteredSuppliers.map((supplier) => (
-                          <button
-                            key={supplier.id}
-                            type="button"
-                            onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => {
-                              setSupplierId(supplier.id);
-                              setSupplierSearch(supplier.company);
-                              setShowSupplierDropdown(false);
-                            }}
-                            className={`block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${
-                              supplier.id === supplierId ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300' : 'text-slate-700 dark:text-slate-200'
-                            }`}
-                          >
-                            {supplier.company}
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  ) : null}
-                </div>
+                {sharedSupplierCogs.length > 0 ? (
+                  <select
+                    value={supplierId}
+                    onChange={(event) => setSupplierId(event.target.value)}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    aria-label="Supplier override"
+                  >
+                    <option value="">Use each item’s recommended supplier</option>
+                    {sharedSupplierCogs.map((cog) => (
+                      <option key={cog.supplier_id} value={cog.supplier_id}>
+                        {supplierCogOptionLabel(cog)}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="text-sm text-slate-500">Each line can only use a Supplier COG recorded on that product.</p>
+                )}
                 {unresolvedSupplierCount > 0 ? (
                   <p className="mt-2 text-xs font-semibold text-amber-700">
-                    {unresolvedSupplierCount} item(s) have no recommended supplier. Select an override to continue.
+                    {unresolvedSupplierCount} item(s) have no Product Database Supplier COG. Add costing on Product Database before creating a PR.
                   </p>
                 ) : (
                   <p className="mt-2 text-xs text-slate-500">Leave blank to keep each item’s recommended supplier and recorded cost.</p>
@@ -339,6 +291,7 @@ const ReorderReport: React.FC = () => {
     return value ? new Date(value) : new Date();
   });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(initialSnapshotRef.current?.selectedIds || []));
+  const [supplierChoiceById, setSupplierChoiceById] = useState<Record<string, string>>({});
   const [showAddPrModal, setShowAddPrModal] = useState(false);
   const [confirmAction, setConfirmAction] = useState<'hide' | null>(null);
   const [searchInput, setSearchInput] = useState(() => initialSnapshotRef.current?.searchInput || '');
@@ -754,6 +707,12 @@ const ReorderReport: React.FC = () => {
     maximumFractionDigits: 2,
   }).format(value);
 
+  const chosenSupplierCog = (row: ReorderReportEntry) => {
+    const cogs = itemSupplierCogs(row);
+    const selectedId = supplierChoiceById[row.id] || row.preferred_supplier_id;
+    return cogs.find((cog) => cog.supplier_id === selectedId) || cogs[0] || null;
+  };
+
   const renderStatusBadge = (status: string) => {
     const normalized = status.toLowerCase();
     const color = normalized.startsWith('overdue') || normalized === 'cancelled'
@@ -1009,6 +968,8 @@ const ReorderReport: React.FC = () => {
                   </td></tr>
                 ) : rows.map((row) => {
                   const active = isReorderWorkflowActive(row);
+                  const supplierCogs = itemSupplierCogs(row);
+                  const selectedCog = chosenSupplierCog(row);
                   return (
                     <tr key={row.id} className="border-b border-slate-100 align-top hover:bg-slate-50">
                       <td className="border-r border-slate-100 px-3 py-3 text-center">
@@ -1019,8 +980,28 @@ const ReorderReport: React.FC = () => {
                       <td className="border-r border-slate-100 px-3 py-3 font-semibold">{row.description}</td>
                       <td className="px-3 py-3 text-center font-bold text-rose-600">{formatQuantity(row.available_stock)}</td>
                       <td className="border-r border-slate-100 px-3 py-3 text-center font-extrabold text-emerald-700">{formatQuantity(row.reorder_qty)}</td>
-                      <td className="px-3 py-3 font-semibold">{row.preferred_supplier_name || '-'}</td>
-                      <td className="border-r border-slate-100 px-3 py-3 text-right font-semibold">{row.preferred_supplier_cost > 0 ? formatCurrency(row.preferred_supplier_cost) : '-'}</td>
+                      <td className="px-3 py-3 font-semibold">
+                        {supplierCogs.length > 0 ? (
+                          <select
+                            aria-label={`Recommended supplier for ${row.item_code}`}
+                            value={selectedCog?.supplier_id || ''}
+                            onChange={(event) => {
+                              const nextId = event.target.value;
+                              setSupplierChoiceById((current) => ({ ...current, [row.id]: nextId }));
+                            }}
+                            className="w-full max-w-full rounded border border-slate-300 bg-white py-1 text-sm font-semibold"
+                          >
+                            {supplierCogs.map((cog) => (
+                              <option key={cog.supplier_id} value={cog.supplier_id}>
+                                {supplierCogOptionLabel(cog)}
+                              </option>
+                            ))}
+                          </select>
+                        ) : '-'}
+                      </td>
+                      <td className="border-r border-slate-100 px-3 py-3 text-right font-semibold">
+                        {selectedCog ? formatCurrency(selectedCog.supplier_cost) : '-'}
+                      </td>
                       <td className="border-r border-slate-100 px-3 py-3 text-center">{renderPrDocuments(row)}</td>
                       <td className="border-r border-slate-100 px-3 py-3 text-center font-semibold text-orange-600">{formatQuantity(row.pr_requested_qty ?? row.open_pr_qty)}</td>
                       <td className="border-r border-slate-100 px-3 py-3 text-center">{renderPoDocuments(row)}</td>
@@ -1054,6 +1035,7 @@ const ReorderReport: React.FC = () => {
       {showAddPrModal && selectedRows.length > 0 ? (
         <AddToPrModal
           items={selectedRows}
+          supplierChoiceById={supplierChoiceById}
           onClose={() => setShowAddPrModal(false)}
           onSaved={(created) => {
             setLatestCreatedPr(created);
@@ -1084,7 +1066,10 @@ const ReorderReport: React.FC = () => {
             <tr><th rowSpan={2}>ITEM CODE</th><th rowSpan={2}>PART NO.</th><th rowSpan={2}>DESCRIPTION</th><th colSpan={2}>STOCK POSITION</th><th colSpan={2}>RECOMMENDED SUPPLIER</th><th colSpan={2}>① PR STAGE</th><th colSpan={2}>② PO STAGE</th><th colSpan={2}>③ RECEIVING STOCK</th><th rowSpan={2}>STATUS</th></tr>
             <tr><th>AVAILABLE STOCK</th><th>REORDER QUANTITY</th><th>SUPPLIER</th><th>COST</th><th>PR #</th><th>OPEN PR</th><th>PO #</th><th>ORDERED</th><th>RR #</th><th>RECEIVED</th></tr>
           </thead>
-          <tbody>{(printRows.length > 0 ? printRows : rows).map((row) => <tr key={`print-${row.product_session}`}><td>{row.item_code}</td><td>{row.part_no}</td><td>{row.description}</td><td>{formatQuantity(row.available_stock)}</td><td>{formatQuantity(row.reorder_qty)}</td><td>{row.preferred_supplier_name || '-'}</td><td>{row.preferred_supplier_cost > 0 ? formatCurrency(row.preferred_supplier_cost) : '-'}</td><td>{row.pr_documents.map((document) => document.number).join(', ') || '-'}</td><td>{formatQuantity(row.pr_requested_qty ?? row.open_pr_qty)}</td><td>{row.po_documents.map((document) => document.number).join(', ') || '-'}</td><td>{formatQuantity(row.po_ordered_qty)}</td><td>{row.rr_documents.map((document) => document.number).join(', ') || '-'}</td><td>{formatQuantity(row.received_qty)}</td><td>{row.overall_status}</td></tr>)}</tbody>
+          <tbody>{(printRows.length > 0 ? printRows : rows).map((row) => {
+            const cog = chosenSupplierCog(row);
+            return <tr key={`print-${row.product_session}`}><td>{row.item_code}</td><td>{row.part_no}</td><td>{row.description}</td><td>{formatQuantity(row.available_stock)}</td><td>{formatQuantity(row.reorder_qty)}</td><td>{cog?.supplier_code || cog?.supplier_name || '-'}</td><td>{cog && cog.supplier_cost > 0 ? formatCurrency(cog.supplier_cost) : '-'}</td><td>{row.pr_documents.map((document) => document.number).join(', ') || '-'}</td><td>{formatQuantity(row.pr_requested_qty ?? row.open_pr_qty)}</td><td>{row.po_documents.map((document) => document.number).join(', ') || '-'}</td><td>{formatQuantity(row.po_ordered_qty)}</td><td>{row.rr_documents.map((document) => document.number).join(', ') || '-'}</td><td>{formatQuantity(row.received_qty)}</td><td>{row.overall_status}</td></tr>;
+          })}</tbody>
         </table>
       </div>
     </div>

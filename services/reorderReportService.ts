@@ -24,6 +24,13 @@ export interface ReorderSearchOption {
   category: 'Item Code' | 'Part Number' | 'Original Part Number' | 'Description' | 'Brand';
 }
 
+export interface ReorderSupplierCog {
+  supplier_id: string;
+  supplier_code: string;
+  supplier_name: string;
+  supplier_cost: number;
+}
+
 export interface ReorderReportEntry {
   id: string;
   product_session: string;
@@ -51,6 +58,7 @@ export interface ReorderReportEntry {
   preferred_supplier_id: string;
   preferred_supplier_name: string;
   preferred_supplier_cost: number;
+  supplier_costs: ReorderSupplierCog[];
   overall_status: string;
   can_create_pr: boolean;
   pr_documents: ReorderPrDocument[];
@@ -148,6 +156,71 @@ const toBoolean = (value: unknown): boolean => {
   return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
 };
 
+const normalizeSupplierCog = (raw: unknown): ReorderSupplierCog => {
+  const row = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {};
+  return {
+    supplier_id: toString(row.supplier_id),
+    supplier_code: toString(row.supplier_code || row.supplier_name),
+    supplier_name: toString(row.supplier_name || row.supplier_code),
+    supplier_cost: toNumber(row.supplier_cost ?? row.cost),
+  };
+};
+
+const normalizeSupplierCosts = (raw: unknown): ReorderSupplierCog[] => (
+  Array.isArray(raw)
+    ? raw.map(normalizeSupplierCog).filter((cog) => cog.supplier_id !== '' || cog.supplier_name !== '')
+    : []
+);
+
+export const itemSupplierCogs = (item: ReorderReportEntry): ReorderSupplierCog[] => {
+  if ((item.supplier_costs || []).length > 0) return item.supplier_costs;
+  if (item.preferred_supplier_id || item.preferred_supplier_name) {
+    return [{
+      supplier_id: item.preferred_supplier_id,
+      supplier_code: item.preferred_supplier_name,
+      supplier_name: item.preferred_supplier_name,
+      supplier_cost: item.preferred_supplier_cost,
+    }];
+  }
+  return [];
+};
+
+export const sharedSupplierCogOptions = (items: ReorderReportEntry[]): ReorderSupplierCog[] => {
+  if (items.length === 0) return [];
+  const [first, ...rest] = items.map(itemSupplierCogs);
+  return first.filter((cog) => rest.every((list) => list.some((other) => other.supplier_id === cog.supplier_id && cog.supplier_id !== '')));
+};
+
+export const mapReorderItemToPrLine = (item: ReorderReportEntry, selectedSupplierId = '') => {
+  const cogs = itemSupplierCogs(item);
+  const selected = cogs.find((cog) => cog.supplier_id === selectedSupplierId && selectedSupplierId !== '');
+  const recommended = cogs.find((cog) => cog.supplier_id === item.preferred_supplier_id && item.preferred_supplier_id !== '')
+    || cogs[0];
+
+  const chosen = selected || recommended;
+  return {
+    item_id: item.product_session,
+    item_code: item.item_code,
+    part_number: item.part_no,
+    description: item.description,
+    quantity: Math.max(1, item.suggested_reorder_qty),
+    unit_cost: chosen?.supplier_cost ?? 0,
+    supplier_id: chosen?.supplier_id ?? '',
+    supplier_name: chosen?.supplier_name || chosen?.supplier_code || '',
+    eta_date: '',
+  };
+};
+
+export const supplierCogOptionLabel = (cog: ReorderSupplierCog): string => {
+  const name = cog.supplier_code.trim() || cog.supplier_name.trim() || '-';
+  const cost = new Intl.NumberFormat('en-PH', {
+    style: 'currency',
+    currency: 'PHP',
+    maximumFractionDigits: 2,
+  }).format(cog.supplier_cost);
+  return `${name} ${cost}`;
+};
+
 const normalizePrDocument = (raw: any): ReorderPrDocument => ({
   refno: toString(raw?.refno),
   number: toString(raw?.number),
@@ -214,6 +287,7 @@ const normalizeEntry = (raw: any): ReorderReportEntry => ({
   preferred_supplier_id: toString(raw?.preferred_supplier_id),
   preferred_supplier_name: toString(raw?.preferred_supplier_name),
   preferred_supplier_cost: toNumber(raw?.preferred_supplier_cost),
+  supplier_costs: normalizeSupplierCosts(raw?.supplier_costs),
   overall_status: toString(raw?.overall_status || 'Needs PR'),
   can_create_pr: raw?.can_create_pr === undefined ? true : toBoolean(raw?.can_create_pr),
   pr_documents: Array.isArray(raw?.pr_documents) ? raw.pr_documents.map(normalizePrDocument) : [],

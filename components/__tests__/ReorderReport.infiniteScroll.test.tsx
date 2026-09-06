@@ -13,21 +13,21 @@ const { fetchEntriesMock, fetchSearchOptionsMock, addToastMock, getPrsMock, getS
   createPrMock: vi.fn(),
 }));
 
-vi.mock('../../services/reorderReportService', () => ({
-  REORDER_WAREHOUSE_OPTIONS: [
-    { id: 'total', label: 'Total Company' },
-    { id: 'wh1', label: 'WH1' },
-  ],
-  fetchReorderReportEntries: fetchEntriesMock,
-  fetchReorderSearchOptions: fetchSearchOptionsMock,
-  hideReorderReportItems: vi.fn(),
-  isReorderWorkflowActive: (row: any) => Boolean(row.pr_refno || row.po_refno) && row.rr_status !== 'Posted',
-  getReorderWorkflowStages: (row: any) => ({
-    pr: row.pr_status || (row.pr_refno ? 'Active' : 'Not started'),
-    po: row.po_status || (row.po_refno ? 'Active' : 'Not started'),
-    receiving: row.rr_status || (row.rr_refno ? 'Active' : 'Not started'),
-  }),
-}));
+vi.mock('../../services/reorderReportService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../services/reorderReportService')>();
+  return {
+    ...actual,
+    fetchReorderReportEntries: fetchEntriesMock,
+    fetchReorderSearchOptions: fetchSearchOptionsMock,
+    hideReorderReportItems: vi.fn(),
+    isReorderWorkflowActive: (row: any) => Boolean(row.pr_refno || row.po_refno) && row.rr_status !== 'Posted',
+    getReorderWorkflowStages: (row: any) => ({
+      pr: row.pr_status || (row.pr_refno ? 'Active' : 'Not started'),
+      po: row.po_status || (row.po_refno ? 'Active' : 'Not started'),
+      receiving: row.rr_status || (row.rr_refno ? 'Active' : 'Not started'),
+    }),
+  };
+});
 
 vi.mock('../../services/purchaseRequestService', () => ({
   purchaseRequestService: {
