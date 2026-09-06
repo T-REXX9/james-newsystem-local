@@ -11,6 +11,8 @@ const selectedInput = {
   terms: '30 days',
   balance: 12000,
   preferredBrand: 'Ishinomoto',
+  priceCode: 'vip 2',
+  discountCode: 'vip gold',
   monthLabel: 'September',
   vipConfig: DEFAULT_VIP_TIER_CONFIG,
 };
@@ -32,6 +34,8 @@ describe('buildSalesInquiryCustomerSummary', () => {
       'Credit Limit',
       'Terms',
       'Balance',
+      'Price Code',
+      'Discount Code',
       'Preferred Brand',
     ]);
   });
@@ -83,6 +87,8 @@ describe('buildSalesInquiryCustomerSummary', () => {
     expect(cell('Credit Limit')?.value).toBe(50000);
     expect(cell('Terms')?.value).toBe('30 days');
     expect(cell('Balance')?.value).toBe(12000);
+    expect(cell('Price Code')?.value).toBe('vip 2');
+    expect(cell('Discount Code')?.value).toBe('vip gold');
     expect(cell('Preferred Brand')?.value).toBe('Ishinomoto');
   });
 });

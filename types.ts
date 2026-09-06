@@ -308,6 +308,8 @@ export interface Contact {
   // Financial / Legal
   tin: string;
   priceGroup: string; // "price_group"
+  priceCode?: string; // Customer database price code
+  discountCode?: 'regular' | 'vip silver' | 'vip gold' | 'vip platinum';
   businessLine: string; // "business_line"
   terms: string;
   transactionType: string;

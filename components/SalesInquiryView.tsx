@@ -142,6 +142,17 @@ const getLocalTimeInputValue = (date = new Date()): string => {
   return `${hours}:${minutes}`;
 };
 
+const normalizeToWritablePriceCode = (raw: string | undefined | null): string => {
+  const cleaned = String(raw || '').trim().toLowerCase().replace(/[\s_-]+/g, ' ');
+  if (cleaned === 'vip 1' || cleaned === 'vip1') return 'vip 1';
+  if (cleaned === 'vip 2' || cleaned === 'vip2') return 'vip 2';
+  if (cleaned === 'vip 3' || cleaned === 'vip3') return 'vip 3';
+  const normalized = normalizePriceGroupToInternalKey(raw || '');
+  if (normalized === 'silver') return 'vip 1';
+  if (normalized === 'gold' || normalized === 'platinum') return 'vip 2';
+  return normalized || 'regular';
+};
+
 const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   initialContactId,
   initialInquiryId,
@@ -340,7 +351,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       .then((ledger) => {
         if (cancelled) return;
         setPostedSales({
-          ishinomotoSales: ledger.metrics.dealership_sales,
+          ishinomotoSales: ledger.metrics.ishinomoto_sales,
           currentMonthSales: ledger.metrics.monthly_sales,
           lastMonthSales: ledger.metrics.last_month_sales,
           summaryRows: (ledger.summary_rows || []).map((row) => ({
@@ -431,7 +442,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   const handleProductSelect = (product: any) => {
     if (!activeRowId) return;
 
-    const price = getProductPrice(product, priceGroup);
+    const price = getProductPrice(product, normalizePriceGroupToInternalKey(priceGroup));
     setItems(prev => prev.map(item => {
       if (item.tempId === activeRowId) {
         return {
@@ -488,9 +499,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   }, [items]);
 
   const handlePriceGroupChange = useCallback(async (newGroup: string) => {
-    const normalizedGroup = normalizePriceGroupToInternalKey(newGroup);
-    setPriceGroup(normalizedGroup);
-    await repriceItemsForGroup(normalizedGroup);
+    setPriceGroup(newGroup);
+    await repriceItemsForGroup(newGroup);
   }, [repriceItemsForGroup]);
 
   const formatCurrency = useCallback((value: number) => {
@@ -635,7 +645,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     const customer = customerMap.get(inquiry.contact_id) || null;
     const normalizedSalesDate = (inquiry.sales_date || '').split('T')[0];
     const normalizedSalesTime = String(inquiry.sales_time || '').slice(0, 5);
-    const rawPriceGroup = normalizePriceGroupToInternalKey(inquiry.price_group || customer?.priceGroup || '');
+    const rawPriceGroup = normalizeToWritablePriceCode(inquiry.price_group || customer?.priceCode || customer?.priceGroup || '');
     setInquiryNo((prev) => inquiry.inquiry_no || prev);
 
     const mappedItems: InquiryItemRow[] = (inquiry.items || []).map((item) => {
@@ -744,7 +754,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   }, [isCreatingNew, selectedInquiry?.id]);
 
   const applySelectedCustomer = useCallback((customer: Contact) => {
-    const normalizedGroup = normalizePriceGroupToInternalKey(customer.priceGroup);
+    const normalizedGroup = normalizeToWritablePriceCode(customer.priceCode || customer.priceGroup);
     const defaultReference = String(customer.contactPersons?.[0]?.name || '').trim();
     setSelectedCustomer(customer);
     setDeliveryAddress(customer.deliveryAddress || customer.address || '');
@@ -1380,7 +1390,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       setExportingJpeg(false);
     }
   }, [activeInquiryNumberDisplay, addToast, jpegCaptureMode, referenceNo]);
-  const priceGroupDisplay = normalizePriceGroup(priceGroup);
+  const priceGroupDisplay = priceGroup || normalizePriceGroup(priceGroup);
   const canGenerateSO = Boolean(
     selectedInquiry &&
     !isCreatingNew &&
@@ -1451,6 +1461,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         creditLimit,
         terms,
         balance: selectedCustomer ? selectedCustomerBalance : null,
+        priceCode: selectedCustomer ? (summaryCustomer?.priceCode || summaryCustomer?.priceGroup || null) : null,
+        discountCode: selectedCustomer ? (summaryCustomer?.discountCode || 'regular') : null,
         preferredBrand: selectedCustomer ? formatPreferredBrand(summaryCustomer?.preferredBrand) : null,
         monthLabel: currentMonthLabel,
         vipConfig,
@@ -1463,6 +1475,9 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       selectedCustomer,
       selectedCustomerBalance,
       summaryCustomer?.customerSince,
+      summaryCustomer?.discountCode,
+      summaryCustomer?.priceCode,
+      summaryCustomer?.priceGroup,
       summaryCustomer?.preferredBrand,
       summaryCustomer?.since,
       terms,
@@ -1634,7 +1649,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
               <tbody>
                 <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[15%_31%_9%_10%_9%_9%_8%_9%]"><label className={legacyLabelClass}>Sold to :</label><div className="pl-3"><CustomerAutocomplete contacts={customers} selectedCustomer={selectedCustomer} disabled={isReadOnly} onSelect={(customer) => handleCustomerSelect(customer)} placeholder="Select Customer" inputClassName={`h-[34px] rounded-[4px] border-[#c9c9c9] bg-white text-center text-[13px] ${validationErrors.customer ? 'border-red-400' : ''}`} /></div><label className={legacyLabelClass}>Date :</label><div className="pl-2"><input type="date" required disabled={isReadOnly} value={salesDate} onChange={(event) => setSalesDate(event.target.value)} className={legacyInputClass} /></div><label className={legacyLabelClass}>Time :</label><div className="pl-2"><input type="time" required disabled={isReadOnly} value={salesTime} onChange={(event) => setSalesTime(event.target.value)} className={legacyInputClass} /></div><label className={legacyLabelClass}>Sales Person:</label><div className="pl-2"><input type="text" disabled={isReadOnly} value={salesPerson} onChange={(event) => setSalesPerson(event.target.value)} className={legacyInputClass} /></div></div></td></tr>
                 <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[17%_40%_10.5%_10.5%_9.5%_12.5%]"><label className={legacyLabelClass}>Delivery Address :</label><div className="pl-3"><input type="text" disabled={isReadOnly} value={deliveryAddress} onChange={(event) => setDeliveryAddress(event.target.value)} className={legacyInputClass} /></div><label className={legacyLabelClass}>Our Reference:</label><div className="pl-2"><input type="text" readOnly value={referenceNo} className={legacyInputClass} /></div><label className={legacyLabelClass}>Your Reference:</label><div className="pl-2"><select disabled={isReadOnly || !selectedCustomer} value={customerReference} onChange={(event) => setCustomerReference(event.target.value)} className={legacyInputClass}><option value="">Select reference</option>{customerReferenceOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div></div></td></tr>
-                <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[12%_20%_10%_19%_10%_11%_9%_9%]"><label className={legacyLabelClass}>Send By:</label><div className="pl-3"><SearchableSelect value={sendBy} options={courierOptions.map((option) => ({ value: option.name, label: option.name }))} onChange={setSendBy} placeholder="Select..." searchPlaceholder="Search courier..." disabled={isReadOnly} /></div><label className={legacyLabelClass}>Price Group:</label><div className="pl-2"><select disabled={isReadOnly || !selectedCustomer} value={priceGroup} onChange={(event) => void handlePriceGroupChange(event.target.value)} className={legacyInputClass}>{!selectedCustomer && <option value="">Select</option>}{WRITABLE_PRICING_GROUP_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div><label className={legacyLabelClass}>Credit Limit:</label><div className="pl-2"><input type="text" readOnly value={creditLimit ? creditLimit.toLocaleString('en-US', { minimumFractionDigits: 2 }) : ''} className={legacyInputClass} /></div><label className={legacyLabelClass}>Terms Strictly:</label><div className="pl-2"><input type="text" readOnly value={terms} className={legacyInputClass} /></div></div></td></tr>
+                <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[12%_20%_10%_19%_10%_11%_9%_9%]"><label className={legacyLabelClass}>Send By:</label><div className="pl-3"><SearchableSelect value={sendBy} options={courierOptions.map((option) => ({ value: option.name, label: option.name }))} onChange={setSendBy} placeholder="Select..." searchPlaceholder="Search courier..." disabled={isReadOnly} /></div><label className={legacyLabelClass}>Price Code:</label><div className="pl-2"><select disabled={isReadOnly || !selectedCustomer} value={priceGroup} onChange={(event) => void handlePriceGroupChange(event.target.value)} className={legacyInputClass}>{!selectedCustomer && <option value="">Select</option>}{WRITABLE_PRICING_GROUP_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div><label className={legacyLabelClass}>Credit Limit:</label><div className="pl-2"><input type="text" readOnly value={creditLimit ? creditLimit.toLocaleString('en-US', { minimumFractionDigits: 2 }) : ''} className={legacyInputClass} /></div><label className={legacyLabelClass}>Terms Strictly:</label><div className="pl-2"><input type="text" readOnly value={terms} className={legacyInputClass} /></div></div></td></tr>
                 <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[17%_63%_10%_10%]"><label className={legacyLabelClass}>Promise to Pay:</label><div className="pl-3"><input type="text" disabled={isReadOnly} value={promiseToPay} onChange={(event) => setPromiseToPay(event.target.value)} placeholder="if applicable" className={legacyInputClass} /></div><label className={legacyLabelClass}>PO No.:</label><div className="pl-2"><input type="text" disabled={isReadOnly} value={poNumber} onChange={(event) => setPoNumber(event.target.value)} placeholder="if applicable" className={legacyInputClass} /></div></div></td></tr>
                 <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[17%_63%_10%_10%]"><label className={legacyLabelClass}>Remarks:</label><div className="pl-3"><SearchableSelect value={remarks} options={remarkTemplateOptions.map((option) => ({ value: option.name, label: option.name }))} onChange={setRemarks} placeholder="No Remark" searchPlaceholder="Search remarks..." disabled={isReadOnly} /></div><label className={legacyLabelClass}>Inquiry Type:</label><div className="pl-2"><select disabled={isReadOnly} value={showNewInquiryType ? 'AddNew' : inquiryType} onChange={(event) => { if (event.target.value === 'AddNew') { setShowNewInquiryType(true); setInquiryType('General'); } else { setInquiryType(event.target.value); setShowNewInquiryType(false); } }} className={legacyInputClass}><option value="General">Phone Call</option><option value="Bulk Order">Bulk Order</option><option value="AddNew">Add New Type</option></select></div></div></td></tr>
                 {showNewInquiryType && <tr><td><div className="ml-[17%] w-[40%] pl-3"><input type="text" disabled={isReadOnly} value={newInquiryType} onChange={(event) => setNewInquiryType(event.target.value)} placeholder="Input Inquiry Type" className={legacyInputClass} /></div></td></tr>}
@@ -2104,7 +2119,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                     </td>
                   </tr>
                   <tr>
-                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Price Group:</td>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Price Code:</td>
                     <td>
                       {isReadOnly ? (
                         <input

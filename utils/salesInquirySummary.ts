@@ -15,6 +15,8 @@ export type SalesInquirySummaryInput = {
   creditLimit: number | null;
   terms: string | null;
   balance: number | null;
+  priceCode: string | null;
+  discountCode: string | null;
   preferredBrand: string | null;
   monthLabel: string;
   vipConfig: VipTierConfig;
@@ -51,6 +53,8 @@ export const buildSalesInquiryCustomerSummary = (
     { label: 'Credit Limit', value: input.creditLimit, isCurrency: true },
     { label: 'Terms', value: input.terms, isCurrency: false },
     { label: 'Balance', value: input.balance, isCurrency: true },
+    { label: 'Price Code', value: selected ? input.priceCode : null, isCurrency: false },
+    { label: 'Discount Code', value: selected ? input.discountCode : null, isCurrency: false },
     { label: 'Preferred Brand', value: input.preferredBrand, isCurrency: false },
   ];
 };

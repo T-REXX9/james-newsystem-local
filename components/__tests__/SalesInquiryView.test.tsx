@@ -260,6 +260,7 @@ describe('SalesInquiryView', () => {
     getLedgerMock.mockResolvedValue({
       metrics: {
         dealership_sales: 125000,
+        ishinomoto_sales: 42000,
         monthly_sales: 2500,
         customer_since: '2019-03-01',
         credit_limit: 10000,
@@ -465,10 +466,25 @@ describe('SalesInquiryView', () => {
         ...baseContacts[0],
         priceGroup: 'gold',
       },
+      {
+        ...baseContacts[0],
+        id: 'c-3',
+        company: 'VIP Three Customer',
+        priceCode: 'vip 3',
+        priceGroup: 'vip3',
+      },
     ]);
-    fetchContactByIdMock.mockResolvedValue({
-      ...baseContacts[0],
-      priceGroup: 'gold',
+    fetchContactByIdMock.mockImplementation(async (id: string) => {
+      if (id === 'c-3') {
+        return {
+          ...baseContacts[0],
+          id: 'c-3',
+          company: 'VIP Three Customer',
+          priceCode: 'vip 3',
+          priceGroup: 'vip3',
+        };
+      }
+      return { ...baseContacts[0], priceGroup: 'gold' };
     });
 
     render(<SalesInquiryView />);
@@ -476,10 +492,13 @@ describe('SalesInquiryView', () => {
     await waitFor(() => expect(fetchContactsMock).toHaveBeenCalled());
     await user.selectOptions(screen.getByLabelText('Customer'), 'c-1');
 
-    const priceGroupRow = screen.getByText('Price Group:').closest('tr');
+    const priceGroupRow = screen.getByText('Price Code:').closest('tr');
     expect(priceGroupRow).toBeTruthy();
     const priceGroupSelect = within(priceGroupRow as HTMLElement).getByRole('combobox');
-    expect(priceGroupSelect).toHaveValue('gold');
+    expect(priceGroupSelect).toHaveValue('vip 2');
+
+    await user.selectOptions(screen.getByLabelText('Customer'), 'c-3');
+    await waitFor(() => expect(priceGroupSelect).toHaveValue('vip 3'));
   });
 
   it('reprices existing inquiry items when switching to a customer with a different default price group', async () => {
@@ -664,10 +683,13 @@ describe('SalesInquiryView', () => {
     expect(screen.getByText('Ishinomoto Sales')).toBeInTheDocument();
     expect(screen.getByText('VIP Silver remaining')).toBeInTheDocument();
     expect(screen.getByText('VIP Gold remaining')).toBeInTheDocument();
+    expect(screen.getByText('Price Code')).toBeInTheDocument();
+    expect(screen.getByText('Discount Code')).toBeInTheDocument();
     expect(screen.getByText('Customer Since')).toBeInTheDocument();
     expect(screen.queryByText('Dealership Since')).not.toBeInTheDocument();
     expect(screen.queryByText('Dealership Sales')).not.toBeInTheDocument();
     expect(screen.queryByText('Dealership Quota')).not.toBeInTheDocument();
+    expect(screen.queryByText('Price Group:')).not.toBeInTheDocument();
   });
 
   it('shows VIP Silver discount and TOTAL to pay on a qualifying first inquiry', async () => {
@@ -675,6 +697,7 @@ describe('SalesInquiryView', () => {
     getLedgerMock.mockResolvedValue({
       metrics: {
         dealership_sales: 125000,
+        ishinomoto_sales: 42000,
         monthly_sales: 2500,
         last_month_sales: 15000,
         customer_since: '2019-03-01',
@@ -753,6 +776,7 @@ describe('SalesInquiryView', () => {
     getLedgerMock.mockResolvedValue({
       metrics: {
         dealership_sales: 125000,
+        ishinomoto_sales: 42000,
         monthly_sales: 2500,
         last_month_sales: 30000,
         customer_since: '2019-03-01',
@@ -809,6 +833,7 @@ describe('SalesInquiryView', () => {
     getLedgerMock.mockResolvedValue({
       metrics: {
         dealership_sales: 125000,
+        ishinomoto_sales: 42000,
         monthly_sales: 2500,
         last_month_sales: 30000,
         customer_since: '2019-03-01',
@@ -843,7 +868,7 @@ describe('SalesInquiryView', () => {
       expect(getLedgerMock).toHaveBeenCalled();
       expect(screen.getByText('₱7,500.00')).toBeInTheDocument();
       expect(screen.getByText('₱27,500.00')).toBeInTheDocument();
-      expect(screen.getByText('₱125,000.00')).toBeInTheDocument();
+      expect(screen.getByText('₱42,000.00')).toBeInTheDocument();
     });
   });
 });

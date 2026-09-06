@@ -351,11 +351,11 @@ export const getProductPrice = (product: Product, priceGroup?: string): number =
     return product.price_aa || 0;
   }
 
-  if (candidates.includes('Silver') || candidates.includes('silver') || candidates.includes('VIP1')) {
+  if (candidates.includes('Silver') || candidates.includes('silver') || candidates.includes('VIP1') || candidates.includes('vip 1')) {
     return product.price_vip1 || 0;
   }
 
-  if (candidates.includes('Gold') || candidates.includes('gold') || candidates.includes('VIP2')) {
+  if (candidates.includes('Gold') || candidates.includes('gold') || candidates.includes('VIP2') || candidates.includes('vip 2') || candidates.includes('vip 3')) {
     return product.price_vip2 || 0;
   }
 

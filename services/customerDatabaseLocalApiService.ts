@@ -8,6 +8,8 @@ const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
 
 type ApiCustomerStatus = 0 | 1 | 3 | number;
+type CustomerDiscountCode = NonNullable<Contact['discountCode']>;
+const CUSTOMER_DISCOUNT_CODES: CustomerDiscountCode[] = ['regular', 'vip silver', 'vip gold', 'vip platinum'];
 
 interface ApiContactPersonRow {
   id?: string | number | null;
@@ -58,6 +60,8 @@ interface ApiCustomerRow {
   delivery_address?: string | null;
   tin?: string | null;
   price_group?: string | null;
+  price_code?: string | null;
+  discount_code?: string | null;
   pricing_tier?: string | null;
   business_line?: string | null;
   terms?: string | null;
@@ -271,6 +275,11 @@ export const mapApiCustomerToContact = (row: ApiCustomerRow): LocalContact => {
   const fallbackEmail = sanitizeLegacyString(row?.email || row?.lemail || '');
   const fallbackPhone = sanitizeLegacyString(row?.phone || row?.lphone || '');
   const fallbackMobile = sanitizeLegacyString(row?.mobile || row?.lmobile || '');
+  const priceCode = sanitizeLegacyString(row?.price_code || row?.price_group || row?.pricing_tier || '');
+  const rawDiscountCode = sanitizeLegacyString(row?.discount_code || 'regular').toLowerCase();
+  const discountCode: CustomerDiscountCode = CUSTOMER_DISCOUNT_CODES.includes(rawDiscountCode as CustomerDiscountCode)
+    ? rawDiscountCode as CustomerDiscountCode
+    : 'regular';
 
   return {
     id: String(row?.session_id ?? row?.lsessionid ?? row?.id ?? ''),
@@ -285,7 +294,9 @@ export const mapApiCustomerToContact = (row: ApiCustomerRow): LocalContact => {
     area: sanitizeLegacyString(row?.area || ''),
     deliveryAddress: sanitizeLegacyString(row?.delivery_address || row?.address || ''),
     tin: sanitizeLegacyString(row?.tin || ''),
-    priceGroup: row?.pricing_tier ? sanitizeLegacyString(row.pricing_tier) : normalizePriceGroup(sanitizeLegacyString(row?.price_group || '')),
+    priceGroup: priceCode || normalizePriceGroup(sanitizeLegacyString(row?.price_group || '')),
+    priceCode,
+    discountCode,
     businessLine: sanitizeLegacyString(row?.business_line || ''),
     terms: sanitizeLegacyString(row?.terms || ''),
     transactionType: sanitizeLegacyString(row?.transaction_type || ''),
@@ -343,7 +354,8 @@ export const mapContactPayloadToApi = (contact: ContactPayloadWithSalesPersonId)
     city: String(contact?.city || ''),
     province: String(contact?.province || ''),
     tin: String(contact?.tin || ''),
-    price_group: String(contact?.priceGroup || ''),
+    price_group: String(contact?.priceCode || contact?.priceGroup || ''),
+    discount_code: String(contact?.discountCode || 'regular'),
     business_line: String(contact?.businessLine || ''),
     terms: String(contact?.terms || ''),
     transaction_type: String(contact?.transactionType || 'Order Slip'),
@@ -382,7 +394,8 @@ export const mapContactUpdatesToApi = (contact: Partial<ContactPayloadWithSalesP
   if (hasOwn(contact, 'city')) payload.city = String(contact.city || '');
   if (hasOwn(contact, 'province')) payload.province = String(contact.province || '');
   if (hasOwn(contact, 'tin')) payload.tin = String(contact.tin || '');
-  if (hasOwn(contact, 'priceGroup')) payload.price_group = String(contact.priceGroup || '');
+  if (hasOwn(contact, 'priceCode') || hasOwn(contact, 'priceGroup')) payload.price_group = String(contact.priceCode || contact.priceGroup || '');
+  if (hasOwn(contact, 'discountCode')) payload.discount_code = String(contact.discountCode || 'regular');
   if (hasOwn(contact, 'businessLine')) payload.business_line = String(contact.businessLine || '');
   if (hasOwn(contact, 'terms')) payload.terms = String(contact.terms || '');
   if (hasOwn(contact, 'transactionType')) payload.transaction_type = String(contact.transactionType || '');

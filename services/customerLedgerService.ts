@@ -16,6 +16,7 @@ export type LedgerCustomer = {
 export type CustomerLedgerMetrics = {
   dealership_since: string | null;
   dealership_sales: number;
+  ishinomoto_sales: number;
   dealership_quota: number;
   monthly_sales: number;
   last_month_sales: number;
@@ -179,6 +180,7 @@ export const customerLedgerService = {
       metrics: {
         dealership_since: data?.metrics?.dealership_since || null,
         dealership_sales: toNumber(data?.metrics?.dealership_sales),
+        ishinomoto_sales: toNumber(data?.metrics?.ishinomoto_sales ?? data?.metrics?.dealership_sales),
         dealership_quota: toNumber(data?.metrics?.dealership_quota),
         monthly_sales: toNumber(data?.metrics?.monthly_sales),
         last_month_sales: toNumber(data?.metrics?.last_month_sales),

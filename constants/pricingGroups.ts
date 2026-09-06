@@ -1,5 +1,5 @@
 // DB values remain unchanged for MySQL compatibility, including legacy-only groups.
-export const PRICING_GROUP_DB_VALUES = ['aaa', 'vip1', 'vip2', 'bbb', 'ccc', 'ddd'] as const;
+export const PRICING_GROUP_DB_VALUES = ['aaa', 'vip1', 'vip2', 'vip3', 'bbb', 'ccc', 'ddd'] as const;
 
 // Internal values are the new application vocabulary; platinum is application-level only.
 export const PRICING_GROUP_INTERNAL = {
@@ -53,10 +53,12 @@ export const ACTIVE_PRICING_GROUP_OPTIONS = Object.values(PRICING_GROUP_INTERNAL
   label: INTERNAL_TO_DISPLAY_LABEL[value],
 }));
 
-// Writable options exclude computed tiers (e.g. platinum) that are derived by the API.
-export const WRITABLE_PRICING_GROUP_OPTIONS = ACTIVE_PRICING_GROUP_OPTIONS.filter(
-  (option) => option.value !== PRICING_GROUP_INTERNAL.platinum,
-);
+export const WRITABLE_PRICING_GROUP_OPTIONS = [
+  { value: 'regular', label: 'regular' },
+  { value: 'vip 1', label: 'vip 1' },
+  { value: 'vip 2', label: 'vip 2' },
+  { value: 'vip 3', label: 'vip 3' },
+];
 
 /**
  * Collapses legacy spacing variants such as "VIP 1" and "VIP1" into "vip1".
