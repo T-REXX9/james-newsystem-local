@@ -237,6 +237,18 @@ const mapUiStatusToApi = (status: CustomerStatus | string | undefined): number =
   return 1;
 };
 
+const debtTypeForUiStatus = (status: CustomerStatus | string | undefined): 'Bad' | 'Good' => {
+  const normalized = String(status || '').trim().toLowerCase();
+  return normalized === String(CustomerStatus.BLACKLISTED).toLowerCase() ? 'Bad' : 'Good';
+};
+
+const verificationForUiStatus = (status: CustomerStatus | string | undefined): string | undefined => {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (normalized === String(CustomerStatus.VERIFIED_PROSPECT).toLowerCase()) return 'Verified';
+  if (normalized === String(CustomerStatus.PROSPECTIVE).toLowerCase()) return 'Unverified';
+  return undefined;
+};
+
 const splitName = (fullName: string): { first_name: string; last_name: string } => {
   const trimmed = String(fullName || '').trim();
   if (!trimmed) return { first_name: '', last_name: '' };
@@ -351,7 +363,7 @@ export const mapApiCustomerToContact = (row: ApiCustomerRow): LocalContact => {
 
 export const mapContactPayloadToApi = (contact: ContactPayloadWithSalesPersonId) => {
   const status = mapUiStatusToApi(contact?.status as CustomerStatus | undefined);
-  const debtType = String(contact?.debtType || 'Good');
+  const debtType = debtTypeForUiStatus(contact?.status as CustomerStatus | undefined);
   const resolvedSalesPerson = String(contact?.__salesPersonId || contact?.salesman || '').trim();
 
   return {
@@ -383,7 +395,8 @@ export const mapContactPayloadToApi = (contact: ContactPayloadWithSalesPersonId)
     notes: String(contact?.comment || ''),
     debt_type: debtType,
     profile_type: status === 3 ? 'Prospect' : 'Old',
-    verification: status === 3 ? String(contact?.verification || 'Unverified') : '',
+    verification: verificationForUiStatus(contact?.status as CustomerStatus | undefined)
+      ?? (status === 3 ? String(contact?.verification || 'Unverified') : ''),
   };
 };
 
@@ -428,6 +441,9 @@ export const mapContactUpdatesToApi = (contact: Partial<ContactPayloadWithSalesP
     const status = mapUiStatusToApi(contact.status as CustomerStatus | undefined);
     payload.status = status;
     payload.profile_type = status === 3 ? 'Prospect' : 'Old';
+    payload.debt_type = debtTypeForUiStatus(contact.status as CustomerStatus | undefined);
+    const verification = verificationForUiStatus(contact.status as CustomerStatus | undefined);
+    if (verification !== undefined) payload.verification = verification;
   } else if (hasOwn(contact, 'isHidden')) {
     payload.status = contact.isHidden ? 0 : 1;
   }

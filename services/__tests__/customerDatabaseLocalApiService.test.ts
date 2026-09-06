@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { CustomerStatus } from '../../types';
 import { mapApiCustomerToContact, mapContactPayloadToApi, mapContactUpdatesToApi } from '../customerDatabaseLocalApiService';
+
+const reloadStanding = (patch: Record<string, unknown>) =>
+  mapApiCustomerToContact({
+    session_id: 'sess-standing',
+    company: 'Standing Co',
+    status: patch.status as number,
+    debt_type: String(patch.debt_type ?? ''),
+    profile_type: String(patch.profile_type ?? 'Old'),
+    verification: String(patch.verification ?? ''),
+  }).status;
 
 describe('customer database price and discount codes', () => {
   it('maps persisted price and discount codes from the customer database', () => {
@@ -93,5 +104,79 @@ describe('customer since mapping', () => {
 
     expect(contact.customerSince).toBe('2019-05-24');
     expect(contact.dealershipSince).toBe('2021-01-01');
+  });
+});
+
+describe('customer standing round-trip', () => {
+  it('saving Status Active on a Blacklisted customer reloads as Active', () => {
+    const loaded = mapApiCustomerToContact({
+      session_id: 'sess-standing',
+      company: 'Standing Co',
+      status: 1,
+      debt_type: 'Bad',
+      profile_type: 'Old',
+    });
+    expect(loaded.status).toBe(CustomerStatus.BLACKLISTED);
+
+    const patch = mapContactUpdatesToApi({
+      status: CustomerStatus.ACTIVE,
+      debtType: loaded.debtType,
+    });
+
+    expect(reloadStanding(patch)).toBe(CustomerStatus.ACTIVE);
+  });
+
+  it('saving Status Blacklisted on an Active customer reloads as Blacklisted', () => {
+    const patch = mapContactUpdatesToApi({
+      status: CustomerStatus.BLACKLISTED,
+      debtType: 'Good',
+    });
+
+    expect(reloadStanding(patch)).toBe(CustomerStatus.BLACKLISTED);
+  });
+
+  it('saving Status Inactive on a Blacklisted customer reloads as Inactive', () => {
+    const patch = mapContactUpdatesToApi({
+      status: CustomerStatus.INACTIVE,
+      debtType: 'Bad',
+    });
+
+    expect(reloadStanding(patch)).toBe(CustomerStatus.INACTIVE);
+  });
+
+  it('saving Status Prospective on a Blacklisted customer reloads as Prospective', () => {
+    const patch = mapContactUpdatesToApi({
+      status: CustomerStatus.PROSPECTIVE,
+      debtType: 'Bad',
+    });
+
+    expect(reloadStanding(patch)).toBe(CustomerStatus.PROSPECTIVE);
+  });
+
+  it('saving Status Verified Prospect on a Blacklisted customer reloads as Verified Prospect', () => {
+    const patch = mapContactUpdatesToApi({
+      status: CustomerStatus.VERIFIED_PROSPECT,
+      debtType: 'Bad',
+    });
+
+    expect(reloadStanding(patch)).toBe(CustomerStatus.VERIFIED_PROSPECT);
+  });
+
+  it('saving Status Active without a Debt Type field still reloads as Active', () => {
+    const patch = mapContactUpdatesToApi({
+      status: CustomerStatus.ACTIVE,
+    });
+
+    expect(reloadStanding(patch)).toBe(CustomerStatus.ACTIVE);
+  });
+
+  it('create payload for Status Active does not keep a Bad debt type as Blacklisted', () => {
+    const payload = mapContactPayloadToApi({
+      company: 'Standing Co',
+      status: CustomerStatus.ACTIVE,
+      debtType: 'Bad',
+    });
+
+    expect(reloadStanding(payload)).toBe(CustomerStatus.ACTIVE);
   });
 });
