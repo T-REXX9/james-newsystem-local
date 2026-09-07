@@ -2,6 +2,7 @@ import { DEFAULT_CUSTOMER_VAT_TYPE } from '../constants/customerVat';
 import { normalizePreferredBrand } from '../constants/customerPreferredBrand';
 import { normalizePriceGroup } from '../constants/pricingGroups';
 import { Contact, ContactPerson, ContactTransaction, CustomerStatus, CustomerVatType, DealStage, Product, UserProfile } from '../types';
+import { invalidateDailyCallMasterListCache } from './dailyCallMonitoringService';
 import { getLocalAuthSession } from './localAuthService';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
@@ -440,7 +441,9 @@ export const mapContactUpdatesToApi = (contact: Partial<ContactPayloadWithSalesP
   if (hasOwn(contact, 'status')) {
     const status = mapUiStatusToApi(contact.status as CustomerStatus | undefined);
     payload.status = status;
-    payload.profile_type = status === 3 ? 'Prospect' : 'Old';
+    if (contact.status !== CustomerStatus.BLACKLISTED) {
+      payload.profile_type = status === 3 ? 'Prospect' : 'Old';
+    }
     payload.debt_type = debtTypeForUiStatus(contact.status as CustomerStatus | undefined);
     const verification = verificationForUiStatus(contact.status as CustomerStatus | undefined);
     if (verification !== undefined) payload.verification = verification;
@@ -630,8 +633,8 @@ const syncContactPersons = async (sessionId: string, contactPersons: ContactPers
   }
 };
 
-export const updateContact = async (id: string, updates: Partial<Contact>, actorId?: string): Promise<void> => {
-  const payload = {
+export const updateContact = async (id: string, updates: Partial<ContactPayloadWithSalesPersonId>, actorId?: string): Promise<void> => {
+  const payload: Record<string, unknown> = {
     main_id: API_MAIN_ID,
     user_id: actorId || String(getUserContext().userId),
     ...mapContactUpdatesToApi(updates),
@@ -664,6 +667,8 @@ export const updateContact = async (id: string, updates: Partial<Contact>, actor
   if (updates?.contactPersons) {
     await syncContactPersons(id, updates.contactPersons);
   }
+
+  invalidateDailyCallMasterListCache();
 };
 
 export const fetchContactById = async (id: string): Promise<Contact | null> => {

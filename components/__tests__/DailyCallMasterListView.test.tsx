@@ -6,6 +6,13 @@ import DailyCallMasterListView from '../DailyCallMasterListView';
 import { fetchCustomersForDailyCall, fetchDailyCallMasterList } from '../../services/dailyCallMonitoringService';
 import { updateContact, fetchSalesAgents } from '../../services/customerDatabaseLocalApiService';
 import { getVipTierConfig } from '../../services/vipTierSettingsService';
+import type { UserProfile } from '../../types';
+
+const masterUser: UserProfile = {
+  id: 'master-1',
+  email: 'master@example.com',
+  role: 'Master User',
+};
 
 vi.mock('../../services/dailyCallMonitoringService', () => ({
   fetchDailyCallMasterList: vi.fn(),
@@ -73,7 +80,7 @@ describe('DailyCallMasterListView', () => {
     });
     vi.mocked(updateContact).mockResolvedValue(undefined);
 
-    render(<DailyCallMasterListView />);
+    render(<DailyCallMasterListView currentUser={masterUser} />);
 
     await user.click(await screen.findByRole('button', { name: 'Unverified Prospects (1)' }));
     await user.click(await screen.findByRole('button', { name: 'Approve verification for Pending Prospect Shop' }));
@@ -377,7 +384,7 @@ describe('DailyCallMasterListView', () => {
       weeklyRangeTotals: [], dailyActivity: [],
     } as any]);
 
-    render(<DailyCallMasterListView currentUser={{ id: 'master-1', role: 'Master User' } as any} />);
+    render(<DailyCallMasterListView currentUser={masterUser} />);
     await user.click(await screen.findByRole('button', { name: 'View details for Priority Buyer Shop' }));
 
     expect(fetchCustomersForDailyCall).toHaveBeenCalledWith({});
@@ -434,7 +441,7 @@ describe('DailyCallMasterListView', () => {
     });
     vi.mocked(updateContact).mockResolvedValue(undefined);
 
-    render(<DailyCallMasterListView currentUser={{ id: 'master-1', role: 'Master User' } as any} />);
+    render(<DailyCallMasterListView currentUser={masterUser} />);
 
     await user.selectOptions(
       await screen.findByLabelText('Assign sales agent for Priority Buyer Shop'),
@@ -452,6 +459,193 @@ describe('DailyCallMasterListView', () => {
       );
     });
     expect(screen.getByLabelText('Assign sales agent for Priority Buyer Shop')).toHaveValue('agent-1');
+  });
+
+  it('does not change a customer when do-not-contact confirmation is canceled', async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 1 },
+      items: [{
+        id: 'priority-1',
+        shopName: 'Priority Buyer Shop',
+        province: 'Manila',
+        city: 'Manila',
+        contactNumber: '0930',
+        assignedTo: 'Joan Jerusalem',
+        lastPurchaseDate: 'May 26, 2026',
+        lastPurchaseDateRaw: '2026-05-26',
+        purchaseCount: 1,
+        listCategory: 'priority',
+        totalSales: 5000,
+        currentMonthSales: 0,
+        daysSinceLastPurchase: 20,
+        monthsSinceLastPurchase: 0,
+        purchaseAgeGroup: 'two_weeks_to_one_month',
+      }],
+    });
+
+    render(<DailyCallMasterListView currentUser={masterUser} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Mark Priority Buyer Shop as Do Not Contact' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Mark as Do Not Contact' });
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(within(dialog).getByText(/Priority Buyer Shop/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    expect(updateContact).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog', { name: 'Mark as Do Not Contact' })).not.toBeInTheDocument();
+    expect(screen.getByText('Priority Buyer Shop')).toBeInTheDocument();
+  });
+
+  it('marks an unverified prospect do-not-contact and records Reject verification after confirmation', async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    vi.mocked(fetchDailyCallMasterList)
+      .mockResolvedValueOnce({
+        meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 1 },
+        items: [{
+          id: 'unverified-1',
+          shopName: 'Fresh Prospect Shop',
+          province: 'Batangas',
+          city: 'Lipa',
+          contactNumber: '0950',
+          assignedTo: 'Joan Jerusalem',
+          profileType: 'Prospect',
+          verification: 'Unverified',
+          lastPurchaseDate: '—',
+          lastPurchaseDateRaw: '',
+          purchaseCount: 0,
+          listCategory: 'no_purchase',
+          totalSales: 0,
+          currentMonthSales: 0,
+          daysSinceLastPurchase: 0,
+          monthsSinceLastPurchase: 0,
+          purchaseAgeGroup: 'no_purchase',
+        }],
+      })
+      .mockResolvedValueOnce({
+        meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 1 },
+        items: [{
+          id: 'unverified-1',
+          shopName: 'Fresh Prospect Shop',
+          province: 'Batangas',
+          city: 'Lipa',
+          contactNumber: '0950',
+          assignedTo: 'Joan Jerusalem',
+          profileType: 'Prospect',
+          verification: 'Rejected',
+          customerStatus: 4,
+          debtType: 'Bad',
+          lastPurchaseDate: '—',
+          lastPurchaseDateRaw: '',
+          purchaseCount: 0,
+          listCategory: 'no_purchase',
+          totalSales: 0,
+          currentMonthSales: 0,
+          daysSinceLastPurchase: 0,
+          monthsSinceLastPurchase: 0,
+          purchaseAgeGroup: 'no_purchase',
+        }],
+      });
+    vi.mocked(updateContact).mockResolvedValue(undefined);
+
+    render(<DailyCallMasterListView currentUser={masterUser} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Unverified Prospects (1)' }));
+    expect(await screen.findByRole('button', { name: 'Approve verification for Fresh Prospect Shop' })).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Mark Fresh Prospect Shop as Do Not Contact' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Mark as Do Not Contact' });
+    expect(confirmSpy).not.toHaveBeenCalled();
+    await user.click(within(dialog).getByRole('button', { name: 'Mark Do Not Contact' }));
+
+    expect(updateContact).toHaveBeenCalledWith(
+      'unverified-1',
+      {
+        status: 'Blacklisted',
+        debtType: 'Bad',
+        verification: 'Rejected',
+      },
+      'master-1'
+    );
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Unverified Prospects (0)' })).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /blacklisted\/rejected -do not contact \(1\)/i })).toBeInTheDocument();
+    expect(screen.getByTestId('category-table-unverified')).toBeInTheDocument();
+    expect(screen.queryByText('Fresh Prospect Shop')).not.toBeInTheDocument();
+  });
+
+  it('marks a buyer do-not-contact without changing verification fields', async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    vi.mocked(fetchDailyCallMasterList)
+      .mockResolvedValueOnce({
+        meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 1 },
+        items: [{
+          id: 'priority-1',
+          shopName: 'Priority Buyer Shop',
+          province: 'Manila',
+          city: 'Manila',
+          contactNumber: '0930',
+          assignedTo: 'Joan Jerusalem',
+          verification: 'Verified',
+          verifiedBy: 'Master User',
+          lastPurchaseDate: 'May 26, 2026',
+          lastPurchaseDateRaw: '2026-05-26',
+          purchaseCount: 1,
+          listCategory: 'priority',
+          totalSales: 5000,
+          currentMonthSales: 0,
+          daysSinceLastPurchase: 20,
+          monthsSinceLastPurchase: 0,
+          purchaseAgeGroup: 'two_weeks_to_one_month',
+        }],
+      })
+      .mockResolvedValueOnce({
+        meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 1 },
+        items: [{
+          id: 'priority-1',
+          shopName: 'Priority Buyer Shop',
+          province: 'Manila',
+          city: 'Manila',
+          contactNumber: '0930',
+          assignedTo: 'Joan Jerusalem',
+          verification: 'Verified',
+          verifiedBy: 'Master User',
+          customerStatus: 4,
+          debtType: 'Bad',
+          lastPurchaseDate: 'May 26, 2026',
+          lastPurchaseDateRaw: '2026-05-26',
+          purchaseCount: 1,
+          listCategory: 'priority',
+          totalSales: 5000,
+          currentMonthSales: 0,
+          daysSinceLastPurchase: 20,
+          monthsSinceLastPurchase: 0,
+          purchaseAgeGroup: 'two_weeks_to_one_month',
+        }],
+      });
+    vi.mocked(updateContact).mockResolvedValue(undefined);
+
+    render(<DailyCallMasterListView currentUser={masterUser} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Mark Priority Buyer Shop as Do Not Contact' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Mark as Do Not Contact' });
+    expect(confirmSpy).not.toHaveBeenCalled();
+    await user.click(within(dialog).getByRole('button', { name: 'Mark Do Not Contact' }));
+
+    expect(updateContact).toHaveBeenCalledWith(
+      'priority-1',
+      {
+        status: 'Blacklisted',
+        debtType: 'Bad',
+      },
+      'master-1'
+    );
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Priority List (0)' })).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /blacklisted\/rejected -do not contact \(1\)/i })).toBeInTheDocument();
+    expect(screen.getByTestId('category-table-priority')).toBeInTheDocument();
+    expect(screen.queryByText('Priority Buyer Shop')).not.toBeInTheDocument();
   });
 
   it('shows the blocked do-not-contact quick go to category', async () => {
@@ -479,6 +673,35 @@ describe('DailyCallMasterListView', () => {
     render(<DailyCallMasterListView />);
 
     expect(await screen.findByRole('button', { name: /blacklisted\/rejected -do not contact \(1\)/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Mark Blocked Shop as Do Not Contact' })).not.toBeInTheDocument();
+  });
+
+  it('does not show master do-not-contact controls when the master view is rendered without a master user', async () => {
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 1 },
+      items: [{
+        id: 'priority-1',
+        shopName: 'Priority Buyer Shop',
+        province: 'Manila',
+        city: 'Manila',
+        contactNumber: '0930',
+        assignedTo: 'Joan Jerusalem',
+        lastPurchaseDate: 'May 26, 2026',
+        lastPurchaseDateRaw: '2026-05-26',
+        purchaseCount: 1,
+        listCategory: 'priority',
+        totalSales: 5000,
+        currentMonthSales: 0,
+        daysSinceLastPurchase: 20,
+        monthsSinceLastPurchase: 0,
+        purchaseAgeGroup: 'two_weeks_to_one_month',
+      }],
+    });
+
+    render(<DailyCallMasterListView />);
+
+    expect(await screen.findByRole('button', { name: 'Call Priority Buyer Shop' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Mark Priority Buyer Shop as Do Not Contact' })).not.toBeInTheDocument();
   });
 
   it('does not render the removed customer case and incident-flow footer area', async () => {

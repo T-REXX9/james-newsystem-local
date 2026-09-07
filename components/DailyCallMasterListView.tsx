@@ -35,6 +35,7 @@ import type { DetailTabId } from './DailyCallCustomerDetailExpansion';
 const fromDate = '2025-10-01';
 const INITIAL_VISIBLE_ROWS = 30;
 const VISIBLE_ROWS_STEP = 30;
+const DO_NOT_CONTACT_CUSTOMER_STATUS = 4;
 
 const peso = new Intl.NumberFormat('en-PH', {
   style: 'currency',
@@ -144,7 +145,13 @@ const isProspectRow = (row: DailyCallMasterCustomerRow) => {
   return profileType.includes('prospect');
 };
 
-const sumBy = (rows: DailyCallMasterCustomerRow[], field: 'totalSales' | 'currentMonthSales' | 'purchaseCount') =>
+const canUseMasterDailyCallActions = (user?: UserProfile | null) => {
+  const role = String(user?.role || '').trim().toLowerCase();
+  const userType = String(user?.user_type || '').trim();
+  return role === 'master user' || role === 'company owner' || role === 'owner' || role === 'main' || role === 'developer' || userType === '1';
+};
+
+const sumBy = (rows: DailyCallMasterCustomerRow[], field: 'totalSales' | 'currentMonthSales' | 'purchaseCount' | 'averageMonthlySales') =>
   rows.reduce((sum, row) => sum + row[field], 0);
 
 const ageLabel = (row: DailyCallMasterCustomerRow) => {
@@ -266,6 +273,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const [detailInitialTab, setDetailInitialTab] = useState<DetailTabId>('overview');
   const [detailViewOnly, setDetailViewOnly] = useState(false);
   const [loadingCustomerId, setLoadingCustomerId] = useState<string | null>(null);
+  const [pendingDoNotContactRow, setPendingDoNotContactRow] = useState<DailyCallMasterCustomerRow | null>(null);
   const [activeCategoryId, setActiveCategoryId] = useState<CategoryId>('priority');
   const [visibleLimit, setVisibleLimit] = useState(INITIAL_VISIBLE_ROWS);
   const [currentVipFilter, setCurrentVipFilter] = useState('all');
@@ -354,15 +362,41 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     await loadRows(false, true);
   }, [loadRows]);
 
-  const handleRejectExistingProspect = useCallback(async (row: DailyCallMasterCustomerRow) => {
-    await updateContact(row.id, {
+  const handleConfirmDoNotContact = useCallback(async () => {
+    const row = pendingDoNotContactRow;
+    if (!row) return;
+    const shouldRejectProspect = isProspectRow(row) && row.verification !== 'Verified';
+    const updates = {
       status: CustomerStatus.BLACKLISTED,
-      debtType: 'Bad',
-      verification: 'Rejected',
-    });
-    setRows((prev) => prev.filter((item) => item.id !== row.id));
-    await loadRows(false, true);
-  }, [loadRows]);
+      debtType: 'Bad' as const,
+      ...(shouldRejectProspect ? { verification: 'Rejected' } : {}),
+    };
+
+    setLoadingCustomerId(row.id);
+    try {
+      await updateContact(row.id, updates, currentUser?.id);
+      setRows((prev) => prev.map((item) =>
+        item.id === row.id
+          ? {
+              ...item,
+              customerStatus: DO_NOT_CONTACT_CUSTOMER_STATUS,
+              debtType: 'Bad',
+              ...(shouldRejectProspect ? { verification: 'Rejected' } : {}),
+            }
+          : item
+      ));
+      await loadRows(false, true);
+      setPendingDoNotContactRow(null);
+    } catch {
+      addToast({
+        type: 'error',
+        title: 'Unable to update customer',
+        description: 'Please try again or update Status from Customer Database.',
+      });
+    } finally {
+      setLoadingCustomerId(null);
+    }
+  }, [addToast, currentUser?.id, loadRows, pendingDoNotContactRow]);
 
   useEffect(() => {
     loadRows();
@@ -509,6 +543,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const activeCategory = categoryData.find((category) => category.id === activeCategoryId) || categoryData[0];
   const visibleRows = activeCategory.rows.slice(0, visibleLimit);
   const hasMoreRows = visibleRows.length < activeCategory.rows.length;
+  const showMasterActions = canUseMasterDailyCallActions(currentUser);
 
   useEffect(() => {
     setVisibleLimit(INITIAL_VISIBLE_ROWS);
@@ -832,7 +867,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                         </td>
                         <td className="px-2 py-2.5">
                           <div className="flex justify-center gap-1.5">
-                            {activeCategory.id === 'unverified' && (
+                            {activeCategory.id === 'unverified' && showMasterActions && (
                               <><button
                                 type="button"
                                 aria-label={`Approve verification for ${row.shopName}`}
@@ -843,16 +878,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                               >
                                 <UserRoundCheck className="h-4 w-4" />
                               </button>
-                              <button
-                                type="button"
-                                aria-label={`Reject ${row.shopName} to Blacklisted`}
-                                title={`Reject ${row.shopName} to Blacklisted`}
-                                onClick={() => handleRejectExistingProspect(row)}
-                                disabled={loadingCustomerId === row.id}
-                                className="rounded-full border border-rose-200 p-1.5 text-rose-600 transition hover:bg-rose-50 disabled:opacity-60"
-                              >
-                                <XCircle className="h-4 w-4" />
-                              </button></>
+                              </>
                             )}
                             {viewOnlyRow ? (
                               <button
@@ -865,6 +891,29 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                               >
                                 <Eye className="h-4 w-4" />
                               </button>
+                            ) : showMasterActions ? (
+                              <>
+                                <button
+                                  type="button"
+                                  aria-label={`Mark ${row.shopName} as Do Not Contact`}
+                                  title={`Mark ${row.shopName} as Do Not Contact`}
+                                  onClick={() => setPendingDoNotContactRow(row)}
+                                  disabled={loadingCustomerId === row.id}
+                                  className="rounded-full border border-rose-200 p-1.5 text-rose-600 transition hover:bg-rose-50 disabled:opacity-60"
+                                >
+                                  <XCircle className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  aria-label={`Call ${row.shopName}`}
+                                  title={`Open call details for ${row.shopName}`}
+                                  onClick={() => openCustomerDetails(row, 'overview')}
+                                  disabled={loadingCustomerId === row.id}
+                                  className="rounded-full border border-emerald-200 p-1.5 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-60"
+                                >
+                                  <Phone className="h-4 w-4" />
+                                </button>
+                              </>
                             ) : (
                               <button
                                 type="button"
@@ -895,6 +944,51 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
       <footer className="flex items-center justify-between px-2 pb-2 text-[11px] text-slate-500">
         <span>© 2026 TND-OPC. All rights reserved.</span><span>Version 1.0.0</span>
       </footer>
+
+      {pendingDoNotContactRow && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4 py-6" role="presentation">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="do-not-contact-confirm-title"
+            className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-2xl"
+          >
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 rounded-full bg-rose-50 p-2 text-rose-600">
+                <XCircle className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 id="do-not-contact-confirm-title" className="text-base font-bold text-slate-950">Mark as Do Not Contact</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Confirm that <span className="font-semibold text-slate-900">{pendingDoNotContactRow.shopName}</span> should be moved to Do Not Contact.
+                </p>
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  This sets the customer status to Blacklisted and debt type to Bad. Unverified prospects will also be marked Rejected.
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingDoNotContactRow(null)}
+                disabled={loadingCustomerId === pendingDoNotContactRow.id}
+                className="rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDoNotContact}
+                disabled={loadingCustomerId === pendingDoNotContactRow.id}
+                className="inline-flex items-center rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:opacity-60"
+              >
+                {loadingCustomerId === pendingDoNotContactRow.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Mark Do Not Contact
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <DailyCallCustomerDetailModal
         isOpen={Boolean(selectedCustomer)}

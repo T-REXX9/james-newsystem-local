@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
 import { CustomerStatus } from '../../types';
-import { mapApiCustomerToContact, mapContactPayloadToApi, mapContactUpdatesToApi } from '../customerDatabaseLocalApiService';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchDailyCallMasterList } from '../dailyCallMonitoringService';
+import { mapApiCustomerToContact, mapContactPayloadToApi, mapContactUpdatesToApi, updateContact } from '../customerDatabaseLocalApiService';
 
 const reloadStanding = (patch: Record<string, unknown>) =>
   mapApiCustomerToContact({
@@ -42,6 +43,49 @@ describe('customer database price and discount codes', () => {
     expect(mapContactUpdatesToApi({ discountCode: 'vip silver' })).toEqual({
       discount_code: 'vip silver',
     });
+  });
+});
+
+describe('customer database saves and daily call cache', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('does not let the master daily call list serve a pre-save cache after updateContact succeeds', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: {
+            items: [{ id: 'blocked-1', shop_name: 'Blocked Shop', customer_status: 4, debt_type: 'Bad' }],
+            meta: { from_date: '2025-10-01', count: 1 },
+          },
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { id: 'blocked-1' } }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: {
+            items: [{ id: 'blocked-1', shop_name: 'Active Again Shop', customer_status: 1, debt_type: 'Good' }],
+            meta: { from_date: '2025-10-01', count: 1 },
+          },
+        }),
+      } as Response);
+
+    const beforeSave = await fetchDailyCallMasterList({ fromDate: '2025-10-01' });
+    expect(beforeSave.items[0]).toMatchObject({ shopName: 'Blocked Shop', debtType: 'Bad' });
+
+    await updateContact('blocked-1', { status: CustomerStatus.ACTIVE });
+
+    const afterSave = await fetchDailyCallMasterList({ fromDate: '2025-10-01' });
+
+    expect(afterSave.items[0]).toMatchObject({ shopName: 'Active Again Shop', debtType: 'Good' });
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    expect(String(fetchSpy.mock.calls[2][0])).toContain('/daily-call-monitoring/master-list?');
   });
 });
 
@@ -133,6 +177,20 @@ describe('customer standing round-trip', () => {
     });
 
     expect(reloadStanding(patch)).toBe(CustomerStatus.BLACKLISTED);
+  });
+
+  it('saving Status Blacklisted does not rewrite profile type or verification unless explicitly requested', () => {
+    const patch = mapContactUpdatesToApi({
+      status: CustomerStatus.BLACKLISTED,
+      debtType: 'Good',
+    });
+
+    expect(patch).toMatchObject({
+      status: 1,
+      debt_type: 'Bad',
+    });
+    expect(patch).not.toHaveProperty('profile_type');
+    expect(patch).not.toHaveProperty('verification');
   });
 
   it('saving Status Inactive on a Blacklisted customer reloads as Inactive', () => {

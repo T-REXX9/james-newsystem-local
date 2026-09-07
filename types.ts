@@ -332,7 +332,6 @@ export interface Contact {
   status: CustomerStatus; // "status_filter"
   verification?: string;
   customerStatus?: number;
-  debtType?: string;
   isHidden: boolean; // "hide_unhide"
   debtType: 'Good' | 'Bad';
   comment: string; // General comment
@@ -714,6 +713,8 @@ export interface DailyCallMasterCustomerRow {
   assignedDate?: string;
   profileType?: string;
   verification?: string;
+  customerStatus?: number;
+  debtType?: 'Good' | 'Bad' | string;
   verifiedBy?: string;
   createdAt?: string;
   priceGroup?: string;
