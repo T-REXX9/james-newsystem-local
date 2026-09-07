@@ -119,13 +119,13 @@ interface SalesInquiryViewProps {
 }
 
 const inquiryListColumnWidths = [
-  '8rem',
-  '30%',
-  '12rem',
-  '11rem',
-  '14rem',
-  '16%',
-  '10rem',
+  '10%',
+  '23%',
+  '13%',
+  '12%',
+  '15%',
+  '15%',
+  '12%',
 ];
 const SALES_INQUIRY_TAB_ID = 'sales-transaction-sales-inquiry';
 
@@ -1534,7 +1534,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
   const legacyLayout = (
     <div className="min-h-full overflow-y-auto bg-[#f4f4f4] px-5 py-10 text-[#202020] dark:bg-[#f4f4f4] dark:text-[#202020]" style={{ fontFamily: 'Arial, sans-serif' }}>
-      <div className="mx-auto w-full max-w-[1140px] space-y-[26px]">
+      <div className="mx-auto w-full max-w-[1680px] space-y-[26px]">
         <section className="overflow-hidden rounded-[5px] border border-[#d7d7d7] bg-white">
           <div className="flex min-h-[83px] flex-col gap-5 border-b border-[#d7d7d7] px-[35px] py-5 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-wrap items-center gap-[5px]">
@@ -1561,17 +1561,14 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
             </div>
           </div>
 
-          <div className="h-[207px] overflow-x-auto px-[25px] py-[25px]">
+          <div className="h-[207px] px-[25px] py-[25px]">
             <div className="mb-[10px] text-[13px]"><strong>Filtered By:</strong> {filteredByLabel}</div>
-            <table className="w-full min-w-[1400px] table-fixed border-collapse text-[12px]">
-              <colgroup>{inquiryListColumnWidths.map((width, index) => <col key={`${width}-${index}`} style={{ width }} />)}</colgroup>
-              <thead><tr className="border-b-2 border-[#d5d5d5] text-left text-[14px] font-semibold">
-                <th className="px-2 pb-2">Date</th><th className="px-2 pb-2">Customer</th><th className="px-2 pb-2">SI No.</th><th className="px-2 pb-2">SO No.</th><th className="px-2 pb-2">Transaction No.</th><th className="px-2 pb-2">Sales Person</th><th className="px-2 pb-2">Status</th>
-              </tr></thead>
-            </table>
-            <div className="max-h-[104px] min-w-[1400px] overflow-y-auto">
-              <table className="w-full table-fixed border-collapse text-[13px]">
+            <div data-testid="sales-inquiry-list" className="max-h-[132px] overflow-x-auto overflow-y-auto lg:overflow-x-hidden">
+              <table className="w-full min-w-[1100px] table-fixed border-collapse text-[13px] lg:min-w-0">
                 <colgroup>{inquiryListColumnWidths.map((width, index) => <col key={`${width}-${index}`} style={{ width }} />)}</colgroup>
+                <thead className="sticky top-0 z-10 bg-white"><tr className="border-b-2 border-[#d5d5d5] text-left text-[14px] font-semibold">
+                  <th className="px-2 pb-2">Date</th><th className="px-2 pb-2">Customer</th><th className="px-2 pb-2">SI No.</th><th className="px-2 pb-2">SO No.</th><th className="px-2 pb-2">Transaction No.</th><th className="px-2 pb-2">Sales Person</th><th className="px-2 pb-2">Status</th>
+                </tr></thead>
                 <tbody>
                   {listLoading ? <tr><td colSpan={7} className="border border-[#d7d7d7] px-2 py-4 text-center text-[#777]">Loading inquiries...</td></tr> : filteredInquiries.length === 0 ? <tr><td colSpan={7} className="border border-[#d7d7d7] px-2 py-4 text-center text-[#777]">No inquiries found.</td></tr> : filteredInquiries.map((inquiry) => {
                     const customer = customerMap.get(inquiry.contact_id);

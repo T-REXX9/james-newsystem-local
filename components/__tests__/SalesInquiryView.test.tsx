@@ -292,6 +292,22 @@ describe('SalesInquiryView', () => {
     expect(middle.compareDocumentPosition(oldest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it('keeps every Sales Inquiry list column visible without horizontal scrolling', async () => {
+    getAllSalesInquiriesMock.mockResolvedValue([makeInquiry()]);
+
+    render(<SalesInquiryView />);
+
+    await screen.findByText('INQ26-1');
+
+    const list = screen.getByTestId('sales-inquiry-list');
+    expect(list).toHaveClass('overflow-x-auto', 'lg:overflow-x-hidden');
+    expect(list.querySelectorAll('table')).toHaveLength(1);
+    expect(list.querySelector('table')).toHaveClass('min-w-[1100px]', 'lg:min-w-0');
+    ['Date', 'Customer', 'SI No.', 'SO No.', 'Transaction No.', 'Sales Person', 'Status'].forEach((heading) => {
+      expect(within(list).getByText(heading)).toBeVisible();
+    });
+  });
+
   it('opens a blank draft from Create New when routed to an existing inquiry', async () => {
     const user = userEvent.setup();
     const existingInquiry = makeInquiry({
