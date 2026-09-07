@@ -220,4 +220,12 @@ describe('ProductDatabase', () => {
     expect(screen.getByText('Showing 2 of 2 records')).toBeInTheDocument();
     expect(screen.getByText('All items loaded')).toBeInTheDocument();
   });
+
+  it('opens on Supplier & Costing when handed off from Reorder Report', async () => {
+    render(<ProductDatabase currentUser={{ id: 'owner-1', email: 'owner@example.com', role: 'Owner', user_type: '1' }} initialDetailTab="suppliers" />);
+
+    expect(await screen.findByRole('tab', { name: 'Supplier & Costing' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('Supplier COG')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Product Details' })).toHaveAttribute('aria-selected', 'false');
+  });
 });

@@ -446,6 +446,10 @@ const App: React.FC = () => {
                 (moduleContext['warehouse-inventory-product-database']?.suggestedFrom ||
                   moduleContext.products?.suggestedFrom) === '1'
               }
+              initialDetailTab={
+                moduleContext['warehouse-inventory-product-database']?.detailTab ||
+                moduleContext.products?.detailTab
+              }
             />
           </div>
         );
@@ -453,7 +457,7 @@ const App: React.FC = () => {
       case 'warehouse-reports-reorder-report':
         return (
           <div className="h-full overflow-y-auto">
-            <ReorderReport />
+            <ReorderReport currentUser={userProfile} />
           </div>
         );
       case 'warehouse-inventory-stock-movement':

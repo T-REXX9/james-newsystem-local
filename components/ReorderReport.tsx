@@ -15,10 +15,17 @@ import {
   ReorderSearchOption,
   ReorderWarehouseType,
 } from '../services/reorderReportService';
+import type { UserProfile } from '../types';
 import { useToast } from './ToastProvider';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
 import ConfirmModal from './ConfirmModal';
 import ModuleRecordLink from './ModuleRecordLink';
+import { buildModuleRecordUrl } from '../utils/workflowNavigate';
+
+const isMasterUser = (user?: UserProfile | null) => {
+  const role = String(user?.role || '').trim().toLowerCase();
+  return String(user?.user_type || '') === '1' || ['owner', 'company owner', 'master user', 'main'].includes(role);
+};
 
 interface AddToPrModalProps {
   items: ReorderReportEntry[];
@@ -275,8 +282,13 @@ const isReorderReportHistoryEntry = (): boolean =>
   typeof window !== 'undefined'
   && window.location.hash.replace(/^#\/?/, '').split('?')[0] === 'warehouse-reports-reorder-report';
 
-const ReorderReport: React.FC = () => {
+interface ReorderReportProps {
+  currentUser?: UserProfile | null;
+}
+
+const ReorderReport: React.FC<ReorderReportProps> = ({ currentUser = null }) => {
   const { addToast } = useToast();
+  const masterUser = isMasterUser(currentUser);
   const initialSnapshotRef = useRef<ReorderReportHistorySnapshot | null>(readReorderHistorySnapshot());
   const [rows, setRows] = useState<ReorderReportEntry[]>(() => initialSnapshotRef.current?.rows || []);
   const [loading, setLoading] = useState(() => !initialSnapshotRef.current);
@@ -713,6 +725,26 @@ const ReorderReport: React.FC = () => {
     return cogs.find((cog) => cog.supplier_id === selectedId) || cogs[0] || null;
   };
 
+  const openProductSupplierCog = (row: ReorderReportEntry) => {
+    const opened = window.open(
+      buildModuleRecordUrl('warehouse-inventory-product-database', {
+        productId: row.product_session,
+        partNo: row.part_no,
+        detailTab: 'suppliers',
+      }),
+      '_blank',
+      'noopener,noreferrer'
+    );
+    if (!opened) {
+      addToast({
+        type: 'warning',
+        title: 'New tab was blocked',
+        description: 'Please allow pop-ups for this system to open Product Database in a separate tab.',
+        durationMs: 5000,
+      });
+    }
+  };
+
   const renderStatusBadge = (status: string) => {
     const normalized = status.toLowerCase();
     const color = normalized.startsWith('overdue') || normalized === 'cancelled'
@@ -997,6 +1029,14 @@ const ReorderReport: React.FC = () => {
                               </option>
                             ))}
                           </select>
+                        ) : masterUser ? (
+                          <button
+                            type="button"
+                            className="rounded border border-[#173c83] bg-white px-2 py-1 text-xs font-bold text-[#173c83] hover:bg-slate-50"
+                            onClick={() => openProductSupplierCog(row)}
+                          >
+                            Add Supplier COG
+                          </button>
                         ) : '-'}
                       </td>
                       <td className="border-r border-slate-100 px-3 py-3 text-right font-semibold">

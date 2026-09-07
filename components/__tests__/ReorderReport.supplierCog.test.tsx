@@ -90,6 +90,15 @@ const reportRow = (updates: Record<string, unknown> = {}) => ({
   ...updates,
 });
 
+const emptySupplierCog = {
+  preferred_supplier_id: '',
+  preferred_supplier_name: '',
+  preferred_supplier_cost: 0,
+  supplier_costs: [],
+};
+
+const masterUser = { id: 'master-1', email: 'master@example.com', role: 'Master User', user_type: '1' };
+
 describe('Reorder Report Recommended Supplier COG', () => {
   beforeEach(() => {
     window.history.replaceState(null, '', '/#/warehouse-reports-reorder-report');
@@ -147,12 +156,7 @@ describe('Reorder Report Recommended Supplier COG', () => {
 
   it('does not invent a supplier when the product has no Supplier COG', async () => {
     fetchEntriesMock.mockResolvedValue({
-      items: [reportRow({
-        preferred_supplier_id: '',
-        preferred_supplier_name: '',
-        preferred_supplier_cost: 0,
-        supplier_costs: [],
-      })],
+      items: [reportRow(emptySupplierCog)],
       meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
     });
 
@@ -160,5 +164,62 @@ describe('Reorder Report Recommended Supplier COG', () => {
     expect((await screen.findAllByText('QK6-022')).length).toBeGreaterThan(0);
     expect(screen.queryByRole('combobox', { name: 'Recommended supplier for QK6-022' })).not.toBeInTheDocument();
     expect(screen.getAllByText('-').length).toBeGreaterThan(0);
+  });
+
+  it('lets a Master User add Supplier COG from a row that has none', async () => {
+    fetchEntriesMock.mockResolvedValue({
+      items: [reportRow(emptySupplierCog)],
+      meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
+    });
+
+    render(<ReorderReport currentUser={masterUser} />);
+
+    expect(await screen.findByRole('button', { name: 'Add Supplier COG' })).toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Recommended supplier for QK6-022' })).not.toBeInTheDocument();
+  });
+
+  it('opens that product on the Product Database Supplier COG tab in a new tab', async () => {
+    fetchEntriesMock.mockResolvedValue({
+      items: [reportRow(emptySupplierCog)],
+      meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
+    });
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+    render(<ReorderReport currentUser={masterUser} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Add Supplier COG' }));
+
+    expect(openSpy).toHaveBeenCalledTimes(1);
+    const [url, target, features] = openSpy.mock.calls[0];
+    expect(String(url)).toContain('#/warehouse-inventory-product-database?');
+    expect(String(url)).toContain('productId=session-1');
+    expect(String(url)).toContain('partNo=P-DN21150');
+    expect(String(url)).toContain('detailTab=suppliers');
+    expect(target).toBe('_blank');
+    expect(features).toBe('noopener,noreferrer');
+    expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'warning',
+      title: 'New tab was blocked',
+    }));
+    openSpy.mockRestore();
+  });
+
+  it('keeps a dash for warehouse staff when the product has no Supplier COG', async () => {
+    fetchEntriesMock.mockResolvedValue({
+      items: [reportRow(emptySupplierCog)],
+      meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
+    });
+
+    render(<ReorderReport currentUser={{ id: 'wh-1', email: 'warehouse@example.com', role: 'Warehouse Personnel', user_type: '4' }} />);
+    expect((await screen.findAllByText('QK6-022')).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: 'Add Supplier COG' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Recommended supplier for QK6-022' })).not.toBeInTheDocument();
+    expect(screen.getAllByText('-').length).toBeGreaterThan(0);
+  });
+
+  it('keeps the Recommended Supplier dropdown for a Master User when Supplier COG exists', async () => {
+    render(<ReorderReport currentUser={masterUser} />);
+
+    expect(await screen.findByRole('combobox', { name: 'Recommended supplier for QK6-022' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add Supplier COG' })).not.toBeInTheDocument();
   });
 });

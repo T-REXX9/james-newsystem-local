@@ -30,10 +30,16 @@ interface ProductDatabaseProps {
   initialItemCode?: string;
   initialSuggestedInquiryItemId?: string;
   fromSuggestedStock?: boolean;
+  initialDetailTab?: string;
 }
 
 type ProductForm = Omit<Product, 'id'>;
+type ProductDetailTab = 'details' | 'suppliers' | 'pricing';
 type SupplierCost = NonNullable<Product['supplier_costs']>[number];
+
+const productDetailTab = (value?: string): ProductDetailTab => (
+  value === 'suppliers' ? 'suppliers' : 'details'
+);
 
 interface LegacyFilters {
   partNo: string;
@@ -186,6 +192,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
   initialItemCode = '',
   initialSuggestedInquiryItemId = '',
   fromSuggestedStock = false,
+  initialDetailTab,
 }) => {
   const { addToast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
@@ -207,7 +214,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
   const [submitCount, setSubmitCount] = useState(0);
   const [submitError, setSubmitError] = useState('');
   const [highlightedProductId, setHighlightedProductId] = useState<string | null>(null);
-  const [detailTab, setDetailTab] = useState<'details' | 'suppliers' | 'pricing'>('details');
+  const [detailTab, setDetailTab] = useState<ProductDetailTab>(() => productDetailTab(initialDetailTab));
   const productRowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
   const listViewportRef = useRef<HTMLDivElement | null>(null);
   const loadingRef = useRef(false);
