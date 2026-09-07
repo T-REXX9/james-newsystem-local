@@ -20,16 +20,14 @@ interface ReceivingViewProps {
     onCreateNew: () => void;
 }
 
-type LineDraft = { qty: number | ''; unitCost: number | '' };
+type LineDraft = { qty: number | '' };
 
 const seedLineDrafts = (items: ReceivingReportWithDetails['items'] | undefined): Record<string, LineDraft> => {
     const drafts: Record<string, LineDraft> = {};
     for (const item of items || []) {
         const qty = Number(item.qty_received);
-        const unitCost = Number(item.unit_cost);
         drafts[item.id] = {
             qty: Number.isFinite(qty) && qty > 0 ? qty : '',
-            unitCost: Number.isFinite(unitCost) ? unitCost : '',
         };
     }
     return drafts;
@@ -43,9 +41,7 @@ const applyLineDrafts = (
     items: (report.items || []).map((item) => {
         const draft = drafts[item.id];
         const qty = draft?.qty === '' || draft?.qty == null ? 0 : Number(draft.qty);
-        const unitCost = draft?.unitCost === '' || draft?.unitCost == null
-            ? Number(item.unit_cost || 0)
-            : Number(draft.unitCost);
+        const unitCost = Number(item.unit_cost || 0);
         return {
             ...item,
             qty_received: qty,
@@ -68,10 +64,6 @@ const validateLineDrafts = (
         }
         if (ordered > 0 && qty > ordered) {
             return `Quantity cannot exceed the ordered quantity (${ordered}).`;
-        }
-        const unitCost = draft?.unitCost === '' ? 0 : Number(draft?.unitCost);
-        if (!Number.isFinite(unitCost) || unitCost < 0) {
-            return 'Unit cost cannot be negative';
         }
     }
     return null;
@@ -126,14 +118,11 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
         try {
             for (const item of drafted.items || []) {
                 const original = rr.items?.find((candidate) => candidate.id === item.id);
-                if (
-                    Number(original?.qty_received || 0) !== Number(item.qty_received || 0)
-                    || Number(original?.unit_cost || 0) !== Number(item.unit_cost || 0)
-                ) {
+                if (Number(original?.qty_received || 0) !== Number(item.qty_received || 0)) {
                     await receivingService.updateReceivingReportItem(item.id, {
                         rr_id: rr.id,
                         qty_received: Number(item.qty_received),
-                        unit_cost: Number(item.unit_cost),
+                        unit_cost: Number(original?.unit_cost || item.unit_cost || 0),
                     });
                 }
             }
@@ -173,14 +162,10 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
 
     const canEditItems = ['Draft', 'Pending', 'Unposted'].includes(rr?.status || '');
 
-    const updateLineDraft = (itemId: string, field: keyof LineDraft, value: number | '') => {
+    const updateLineQty = (itemId: string, value: number | '') => {
         setLineDrafts((current) => ({
             ...current,
-            [itemId]: {
-                qty: current[itemId]?.qty ?? '',
-                unitCost: current[itemId]?.unitCost ?? '',
-                [field]: value,
-            },
+            [itemId]: { qty: value },
         }));
     };
 
@@ -228,7 +213,6 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
     const remainingQty = remainingQuantityAfterReceipt(drafted);
     const hasIncompleteDelivery = remainingQty > 0;
     const etaDate = rr.eta_date || rr.po?.items?.find(item => item.eta_date)?.eta_date || null;
-    const liveGrandTotal = drafted.items?.reduce((sum, item) => sum + Number(item.total_amount || 0), 0) || 0;
 
     return (
         <div className="w-full rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -314,16 +298,14 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                 <div className="overflow-hidden rounded-lg border border-slate-200">
                     <table className="w-full table-fixed border-collapse text-xs">
                         <colgroup>
-                            <col className="w-[4%]" />
+                            <col className="w-[5%]" />
+                            <col className="w-[13%]" />
+                            <col className="w-[22%]" />
+                            <col className="w-[13%]" />
+                            <col className="w-[13%]" />
+                            <col className="w-[12%]" />
                             <col className="w-[11%]" />
-                            <col className="w-[18%]" />
                             <col className="w-[11%]" />
-                            <col className="w-[11%]" />
-                            <col className="w-[10%]" />
-                            <col className="w-[9%]" />
-                            <col className="w-[10%]" />
-                            <col className="w-[8%]" />
-                            <col className="w-[8%]" />
                         </colgroup>
                         <thead>
                             <tr className="border-b border-slate-200 bg-slate-50 text-left text-[9px] font-bold uppercase leading-tight tracking-wide text-slate-500">
@@ -335,15 +317,13 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                                 <th className="break-words px-2 py-3">Brand</th>
                                 <th className="break-words px-2 py-3 text-center">Qty Ordered</th>
                                 <th className="break-words px-2 py-3 text-center">Qty Received</th>
-                                <th className="break-words px-2 py-3 text-right">Unit Cost</th>
-                                <th className="break-words px-2 py-3 text-right">Amount</th>
                             </tr>
                         </thead>
                         <tbody>
                             {!rr.items?.length ? (
-                                <tr><td colSpan={10} className="py-12 text-center text-sm text-slate-500">No items received.</td></tr>
+                                <tr><td colSpan={8} className="py-12 text-center text-sm text-slate-500">No items received.</td></tr>
                             ) : drafted.items.map((item, index) => {
-                                const draft = lineDrafts[item.id] || { qty: item.qty_received || '', unitCost: item.unit_cost || '' };
+                                const draft = lineDrafts[item.id] || { qty: item.qty_received || '' };
                                 return (
                                 <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
                                     <td className="break-words px-2 py-3 text-center font-semibold text-slate-500">{index + 1}</td>
@@ -353,9 +333,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                                     <td className="break-words px-2 py-3 text-[13px] font-bold text-[#173c83]">{item.part_no || '-'}</td>
                                     <td className="break-words px-2 py-3 font-semibold text-slate-600">{item.brand || item.product?.brand || '-'}</td>
                                     <td className="break-words px-2 py-3 text-center font-semibold text-slate-600">{item.qty_ordered || item.qty_received || 0}</td>
-                                    <td className="break-words px-2 py-3 text-center font-bold text-slate-700">{canEditItems ? <input aria-label={`Edit quantity received ${index + 1}`} type="number" min="1" value={draft.qty} onChange={(event) => updateLineDraft(item.id, 'qty', parseOptionalNumberInput(event.target.value))} className="h-8 w-full min-w-0 rounded border border-slate-300 px-1 text-center" /> : (item.qty_received || 0)}</td>
-                                    <td className="break-words px-2 py-3 text-right font-semibold text-slate-600">{canEditItems ? <input aria-label={`Edit unit cost ${index + 1}`} type="number" min="0" step="0.01" value={draft.unitCost} onChange={(event) => updateLineDraft(item.id, 'unitCost', parseOptionalNumberInput(event.target.value))} className="h-8 w-full min-w-0 rounded border border-slate-300 px-1 text-right" /> : (item.unit_cost ? item.unit_cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-')}</td>
-                                    <td className="break-words px-2 py-3 text-right font-bold text-slate-700">{item.total_amount ? item.total_amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
+                                    <td className="break-words px-2 py-3 text-center font-bold text-slate-700">{canEditItems ? <input aria-label={`Edit quantity received ${index + 1}`} type="number" min="1" value={draft.qty} onChange={(event) => updateLineQty(item.id, parseOptionalNumberInput(event.target.value))} className="h-8 w-full min-w-0 rounded border border-slate-300 px-1 text-center" /> : (item.qty_received || 0)}</td>
                                 </tr>
                                 );
                             })}
@@ -363,28 +341,13 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                     </table>
                 </div>
 
-                <div className="mt-4 flex items-start justify-between rounded-lg border border-slate-200 bg-slate-50 p-6">
+                <div className="mt-4 flex flex-wrap items-start justify-between gap-6 rounded-lg border border-slate-200 bg-slate-50 p-6">
                     <div className="flex flex-col gap-3 text-sm font-bold text-slate-700">
                         <div>Total Items: <span className="ml-2">{rr.items?.length || 0}</span></div>
                         <div>Total Quantity Received: <span className="ml-2 text-[#175fd3]">{totalReceived}</span></div>
                     </div>
-                    <div className="flex w-64 flex-col gap-3 text-sm">
-                        <div className="flex justify-between font-semibold text-slate-600">
-                            <span>Total Qty Ordered:</span>
-                            <span>{totalOrdered}</span>
-                        </div>
-                        <div className="flex justify-between font-semibold text-slate-600">
-                            <span>Total Amount:</span>
-                            <span>{liveGrandTotal ? liveGrandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}</span>
-                        </div>
-                        <div className="flex justify-between font-semibold text-slate-600">
-                            <span>Total COGS:</span>
-                            <span>-</span>
-                        </div>
-                        <div className="mt-2 flex justify-between border-t border-slate-300 pt-3 text-base font-extrabold text-slate-800">
-                            <span>Grand Total:</span>
-                            <span className="text-[#175fd3]">{liveGrandTotal ? liveGrandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}</span>
-                        </div>
+                    <div className="text-sm font-semibold text-slate-600">
+                        Total Qty Ordered: <span className="ml-2">{totalOrdered}</span>
                     </div>
                 </div>
             </div>

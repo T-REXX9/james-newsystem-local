@@ -329,14 +329,12 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                     <div className="min-h-[200px] overflow-hidden">
                         <table className="w-full table-fixed text-left text-xs leading-tight">
                             <colgroup>
+                                <col className="w-[18%]" />
+                                <col className="w-[34%]" />
+                                <col className="w-[12%]" />
                                 <col className="w-[16%]" />
-                                <col className="w-[28%]" />
-                                <col className="w-[9%]" />
-                                <col className="w-[11%]" />
-                                <col className="w-[10%]" />
-                                <col className="w-[11%]" />
-                                <col className="w-[11%]" />
-                                <col className="w-[4%]" />
+                                <col className="w-[14%]" />
+                                <col className="w-[6%]" />
                             </colgroup>
                             <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-500 uppercase text-xs font-semibold">
                                 <tr>
@@ -345,15 +343,13 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                                     <th className="break-words px-2 py-3">Ordered</th>
                                     <th className="break-words px-2 py-3">Previously Received</th>
                                     <th className="break-words px-2 py-3">Qty Recv</th>
-                                    <th className="break-words px-2 py-3">Unit Cost</th>
-                                    <th className="break-words px-2 py-3 text-right">Total</th>
                                     <th className="px-2 py-3 rounded-r-lg"></th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                                 {items.length === 0 ? (
                                     <tr>
-                                        <td colSpan={8} className="py-12 text-center text-slate-400">
+                                        <td colSpan={6} className="py-12 text-center text-slate-400">
                                             <Package className="w-12 h-12 mx-auto mb-3 opacity-20" />
                                             <p>No items added yet</p>
                                         </td>
@@ -381,22 +377,6 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                                                     }`}
                                                 />
                                             </td>
-                                            <td className="px-2 py-3">
-                                                <div className="relative">
-                                                    <span className="absolute left-2 top-1.5 text-slate-400">₱</span>
-                                                    <input
-                                                        type="number"
-                                                        min="0"
-                                                        step="0.01"
-                                                        value={item.unit_cost || ''}
-                                                        onChange={(e) => updateItem(item.tempId, 'unit_cost', parseOptionalNumberInput(e.target.value))}
-                                                        className="w-full min-w-0 pl-6 pr-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-900 focus:ring-2 focus:ring-blue-500 outline-none"
-                                                    />
-                                                </div>
-                                            </td>
-                                            <td className="break-words px-2 py-3 text-right font-medium text-slate-700 dark:text-white">
-                                                ₱{(item.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                            </td>
                                             <td className="px-2 py-3 text-right">
                                                 <button
                                                     onClick={() => removeItem(item.tempId)}
@@ -409,17 +389,6 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                                     ))
                                 )}
                             </tbody>
-                            <tfoot className="border-t-2 border-slate-100 dark:border-slate-700">
-                                <tr>
-                                    <td colSpan={6} className="text-right py-4 px-4 font-bold text-slate-600 dark:text-slate-400 uppercase text-xs tracking-wider">
-                                        Grand Total
-                                    </td>
-                                    <td className="text-right py-4 px-4 font-bold text-xl text-blue-600 dark:text-blue-400">
-                                        ₱{items.reduce((sum, i) => sum + (i.total_amount || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                    </td>
-                                    <td></td>
-                                </tr>
-                            </tfoot>
                         </table>
                     </div>
                 </div>

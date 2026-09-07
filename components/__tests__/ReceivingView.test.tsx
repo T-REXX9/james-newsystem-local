@@ -46,6 +46,11 @@ describe('ReceivingView', () => {
     expect(screen.getAllByText('PO-2601').length).toBeGreaterThan(0);
     expect(screen.getByText(/August 22, 2026|08\/22\/2026/)).toBeInTheDocument();
     expect(screen.getByText('OPN-1')).toBeInTheDocument();
+    expect(screen.queryByText('Unit Cost')).not.toBeInTheDocument();
+    expect(screen.queryByText('Amount')).not.toBeInTheDocument();
+    expect(screen.queryByText('Total Amount:')).not.toBeInTheDocument();
+    expect(screen.queryByText('Total COGS:')).not.toBeInTheDocument();
+    expect(screen.queryByText('Grand Total:')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /print rr/i }));
     expect(window.print).toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: /view history/i }));
@@ -90,7 +95,7 @@ describe('ReceivingView', () => {
     fireEvent.change(qtyInput, { target: { value: '' } });
     expect(qtyInput).toHaveValue(null);
     fireEvent.change(qtyInput, { target: { value: '4' } });
-    fireEvent.change(screen.getByLabelText('Edit unit cost 1'), { target: { value: '20' } });
+    expect(screen.queryByLabelText('Edit unit cost 1')).not.toBeInTheDocument();
     expect(screen.queryByTitle('Save item')).not.toBeInTheDocument();
     expect(screen.queryByTitle('Edit item')).not.toBeInTheDocument();
 
@@ -101,7 +106,7 @@ describe('ReceivingView', () => {
     await waitFor(() => expect(service.updateReceivingReportItem).toHaveBeenCalledWith('RRITEM-1', expect.objectContaining({
       rr_id: 'RRREF-1',
       qty_received: 4,
-      unit_cost: 20,
+      unit_cost: 25,
     })));
     await waitFor(() => expect(service.finalizeReceivingReport).toHaveBeenCalledWith('RRREF-1', {
       closeRemainingPoQty: false,
