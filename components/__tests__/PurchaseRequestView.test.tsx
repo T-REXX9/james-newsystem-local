@@ -316,6 +316,44 @@ describe('PurchaseRequestView', () => {
     expect(screen.getByRole('link', { name: 'Open line purchase order PO-26310' })).toBeInTheDocument();
   });
 
+  it('shows the completed receiving report number from the PR summary banner', () => {
+    render(
+      <PurchaseRequestView
+        request={{
+          ...baseRequest,
+          status: 'Submitted',
+          cycle_status: 'Completed',
+          ordered_qty: 950,
+          received_qty: 950,
+          remaining_qty: 0,
+          rr_refno: 'RRREF-406',
+          rr_numbers: 'RR-26406',
+          rr_dates: '2026-05-27',
+          items: [{
+            ...baseRequest.items[0],
+            po_refno: 'POREF-279',
+            po_number: 'PO-26279',
+          }],
+        } as any}
+        onBack={vi.fn()}
+        onUpdate={vi.fn()}
+        onUpdateItem={vi.fn()}
+        onDeleteItem={vi.fn()}
+        onAddItem={vi.fn()}
+        onConvert={vi.fn()}
+        onPrint={vi.fn()}
+        products={[]}
+        suppliers={[]}
+      />
+    );
+
+    expect(screen.getByRole('link', { name: 'RR-26406' })).toHaveAttribute(
+      'href',
+      '#/warehouse-purchasing-receiving-stock?rrId=RRREF-406&rrRefNo=RR-26406',
+    );
+    expect(screen.getByText('May 27, 2026')).toBeInTheDocument();
+  });
+
   it('links a PR item to the exact purchase order record', () => {
     render(
       <PurchaseRequestView

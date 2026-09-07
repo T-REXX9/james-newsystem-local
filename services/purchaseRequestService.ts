@@ -110,6 +110,9 @@ const mapSummaryRow = (row: any): PurchaseRequestWithItems => {
     incomplete_delivery_reason: String(row?.incomplete_delivery_reason || ''),
     po_refno: String(row?.po_refno || ''),
     po_numbers: String(row?.po_numbers || ''),
+    rr_refno: String(row?.rr_refno || ''),
+    rr_numbers: String(row?.rr_numbers || ''),
+    rr_dates: String(row?.rr_dates || ''),
   } as PurchaseRequestWithItems;
 };
 
@@ -133,6 +136,9 @@ const mapDetail = (data: any): PurchaseRequestWithItems => {
     received_qty: receivedQty,
     remaining_qty: Math.max(0, orderedQty - receivedQty),
     cycle_status: request?.cycle_status || (items.some((item: any) => item?.po_refno) ? 'PO Created' : 'Pending'),
+    rr_refno: String(request?.rr_refno || ''),
+    rr_numbers: String(request?.rr_numbers || ''),
+    rr_dates: String(request?.rr_dates || ''),
     items: items.map((item: any) => ({
       id: String(item?.id || ''),
       pr_id: String(request?.refno || ''),

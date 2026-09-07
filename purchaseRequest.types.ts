@@ -21,6 +21,9 @@ export interface PurchaseRequestWithItems extends PurchaseRequest {
     received_qty?: number;
     remaining_qty?: number;
     incomplete_delivery_reason?: string;
+    rr_refno?: string;
+    rr_numbers?: string;
+    rr_dates?: string;
 }
 
 export interface CreatePRItemPayload {

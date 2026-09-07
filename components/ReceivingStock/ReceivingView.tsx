@@ -9,10 +9,11 @@ import {
 import { receivingService } from '../../services/receivingService';
 import { parseOptionalNumberInput } from '../../utils/formValidation';
 import { useToast } from '../ToastProvider';
-import { ArrowLeft, Printer, CheckCircle, Trash2, Calendar, FileText, Loader2, AlertCircle, Plus } from 'lucide-react';
+import { Printer, CheckCircle, Trash2, FileText, Loader2, AlertCircle, Plus } from 'lucide-react';
 import CustomLoadingSpinner from '../CustomLoadingSpinner';
 import RecoveryReasonModal from '../RecoveryReasonModal';
 import ModuleRecordLink from '../ModuleRecordLink';
+import ProcurementDocumentBanner from '../ProcurementDocumentBanner';
 
 interface ReceivingViewProps {
     rrId: string;
@@ -247,51 +248,20 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                         <span className="font-bold text-indigo-800">Delivery status: {rr.cycle_status || (hasIncompleteDelivery ? 'Incomplete Delivery' : 'Complete Delivery')}</span>
                         <span>Ordered <b>{Number(rr.ordered_qty ?? totalOrdered)}</b> · Received <b>{Number(rr.received_qty ?? totalReceived)}</b> · Remaining <b>{Number(rr.remaining_qty ?? Math.max(0, totalOrdered - totalReceived))}</b></span>
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                        <span className="font-bold text-slate-500">Related documents:</span>
-                        {rr.po?.pr_reference ? (rr.po.pr_refno ? <ModuleRecordLink tab="warehouse-purchasing-purchase-request" payload={{ prId: rr.po.pr_refno }} className="font-bold text-[#175fd3] hover:underline">PR {rr.po.pr_reference}</ModuleRecordLink> : <span>PR <b className="text-[#175fd3]">{rr.po.pr_reference}</b></span>) : null}
-                        {rr.po_refno ? <ModuleRecordLink tab="purchases-transaction-purchase-order" payload={{ poId: rr.po_refno }} className="font-bold text-[#175fd3] hover:underline">PO {rr.po_no}</ModuleRecordLink> : <span>PO {rr.po_no || '—'}</span>}
-                        {(rr.return_records || []).map((returnRecord) => <ModuleRecordLink key={returnRecord.id} tab="warehouse-purchasing-return-to-supplier" payload={{ returnId: returnRecord.id }} className="font-bold text-[#175fd3] hover:underline">Return {returnRecord.return_no}</ModuleRecordLink>)}
-                    </div>
+                    {(rr.return_records || []).length > 0 ? (
+                        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                            <span className="font-bold text-slate-500">Related returns:</span>
+                            {(rr.return_records || []).map((returnRecord) => <ModuleRecordLink key={returnRecord.id} tab="warehouse-purchasing-return-to-supplier" payload={{ returnId: returnRecord.id }} className="font-bold text-[#175fd3] hover:underline">Return {returnRecord.return_no}</ModuleRecordLink>)}
+                        </div>
+                    ) : null}
                     {rr.incomplete_delivery_reason ? <p className="mt-2 text-xs text-amber-800"><b>Reason for incomplete delivery:</b> {rr.incomplete_delivery_reason}</p> : null}
                 </div>
-                <div className="mb-6 flex flex-wrap items-center justify-between gap-5 rounded-xl border border-slate-200 p-5">
-                    <div className="flex flex-col gap-1">
-                        <span className="text-xs font-bold uppercase tracking-wide text-orange-500">PR No.</span>
-                        <span className="text-2xl font-bold text-orange-500">{rr.po?.pr_reference || 'PR-UNKNOWN'}</span>
-                        <span className="mt-2 text-xs font-semibold text-slate-500">PR Date</span>
-                        <span className="text-sm font-semibold text-slate-700">{rr.po?.order_date ? new Date(rr.po.order_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : '-'}</span>
-                    </div>
-
-                    <ArrowLeft className="hidden h-6 w-6 rotate-180 text-slate-300 xl:block" />
-
-                    <div className="flex flex-col gap-1">
-                        <span className="text-xs font-bold uppercase tracking-wide text-[#175fd3]">PO No.</span>
-                        <span className="text-2xl font-bold text-[#175fd3]">{rr.po_no || '-'}</span>
-                        <span className="mt-2 text-xs font-semibold text-slate-500">PO Date</span>
-                        <span className="text-sm font-semibold text-slate-700">{rr.po?.order_date ? new Date(rr.po.order_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : '-'}</span>
-                    </div>
-
-                    <ArrowLeft className="hidden h-6 w-6 rotate-180 text-slate-300 xl:block" />
-
-                    <div className="flex flex-col gap-1">
-                        <span className="text-xs font-bold uppercase tracking-wide text-emerald-600">RR No.</span>
-                        <span className="text-2xl font-bold text-emerald-600">{rr.rr_no}</span>
-                        <span className="mt-2 text-xs font-semibold text-slate-500">RR Date</span>
-                        <span className="text-sm font-semibold text-slate-700">{new Date(rr.receive_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
-                    </div>
-
-                    <div className="hidden h-24 w-px bg-slate-200 xl:block"></div>
-
-                    <div className="flex flex-col justify-center">
-                        <div className="flex items-center gap-2">
-                            <Calendar className="h-5 w-5 text-slate-400" />
-                            <span className="text-xs font-bold uppercase tracking-wide text-slate-500">ETA Date</span>
-                        </div>
-                        <span className="mt-1 text-lg font-bold text-slate-800">{etaDate ? new Date(etaDate).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : '-'}</span>
-                        <span className="text-xs font-semibold text-slate-500">(Estimated Arrival)</span>
-                    </div>
-                </div>
+                <ProcurementDocumentBanner
+                    pr={{ number: rr.po?.pr_reference, date: rr.po?.order_date, id: rr.po?.pr_refno }}
+                    po={{ number: rr.po_no || rr.po?.po_number, date: rr.po?.order_date, id: rr.po_refno || rr.po?.id }}
+                    rr={{ number: rr.rr_no, date: rr.receive_date, id: rr.id }}
+                    etaDate={etaDate}
+                />
 
                 <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-slate-800">Items Received</h3>
 

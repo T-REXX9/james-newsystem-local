@@ -22,6 +22,7 @@ import {
   markNotificationsAsReadByEntityKey,
 } from '../services/notificationLocalApiService';
 import ModuleRecordLink from './ModuleRecordLink';
+import ProcurementDocumentBanner from './ProcurementDocumentBanner';
 import { retraceWorkflowHistory } from '../utils/workflowHistory';
 
 // Inline StatusBadge if generic one is not suitable for POs, but I'll use simple spans for now to be safe, or try to use the imported one if generic.
@@ -43,7 +44,7 @@ interface PurchaseOrderViewProps {
 }
 
 const PAGE_SIZE = 10;
-const PURCHASE_ORDER_TAB_ID = 'purchases-transaction-purchase-order';
+const PURCHASE_ORDER_TAB_ID = 'warehouse-purchasing-purchase-order';
 const isPurchaseRequestItemConverted = (item: any) => String(item?.po_refno || '').trim() !== '';
 
 const poItemRrLabel = (item: PurchaseOrderWithDetails['items'][number]) =>
@@ -101,6 +102,17 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
     }),
     [createForm.supplier_id, selectedPR]
   );
+  const selectedPORRDocuments = useMemo(
+    () => (selectedPO?.receiving_reports || []).map((rr) => ({
+      number: rr.rr_number,
+      id: rr.id,
+    })),
+    [selectedPO?.receiving_reports]
+  );
+  const selectedPOEtaDate = selectedPO?.first_eta_date
+    || selectedPO?.items?.find((item) => String(item.eta_date || '').trim())?.eta_date
+    || selectedPO?.last_eta_date
+    || null;
 
   // Item Add State
   const [showAddItem, setShowAddItem] = useState(false);
@@ -1048,21 +1060,14 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
             </div>
 
             <div className="p-6">
-              <div className="mb-6 grid gap-4 border-b border-slate-100 pb-6 sm:grid-cols-2 xl:grid-cols-4">
-                <div>
-                  <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">PR No.</p>
-                  {linkedPRId ? (
-                    <ModuleRecordLink
-                      tab="warehouse-purchasing-purchase-request"
-                      payload={{ prId: linkedPRId }}
-                      className="font-semibold text-[#175fd3] hover:underline"
-                    >
-                      {selectedPO.pr_reference}
-                    </ModuleRecordLink>
-                  ) : (
-                    <p className="font-semibold text-[#175fd3]">{selectedPO.pr_reference || '-'}</p>
-                  )}
-                </div>
+              <ProcurementDocumentBanner
+                pr={{ number: selectedPO.pr_reference, date: selectedPO.order_date, id: linkedPRId }}
+                po={{ number: selectedPO.po_number, date: selectedPO.order_date, id: selectedPO.id }}
+                rr={selectedPORRDocuments}
+                etaDate={selectedPOEtaDate}
+              />
+
+              <div className="mb-6 grid gap-4 border-b border-slate-100 pb-6 sm:grid-cols-3">
                 <div>
                   <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">Supplier</p>
                   <p className="font-semibold text-[#175fd3]">{selectedPO.supplier?.company || '-'}</p>
@@ -1103,11 +1108,6 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <span className="font-bold text-indigo-800">Purchasing cycle: {selectedPO.cycle_status || 'Awaiting Delivery'}</span>
                   <span>Ordered <b>{Number(selectedPO.total_qty ?? selectedPO.items.reduce((sum, item) => sum + Number(item.qty || 0), 0))}</b> · Received <b>{Number(selectedPO.received_qty ?? selectedPO.items.reduce((sum, item) => sum + Number(item.quantity_received || 0), 0))}</b> · Remaining <b>{Number(selectedPO.remaining_qty ?? 0)}</b></span>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                  <span className="font-bold text-slate-500">Related RR:</span>
-                  {(selectedPO.receiving_reports || []).map((rr) => <ModuleRecordLink key={rr.id} tab="warehouse-purchasing-receiving-stock" payload={{ rrId: rr.id, rrRefNo: rr.rr_number }} className="font-bold text-[#175fd3] hover:underline">{rr.rr_number}</ModuleRecordLink>)}
-                  {!selectedPO.receiving_reports?.length ? <span className="text-slate-500">None yet</span> : null}
                 </div>
                 {selectedPO.incomplete_delivery_reason ? <p className="mt-2 text-xs text-amber-800"><b>Reason for incomplete delivery:</b> {selectedPO.incomplete_delivery_reason}</p> : null}
               </div>

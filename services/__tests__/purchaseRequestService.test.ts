@@ -142,11 +142,12 @@ describe('purchaseRequestService (local API)', () => {
 
   it('loads a purchase-request detail and normalizes item metadata', async () => {
     (global.fetch as any).mockImplementation(() => okResponse({
-      request: { refno: 'PRREF-3', pr_number: 'PR-2603', request_date: '2026-03-28', status: 'Pending' },
+      request: { refno: 'PRREF-3', pr_number: 'PR-2603', request_date: '2026-03-28', status: 'Pending', rr_refno: 'RRREF-8', rr_numbers: 'RR-2608', rr_dates: '2026-04-02' },
       items: [{ id: 8, item_id: 'P8', item_code: 'I8', part_number: 'PART-8', description: 'Part 8', quantity: '3', unit_cost: '12.5', eta_date: '2026-04-01', sr_cases: 1, ir_cases: 0, po_refno: 'POREF-8', po_number: 'PO-2608' }],
     }));
     const { purchaseRequestService } = await import('../purchaseRequestService');
     const detail = await purchaseRequestService.getPurchaseRequestById('PRREF-3');
+    expect(detail).toMatchObject({ rr_refno: 'RRREF-8', rr_numbers: 'RR-2608', rr_dates: '2026-04-02' });
     expect(detail.items[0]).toMatchObject({ id: '8', quantity: 3, unit_cost: 12.5, eta_date: '2026-04-01', recommendation: 'Review Supplier', po_refno: 'POREF-8', po_number: 'PO-2608' });
   });
 

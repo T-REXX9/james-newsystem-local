@@ -25,6 +25,7 @@ import ConfirmModal from "../ConfirmModal";
 import RecoveryReasonModal from "../RecoveryReasonModal";
 import ProductAutocomplete from "../ProductAutocomplete";
 import ModuleRecordLink from "../ModuleRecordLink";
+import ProcurementDocumentBanner from "../ProcurementDocumentBanner";
 import type { Product as SearchProduct } from "../../types";
 
 interface PurchaseRequestViewProps {
@@ -106,6 +107,11 @@ const isItemOnPurchaseOrder = (item: EnrichedItem) =>
   String(item.po_refno || item.po_number || "").trim() !== "";
 const itemSupplierKey = (item: EnrichedItem) =>
   String(item.supplier_id || item.supplier_name || item.preferred_supplier_name || "NO_SUPPLIER").trim();
+const splitDocumentList = (value?: string | null) =>
+  String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 
 const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
   request,
@@ -286,11 +292,35 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
         orders.set(number, {
           number,
           refno: String(item.po_refno || "").trim(),
+          etaDate: String(item.eta_date || "").trim(),
         });
       }
       return orders;
+    }, new Map<string, { number: string; refno: string; etaDate: string }>()).values(),
+  );
+  const generatedRRsFromItems = Array.from(
+    items.reduce((reports, item: any) => {
+      const number = String(item.rr_number || "").trim();
+      if (number && !reports.has(number)) {
+        reports.set(number, {
+          number,
+          refno: String(item.rr_refno || "").trim(),
+        });
+      }
+      return reports;
     }, new Map<string, { number: string; refno: string }>()).values(),
   );
+  const requestRRNumbers = splitDocumentList(request.rr_numbers);
+  const requestRRRefs = splitDocumentList(request.rr_refno);
+  const requestRRDates = splitDocumentList(request.rr_dates);
+  const generatedRRs = requestRRNumbers.length > 0
+    ? requestRRNumbers.map((number, index) => ({
+      number,
+      refno: requestRRRefs[index] || "",
+      date: requestRRDates[index] || "",
+    }))
+    : generatedRRsFromItems.map((rr) => ({ ...rr, date: "" }));
+  const requestEtaDate = items.find((item) => String(item.eta_date || "").trim())?.eta_date || generatedPOs.find((po) => po.etaDate)?.etaDate || null;
   const togglePOItemSelection = (itemId: string, checked: boolean) => {
     setSelectedPOItemIds((current) => {
       const item = convertibleItems.find((candidate) => String(candidate.id || "") === itemId);
@@ -391,21 +421,15 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
               <span className="font-bold text-indigo-800">Purchasing cycle: {request.cycle_status || (itemsOnPOCount ? 'PO Created' : 'Pending')}</span>
               <span className="text-slate-700">Ordered <b>{Number(request.ordered_qty ?? totalQuantity)}</b> · Received <b>{Number(request.received_qty ?? 0)}</b> · Remaining <b>{Number(request.remaining_qty ?? Math.max(0, totalQuantity - Number(request.received_qty ?? 0)))}</b></span>
             </div>
-            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
-              <span className="font-bold text-slate-500">Related PO:</span>
-              {generatedPOs.map((po) => (
-                <ModuleRecordLink
-                  key={po.refno || po.number}
-                  tab="purchases-transaction-purchase-order"
-                  payload={{ poId: po.refno || undefined }}
-                  className="font-bold text-[#175fd3] hover:underline"
-                >
-                  {po.number}
-                </ModuleRecordLink>
-              ))}
-              {generatedPOs.length === 0 ? <span className="text-slate-500">Not created</span> : null}
-            </div>
             {request.incomplete_delivery_reason ? <p className="mt-2 text-xs text-amber-800"><b>Reason for incomplete delivery:</b> {request.incomplete_delivery_reason}</p> : null}
+          </div>
+          <div className="mt-5">
+            <ProcurementDocumentBanner
+              pr={{ number: request.pr_number, date: request.request_date, id: request.id }}
+              po={generatedPOs.map((po) => ({ number: po.number, id: po.refno }))}
+              rr={generatedRRs.map((rr) => ({ number: rr.number, id: rr.refno, date: rr.date }))}
+              etaDate={requestEtaDate}
+            />
           </div>
           <div className="mt-5 grid gap-4 text-sm md:grid-cols-3">
             <div>
