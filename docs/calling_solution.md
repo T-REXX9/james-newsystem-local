@@ -69,7 +69,7 @@ The web service layer adds the authenticated session token to call-system reques
 
 ### 3.3 Call-system API
 
-The API validates the authenticated staff account, company scope, registered device, phone number, call direction, duration, timestamps, request status, date filters, and role access. It also matches uploaded phone numbers to customers within the authenticated company scope. The API prevents a device from being silently reassigned between staff accounts. [3]
+The API validates the authenticated staff account, company scope, registered device, phone number, call direction, duration, timestamps, request status, date filters, and role access. It also matches uploaded phone numbers to customers within the authenticated company scope. When a staff account registers a device that currently belongs to another staff account, the API rebinds that device to the newly authenticated account. [3]
 
 ### 3.4 Staff phone application
 
@@ -206,7 +206,7 @@ The app calls `/api/v1/auth/login`. After a successful login, it stores the sess
 
 ### 7.3 Device registration
 
-The phone registers itself against the authenticated staff account using a device ID and an initial `app_open` status. The API rejects an attempt to register a device that is already assigned to another staff account. This prevents one phone from silently moving between accounts. [3] [5]
+The phone registers itself against the authenticated staff account using a device ID and an initial `app_open` status. If that device ID is already assigned to another staff account, registration rebinds it to the newly authenticated account so the same phone can be used to sign in sequentially as different staff. The previous account no longer owns the device. [3] [5]
 
 ### 7.4 Permissions
 
@@ -357,7 +357,7 @@ The solution uses several safeguards:
 
 1. **Authenticated requests:** Web and phone clients send Bearer tokens for protected call-system operations.
 2. **Company scoping:** The API uses the authenticated company or Master User scope when matching customers and listing records.
-3. **Device ownership:** A device cannot be registered to a different staff account without server rejection.
+3. **Device ownership:** A device belongs to one staff account at a time. Registering it while authenticated as a different staff account rebinds it to that account; the previous account can no longer use it.
 4. **Registered-device checks:** Hardware call uploads, pending-request polling, and dial-status updates require a device registered to the authenticated staff account.
 5. **Role restrictions:** Team-level device and call-log views are restricted by authenticated role claims; missed-call auto-reply configuration is Master User-only.
 6. **Confirmed dialer launch:** The website confirmation queues the request, and the registered phone opens the native dialer automatically without a second app prompt.
