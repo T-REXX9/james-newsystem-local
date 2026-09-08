@@ -41,12 +41,14 @@ const formatDuration = (seconds: number | string): string => {
   return `${Math.floor(value / 60)}m ${value % 60}s`;
 };
 
-const formatStaffName = (record: CallRecord): string => {
+const formatStaffIdentity = (record: CallRecord): string => {
   const first = (record.agent_first_name || '').trim();
   const last = (record.agent_last_name || '').trim();
   const name = `${first} ${last}`.trim();
   return name || `Staff #${record.lagent_id}`;
 };
+
+const CALL_RECORD_COLUMNS = 'grid-cols-[4.5rem_4.5rem_minmax(0,1.7fr)_minmax(0,0.9fr)_minmax(0,1.45fr)_minmax(0,1.45fr)_minmax(0,0.95fr)_minmax(0,0.95fr)]';
 
 const DIRECTION_FILTERS: Array<{ id: string; label: string }> = [
   { id: '', label: 'All' },
@@ -180,19 +182,20 @@ const CallRecordsView: React.FC<CallRecordsViewProps> = ({ currentUser }) => {
       <div className="flex min-h-0 flex-1 flex-col">
         {/* Column headers - fixed, never scroll */}
         <div className="shrink-0 overflow-hidden border-b border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800">
-          <div className="grid w-full grid-cols-[5rem_5rem_1fr_7rem_1.4fr_1.4fr_7rem] gap-1 px-2 py-2 text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+          <div className={`grid w-full gap-1 px-2 py-2 text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300 ${CALL_RECORD_COLUMNS}`}>
             <div>Date</div>
             <div>Time</div>
             <div>Customer</div>
             <div>Contact</div>
             <div>Concern</div>
             <div>Action</div>
+            <div>Staff phone</div>
             <div>Remarks</div>
           </div>
         </div>
 
         {/* Scrollable row list - only this scrolls, vertically only */}
-        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden" data-testid="call-records-scroll-region">
           {loading ? (
             <div className="flex items-center justify-center p-8 text-sm text-slate-500">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading call records…
@@ -207,11 +210,12 @@ const CallRecordsView: React.FC<CallRecordsViewProps> = ({ currentUser }) => {
                 const customerName = (record.customer_company || '').trim();
                 const concern = (record.concern || '').trim();
                 const action = (record.action || '').trim();
+                const staffIdentity = formatStaffIdentity(record);
                 const hasReport = concern !== '' || action !== '';
                 return (
                   <div
                     key={String(record.lid)}
-                    className={`grid w-full grid-cols-[5rem_5rem_1fr_7rem_1.4fr_1.4fr_7rem] gap-1 px-2 py-1.5 text-xs text-slate-700 dark:text-slate-300 ${hasReport ? '' : 'bg-rose-50/40 dark:bg-rose-950/20'}`}
+                    className={`grid w-full gap-1 px-2 py-1.5 text-xs text-slate-700 dark:text-slate-300 ${CALL_RECORD_COLUMNS} ${hasReport ? '' : 'bg-rose-50/40 dark:bg-rose-950/20'}`}
                   >
                     <div className="whitespace-nowrap font-medium text-slate-600 dark:text-slate-400">
                       {formatDate(record.lcall_timestamp)}
@@ -241,8 +245,13 @@ const CallRecordsView: React.FC<CallRecordsViewProps> = ({ currentUser }) => {
                       </span>
                     </div>
                     <div className="min-w-0 overflow-hidden">
-                      <span className="block truncate font-semibold text-slate-700 dark:text-slate-200" title={formatStaffName(record)}>
-                        {formatStaffName(record)}
+                      <span className="block truncate font-semibold text-slate-700 dark:text-slate-200" title={staffIdentity}>
+                        {staffIdentity}
+                      </span>
+                    </div>
+                    <div className="min-w-0 overflow-hidden">
+                      <span className="block truncate font-semibold text-slate-700 dark:text-slate-200" title={staffIdentity}>
+                        {staffIdentity}
                       </span>
                     </div>
                   </div>
