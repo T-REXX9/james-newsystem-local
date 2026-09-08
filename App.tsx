@@ -85,7 +85,8 @@ import { Filter, Lock } from 'lucide-react';
 import { ToastProvider } from './components/ToastProvider';
 import { NotificationProvider } from './components/NotificationProvider';
 import CustomLoadingSpinner from './components/CustomLoadingSpinner';
-import { AVAILABLE_APP_MODULES, isCompanyOwnerRole, isMasterUserAccount, isMasterUserType, MODULE_ID_ALIASES, ROLE_NAMES } from './constants';
+import { AVAILABLE_APP_MODULES, isCompanyOwnerRole, isMasterOnlyDashboardRoute, isMasterUserAccount, isMasterUserType, MODULE_ID_ALIASES, ROLE_NAMES } from './constants';
+import { hasBinaryModulePageAccess } from './utils/accessModules';
 import {
   getLocalAuthSession,
   LocalAuthSession,
@@ -335,6 +336,11 @@ const App: React.FC = () => {
 
     const canonical = normalizeModuleId(moduleId);
 
+    // Extra Dashboards are Master User / owner only — never via staff access_rights alone.
+    if (isMasterOnlyDashboardRoute(canonical)) {
+      return isMasterUserAccount(userProfile);
+    }
+
     // Server Maintenance dump is Master User type only (matches API user_type === '1').
     if (canonical === 'maintenance-profile-server-maintenance') {
       return isMasterUserType(userProfile);
@@ -365,9 +371,9 @@ const App: React.FC = () => {
       return false;
     }
 
-    // Step 2: Check if the user has explicit access via access_rights (role-based or overridden)
+    // Step 2: Binary module access — partial leftover page grants do not unlock a module.
     const idsToCheck = expandModuleIds(canonical);
-    return idsToCheck.some((id) => rights.includes(id));
+    return idsToCheck.some((id) => hasBinaryModulePageAccess(rights, id));
   };
 
   /**
@@ -714,14 +720,14 @@ const App: React.FC = () => {
         );
       case 'management':
       case 'sales-performance-management-dashboard':
-        if (!isCompanyOwnerRole(userProfile?.role)) return renderAccessDenied();
+        if (!isMasterUserAccount(userProfile)) return renderAccessDenied();
         return (
           <div className="h-full overflow-y-auto">
             <ManagementView currentUser={userProfile} />
           </div>
         );
       case 'operations-management-dashboard':
-        if (!isCompanyOwnerRole(userProfile?.role)) return renderAccessDenied();
+        if (!isMasterUserAccount(userProfile)) return renderAccessDenied();
         return <OperationsDashboard onNavigate={(tab, payload) => {
           const canonicalTab = normalizeModuleId(tab);
           setModuleContext((prev) => ({ ...prev, [canonicalTab]: payload || {} }));
@@ -729,7 +735,7 @@ const App: React.FC = () => {
           writeRouteStateToLocation(canonicalTab, payload, 'push');
         }} />;
       case 'call-records-dashboard':
-        if (!isCompanyOwnerRole(userProfile?.role)) return renderAccessDenied();
+        if (!isMasterUserAccount(userProfile)) return renderAccessDenied();
         return <CallRecordsView currentUser={userProfile} />;
       case 'sales-reports-inquiry-report':
         return (

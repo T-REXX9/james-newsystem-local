@@ -9,7 +9,8 @@ import {
 import type { UserProfile } from '../types';
 import { useKeyboardShortcuts, getShortcutDisplay } from '../hooks/useKeyboardShortcuts';
 import { useSmartDropdownPosition } from '../hooks/useSmartDropdownPosition';
-import { isMasterUserAccount, isMasterUserType, MODULE_ID_ALIASES } from '../constants';
+import { hasBinaryModulePageAccess } from '../utils/accessModules';
+import { isMasterUserAccount, isMasterUserType, isMasterOnlyDashboardRoute, MODULE_ID_ALIASES } from '../constants';
 import { openModuleInNewWindow } from '../utils/workflowNavigate';
 import {
   TOPBAR_MENU_CONFIG,
@@ -48,6 +49,11 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
 
     const canonical = MODULE_ID_ALIASES[route] || route;
 
+    // Extra Dashboards (Operations / Sales Performance / Call Records) are Master-only.
+    if (isMasterOnlyDashboardRoute(canonical)) {
+      return isMasterUserAccount(user);
+    }
+
     // Server Maintenance dump is Master User type only (matches API user_type === '1').
     if (canonical === 'maintenance-profile-server-maintenance') {
       return isMasterUserType(user);
@@ -61,16 +67,25 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
     // Owner always has access
     if (user.role === 'Owner') return true;
 
+    // Sales Agents should always reach their home/dashboard even if access_rights is misconfigured.
+    if (
+      (canonical === 'home' || route === 'dashboard') &&
+      (user.role === 'Sales Agent' || user.role === 'sales_agent')
+    ) {
+      return true;
+    }
+
     const rights = user.access_rights || [];
     const hasExplicitRights = rights.length > 0;
     if (!hasExplicitRights) return false;
     if (rights.includes('*')) return true;
 
-    // Check canonical ID and all aliases against the user's access_rights
-    if (rights.includes(canonical)) return true;
+    // Module checkboxes are binary: leftover partial page grants from a module
+    // that is not fully checked must not unlock that top-nav family.
+    if (hasBinaryModulePageAccess(rights, canonical)) return true;
 
     const aliases = CANONICAL_TO_ALIASES[canonical] || [];
-    return aliases.some((aliasId) => rights.includes(aliasId));
+    return aliases.some((aliasId) => hasBinaryModulePageAccess(rights, aliasId));
   }, [user]);
 
   const filteredMenus = useMemo(() => {

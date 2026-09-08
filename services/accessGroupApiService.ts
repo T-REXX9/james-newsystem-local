@@ -12,6 +12,7 @@ interface AccessGroupRecord {
   access_rights?: string[] | string | null;
   created_at?: string;
   assigned_staff_count?: number;
+  is_core?: boolean | number;
 }
 
 const parseApiErrorMessage = async (response: Response): Promise<string> => {
@@ -64,6 +65,7 @@ const mapGroup = (group: AccessGroupRecord): AccessGroup => ({
   access_rights: parseAccessRights(group.access_rights),
   created_at: group.created_at,
   assigned_staff_count: Number(group.assigned_staff_count || 0),
+  is_core: Boolean(group.is_core),
 });
 
 export const fetchAccessGroups = async (): Promise<AccessGroup[]> => {

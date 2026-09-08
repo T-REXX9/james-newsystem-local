@@ -126,6 +126,8 @@ export interface AccessGroup {
   access_rights: string[];
   created_at?: string;
   assigned_staff_count?: number;
+  /** Built-in role group that the API recreates and will not permanently delete. */
+  is_core?: boolean;
 }
 
 export interface ProfileRow extends UserProfile {
@@ -1169,6 +1171,7 @@ export interface SalesInquiryDTO {
   sales_date: string;
   sales_time: string;
   sales_person: string;
+  sales_person_id?: string;
   delivery_address: string;
   reference_no: string;
   customer_reference: string;

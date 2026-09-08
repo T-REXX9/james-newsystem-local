@@ -153,6 +153,14 @@ const normalizeToWritablePriceCode = (raw: string | undefined | null): string =>
   return normalized || 'regular';
 };
 
+const getSessionSalesPerson = (): { id: string; name: string } => {
+  const profile = getLocalAuthSession()?.userProfile;
+  return {
+    id: String(profile?.id || '').trim(),
+    name: String(profile?.full_name || '').trim(),
+  };
+};
+
 const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   initialContactId,
   initialInquiryId,
@@ -609,7 +617,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     setSelectedCustomer(null);
     setSalesDate(getLocalDateInputValue());
     setSalesTime(getLocalTimeInputValue());
-    setSalesPerson('');
+    setSalesPerson(getSessionSalesPerson().name);
     setDeliveryAddress('');
     setReferenceNo(newInquiryNo);
     setCustomerReference('');
@@ -749,7 +757,9 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     const defaultReference = String(customer.contactPersons?.[0]?.name || '').trim();
     setSelectedCustomer(customer);
     setDeliveryAddress(customer.deliveryAddress || customer.address || '');
-    setSalesPerson(customer.salesman || '');
+    // Keep the logged-in creator as Sales Person. Never replace with the customer's
+    // assigned agent — that broke accountability (e.g. test@... saved as APOSTOL ELLA).
+    setSalesPerson((current) => current.trim() || getSessionSalesPerson().name || customer.salesman || '');
     setPriceGroup(normalizedGroup);
     setCreditLimit(Number(customer.creditLimit || 0));
     setTerms(customer.terms || '');
@@ -1079,11 +1089,13 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         finalInquiryType = newInquiryType;
       }
 
+      const sessionSalesPerson = getSessionSalesPerson();
       const inquiryData: SalesInquiryDTO = {
         contact_id: selectedCustomer.id,
         sales_date: salesDate,
         sales_time: salesTime,
-        sales_person: salesPerson,
+        sales_person: salesPerson.trim() || sessionSalesPerson.name,
+        sales_person_id: sessionSalesPerson.id,
         delivery_address: deliveryAddress,
         reference_no: activeInquiryReferenceNo,
         customer_reference: customerReference,

@@ -7,7 +7,7 @@ import { createStaffAccountLocal, fetchProfilesLocal, updateProfileLocal } from 
 import { fetchAccessGroups } from '../services/accessGroupApiService';
 import { ROLE_DEFAULT_ACCESS_RIGHTS } from '../constants';
 import { ToastProvider } from './ToastProvider';
-import { expandAccessModule } from '../utils/accessModules';
+import { ACCESS_MODULES, expandAccessModule } from '../utils/accessModules';
 
 vi.mock('../services/accessLocalApiService', () => ({
   fetchProfilesLocal: vi.fn(),
@@ -55,6 +55,7 @@ afterEach(() => {
 describe('AccessControlSettings - create staff account', () => {
   it('saves edited staff permissions through the profile update API', async () => {
     const user = userEvent.setup();
+    const homePages = expandAccessModule('home');
     fetchProfilesMock.mockResolvedValue({
       items: [
         {
@@ -62,7 +63,7 @@ describe('AccessControlSettings - create staff account', () => {
           full_name: 'melson',
           email: 'melson@example.com',
           role: 'Sales Agent',
-          access_rights: ['home'],
+          access_rights: homePages,
           access_override: false,
           group_id: '2',
         },
@@ -75,7 +76,7 @@ describe('AccessControlSettings - create staff account', () => {
       email: 'melson@example.com',
       role: 'Sales Agent',
       groupId: '2',
-      access_rights: ['home', 'warehouse-inventory-product-database'],
+      access_rights: [...homePages, ...expandAccessModule('warehouse')],
       access_override: true,
       group_id: '9',
     });
@@ -88,10 +89,51 @@ describe('AccessControlSettings - create staff account', () => {
     await waitFor(() =>
       expect(updateProfileMock).toHaveBeenCalledWith('2', {
         group_id: '2',
-        access_rights: ['home', ...expandAccessModule('warehouse')],
+        access_rights: [...homePages, ...expandAccessModule('warehouse')],
         access_override: true,
       })
     );
+  });
+
+  it('persists all six module toggles as complete page sets after reload', async () => {
+    const user = userEvent.setup();
+    let persistedRights: string[] = [];
+    const profile = {
+      id: '2',
+      full_name: 'melson',
+      email: 'melson@example.com',
+      role: 'Sales Agent',
+      access_override: false,
+      group_id: '2',
+    };
+    fetchProfilesMock.mockImplementation(async () => ({
+      items: [{ ...profile, access_rights: persistedRights }],
+      meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
+    }));
+    updateProfileMock.mockImplementation(async (_staffId, data) => {
+      persistedRights = data.access_rights || [];
+      return { ...profile, access_rights: persistedRights, access_override: true };
+    });
+
+    renderWithProviders(<AccessControlSettings />);
+
+    for (const module of ACCESS_MODULES) {
+      await user.click(await screen.findByRole('checkbox', {
+        name: `${module.label} module access for melson`,
+      }));
+    }
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(updateProfileMock).toHaveBeenCalledTimes(1));
+    expect(persistedRights).toEqual(ACCESS_MODULES.flatMap((module) => module.pageIds));
+
+    cleanup();
+    renderWithProviders(<AccessControlSettings />);
+    for (const module of ACCESS_MODULES) {
+      expect(await screen.findByRole('checkbox', {
+        name: `${module.label} module access for melson`,
+      })).toBeChecked();
+    }
   });
 
   it('creates a staff account and refreshes profiles on success', async () => {

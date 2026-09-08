@@ -14,7 +14,10 @@ const pageIdsForMenu = (menuId: string): string[] => {
 
   // App.tsx checks the navigated route, which is not always the same as the
   // menu item's stable configuration id (for example SMS Blasting).
-  return (menu.submenus || []).flatMap((submenu) => submenu.items.map((item) => item.route));
+  // Master-only pages are role-gated, not granted via Access Control checkboxes.
+  return (menu.submenus || []).flatMap((submenu) =>
+    submenu.items.filter((item) => !item.masterOnly).map((item) => item.route)
+  );
 };
 
 export const ACCESS_MODULES: AccessModule[] = moduleIds.map((id) => ({
@@ -57,4 +60,45 @@ export const toggleAccessModule = (
     else pageIds.delete(pageId);
   });
   return Array.from(pageIds);
+};
+
+/**
+ * Drop leftover page grants that belong to modules which are not fully checked.
+ * Access Control treats modules as binary; partial/legacy grants otherwise leave
+ * Sales/Maintenance visible while those checkboxes look unchecked.
+ */
+export const canonicalizeBinaryModuleAccessRights = (grantedPageIds: Iterable<string>): string[] => {
+  const granted = new Set(Array.from(grantedPageIds).filter((id): id is string => typeof id === 'string'));
+  if (granted.has('*')) return ['*'];
+
+  const kept = new Set<string>();
+  ACCESS_MODULES.forEach((module) => {
+    if (!getAccessModuleState(module.id, granted).checked) return;
+    module.pageIds.forEach((pageId) => kept.add(pageId));
+  });
+  return Array.from(kept);
+};
+
+const pageIdToModuleId = (() => {
+  const map = new Map<string, string>();
+  ACCESS_MODULES.forEach((module) => {
+    module.pageIds.forEach((pageId) => map.set(pageId, module.id));
+  });
+  return map;
+})();
+
+/** Page access follows binary module checkboxes, not leftover partial page grants. */
+export const hasBinaryModulePageAccess = (
+  grantedPageIds: Iterable<string>,
+  pageId: string
+): boolean => {
+  const granted = new Set(Array.from(grantedPageIds).filter((id): id is string => typeof id === 'string'));
+  if (granted.has('*')) return true;
+
+  const moduleId = pageIdToModuleId.get(pageId);
+  if (!moduleId) {
+    return granted.has(pageId);
+  }
+
+  return getAccessModuleState(moduleId, granted).checked;
 };

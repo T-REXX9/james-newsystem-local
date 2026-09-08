@@ -72,6 +72,13 @@ export const ROLE_NAMES = {
   WAREHOUSE_PERSONNEL: 'Warehouse Personnel',
 } as const;
 
+/** Built-in groups recreated by the API; they cannot be permanently deleted. */
+export const CORE_ACCESS_GROUP_NAMES = [
+  ROLE_NAMES.COMPANY_OWNER,
+  ROLE_NAMES.SALES_AGENT,
+  ROLE_NAMES.WAREHOUSE_PERSONNEL,
+] as const;
+
 export const ASSIGNABLE_STAFF_ROLES = [
   ROLE_NAMES.SALES_AGENT,
   ROLE_NAMES.WAREHOUSE_PERSONNEL,
@@ -93,6 +100,11 @@ export const canonicalizeRoleName = (value?: string | null): string => {
   return String(value || '').trim();
 };
 
+export const isCoreAccessGroupName = (value?: string | null): boolean => {
+  const role = canonicalizeRoleName(value);
+  return (CORE_ACCESS_GROUP_NAMES as readonly string[]).includes(role);
+};
+
 export const isCompanyOwnerRole = (value?: string | null): boolean => {
   const role = canonicalizeRoleName(value);
   return role === ROLE_NAMES.COMPANY_OWNER || String(value || '').trim().toLowerCase() === 'developer';
@@ -108,6 +120,16 @@ export const isMasterUserAccount = (user?: { role?: string | null; user_type?: s
   const role = String(user?.role || '').trim().toLowerCase();
   return isCompanyOwnerRole(user?.role) || ['master user', 'owner', 'company owner', 'main'].includes(role);
 };
+
+/** Extra Dashboards pages visible only to Master User / owner accounts. */
+export const MASTER_ONLY_DASHBOARD_ROUTES = [
+  'operations-management-dashboard',
+  'sales-performance-management-dashboard',
+  'call-records-dashboard',
+] as const;
+
+export const isMasterOnlyDashboardRoute = (route?: string | null): boolean =>
+  (MASTER_ONLY_DASHBOARD_ROUTES as readonly string[]).includes(String(route || '').trim());
 
 /**
  * Role-specific default permissions mapping.

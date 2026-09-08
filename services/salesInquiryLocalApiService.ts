@@ -115,13 +115,21 @@ const mapApiInquiry = (row: any): SalesInquiry => {
   };
 };
 
-const buildInquiryPayload = (dto: SalesInquiryDTO) => ({
+const buildInquiryPayload = (dto: SalesInquiryDTO) => {
+  const { userId } = getUserContext();
+  const session = getLocalAuthSession();
+  const sessionName = String(session?.userProfile?.full_name || '').trim();
+  const salesPersonId = String(dto.sales_person_id || session?.userProfile?.id || userId || '').trim();
+  const salesPersonName = String(dto.sales_person || sessionName || '').trim();
+
+  return {
   main_id: API_MAIN_ID,
-  user_id: getUserContext().userId,
+  user_id: userId,
   contact_id: dto.contact_id,
   sales_date: dto.sales_date,
   sales_time: dto.sales_time,
-  sales_person: dto.sales_person,
+  sales_person: salesPersonName,
+  sales_person_id: salesPersonId,
   delivery_address: dto.delivery_address,
   reference_no: dto.reference_no,
   customer_reference: dto.customer_reference,
@@ -152,7 +160,8 @@ const buildInquiryPayload = (dto: SalesInquiryDTO) => ({
     remark: item.remark || '',
     approved: item.approval_status === 'approved' ? 1 : 0,
   })),
-});
+  };
+};
 
 export const createSalesInquiry = async (data: SalesInquiryDTO): Promise<SalesInquiry> => {
   if (!data.items || data.items.length === 0) {

@@ -169,38 +169,27 @@ db_query_scalar() {
 
 apply_required_database_migrations() {
   local migration=""
-  local migrations=(
-    "$API_DIR/migrations/014_optimize_notification_indexes.sql"
-    "$API_DIR/migrations/015_optimize_reorder_report_indexes.sql"
-    "$API_DIR/migrations/016_create_incident_reports.sql"
-    "$API_DIR/migrations/017_create_customer_requests.sql"
-    "$API_DIR/migrations/019_add_procurement_recovery_columns.sql"
-    "$API_DIR/migrations/020_create_call_logs_v2.sql"
-    "$API_DIR/migrations/022_add_lbc_rto_to_incident_reports.sql"
-    "$API_DIR/migrations/023_add_customer_product_soft_delete_columns.sql"
-    "$API_DIR/migrations/024_create_incident_return_approval_workflow.sql"
-    "$API_DIR/migrations/025_optimize_daily_call_master_list_indexes.sql"
-    "$API_DIR/migrations/026_add_incident_report_times.sql"
-    "$API_DIR/migrations/027_optimize_suggested_stock_report_indexes.sql"
-    "$API_DIR/migrations/028_create_call_report_threads.sql"
-    "$API_DIR/migrations/029_add_call_report_call_details.sql"
-    "$API_DIR/migrations/030_add_customer_preferred_brand.sql"
-    "$API_DIR/migrations/031_create_suggested_stock_kiv.sql"
-    "$API_DIR/migrations/032_backfill_product_created_suggested_stock.sql"
-    "$API_DIR/migrations/033_restore_uncovered_added_to_pr_suggested_stock.sql"
-    "$API_DIR/migrations/034_add_incident_report_number.sql"
-    "$API_DIR/migrations/036_clear_epoch_dealer_since.sql"
-    "$API_DIR/migrations/037_optimize_reorder_report_list_indexes.sql"
-    "$API_DIR/migrations/038_add_call_report_concern_action.sql"
-  )
+  local migrations=()
+  local migration_dir="$API_DIR/migrations"
 
-  echo "Applying required database migrations..."
+  if [[ ! -d "$migration_dir" ]]; then
+    echo "ERROR: Migration directory not found: $migration_dir" >&2
+    return 1
+  fi
+
+  # Always apply every *.sql under api/migrations/ in numeric/filename order.
+  # New migration files are picked up automatically — do not maintain a hand list.
+  while IFS= read -r migration; do
+    migrations+=("$migration")
+  done < <(find "$migration_dir" -maxdepth 1 -type f -name '*.sql' | LC_ALL=C sort)
+
+  if [[ ${#migrations[@]} -eq 0 ]]; then
+    echo "ERROR: No *.sql migrations found in $migration_dir" >&2
+    return 1
+  fi
+
+  echo "Applying required database migrations (${#migrations[@]} files)..."
   for migration in "${migrations[@]}"; do
-    if [[ ! -f "$migration" ]]; then
-      echo "ERROR: Required migration not found: $migration" >&2
-      return 1
-    fi
-
     echo "  Applying $(basename "$migration")..."
     if mysql --batch --raw --skip-column-names -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" "-p$DB_PASS" "$DB_NAME" < "$migration" \
       || sudo mysql --batch --raw --skip-column-names "$DB_NAME" < "$migration"; then

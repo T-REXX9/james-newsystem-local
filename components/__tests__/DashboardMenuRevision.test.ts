@@ -20,7 +20,16 @@ describe('requested dashboard menu and access rules', () => {
     expect(app).toContain("case 'operations-management-dashboard':");
     expect(app).toContain("case 'sales-performance-management-dashboard':");
     expect(app).toContain("case 'call-records-dashboard':");
-    expect(app.match(/if \(!isCompanyOwnerRole\(userProfile\?\.role\)\) return renderAccessDenied\(\);/g)).toHaveLength(3);
+    expect(app.match(/if \(!isMasterUserAccount\(userProfile\)\) return renderAccessDenied\(\);/g)).toHaveLength(3);
+  });
+
+  it('marks the extra dashboard pages as master-only in the topbar', () => {
+    const dashboardMenu = TOPBAR_MENU_CONFIG.find((menu) => menu.id === 'home');
+    const items = dashboardMenu?.submenus?.flatMap((submenu) => submenu.items) || [];
+    expect(items.find((item) => item.route === 'home')?.masterOnly).toBeFalsy();
+    expect(items.find((item) => item.route === 'operations-management-dashboard')?.masterOnly).toBe(true);
+    expect(items.find((item) => item.route === 'sales-performance-management-dashboard')?.masterOnly).toBe(true);
+    expect(items.find((item) => item.route === 'call-records-dashboard')?.masterOnly).toBe(true);
   });
 
   it('labels the old management page as Sales Performance Dashboard', () => {

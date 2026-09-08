@@ -39,7 +39,7 @@ import {
 import CustomLoadingSpinner from './CustomLoadingSpinner';
 import AccessGroupManager from './AccessGroupManager';
 import { useToast } from './ToastProvider';
-import { ACCESS_MODULES, getAccessModuleState, toggleAccessModule } from '../utils/accessModules';
+import { ACCESS_MODULES, getAccessModuleState, toggleAccessModule, canonicalizeBinaryModuleAccessRights } from '../utils/accessModules';
 
 const STAFF_PER_PAGE = 50;
 const STAFF_MEMBER_COLUMN_WIDTH = 288;
@@ -77,6 +77,7 @@ const canonicalizeGroups = (groups: AccessGroup[]): AccessGroup[] => {
       ...existing,
       access_rights: nextRights,
       assigned_staff_count: Math.max(existing.assigned_staff_count || 0, group.assigned_staff_count || 0),
+      is_core: Boolean(existing.is_core || group.is_core),
     });
   });
 
@@ -253,17 +254,23 @@ const AccessControlSettings: React.FC = () => {
 
   const savePermissions = async (user: UserProfile) => {
     const hasPermOverride = permissionChanges[user.id] || false;
+    const nextRights = canonicalizeBinaryModuleAccessRights(user.access_rights || []);
     setSavingId(user.id);
     try {
       await updateProfileLocal(user.id, {
         group_id: user.group_id ?? null,
-        access_rights: user.access_rights || [],
+        access_rights: nextRights,
         access_override: hasPermOverride,
       });
+      setProfiles((prev) =>
+        prev.map((profile) =>
+          profile.id === user.id ? { ...profile, access_rights: nextRights, access_override: hasPermOverride } : profile
+        )
+      );
       setOriginalProfiles((prev) =>
         prev.map((profile) =>
           profile.id === user.id
-            ? { ...profile, access_rights: user.access_rights, access_override: hasPermOverride, group_id: user.group_id ?? null }
+            ? { ...profile, access_rights: nextRights, access_override: hasPermOverride, group_id: user.group_id ?? null }
             : profile
         )
       );

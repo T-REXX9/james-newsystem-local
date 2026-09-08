@@ -48,8 +48,8 @@ vi.mock('../../services/salesInquiryLocalApiService', () => ({
 
 vi.mock('../../services/localAuthService', () => ({
   getLocalAuthSession: vi.fn(() => ({
-    context: { user: { id: 1 } },
-    userProfile: { id: 'user-1', role: 'Owner' },
+    context: { user: { id: 64 } },
+    userProfile: { id: '64', role: 'Sales Agent', full_name: 'test' },
   })),
 }));
 
@@ -437,6 +437,19 @@ describe('SalesInquiryView', () => {
     expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:sales-inquiry-jpeg');
     expect(addToastMock).toHaveBeenCalledWith({ type: 'success', message: 'Sales inquiry JPEG exported.' });
+  });
+
+  it('keeps the logged-in creator as Sales Person when a customer with another agent is selected', async () => {
+    const user = userEvent.setup();
+    render(<SalesInquiryView />);
+    await waitFor(() => expect(fetchContactsMock).toHaveBeenCalled());
+
+    await user.click(screen.getByRole('button', { name: 'Create New' }));
+    await user.selectOptions(screen.getByLabelText('Customer'), 'c-1');
+
+    // Customer salesman is Jane Doe; creator session is "test".
+    expect(screen.getByDisplayValue('test')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('Jane Doe')).not.toBeInTheDocument();
   });
 
   it('auto-selects the first customer contact and keeps PO No. editable when creating an inquiry', async () => {

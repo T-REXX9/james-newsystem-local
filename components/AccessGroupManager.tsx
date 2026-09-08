@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, FolderPlus, Lock, Save, Trash2, Users } from 'lucide-react';
-import { MODULE_ID_ALIASES } from '../constants';
+import { MODULE_ID_ALIASES, isCoreAccessGroupName } from '../constants';
 import { ACCESS_MODULES, getAccessModuleState, toggleAccessModule } from '../utils/accessModules';
 import { AccessGroup } from '../types';
 import ConfirmModal from './ConfirmModal';
@@ -166,6 +166,13 @@ const AccessGroupManager: React.FC<AccessGroupManagerProps> = ({
           {groups.map((group) => {
             const isSelected = group.id === selectedGroupId;
             const hasAssignedStaff = (group.assigned_staff_count || 0) > 0;
+            const isCoreGroup = group.is_core === true || isCoreAccessGroupName(group.name);
+            const deleteBlocked = isCoreGroup || hasAssignedStaff;
+            const deleteTitle = isCoreGroup
+              ? `${group.name} is a built-in system group and cannot be deleted`
+              : hasAssignedStaff
+                ? 'Remove assigned staff before deleting this group'
+                : 'Delete group';
 
             return (
               <div
@@ -198,8 +205,9 @@ const AccessGroupManager: React.FC<AccessGroupManagerProps> = ({
                       event.stopPropagation();
                       setDeleteTargetGroup(group);
                     }}
-                    disabled={hasAssignedStaff || deletingId === group.id}
-                    title={hasAssignedStaff ? 'Remove assigned staff before deleting this group' : 'Delete group'}
+                    disabled={deleteBlocked || deletingId === group.id}
+                    title={deleteTitle}
+                    aria-label={deleteTitle}
                     className="rounded-md p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-red-950/40"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -210,6 +218,12 @@ const AccessGroupManager: React.FC<AccessGroupManagerProps> = ({
                     <Users className="h-3.5 w-3.5" />
                     {group.assigned_staff_count || 0}
                   </span>
+                  {isCoreGroup && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 font-medium dark:bg-slate-800">
+                      <Lock className="h-3.5 w-3.5" />
+                      Built-in
+                    </span>
+                  )}
                 </div>
               </div>
             );

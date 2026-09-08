@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   ACCESS_MODULES,
+  canonicalizeBinaryModuleAccessRights,
   expandAccessModule,
   getAccessModuleState,
+  hasBinaryModulePageAccess,
+  toggleAccessModule,
 } from '../accessModules';
 
 describe('access module permissions', () => {
@@ -39,7 +42,29 @@ describe('access module permissions', () => {
     expect(getAccessModuleState('sales', [])).toEqual({ checked: false, indeterminate: false });
   });
 
+  it('strips leftover pages from modules that are not fully checked', () => {
+    const partial = [
+      ...expandAccessModule('home'),
+      'sales-transaction-sales-inquiry',
+      'maintenance-customer-customer-data',
+    ];
+
+    expect(canonicalizeBinaryModuleAccessRights(partial)).toEqual(expandAccessModule('home'));
+    expect(hasBinaryModulePageAccess(partial, 'sales-transaction-sales-inquiry')).toBe(false);
+    expect(hasBinaryModulePageAccess(partial, 'home')).toBe(true);
+  });
+
   it('uses navigated routes for pages whose menu id is only a display key', () => {
     expect(expandAccessModule('communication')).toContain('sales-transaction-marketing-campaigns');
+  });
+
+  it.each(ACCESS_MODULES)('toggles every page in the %s module as one binary permission', (module) => {
+    const enabled = toggleAccessModule([], module.id, true);
+    expect(enabled).toEqual(module.pageIds);
+    expect(getAccessModuleState(module.id, enabled)).toEqual({ checked: true, indeterminate: false });
+
+    const disabled = toggleAccessModule(enabled, module.id, false);
+    expect(disabled).toEqual([]);
+    expect(getAccessModuleState(module.id, disabled)).toEqual({ checked: false, indeterminate: false });
   });
 });
