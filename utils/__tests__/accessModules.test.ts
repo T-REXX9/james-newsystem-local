@@ -31,11 +31,11 @@ describe('access module permissions', () => {
     ]);
   });
 
-  it('reports a module checked only when all of its pages are granted', () => {
+  it('keeps module access binary and only checks when all pages are granted', () => {
     const salesPages = expandAccessModule('sales');
 
     expect(getAccessModuleState('sales', salesPages)).toEqual({ checked: true, indeterminate: false });
-    expect(getAccessModuleState('sales', salesPages.slice(0, -1))).toEqual({ checked: false, indeterminate: true });
+    expect(getAccessModuleState('sales', salesPages.slice(0, -1))).toEqual({ checked: false, indeterminate: false });
     expect(getAccessModuleState('sales', [])).toEqual({ checked: false, indeterminate: false });
   });
 

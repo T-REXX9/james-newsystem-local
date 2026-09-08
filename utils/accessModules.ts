@@ -30,16 +30,15 @@ export const expandAccessModule = (moduleId: string): string[] => moduleById.get
 export const getAccessModuleState = (
   moduleId: string,
   grantedPageIds: Iterable<string>
-): { checked: boolean; indeterminate: boolean } => {
+): { checked: boolean; indeterminate: false } => {
   const pageIds = expandAccessModule(moduleId);
   const granted = new Set(grantedPageIds);
   if (granted.has('*')) return { checked: true, indeterminate: false };
-  const grantedCount = pageIds.filter((pageId) => granted.has(pageId)).length;
+  const checked = pageIds.length > 0 && pageIds.every((pageId) => granted.has(pageId));
 
-  return {
-    checked: pageIds.length > 0 && grantedCount === pageIds.length,
-    indeterminate: grantedCount > 0 && grantedCount < pageIds.length,
-  };
+  // Module permissions are intentionally binary. Legacy partial page grants
+  // are shown as unchecked until the user enables the complete module.
+  return { checked, indeterminate: false };
 };
 
 export const toggleAccessModule = (

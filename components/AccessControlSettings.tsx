@@ -686,7 +686,6 @@ const AccessControlSettings: React.FC = () => {
                         {ACCESS_MODULES.map((module) => {
                           const moduleState = getAccessModuleState(module.id, effectiveCanonicalRights);
                           const isAllowed = isOwner || hasFullAccess || moduleState.checked;
-                          const isIndeterminate = !isOwner && !hasFullAccess && moduleState.indeterminate;
                           const assignedGroupRights = assignedGroup
                             ? getEffectiveCanonicalRights(assignedGroup.access_rights)
                             : null;
@@ -711,10 +710,7 @@ const AccessControlSettings: React.FC = () => {
                                     type="checkbox"
                                     checked={isAllowed}
                                     aria-label={`${module.label} module access for ${user.full_name}`}
-                                    aria-checked={isIndeterminate ? 'mixed' : isAllowed}
-                                    ref={(element) => {
-                                      if (element) element.indeterminate = isIndeterminate;
-                                    }}
+                                    aria-checked={isAllowed}
                                     disabled={isOwner}
                                   onChange={() => {
                                     if (!isOwner) handlePermissionToggle(user.id, module.id, isAllowed);
