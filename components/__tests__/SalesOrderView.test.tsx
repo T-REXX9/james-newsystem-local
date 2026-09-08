@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SalesOrderView from '../SalesOrderView';
 import { ToastProvider } from '../ToastProvider';
@@ -127,6 +127,25 @@ describe('SalesOrderView', () => {
     expect(newest.compareDocumentPosition(middle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(middle.compareDocumentPosition(oldest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(getAllSalesOrdersMock).toHaveBeenCalledWith({});
+  });
+
+  it('keeps every Sales Order list column visible without desktop horizontal scrolling', async () => {
+    getAllSalesOrdersMock.mockResolvedValue([makeOrder()]);
+    fetchContactsMock.mockResolvedValue([
+      { id: 'contact-1', company: 'Acme Corp', transactionType: 'Invoice' },
+    ]);
+
+    renderView();
+
+    await screen.findByText('SO-1');
+
+    const list = screen.getByTestId('sales-order-list');
+    expect(list).toHaveClass('overflow-x-auto', 'lg:overflow-x-hidden');
+    expect(list.querySelectorAll('table')).toHaveLength(1);
+    expect(list.querySelector('table')).toHaveClass('min-w-[1100px]', 'lg:min-w-0');
+    ['Date', 'Customer', 'SI No.', 'SO No.', 'Transaction No.', 'Sales Person', 'Status'].forEach((heading) => {
+      expect(within(list).getByText(heading)).toBeVisible();
+    });
   });
 
   it('loads the redirected sales order even when it is not present in the initial list page', async () => {

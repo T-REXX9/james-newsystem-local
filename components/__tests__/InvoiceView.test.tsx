@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import InvoiceView from '../InvoiceView';
 import { InvoiceStatus } from '../../types';
 
@@ -119,6 +119,37 @@ describe('InvoiceView', () => {
     expect(await screen.findByText('SO26-20478')).toBeInTheDocument();
     expect(screen.getByText('T-01542')).toBeInTheDocument();
     expect(screen.queryByText('20260827172321')).not.toBeInTheDocument();
+  });
+
+  it('keeps every Sales Invoice list column visible without desktop horizontal scrolling', async () => {
+    getAllInvoicesMock.mockResolvedValue([
+      {
+        id: 'inv-list-1',
+        invoice_no: 'INV26-1001',
+        order_id: 'so-1',
+        sales_no: 'SO26-1001',
+        contact_id: 'c-1',
+        sales_date: '2026-09-05',
+        sales_person: 'Jane',
+        customer_reference: 'CR-1',
+        debit_memo_no: 'DM-1',
+        tracking_no: 'TRACK-1',
+        status: InvoiceStatus.SENT,
+        items: [],
+      },
+    ]);
+
+    render(<InvoiceView />);
+
+    await screen.findByText('INV26-1001');
+
+    const list = screen.getByTestId('sales-invoice-list');
+    expect(list).toHaveClass('overflow-x-auto', 'lg:overflow-x-hidden');
+    expect(list.querySelectorAll('table')).toHaveLength(1);
+    expect(list.querySelector('table')).toHaveClass('min-w-[1100px]', 'lg:min-w-0');
+    ['Date', 'Customer', 'SO No.', 'INV No.', 'DM No.', 'Tracking No.', 'CR No.', 'Sales Person', 'Status'].forEach((heading) => {
+      expect(within(list).getByText(heading)).toBeVisible();
+    });
   });
 
   it('warns and does not download when Export JPEG is clicked without a selected invoice', async () => {
