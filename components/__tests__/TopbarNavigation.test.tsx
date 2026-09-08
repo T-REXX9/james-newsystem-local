@@ -38,16 +38,17 @@ describe('TopbarNavigation responsive layout', () => {
   });
 
   it.each([
-    ['Product Database', 'warehouse-inventory-product-database', 'Company Owner'],
-    ['Recycle Bin', 'maintenance-profile-server-maintenance', 'Company Owner'],
-  ])('navigates to %s from the current menu and preserves open-in-new-tab gestures', async (label, route, role) => {
+    ['Product Database', 'warehouse-inventory-product-database', { role: 'Company Owner' }],
+    ['Recycle Bin', 'maintenance-profile-recycle-bin', { role: 'Company Owner' }],
+    ['Server Maintenance', 'maintenance-profile-server-maintenance', { role: 'Company Owner', user_type: '1' }],
+  ])('navigates to %s from the current menu and preserves open-in-new-tab gestures', async (label, route, userOverrides) => {
     const user = userEvent.setup();
     const onNavigate = vi.fn();
     render(
       <TopbarNavigation
         activeTab="home"
         onNavigate={onNavigate}
-        user={{ ...owner, role }}
+        user={{ ...owner, ...userOverrides }}
       />
     );
 
@@ -64,6 +65,21 @@ describe('TopbarNavigation responsive layout', () => {
 
     await user.click(menuLink);
     expect(onNavigate).toHaveBeenCalledWith(route);
+  });
+
+  it('hides Server Maintenance from non–Master User accounts', async () => {
+    const user = userEvent.setup();
+    render(
+      <TopbarNavigation
+        activeTab="home"
+        onNavigate={vi.fn()}
+        user={{ ...owner, role: 'Sales Agent', user_type: '2', access_rights: ['*'] }}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Toggle navigation' }));
+    const compactMenu = document.querySelector('[data-responsive-nav="compact"]') as HTMLElement;
+    expect(within(compactMenu).queryByRole('menuitem', { name: 'Server Maintenance' })).not.toBeInTheDocument();
   });
 
   it('opens a sales menu page in a new window without leaving the current screen', async () => {

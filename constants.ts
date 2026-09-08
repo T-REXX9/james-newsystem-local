@@ -59,7 +59,7 @@ export const DEFAULT_STAFF_ACCESS_RIGHTS = [
   'maintenance-profile-approver',
   'maintenance-profile-activity-logs',
   'maintenance-profile-system-access',
-  'maintenance-profile-server-maintenance',
+  'maintenance-profile-recycle-bin',
 ];
 /**
  * Role-specific default permissions mapping.
@@ -96,6 +96,17 @@ export const canonicalizeRoleName = (value?: string | null): string => {
 export const isCompanyOwnerRole = (value?: string | null): boolean => {
   const role = canonicalizeRoleName(value);
   return role === ROLE_NAMES.COMPANY_OWNER || String(value || '').trim().toLowerCase() === 'developer';
+};
+
+/** True Master User account (`user_type === '1'`). Matches API Master-only gates. */
+export const isMasterUserType = (user?: { user_type?: string | number | null } | null): boolean =>
+  String(user?.user_type ?? '') === '1';
+
+/** Owner / Master User roles used for UI gates that accept either claim shape. */
+export const isMasterUserAccount = (user?: { role?: string | null; user_type?: string | number | null } | null): boolean => {
+  if (isMasterUserType(user)) return true;
+  const role = String(user?.role || '').trim().toLowerCase();
+  return isCompanyOwnerRole(user?.role) || ['master user', 'owner', 'company owner', 'main'].includes(role);
 };
 
 /**
@@ -231,6 +242,7 @@ export const AVAILABLE_APP_MODULES = [
   { id: 'maintenance-profile-approver', label: 'Approver' },
   { id: 'maintenance-profile-activity-logs', label: 'Activity Logs' },
   { id: 'maintenance-profile-system-access', label: 'System Access' },
+  { id: 'maintenance-profile-recycle-bin', label: 'Recycle Bin' },
   { id: 'maintenance-profile-server-maintenance', label: 'Server Maintenance' },
   { id: 'communication-sms-blasting', label: 'SMS Blasting' },
   { id: 'communication-sms-templates', label: 'SMS Templates' },
@@ -254,11 +266,11 @@ export const MODULE_ID_ALIASES: Record<string, string> = {
   mail: 'communication-messaging-inbox',
   calendar: 'communication-productivity-calendar',
   calls: 'sales-transaction-daily-call-monitoring',
-  recyclebin: 'maintenance-profile-server-maintenance',
+  recyclebin: 'maintenance-profile-recycle-bin',
   settings: 'maintenance-profile-system-access',
   'warehouse-inventory-reorder-report': 'warehouse-reports-reorder-report',
   'maintenance-profile-staff-and-agents': 'maintenance-profile-staff',
-  'maintenance-system-recycle-bin': 'maintenance-profile-server-maintenance',
+  'maintenance-system-recycle-bin': 'maintenance-profile-recycle-bin',
   'maintenance-system-settings-permissions': 'maintenance-profile-system-access',
   'maintenance-system-loyalty-discounts': 'maintenance-system-loyalty-discounts',
   'maintenance-system-profit-protection': 'maintenance-system-profit-protection',

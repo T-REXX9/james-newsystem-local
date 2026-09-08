@@ -14,6 +14,7 @@ import {
   Bot,
   Shield,
   Trash2,
+  HardDrive,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -438,10 +439,17 @@ export const TOPBAR_MENU_CONFIG: TopbarMainMenu[] = [
             icon: Settings,
           },
           {
-            id: 'maintenance-profile-server-maintenance',
+            id: 'maintenance-profile-recycle-bin',
             label: 'Recycle Bin',
-            route: 'maintenance-profile-server-maintenance',
+            route: 'maintenance-profile-recycle-bin',
             icon: Trash2,
+          },
+          {
+            id: 'maintenance-profile-server-maintenance',
+            label: 'Server Maintenance',
+            route: 'maintenance-profile-server-maintenance',
+            icon: HardDrive,
+            masterOnly: true,
           },
         ],
       },

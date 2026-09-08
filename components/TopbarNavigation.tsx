@@ -9,7 +9,7 @@ import {
 import type { UserProfile } from '../types';
 import { useKeyboardShortcuts, getShortcutDisplay } from '../hooks/useKeyboardShortcuts';
 import { useSmartDropdownPosition } from '../hooks/useSmartDropdownPosition';
-import { isCompanyOwnerRole, MODULE_ID_ALIASES } from '../constants';
+import { isMasterUserAccount, isMasterUserType, MODULE_ID_ALIASES } from '../constants';
 import { openModuleInNewWindow } from '../utils/workflowNavigate';
 import {
   TOPBAR_MENU_CONFIG,
@@ -48,9 +48,14 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
 
     const canonical = MODULE_ID_ALIASES[route] || route;
 
-    // Special case: server maintenance / recycle bin
+    // Server Maintenance dump is Master User type only (matches API user_type === '1').
     if (canonical === 'maintenance-profile-server-maintenance') {
-      return isCompanyOwnerRole(user.role);
+      return isMasterUserType(user);
+    }
+
+    // Recycle Bin for Master User / owner-level accounts
+    if (canonical === 'maintenance-profile-recycle-bin') {
+      return isMasterUserAccount(user);
     }
 
     // Owner always has access
@@ -69,11 +74,14 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
   }, [user]);
 
   const filteredMenus = useMemo(() => {
-    const role = String(user?.role || '').trim().toLowerCase();
-    const isMasterUser = String(user?.user_type || '') === '1'
-      || ['owner', 'company owner', 'master user', 'main'].includes(role);
+    const isMasterUser = isMasterUserAccount(user);
     const filterItems = (items: TopbarMenuItem[]) =>
-      items.filter((item) => (!item.masterOnly || isMasterUser) && canAccessRoute(item.route));
+      items.filter((item) => {
+        if (item.route === 'maintenance-profile-server-maintenance') {
+          return isMasterUserType(user) && canAccessRoute(item.route);
+        }
+        return (!item.masterOnly || isMasterUser) && canAccessRoute(item.route);
+      });
 
     const filterSubmenus = (submenus: TopbarSubmenu[]) =>
       submenus
@@ -91,7 +99,7 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
       if (menu.route) return canAccessRoute(menu.route);
       return (menu.submenus || []).length > 0;
     });
-  }, [canAccessRoute]);
+  }, [canAccessRoute, user]);
 
   const navigateTo = useCallback(
     (route: string) => {

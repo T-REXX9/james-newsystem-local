@@ -35,6 +35,7 @@ import WarehouseIncidentReportDetail from './components/WarehouseIncidentReportD
 import AccessControlSettings from './components/AccessControlSettings';
 import ManagementView from './components/ManagementView';
 import RecycleBinView from './components/RecycleBinView';
+import ServerMaintenanceView from './components/ServerMaintenanceView';
 import ReportsView from './components/ReportsView';
 import PurchaseOrderView from './components/PurchaseOrderView';
 import ReceivingStock from './components/ReceivingStock';
@@ -84,7 +85,7 @@ import { Filter, Lock } from 'lucide-react';
 import { ToastProvider } from './components/ToastProvider';
 import { NotificationProvider } from './components/NotificationProvider';
 import CustomLoadingSpinner from './components/CustomLoadingSpinner';
-import { AVAILABLE_APP_MODULES, isCompanyOwnerRole, MODULE_ID_ALIASES, ROLE_NAMES } from './constants';
+import { AVAILABLE_APP_MODULES, isCompanyOwnerRole, isMasterUserAccount, isMasterUserType, MODULE_ID_ALIASES, ROLE_NAMES } from './constants';
 import {
   getLocalAuthSession,
   LocalAuthSession,
@@ -334,9 +335,14 @@ const App: React.FC = () => {
 
     const canonical = normalizeModuleId(moduleId);
 
-    // Special case: Recycle Bin only for owner-level accounts
-    if (canonical === 'maintenance-profile-server-maintenance' || moduleId === 'recyclebin') {
-      return isCompanyOwnerRole(userProfile.role);
+    // Server Maintenance dump is Master User type only (matches API user_type === '1').
+    if (canonical === 'maintenance-profile-server-maintenance') {
+      return isMasterUserType(userProfile);
+    }
+
+    // Recycle Bin for Master User / owner-level accounts
+    if (canonical === 'maintenance-profile-recycle-bin' || moduleId === 'recyclebin') {
+      return isMasterUserAccount(userProfile);
     }
 
     // Step 1: Check if the user's role grants access
@@ -913,10 +919,17 @@ const App: React.FC = () => {
         return <ActivityLogs initialDateFrom={context.dashboardDate} initialDateTo={context.dashboardDate} />;
       }
       case 'recyclebin':
-      case 'maintenance-profile-server-maintenance':
+      case 'maintenance-profile-recycle-bin':
+      case 'maintenance-system-recycle-bin':
         return (
           <div className="h-full overflow-y-auto">
             <RecycleBinView />
+          </div>
+        );
+      case 'maintenance-profile-server-maintenance':
+        return (
+          <div className="h-full overflow-y-auto">
+            <ServerMaintenanceView currentUser={userProfile} />
           </div>
         );
       case 'maintenance-profile-system-access':

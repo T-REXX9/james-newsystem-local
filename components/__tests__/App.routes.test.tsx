@@ -8,7 +8,7 @@ import App from '../../App';
 const session = vi.hoisted(() => ({
   token: 'route-test-token',
   context: { user: { id: 1, main_userid: 1 }, main_userid: 1 },
-  userProfile: { id: '1', full_name: 'Test Owner', email: 'owner@example.test', role: 'Owner', access_rights: ['*'] },
+  userProfile: { id: '1', full_name: 'Test Owner', email: 'owner@example.test', role: 'Owner', user_type: '1', access_rights: ['*'] },
 }));
 vi.mock('../../services/localAuthService', () => ({
   getLocalAuthSession: () => session,
@@ -51,7 +51,7 @@ describe('Current App routes with local APIs', () => {
     expect(screen.queryByTestId('route-crash')).not.toBeInTheDocument();
     expect(screen.getByTestId('route-navigation')).toBeInTheDocument();
     expect(screen.getAllByRole('main')[0].childElementCount).toBeGreaterThan(0);
-    if (['recyclebin', 'maintenance-profile-server-maintenance'].includes(route)) {
+    if (['recyclebin', 'maintenance-profile-recycle-bin', 'maintenance-profile-server-maintenance'].includes(route)) {
       expect(screen.getByRole('alert')).toHaveTextContent('Test API unavailable');
     }
   });
