@@ -45,6 +45,11 @@ export type PurchaseHistoryReport = {
     agent_name: string;
   };
   items: PurchaseHistoryRow[];
+  pagination: {
+    page: number;
+    per_page: number;
+    has_more: boolean;
+  };
 };
 
 const parseApiError = async (response: Response): Promise<string> => {
@@ -157,15 +162,21 @@ export const purchaseHistoryReportService = {
     dateType: PurchaseHistoryDateType;
     customDateFrom?: string;
     customDateTo?: string;
+    page?: number;
+    perPage?: number;
+    signal?: AbortSignal;
   }): Promise<PurchaseHistoryReport> {
     const { dateFrom, dateTo } = resolveDateRange(params.dateType, params.customDateFrom, params.customDateTo);
     const query = new URLSearchParams({
       date_from: dateFrom,
       date_to: dateTo,
+      page: String(Math.max(1, params.page || 1)),
+      per_page: String(Math.min(50, Math.max(1, params.perPage || 50))),
     });
 
     const data = await requestApi(
-      `${API_BASE_URL}/customers/${encodeURIComponent(params.customerId)}/purchase-history?${query.toString()}`
+      `${API_BASE_URL}/customers/${encodeURIComponent(params.customerId)}/purchase-history?${query.toString()}`,
+      { signal: params.signal }
     );
 
     const items = Array.isArray(data?.items) ? data.items : [];
@@ -206,6 +217,11 @@ export const purchaseHistoryReportService = {
           line_total: (qty - returnQty) * price,
         };
       }),
+      pagination: {
+        page: toNumber(data?.pagination?.page, params.page || 1),
+        per_page: toNumber(data?.pagination?.per_page, params.perPage || 50),
+        has_more: Boolean(data?.pagination?.has_more),
+      },
     };
   },
 };

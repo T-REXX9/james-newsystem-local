@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Calendar, Crown, FileText, Printer, RefreshCcw, Search, ShieldCheck, Tags, TrendingUp, WalletCards } from 'lucide-react';
 import {
   PurchaseHistoryCustomer,
@@ -8,6 +8,7 @@ import {
 } from '../services/purchaseHistoryReportService';
 import { retraceWorkflowHistory } from '../utils/workflowHistory';
 import { formatCustomerSince } from '../utils/formatUtils';
+import { buildDateSubtotals } from '../utils/purchaseHistoryAggregates';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
@@ -42,6 +43,9 @@ const PurchaseHistoryReportView: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [report, setReport] = useState<PurchaseHistoryReport | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const requestController = useRef<AbortController | null>(null);
+  const requestVersion = useRef(0);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(customerSearch.trim()), 220);
@@ -111,6 +115,8 @@ const PurchaseHistoryReportView: React.FC = () => {
     };
   }, [report]);
 
+  const dateSubtotals = useMemo(() => buildDateSubtotals(report?.items || []), [report?.items]);
+
   const generate = async () => {
     if (!selectedCustomerId) {
       setError('Select a customer first');
@@ -122,7 +128,13 @@ const PurchaseHistoryReportView: React.FC = () => {
       return;
     }
 
+    requestController.current?.abort();
+    const controller = new AbortController();
+    requestController.current = controller;
+    const version = ++requestVersion.current;
+    setReport(null);
     setLoading(true);
+    setLoadingMore(false);
     setError('');
     try {
       const payload = await purchaseHistoryReportService.getReport({
@@ -130,13 +142,41 @@ const PurchaseHistoryReportView: React.FC = () => {
         dateType,
         customDateFrom: dateType === 'custom' ? dateFrom : undefined,
         customDateTo: dateType === 'custom' ? dateTo : undefined,
+        page: 1,
+        perPage: 50,
+        signal: controller.signal,
       });
-      setReport(payload);
+      if (version === requestVersion.current) setReport(payload);
     } catch (err: any) {
-      setReport(null);
-      setError(err?.message || 'Failed to load purchase history report');
+      if (version === requestVersion.current && err?.name !== 'AbortError') {
+        setReport(null);
+        setError(err?.message || 'Failed to load purchase history report');
+      }
     } finally {
-      setLoading(false);
+      if (version === requestVersion.current) setLoading(false);
+    }
+  };
+
+  const loadNextPage = async () => {
+    if (!report?.pagination?.has_more || loading || loadingMore || !selectedCustomerId) return;
+
+    setLoadingMore(true);
+    try {
+      const payload = await purchaseHistoryReportService.getReport({
+        customerId: selectedCustomerId,
+        dateType,
+        customDateFrom: dateType === 'custom' ? dateFrom : undefined,
+        customDateTo: dateType === 'custom' ? dateTo : undefined,
+        page: report.pagination.page + 1,
+        perPage: 50,
+      });
+      setReport((current) => current ? {
+        ...current,
+        items: [...current.items, ...payload.items],
+        pagination: payload.pagination,
+      } : current);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -144,6 +184,8 @@ const PurchaseHistoryReportView: React.FC = () => {
     if (!selectedCustomerId) return;
     generate();
   }, [selectedCustomerId]);
+
+  useEffect(() => () => requestController.current?.abort(), []);
 
   return (
     <div className="h-full bg-slate-100 dark:bg-slate-950 p-4">
@@ -176,6 +218,9 @@ const PurchaseHistoryReportView: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => {
+                          requestController.current?.abort();
+                          setReport(null);
+                          setError('');
                           setSelectedCustomerId(customer.sessionId);
                           setSelectedCustomerSnapshot(customer);
                         }}
@@ -305,7 +350,14 @@ const PurchaseHistoryReportView: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex-1 overflow-auto p-4 space-y-4">
+          <div
+            data-testid="purchase-history-scroll"
+            className="flex-1 overflow-auto p-4 space-y-4"
+            onScroll={(event) => {
+              const element = event.currentTarget;
+              if (element.scrollHeight - element.scrollTop - element.clientHeight < 320) void loadNextPage();
+            }}
+          >
             {error && <p className="text-sm text-rose-600">{error}</p>}
             {loading ? (
               <p className="text-sm text-slate-500">Loading purchase history...</p>
@@ -354,9 +406,7 @@ const PurchaseHistoryReportView: React.FC = () => {
                         report.items.map((row, idx) => {
                           const nextDate = report.items[idx + 1]?.ldate;
                           const showDateSubtotal = !nextDate || formatDate(nextDate) !== formatDate(row.ldate);
-                          const dateRows = report.items.filter((candidate) => formatDate(candidate.ldate) === formatDate(row.ldate));
-                          const dateSold = dateRows.reduce((sum, candidate) => sum + candidate.lqty * candidate.lprice, 0);
-                          const dateReturn = dateRows.reduce((sum, candidate) => sum + candidate.return_qty * candidate.lprice, 0);
+                          const dateSubtotal = dateSubtotals[row.ldate] || { sold: 0, returned: 0 };
                           return (
                             <React.Fragment key={`${row.source_refno}-${row.litemcode}-${idx}`}>
                               <tr>
@@ -375,8 +425,8 @@ const PurchaseHistoryReportView: React.FC = () => {
                               {showDateSubtotal ? (
                                 <tr className="bg-slate-50 font-bold dark:bg-slate-800/60">
                                   <td colSpan={9} className="px-3 py-2 text-right">{formatDate(row.ldate)} =&gt;</td>
-                                  <td className="px-3 py-2 text-right">{peso.format(dateSold)}</td>
-                                  <td className="px-3 py-2 text-right">{peso.format(dateReturn)}</td>
+                                  <td className="px-3 py-2 text-right">{peso.format(dateSubtotal.sold)}</td>
+                                  <td className="px-3 py-2 text-right">{peso.format(dateSubtotal.returned)}</td>
                                 </tr>
                               ) : null}
                             </React.Fragment>
@@ -389,6 +439,11 @@ const PurchaseHistoryReportView: React.FC = () => {
                           <td className="px-3 py-2 text-right">{peso.format(summary.totalAmountSold)}</td>
                           <td className="px-3 py-2 text-right">{peso.format(summary.totalAmountReturn)}</td>
                         </tr>
+                      ) : null}
+                      {loadingMore ? (
+                        <tr><td colSpan={11} className="px-3 py-3 text-center text-slate-500">Loading more purchase history...</td></tr>
+                      ) : report.pagination?.has_more ? (
+                        <tr><td colSpan={11} className="px-3 py-3 text-center text-slate-500">Scroll for more rows</td></tr>
                       ) : null}
                     </tbody>
                   </table>

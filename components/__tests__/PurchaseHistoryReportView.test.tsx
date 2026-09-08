@@ -1,5 +1,5 @@
 import React from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PurchaseHistoryReportView from '../PurchaseHistoryReportView';
 
@@ -65,5 +65,33 @@ describe('PurchaseHistoryReportView', () => {
     expect(screen.getByText('Total Qty: 10')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Print' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    expect(getReportMock).toHaveBeenCalledWith(expect.objectContaining({ page: 1, perPage: 50 }));
+  });
+
+  it('appends the next page when the report scroll nears the end', async () => {
+    const firstRow = {
+      source_type: 'INVOICE', source_refno: 'ref-1', source_no: 'D1', ldate: '2026-09-08',
+      litemcode: 'ITEM-1', lpartno: 'P-1', ldesc: 'First item', lbrand: 'BRAND',
+      lqty: 1, lprice: 10, return_qty: 0, net_qty: 1, line_total: 10,
+    };
+    const secondRow = { ...firstRow, source_refno: 'ref-2', source_no: 'D2', litemcode: 'ITEM-2', lpartno: 'P-2', ldesc: 'Second item' };
+    const customer = { company: '3R MAN CALIBRATION', old_name: '', customer_since: '', vip_status: 'REGULAR', price_code: 'VIP1', current_month_sales: 0, outstanding_balance: 0, terms: '', credit_limit: 0, agent_name: '' };
+    getReportMock
+      .mockResolvedValueOnce({ customer_session: 'customer-1', date_from: '2026-09-08', date_to: '2026-09-08', generated_at: '', customer, items: [firstRow], pagination: { page: 1, per_page: 50, has_more: true } })
+      .mockResolvedValueOnce({
+        customer_session: 'customer-1', date_from: '2026-09-08', date_to: '2026-09-08', generated_at: '',
+        customer,
+        items: [secondRow], pagination: { page: 2, per_page: 50, has_more: false },
+      });
+
+    render(<PurchaseHistoryReportView />);
+    expect((await screen.findAllByText('First item')).length).toBeGreaterThan(0);
+
+    const scroll = screen.getByTestId('purchase-history-scroll');
+    Object.defineProperties(scroll, { scrollHeight: { value: 1000 }, clientHeight: { value: 500 }, scrollTop: { value: 600 } });
+    fireEvent.scroll(scroll);
+
+    expect((await screen.findAllByText('Second item')).length).toBeGreaterThan(0);
+    await waitFor(() => expect(getReportMock).toHaveBeenCalledWith(expect.objectContaining({ page: 2, perPage: 50 })));
   });
 });
