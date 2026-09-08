@@ -7,12 +7,11 @@ const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
 
 export type SuggestedStockSortOption =
   | 'qty-desc'
+  | 'customers-desc'
   | 'description-asc'
-  | 'description-desc'
-  | 'inquiries-desc'
-  | 'inquiries-asc';
+  | 'description-desc';
 
-export const SUGGESTED_STOCK_DEFAULT_SORT: SuggestedStockSortOption = 'qty-desc';
+export const SUGGESTED_STOCK_DEFAULT_SORT: SuggestedStockSortOption = 'customers-desc';
 
 export interface SuggestedStockFilters {
   dateFrom: string;

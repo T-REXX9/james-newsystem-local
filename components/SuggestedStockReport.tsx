@@ -32,10 +32,9 @@ interface SuggestedStockReportProps {
 }
 
 const SORT_OPTIONS: Array<{ value: SuggestedStockSortOption; label: string }> = [
+  { value: 'customers-desc', label: 'Customers — highest first' },
   { value: 'qty-desc', label: 'Qty requested (total) — highest first' },
   { value: 'description-asc', label: 'Descriptions' },
-  { value: 'inquiries-desc', label: 'Customer requests — highest first' },
-  { value: 'inquiries-asc', label: 'Customer requests — lowest first' },
   { value: 'description-desc', label: 'Description — Z to A' },
 ];
 
@@ -215,9 +214,8 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
       'Item Code',
       'Description',
       'Brand',
-      'Total Inquiries',
-      'Total Qty Requested',
       'Customers',
+      'Total Qty Requested',
       'Last Requested',
       'KIV',
       ...(cartFolder ? ['Covering PR'] : []),
@@ -227,9 +225,8 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
       item.itemCode,
       item.description,
       item.brand,
-      item.inquiryCount,
-      item.totalQty,
       item.customerCount,
+      item.totalQty,
       item.lastInquiryDate,
       kivFolder || item.isKiv ? 'Yes' : 'No',
       ...(cartFolder ? [item.coveringPrNumber] : []),
@@ -579,9 +576,8 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
                         )}
                         <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-left font-bold uppercase tracking-wide text-white">Part No</th>
                         <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-left font-bold uppercase tracking-wide text-white">Description</th>
-                        <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-center font-bold uppercase tracking-wide text-white">Customer Requests</th>
-                        <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-center font-bold uppercase tracking-wide text-white">Qty Requested (Total)</th>
                         <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-center font-bold uppercase tracking-wide text-white">Customers</th>
+                        <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-center font-bold uppercase tracking-wide text-white">Qty Requested (Total)</th>
                         <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-center font-bold uppercase tracking-wide text-white">Last Requested</th>
                         <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-center font-bold uppercase tracking-wide text-white">Status</th>
                         <th className="border-b border-slate-200 bg-[#102f76] px-4 py-3 text-center font-bold uppercase tracking-wide text-white">{cartFolder ? 'Purchase Request' : 'PR Qty'}</th>
@@ -613,9 +609,8 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
                             )}
                             <td className="px-4 py-3 font-semibold text-[#e85c41]">{item.partNo || '-'}</td>
                             <td className="px-4 py-3 font-semibold text-[#173c83]">{item.description || '-'}</td>
-                            <td className="px-4 py-3 text-center font-bold text-[#175fd3]">{item.inquiryCount} requests</td>
+                            <td className="px-4 py-3 text-center font-semibold text-emerald-700">{item.customerCount} customers</td>
                             <td className="px-4 py-3 text-center font-bold text-slate-700">{item.totalQty} pcs</td>
-                            <td className="px-4 py-3 text-center font-semibold text-slate-600">{item.customerCount} customers</td>
                             <td className="px-4 py-3 text-center font-semibold text-slate-600">{item.lastInquiryDate ? new Date(item.lastInquiryDate).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : '-'}</td>
                             <td className="px-4 py-3 text-center">
                               {cartFolder ? (

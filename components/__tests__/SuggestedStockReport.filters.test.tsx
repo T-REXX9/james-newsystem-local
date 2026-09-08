@@ -39,7 +39,7 @@ vi.mock('../ToastProvider', () => ({
   useToast: () => ({ addToast: addToastMock }),
 }));
 
-const item = (id: string, description: string, inquiryCount: number, totalQty = inquiryCount) => ({
+const item = (id: string, description: string, inquiryCount: number, totalQty = inquiryCount, customerCount = 1) => ({
   id,
   partNo: `PN-${id}`,
   itemCode: '',
@@ -51,7 +51,7 @@ const item = (id: string, description: string, inquiryCount: number, totalQty = 
   isListed: false,
   inquiryCount,
   totalQty,
-  customerCount: 1,
+  customerCount,
   customers: [{ id: `customer-${id}`, name: `Customer ${id}` }],
   remark: '',
   lastInquiryDate: '2026-08-20',
@@ -100,30 +100,51 @@ describe('SuggestedStockReport filters', () => {
     vi.clearAllMocks();
   });
 
-  it('opens sorted by highest qty requested and keeps the server row order', async () => {
+  it('opens sorted by distinct customers and keeps the server row order', async () => {
     render(<SuggestedStockReport />);
     await screen.findByText('ZULU PART');
 
     await waitFor(() => expect(fetchSummaryMock).toHaveBeenCalledWith(
-      expect.objectContaining({ sortBy: 'qty-desc', kivFolder: false }),
+      expect.objectContaining({ sortBy: 'customers-desc', kivFolder: false }),
       1,
       50
     ));
 
     const sort = screen.getByRole('combobox', { name: 'Sort suggested stock items' });
-    expect(sort).toHaveValue('qty-desc');
+    expect(sort).toHaveValue('customers-desc');
     expect(sort).not.toHaveTextContent('KIV folder');
     expect(Array.from((sort as HTMLSelectElement).options).map((option) => option.value)).toEqual([
+      'customers-desc',
       'qty-desc',
       'description-asc',
-      'inquiries-desc',
-      'inquiries-asc',
       'description-desc',
     ]);
 
     const [zulu, alpha, mu] = rowOrder('ZULU PART', 'ALPHA PART', 'MU PART');
     expect(zulu?.compareDocumentPosition(alpha as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(alpha?.compareDocumentPosition(mu as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('uses distinct customer count for the demand sort, not repeated inquiry lines', async () => {
+    fetchSummaryMock.mockResolvedValueOnce({
+      items: [
+        item('broad', 'BROAD DEMAND', 1, 1, 3),
+        item('repeat', 'REPEAT DEMAND', 4, 4, 1),
+      ],
+      hasMore: false,
+    });
+
+    render(<SuggestedStockReport />);
+    await screen.findByText('BROAD DEMAND');
+
+    await waitFor(() => expect(fetchSummaryMock).toHaveBeenCalledWith(
+      expect.objectContaining({ sortBy: 'customers-desc' }),
+      1,
+      50
+    ));
+    const [broad, repeat] = rowOrder('BROAD DEMAND', 'REPEAT DEMAND');
+    expect(broad?.compareDocumentPosition(repeat as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText('Customer Requests')).not.toBeInTheDocument();
   });
 
   it('requests description A→Z from the API and renders that server page without re-sorting', async () => {
@@ -276,7 +297,7 @@ describe('SuggestedStockReport filters', () => {
 
     await waitFor(() => expect(fetchSummaryMock).toHaveBeenCalledWith(expect.objectContaining({
       partNo: 'PN-a',
-      sortBy: 'qty-desc',
+      sortBy: 'customers-desc',
     }), 1, 50));
     await screen.findByText('ALPHA PART');
     expect(screen.queryByText('ZULU PART')).not.toBeInTheDocument();
@@ -368,9 +389,9 @@ describe('SuggestedStockReport filters', () => {
 
     await waitFor(() => expect(fetchSummaryMock).toHaveBeenCalledWith(expect.objectContaining({
       kivFolder: true,
-      sortBy: 'qty-desc',
+      sortBy: 'customers-desc',
     }), 1, 50));
-    expect(screen.getByRole('combobox', { name: 'Sort suggested stock items' })).toHaveValue('qty-desc');
+    expect(screen.getByRole('combobox', { name: 'Sort suggested stock items' })).toHaveValue('customers-desc');
     expect(screen.getByText('3 items in KIV folder')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Restore selected from KIV/i })).toBeInTheDocument();
 
@@ -402,7 +423,7 @@ describe('SuggestedStockReport filters', () => {
     await waitFor(() => expect(fetchSummaryMock).toHaveBeenCalledWith(expect.objectContaining({
       cartFolder: true,
       kivFolder: false,
-      sortBy: 'qty-desc',
+      sortBy: 'customers-desc',
     }), 1, 50));
 
     expect(screen.getByText(/item in Cart folder/i)).toBeInTheDocument();
