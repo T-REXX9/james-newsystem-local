@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, FolderPlus, Lock, Save, Trash2, Users } from 'lucide-react';
-import { AVAILABLE_APP_MODULES, MODULE_ID_ALIASES } from '../constants';
+import { MODULE_ID_ALIASES } from '../constants';
+import { ACCESS_MODULES, getAccessModuleState, toggleAccessModule } from '../utils/accessModules';
 import { AccessGroup } from '../types';
 import ConfirmModal from './ConfirmModal';
 
@@ -13,15 +14,6 @@ interface AccessGroupManagerProps {
   ) => Promise<void>;
   onDeleteGroup: (id: string) => Promise<void>;
 }
-
-const CATEGORY_LABELS: Record<string, string> = {
-  home: 'General',
-  warehouse: 'Warehouse',
-  sales: 'Sales',
-  accounting: 'Accounting',
-  maintenance: 'Maintenance',
-  communication: 'Communication',
-};
 
 const canonicalizeRights = (rights: string[] | null | undefined): string[] => {
   const normalized = new Set<string>();
@@ -37,16 +29,6 @@ const canonicalizeRights = (rights: string[] | null | undefined): string[] => {
 
   return Array.from(normalized);
 };
-
-const moduleGroups = AVAILABLE_APP_MODULES.filter((module) => module.id !== 'settings').reduce<Record<string, typeof AVAILABLE_APP_MODULES>>(
-  (acc, module) => {
-    const prefix = module.id.split('-')[0] || 'general';
-    if (!acc[prefix]) acc[prefix] = [];
-    acc[prefix].push(module);
-    return acc;
-  },
-  {}
-);
 
 const AccessGroupManager: React.FC<AccessGroupManagerProps> = ({
   groups,
@@ -92,9 +74,8 @@ const AccessGroupManager: React.FC<AccessGroupManagerProps> = ({
   const toggleRight = (moduleId: string) => {
     setDraftRights((current) => {
       const canonical = MODULE_ID_ALIASES[moduleId] || moduleId;
-      return current.includes(canonical)
-        ? current.filter((id) => id !== canonical)
-        : [...current, canonical];
+      const { checked } = getAccessModuleState(canonical, current);
+      return toggleAccessModule(current, canonical, !checked);
     });
   };
 
@@ -278,37 +259,33 @@ const AccessGroupManager: React.FC<AccessGroupManagerProps> = ({
               </p>
             </div>
 
-            <div className="space-y-5">
-              {Object.entries(moduleGroups).map(([categoryKey, modules]) => (
-                <section key={categoryKey} className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-                  <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                    {CATEGORY_LABELS[categoryKey] || categoryKey}
-                  </h3>
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    {modules.map((module) => {
-                      const checked = draftRights.includes(module.id);
-                      return (
-                        <label
-                          key={module.id}
-                          className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-sm transition-colors ${
-                            checked
-                              ? 'border-brand-blue bg-blue-50 dark:border-brand-blue dark:bg-blue-950/30'
-                              : 'border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800/60'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleRight(module.id)}
-                            className="h-4 w-4 rounded border-slate-300 text-brand-blue focus:ring-brand-blue"
-                          />
-                          <span className="text-slate-700 dark:text-slate-200">{module.label}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </section>
-              ))}
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {ACCESS_MODULES.map((module) => {
+                const state = getAccessModuleState(module.id, draftRights);
+                return (
+                  <label
+                    key={module.id}
+                    className={`flex items-center gap-3 rounded-lg border px-3 py-3 text-sm transition-colors ${
+                      state.checked
+                        ? 'border-brand-blue bg-blue-50 dark:border-brand-blue dark:bg-blue-950/30'
+                        : 'border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800/60'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={state.checked}
+                      aria-label={`${module.label} module access`}
+                      aria-checked={state.indeterminate ? 'mixed' : state.checked}
+                      ref={(element) => {
+                        if (element) element.indeterminate = state.indeterminate;
+                      }}
+                      onChange={() => toggleRight(module.id)}
+                      className="h-4 w-4 rounded border-slate-300 text-brand-blue focus:ring-brand-blue"
+                    />
+                    <span className="text-slate-700 dark:text-slate-200">{module.label}</span>
+                  </label>
+                );
+              })}
             </div>
 
             <div className="flex items-center justify-between gap-3 rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:bg-blue-950/30 dark:text-blue-200">

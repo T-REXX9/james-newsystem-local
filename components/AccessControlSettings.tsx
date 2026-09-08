@@ -12,7 +12,6 @@ import {
   X,
 } from 'lucide-react';
 import {
-  AVAILABLE_APP_MODULES,
   canonicalizeRoleName,
   DEFAULT_STAFF_ROLE,
   MODULE_ID_ALIASES,
@@ -40,6 +39,7 @@ import {
 import CustomLoadingSpinner from './CustomLoadingSpinner';
 import AccessGroupManager from './AccessGroupManager';
 import { useToast } from './ToastProvider';
+import { ACCESS_MODULES, getAccessModuleState, toggleAccessModule } from '../utils/accessModules';
 
 const STAFF_PER_PAGE = 50;
 const STAFF_MEMBER_COLUMN_WIDTH = 288;
@@ -233,30 +233,17 @@ const AccessControlSettings: React.FC = () => {
         if (profile.id !== userId) return profile;
 
         const currentRights = new Set(profile.access_rights || []);
-
-        if (currentlyAllowed) {
-          // If has wildcard, expand to all modules minus the toggled one
-          if (currentRights.has('*')) {
-            currentRights.delete('*');
-            AVAILABLE_APP_MODULES.forEach((mod) => {
-              if (mod.id !== 'settings' && mod.id !== moduleId) {
-                currentRights.add(mod.id);
-              }
-            });
-          } else {
-            currentRights.delete(moduleId);
-            // Also remove any aliases that map to this module
-            Object.entries(MODULE_ID_ALIASES).forEach(([alias, canonical]) => {
-              if (canonical === moduleId) currentRights.delete(alias);
-            });
-          }
-        } else {
-          currentRights.add(moduleId);
+        if (currentRights.has('*')) {
+          currentRights.delete('*');
+          ACCESS_MODULES.filter((module) => module.id !== moduleId).forEach((module) => {
+            module.pageIds.forEach((pageId) => currentRights.add(pageId));
+          });
         }
+        const nextRights = toggleAccessModule(currentRights, moduleId, !currentlyAllowed);
 
         return {
           ...profile,
-          access_rights: Array.from(currentRights),
+          access_rights: nextRights,
           access_override: true,
         };
       })
@@ -493,7 +480,7 @@ const AccessControlSettings: React.FC = () => {
     maxWidth: `${GROUP_COLUMN_WIDTH}px`,
   } as const;
   const permissionTableMinWidth =
-    STAFF_MEMBER_COLUMN_WIDTH + GROUP_COLUMN_WIDTH + AVAILABLE_APP_MODULES.filter((module) => module.id !== 'settings').length * 112 + 140;
+    STAFF_MEMBER_COLUMN_WIDTH + GROUP_COLUMN_WIDTH + ACCESS_MODULES.length * 112 + 140;
 
   return (
     <div className="relative h-full overflow-y-auto p-8 animate-fadeIn">
@@ -612,7 +599,7 @@ const AccessControlSettings: React.FC = () => {
                     >
                       Group
                     </th>
-                    {AVAILABLE_APP_MODULES.filter((module) => module.id !== 'settings').map((module) => (
+                    {ACCESS_MODULES.map((module) => (
                       <th
                         key={module.id}
                         className="border-l border-slate-100 p-4 text-center dark:border-slate-800"
@@ -696,13 +683,18 @@ const AccessControlSettings: React.FC = () => {
                           </select>
                         </td>
 
-                        {AVAILABLE_APP_MODULES.filter((module) => module.id !== 'settings').map((module) => {
-                          const isAllowed = isOwner || hasFullAccess || effectiveCanonicalRights.has(module.id);
+                        {ACCESS_MODULES.map((module) => {
+                          const moduleState = getAccessModuleState(module.id, effectiveCanonicalRights);
+                          const isAllowed = isOwner || hasFullAccess || moduleState.checked;
+                          const isIndeterminate = !isOwner && !hasFullAccess && moduleState.indeterminate;
                           const assignedGroupRights = assignedGroup
                             ? getEffectiveCanonicalRights(assignedGroup.access_rights)
                             : null;
-                          const differsFromGroup = permissionsEdited && assignedGroupRights
-                            ? isAllowed !== (assignedGroupRights.has(module.id) || assignedGroupRights.has('*'))
+                          const assignedGroupState = assignedGroupRights
+                            ? getAccessModuleState(module.id, assignedGroupRights)
+                            : null;
+                          const differsFromGroup = permissionsEdited && assignedGroupState
+                            ? isAllowed !== (assignedGroupState.checked || assignedGroupRights.has('*'))
                             : false;
                           return (
                             <td
@@ -715,10 +707,15 @@ const AccessControlSettings: React.FC = () => {
                               title={isOwner ? 'Owner — full access' : differsFromGroup ? 'Modified from group permissions' : 'Click to toggle access'}
                             >
                               <div className="flex items-center justify-center">
-                                <input
-                                  type="checkbox"
-                                  checked={isAllowed}
-                                  disabled={isOwner}
+                                  <input
+                                    type="checkbox"
+                                    checked={isAllowed}
+                                    aria-label={`${module.label} module access for ${user.full_name}`}
+                                    aria-checked={isIndeterminate ? 'mixed' : isAllowed}
+                                    ref={(element) => {
+                                      if (element) element.indeterminate = isIndeterminate;
+                                    }}
+                                    disabled={isOwner}
                                   onChange={() => {
                                     if (!isOwner) handlePermissionToggle(user.id, module.id, isAllowed);
                                   }}

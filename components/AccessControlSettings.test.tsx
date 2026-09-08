@@ -7,6 +7,7 @@ import { createStaffAccountLocal, fetchProfilesLocal, updateProfileLocal } from 
 import { fetchAccessGroups } from '../services/accessGroupApiService';
 import { ROLE_DEFAULT_ACCESS_RIGHTS } from '../constants';
 import { ToastProvider } from './ToastProvider';
+import { expandAccessModule } from '../utils/accessModules';
 
 vi.mock('../services/accessLocalApiService', () => ({
   fetchProfilesLocal: vi.fn(),
@@ -81,15 +82,13 @@ describe('AccessControlSettings - create staff account', () => {
 
     renderWithProviders(<AccessControlSettings />);
 
-    const permissionCheckboxes = await screen.findAllByRole('checkbox');
-    const productDatabaseCheckbox = permissionCheckboxes[1];
-    await user.click(productDatabaseCheckbox);
+    await user.click(await screen.findByRole('checkbox', { name: 'Warehouse module access for melson' }));
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() =>
       expect(updateProfileMock).toHaveBeenCalledWith('2', {
         group_id: '2',
-        access_rights: ['home', 'warehouse-inventory-product-database'],
+        access_rights: ['home', ...expandAccessModule('warehouse')],
         access_override: true,
       })
     );
