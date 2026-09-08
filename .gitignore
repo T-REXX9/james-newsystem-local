@@ -63,3 +63,6 @@ dist-codex*/
 # Large local database dumps
 *.sql
 !*.sql.gz
+# Deployment DB dumps stay on disk / are scp'd to the server — do not commit them.
+/backup.sql.gz
+/backups/

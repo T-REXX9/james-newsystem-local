@@ -36,7 +36,12 @@ cd ~/james-system/james-newsystem
 1. Copy the database backup from the Mac to the server:
 
 ```bash
-scp /Users/melsonleanbacuen/james-system/backups/topnotch_migrate_full_20260830_223810.sql.gz \
+# Preferred: stable name that setup.sh always finds next to setup.sh
+scp /Users/melsonleanbacuen/james-system/james-newsystem/backup.sql.gz \
+  user@your-server:~/james-system/james-newsystem/backup.sql.gz
+
+# Also keep a dated archive under the shared backups directory
+scp /Users/melsonleanbacuen/james-system/backups/topnotch_migrate_full_20260908_202822.sql.gz \
   user@your-server:~/james-system/backups/
 ```
 
@@ -48,10 +53,10 @@ git pull origin main
 ./setup.sh -production
 ```
 
-`setup.sh -production` automatically restores the newest `.sql` or `.sql.gz` in `~/james-system/backups/`. To select an exact file instead, pass `DB_DUMP_PATH`:
+`setup.sh -production` restores a dump automatically, in this order: `DB_DUMP_PATH`, `./backup.sql[.gz]`, `./topnotch.sql[.gz]`, then the newest `.sql` / `.sql.gz` in `~/james-system/backups/` or `./backups/`. To select an exact file instead, pass `DB_DUMP_PATH`:
 
 ```bash
-DB_DUMP_PATH=~/james-system/backups/topnotch_migrate_full_20260830_223810.sql.gz ./setup.sh -production
+DB_DUMP_PATH=~/james-system/backups/topnotch_migrate_full_20260908_202822.sql.gz ./setup.sh -production
 ```
 
 After it finishes, start/reload production services:
