@@ -220,7 +220,7 @@ The app sends a heartbeat every two minutes. The heartbeat reports `background_a
 
 ### 7.6 Dial-request polling
 
-The app polls for pending dial requests every ten seconds. It remembers request IDs already handled during the current app process so the same request is not repeatedly presented. When requests are pending, the app shows a high-priority notification telling the staff member to open TND-OPC Calling and review the request. [5]
+The app polls for pending dial requests every ten seconds. It remembers request IDs already handled during the current monitoring process so the same request is not launched twice. When a new request arrives, the monitoring service opens the native Android dialer with the number filled in, including when TND-OPC Calling is in the background or was swiped from Recents. A high-priority call notification remains as a backup if the dialer cannot be opened. [5]
 
 ### 7.7 Call-history synchronization
 
