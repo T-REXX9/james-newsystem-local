@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { canonicalizeRoleName } from '../constants';
+import { UserProfile } from '../types';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
@@ -9,6 +9,7 @@ export interface StaffRecord {
     full_name: string;
     email: string;
     role: string;
+    group_id?: string | null;
     mobile: string;
     team_id: string;
     team_name?: string;
@@ -42,14 +43,10 @@ export interface StaffListResponse {
     };
 }
 
-export interface RoleRecord {
-    id: number;
-    name: string;
-}
-
 export interface StaffUpdateInput {
     full_name?: string;
     role?: string;
+    group_id?: string | null;
     mobile?: string;
     team_id?: string;
     birthday?: string;
@@ -67,6 +64,7 @@ export interface StaffCreateInput {
     email: string;
     password: string;
     role: string;
+    group_id?: string;
     mobile?: string;
     birthday?: string;
     access_rights?: string[];
@@ -102,6 +100,21 @@ export const fetchStaff = async (search = '', page = 1, perPage = 100): Promise<
     return payload?.data || { items: [], meta: { page: 1, per_page: perPage, total: 0, total_pages: 0 } };
 };
 
+/** The single source for active staff assignment options across the app. */
+export const fetchAssignableStaff = async (): Promise<UserProfile[]> => {
+    const result = await fetchStaff('', 1, 500);
+
+    return result.items
+        .map((staff) => ({
+            id: String(staff.id || '').trim(),
+            email: String(staff.email || '').trim(),
+            full_name: String(staff.full_name || '').trim(),
+            role: String(staff.role || '').trim(),
+        }))
+        .filter((staff) => staff.id && staff.full_name && staff.full_name !== '0')
+        .sort((a, b) => a.full_name.localeCompare(b.full_name));
+};
+
 export const fetchStaffById = async (staffId: string | number): Promise<StaffDetailRecord> => {
     const query = new URLSearchParams({ main_id: String(API_MAIN_ID) });
     const payload = await requestJson(`${API_BASE_URL}/staff/${staffId}?${query.toString()}`);
@@ -131,24 +144,4 @@ export const deleteStaff = async (staffId: string | number): Promise<void> => {
     await requestJson(`${API_BASE_URL}/staff/${staffId}?${query.toString()}`, {
         method: 'DELETE',
     });
-};
-
-export const fetchRoles = async (): Promise<RoleRecord[]> => {
-    const query = new URLSearchParams({ main_id: String(API_MAIN_ID) });
-    const payload = await requestJson(`${API_BASE_URL}/staff/roles?${query.toString()}`);
-    const roles = Array.isArray(payload?.data) ? payload.data : [];
-    const seen = new Set<string>();
-
-    return roles
-        .map((role) => ({
-            ...role,
-            name: canonicalizeRoleName(String(role?.name || '')),
-        }))
-        .filter((role) => {
-            if (!role.name) return false;
-            const key = role.name.toLowerCase();
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-        });
 };

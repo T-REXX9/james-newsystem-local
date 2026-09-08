@@ -4,6 +4,7 @@ import { normalizePriceGroup } from '../constants/pricingGroups';
 import { Contact, ContactPerson, ContactTransaction, CustomerStatus, CustomerVatType, DealStage, Product, UserProfile } from '../types';
 import { invalidateDailyCallMasterListCache } from './dailyCallMonitoringService';
 import { getLocalAuthSession } from './localAuthService';
+import { fetchAssignableStaff } from './staffLocalApiService';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
@@ -720,42 +721,7 @@ export const bulkUpdateContacts = async (ids: string[], updates: Partial<Contact
 };
 
 export const fetchSalesAgents = async (): Promise<UserProfile[]> => {
-  try {
-    const payload = await requestJson<{ data?: UserProfile[] }>(
-      `${API_BASE_URL}/profiles/sales-agents?per_page=200`
-    );
-    const rows = Array.isArray(payload?.data) ? payload.data : [];
-    const agents = rows
-      .map((row, index) => ({
-        id: String(row?.id || `agent-${index + 1}`),
-        email: String(row?.email || ''),
-        full_name: String(row?.full_name || (row as { fullName?: string }).fullName || '').trim(),
-        role: String(row?.role || 'Sales Agent'),
-      }))
-      .filter((agent) => agent.full_name);
-
-    if (agents.length > 0) {
-      return agents.sort((a, b) => a.full_name.localeCompare(b.full_name));
-    }
-  } catch (err) {
-    console.error('Error loading sales agents from profiles API:', err);
-  }
-
-  const contacts = await fetchContacts();
-  const nameSet = new Set<string>();
-  contacts.forEach((contact) => {
-    const name = String(contact?.salesman || '').trim();
-    if (name) nameSet.add(name);
-  });
-
-  return Array.from(nameSet)
-    .sort((a, b) => a.localeCompare(b))
-    .map((name, index) => ({
-      id: `agent-${index + 1}`,
-      email: '',
-      full_name: name,
-      role: 'Sales Agent',
-    }));
+  return fetchAssignableStaff();
 };
 
 export const fetchContactTransactions = async (contactId: string): Promise<ContactTransaction[]> => {

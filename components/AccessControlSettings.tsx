@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import {
   AVAILABLE_APP_MODULES,
-  ASSIGNABLE_STAFF_ROLES,
   canonicalizeRoleName,
   DEFAULT_STAFF_ROLE,
   MODULE_ID_ALIASES,
@@ -31,7 +30,6 @@ import {
   fetchAccessGroups,
   updateAccessGroup,
 } from '../services/accessGroupApiService';
-import { fetchRoles } from '../services/staffLocalApiService';
 import { parseSupabaseError } from '../utils/errorHandler';
 import {
   AccessGroup,
@@ -101,32 +99,6 @@ const canonicalizeProfiles = (profiles: UserProfile[], groups: AccessGroup[]): U
   });
 };
 
-const sanitizeAssignableRoles = (roles: Array<{ name?: string | null }>): string[] => {
-  const seen = new Set<string>();
-  const allowed = new Set(ASSIGNABLE_STAFF_ROLES.map((role) => role.toLowerCase()));
-
-  const apiRoles = roles
-    .map((role) => canonicalizeRoleName(String(role?.name || '')))
-    .filter((role) => {
-      if (!role) return false;
-      const normalized = role.toLowerCase();
-      if (!allowed.has(normalized)) return false;
-      if (seen.has(normalized)) return false;
-      seen.add(normalized);
-      return true;
-    });
-
-  ASSIGNABLE_STAFF_ROLES.forEach((role) => {
-    const normalized = role.toLowerCase();
-    if (!seen.has(normalized)) {
-      apiRoles.push(role);
-      seen.add(normalized);
-    }
-  });
-
-  return apiRoles;
-};
-
 const getEffectiveCanonicalRights = (rights: string[] | null | undefined): Set<string> => {
   const result = new Set<string>();
 
@@ -181,10 +153,6 @@ const AccessControlSettings: React.FC = () => {
     loadGroups();
   }, []);
 
-  useEffect(() => {
-    loadRoles();
-  }, []);
-
   const loadProfiles = async (targetPage = page) => {
     setIsLoading(true);
     try {
@@ -218,11 +186,18 @@ const AccessControlSettings: React.FC = () => {
       const data = await fetchAccessGroups();
       const nextGroups = canonicalizeGroups(data);
       setGroups(nextGroups);
+      setAvailableRoles(nextGroups.map((group) => group.name));
+      setNewUserForm((prev) => {
+        if (prev.role && nextGroups.some((group) => group.name === prev.role)) return prev;
+        const defaultGroup = nextGroups.find((group) => group.name === DEFAULT_STAFF_ROLE) || nextGroups[0];
+        return { ...prev, role: defaultGroup?.name || '' };
+      });
       setProfiles((prev) => canonicalizeProfiles(prev, nextGroups));
       setOriginalProfiles((prev) => canonicalizeProfiles(prev, nextGroups));
     } catch (error) {
       console.error('Unable to load access groups:', error);
       setGroups([]);
+      setAvailableRoles([]);
       addToast({
         type: 'error',
         title: 'Unable to load access groups',
@@ -231,35 +206,6 @@ const AccessControlSettings: React.FC = () => {
       });
     } finally {
       setIsGroupsLoading(false);
-    }
-  };
-
-  const loadRoles = async () => {
-    setIsRolesLoading(true);
-    try {
-      const data = await fetchRoles();
-      const nextRoles = sanitizeAssignableRoles(data);
-      setAvailableRoles(nextRoles);
-      setNewUserForm((prev) => {
-        if (prev.role && nextRoles.includes(prev.role)) {
-          return prev;
-        }
-
-        return {
-          ...prev,
-          role: nextRoles.includes(DEFAULT_STAFF_ROLE) ? DEFAULT_STAFF_ROLE : (nextRoles[0] || ''),
-        };
-      });
-    } catch (error) {
-      console.error('Unable to load staff roles:', error);
-      setAvailableRoles([]);
-      addToast({
-        type: 'error',
-        title: 'Unable to load staff roles',
-        description: parseSupabaseError(error, 'staff roles'),
-        durationMs: 6000,
-      });
-    } finally {
       setIsRolesLoading(false);
     }
   };
@@ -477,6 +423,7 @@ const AccessControlSettings: React.FC = () => {
       email: newUserForm.email.trim(),
       password: newUserForm.password,
       role: newUserForm.role,
+      groupId: groups.find((group) => group.name === newUserForm.role)?.id,
       birthday: newUserForm.birthday || undefined,
       mobile: newUserForm.mobile || undefined,
       accessRights: ROLE_DEFAULT_ACCESS_RIGHTS[newUserForm.role] || ROLE_DEFAULT_ACCESS_RIGHTS['Staff'] || ['home'],

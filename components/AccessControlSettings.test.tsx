@@ -5,7 +5,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import AccessControlSettings from './AccessControlSettings';
 import { createStaffAccountLocal, fetchProfilesLocal, updateProfileLocal } from '../services/accessLocalApiService';
 import { fetchAccessGroups } from '../services/accessGroupApiService';
-import { fetchRoles } from '../services/staffLocalApiService';
 import { ROLE_DEFAULT_ACCESS_RIGHTS } from '../constants';
 import { ToastProvider } from './ToastProvider';
 
@@ -23,15 +22,11 @@ vi.mock('../services/accessGroupApiService', () => ({
   assignStaffToGroup: vi.fn(),
 }));
 
-vi.mock('../services/staffLocalApiService', () => ({
-  fetchRoles: vi.fn(),
-}));
 
 const fetchProfilesMock = fetchProfilesLocal as unknown as ReturnType<typeof vi.fn>;
 const createStaffAccountMock = createStaffAccountLocal as unknown as ReturnType<typeof vi.fn>;
 const updateProfileMock = updateProfileLocal as unknown as ReturnType<typeof vi.fn>;
 const fetchAccessGroupsMock = fetchAccessGroups as unknown as ReturnType<typeof vi.fn>;
-const fetchRolesMock = fetchRoles as unknown as ReturnType<typeof vi.fn>;
 
 const renderWithProviders = (ui: React.ReactElement) =>
   render(<ToastProvider>{ui}</ToastProvider>);
@@ -43,11 +38,11 @@ beforeEach(() => {
     meta: { page: 1, per_page: 50, total: 0, total_pages: 1 },
   });
   fetchAccessGroupsMock.mockResolvedValue([]);
-  fetchRolesMock.mockResolvedValue([
-    { id: 2, name: 'Sales Person' },
-    { id: 3, name: 'Accountant' },
-    { id: 4, name: 'Warehouse Personnel' },
-    { id: 9, name: 'Sales Agent' },
+  fetchAccessGroupsMock.mockResolvedValue([
+    { id: '2', name: 'Sales Agent', access_rights: [], description: '' },
+    { id: '3', name: 'Accountant', access_rights: [], description: '' },
+    { id: '4', name: 'Warehouse Personnel', access_rights: [], description: '' },
+    { id: '9', name: 'Company Owner', access_rights: [], description: '' },
   ]);
 });
 
@@ -68,7 +63,7 @@ describe('AccessControlSettings - create staff account', () => {
           role: 'Sales Agent',
           access_rights: ['home'],
           access_override: false,
-          group_id: '9',
+          group_id: '2',
         },
       ],
       meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
@@ -78,6 +73,7 @@ describe('AccessControlSettings - create staff account', () => {
       full_name: 'melson',
       email: 'melson@example.com',
       role: 'Sales Agent',
+      groupId: '2',
       access_rights: ['home', 'warehouse-inventory-product-database'],
       access_override: true,
       group_id: '9',
@@ -92,7 +88,7 @@ describe('AccessControlSettings - create staff account', () => {
 
     await waitFor(() =>
       expect(updateProfileMock).toHaveBeenCalledWith('2', {
-        group_id: '9',
+        group_id: '2',
         access_rights: ['home', 'warehouse-inventory-product-database'],
         access_override: true,
       })
@@ -132,6 +128,7 @@ describe('AccessControlSettings - create staff account', () => {
       email: 'jane@example.com',
       password: 'StrongPass1',
       role: 'Sales Agent',
+      groupId: '2',
       birthday: undefined,
       mobile: '09171234567',
       accessRights: ROLE_DEFAULT_ACCESS_RIGHTS['Sales Agent']
@@ -160,7 +157,7 @@ describe('AccessControlSettings - create staff account', () => {
     expect(createStaffAccountMock).not.toHaveBeenCalled();
   });
 
-  it('normalizes Sales Person into Sales Agent in the create account role selector', async () => {
+  it('renders every role from the Groups list in the create account role selector', async () => {
     const user = userEvent.setup();
     renderWithProviders(<AccessControlSettings />);
 
@@ -170,8 +167,7 @@ describe('AccessControlSettings - create staff account', () => {
     const roleSelect = screen.getByRole('combobox');
     const optionLabels = Array.from(roleSelect.querySelectorAll('option')).map((option) => option.textContent);
 
-    expect(optionLabels.filter((label) => label === 'Sales Agent')).toHaveLength(1);
-    expect(optionLabels).not.toContain('Sales Person');
+    expect(optionLabels).toEqual(['Accountant', 'Company Owner', 'Sales Agent', 'Warehouse Personnel']);
   });
 
   it('keeps the modal open and renders field errors when service validation fails', async () => {

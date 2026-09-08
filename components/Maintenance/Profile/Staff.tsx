@@ -12,6 +12,8 @@ import {
 } from '../../../services/staffLocalApiService';
 import { fetchTeams, TeamRecord } from '../../../services/teamLocalApiService';
 import { ROLE_DEFAULT_ACCESS_RIGHTS } from '../../../constants';
+import { AccessGroup } from '../../../types';
+import { fetchAccessGroups } from '../../../services/accessGroupApiService';
 import HighLevelDeleteModal from '../../HighLevelDeleteModal';
 
 interface StaffFormProps {
@@ -25,6 +27,7 @@ const StaffForm: React.FC<StaffFormProps> = ({ initialData, onClose, onSuccess }
     const [formData, setFormData] = useState<StaffUpdateInput>({
         full_name: initialData?.full_name || '',
         role: initialData?.role || 'Sales Agent',
+        group_id: initialData?.group_id || '',
         mobile: initialData?.mobile || '',
         team_id: initialData?.team_id || '',
     });
@@ -33,6 +36,8 @@ const StaffForm: React.FC<StaffFormProps> = ({ initialData, onClose, onSuccess }
     const [email, setEmail] = useState(initialData?.email || '');
     const [password, setPassword] = useState('');
     const [birthday, setBirthday] = useState(initialData?.birthday || '');
+    const [groups, setGroups] = useState<AccessGroup[]>([]);
+    const [groupsLoading, setGroupsLoading] = useState(true);
 
     useEffect(() => {
         const loadTeams = async () => {
@@ -46,18 +51,42 @@ const StaffForm: React.FC<StaffFormProps> = ({ initialData, onClose, onSuccess }
         loadTeams();
     }, []);
 
+    useEffect(() => {
+        const loadGroups = async () => {
+            try {
+                const result = await fetchAccessGroups();
+                setGroups(result);
+                setFormData((current) => {
+                    const selected = result.find((group) => group.id === current.group_id)
+                        || result.find((group) => group.name === current.role)
+                        || result.find((group) => group.name === 'Sales Agent')
+                        || result[0];
+                    return selected
+                        ? { ...current, group_id: selected.id, role: selected.name }
+                        : current;
+                });
+            } catch (err) {
+                console.error('Failed to load access groups:', err);
+            } finally {
+                setGroupsLoading(false);
+            }
+        };
+        loadGroups();
+    }, []);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         try {
             if (initialData?.id) {
-                await updateStaff(initialData.id, { ...formData, birthday });
+                await updateStaff(initialData.id, { ...formData, birthday, group_id: formData.group_id || null });
             } else {
                 const createdStaff = await createStaff({
                     full_name: String(formData.full_name || '').trim(),
                     email: email.trim(),
                     password,
                     role: String(formData.role || 'Sales Agent'),
+                    group_id: formData.group_id || undefined,
                     birthday: birthday || undefined,
                     mobile: formData.mobile || undefined,
                     access_rights: ROLE_DEFAULT_ACCESS_RIGHTS[String(formData.role || 'Sales Agent')] || ['home'],
@@ -131,15 +160,20 @@ const StaffForm: React.FC<StaffFormProps> = ({ initialData, onClose, onSuccess }
             <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Role</label>
                 <select
-                    value={formData.role || 'Sales Agent'}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                    aria-label="Role"
+                    value={formData.group_id || ''}
+                    disabled={groupsLoading || groups.length === 0}
+                    onChange={(e) => {
+                        const group = groups.find((item) => item.id === e.target.value);
+                        setFormData({ ...formData, group_id: e.target.value, role: group?.name || '' });
+                    }}
                     className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 bg-white"
                 >
-                    <option value="Administrator">Administrator</option>
-                    <option value="Manager">Manager</option>
-                    <option value="Sales Agent">Sales Agent</option>
-                    <option value="Accounting">Accounting</option>
-                    <option value="Warehouse">Warehouse</option>
+                    {groupsLoading && <option value="">Loading roles...</option>}
+                    {!groupsLoading && groups.length === 0 && <option value="">No roles available</option>}
+                    {groups.map((group) => (
+                        <option key={group.id} value={group.id}>{group.name}</option>
+                    ))}
                 </select>
             </div>
             <div>

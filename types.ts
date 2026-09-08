@@ -222,6 +222,7 @@ export interface CreateStaffAccountInput {
   password: string;
   fullName: string;
   role?: string;
+  groupId?: string;
   birthday?: string;
   mobile?: string;
   accessRights?: string[];

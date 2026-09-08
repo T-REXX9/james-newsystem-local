@@ -217,6 +217,7 @@ export const createStaffAccountLocal = async (
                 email: input.email.trim(),
                 password: input.password,
                 role,
+                group_id: input.groupId || null,
                 birthday: input.birthday || null,
                 mobile: input.mobile || null,
                 access_rights: accessRights,

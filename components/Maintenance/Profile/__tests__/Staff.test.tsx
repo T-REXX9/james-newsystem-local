@@ -5,12 +5,17 @@ import userEvent from '@testing-library/user-event';
 import Staff from '../Staff';
 import { ToastProvider } from '../../../ToastProvider';
 import { createStaff, fetchStaff } from '../../../../services/staffLocalApiService';
+import { fetchAccessGroups } from '../../../../services/accessGroupApiService';
 
 vi.mock('../../../../services/staffLocalApiService', () => ({
   fetchStaff: vi.fn(),
   createStaff: vi.fn(),
   updateStaff: vi.fn(),
   deleteStaff: vi.fn(),
+}));
+
+vi.mock('../../../../services/accessGroupApiService', () => ({
+  fetchAccessGroups: vi.fn(),
 }));
 
 vi.mock('../../../../services/teamLocalApiService', () => ({
@@ -23,6 +28,10 @@ describe('Staff Management', () => {
       items: [],
       meta: { page: 1, per_page: 100, total: 0, total_pages: 0 },
     });
+    vi.mocked(fetchAccessGroups).mockResolvedValue([
+      { id: 'group-7', name: 'Warehouse Personnel', access_rights: [], description: '' },
+      { id: 'group-9', name: 'Sales Agent', access_rights: [], description: '' },
+    ] as any);
   });
 
   afterEach(() => {
@@ -43,6 +52,7 @@ describe('Staff Management', () => {
     expect(accountInput).toHaveAttribute('type', 'text');
     await user.type(accountInput, 'melson');
     await user.type(screen.getByPlaceholderText('Minimum 8 characters'), 'StrongPass1');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Role' }), 'group-9');
     await user.click(screen.getByRole('button', { name: 'Create Account' }));
 
     await waitFor(() => expect(createStaff).toHaveBeenCalledWith(expect.objectContaining({
@@ -50,6 +60,7 @@ describe('Staff Management', () => {
       email: 'melson',
       password: 'StrongPass1',
       role: 'Sales Agent',
+      group_id: 'group-9',
     })));
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Create Staff Account' })).not.toBeInTheDocument());
   });

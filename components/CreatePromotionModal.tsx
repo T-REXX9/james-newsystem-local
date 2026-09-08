@@ -3,10 +3,10 @@ import { X, Plus, Search, MapPin, Users } from 'lucide-react';
 import { UserProfile, Product, Contact } from '../types';
 import * as promotionService from '../services/promotionLocalApiService';
 import { fetchContacts } from '../services/customerDatabaseLocalApiService';
+import { fetchAssignableStaff } from '../services/staffLocalApiService';
 import CustomerAutocomplete from './CustomerAutocomplete';
 import ProductAutocomplete from './ProductAutocomplete';
 
-const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 import { useToast } from './ToastProvider';
 
 interface Props {
@@ -25,24 +25,6 @@ interface SelectedProduct {
     promo_price_vip2?: number;
     promo_price_platinum?: number;
 }
-
-const extractArrayPayload = <T,>(payload: any): T[] => {
-    const candidates = [
-        payload?.data?.items,
-        payload?.data?.data,
-        payload?.data,
-        payload?.items,
-        payload,
-    ];
-
-    for (const candidate of candidates) {
-        if (Array.isArray(candidate)) {
-            return candidate as T[];
-        }
-    }
-
-    return [];
-};
 
 const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated }) => {
     const { addToast } = useToast();
@@ -86,7 +68,7 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
             try {
                 const [contactRows, staffRes] = await Promise.all([
                     fetchContacts(),
-                    fetch(`${API_BASE_URL}/profiles/sales-agents`),
+                    fetchAssignableStaff(),
                 ]);
                 const sortedContactRows = [...contactRows].sort((a, b) =>
                     (a.company || '').localeCompare(b.company || '')
@@ -94,11 +76,7 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
 
                 setContacts(sortedContactRows);
 
-                // Fetch staff (sales agents)
-                if (staffRes.ok) {
-                    const staffResult = await staffRes.json();
-                    setStaffList(extractArrayPayload<UserProfile>(staffResult));
-                }
+                setStaffList(staffRes);
             } catch (error) {
                 console.error('Error fetching data:', error);
             }
