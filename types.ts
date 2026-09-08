@@ -569,6 +569,8 @@ export interface CallLogEntry {
   occurred_at: string;
   next_action?: string | null;
   next_action_due?: string | null;
+  concern?: string;
+  action?: string;
 }
 
 export type CustomerLogEntryType = 'Note' | 'Status';

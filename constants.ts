@@ -198,6 +198,7 @@ export const AVAILABLE_APP_MODULES = [
   { id: 'sales-reports-sales-development-report', label: 'Sales Development Report' },
   { id: 'operations-management-dashboard', label: 'Operations Dashboard' },
   { id: 'sales-performance-management-dashboard', label: 'Sales Performance Dashboard' },
+  { id: 'call-records-dashboard', label: 'Call Records' },
   { id: 'accounting-transactions-freight-charges-debit', label: 'Freight Charges (Debit)' },
   { id: 'accounting-transactions-sales-return-credit', label: 'Sales Return (Credit)' },
   { id: 'accounting-transactions-adjustment-entry', label: 'Adjustment Entry' },

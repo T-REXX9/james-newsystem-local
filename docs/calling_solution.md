@@ -184,7 +184,7 @@ The website confirmation is the approval step. The phone does not show a second 
 
 The current click-to-call workflow queues a website-confirmed request and opens the phone’s native dialer automatically. It does not silently place the actual call. The result `dialed` confirms that the native dialer was launched, not that the customer answered or that the conversation was successful.
 
-The phone-side hardware call-log synchronization is the mechanism that later provides actual call metadata such as direction, duration, and timestamp. [4] [5]
+When the phone reports a request as `dialed`, the API immediately stores an outbound row in `tblcall_logs_v2`. That James database record is the source of truth for the click-to-call. Phone call-log synchronization later fills in duration when Android permission is available; missing phone permission does not omit the call from James. [4] [5]
 
 ## 7. Staff phone application procedure
 
@@ -224,7 +224,11 @@ The app polls for pending dial requests every ten seconds. It remembers request 
 
 ### 7.7 Call-history synchronization
 
-When phone permission is available, the background service reads the device call history using the call-log integration. It starts from the last successful sync time minus a five-minute overlap window. The overlap reduces the risk of missing a call that was written near the previous sync boundary.
+Click-to-call outbound activity is stored by the API when the phone marks the request `dialed`. That row uses source `manual` and duration `0` so Daily Call Monitoring and customer call history show the attempt even if Android call-log access is blocked.
+
+When phone permission is available, the background service also reads the device call history using the call-log integration. It starts from the last successful sync time minus a five-minute overlap window. The overlap reduces the risk of missing a call that was written near the previous sync boundary.
+
+Inbound, missed, and non-James outbound calls still come from that phone upload. If an uploaded outbound call matches a recent James `dialed` row for the same staff device and number, the API updates that row’s duration instead of inserting a second call.
 
 Each entry is uploaded only when it has a recognized direction, phone number, and timestamp. The current mapping is:
 

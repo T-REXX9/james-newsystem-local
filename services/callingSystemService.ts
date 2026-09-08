@@ -75,6 +75,25 @@ export interface HardwareCallLog {
   customer_code?: string;
 }
 
+export interface CallRecord {
+  lid: number | string;
+  lagent_id: number | string;
+  ldevice_id: string;
+  lcustomer_id?: number | string | null;
+  lphone_number: string;
+  ldirection: 'inbound' | 'outbound' | 'missed' | string;
+  lduration_seconds: number | string;
+  lcall_timestamp: string;
+  lsource?: string;
+  agent_first_name?: string;
+  agent_last_name?: string;
+  customer_company?: string;
+  customer_code?: string;
+  concern?: string | null;
+  action?: string | null;
+  report_body?: string | null;
+}
+
 const authenticatedGet = async <T>(path: string): Promise<T> => {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: 'GET',
@@ -143,6 +162,20 @@ export const fetchHardwareCallLogs = async (filters: {
   const suffix = params.toString() ? `?${params.toString()}` : '';
   const data = await authenticatedGet<{ calls?: HardwareCallLog[] }>(`/call-system/call-logs${suffix}`);
   return Array.isArray(data?.calls) ? data.calls : [];
+};
+
+export const fetchCallRecords = async (filters: {
+  month?: number;
+  year?: number;
+  direction?: string;
+} = {}): Promise<CallRecord[]> => {
+  const params = new URLSearchParams();
+  if (filters.month) params.set('month', String(filters.month));
+  if (filters.year) params.set('year', String(filters.year));
+  if (filters.direction) params.set('direction', filters.direction);
+  const suffix = params.toString() ? `?${params.toString()}` : '';
+  const data = await authenticatedGet<{ records?: CallRecord[] }>(`/call-system/call-records${suffix}`);
+  return Array.isArray(data?.records) ? data.records : [];
 };
 
 export const queueCallRequest = async (phoneNumber: string, customerId?: string | number): Promise<QueueCallResult> => {

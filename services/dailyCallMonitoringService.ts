@@ -799,6 +799,8 @@ export const createCallLogForDailyCall = async (
       notes: input.notes || '',
       occurred_at: input.occurred_at,
       duration_seconds: input.duration_seconds ?? 0,
+      concern: input.concern || '',
+      action: input.action || '',
     }),
   });
 

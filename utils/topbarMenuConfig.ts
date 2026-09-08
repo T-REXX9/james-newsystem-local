@@ -53,6 +53,7 @@ export const TOPBAR_MENU_CONFIG: TopbarMainMenu[] = [
         { id: 'home', label: 'Daily Call Monitoring Dashboard', route: 'home', icon: Users },
         { id: 'operations-management-dashboard', label: 'Operations Dashboard', route: 'operations-management-dashboard', icon: ClipboardList },
         { id: 'sales-performance-management-dashboard', label: 'Sales Performance Dashboard', route: 'sales-performance-management-dashboard', icon: BarChart3 },
+        { id: 'call-records-dashboard', label: 'Call Records', route: 'call-records-dashboard', icon: Phone },
       ],
     }],
   },

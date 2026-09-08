@@ -191,6 +191,7 @@ apply_required_database_migrations() {
     "$API_DIR/migrations/034_add_incident_report_number.sql"
     "$API_DIR/migrations/036_clear_epoch_dealer_since.sql"
     "$API_DIR/migrations/037_optimize_reorder_report_list_indexes.sql"
+    "$API_DIR/migrations/038_add_call_report_concern_action.sql"
   )
 
   echo "Applying required database migrations..."

@@ -545,6 +545,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [callContactLoading, setCallContactLoading] = useState(false);
   const [callNumberOptions, setCallNumberOptions] = useState<string[] | null>(null);
   const [callReport, setCallReport] = useState('');
+  const [callReportConcern, setCallReportConcern] = useState('');
+  const [callReportAction, setCallReportAction] = useState('');
   const [callReportOutcome, setCallReportOutcome] = useState<CallOutcome>('note');
   const [submittingCallReport, setSubmittingCallReport] = useState(false);
   const [callManagementInstructions, setCallManagementInstructions] = useState<ManagementInstruction[]>([]);
@@ -823,7 +825,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   }, [callContact]);
 
   const handleSubmitCallReport = async () => {
-    if (!callContact || !callReport.trim()) return;
+    if (!callContact || !callReportConcern.trim() || !callReportAction.trim()) return;
 
     setSubmittingCallReport(true);
     try {
@@ -832,22 +834,28 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         ? Math.max(0, Math.floor((callEndedAt.getTime() - callStartedAtRef.current) / 1000))
         : 0;
 
+      const concernText = callReportConcern.trim();
+      const actionText = callReportAction.trim();
+      const combinedReport = `Concern: ${concernText}\nAction: ${actionText}`;
+
       await createCallLogForDailyCall({
         contact_id: callContact.id,
         agent_name: agentDataName || agentDisplayName,
         channel: 'call',
         direction: 'outbound',
         duration_seconds: durationSeconds,
-        notes: `[Sales Agent Report] ${callReport.trim()}`,
+        notes: `[Sales Agent Report] ${combinedReport}`,
         outcome: callReportOutcome,
         occurred_at: callEndedAt.toISOString(),
         next_action: null,
         next_action_due: null,
+        concern: concernText,
+        action: actionText,
       });
       addToast({
         type: 'success',
         title: 'Call report submitted',
-        description: 'The Master User can now view this report in the customer Sales Agent Activity tab.',
+        description: 'The Master User can now view this report in the Call Records page.',
         durationMs: 4000,
       });
       callStartedAtRef.current = null;
@@ -855,6 +863,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       setCallManagementInstructions([]);
       setCallInstructionsLoading(false);
       setCallReport('');
+      setCallReportConcern('');
+      setCallReportAction('');
       setCallReportOutcome('note');
     } catch (error) {
       console.error('Error submitting call report:', error);
@@ -2564,16 +2574,30 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                   </select>
                 </label>
                 <label className="block space-y-1">
-                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Report</span>
+                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Concern <span className="text-rose-500">*</span></span>
                   <textarea
-                    value={callReport}
-                    onChange={(event) => setCallReport(event.target.value)}
-                    placeholder="Write a report about the customer conversation..."
-                    rows={4}
+                    aria-label="Customer concern"
+                    value={callReportConcern}
+                    onChange={(event) => setCallReportConcern(event.target.value)}
+                    placeholder="What did the customer ask about or need?"
+                    rows={3}
                     maxLength={2000}
                     className="w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-blue/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                   />
-                  <span className="block text-right text-[11px] text-slate-400">{callReport.length}/2000</span>
+                  <span className="block text-right text-[11px] text-slate-400">{callReportConcern.length}/2000</span>
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Action <span className="text-rose-500">*</span></span>
+                  <textarea
+                    aria-label="Action taken"
+                    value={callReportAction}
+                    onChange={(event) => setCallReportAction(event.target.value)}
+                    placeholder="What did you do in response?"
+                    rows={3}
+                    maxLength={2000}
+                    className="w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-blue/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  />
+                  <span className="block text-right text-[11px] text-slate-400">{callReportAction.length}/2000</span>
                 </label>
               </section>
 
@@ -2584,7 +2608,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
-                  disabled={!callReport.trim() || callContactLoading || submittingCallReport}
+                  disabled={!callReportConcern.trim() || !callReportAction.trim() || callContactLoading || submittingCallReport}
                   onClick={handleSubmitCallReport}
                   className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >

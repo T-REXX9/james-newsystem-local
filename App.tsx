@@ -70,6 +70,7 @@ import { CustomerData } from './components/Maintenance/Customer/CustomerData';
 import SpecialPrice from './components/Maintenance/Product/SpecialPrice';
 import ActivityLogs from './components/Maintenance/Profile/ActivityLogs';
 import OperationsDashboard from './components/OperationsDashboard';
+import CallRecordsView from './components/CallRecordsView';
 
 // System Enhancement Components
 import AIMessageTemplatesView from './components/AIMessageTemplatesView';
@@ -721,6 +722,9 @@ const App: React.FC = () => {
           setActiveTab(canonicalTab);
           writeRouteStateToLocation(canonicalTab, payload, 'push');
         }} />;
+      case 'call-records-dashboard':
+        if (!isCompanyOwnerRole(userProfile?.role)) return renderAccessDenied();
+        return <CallRecordsView currentUser={userProfile} />;
       case 'sales-reports-inquiry-report':
         return (
           <div className="h-full overflow-y-auto">
