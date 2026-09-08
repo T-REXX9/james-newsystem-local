@@ -27,13 +27,10 @@ WEB_PORT="${WEB_PORT:-8080}"
 REALTIME_HOST="${REALTIME_HOST:-127.0.0.1}"
 REALTIME_PORT="${REALTIME_PORT:-8082}"
 
-# Optional DB dump source (first match wins during install / -production):
-# 1) DB_DUMP_PATH=/path/to/file.sql[.gz]
-# 2) ./backup.sql or ./backup.sql.gz (next to setup.sh)
-# 3) ./topnotch.sql or ./topnotch.sql.gz (next to setup.sh)
-# 4) $INSTALL_DIR/topnotch.sql[.gz]
-# 5) newest *.sql / *.sql.gz in $INSTALL_DIR/backups or ./backups
-# 6) DB_DUMP_URL=...
+# Optional DB dump source:
+# 1) local file path passed via DB_DUMP_PATH
+# 2) local file at ./topnotch.sql (next to setup.sh)
+# 3) downloadable URL via DB_DUMP_URL
 DB_DUMP_PATH="${DB_DUMP_PATH:-}"
 DB_DUMP_URL="${DB_DUMP_URL:-}"
 
@@ -855,10 +852,8 @@ EOF
 }
 
 production_transform_sql_stream() {
-  # Normalize MySQL 8+/9 and MariaDB dump quirks for older production MariaDB/MySQL.
   sed -E \
     -e 's/DEFAULT[[:space:]]+CURRENT_DATE(\(\))?/DEFAULT NULL/gI' \
-    -e 's/DEFAULT[[:space:]]+\(?[[:space:]]*CURDATE[[:space:]]*\([[:space:]]*\)[[:space:]]*\)?/DEFAULT NULL/gI' \
     -e 's/ON[[:space:]]+UPDATE[[:space:]]+CURRENT_DATE(\(\))?//gI' \
     -e 's/utf8mb4_0900_ai_ci/utf8mb4_unicode_ci/g' \
     -e 's/DEFINER=`[^`]+`@`[^`]+`//g'
@@ -1189,7 +1184,7 @@ run_production_mode() {
   ensure_node_runtime
 
   step "Creating installation and production directories"
-  mkdir -p "$INSTALL_DIR" "$LOG_DIR" "$INSTALL_DIR/backups" "$SCRIPT_DIR/backups"
+  mkdir -p "$INSTALL_DIR" "$LOG_DIR"
   sudo install -d -m 0755 "$PRODUCTION_ROOT" "$PRODUCTION_WEB_DIR" "$PRODUCTION_API_DIR" "$PRODUCTION_REALTIME_DIR"
 
   step "Cloning or updating API repository"
