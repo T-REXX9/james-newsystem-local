@@ -39,6 +39,7 @@ import { getProductPrice, fetchProductById } from '../services/productLocalApiSe
 import { getSalesOrderByInquiry, getSalesOrder } from '../services/salesOrderLocalApiService';
 
 import ProductSearchModal from './ProductSearchModal';
+import NotListedItemModal, { NotListedItemDraft } from './NotListedItemModal';
 import CustomerAutocomplete from './CustomerAutocomplete';
 import SearchableSelect from './SearchableSelect';
 import SalesInquiryPrintPreview from './SalesInquiryPrintPreview';
@@ -380,6 +381,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirming, setDeleteConfirming] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
+  const [showNotListedItemModal, setShowNotListedItemModal] = useState(false);
   const [activeRowId, setActiveRowId] = useState<string | null>(null);
   const getNextLegacyInquiryCounter = useCallback(() => {
     const counters = inquiries
@@ -886,15 +888,18 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
   const addManualItemRow = () => {
     if (isCreatingNew ? !canAdd : !canEdit) return;
+    setShowNotListedItemModal(true);
+  };
+
+  const handleConfirmNotListedItem = (draft: NotListedItemDraft) => {
     setItems([
       ...items,
       {
-        qty: 1,
-        part_no: '',
+        qty: Number(draft.qty),
+        part_no: draft.part_no.toUpperCase(),
         item_code: '',
         location: '',
-        brand: '',
-        description: '',
+        description: draft.description.toUpperCase(),
         unit_price: 0,
         amount: 0,
         remark: 'NotListed',
@@ -904,6 +909,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         isManual: true,
       },
     ]);
+    setShowNotListedItemModal(false);
   };
 
   // Update item row
@@ -1752,6 +1758,11 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       )}
       {showDeleteModal && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"><div className="w-full max-w-sm rounded-[5px] bg-white p-5 shadow-xl"><h3 className="mb-3 text-[18px] font-semibold">{selectedInquiry && !isCreatingNew ? 'Cancel Sales Inquiry' : 'Clear Sales Inquiry'}</h3><p className="mb-5 text-[14px] text-[#555]">{selectedInquiry && !isCreatingNew ? 'Are you sure you want to cancel this Sales Inquiry?' : 'Are you sure you want to clear this draft?'}</p><div className="flex justify-end gap-2"><button type="button" onClick={() => setShowDeleteModal(false)} className="rounded border border-[#ccc] px-4 py-2 text-[13px]">Close</button><button type="button" onClick={handleDeleteConfirm} disabled={deleteConfirming} className="rounded bg-[#337ab7] px-4 py-2 text-[13px] text-white">{deleteConfirming ? 'Working...' : 'Proceed'}</button></div></div></div>}
       <ProductSearchModal isOpen={showProductModal} onClose={handleCloseProductModal} onSelect={handleProductSelect} />
+      <NotListedItemModal
+        isOpen={showNotListedItemModal}
+        onClose={() => setShowNotListedItemModal(false)}
+        onConfirm={handleConfirmNotListedItem}
+      />
     </div>
   );
 

@@ -505,6 +505,62 @@ describe('SalesInquiryView', () => {
     expect(within(ourReferenceAfterSave as HTMLElement).getByDisplayValue(payload.reference_no)).toBeInTheDocument();
   });
 
+  it('opens a focused modal for adding a not-listed item with only Product No., Description, and Qty', async () => {
+    const user = userEvent.setup();
+
+    render(<SalesInquiryView />);
+
+    await waitFor(() => expect(fetchContactsMock).toHaveBeenCalled());
+    await user.selectOptions(screen.getByLabelText('Customer'), 'c-1');
+    await user.click(screen.getByRole('button', { name: /add item/i }));
+    await user.click(screen.getByRole('button', { name: 'Select Product' }));
+
+    await user.click(screen.getByRole('button', { name: 'Not Listed Product' }));
+
+    const modal = screen.getByRole('dialog', { name: 'Add Not Listed Product' });
+    expect(within(modal).getByLabelText('Product No.')).toBeInTheDocument();
+    expect(within(modal).getByLabelText('Description')).toBeInTheDocument();
+    expect(within(modal).getByLabelText('Qty')).toBeInTheDocument();
+    expect(within(modal).queryByLabelText('Item Code')).not.toBeInTheDocument();
+    expect(within(modal).queryByLabelText('Unit Price')).not.toBeInTheDocument();
+
+    await user.type(within(modal).getByLabelText('Product No.'), 'PN-MANUAL-1');
+    await user.type(within(modal).getByLabelText('Description'), 'Special filter');
+    await user.clear(within(modal).getByLabelText('Qty'));
+    await user.type(within(modal).getByLabelText('Qty'), '3');
+    await user.click(within(modal).getByRole('button', { name: 'Add Item' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Add Not Listed Product' })).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue('PN-MANUAL-1')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('SPECIAL FILTER')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('3')).toBeInTheDocument();
+    expect(screen.getByText('NotListed')).toBeInTheDocument();
+  });
+
+  it('keeps an incomplete not-listed item in the modal and cancels without adding a row', async () => {
+    const user = userEvent.setup();
+
+    render(<SalesInquiryView />);
+
+    await waitFor(() => expect(fetchContactsMock).toHaveBeenCalled());
+    await user.selectOptions(screen.getByLabelText('Customer'), 'c-1');
+    await user.click(screen.getByRole('button', { name: /add item/i }));
+    await user.click(screen.getByRole('button', { name: 'Select Product' }));
+    await user.click(screen.getByRole('button', { name: 'Not Listed Product' }));
+
+    const modal = screen.getByRole('dialog', { name: 'Add Not Listed Product' });
+    await user.click(within(modal).getByRole('button', { name: 'Add Item' }));
+
+    expect(screen.getByText('Please enter a Product No.')).toBeInTheDocument();
+    expect(screen.getByText('Please enter a description.')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Add Not Listed Product' })).toBeInTheDocument();
+
+    await user.click(within(modal).getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Add Not Listed Product' })).not.toBeInTheDocument();
+    expect(screen.queryByText('NotListed')).not.toBeInTheDocument();
+  });
+
   it('shows the generated inquiry number as Our Reference on a new inquiry', async () => {
     render(<SalesInquiryView />);
 
