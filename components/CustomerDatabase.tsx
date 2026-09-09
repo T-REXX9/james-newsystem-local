@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useRealtimeList } from '../hooks/useRealtimeList';
-import { fetchContacts, bulkUpdateContacts, createContact, updateContact } from '../services/customerDatabaseLocalApiService';
+import { fetchContacts, bulkUpdateContacts, createContact, updateContact, deleteCustomer } from '../services/customerDatabaseLocalApiService';
 import { Contact } from '../types';
 import CustomerListSidebar from './CustomerListSidebar';
 import CustomerDetailPanel from './CustomerDetailPanel';
@@ -15,6 +15,7 @@ import { EmptyState, PageHeader } from './common/PageScaffold';
 import ApprovalRequestsView from './ApprovalRequestsView';
 import { getLocalAuthSession } from '../services/localAuthService';
 import { isMasterUserAccount, hasActionPermission } from '../constants';
+import HighLevelDeleteModal from './HighLevelDeleteModal';
 
 const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: string; initialApprovalRequestId?: string }> = ({ initialStatus = 'All', initialContactId, initialApprovalRequestId }) => {
     const { addToast } = useToast();
@@ -37,6 +38,7 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
     const canViewApprovals = isMasterUserAccount(currentUser);
     const canAdd = hasActionPermission(currentUser, 'can_add');
     const canEdit = hasActionPermission(currentUser, 'can_edit');
+    const canDelete = hasActionPermission(currentUser, 'can_delete');
 
     React.useEffect(() => {
         if (initialApprovalRequestId && canViewApprovals) setViewMode('approvals');
@@ -79,6 +81,7 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
   const [showSetPriceGroupModal, setShowSetPriceGroupModal] = useState(false);
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
   const [showEditCustomerModal, setShowEditCustomerModal] = useState(false);
+  const [showDeleteCustomerModal, setShowDeleteCustomerModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Contact | null>(null);
 
   // Handlers
@@ -186,6 +189,33 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
     if (!canEdit) return;
     setEditingCustomer(contact);
     setShowEditCustomerModal(true);
+  };
+
+  const handleDeleteCustomer = async () => {
+    if (!canDelete || !selectedCustomerId) return;
+    const deletedId = selectedCustomerId;
+    try {
+      await deleteCustomer(deletedId);
+      setCustomers((prev) => prev.filter((customer) => customer.id !== deletedId));
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(deletedId);
+        return next;
+      });
+      setSelectedCustomerId(null);
+      addToast({
+        type: 'success',
+        title: 'Customer moved to Recycle Bin',
+        description: 'The customer was soft-deleted and can be restored from Recycle Bin.',
+      });
+      await reload();
+    } catch (e) {
+      addToast({
+        type: 'error',
+        title: 'Unable to delete customer',
+        description: e instanceof Error ? e.message : 'The customer could not be moved to Recycle Bin.',
+      });
+    }
   };
 
   const handleSubmitNewCustomer = async (data: Omit<Contact, 'id'>) => {
@@ -315,6 +345,14 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
           </div>
         }
       />
+      <HighLevelDeleteModal
+        isOpen={showDeleteCustomerModal}
+        onClose={() => setShowDeleteCustomerModal(false)}
+        onConfirm={handleDeleteCustomer}
+        title="Delete Customer"
+        message={`${customers.find((customer) => customer.id === selectedCustomerId)?.company || 'This customer'} will be moved to Recycle Bin and can be restored later.`}
+        confirmLabel="Delete Customer"
+      />
       <div data-testid="customer-database-workspace" className="flex min-h-0 w-full flex-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <AddContactModal
         isOpen={showAddCustomerModal}
@@ -369,6 +407,7 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
             onClose={() => setSelectedCustomerId(null)}
             onUpdate={handleUpdateContact}
             onEditContact={canEdit ? handleEditCustomer : undefined}
+            onDeleteCustomer={canDelete ? () => setShowDeleteCustomerModal(true) : undefined}
             currentUser={currentUser}
           />
         ) : pendingContactResolution ? (

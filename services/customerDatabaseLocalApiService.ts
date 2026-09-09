@@ -588,6 +588,14 @@ export const createContact = async (contact: Omit<Contact, 'id'>): Promise<Conta
   return mapApiCustomerToContact(created?.data || {});
 };
 
+export const deleteCustomer = async (sessionId: string): Promise<void> => {
+  const query = new URLSearchParams({ main_id: String(API_MAIN_ID) });
+  await requestJson(
+    `${API_BASE_URL}/customer-database/${encodeURIComponent(String(sessionId))}?${query.toString()}`,
+    { method: 'DELETE' },
+  );
+};
+
 const syncContactPersons = async (sessionId: string, contactPersons: ContactPerson[] | undefined): Promise<void> => {
   if (!Array.isArray(contactPersons)) return;
 

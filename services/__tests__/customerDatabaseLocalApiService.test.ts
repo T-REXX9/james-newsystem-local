@@ -1,7 +1,7 @@
 import { CustomerStatus } from '../../types';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchDailyCallMasterList } from '../dailyCallMonitoringService';
-import { mapApiCustomerToContact, mapContactPayloadToApi, mapContactUpdatesToApi, updateContact } from '../customerDatabaseLocalApiService';
+import { deleteCustomer, mapApiCustomerToContact, mapContactPayloadToApi, mapContactUpdatesToApi, updateContact } from '../customerDatabaseLocalApiService';
 
 const reloadStanding = (patch: Record<string, unknown>) =>
   mapApiCustomerToContact({
@@ -86,6 +86,20 @@ describe('customer database saves and daily call cache', () => {
     expect(afterSave.items[0]).toMatchObject({ shopName: 'Active Again Shop', debtType: 'Good' });
     expect(fetchSpy).toHaveBeenCalledTimes(3);
     expect(String(fetchSpy.mock.calls[2][0])).toContain('/daily-call-monitoring/master-list?');
+  });
+
+  it('uses the customer soft-delete route with the current main context', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { deleted: true, session_id: 'customer-1' } }),
+    } as Response);
+
+    await deleteCustomer('customer-1');
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.stringContaining('/customer-database/customer-1?main_id=1'),
+      expect.objectContaining({ method: 'DELETE' }),
+    );
   });
 });
 

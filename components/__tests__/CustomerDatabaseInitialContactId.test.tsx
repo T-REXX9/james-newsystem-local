@@ -1,8 +1,10 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import CustomerDatabase from '../CustomerDatabase';
 import { ToastProvider } from '../ToastProvider';
+import { deleteCustomer } from '../../services/customerDatabaseLocalApiService';
 
 // The hook is mocked so we can drive `isLoading` and `data` from each test.
 const realtimeState = {
@@ -21,6 +23,7 @@ vi.mock('../../services/customerDatabaseLocalApiService', () => ({
   bulkUpdateContacts: vi.fn(),
   updateContact: vi.fn(),
   createContact: vi.fn(),
+  deleteCustomer: vi.fn(),
 }));
 
 vi.mock('../CustomerListSidebar', () => ({
@@ -28,8 +31,11 @@ vi.mock('../CustomerListSidebar', () => ({
 }));
 
 vi.mock('../CustomerDetailPanel', () => ({
-  default: ({ contactId, initialData }: { contactId: string; initialData?: any }) => (
-    <div>CustomerDetailPanel:{contactData(contactId, initialData)}</div>
+  default: ({ contactId, initialData, onDeleteCustomer }: { contactId: string; initialData?: any; onDeleteCustomer?: () => void }) => (
+    <div>
+      CustomerDetailPanel:{contactData(contactId, initialData)}
+      {onDeleteCustomer && <button onClick={onDeleteCustomer}>Delete Customer</button>}
+    </div>
   ),
 }));
 
@@ -46,6 +52,7 @@ describe('CustomerDatabase - initialContactId loading state', () => {
   beforeEach(() => {
     realtimeState.data = [];
     realtimeState.isLoading = true;
+    vi.mocked(deleteCustomer).mockReset();
   });
 
   afterEach(() => {
@@ -118,5 +125,28 @@ describe('CustomerDatabase - initialContactId loading state', () => {
     );
 
     expect(screen.getByText(/select a customer/i)).toBeInTheDocument();
+  });
+
+  it('soft-deletes the selected customer only after explicit confirmation', async () => {
+    realtimeState.isLoading = false;
+    realtimeState.data = [{ id: 'c-42', company: 'Acme Hardware' }];
+    vi.mocked(deleteCustomer).mockResolvedValue(undefined);
+
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <CustomerDatabase initialContactId="c-42" />
+      </ToastProvider>
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Delete Customer' }));
+    expect(deleteCustomer).not.toHaveBeenCalled();
+    expect(screen.getByText(/moved to recycle bin/i)).toBeInTheDocument();
+
+    await user.type(screen.getByRole('textbox'), 'DELETE');
+    await user.click(screen.getAllByRole('button', { name: 'Delete Customer' }).at(0)!);
+
+    await waitFor(() => expect(deleteCustomer).toHaveBeenCalledWith('c-42'));
+    expect(await screen.findByText(/select a customer/i)).toBeInTheDocument();
   });
 });

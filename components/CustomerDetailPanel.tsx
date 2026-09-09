@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
     Building2, User, Phone, Mail, MapPin, Calendar, CreditCard,
     TrendingUp, AlertCircle, ShoppingBag, MessageSquare, RotateCcw,
-    FileText, DollarSign, Activity, Clock, UserCog, Save, X as XIcon, Pencil
+    FileText, DollarSign, Activity, Clock, UserCog, Save, X as XIcon, Pencil, Trash2
 } from 'lucide-react';
 import { Contact, CustomerStatus, UserProfile } from '../types';
 import { fetchContactById, fetchCustomerTerms, fetchSalesAgents, updateContact } from '../services/customerDatabaseLocalApiService';
@@ -28,6 +28,7 @@ interface CustomerDetailPanelProps {
     onClose: () => void;
     onUpdate: (updated: Contact) => void;
     onEditContact?: (contact: Contact) => void;
+    onDeleteCustomer?: () => void;
     currentUser?: UserProfile | null;
 }
 
@@ -58,6 +59,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     onClose,
     onUpdate,
     onEditContact,
+    onDeleteCustomer,
     currentUser,
 }) => {
     const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'calls' | 'inquiries' | 'incidents' | 'returns' | 'financials' | 'profile'>('overview');
@@ -228,6 +230,16 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                 >
                                     <Pencil className="w-3.5 h-3.5" />
                                     Edit Details
+                                </button>
+                            )}
+                            {onDeleteCustomer && (
+                                <button
+                                    type="button"
+                                    onClick={onDeleteCustomer}
+                                    className="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50/70 px-3 py-1.5 text-xs font-bold text-rose-600 transition-colors hover:border-rose-300 hover:bg-rose-100 dark:border-rose-900/40 dark:bg-rose-900/20 dark:text-rose-400"
+                                >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                    Delete Customer
                                 </button>
                             )}
                         </div>
