@@ -892,6 +892,11 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   };
 
   const handleConfirmNotListedItem = (draft: NotListedItemDraft) => {
+    if (isReadOnly || (isCreatingNew ? !canAdd : !canEdit)) {
+      setShowNotListedItemModal(false);
+      return;
+    }
+
     setItems([
       ...items,
       {

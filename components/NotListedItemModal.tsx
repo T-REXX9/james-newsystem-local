@@ -72,10 +72,11 @@ const NotListedItemModal: React.FC<NotListedItemModalProps> = ({ isOpen, onClose
         </div>
         <form onSubmit={handleSubmit} noValidate>
           <div className="space-y-4 px-5 py-5">
-            <label className="block text-sm font-medium text-slate-700">
+            <label htmlFor="not-listed-product-no" className="block text-sm font-medium text-slate-700">
               Product No.
               <input
                 ref={productNoRef}
+                id="not-listed-product-no"
                 aria-invalid={Boolean(errors.part_no)}
                 aria-describedby={errors.part_no ? 'not-listed-product-no-error' : undefined}
                 value={draft.part_no}
@@ -84,10 +85,11 @@ const NotListedItemModal: React.FC<NotListedItemModalProps> = ({ isOpen, onClose
               />
               {errors.part_no && <span id="not-listed-product-no-error" className="mt-1 block text-xs text-rose-600">{errors.part_no}</span>}
             </label>
-            <label className="block text-sm font-medium text-slate-700">
+            <label htmlFor="not-listed-description" className="block text-sm font-medium text-slate-700">
               Description
               <input
                 aria-invalid={Boolean(errors.description)}
+                id="not-listed-description"
                 aria-describedby={errors.description ? 'not-listed-description-error' : undefined}
                 value={draft.description}
                 onChange={(event) => updateDraft('description', event.target.value.toUpperCase())}
@@ -95,11 +97,12 @@ const NotListedItemModal: React.FC<NotListedItemModalProps> = ({ isOpen, onClose
               />
               {errors.description && <span id="not-listed-description-error" className="mt-1 block text-xs text-rose-600">{errors.description}</span>}
             </label>
-            <label className="block text-sm font-medium text-slate-700">
+            <label htmlFor="not-listed-qty" className="block text-sm font-medium text-slate-700">
               Qty
               <input
                 type="number"
                 min="1"
+                id="not-listed-qty"
                 aria-invalid={Boolean(errors.qty)}
                 aria-describedby={errors.qty ? 'not-listed-qty-error' : undefined}
                 value={draft.qty}

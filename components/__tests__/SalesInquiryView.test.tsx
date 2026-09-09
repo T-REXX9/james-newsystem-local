@@ -555,6 +555,16 @@ describe('SalesInquiryView', () => {
     expect(screen.getByText('Please enter a description.')).toBeInTheDocument();
     expect(screen.getByRole('dialog', { name: 'Add Not Listed Product' })).toBeInTheDocument();
 
+    const modalAfterValidation = screen.getByRole('dialog', { name: 'Add Not Listed Product' });
+    await user.type(within(modalAfterValidation).getByRole('textbox', { name: /Product No\./ }), 'PN-MANUAL-1');
+    await user.type(within(modalAfterValidation).getByRole('textbox', { name: /Description/ }), 'Special filter');
+    await user.clear(within(modalAfterValidation).getByLabelText('Qty'));
+    await user.type(within(modalAfterValidation).getByLabelText('Qty'), '0');
+    await user.click(within(modalAfterValidation).getByRole('button', { name: 'Add Item' }));
+
+    expect(screen.getByText('Please enter a valid quantity greater than 0.')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Add Not Listed Product' })).toBeInTheDocument();
+
     await user.click(within(modal).getByRole('button', { name: 'Cancel' }));
 
     expect(screen.queryByRole('dialog', { name: 'Add Not Listed Product' })).not.toBeInTheDocument();
