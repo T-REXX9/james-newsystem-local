@@ -27,6 +27,7 @@ import ProductAutocomplete from "../ProductAutocomplete";
 import ModuleRecordLink from "../ModuleRecordLink";
 import ProcurementDocumentBanner from "../ProcurementDocumentBanner";
 import type { Product as SearchProduct } from "../../types";
+import { canPerformAction } from "../../utils/actionPermissions";
 
 interface PurchaseRequestViewProps {
   request: PurchaseRequestWithItems;
@@ -128,6 +129,11 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
   suppliers,
   isApprover = true,
 }) => {
+  const canAdd = canPerformAction("can_add");
+  const canEdit = canPerformAction("can_edit");
+  const canDelete = canPerformAction("can_delete");
+  const canPost = canPerformAction("can_post");
+  const canUnpost = canPerformAction("can_unpost");
   const [showAddItem, setShowAddItem] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -198,7 +204,8 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
       isOpen: false,
       onConfirm: null,
     }));
-  const handleStatusChange = (newStatus: PRStatus) =>
+  const handleStatusChange = (newStatus: PRStatus) => {
+    if ((newStatus === "Approved" && !canPost) || (newStatus === "Cancelled" && !canDelete)) return;
     setConfirmModal({
       isOpen: true,
       title: `${request.status === "Unposted" && newStatus === "Approved" ? "Post" : newStatus} Purchase Request`,
@@ -207,7 +214,9 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
       variant: newStatus === "Cancelled" ? "danger" : "warning",
       onConfirm: async () => onUpdate(request.id, { status: newStatus }),
     });
-  const handleDeleteItemRequest = (itemId: string, partNumber?: string) =>
+  };
+  const handleDeleteItemRequest = (itemId: string, partNumber?: string) => {
+    if (!canDelete) return;
     setConfirmModal({
       isOpen: true,
       title: "Delete Item",
@@ -216,7 +225,9 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
       variant: "danger",
       onConfirm: async () => onDeleteItem(itemId),
     });
-  const handleConvertRequest = () =>
+  };
+  const handleConvertRequest = () => {
+    if (!canAdd) return;
     setConfirmModal({
       isOpen: true,
       title: "Generate Purchase Order",
@@ -225,7 +236,9 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
       variant: "info",
       onConfirm: async () => onConvert(selectedPOItemIds),
     });
+  };
   const handleRecovery = (kind: "unpost" | "delete", reason: string) => {
+    if ((kind === "unpost" && !canUnpost) || (kind === "delete" && !canDelete)) return;
     setConfirmModal({
       isOpen: true,
       title: `${kind === "unpost" ? "Unpost" : "Delete"} Purchase Request`,
@@ -251,6 +264,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
   };
 
   const handleAddItem = async () => {
+    if (!canAdd) return;
     if (!selectedProductId || quantity <= 0) return;
     const product =
       selectedProduct || products.find((item) => item.id === selectedProductId);
@@ -278,6 +292,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
     item: EnrichedItem,
     supplierId: string,
   ) => {
+    if (!canEdit) return;
     const supplier = suppliers.find((candidate) => candidate.id === supplierId);
     await onUpdateItem(item.id, {
       supplier_id: supplierId || null,
@@ -369,7 +384,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
               >
                 <Printer className="h-4 w-4" /> Print
               </button>
-              {["Pending", "Submitted", "Unposted"].includes(request.status || "") && isApprover && (generatedPOs.length === 0 || request.status === "Unposted") && (
+              {["Pending", "Submitted", "Unposted"].includes(request.status || "") && isApprover && canPost && (generatedPOs.length === 0 || request.status === "Unposted") && (
                 <button
                   onClick={() => handleStatusChange("Approved")}
                   className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700"
@@ -377,7 +392,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                   <CheckCircle className="h-4 w-4" /> {request.status === "Unposted" ? "Post" : "Approve"}
                 </button>
               )}
-              {request.status === "Approved" && convertibleItemCount > 0 && (
+              {request.status === "Approved" && convertibleItemCount > 0 && canAdd && (
                 <button
                   onClick={handleConvertRequest}
                   disabled={selectedPOItemIds.length === 0}
@@ -386,7 +401,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                   <FileOutput className="h-4 w-4" /> Generate Purchase Order
                 </button>
               )}
-              {["Pending", "Approved", "Unposted"].includes(request.status || "") && (
+              {["Pending", "Approved", "Unposted"].includes(request.status || "") && canDelete && (
                 <button
                   onClick={() => handleStatusChange("Cancelled")}
                   className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-bold text-rose-600 hover:bg-rose-50"
@@ -394,7 +409,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                   <XCircle className="h-4 w-4" /> Cancel
                 </button>
               )}
-              {onUnpost &&
+              {onUnpost && canUnpost &&
                 ["Approved", "Submitted"].includes(request.status || "") && (
                   <button
                     onClick={() => setRecoveryAction("unpost")}
@@ -403,7 +418,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                     Unpost
                   </button>
                 )}
-              {onDelete &&
+              {onDelete && canDelete &&
                 ["Draft", "Pending", "Unposted"].includes(
                   request.status || "",
                 ) && (
@@ -490,7 +505,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                 procurement records.
               </p>
             </div>
-            {request.status === "Approved" && convertibleItemCount > 0 && (
+            {request.status === "Approved" && convertibleItemCount > 0 && canAdd && (
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-bold text-slate-500">
                   {selectedPOItemIds.length} of {convertibleItemCount} open selected
@@ -512,7 +527,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                 </button>
               </div>
             )}
-            {["Pending", "Unposted"].includes(request.status || "") && (
+            {["Pending", "Unposted"].includes(request.status || "") && canAdd && (
               <button
                 onClick={() => setShowAddItem(true)}
                 className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
@@ -521,7 +536,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
               </button>
             )}
           </div>
-          {showAddItem && (
+          {showAddItem && canAdd && (
             <div className="border-b border-blue-100 bg-blue-50/50 p-4">
               <div className="grid gap-3 lg:grid-cols-[minmax(260px,2fr)_110px_minmax(180px,1fr)_150px_auto_auto] lg:items-end">
                 <div>
@@ -766,7 +781,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                           {item.description || "-"}
                         </td>
                         <td className="px-1.5 py-2.5 text-center">
-                          {["Pending", "Unposted"].includes(request.status || "") ? (
+                          {["Pending", "Unposted"].includes(request.status || "") && canEdit ? (
                             <input
                               aria-label={`Quantity ${item.part_number || index + 1}`}
                               type="number"
@@ -785,7 +800,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                         </td>
                         <td className="px-1.5 py-2.5">{item.unit || "PCS"}</td>
                         <td className="px-1.5 py-2.5">
-                          {["Pending", "Unposted"].includes(request.status || "") ? (
+                          {["Pending", "Unposted"].includes(request.status || "") && canEdit ? (
                             <>
                               <select
                                 aria-label={`Supplier ${item.part_number || index + 1}`}
@@ -871,7 +886,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                               <MessageSquare className="inline h-4 w-4" />
                             </button>
                           ) : null}
-                          {["Pending", "Unposted"].includes(request.status || "") && (
+                          {["Pending", "Unposted"].includes(request.status || "") && canDelete && (
                             <button
                               type="button"
                               aria-label={`Delete ${item.part_number || "item"}`}
