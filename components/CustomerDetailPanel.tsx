@@ -6,7 +6,8 @@ import {
     FileText, DollarSign, Activity, Clock, UserCog, Save, X as XIcon, Pencil
 } from 'lucide-react';
 import { Contact, CustomerStatus, UserProfile } from '../types';
-import { fetchContactById, fetchContactTransactions, fetchCustomerMetrics, fetchCustomerTerms, fetchSalesAgents, updateContact } from '../services/customerDatabaseLocalApiService';
+import { fetchContactById, fetchCustomerTerms, fetchSalesAgents, updateContact } from '../services/customerDatabaseLocalApiService';
+import { buildYearlySales, customerLedgerService, ledgerRowsToContactTransactions } from '../services/customerLedgerService';
 import CustomerHistoryTab from './CustomerHistoryTab';
 import CustomerRequestsTab from './CustomerRequestsTab';
 import { getLocalAuthSession } from '../services/localAuthService';
@@ -19,6 +20,7 @@ import { formatCurrency, formatCustomerSince } from '../utils/formatUtils';
 import CallCustomerButton from './CallCustomerButton';
 import CustomerCallHistoryCard from './CustomerCallHistoryCard';
 import IncidentReportTab from './IncidentReportTab';
+import CustomerYearlySales from './CustomerYearlySales';
 
 interface CustomerDetailPanelProps {
     contactId: string;
@@ -61,6 +63,8 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'calls' | 'inquiries' | 'incidents' | 'returns' | 'financials' | 'profile'>('overview');
     const [transactions, setTransactions] = useState<any[]>([]);
     const [metrics, setMetrics] = useState<any>(null);
+    const [ledgerSalesRows, setLedgerSalesRows] = useState<Parameters<typeof buildYearlySales>[0]>([]);
+    const [ledgerError, setLedgerError] = useState('');
     const [terms, setTerms] = useState<CustomerTermsRow[]>([]);
     const [loading, setLoading] = useState(false);
     const [contact, setContact] = useState<Contact | undefined>(initialData);
@@ -90,11 +94,11 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
 
         const loadData = async () => {
             setLoading(true);
+            setLedgerError('');
             try {
-                const [detail, txs, mets, customerTerms, agents] = await Promise.all([
+                const [detail, ledger, customerTerms, agents] = await Promise.all([
                     fetchContactById(contactId),
-                    fetchContactTransactions(contactId),
-                    fetchCustomerMetrics(contactId),
+                    customerLedgerService.getLedger(contactId, { reportType: 'detailed', dateType: 'all' }),
                     fetchCustomerTerms(contactId),
                     fetchSalesAgents()
                 ]);
@@ -102,11 +106,21 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                     setContact((previous) => ({ ...(previous || {}), ...detail } as Contact));
                     onUpdate(detail);
                 }
-                setTransactions(txs);
-                setMetrics(mets);
+                const ledgerTransactions = ledgerRowsToContactTransactions(ledger.rows);
+                setTransactions(ledgerTransactions);
+                setLedgerSalesRows(ledger.rows);
+                setMetrics({
+                    ...ledger.metrics,
+                    total_purchases: ledger.metrics.dealership_sales,
+                    average_order_value: ledgerTransactions.length > 0
+                        ? ledgerTransactions.reduce((sum, transaction) => sum + transaction.amount, 0) / ledgerTransactions.length
+                        : 0,
+                    last_purchase_date: ledgerTransactions[0]?.date || null,
+                });
                 setTerms(customerTerms);
                 setSalesAgents(agents);
             } catch (err) {
+                setLedgerError(err instanceof Error ? err.message : 'Unable to load customer ledger sales.');
                 console.error("Failed to load customer details", err);
             } finally {
                 setLoading(false);
@@ -303,6 +317,8 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                 </div>
                             </div>
                         </div>
+
+                        <CustomerYearlySales rows={ledgerSalesRows} error={ledgerError} />
 
                         {/* Recent Activity Stream */}
                         <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm col-span-1 md:col-span-2">

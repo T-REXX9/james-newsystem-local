@@ -5,6 +5,7 @@ import { Contact, ContactPerson, ContactTransaction, CustomerStatus, CustomerVat
 import { invalidateDailyCallMasterListCache } from './dailyCallMonitoringService';
 import { getLocalAuthSession } from './localAuthService';
 import { fetchAssignableStaff } from './staffLocalApiService';
+import { customerLedgerService, ledgerRowsToContactTransactions } from './customerLedgerService';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
@@ -831,25 +832,21 @@ export interface LocalCustomerMetrics {
 
 export const fetchCustomerMetrics = async (contactId: string): Promise<LocalCustomerMetrics | null> => {
   try {
-    const [customerPayload, purchasePayload] = await Promise.all([
-      requestJson<ApiCustomerMetricsResponse>(`${API_BASE_URL}/customers/${encodeURIComponent(String(contactId))}`),
-      requestJson<ApiPurchaseHistoryResponse>(`${API_BASE_URL}/customers/${encodeURIComponent(String(contactId))}/purchase-history`),
-    ]);
-
-    const customer = customerPayload?.data || {};
-    const rows = Array.isArray(purchasePayload?.data?.items) ? purchasePayload.data.items : [];
-    const total = rows.reduce((sum: number, row: ApiTransactionRow) => {
-      return sum + toNumber(row?.lqty, 0) * toNumber(row?.lprice, 0);
-    }, 0);
-    const avg = rows.length > 0 ? total / rows.length : 0;
+    const ledger = await customerLedgerService.getLedger(contactId, {
+      reportType: 'detailed',
+      dateType: 'all',
+    });
+    const transactions = ledgerRowsToContactTransactions(ledger.rows);
+    const total = ledger.metrics.dealership_sales;
+    const avg = transactions.length > 0 ? total / transactions.length : 0;
 
     return {
       contact_id: contactId,
       total_purchases: total,
       average_order_value: avg,
-      last_purchase_date: rows[0]?.ldate || null,
-      outstanding_balance: toNumber(customer?.latest_balance, 0),
-      credit_limit: toNumber(customer?.lcredit, 0),
+      last_purchase_date: transactions[0]?.date || null,
+      outstanding_balance: ledger.metrics.balance,
+      credit_limit: ledger.metrics.credit_limit,
       currency: 'PHP',
     };
   } catch (err) {

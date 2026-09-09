@@ -1,4 +1,5 @@
 import { getLocalAuthSession } from './localAuthService';
+import { ContactTransaction } from '../types';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
@@ -85,6 +86,73 @@ export type CustomerLedgerResponse = {
     row_count: number;
   };
 };
+
+export type CustomerYearlySales = {
+  year: number;
+  total: number;
+  months: Array<{ month: number; label: string; total: number }>;
+};
+
+/** Aggregate the same qualifying ledger sales used by Customer Data totals. */
+export const buildYearlySales = (
+  rows: CustomerLedgerDetailedRow[],
+  today = new Date(),
+): CustomerYearlySales[] => {
+  const monthFormatter = new Intl.DateTimeFormat('en-US', { month: 'long', timeZone: 'UTC' });
+  const currentYear = today.getFullYear();
+  const todayIso = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')].join('-');
+  const grouped = new Map<number, Map<number, number>>();
+
+  for (const row of rows) {
+    if (row.debit <= 0 || !['invoice', 'order slip', 'order_slip'].includes(row.ref_type.trim().toLowerCase())) continue;
+    const date = String(row.date || row.datetime || '').slice(0, 10);
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+    if (!match) continue;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    if (year > currentYear || month < 1 || month > 12 || date > todayIso) continue;
+    const months = grouped.get(year) || new Map<number, number>();
+    months.set(month, (months.get(month) || 0) + row.debit);
+    grouped.set(year, months);
+  }
+
+  return [...grouped.entries()]
+    .sort(([left], [right]) => right - left)
+    .map(([year, months]) => ({
+      year,
+      total: [...months.values()].reduce((sum, amount) => sum + amount, 0),
+      months: [...months.entries()]
+        .sort(([left], [right]) => left - right)
+        .map(([month, total]) => ({
+          month,
+          label: monthFormatter.format(new Date(Date.UTC(2000, month - 1, 1))),
+          total,
+        })),
+    }));
+};
+
+/**
+ * Customer Data sales history is a ledger view, not an item-line purchase list.
+ * A ledger posting already represents the document amount, so never recompute
+ * the amount from invoice/order-slip item quantities here.
+ */
+export const ledgerRowsToContactTransactions = (
+  rows: CustomerLedgerDetailedRow[],
+): ContactTransaction[] => rows
+  .filter((row) => row.debit > 0 && ['invoice', 'order slip', 'order_slip'].includes(row.ref_type.trim().toLowerCase()))
+  .map((row) => {
+    const normalizedType = row.ref_type.trim().toLowerCase();
+    const type: ContactTransaction['type'] = normalizedType === 'invoice' ? 'invoice' : 'order_slip';
+    return {
+      id: `${row.ref_no || 'ledger'}:${row.id}`,
+      type,
+      number: row.reference,
+      date: row.date || row.datetime,
+      amount: row.debit,
+      status: 'finalized',
+      label: `${row.ref_type} ${row.reference}`.trim(),
+    };
+  });
 
 const parseApiErrorMessage = async (response: Response): Promise<string> => {
   try {
