@@ -14,6 +14,7 @@ import CustomLoadingSpinner from '../CustomLoadingSpinner';
 import RecoveryReasonModal from '../RecoveryReasonModal';
 import ModuleRecordLink from '../ModuleRecordLink';
 import ProcurementDocumentBanner from '../ProcurementDocumentBanner';
+import { canPerformAction } from '../../utils/actionPermissions';
 
 interface ReceivingViewProps {
     rrId: string;
@@ -72,6 +73,11 @@ const validateLineDrafts = (
 
 const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew }) => {
     const { addToast } = useToast();
+    const canAdd = canPerformAction('can_add');
+    const canEdit = canPerformAction('can_edit');
+    const canDelete = canPerformAction('can_delete');
+    const canPost = canPerformAction('can_post');
+    const canUnpost = canPerformAction('can_unpost');
     const [loading, setLoading] = useState(true);
     const [rr, setRr] = useState<ReceivingReportWithDetails | null>(null);
     const [finalizing, setFinalizing] = useState(false);
@@ -102,7 +108,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
     }, [rrId]);
 
     const handleFinalize = async () => {
-        if (!rr) return;
+        if (!canPost || !rr) return;
         const lineError = validateLineDrafts(rr, lineDrafts);
         if (lineError) {
             addToast({ type: 'error', message: lineError });
@@ -149,7 +155,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
     };
 
     const handleRecovery = async (kind: 'unpost' | 'delete', reason: string) => {
-        if (!rr) return;
+        if ((kind === 'unpost' && !canUnpost) || (kind === 'delete' && !canDelete) || !rr) return;
             try {
                 if (kind === 'unpost') await receivingService.unpostReceivingReport(rr.id, reason);
                 else await receivingService.deleteReceivingReport(rr.id, reason);
@@ -161,7 +167,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
             }
     };
 
-    const canEditItems = ['Draft', 'Pending', 'Unposted'].includes(rr?.status || '');
+    const canEditItems = canEdit && ['Draft', 'Pending', 'Unposted'].includes(rr?.status || '');
 
     const updateLineQty = (itemId: string, value: number | '') => {
         setLineDrafts((current) => ({
@@ -223,18 +229,18 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                     <span className={`rounded-md px-3 py-1 text-sm font-bold ${statusColor}`}>{rr.status || 'Draft'}</span>
                 </div>
                 <div className="flex items-center gap-3">
-                    <button onClick={onCreateNew} className="inline-flex items-center gap-2 rounded-md bg-[#175fd3] px-4 py-2 text-sm font-bold text-white hover:bg-[#0e4fb7] print:hidden">
+                    {canAdd && <button onClick={onCreateNew} className="inline-flex items-center gap-2 rounded-md bg-[#175fd3] px-4 py-2 text-sm font-bold text-white hover:bg-[#0e4fb7] print:hidden">
                         <Plus className="h-4 w-4" /> New RR
-                    </button>
+                    </button>}
                     <button onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 print:hidden">
                         <Printer className="h-4 w-4" /> Print RR
                     </button>
                     <button onClick={() => setShowHistory(true)} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 print:hidden">
                         <FileText className="h-4 w-4" /> View History
                     </button>
-                    {['Posted', 'Delivered'].includes(rr.status) && <button onClick={() => setRecoveryAction('unpost')} className="inline-flex items-center gap-2 rounded-md bg-amber-500 px-4 py-2 text-sm font-bold text-white hover:bg-amber-600 print:hidden"><AlertCircle className="h-4 w-4" /> Unpost</button>}
-                    {['Draft', 'Unposted'].includes(rr.status) && <button onClick={() => setRecoveryAction('delete')} className="inline-flex items-center gap-2 rounded-md bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 print:hidden"><Trash2 className="h-4 w-4" /> Delete</button>}
-                    {['Draft', 'Unposted'].includes(rr.status) ? (
+                    {['Posted', 'Delivered'].includes(rr.status) && canUnpost && <button onClick={() => setRecoveryAction('unpost')} className="inline-flex items-center gap-2 rounded-md bg-amber-500 px-4 py-2 text-sm font-bold text-white hover:bg-amber-600 print:hidden"><AlertCircle className="h-4 w-4" /> Unpost</button>}
+                    {['Draft', 'Unposted'].includes(rr.status) && canDelete && <button onClick={() => setRecoveryAction('delete')} className="inline-flex items-center gap-2 rounded-md bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 print:hidden"><Trash2 className="h-4 w-4" /> Delete</button>}
+                    {['Draft', 'Unposted'].includes(rr.status) && canPost ? (
                         <button onClick={openPostModal} className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 print:hidden">
                             <CheckCircle className="h-4 w-4" /> Post Receiving
                         </button>

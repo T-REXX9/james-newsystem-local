@@ -20,6 +20,7 @@ import {
   StockAdjustmentType
 } from '../types';
 import { getCentralStock } from '../utils/productStock';
+import { canPerformAction } from '../utils/actionPermissions';
 
 interface StockAdjustmentViewProps {
   initialAdjustmentId?: string;
@@ -38,6 +39,10 @@ const documentStatusMeta: Record<StockAdjustmentStatus, { label: string; tone: '
 };
 
 const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjustmentId, initialAdjustmentNo }) => {
+  const canAdd = canPerformAction('can_add');
+  const canEdit = canPerformAction('can_edit');
+  const canDelete = canPerformAction('can_delete');
+  const canPost = canPerformAction('can_post');
   const [products, setProducts] = useState<Product[]>([]);
   const [stockAdjustments, setStockAdjustments] = useState<StockAdjustment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -185,7 +190,7 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
   };
 
   const handleFinalize = async () => {
-    if (!selectedAdjustment) return;
+    if (!canPost || !selectedAdjustment) return;
     setFinalizing(true);
 
     try {
@@ -205,6 +210,7 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
   };
 
   const handleCreateAdjustment = async () => {
+    if (!canAdd) return;
     if (!adjustmentNo || !adjustmentDate || items.length === 0) {
       alert('Please fill in all required fields');
       return;
@@ -241,6 +247,7 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
   };
 
   const handleAddItem = (product: Product) => {
+    if (!canEdit) return;
     const systemQty = getProductStock(product.id);
     const existingItemIndex = items.findIndex(item => item.item_id === product.id);
     if (existingItemIndex >= 0) {
@@ -264,6 +271,7 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
   };
 
   const handleRemoveItem = (index: number) => {
+    if (!canDelete) return;
     setItems(items.filter((_, i) => i !== index));
   };
 
@@ -312,13 +320,13 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
             <p className="text-xs text-slate-300">Physical count reconciliation and inventory corrections</p>
           </div>
         </div>
-        <button
+        {canAdd && <button
           onClick={() => setShowCreateForm(true)}
           className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-medium"
         >
           <Plus className="w-4 h-4" />
           <span>New Adjustment</span>
-        </button>
+        </button>}
       </div>
 
       <div className="flex-1 flex overflow-hidden">
@@ -417,7 +425,7 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2 text-xs">
-                  {selectedAdjustment.status === 'draft' && (
+                  {selectedAdjustment.status === 'draft' && canPost && (
                     <button
                       type="button"
                       onClick={() => setShowFinalizeConfirm(true)}
@@ -724,6 +732,7 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
                               <td className="px-3 py-2 text-right">
                                 <button
                                   onClick={() => handleRemoveItem(idx)}
+                                  disabled={!canDelete}
                                   className="text-rose-500 hover:text-rose-700"
                                 >
                                   <Trash2 className="w-4 h-4" />

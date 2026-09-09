@@ -4,6 +4,7 @@ import { returnToSupplierService } from '../../services/returnToSupplierService'
 import { Send, Printer, RotateCcw, Save, Trash2 } from 'lucide-react';
 import ConfirmModal from '../ConfirmModal';
 import { useToast } from '../ToastProvider';
+import { canPerformAction } from '../../utils/actionPermissions';
 
 interface ReturnToSupplierViewProps {
     returnRecord: SupplierReturn;
@@ -12,6 +13,10 @@ interface ReturnToSupplierViewProps {
 
 const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecord, onUpdate }) => {
     const { addToast } = useToast();
+    const canEdit = canPerformAction('can_edit');
+    const canDelete = canPerformAction('can_delete');
+    const canPost = canPerformAction('can_post');
+    const canUnpost = canPerformAction('can_unpost');
     const [items, setItems] = useState<SupplierReturnItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [processing, setProcessing] = useState(false);
@@ -71,6 +76,7 @@ const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecor
     const hasChanges = headerChanged || hasItemChanges || draftItems.length !== items.length;
 
     const persistChanges = async () => {
+        if (!canEdit) return;
         if (headerChanged) {
             await returnToSupplierService.updateReturn(returnRecord.id, draftHeader);
         }
@@ -88,6 +94,7 @@ const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecor
     };
 
     const handleUnpost = async () => {
+        if (!canUnpost) return;
         setProcessing(true);
         try {
             await returnToSupplierService.unpostReturn(returnRecord.id);
@@ -113,7 +120,7 @@ const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecor
     };
 
     const handleSave = async () => {
-        if (!isEditable) return;
+        if (!canEdit || !isEditable) return;
 
         const invalidItem = draftItems.find((item) => Number(item.qty_returned) <= 0);
         if (invalidItem) {
@@ -152,6 +159,7 @@ const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecor
     };
 
     const handleFinalize = async () => {
+        if (!canPost) return;
         setProcessing(true);
         try {
             if (hasChanges) {
@@ -189,6 +197,7 @@ const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecor
     };
 
     const removeDraftItem = (itemId: string) => {
+        if (!canDelete) return;
         setDraftItems((current) => current.filter((item) => item.id !== itemId));
     };
 
@@ -213,7 +222,7 @@ const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecor
                     <button onClick={handlePrint} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
                         <Printer className="h-4 w-4" /> Print Return
                     </button>
-                    {isEditable && (
+                    {isEditable && canEdit && (
                         <button
                             onClick={handleSave}
                             disabled={processing || !hasChanges}
@@ -223,7 +232,7 @@ const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecor
                             {processing ? 'Saving...' : 'Save Changes'}
                         </button>
                     )}
-                    {returnRecord.status === 'Pending' && (
+                    {returnRecord.status === 'Pending' && canPost && (
                         <button
                             onClick={() => setFinalizeModalOpen(true)}
                             disabled={processing || draftItems.length === 0}
@@ -233,7 +242,7 @@ const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecor
                             {processing ? 'Posting...' : 'Post Return to Supplier'}
                         </button>
                     )}
-                    {isPosted && (
+                    {isPosted && canUnpost && (
                         <button
                             onClick={() => setUnpostModalOpen(true)}
                             disabled={processing}

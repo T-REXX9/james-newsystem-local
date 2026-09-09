@@ -39,6 +39,7 @@ import {
 import { useToast } from './ToastProvider';
 import { PageHeader, RecordTrustStrip, WorkflowGuidance } from './common/PageScaffold';
 import { exportPrintSheetAsJpeg } from '../utils/exportPrintSheetJpeg';
+import { canPerformAction } from '../utils/actionPermissions';
 
 interface OrderSlipViewProps {
   initialSlipId?: string;
@@ -333,6 +334,10 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
   const selectedCustomerLabel = selectedCustomer?.company || selectedSlip?.customer_name || selectedSlip?.contact_id || '-';
   const selectedSlipPriceGroupDisplay = normalizePriceGroup(selectedSlip?.price_group || '');
   const canProcessOrderSlip = isOrderSlipAllowedForTransactionType(selectedCustomer?.transactionType);
+  const canEdit = canPerformAction('can_edit');
+  const canDelete = canPerformAction('can_delete');
+  const canPost = canPerformAction('can_post');
+  const canUnpost = canPerformAction('can_unpost');
 
   useEffect(() => {
     syncDocumentPolicyState(selectedCustomer?.transactionType || null);
@@ -435,7 +440,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
   };
 
   const handleFinalize = async () => {
-    if (!selectedSlip || !canProcessOrderSlip) return;
+    if (!canPost || !selectedSlip || !canProcessOrderSlip) return;
     setFinalizing(true);
 
     setOrderSlips(prev => applyOptimisticUpdate(prev, selectedSlip.id, { status: OrderSlipStatus.FINALIZED } as Partial<OrderSlip>));
@@ -543,7 +548,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
   };
 
   const handleCancelOrderSlip = async () => {
-    if (!selectedSlip || !cancelReason.trim()) return;
+    if (!canDelete || !selectedSlip || !cancelReason.trim()) return;
     setCancelLoading(true);
 
     const previousStatus = selectedSlip.status;
@@ -596,7 +601,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
   };
 
   const handleUnpostOrderSlip = async () => {
-    if (!selectedSlip) return;
+    if (!canUnpost || !selectedSlip) return;
     setUnpostLoading(true);
 
     try {
@@ -648,7 +653,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
   };
 
   const handleSaveTrackingNo = async () => {
-    if (!selectedSlip) return;
+    if (!canEdit || !selectedSlip) return;
     setTrackingSaveLoading(true);
     try {
       const updated = await updateOrderSlip(selectedSlip.id, {
@@ -851,11 +856,11 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
 
             {selectedSlip && <div data-jpeg-export-ignore className="mt-2 flex flex-wrap items-center justify-end gap-[5px] border-t border-[#e3e3e3] pt-3 print:hidden">
               <select value={trackingNoDraft} onChange={(event) => setTrackingNoDraft(event.target.value)} aria-label="Tracking number" className="h-[34px] rounded border border-[#ccc] bg-white px-3 text-[13px]"><option value="">Select Tracking</option>{selectedSlip.tracking_no && !selectedSlip.tracking_options?.includes(selectedSlip.tracking_no) && <option value={selectedSlip.tracking_no}>{selectedSlip.tracking_no}</option>}{(selectedSlip.tracking_options || []).map((trackingNo) => <option key={trackingNo} value={trackingNo}>{trackingNo}</option>)}</select>
-              <button type="button" onClick={() => void handleSaveTrackingNo()} disabled={trackingSaveLoading || trackingNoDraft === (selectedSlip.tracking_no || '')} className="rounded-[4px] bg-[#5d82a2] px-[15px] py-[9px] text-[13px] text-white disabled:opacity-50">{trackingSaveLoading ? 'Saving...' : 'Update Tracking'}</button>
-              {selectedSlip.status === OrderSlipStatus.DRAFT && canProcessOrderSlip && <button type="button" onClick={() => void handleFinalize()} disabled={finalizing} className="rounded-[4px] bg-[#4caf50] px-[15px] py-[9px] text-[13px] text-white disabled:opacity-50">{finalizing ? 'Finalizing...' : 'Finalize'}</button>}
+              {canEdit && <button type="button" onClick={() => void handleSaveTrackingNo()} disabled={trackingSaveLoading || trackingNoDraft === (selectedSlip.tracking_no || '')} className="rounded-[4px] bg-[#5d82a2] px-[15px] py-[9px] text-[13px] text-white disabled:opacity-50">{trackingSaveLoading ? 'Saving...' : 'Update Tracking'}</button>}
+              {selectedSlip.status === OrderSlipStatus.DRAFT && canProcessOrderSlip && canPost && <button type="button" onClick={() => void handleFinalize()} disabled={finalizing} className="rounded-[4px] bg-[#4caf50] px-[15px] py-[9px] text-[13px] text-white disabled:opacity-50">{finalizing ? 'Finalizing...' : 'Finalize'}</button>}
               {(!selectedSlip.printed_at || isAdmin) && canProcessOrderSlip && <button type="button" onClick={() => void handlePrint()} disabled={printing} className="rounded-[4px] bg-[#5d82a2] px-[15px] py-[9px] text-[13px] text-white disabled:opacity-50">{printing ? 'Printing...' : 'Print'}</button>}
-              {selectedSlip.status !== OrderSlipStatus.CANCELLED && canProcessOrderSlip && <button type="button" onClick={() => setCancelModalOpen(true)} className="rounded-[4px] bg-[#d64b47] px-[15px] py-[9px] text-[13px] text-white">Cancel</button>}
-              {selectedSlip.status === OrderSlipStatus.FINALIZED && <button type="button" onClick={() => setUnpostModalOpen(true)} className="rounded-[4px] bg-[#d64b47] px-[15px] py-[9px] text-[13px] text-white">UNPOST</button>}
+              {selectedSlip.status !== OrderSlipStatus.CANCELLED && canProcessOrderSlip && canDelete && <button type="button" onClick={() => setCancelModalOpen(true)} className="rounded-[4px] bg-[#d64b47] px-[15px] py-[9px] text-[13px] text-white">Cancel</button>}
+              {selectedSlip.status === OrderSlipStatus.FINALIZED && canUnpost && <button type="button" onClick={() => setUnpostModalOpen(true)} className="rounded-[4px] bg-[#d64b47] px-[15px] py-[9px] text-[13px] text-white">UNPOST</button>}
               <ModuleRecordAction tab="sales-transaction-sales-order" payload={{ orderId: selectedSlip.order_id }} className="rounded-[4px] border border-[#ccc] px-[15px] py-[8px] text-[13px]" newWindowLabel="Open sales order in new window">View Sales Order</ModuleRecordAction>
             </div>}
           </div>
@@ -1159,7 +1164,8 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                       <select
                         value={trackingNoDraft}
                         onChange={(e) => setTrackingNoDraft(e.target.value)}
-                        className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm"
+                        disabled={!canEdit}
+                        className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm disabled:opacity-60"
                       >
                         <option value="">Select Tracking</option>
                         {selectedSlip.tracking_no && !selectedSlip.tracking_options?.includes(selectedSlip.tracking_no) ? (
@@ -1173,14 +1179,14 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                       </select>
                     </td>
                     <td colSpan={4}>
-                      <button
+                      {canEdit && <button
                         type="button"
                         onClick={handleSaveTrackingNo}
                         disabled={trackingSaveLoading || trackingNoDraft === (selectedSlip.tracking_no || '')}
                         className="px-3 py-2 rounded bg-slate-700 text-white text-sm disabled:opacity-50"
                       >
                         {trackingSaveLoading ? 'Saving...' : 'Update Tracking'}
-                      </button>
+                      </button>}
                     </td>
                   </tr>
                 </tbody>
@@ -1249,7 +1255,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
 
             {/* Action buttons bar (footbar) */}
             <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 dark:border-slate-800 pt-4">
-              {selectedSlip.status === OrderSlipStatus.DRAFT && canProcessOrderSlip && (
+              {selectedSlip.status === OrderSlipStatus.DRAFT && canProcessOrderSlip && canPost && (
                 <button
                   type="button"
                   onClick={handleFinalize}
@@ -1269,7 +1275,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                   <Printer className="w-4 h-4" /> {printing ? 'Printing...' : 'Print'}
                 </button>
               )}
-              {selectedSlip.status !== OrderSlipStatus.CANCELLED && canProcessOrderSlip && (
+              {selectedSlip.status !== OrderSlipStatus.CANCELLED && canProcessOrderSlip && canDelete && (
                 <button
                   type="button"
                   onClick={() => setCancelModalOpen(true)}
@@ -1278,7 +1284,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                   Cancel
                 </button>
               )}
-              {selectedSlip.status === OrderSlipStatus.FINALIZED && (
+              {selectedSlip.status === OrderSlipStatus.FINALIZED && canUnpost && (
                 <button
                   type="button"
                   onClick={() => setUnpostModalOpen(true)}

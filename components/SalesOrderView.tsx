@@ -111,6 +111,9 @@ const formatCurrency = (value?: number | string | null): string => {
 };
 
 const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initialMonth, initialYear }) => {
+  const canAdd = canPerformAction('can_add');
+  const canDelete = canPerformAction('can_delete');
+  const canPost = canPerformAction('can_post');
   const canUnpost = canPerformAction('can_unpost');
   const { addToast } = useToast();
   const userId = String(getLocalAuthSession()?.userProfile?.id || '').trim();
@@ -436,7 +439,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
   }, [selectedOrder?.id, userId]);
 
   const handleConfirmOrder = async () => {
-    if (!selectedOrder) return;
+    if (!canPost || !selectedOrder) return;
     setConfirming(true);
 
     const currentStatus = normalizeStatus(selectedOrder.status);
@@ -508,7 +511,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
   };
 
   const handleConversion = async () => {
-    if (!selectedOrder) return;
+    if (!canAdd || !selectedOrder) return;
     setConversionLoading(true);
 
     try {
@@ -610,7 +613,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
   };
 
   const handleCancelOrder = async () => {
-    if (!selectedOrder || !cancelReason.trim()) {
+    if (!canDelete || !selectedOrder || !cancelReason.trim()) {
       return;
     }
 
@@ -621,7 +624,10 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
         `${API_BASE_URL}/sales-orders/${encodeURIComponent(orderToCancel.id)}/actions/cancel`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(getLocalAuthSession()?.token ? { Authorization: `Bearer ${getLocalAuthSession()?.token}` } : {}),
+          },
           body: JSON.stringify({
             main_id: API_MAIN_ID,
             reason: cancelReason.trim(),
@@ -1032,10 +1038,10 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
               </div>
 
               {selectedOrder && <div data-jpeg-export-ignore className="mt-3 flex flex-wrap justify-end gap-[5px] border-t border-[#e3e3e3] pt-4 print:hidden">
-                {canConfirm && <button type="button" onClick={() => void handleConfirmOrder()} disabled={confirming} className="rounded-[4px] bg-[#4caf50] px-[18px] py-[9px] text-[13px] text-white disabled:opacity-50">{confirming ? 'Processing...' : confirmLabel}</button>}
-                {canGenerate && <button type="button" onClick={() => setConversionModalOpen(true)} className="rounded-[4px] bg-[#4caf50] px-[18px] py-[9px] text-[13px] text-white">Generate Sales Transaction</button>}
-                {canGenerate && <button type="button" onClick={handlePrint} className="rounded-[4px] bg-[#5d82a2] px-[18px] py-[9px] text-[13px] text-white">Print SO</button>}
-                {canGenerate && <button type="button" onClick={() => setCancelModalOpen(true)} className="rounded-[4px] bg-[#d64b47] px-[18px] py-[9px] text-[13px] text-white">Cancel SO</button>}
+                {canConfirm && canPost && <button type="button" onClick={() => void handleConfirmOrder()} disabled={confirming} className="rounded-[4px] bg-[#4caf50] px-[18px] py-[9px] text-[13px] text-white disabled:opacity-50">{confirming ? 'Processing...' : confirmLabel}</button>}
+                {canGenerate && canAdd && <button type="button" onClick={() => setConversionModalOpen(true)} className="rounded-[4px] bg-[#4caf50] px-[18px] py-[9px] text-[13px] text-white">Generate Sales Transaction</button>}
+                {canGenerate && canAdd && <button type="button" onClick={handlePrint} className="rounded-[4px] bg-[#5d82a2] px-[18px] py-[9px] text-[13px] text-white">Print SO</button>}
+                {canGenerate && canDelete && <button type="button" onClick={() => setCancelModalOpen(true)} className="rounded-[4px] bg-[#d64b47] px-[18px] py-[9px] text-[13px] text-white">Cancel SO</button>}
                 {selectedOrderStatus === 'posted' && canUnpost && <button type="button" onClick={() => setUnpostModalOpen(true)} disabled={unpostLoading} className="rounded-[4px] bg-[#d64b47] px-[18px] py-[9px] text-[13px] text-white disabled:opacity-50">{unpostLoading ? 'Unposting...' : 'Unpost'}</button>}
               </div>}
             </div>
@@ -1511,7 +1517,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
               </div>
 
               <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 dark:border-slate-800 pt-4">
-                {canConfirm && (
+                {canConfirm && canPost && (
                   <button
                     type="button"
                     onClick={handleConfirmOrder}
@@ -1521,7 +1527,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                     {confirming ? 'Processing...' : confirmLabel}
                   </button>
                 )}
-                {canGenerate && (
+                {canGenerate && canAdd && (
                   <button
                     type="button"
                     onClick={() => setConversionModalOpen(true)}
@@ -1530,7 +1536,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                     Generate Sales Transaction
                   </button>
                 )}
-                {canGenerate && (
+                {canGenerate && canAdd && (
                   <button
                     type="button"
                     onClick={handlePrint}
@@ -1539,7 +1545,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                     Print SO
                   </button>
                 )}
-                {canGenerate && (
+                {canGenerate && canDelete && (
                   <button
                     type="button"
                     onClick={() => setCancelModalOpen(true)}

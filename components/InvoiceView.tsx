@@ -29,6 +29,7 @@ import {
 } from '../services/notificationLocalApiService';
 import { PageHeader, RecordTrustStrip, WorkflowGuidance } from './common/PageScaffold';
 import { exportPrintSheetAsJpeg, waitForPrintSheet } from '../utils/exportPrintSheetJpeg';
+import { canPerformAction } from '../utils/actionPermissions';
 
 interface InvoiceViewProps {
   initialInvoiceId?: string;
@@ -375,7 +376,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
   };
 
   const handleCancelInvoice = async () => {
-    if (!selectedInvoice || !cancelReason.trim()) return;
+    if (!canDelete || !selectedInvoice || !cancelReason.trim()) return;
     setCancelLoading(true);
     try {
       const updated = await cancelInvoice(selectedInvoice.id, cancelReason.trim());
@@ -421,7 +422,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
   };
 
   const handleUnpost = async () => {
-    if (!selectedInvoice) return;
+    if (!canUnpost || !selectedInvoice) return;
     setUnpostLoading(true);
     try {
       const salesOrderId = String(selectedInvoice.order_id || '').trim();
@@ -515,7 +516,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
   };
 
   const handleEditInvoiceNumber = async () => {
-    if (!selectedInvoice || !editInvoiceNo.trim() || !editReason.trim()) return;
+    if (!canEdit || !selectedInvoice || !editInvoiceNo.trim() || !editReason.trim()) return;
     setEditLoading(true);
     try {
       const updated = await updateInvoiceNumber(selectedInvoice.id, {
@@ -566,6 +567,9 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
 
   const isCancelled = selectedInvoice?.status === InvoiceStatus.CANCELLED;
   const isPostedOrSent = selectedInvoice?.status === InvoiceStatus.SENT || selectedInvoice?.status === InvoiceStatus.PAID;
+  const canEdit = canPerformAction('can_edit');
+  const canDelete = canPerformAction('can_delete');
+  const canUnpost = canPerformAction('can_unpost');
   const invoiceGuidance = (() => {
     if (!selectedInvoice) {
       return {
@@ -956,7 +960,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                 >
                   <Printer className="w-4 h-4" /> {printing ? 'Printing...' : 'Print INV'}
                 </button>
-                {isPostedOrSent && (
+                {isPostedOrSent && canUnpost && (
                   <button
                     type="button"
                     onClick={() => setUnpostModalOpen(true)}
@@ -965,7 +969,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                     UNPOST
                   </button>
                 )}
-                {!isCancelled && (
+                {!isCancelled && canDelete && (
                   <button
                     type="button"
                     onClick={() => setCancelModalOpen(true)}
@@ -1029,7 +1033,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                         <div className="flex items-center gap-2">
                           <input readOnly value={selectedInvoice.invoice_no} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" />
                           <StatusBadge status={selectedInvoice.status} className="text-[10px] px-2 py-0.5" />
-                          {isAdminOrOwner && (
+                          {isAdminOrOwner && canEdit && (
                             <button
                               type="button"
                               onClick={() => {

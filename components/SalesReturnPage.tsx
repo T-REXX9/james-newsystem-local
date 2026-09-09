@@ -12,6 +12,7 @@ import { Contact } from '../types';
 import { fetchContacts, fetchPurchasedItems } from '../services/customerDatabaseLocalApiService';
 import CustomerAutocomplete from './CustomerAutocomplete';
 import { useDebounce } from '../hooks/useDebounce';
+import { canPerformAction } from '../utils/actionPermissions';
 
 type SourceDocument = SalesReturnSourceDocument;
 
@@ -659,6 +660,11 @@ interface SalesReturnPageProps {
 }
 
 const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initialYear, initialStatus }) => {
+  const canAdd = canPerformAction('can_add');
+  const canEdit = canPerformAction('can_edit');
+  const canDelete = canPerformAction('can_delete');
+  const canPost = canPerformAction('can_post');
+  const canUnpost = canPerformAction('can_unpost');
   const today = new Date();
   const [rows, setRows] = useState<SalesReturnRecord[]>([]);
   const [selectedRefno, setSelectedRefno] = useState('');
@@ -871,6 +877,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
   };
 
   const handleDeleteItem = (itemId: number) => {
+    if (!canDelete) return;
     setConfirmAction({
       open: true,
       title: 'Delete Item',
@@ -893,6 +900,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
   };
 
   const handlePost = () => {
+    if (!canPost) return;
     setConfirmAction({
       open: true,
       title: 'Post Credit Memo',
@@ -915,6 +923,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
   };
 
   const handleUnpost = () => {
+    if (!canUnpost) return;
     setConfirmAction({
       open: true,
       title: 'Unpost Credit Memo',
@@ -948,7 +957,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
           <div className="flex min-h-[82px] flex-wrap items-center justify-between gap-4 border-b border-[#ddd] px-9 py-5">
             <div className="flex gap-1">
               <button type="button" onClick={() => setShowSearchModal(true)} className="rounded-[4px] bg-[#5d82a2] px-4 py-2 text-white">Search</button>
-              <button type="button" onClick={() => setShowCreate(true)} className="rounded-[4px] bg-[#51b957] px-4 py-2 text-white">Create New</button>
+              {canAdd && <button type="button" onClick={() => setShowCreate(true)} className="rounded-[4px] bg-[#51b957] px-4 py-2 text-white">Create New</button>}
               <button type="button" onClick={() => { setSearchInput(''); setSearch(''); setStatus('All'); setPage(1); void loadList(); }} className="rounded-[4px] bg-[#51b957] px-4 py-2 text-white">Refresh</button>
             </div>
             <div className="flex items-center gap-4">
@@ -998,8 +1007,8 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
           <div className="flex min-h-[64px] items-center justify-between border-b border-[#ddd] px-5">
             <h2 className="border-b border-[#5d82a2] py-5 pr-24 font-['Oswald'] text-[18px] uppercase text-[#315574]">Sales Return</h2>
             <div className="flex items-center gap-2 font-['Oswald'] text-[18px] text-[#263f52]">
-              {selected && isPending && items.length > 0 && <button type="button" onClick={handlePost} disabled={actionLoading} className="rounded-[4px] bg-[#51b957] px-4 py-2 text-[12px] font-bold text-white">POST <u>Credit Memo</u></button>}
-              {selected && isPosted && <button type="button" onClick={handleUnpost} disabled={actionLoading} className="rounded-[4px] bg-[#f0ad4e] px-4 py-2 text-[12px] font-bold text-white">UNPOST</button>}
+              {selected && isPending && items.length > 0 && canPost && <button type="button" onClick={handlePost} disabled={actionLoading} className="rounded-[4px] bg-[#51b957] px-4 py-2 text-[12px] font-bold text-white">POST <u>Credit Memo</u></button>}
+              {selected && isPosted && canUnpost && <button type="button" onClick={handleUnpost} disabled={actionLoading} className="rounded-[4px] bg-[#f0ad4e] px-4 py-2 text-[12px] font-bold text-white">UNPOST</button>}
               <span>CM No. :</span>
               <input readOnly value={selected?.lcredit_no || ''} className="h-[34px] w-[130px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3 font-sans text-[13px]" />
             </div>
@@ -1034,7 +1043,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
                   <input readOnly value={selected.lremark || ''} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
                 </div>
 
-                {isPending && (
+                {isPending && canEdit && (
                   <div className="mt-5">
                     <button type="button" onClick={openSourceItemsModal} disabled={actionLoading} className="rounded-[4px] bg-[#5d82a2] px-4 py-2 text-white">Add Record</button>
                   </div>
@@ -1044,7 +1053,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
                   <table className="min-w-[980px] w-full border-collapse text-left">
                     <thead className="font-['Oswald'] text-[14px]">
                       <tr className="border-b-2 border-[#ddd]">
-                        {isPending && <th className="w-8 px-2 py-2" />}
+                        {isPending && canDelete && <th className="w-8 px-2 py-2" />}
                         <th className="px-2 py-2">Item Code</th>
                         <th className="px-2 py-2 text-right">Quantity</th>
                         <th className="px-2 py-2">Location.</th>
@@ -1061,7 +1070,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
                       {!loadingDetail && items.length === 0 && <tr><td colSpan={10} className="px-2 py-5 text-slate-500">No line items for this record.</td></tr>}
                       {!loadingDetail && items.map((item) => (
                         <tr key={item.id} className="border-b border-[#ddd]">
-                          {isPending && <td className="px-2 py-2"><button type="button" onClick={() => handleDeleteItem(item.id)} disabled={actionLoading} className="text-[#d9534f]" title="Remove item"><Trash2 className="h-4 w-4" /></button></td>}
+                          {isPending && canDelete && <td className="px-2 py-2"><button type="button" onClick={() => handleDeleteItem(item.id)} disabled={actionLoading} className="text-[#d9534f]" title="Remove item"><Trash2 className="h-4 w-4" /></button></td>}
                           <td className="px-2 py-2">{item.item_code || '-'}</td>
                           <td className="px-2 py-2 text-right">{item.qty.toFixed(2)}</td>
                           <td className="px-2 py-2">{item.location || '-'}</td>

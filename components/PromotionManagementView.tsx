@@ -25,6 +25,7 @@ import * as promotionService from '../services/promotionLocalApiService';
 import CreatePromotionModal from './CreatePromotionModal';
 import PromotionDetailsModal from './PromotionDetailsModal';
 import ExtendPromotionModal from './ExtendPromotionModal';
+import { canPerformAction } from '../utils/actionPermissions';
 
 interface Props {
     currentUser: UserProfile | null;
@@ -33,6 +34,9 @@ interface Props {
 type TabType = 'active' | 'expired' | 'pending';
 
 const PromotionManagementView: React.FC<Props> = ({ currentUser }) => {
+    const canAdd = canPerformAction('can_add');
+    const canEdit = canPerformAction('can_edit');
+    const canDelete = canPerformAction('can_delete');
     const [promotions, setPromotions] = useState<Promotion[]>([]);
     const [stats, setStats] = useState<PromotionStats>({
         total_active: 0,
@@ -121,11 +125,13 @@ const PromotionManagementView: React.FC<Props> = ({ currentUser }) => {
     };
 
     const handleExtend = (promotion: Promotion) => {
+        if (!canEdit) return;
         setSelectedPromotion(promotion);
         setShowExtendModal(true);
     };
 
     const handleDelete = async (promotion: Promotion) => {
+        if (!canDelete) return;
         if (!confirm(`Are you sure you want to delete "${promotion.campaign_title}"?`)) return;
 
         const success = await promotionService.deletePromotion(promotion.id);
@@ -233,13 +239,13 @@ const PromotionManagementView: React.FC<Props> = ({ currentUser }) => {
                                 className="pl-9 pr-4 py-2 w-64 bg-slate-100 dark:bg-slate-800 border-0 rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-500"
                             />
                         </div>
-                        <button
+                        {canAdd && <button
                             onClick={() => setShowCreateModal(true)}
                             className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors"
                         >
                             <Plus className="w-4 h-4" />
                             Create Campaign
-                        </button>
+                        </button>}
                     </div>
                 </div>
 
@@ -312,7 +318,7 @@ const PromotionManagementView: React.FC<Props> = ({ currentUser }) => {
                                         >
                                             <Eye className="w-4 h-4" />
                                         </button>
-                                        {promotion.status === 'Active' && (
+                                        {promotion.status === 'Active' && canEdit && (
                                             <button
                                                 onClick={() => handleExtend(promotion)}
                                                 className="px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
@@ -320,13 +326,13 @@ const PromotionManagementView: React.FC<Props> = ({ currentUser }) => {
                                                 Extend
                                             </button>
                                         )}
-                                        <button
+                                        {canDelete && <button
                                             onClick={() => handleDelete(promotion)}
                                             className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-colors"
                                             title="Delete"
                                         >
                                             <Trash2 className="w-4 h-4" />
-                                        </button>
+                                        </button>}
                                     </div>
                                 </div>
                             );

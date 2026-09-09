@@ -22,6 +22,7 @@ import {
 import type { Product, TransferStock, TransferStockItem, UserProfile } from '../types';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
+import { canPerformAction } from '../utils/actionPermissions';
 
 const TRANSFER_STOCK_TAB_ID = 'warehouse-inventory-transfer-stock';
 const MONTHS = [
@@ -61,6 +62,10 @@ const warehouseStock = (product: Product | undefined, warehouse: string): number
 
 const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId, initialTransferNo }) => {
   const { addToast } = useToast();
+  const canAdd = canPerformAction('can_add');
+  const canEdit = canPerformAction('can_edit');
+  const canDelete = canPerformAction('can_delete');
+  const canPost = canPerformAction('can_post');
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [transfers, setTransfers] = useState<TransferStock[]>([]);
@@ -238,6 +243,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
   };
 
   const createTransfer = async () => {
+    if (!canAdd) return;
     if (!selectedParts.length) {
       addToast({
         type: 'warning',
@@ -273,7 +279,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
   };
 
   const addPartsToRecord = async () => {
-    if (!selectedTransfer || !selectedParts.length) return;
+    if (!canEdit || !selectedTransfer || !selectedParts.length) return;
     setBusy(true);
     try {
       const updated = await addTransferStockPartNumbers(selectedTransfer.id, selectedParts);
@@ -326,7 +332,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
   };
 
   const saveItems = async () => {
-    if (!selectedTransfer) return;
+    if (!canEdit || !selectedTransfer) return;
     setBusy(true);
     try {
       for (const row of draftItems) {
@@ -374,7 +380,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
   };
 
   const performSubmit = async () => {
-    if (!selectedTransfer) return;
+    if (!canPost || !selectedTransfer) return;
     setBusy(true);
     try {
       const updated = await submitTransferStock(selectedTransfer.id);
@@ -405,7 +411,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
   };
 
   const performApprove = async () => {
-    if (!selectedTransfer) return;
+    if (!canPost || !selectedTransfer) return;
     setBusy(true);
     try {
       const updated = await approveTransferStock(selectedTransfer.id);
@@ -438,7 +444,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
   };
 
   const performDeleteTransfer = async () => {
-    if (!selectedTransfer) return;
+    if (!canDelete || !selectedTransfer) return;
     setBusy(true);
     try {
       await deleteTransferStock(selectedTransfer.id);
@@ -464,7 +470,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
   };
 
   const performDeleteItem = async () => {
-    if (!selectedTransfer || !pendingItemId) return;
+    if (!canDelete || !selectedTransfer || !pendingItemId) return;
     setBusy(true);
     try {
       await deleteTransferStockItem(pendingItemId);
@@ -488,7 +494,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
   };
 
   const saveTransferDate = async () => {
-    if (!selectedTransfer || !editedDate) return;
+    if (!canEdit || !selectedTransfer || !editedDate) return;
     setBusy(true);
     try {
       const updated = await updateTransferStock(selectedTransfer.id, { transfer_date: editedDate });
@@ -546,13 +552,13 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
       <div className="mx-auto w-full max-w-[1140px] space-y-[26px] print:hidden">
         <section className="overflow-hidden rounded-[5px] border border-[#d7d7d7] bg-white">
           <div className="flex min-h-[82px] items-center justify-between border-b border-[#d7d7d7] px-[35px]">
-            <button
+            {canAdd && <button
               type="button"
               onClick={() => void startCreate()}
               className="rounded-[4px] bg-[#4caf50] px-[14px] py-[9px] text-[14px] text-white hover:bg-[#43a047]"
             >
               Create New
-            </button>
+            </button>}
             <div className="flex items-center">
               <span className="mr-[30px] text-[20px] font-semibold text-[#263f55]">Filter by Month:</span>
               <select
@@ -627,7 +633,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
               TRANSFER PRODUCT
             </div>
             <div className="flex items-center gap-2 text-[23px] font-semibold text-[#29475f]">
-              {selectedTransfer?.status === 'pending' && !createMode && (
+              {selectedTransfer?.status === 'pending' && !createMode && canPost && (
                 <button
                   type="button"
                   onClick={() => setDialog('submit')}
@@ -636,7 +642,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
                   SUBMIT <u>TRANSFER</u>
                 </button>
               )}
-              {selectedTransfer?.status === 'submitted' && !createMode && (
+              {selectedTransfer?.status === 'submitted' && !createMode && canPost && (
                 <button
                   type="button"
                   onClick={() => setDialog('approve')}
@@ -682,14 +688,14 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
                       ))}
                     </div>
                   )}
-                  <button
+                  {canAdd && <button
                     type="button"
                     onClick={() => void createTransfer()}
                     disabled={busy}
                     className="mt-[18px] rounded-[3px] bg-[#5d82a2] px-[12px] py-[7px] text-[12px] text-white disabled:opacity-50"
                   >
                     Add Transfer
-                  </button>
+                  </button>}
                 </div>
               </div>
               <div className="mt-[20px] border-t border-[#e5e5e5] pt-[28px]">
@@ -711,7 +717,8 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
                   <span className="text-[16px] font-semibold">{formatLegacyDate(selectedTransfer.transfer_date)}</span>
                   <button
                     type="button"
-                    onClick={() => { setEditedDate(selectedTransfer.transfer_date); setDialog('edit-date'); }}
+                    onClick={() => { if (canEdit) { setEditedDate(selectedTransfer.transfer_date); setDialog('edit-date'); } }}
+                    disabled={!canEdit}
                     className="ml-1 text-[#2d7db5]"
                     aria-label="Edit transfer date"
                   >
@@ -751,11 +758,11 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
                       const toProduct = productForSession(toSession, row.part_no, row.item_code) || defaultVariant;
                       const fromWarehouse = row.from_warehouse_id || WAREHOUSES[0];
                       const toWarehouse = row.to_warehouse_id || WAREHOUSES[0];
-                      const editable = selectedTransfer.status === 'pending';
+                      const editable = selectedTransfer.status === 'pending' && canEdit;
                       return (
                         <tr key={row.id} className="border-b border-[#e2e2e2]">
                           <td className="px-2 py-[9px]">
-                            {editable && (
+                            {editable && canDelete && (
                               <button
                                 type="button"
                                 onClick={() => { setPendingItemId(row.id); setDialog('delete-item'); }}
@@ -810,7 +817,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
                         </tr>
                       );
                     })}
-                    {selectedTransfer.status === 'pending' && (
+                    {selectedTransfer.status === 'pending' && canEdit && (
                       <tr>
                         <td colSpan={6}></td>
                         <td className="px-2 py-[9px] text-right">
@@ -818,7 +825,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
                         </td>
                       </tr>
                     )}
-                    {selectedTransfer.status === 'pending' && (
+                    {selectedTransfer.status === 'pending' && canEdit && (
                       <tr className="bg-[#fafafa]">
                         <td colSpan={3} className="px-2 py-[9px]">
                           <div className="relative">
@@ -860,13 +867,13 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
         </section>
 
         <section className="flex min-h-[76px] items-center gap-1 rounded-t-[5px] border border-[#d7d7d7] bg-white px-5">
-          <button
+          {canDelete && <button
             type="button"
             onClick={() => selectedTransfer ? setDialog('delete-transfer') : addToast({ type: 'info', title: 'Select Item', description: 'Select a transfer first before proceeding.', durationMs: 3500 })}
             className="rounded-[4px] bg-[#d64b47] px-[25px] py-[9px] text-[14px] text-white"
           >
             Delete
-          </button>
+          </button>}
           <button type="button" onClick={printTransfer} className="rounded-[4px] bg-[#55b457] px-[29px] py-[9px] text-[14px] text-white">Print</button>
         </section>
       </div>
