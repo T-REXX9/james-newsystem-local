@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, TrendingUp } from 'lucide-react';
-import { buildYearlySales, CustomerLedgerDetailedRow, CustomerYearlySales } from '../services/customerLedgerService';
+import { buildYearlySales } from '../services/customerLedgerService';
+import type { CustomerLedgerDetailedRow, CustomerYearlySales as CustomerYearlySalesEntry } from '../services/customerLedgerService';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
@@ -58,7 +59,7 @@ const CustomerYearlySales: React.FC<CustomerYearlySalesProps> = ({ rows, error, 
 };
 
 const YearRow: React.FC<{
-  entry: CustomerYearlySales;
+  entry: CustomerYearlySalesEntry;
   isCurrentYear: boolean;
   expanded: boolean;
   onToggle: () => void;
