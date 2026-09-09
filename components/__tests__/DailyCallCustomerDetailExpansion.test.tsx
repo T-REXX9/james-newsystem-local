@@ -6,9 +6,11 @@ import userEvent from '@testing-library/user-event';
 import DailyCallCustomerDetailExpansion from '../DailyCallCustomerDetailExpansion';
 
 const fetchManagementInstructionsMock = vi.fn(async () => []);
+const fetchContactCustomerLogsForDailyCallMock = vi.fn(async () => []);
 
 vi.mock('../../services/dailyCallMonitoringService', () => ({
   fetchManagementInstructions: (...args: unknown[]) => fetchManagementInstructionsMock(...args),
+  fetchContactCustomerLogsForDailyCall: (...args: unknown[]) => fetchContactCustomerLogsForDailyCallMock(...args),
 }));
 
 vi.mock('../SalesReportTab', () => ({

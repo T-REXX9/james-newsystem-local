@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import DailyCallMasterListView from '../DailyCallMasterListView';
-import { fetchCustomersForDailyCall, fetchDailyCallMasterList } from '../../services/dailyCallMonitoringService';
+import { createCustomerLogForDailyCall, fetchCustomersForDailyCall, fetchDailyCallMasterList } from '../../services/dailyCallMonitoringService';
 import { updateContact, fetchSalesAgents } from '../../services/customerDatabaseLocalApiService';
 import { getVipTierConfig } from '../../services/vipTierSettingsService';
 import type { UserProfile } from '../../types';
@@ -17,6 +17,7 @@ const masterUser: UserProfile = {
 vi.mock('../../services/dailyCallMonitoringService', () => ({
   fetchDailyCallMasterList: vi.fn(),
   fetchCustomersForDailyCall: vi.fn(),
+  createCustomerLogForDailyCall: vi.fn(),
   getCachedDailyCallMasterList: vi.fn(() => null),
 }));
 
@@ -53,6 +54,17 @@ describe('DailyCallMasterListView', () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    vi.mocked(createCustomerLogForDailyCall).mockResolvedValue({
+      id: 'status-log-1',
+      contact_id: 'customer-1',
+      entry_type: 'Status',
+      topic: 'Status',
+      status: 'Do Not Contact',
+      note: 'No longer operating',
+      occurred_at: '2026-09-10T00:00:00.000Z',
+      created_by: 'master-1',
+      created_by_name: 'Master User',
+    });
   });
 
   it('lets master user approve a pending verification request into verified prospects', async () => {
@@ -558,6 +570,9 @@ describe('DailyCallMasterListView', () => {
     await user.click(await screen.findByRole('button', { name: 'Mark Fresh Prospect Shop as Do Not Contact' }));
     const dialog = await screen.findByRole('dialog', { name: 'Mark as Do Not Contact' });
     expect(confirmSpy).not.toHaveBeenCalled();
+    expect(within(dialog).getByRole('button', { name: 'Mark Do Not Contact' })).toBeDisabled();
+    await user.type(within(dialog).getByLabelText('Reason for Do Not Contact'), 'No longer operating');
+    expect(within(dialog).getByRole('button', { name: 'Mark Do Not Contact' })).toBeEnabled();
     await user.click(within(dialog).getByRole('button', { name: 'Mark Do Not Contact' }));
 
     expect(updateContact).toHaveBeenCalledWith(
@@ -569,6 +584,13 @@ describe('DailyCallMasterListView', () => {
       },
       'master-1'
     );
+    expect(createCustomerLogForDailyCall).toHaveBeenCalledWith({
+      contact_id: 'unverified-1',
+      entry_type: 'Status',
+      topic: 'Status',
+      status: 'Do Not Contact',
+      note: 'No longer operating',
+    });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Unverified Prospects (0)' })).toBeInTheDocument());
     expect(screen.getByRole('button', { name: /blacklisted\/rejected -do not contact \(1\)/i })).toBeInTheDocument();
     expect(screen.getByTestId('category-table-unverified')).toBeInTheDocument();
@@ -632,6 +654,7 @@ describe('DailyCallMasterListView', () => {
     await user.click(await screen.findByRole('button', { name: 'Mark Priority Buyer Shop as Do Not Contact' }));
     const dialog = await screen.findByRole('dialog', { name: 'Mark as Do Not Contact' });
     expect(confirmSpy).not.toHaveBeenCalled();
+    await user.type(within(dialog).getByLabelText('Reason for Do Not Contact'), 'No longer operating');
     await user.click(within(dialog).getByRole('button', { name: 'Mark Do Not Contact' }));
 
     expect(updateContact).toHaveBeenCalledWith(
@@ -642,6 +665,13 @@ describe('DailyCallMasterListView', () => {
       },
       'master-1'
     );
+    expect(createCustomerLogForDailyCall).toHaveBeenCalledWith({
+      contact_id: 'priority-1',
+      entry_type: 'Status',
+      topic: 'Status',
+      status: 'Do Not Contact',
+      note: 'No longer operating',
+    });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Priority List (0)' })).toBeInTheDocument());
     expect(screen.getByRole('button', { name: /blacklisted\/rejected -do not contact \(1\)/i })).toBeInTheDocument();
     expect(screen.getByTestId('category-table-priority')).toBeInTheDocument();

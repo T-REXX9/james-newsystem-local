@@ -19,7 +19,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useDebounce } from '../hooks/useDebounce';
-import { fetchCustomersForDailyCall, fetchDailyCallMasterList, getCachedDailyCallMasterList } from '../services/dailyCallMonitoringService';
+import { createCustomerLogForDailyCall, fetchCustomersForDailyCall, fetchDailyCallMasterList, getCachedDailyCallMasterList } from '../services/dailyCallMonitoringService';
 import { createContact, fetchSalesAgents, updateContact } from '../services/customerDatabaseLocalApiService';
 import { getVipTierConfig } from '../services/vipTierSettingsService';
 import { Contact, CustomerStatus, DailyCallCustomerRow, DailyCallMasterCustomerRow, DailyCallMasterListMeta, UserProfile, VipTierConfig } from '../types';
@@ -292,6 +292,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const [detailViewOnly, setDetailViewOnly] = useState(false);
   const [loadingCustomerId, setLoadingCustomerId] = useState<string | null>(null);
   const [pendingDoNotContactRow, setPendingDoNotContactRow] = useState<DailyCallMasterCustomerRow | null>(null);
+  const [doNotContactReason, setDoNotContactReason] = useState('');
   const [activeCategoryId, setActiveCategoryId] = useState<CategoryId>('priority');
   const [visibleLimit, setVisibleLimit] = useState(INITIAL_VISIBLE_ROWS);
   const [currentVipFilter, setCurrentVipFilter] = useState('all');
@@ -383,6 +384,15 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const handleConfirmDoNotContact = useCallback(async () => {
     const row = pendingDoNotContactRow;
     if (!row) return;
+    const reason = doNotContactReason.trim();
+    if (!reason) {
+      addToast({
+        type: 'error',
+        title: 'Reason required',
+        description: 'Enter a reason before marking the customer as Do Not Contact.',
+      });
+      return;
+    }
     const shouldRejectProspect = isProspectRow(row) && row.verification !== 'Verified';
     const updates = {
       status: CustomerStatus.BLACKLISTED,
@@ -393,6 +403,13 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     setLoadingCustomerId(row.id);
     try {
       await updateContact(row.id, updates, currentUser?.id);
+      await createCustomerLogForDailyCall({
+        contact_id: row.id,
+        entry_type: 'Status',
+        topic: 'Status',
+        status: 'Do Not Contact',
+        note: reason,
+      });
       setRows((prev) => prev.map((item) =>
         item.id === row.id
           ? {
@@ -404,6 +421,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
           : item
       ));
       await loadRows(false, true);
+      setDoNotContactReason('');
       setPendingDoNotContactRow(null);
     } catch {
       addToast({
@@ -414,7 +432,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     } finally {
       setLoadingCustomerId(null);
     }
-  }, [addToast, currentUser?.id, loadRows, pendingDoNotContactRow]);
+  }, [addToast, currentUser?.id, doNotContactReason, loadRows, pendingDoNotContactRow]);
 
   useEffect(() => {
     loadRows();
@@ -928,7 +946,10 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                                   type="button"
                                   aria-label={`Mark ${row.shopName} as Do Not Contact`}
                                   title={`Mark ${row.shopName} as Do Not Contact`}
-                                  onClick={() => setPendingDoNotContactRow(row)}
+                                  onClick={() => {
+                                    setDoNotContactReason('');
+                                    setPendingDoNotContactRow(row);
+                                  }}
                                   disabled={loadingCustomerId === row.id}
                                   className="rounded-full border border-rose-200 p-1.5 text-rose-600 transition hover:bg-rose-50 disabled:opacity-60"
                                 >
@@ -996,6 +1017,18 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 <p className="mt-2 text-xs leading-5 text-slate-500">
                   This sets the customer status to Blacklisted and debt type to Bad. Unverified prospects will also be marked Rejected.
                 </p>
+                <label className="mt-4 block text-xs font-semibold text-slate-700" htmlFor="do-not-contact-reason">
+                  Reason for Do Not Contact <span className="text-rose-600">*</span>
+                  <textarea
+                    id="do-not-contact-reason"
+                    aria-label="Reason for Do Not Contact"
+                    value={doNotContactReason}
+                    onChange={(event) => setDoNotContactReason(event.target.value)}
+                    placeholder="Explain why this customer should not be contacted"
+                    rows={3}
+                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal text-slate-900 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
+                  />
+                </label>
               </div>
             </div>
             <div className="mt-5 flex justify-end gap-2">
@@ -1010,7 +1043,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
               <button
                 type="button"
                 onClick={handleConfirmDoNotContact}
-                disabled={loadingCustomerId === pendingDoNotContactRow.id}
+                disabled={loadingCustomerId === pendingDoNotContactRow.id || !doNotContactReason.trim()}
                 className="inline-flex items-center rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:opacity-60"
               >
                 {loadingCustomerId === pendingDoNotContactRow.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

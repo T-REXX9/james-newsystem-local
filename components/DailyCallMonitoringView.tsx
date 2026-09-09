@@ -1516,6 +1516,11 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     [customerLogs]
   );
 
+  const doNotContactStatusLog = useMemo(
+    () => statusUpdateLogs.find((entry) => entry.status === 'Do Not Contact' && entry.note?.trim()),
+    [statusUpdateLogs]
+  );
+
   const managementInstructions = useMemo<ManagementInstruction[]>(
     () => customerLogs
       .filter((entry) => entry.entry_type === 'Note' && entry.topic === 'Comment' && entry.status === 'Management Instruction')
@@ -2143,6 +2148,9 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             {selectedClientBlocked && (
               <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
                 {DO_NOT_CONTACT_LABEL} — view only. Contact and sales inquiry actions are disabled.
+                {doNotContactStatusLog?.note && (
+                  <p className="mt-1 font-normal">Reason: {doNotContactStatusLog.note}</p>
+                )}
               </div>
             )}
             <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
@@ -2374,6 +2382,9 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                             <span className="text-[11px] text-slate-400 dark:text-slate-500">{formatDate(entry.occurred_at)}</span>
                           </div>
                           <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{entry.created_by_name || 'Unknown user'}</p>
+                          {entry.note && (
+                            <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">Reason: {entry.note}</p>
+                          )}
                         </div>
                       ))
                     )}

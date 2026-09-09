@@ -25,7 +25,7 @@ import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import { getVipStandingSummary } from '../utils/vipStanding';
 import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
 import { getVipTierConfig } from '../services/vipTierSettingsService';
-import { fetchManagementInstructions } from '../services/dailyCallMonitoringService';
+import { fetchContactCustomerLogsForDailyCall, fetchManagementInstructions } from '../services/dailyCallMonitoringService';
 import { DO_NOT_CONTACT_LABEL, isBlockedDailyCallCustomerRow } from '../utils/dailyCallBlockedCustomer';
 
 export type DetailTabId =
@@ -112,6 +112,7 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
   const [activeTab, setActiveTab] = useState<DetailTabId>(initialTab);
   const [vipConfig, setVipConfig] = useState<VipTierConfig>(DEFAULT_VIP_TIER_CONFIG);
   const [latestInstruction, setLatestInstruction] = useState<any | null>(null);
+  const [doNotContactReason, setDoNotContactReason] = useState('');
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -141,6 +142,17 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
   }, [customer.id, activeTab]);
 
   useEffect(() => {
+    let disposed = false;
+    setDoNotContactReason('');
+    void fetchContactCustomerLogsForDailyCall(customer.id).then((logs) => {
+      if (disposed) return;
+      const statusLog = logs.find((entry) => entry.entry_type === 'Status' && entry.status === 'Do Not Contact' && entry.note?.trim());
+      setDoNotContactReason(statusLog?.note?.trim() || '');
+    });
+    return () => { disposed = true; };
+  }, [customer.id]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
       const index = visibleTabs.findIndex((tab) => tab.id === activeTab);
@@ -167,6 +179,11 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
 
   const overview = (
     <div className="space-y-3 bg-slate-50 p-3">
+      {readOnly && doNotContactReason && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-800">
+          Do Not Contact reason: <span className="font-normal">{doNotContactReason}</span>
+        </div>
+      )}
       <div className="grid gap-3 xl:grid-cols-2">
         <div className="space-y-3">
           <PanelCard title="Management Instructions" icon={ClipboardList} tone="text-violet-700" action="+ Add Instruction" onAction={() => setActiveTab('comments')}>

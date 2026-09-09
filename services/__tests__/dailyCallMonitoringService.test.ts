@@ -304,8 +304,8 @@ describe('dailyCallMonitoringService', () => {
           contact_id: '1',
           entry_type: 'Status',
           topic: 'Status',
-          status: 'No Answer',
-          note: '',
+          status: 'Do Not Contact',
+          note: 'No longer operating',
           promise_to_pay: '',
           comments: '',
           occurred_at: '2026-03-08T00:00:00Z',
@@ -319,13 +319,17 @@ describe('dailyCallMonitoringService', () => {
       contact_id: '1',
       entry_type: 'Status',
       topic: 'Status',
-      status: 'No Answer',
+      status: 'Do Not Contact',
+      note: 'No longer operating',
     });
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(String(fetchSpy.mock.calls[0][0])).toContain('/daily-call-monitoring/customer-logs');
     expect(fetchSpy.mock.calls[0][1]).toMatchObject({ method: 'POST' });
-    expect(result).toMatchObject({ id: 'cust-log-2', entry_type: 'Status', status: 'No Answer' });
+    expect(fetchSpy.mock.calls[0][1]).toMatchObject({
+      body: expect.stringContaining('"note":"No longer operating"'),
+    });
+    expect(result).toMatchObject({ id: 'cust-log-2', entry_type: 'Status', status: 'Do Not Contact', note: 'No longer operating' });
   });
 
   it('subscribeToDailyCallMonitoringUpdates triggers onUpdate on interval and supports unsubscribe', () => {
