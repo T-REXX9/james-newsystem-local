@@ -68,6 +68,8 @@ describe('CustomerDatabase - initialContactId loading state', () => {
     // A loading indicator is visible
     expect(screen.getByTestId('customer-loading')).toBeInTheDocument();
     expect(screen.getByText(/loading customer record/i)).toBeInTheDocument();
+    expect(screen.getByTestId('customer-database-page')).toHaveClass('p-2');
+    expect(screen.getByTestId('customer-database-workspace')).toHaveClass('flex-1', 'min-h-0');
   });
 
   it('renders the detail panel once the contacts list finishes loading and the id is found', async () => {

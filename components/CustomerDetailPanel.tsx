@@ -167,18 +167,18 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
         <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950 overflow-hidden animate-fadeIn">
 
             {/* 1. Ultra Headers (Glass / Premium feel) */}
-            <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-6 shadow-sm z-10">
-                <div className="flex justify-between items-start">
+                <div className="z-10 border-b border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div className="flex flex-wrap items-start justify-between gap-3">
 
-                    <div className="flex items-center gap-4">
-                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-blue to-blue-600 flex items-center justify-center text-white font-bold text-2xl shadow-lg shadow-blue-900/20">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-blue to-blue-600 text-xl font-bold text-white shadow-lg shadow-blue-900/20">
                             {Initials}
                         </div>
-                        <div>
-                            <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <div className="min-w-0">
+                            <h1 className="flex items-center gap-2 text-xl font-bold text-slate-900 dark:text-white">
                                 <CompanyName name={contact.company} pastName={contact.pastName} entity={contact} />
                             </h1>
-                            <div className="flex items-center gap-3 mt-1 text-sm text-slate-500 dark:text-slate-400">
+                            <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
                                 <span className="flex items-center gap-1.5">
                                     <User className="w-3.5 h-3.5" />
                                     {contact.contactPersons?.[0]?.name || contact.name || 'No Contact Person'}
@@ -201,13 +201,13 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                         </div>
                     </div>
 
-                    <div className="text-right">
-                        <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Outstanding Balance</div>
-                        <div className={`text-2xl font-mono font-bold ${(contact.balance || 0) > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
+                    <div className="shrink-0 text-right">
+                        <div className="mb-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Outstanding Balance</div>
+                        <div className={`text-xl font-mono font-bold ${(contact.balance || 0) > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
                             }`}>
                             ₱{(contact.balance || 0).toLocaleString()}
                         </div>
-                        <div className="flex justify-end gap-2 mt-2">
+                        <div className="mt-1 flex justify-end gap-2">
                             <span className={`px-2 py-0.5 rounded textxs font-bold uppercase border ${contact.status === CustomerStatus.ACTIVE ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-100 text-slate-500 border-slate-200'
                                 }`}>
                                 {contact.status}
@@ -216,7 +216,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                 {normalizedPriceGroup || 'No Group'}
                             </span>
                         </div>
-                        <div className="mt-3 flex flex-wrap justify-end gap-2">
+                        <div className="mt-2 flex flex-wrap justify-end gap-2">
                             <CallCustomerButton
                                 phoneNumber={contact.phone || contact.mobile}
                                 customerId={contact.id}
@@ -235,7 +235,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                 </div>
 
                 {/* Navigation Tabs */}
-                <div className="flex items-center gap-6 mt-8 border-b border-transparent">
+                <div className="mt-4 flex min-w-0 items-center gap-4 overflow-x-auto border-b border-transparent pb-0.5 custom-scrollbar">
                     {[
                         { id: 'overview', label: 'Overview', icon: Activity },
                         { id: 'history', label: 'Sales History', icon: ShoppingBag },
@@ -250,7 +250,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as any)}
                             className={`
-                 pb-3 px-1 text-sm font-bold flex items-center gap-2 transition-all relative
+                 relative flex shrink-0 items-center gap-2 px-1 pb-2 text-xs font-bold transition-all
                  ${activeTab === tab.id
                                     ? 'text-brand-blue'
                                     : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
@@ -268,7 +268,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
             </div>
 
             {/* 2. Content Area */}
-            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
 
                 {loading && (
                     <div className="flex justify-center py-12">

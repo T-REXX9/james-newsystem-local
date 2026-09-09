@@ -18,18 +18,19 @@ interface PageHeaderProps {
   icon?: React.ReactNode;
   actions?: React.ReactNode;
   meta?: React.ReactNode;
+  compact?: boolean;
 }
 
-export const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, eyebrow, icon, actions, meta }) => (
-  <header className="mb-5 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:flex-row md:items-center md:justify-between">
+export const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, eyebrow, icon, actions, meta, compact = false }) => (
+  <header className={`${compact ? 'mb-2 gap-2 p-3' : 'mb-5 gap-4 p-4'} flex flex-col rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 md:flex-row md:items-center md:justify-between`}>
     <div className="min-w-0">
       {eyebrow && <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{eyebrow}</p>}
-      <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-slate-900 dark:text-white">
+      <h1 className={`${compact ? 'mt-0.5 text-xl' : 'mt-1 text-2xl'} flex items-center gap-2 font-bold text-slate-900 dark:text-white`}>
         {icon}
         <span className="truncate">{title}</span>
       </h1>
-      {subtitle && <p className="mt-1 max-w-3xl text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>}
-      {meta && <div className="mt-3">{meta}</div>}
+      {subtitle && <p className={`${compact ? 'mt-0.5' : 'mt-1'} max-w-3xl text-sm text-slate-500 dark:text-slate-400`}>{subtitle}</p>}
+      {meta && <div className={compact ? 'mt-1.5' : 'mt-3'}>{meta}</div>}
     </div>
     {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
   </header>

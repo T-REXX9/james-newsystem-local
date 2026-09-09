@@ -244,8 +244,9 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
 
   // Layout
   return (
-    <div className="flex h-full w-full flex-col bg-slate-50 p-4 dark:bg-slate-950 overflow-hidden relative">
+    <div data-testid="customer-database-page" className="relative flex h-full w-full flex-col overflow-hidden bg-slate-50 p-2 dark:bg-slate-950 sm:p-3">
       <PageHeader
+        compact
         eyebrow="Sales Database"
         title="Customer Database"
         subtitle="Search customers, maintain account details, assign agents, and review business history from one workspace."
@@ -314,7 +315,7 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
           </div>
         }
       />
-      <div className="flex min-h-0 flex-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div data-testid="customer-database-workspace" className="flex min-h-0 w-full flex-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <AddContactModal
         isOpen={showAddCustomerModal}
         onClose={() => setShowAddCustomerModal(false)}
