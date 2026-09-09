@@ -129,6 +129,7 @@ const AccessControlSettings: React.FC = () => {
   const [totalProfiles, setTotalProfiles] = useState(0);
 
   const [permissionChanges, setPermissionChanges] = useState<Record<string, boolean>>({}); // tracks per-user whether access_rights were manually edited
+  const [expandedModules, setExpandedModules] = useState<Record<string, string[]>>({});
 
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
@@ -258,6 +259,15 @@ const AccessControlSettings: React.FC = () => {
       return { ...profile, access_rights: toggleAccessPage(profile.access_rights || [], pageId, enabled), access_override: true };
     }));
     setPermissionChanges((prev) => ({ ...prev, [userId]: true }));
+  };
+
+  const toggleModuleExpanded = (userId: string, moduleId: string) => {
+    setExpandedModules((current) => {
+      const expanded = new Set(current[userId] || []);
+      if (expanded.has(moduleId)) expanded.delete(moduleId);
+      else expanded.add(moduleId);
+      return { ...current, [userId]: Array.from(expanded) };
+    });
   };
 
   const savePermissions = async (user: UserProfile) => {
@@ -597,8 +607,8 @@ const AccessControlSettings: React.FC = () => {
 
             <div className="overflow-x-auto">
               <table
-                className="border-collapse text-left"
-                style={{ minWidth: `${permissionTableMinWidth}px`, tableLayout: 'fixed' }}
+                className="w-full border-collapse text-left"
+                style={{ tableLayout: 'fixed' }}
               >
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
@@ -614,25 +624,10 @@ const AccessControlSettings: React.FC = () => {
                     >
                       Group
                     </th>
-                    {ACCESS_MODULES.map((module) => (
-                      <th
-                        key={module.id}
-                        colSpan={Math.max(1, module.pages.length)}
-                        className="border-l border-slate-100 p-4 text-center dark:border-slate-800"
-                        style={{ minWidth: `${Math.max(1, module.pages.length) * 150}px` }}
-                      >
-                        {module.label}
-                      </th>
-                    ))}
+                    <th className="border-l border-slate-100 p-4 dark:border-slate-800">Page Access</th>
                     <th className="sticky right-0 z-20 w-32 border-l border-slate-200 bg-slate-50 p-4 text-center dark:border-slate-700 dark:bg-slate-800">
                       Action
                     </th>
-                  </tr>
-                  <tr className="border-b border-slate-200 bg-slate-50/80 text-[10px] font-semibold uppercase text-slate-500 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-400">
-                    <th className="sticky left-0 z-20 bg-slate-50 dark:bg-slate-800" style={stickyStaffColumnStyle} />
-                    <th className="sticky z-20 bg-slate-50 dark:bg-slate-800" style={stickyGroupColumnStyle} />
-                    {ACCESS_MODULES.flatMap((module) => module.pages).map((pageItem) => <th key={pageItem.id} className="border-l border-slate-100 p-2 text-center dark:border-slate-800">{pageItem.label}</th>)}
-                    <th className="sticky right-0 z-20 bg-slate-50 dark:bg-slate-800" />
                   </tr>
                 </thead>
 
@@ -705,43 +700,37 @@ const AccessControlSettings: React.FC = () => {
                           </select>
                         </td>
 
-                        {ACCESS_MODULES.flatMap((module) => module.pages.map((pageItem, pageIndex) => ({ module, pageItem, pageIndex }))).map(({ module, pageItem, pageIndex }) => {
-                          const isAllowed = isOwner || hasFullAccess || effectiveCanonicalRights.has(pageItem.id);
-                          const moduleState = getAccessModuleState(module.id, effectiveCanonicalRights);
-                          const assignedGroupRights = assignedGroup ? getEffectiveCanonicalRights(assignedGroup.access_rights) : null;
-                          const differsFromGroup = permissionsEdited && assignedGroupRights
-                            ? isAllowed !== (assignedGroupRights.has('*') || assignedGroupRights.has(pageItem.id))
-                            : false;
-                          return (
-                            <td
-                              key={pageItem.id}
-                              className={`border-l border-slate-100 p-4 text-center dark:border-slate-800 ${
-                                differsFromGroup
-                                  ? 'bg-amber-50/70 dark:bg-amber-900/20'
-                                  : 'bg-slate-50/70 dark:bg-slate-800/30'
-                              }`}
-                              title={isOwner ? 'Owner — full access' : differsFromGroup ? 'Modified from group permissions' : 'Click to toggle access'}
-                            >
-                              <div className="flex flex-col items-center justify-center gap-1">
-                                {pageIndex === 0 && !isOwner && <button type="button" className="text-[9px] text-brand-blue" onClick={() => handlePermissionToggle(user.id, module.id, getAccessModuleState(module.id, effectiveCanonicalRights).checked)}>Select all</button>}
-                                {pageIndex === 0 && <input type="checkbox" checked={isOwner || hasFullAccess || moduleState.checked} aria-label={`${module.label} module access for ${user.full_name}`} aria-checked={moduleState.indeterminate ? 'mixed' : moduleState.checked} disabled={isOwner} ref={(element) => { if (element) element.indeterminate = moduleState.indeterminate; }} onChange={() => handlePermissionToggle(user.id, module.id, moduleState.checked)} />}
-                                  <input
-                                    type="checkbox"
-                                    checked={isAllowed}
-                                    aria-label={`${pageItem.label} page access for ${user.full_name}`}
-                                    aria-checked={isAllowed}
-                                    disabled={isOwner}
-                                  onChange={() => {
-                                    if (!isOwner) handlePagePermissionToggle(user.id, pageItem.id, !isAllowed);
-                                  }}
-                                  className={`h-4 w-4 rounded border-gray-300 text-brand-blue ${
-                                    isOwner ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer opacity-100'
-                                  }`}
-                                />
-                              </div>
-                            </td>
-                          );
-                        })}
+                        <td className="border-l border-slate-100 p-4 align-top dark:border-slate-800">
+                          <div className="space-y-2">
+                            {ACCESS_MODULES.map((module) => {
+                              const moduleState = getAccessModuleState(module.id, effectiveCanonicalRights);
+                              const isExpanded = (expandedModules[user.id] || []).includes(module.id);
+                              const assignedGroupRights = assignedGroup ? getEffectiveCanonicalRights(assignedGroup.access_rights) : null;
+                              return (
+                                <div key={module.id} className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
+                                  <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 dark:bg-slate-800/70">
+                                    <button type="button" onClick={() => toggleModuleExpanded(user.id, module.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm font-semibold text-slate-700 dark:text-slate-200">
+                                      {isExpanded ? <ChevronLeft className="h-4 w-4 -rotate-90" /> : <ChevronRight className="h-4 w-4" />}
+                                      <span>{module.label}</span>
+                                      <span className="text-xs font-normal text-slate-400">{module.pages.length} pages</span>
+                                    </button>
+                                    <label className="flex items-center gap-1 text-xs text-brand-blue">
+                                      <input type="checkbox" checked={isOwner || hasFullAccess || moduleState.checked} aria-label={`${module.label} module access for ${user.full_name}`} aria-checked={moduleState.indeterminate ? 'mixed' : moduleState.checked} disabled={isOwner} ref={(element) => { if (element) element.indeterminate = moduleState.indeterminate; }} onChange={() => handlePermissionToggle(user.id, module.id, moduleState.checked)} />
+                                      Select all
+                                    </label>
+                                  </div>
+                                  {isExpanded && <div className="grid gap-2 bg-white p-3 sm:grid-cols-2 dark:bg-slate-900">
+                                    {module.pages.map((pageItem) => {
+                                      const isAllowed = isOwner || hasFullAccess || effectiveCanonicalRights.has(pageItem.id);
+                                      const differsFromGroup = Boolean(permissionsEdited && assignedGroupRights && isAllowed !== (assignedGroupRights.has('*') || assignedGroupRights.has(pageItem.id)));
+                                      return <label key={pageItem.id} className={`flex items-center gap-2 rounded px-2 py-1 text-sm ${differsFromGroup ? 'bg-amber-50 dark:bg-amber-900/20' : ''}`}><input type="checkbox" checked={isAllowed} aria-label={`${pageItem.label} page access for ${user.full_name}`} disabled={isOwner} onChange={() => handlePagePermissionToggle(user.id, pageItem.id, !isAllowed)} />{pageItem.label}</label>;
+                                    })}
+                                  </div>}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </td>
 
                         <td className="sticky right-0 z-10 border-l border-slate-200 bg-white p-4 text-center dark:border-slate-800 dark:bg-slate-900">
                           {isOwner ? (
