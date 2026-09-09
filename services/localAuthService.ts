@@ -1,4 +1,4 @@
-import { ActionPermissionEntry, UserProfile } from '../types';
+import { PageActionPermissions, UserProfile } from '../types';
 import { canonicalizeRoleName, MODULE_ID_ALIASES, ROLE_DEFAULT_ACCESS_RIGHTS, ROLE_NAMES } from '../constants';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
@@ -18,7 +18,7 @@ type ApiPermissionPackage = {
   lstatus?: string | number;
 };
 
-type ActionPermissions = ActionPermissionEntry;
+type ActionPermissions = PageActionPermissions;
 
 type ApiAuthUser = {
   id: number;

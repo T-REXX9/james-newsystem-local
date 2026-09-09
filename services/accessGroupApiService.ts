@@ -14,6 +14,7 @@ interface AccessGroupRecord {
   created_at?: string;
   assigned_staff_count?: number;
   is_core?: boolean | number;
+  action_permissions?: Record<string, unknown> | null;
 }
 
 const parseApiErrorMessage = async (response: Response): Promise<string> => {
@@ -61,6 +62,17 @@ const parseAccessRights = (value: AccessGroupRecord['access_rights']): string[] 
   }
 };
 
+const parseActionPermissions = (value: AccessGroupRecord['action_permissions']): AccessGroup['action_permissions'] | undefined => {
+  if (!value) return undefined;
+  if (typeof value === 'object') return value as AccessGroup['action_permissions'];
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed as AccessGroup['action_permissions'] : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 const mapGroup = (group: AccessGroupRecord): AccessGroup => ({
   id: String(group.id),
   main_id: group.main_id,
@@ -70,6 +82,7 @@ const mapGroup = (group: AccessGroupRecord): AccessGroup => ({
   created_at: group.created_at,
   assigned_staff_count: Number(group.assigned_staff_count || 0),
   is_core: Boolean(group.is_core),
+  action_permissions: parseActionPermissions(group.action_permissions),
 });
 
 export const fetchAccessGroups = async (): Promise<AccessGroup[]> => {
@@ -82,7 +95,8 @@ export const fetchAccessGroups = async (): Promise<AccessGroup[]> => {
 export const createAccessGroup = async (
   name: string,
   description: string,
-  accessRights: string[]
+  accessRights: string[],
+  actionPermissions?: AccessGroup['action_permissions']
 ): Promise<AccessGroup> => {
   const payload = await requestJson(`${API_BASE_URL}/access-groups`, {
     method: 'POST',
@@ -92,6 +106,7 @@ export const createAccessGroup = async (
       name,
       description,
       access_rights: accessRights,
+      action_permissions: actionPermissions,
     }),
   });
 
@@ -100,7 +115,7 @@ export const createAccessGroup = async (
 
 export const updateAccessGroup = async (
   id: string,
-  data: Partial<Pick<AccessGroup, 'name' | 'description' | 'access_rights'>>
+  data: Partial<Pick<AccessGroup, 'name' | 'description' | 'access_rights' | 'action_permissions'>>
 ): Promise<AccessGroup> => {
   const payload = await requestJson(`${API_BASE_URL}/access-groups/${id}`, {
     method: 'PATCH',

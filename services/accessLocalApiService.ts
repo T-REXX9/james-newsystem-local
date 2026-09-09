@@ -23,7 +23,7 @@ interface StaffRecord {
     birthday?: string;
     mobile?: string;
     monthly_quota?: number;
-    action_permissions?: Record<string, boolean> | null;
+    action_permissions?: Record<string, unknown> | null;
 }
 
 export interface StaffListResponse {
@@ -175,7 +175,7 @@ export const fetchProfilesLocal = async (
 
 export const updateProfileLocal = async (
   staffId: string | number,
-  data: { access_rights?: string[]; access_override?: boolean; group_id?: string | null; action_permissions?: Record<string, boolean> }
+  data: { access_rights?: string[]; access_override?: boolean; group_id?: string | null; action_permissions?: Record<string, unknown> }
 ): Promise<UserProfile> => {
     const body: Record<string, unknown> = {
         main_id: API_MAIN_ID,

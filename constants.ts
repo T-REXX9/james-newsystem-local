@@ -1,6 +1,6 @@
 
 
-import { Contact, DealStage, PipelineDeal, PipelineColumn, CustomerStatus, Product, Task, ReorderReportEntry, CallLogEntry, Inquiry, Purchase, TeamMessage, Notification } from './types';
+import { Contact, DealStage, PipelineDeal, PipelineColumn, CustomerStatus, Product, Task, ReorderReportEntry, CallLogEntry, Inquiry, Purchase, TeamMessage, Notification, type ActionPermissionEntry, type PageActionPermissions } from './types';
 
 // Default access rights are expressed in terms of canonical hierarchical module IDs
 export const DEFAULT_STAFF_ACCESS_RIGHTS = [
@@ -131,12 +131,45 @@ export const DEFAULT_ACTION_PERMISSIONS = {
 
 export type ActionPermissionName = keyof typeof DEFAULT_ACTION_PERMISSIONS;
 
+const normalizeActionPermissions = (permissions?: PageActionPermissions | null): Partial<ActionPermissionEntry> => {
+  if (!permissions) return {};
+  if (permissions.global) return permissions.global;
+  return permissions;
+};
+
+export const getPageActionPermissions = (
+  permissions: PageActionPermissions | null | undefined,
+  pageLabel?: string | null
+): ActionPermissionEntry => {
+  const legacy = normalizeActionPermissions(permissions);
+  const page = pageLabel && permissions?.pages ? permissions.pages[pageLabel] : undefined;
+  return {
+    ...DEFAULT_ACTION_PERMISSIONS,
+    ...legacy,
+    ...(page || {}),
+  };
+};
+
+export const setPageActionPermission = (
+  permissions: PageActionPermissions | null | undefined,
+  pageLabel: string,
+  action: ActionPermissionName,
+  enabled: boolean
+): PageActionPermissions => {
+  const current = getPageActionPermissions(permissions, pageLabel);
+  const legacy = normalizeActionPermissions(permissions);
+  const pages = { ...(permissions?.pages || {}) };
+  pages[pageLabel] = { ...current, [action]: enabled };
+  return { global: { ...DEFAULT_ACTION_PERMISSIONS, ...legacy }, pages };
+};
+
 export const hasActionPermission = (
-  user: { role?: string | null; user_type?: string | number | null; action_permissions?: Partial<Record<ActionPermissionName, boolean>> } | null | undefined,
-  action: ActionPermissionName
+  user: { role?: string | null; user_type?: string | number | null; action_permissions?: PageActionPermissions } | null | undefined,
+  action: ActionPermissionName,
+  pageLabel?: string | null
 ): boolean => {
   if (isMasterUserAccount(user)) return true;
-  return user?.action_permissions?.[action] ?? DEFAULT_ACTION_PERMISSIONS[action];
+  return getPageActionPermissions(user?.action_permissions, pageLabel)[action];
 };
 
 /** Extra Dashboards pages visible only to Master User / owner accounts. */

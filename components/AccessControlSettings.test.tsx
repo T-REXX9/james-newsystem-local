@@ -91,18 +91,11 @@ describe('AccessControlSettings - create staff account', () => {
         group_id: '2',
         access_rights: [...homePages, ...expandAccessModule('warehouse')],
         access_override: true,
-        action_permissions: {
-          can_add: true,
-          can_edit: true,
-          can_delete: true,
-          can_post: true,
-          can_unpost: true,
-        },
       })
     );
   });
 
-  it('saves disabled action permissions independently from page access', async () => {
+  it('saves disabled action permissions for one page without changing another page', async () => {
     const user = userEvent.setup();
     fetchProfilesMock.mockResolvedValue({
       items: [{
@@ -119,16 +112,29 @@ describe('AccessControlSettings - create staff account', () => {
 
     renderWithProviders(<AccessControlSettings />);
 
-    await user.click(await screen.findByRole('checkbox', { name: 'Edit action permission for melson' }));
+    await user.click(await screen.findByText('Sales', { selector: 'span' }));
+    await user.click(await screen.findByRole('checkbox', { name: 'Sales Inquiry page access for melson' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Edit action permission for Sales Inquiry for melson' }));
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(updateProfileMock).toHaveBeenCalledWith('2', expect.objectContaining({
       action_permissions: {
-        can_add: true,
-        can_edit: false,
-        can_delete: true,
-        can_post: true,
-        can_unpost: true,
+        global: {
+          can_add: true,
+          can_edit: true,
+          can_delete: true,
+          can_post: true,
+          can_unpost: true,
+        },
+        pages: {
+          'Sales Inquiry': {
+            can_add: true,
+            can_edit: false,
+            can_delete: true,
+            can_post: true,
+            can_unpost: true,
+          },
+        },
       },
     })));
   });

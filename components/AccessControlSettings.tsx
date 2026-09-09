@@ -17,6 +17,8 @@ import {
   DEFAULT_STAFF_ROLE,
   MODULE_ID_ALIASES,
   ROLE_DEFAULT_ACCESS_RIGHTS,
+  getPageActionPermissions,
+  setPageActionPermission,
   isCompanyOwnerRole,
 } from '../constants';
 import {
@@ -130,6 +132,7 @@ const AccessControlSettings: React.FC = () => {
   const [totalProfiles, setTotalProfiles] = useState(0);
 
   const [permissionChanges, setPermissionChanges] = useState<Record<string, boolean>>({}); // tracks per-user whether access_rights were manually edited
+  const [actionPermissionChanges, setActionPermissionChanges] = useState<Record<string, boolean>>({});
   const [expandedModules, setExpandedModules] = useState<Record<string, string[]>>({});
 
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
@@ -260,22 +263,16 @@ const AccessControlSettings: React.FC = () => {
       return { ...profile, access_rights: toggleAccessPage(profile.access_rights || [], pageId, enabled), access_override: true };
     }));
     setPermissionChanges((prev) => ({ ...prev, [userId]: true }));
+    setActionPermissionChanges((prev) => ({ ...prev, [userId]: true }));
   };
 
-  const handleActionPermissionToggle = (
-    userId: string,
-    permission: keyof typeof DEFAULT_ACTION_PERMISSIONS,
-    enabled: boolean
-  ) => {
+  const handleActionPermissionToggle = (userId: string, pageLabel: string, permission: keyof typeof DEFAULT_ACTION_PERMISSIONS, enabled: boolean) => {
     setProfiles((prevProfiles) => prevProfiles.map((profile) => {
       if (profile.id !== userId) return profile;
       return {
         ...profile,
         action_permissions: {
-          ...DEFAULT_ACTION_PERMISSIONS,
-          ...(profile.action_permissions || {}),
-          [permission]: enabled,
-          ...(permission === 'can_post' ? { can_unpost: enabled } : {}),
+          ...setPageActionPermission(profile.action_permissions, pageLabel, permission, enabled),
         },
       };
     }));
@@ -294,16 +291,18 @@ const AccessControlSettings: React.FC = () => {
   const savePermissions = async (user: UserProfile) => {
     const hasPermOverride = permissionChanges[user.id] || false;
     const nextRights = canonicalizeAccessRights(user.access_rights || []);
+    const actionPermissions = user.action_permissions?.pages || user.action_permissions?.global
+      ? user.action_permissions
+      : actionPermissionChanges[user.id]
+        ? { global: { ...DEFAULT_ACTION_PERMISSIONS, ...(user.action_permissions || {}) }, pages: {} }
+        : undefined;
     setSavingId(user.id);
     try {
       await updateProfileLocal(user.id, {
         group_id: user.group_id ?? null,
         access_rights: nextRights,
         access_override: hasPermOverride,
-        action_permissions: {
-          ...DEFAULT_ACTION_PERMISSIONS,
-          ...(user.action_permissions || {}),
-        },
+        ...(actionPermissions ? { action_permissions: actionPermissions } : {}),
       });
       setProfiles((prev) =>
         prev.map((profile) =>
@@ -318,6 +317,7 @@ const AccessControlSettings: React.FC = () => {
         )
       );
       setPermissionChanges((prev) => ({ ...prev, [user.id]: false }));
+      setActionPermissionChanges((prev) => ({ ...prev, [user.id]: false }));
       await new Promise((resolve) => setTimeout(resolve, 300));
       await loadGroups();
       addToast({
@@ -339,9 +339,9 @@ const AccessControlSettings: React.FC = () => {
     }
   };
 
-  const handleCreateGroup = async (data: { name: string; description: string; access_rights: string[] }) => {
+  const handleCreateGroup = async (data: { name: string; description: string; access_rights: string[]; action_permissions: AccessGroup['action_permissions'] }) => {
     try {
-      const created = await createAccessGroup(data.name, data.description, data.access_rights);
+      const created = await createAccessGroup(data.name, data.description, data.access_rights, data.action_permissions);
       setGroups((prev) => canonicalizeGroups([...prev, created]));
       addToast({
         type: 'success',
@@ -362,7 +362,7 @@ const AccessControlSettings: React.FC = () => {
 
   const handleUpdateGroup = async (
     id: string,
-    data: { name: string; description: string; access_rights: string[] }
+    data: { name: string; description: string; access_rights: string[]; action_permissions: AccessGroup['action_permissions'] }
   ) => {
     try {
       const updated = await updateAccessGroup(id, data);
@@ -666,7 +666,7 @@ const AccessControlSettings: React.FC = () => {
                     const originalProfile = originalProfiles.find((profile) => profile.id === user.id);
                     const groupChanged = (user.group_id || null) !== (originalProfile?.group_id || null);
                     const permissionsEdited = permissionChanges[user.id] || false;
-                    const hasChanges = groupChanged || permissionsEdited;
+                    const hasChanges = groupChanged || permissionsEdited || actionPermissionChanges[user.id];
 
                     return (
                       <tr key={user.id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
@@ -727,33 +727,6 @@ const AccessControlSettings: React.FC = () => {
 
                         <td className="border-l border-slate-100 p-4 align-top dark:border-slate-800">
                           <div className="space-y-2">
-                            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/60 dark:bg-amber-950/20">
-                              <p className="mb-2 text-xs font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300">
-                                Action permissions
-                              </p>
-                              <div className="grid gap-2 sm:grid-cols-2">
-                                {([
-                                  ['can_add', 'Add'],
-                                  ['can_edit', 'Edit'],
-                                  ['can_delete', 'Delete'],
-                                  ['can_post', 'Post / Unpost'],
-                                ] as const).map(([permission, label]) => {
-                                  const enabled = user.action_permissions?.[permission] ?? DEFAULT_ACTION_PERMISSIONS[permission];
-                                  return (
-                                    <label key={permission} className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200">
-                                      <input
-                                        type="checkbox"
-                                        checked={enabled}
-                                        disabled={isOwner}
-                                        aria-label={`${label} action permission for ${user.full_name}`}
-                                        onChange={(event) => handleActionPermissionToggle(user.id, permission, event.target.checked)}
-                                      />
-                                      {label}
-                                    </label>
-                                  );
-                                })}
-                              </div>
-                            </div>
                             {ACCESS_MODULES.map((module) => {
                               const moduleState = getAccessModuleState(module.id, effectiveCanonicalRights);
                               const isExpanded = (expandedModules[user.id] || []).includes(module.id);
@@ -775,7 +748,32 @@ const AccessControlSettings: React.FC = () => {
                                     {module.pages.map((pageItem) => {
                                       const isAllowed = isOwner || hasFullAccess || effectiveCanonicalRights.has(pageItem.id);
                                       const differsFromGroup = Boolean(permissionsEdited && assignedGroupRights && isAllowed !== (assignedGroupRights.has('*') || assignedGroupRights.has(pageItem.id)));
-                                      return <label key={pageItem.id} className={`flex items-center gap-2 rounded px-2 py-1 text-sm ${differsFromGroup ? 'bg-amber-50 dark:bg-amber-900/20' : ''}`}><input type="checkbox" checked={isAllowed} aria-label={`${pageItem.label} page access for ${user.full_name}`} disabled={isOwner} onChange={() => handlePagePermissionToggle(user.id, pageItem.id, !isAllowed)} />{pageItem.label}</label>;
+                                      const pageActions = pageItem.supportedActions || [];
+                                      const pageActionValues = getPageActionPermissions(user.action_permissions, pageItem.label);
+                                      return (
+                                        <div key={pageItem.id} className={`rounded px-2 py-2 ${differsFromGroup ? 'bg-amber-50 dark:bg-amber-900/20' : ''}`}>
+                                          <label className="flex items-center gap-2 text-sm">
+                                            <input type="checkbox" checked={isAllowed} aria-label={`${pageItem.label} page access for ${user.full_name}`} disabled={isOwner} onChange={() => handlePagePermissionToggle(user.id, pageItem.id, !isAllowed)} />
+                                            {pageItem.label}
+                                          </label>
+                                          {pageActions.length > 0 && (
+                                            <div className="ml-6 mt-1 grid gap-1 sm:grid-cols-2">
+                                              {([
+                                                ['can_add', 'Add'],
+                                                ['can_edit', 'Edit'],
+                                                ['can_delete', 'Delete'],
+                                                ['can_post', 'Post'],
+                                                ['can_unpost', 'Unpost'],
+                                              ] as const).filter(([permission]) => pageActions.includes(permission)).map(([permission, label]) => (
+                                                <label key={permission} className="flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-300">
+                                                  <input type="checkbox" checked={isOwner || pageActionValues[permission]} disabled={isOwner || !isAllowed} aria-label={`${label} action permission for ${pageItem.label} for ${user.full_name}`} onChange={(event) => handleActionPermissionToggle(user.id, pageItem.label, permission, event.target.checked)} />
+                                                  {label}
+                                                </label>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
                                     })}
                                   </div>}
                                 </div>

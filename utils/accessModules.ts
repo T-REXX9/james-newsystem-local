@@ -1,4 +1,5 @@
 import { TOPBAR_MENU_CONFIG } from './topbarMenuConfig';
+import type { ActionPermissionName } from '../constants';
 
 export interface AccessModule {
   id: string;
@@ -10,7 +11,14 @@ export interface AccessModule {
 export interface AccessPage {
   id: string;
   label: string;
+  supportedActions?: ActionPermissionName[];
 }
+
+const READ_ONLY_ROUTE_PARTS = ['report', 'dashboard', 'audit', 'activity-logs', 'call-records', 'sales-map', 'recycle-bin'];
+const supportedActionsForPage = (pageId: string): ActionPermissionName[] => {
+  if (READ_ONLY_ROUTE_PARTS.some((part) => pageId.includes(part))) return [];
+  return ['can_add', 'can_edit', 'can_delete', 'can_post', 'can_unpost'];
+};
 
 const moduleIds = ['home', 'warehouse', 'sales', 'accounting', 'maintenance', 'communication'] as const;
 
@@ -33,7 +41,7 @@ const pagesForMenu = (menuId: string): AccessPage[] => {
   return (menu.submenus || []).flatMap((submenu) =>
     submenu.items
       .filter((item) => !item.masterOnly)
-      .map((item) => ({ id: item.route, label: item.label }))
+      .map((item) => ({ id: item.route, label: item.label, supportedActions: supportedActionsForPage(item.route) }))
   );
 };
 

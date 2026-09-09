@@ -1,16 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, FolderPlus, Lock, Save, Trash2, Users } from 'lucide-react';
-import { MODULE_ID_ALIASES, isCoreAccessGroupName } from '../constants';
+import { DEFAULT_ACTION_PERMISSIONS, getPageActionPermissions, MODULE_ID_ALIASES, setPageActionPermission, isCoreAccessGroupName } from '../constants';
 import { ACCESS_MODULES, getAccessModuleState, toggleAccessModule, toggleAccessPage } from '../utils/accessModules';
 import { AccessGroup } from '../types';
 import ConfirmModal from './ConfirmModal';
 
 interface AccessGroupManagerProps {
   groups: AccessGroup[];
-  onCreateGroup: (data: { name: string; description: string; access_rights: string[] }) => Promise<void>;
+  onCreateGroup: (data: { name: string; description: string; access_rights: string[]; action_permissions: AccessGroup['action_permissions'] }) => Promise<void>;
   onUpdateGroup: (
     id: string,
-    data: { name: string; description: string; access_rights: string[] }
+    data: { name: string; description: string; access_rights: string[]; action_permissions: AccessGroup['action_permissions'] }
   ) => Promise<void>;
   onDeleteGroup: (id: string) => Promise<void>;
 }
@@ -40,6 +40,7 @@ const AccessGroupManager: React.FC<AccessGroupManagerProps> = ({
   const [draftName, setDraftName] = useState('');
   const [draftDescription, setDraftDescription] = useState('');
   const [draftRights, setDraftRights] = useState<string[]>([]);
+  const [draftActionPermissions, setDraftActionPermissions] = useState<AccessGroup['action_permissions']>({ global: { ...DEFAULT_ACTION_PERMISSIONS }, pages: {} });
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupDescription, setNewGroupDescription] = useState('');
@@ -54,6 +55,7 @@ const AccessGroupManager: React.FC<AccessGroupManagerProps> = ({
       setDraftName('');
       setDraftDescription('');
       setDraftRights([]);
+      setDraftActionPermissions({ global: { ...DEFAULT_ACTION_PERMISSIONS }, pages: {} });
       return;
     }
 
@@ -64,6 +66,7 @@ const AccessGroupManager: React.FC<AccessGroupManagerProps> = ({
     setDraftName(selected.name);
     setDraftDescription(selected.description || '');
     setDraftRights(canonicalizeRights(selected.access_rights));
+    setDraftActionPermissions(selected.action_permissions || { global: { ...DEFAULT_ACTION_PERMISSIONS }, pages: {} });
   }, [groups, selectedGroupId]);
 
   const selectedGroup = useMemo(
@@ -93,6 +96,7 @@ const AccessGroupManager: React.FC<AccessGroupManagerProps> = ({
         name,
         description: newGroupDescription.trim(),
         access_rights: [],
+        action_permissions: { global: { ...DEFAULT_ACTION_PERMISSIONS }, pages: {} },
       });
       setNewGroupName('');
       setNewGroupDescription('');
@@ -111,6 +115,7 @@ const AccessGroupManager: React.FC<AccessGroupManagerProps> = ({
         name: draftName.trim(),
         description: draftDescription.trim(),
         access_rights: canonicalizeRights(draftRights),
+        action_permissions: draftActionPermissions,
       });
     } finally {
       setIsSaving(false);
@@ -307,10 +312,20 @@ const AccessGroupManager: React.FC<AccessGroupManagerProps> = ({
                   </label>
                   <div className="mt-3 grid gap-2 pl-7 md:grid-cols-2">
                     {module.pages.map((page) => (
-                      <label key={page.id} className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-                        <input type="checkbox" checked={draftRights.includes(page.id) || draftRights.includes('*')} disabled={draftRights.includes('*')} onChange={(event) => togglePage(page.id, event.target.checked)} />
-                        {page.label}
-                      </label>
+                      <div key={page.id} className="rounded px-2 py-1">
+                        <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                          <input type="checkbox" checked={draftRights.includes(page.id) || draftRights.includes('*')} disabled={draftRights.includes('*')} onChange={(event) => togglePage(page.id, event.target.checked)} />
+                          {page.label}
+                        </label>
+                        {(page.supportedActions || []).length > 0 && <div className="ml-6 mt-1 grid gap-1 sm:grid-cols-2">
+                          {([
+                            ['can_add', 'Add'], ['can_edit', 'Edit'], ['can_delete', 'Delete'], ['can_post', 'Post'], ['can_unpost', 'Unpost'],
+                          ] as const).filter(([permission]) => page.supportedActions?.includes(permission)).map(([permission, label]) => {
+                            const values = getPageActionPermissions(draftActionPermissions, page.label);
+                            return <label key={permission} className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400"><input type="checkbox" checked={values[permission]} onChange={(event) => setDraftActionPermissions((current) => setPageActionPermission(current, page.label, permission, event.target.checked))} />{label}</label>;
+                          })}
+                        </div>}
+                      </div>
                     ))}
                   </div>
                   </div>

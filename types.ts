@@ -100,6 +100,19 @@ export type ActionPermissionEntry = {
   can_unpost: boolean;
 };
 
+export type PageActionPermissions = {
+  /** Legacy account-wide values, retained as the migration fallback. */
+  global?: Partial<ActionPermissionEntry>;
+  /** Page labels map to independent action permissions. */
+  pages?: Record<string, Partial<ActionPermissionEntry>>;
+  /** Legacy flat values from accounts saved before page-scoped permissions. */
+  can_add?: boolean;
+  can_edit?: boolean;
+  can_delete?: boolean;
+  can_post?: boolean;
+  can_unpost?: boolean;
+};
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -117,7 +130,7 @@ export interface UserProfile {
   birthday?: string;
   mobile?: string;
   monthly_quota?: number;
-  action_permissions?: ActionPermissionEntry; // Per-account action permissions
+  action_permissions?: PageActionPermissions; // Per-page action permissions, with legacy global fallback
 }
 
 export interface AccessGroup {
@@ -126,6 +139,7 @@ export interface AccessGroup {
   name: string;
   description?: string | null;
   access_rights: string[];
+  action_permissions?: PageActionPermissions;
   created_at?: string;
   assigned_staff_count?: number;
   /** Built-in role group that the API recreates and will not permanently delete. */
