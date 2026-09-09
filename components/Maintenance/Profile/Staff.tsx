@@ -1,20 +1,22 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Edit2, Trash2, X, Plus } from 'lucide-react';
+import { Search, Edit2, Trash2, X, Plus, KeyRound } from 'lucide-react';
 import { useToast } from '../../ToastProvider';
 import { useDebounce } from '../../../hooks/useDebounce';
 import {
     fetchStaff,
     createStaff,
     updateStaff,
+    changeStaffPassword,
     deleteStaff,
     StaffRecord,
     StaffUpdateInput,
 } from '../../../services/staffLocalApiService';
 import { fetchTeams, TeamRecord } from '../../../services/teamLocalApiService';
-import { ROLE_DEFAULT_ACCESS_RIGHTS } from '../../../constants';
+import { isMasterUserAccount, ROLE_DEFAULT_ACCESS_RIGHTS } from '../../../constants';
 import { AccessGroup } from '../../../types';
 import { fetchAccessGroups } from '../../../services/accessGroupApiService';
 import HighLevelDeleteModal from '../../HighLevelDeleteModal';
+import { getLocalAuthSession } from '../../../services/localAuthService';
 
 interface StaffFormProps {
     initialData?: StaffRecord | null;
@@ -236,6 +238,11 @@ export default function Staff() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<StaffRecord | null>(null);
     const [deactivateTarget, setDeactivateTarget] = useState<StaffRecord | null>(null);
+    const [passwordTarget, setPasswordTarget] = useState<StaffRecord | null>(null);
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [passwordLoading, setPasswordLoading] = useState(false);
+    const canChangeStaffPassword = isMasterUserAccount(getLocalAuthSession()?.userProfile || null);
 
     const loadData = useCallback(async () => {
         setLoading(true);
@@ -279,6 +286,36 @@ export default function Staff() {
                 description: error instanceof Error ? error.message : 'An unexpected error occurred.',
                 durationMs: 6000,
             });
+        }
+    };
+
+    const closePasswordModal = () => {
+        setPasswordTarget(null);
+        setNewPassword('');
+        setConfirmPassword('');
+    };
+
+    const handlePasswordChange = async (event: React.FormEvent) => {
+        event.preventDefault();
+        if (!passwordTarget) return;
+        if (newPassword.length < 8) {
+            addToast({ type: 'error', title: 'Invalid password', description: 'Password must be at least 8 characters.', durationMs: 5000 });
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            addToast({ type: 'error', title: 'Passwords do not match', description: 'Enter the same password in both fields.', durationMs: 5000 });
+            return;
+        }
+
+        setPasswordLoading(true);
+        try {
+            await changeStaffPassword(passwordTarget.id, newPassword);
+            addToast({ type: 'success', title: 'Password changed', description: `${passwordTarget.full_name}'s sessions and registered phones were signed out.`, durationMs: 5000 });
+            closePasswordModal();
+        } catch (error) {
+            addToast({ type: 'error', title: 'Unable to change password', description: error instanceof Error ? error.message : 'An unexpected error occurred.', durationMs: 6000 });
+        } finally {
+            setPasswordLoading(false);
         }
     };
 
@@ -386,7 +423,20 @@ export default function Staff() {
                                             </td>
                                             <td className="px-6 py-4 text-right text-sm font-medium">
                                                 <div className="flex justify-end gap-2">
+                                                    {canChangeStaffPassword && <button
+                                                        type="button"
+                                                        aria-label={`Change password for ${staff.full_name}`}
+                                                        onClick={() => {
+                                                            setPasswordTarget(staff);
+                                                            setNewPassword('');
+                                                            setConfirmPassword('');
+                                                        }}
+                                                        className="p-1 text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300 transition-colors"
+                                                    >
+                                                        <KeyRound size={16} />
+                                                    </button>}
                                                     <button
+                                                        type="button"
                                                         onClick={() => {
                                                             setEditingItem(staff);
                                                             setIsModalOpen(true);
@@ -443,6 +493,34 @@ export default function Staff() {
                                 }}
                             />
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {passwordTarget && (
+                <div className="fixed inset-0 z-[2100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+                        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Change Staff Password</h3>
+                            <button type="button" aria-label="Close password modal" onClick={closePasswordModal} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <form onSubmit={handlePasswordChange} className="p-6 space-y-4">
+                            <p className="text-sm text-gray-600 dark:text-gray-300">Set a new password for <strong>{passwordTarget.full_name}</strong>. Their current sessions and registered phones will be signed out.</p>
+                            <div>
+                                <label htmlFor="staff-new-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">New Password</label>
+                                <input id="staff-new-password" required minLength={8} type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="mt-1 block w-full rounded-md border-gray-300 bg-white p-2 shadow-sm dark:border-gray-600 dark:bg-gray-700" />
+                            </div>
+                            <div>
+                                <label htmlFor="staff-confirm-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Confirm New Password</label>
+                                <input id="staff-confirm-password" required minLength={8} type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="mt-1 block w-full rounded-md border-gray-300 bg-white p-2 shadow-sm dark:border-gray-600 dark:bg-gray-700" />
+                            </div>
+                            <div className="flex justify-end gap-3 pt-2">
+                                <button type="button" onClick={closePasswordModal} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600">Cancel</button>
+                                <button type="submit" disabled={passwordLoading} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 disabled:opacity-50">{passwordLoading ? 'Changing...' : 'Change Password'}</button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}

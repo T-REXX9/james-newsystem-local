@@ -143,6 +143,14 @@ export const updateStaff = async (staffId: string | number, data: StaffUpdateInp
     return payload?.data;
 };
 
+export const changeStaffPassword = async (staffId: string | number, newPassword: string): Promise<void> => {
+    await requestJson(`${API_BASE_URL}/staff/${staffId}/password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ main_id: API_MAIN_ID, new_password: newPassword }),
+    });
+};
+
 export const deleteStaff = async (staffId: string | number): Promise<void> => {
     const query = new URLSearchParams({ main_id: String(API_MAIN_ID) });
     await requestJson(`${API_BASE_URL}/staff/${staffId}?${query.toString()}`, {
