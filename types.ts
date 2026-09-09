@@ -354,6 +354,7 @@ export interface Contact {
   isHidden: boolean; // "hide_unhide"
   debtType: 'Good' | 'Bad';
   comment: string; // General comment
+  duplicateOverrideReason?: string;
 
   // Nested Data
   contactPersons: ContactPerson[];

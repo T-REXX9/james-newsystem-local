@@ -83,6 +83,7 @@ interface ApiCustomerRow {
   preferred_brand?: string | null;
   profile_type?: string | null;
   notes?: string | null;
+  duplicate_override_reason?: string | null;
   contacts?: ApiContactPersonRow[] | null;
   contact_persons?: ApiContactPersonRow[] | null;
   terms_history?: ApiCustomerTermsRow[] | null;
@@ -340,6 +341,7 @@ export const mapApiCustomerToContact = (row: ApiCustomerRow): LocalContact => {
     isHidden: toNumber(row?.status, 1) === 0,
     debtType: String(row?.debt_type || 'Good').toLowerCase() === 'bad' ? 'Bad' : 'Good',
     comment: sanitizeLegacyString(row?.notes || ''),
+    duplicateOverrideReason: sanitizeLegacyString(row?.duplicate_override_reason || ''),
     contactPersons,
     name: primary?.name || company || 'N/A',
     title: primary?.position || '',
@@ -396,6 +398,8 @@ export const mapContactPayloadToApi = (contact: ContactPayloadWithSalesPersonId)
     preferred_brand: normalizePreferredBrand(contact?.preferredBrand),
     status,
     notes: String(contact?.comment || ''),
+    duplicate_override_reason: String(contact?.duplicateOverrideReason || ''),
+    duplicate_override_confirmed: String(contact?.duplicateOverrideReason || '').trim() !== '',
     debt_type: debtType,
     profile_type: status === 3 ? 'Prospect' : 'Old',
     verification: verificationForUiStatus(contact?.status as CustomerStatus | undefined)
@@ -517,6 +521,40 @@ const requestJson = async <T>(url: string, init?: RequestInit): Promise<T> => {
     throw new Error(await parseApiErrorMessage(response));
   }
   return (await response.json()) as T;
+};
+
+export interface SimilarCustomerNameMatch {
+  session_id?: string;
+  company: string;
+  status?: string;
+  profile_type?: string;
+  matched_fields?: string[];
+  is_blacklisted: boolean;
+  is_exact: boolean;
+}
+
+export const fetchSimilarCustomerNames = async (
+  company: string,
+  details: Partial<Contact> = {},
+  excludeSessionId?: string,
+): Promise<SimilarCustomerNameMatch[]> => {
+  const query = new URLSearchParams({
+    main_id: String(API_MAIN_ID),
+    company: company.trim(),
+    tin: String(details.tin || ''),
+    phone: String(details.phone || ''),
+    mobile: String(details.mobile || ''),
+    address: String(details.address || ''),
+    delivery_address: String(details.deliveryAddress || ''),
+    city: String(details.city || ''),
+    province: String(details.province || ''),
+  });
+  if (excludeSessionId) query.set('exclude_session_id', excludeSessionId);
+
+  const payload = await requestJson<{ data?: { items?: SimilarCustomerNameMatch[] } }>(
+    `${API_BASE_URL}/customer-database/name-check?${query.toString()}`
+  );
+  return Array.isArray(payload?.data?.items) ? payload.data.items : [];
 };
 
 export const fetchContacts = async (): Promise<Contact[]> => {

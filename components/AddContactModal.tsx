@@ -11,6 +11,7 @@ import { validateMaxLength, validateOptionalEmail, validateOptionalPhone, valida
 import { parseSupabaseError } from '../utils/errorHandler';
 import { formatCustomerSince } from '../utils/formatUtils';
 import { useToast } from './ToastProvider';
+import { fetchSimilarCustomerNames, type SimilarCustomerNameMatch } from '../services/customerDatabaseLocalApiService';
 
 const TRANSACTION_TYPE_OPTIONS = ['Order Slip', 'Invoice'] as const;
 
@@ -54,6 +55,9 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [submitCount, setSubmitCount] = useState(0);
+  const [similarNameMatches, setSimilarNameMatches] = useState<SimilarCustomerNameMatch[]>([]);
+  const [checkingCompanyName, setCheckingCompanyName] = useState(false);
+  const [duplicateOverrideReason, setDuplicateOverrideReason] = useState('');
   const { addToast } = useToast();
   
   type ContactPersonDraft = Omit<ContactPerson, 'id'> & { id?: string };
@@ -177,6 +181,8 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     if (!isOpen) return;
     setLoading(false);
     setSubmitError(null);
+    setSimilarNameMatches([]);
+    setDuplicateOverrideReason('');
     if (isEditMode && initialData) {
       setFormData(buildFormDataFromContact(initialData));
       setContactPersons(buildContactPersonsFromContact(initialData));
@@ -277,6 +283,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
         isHidden: !!formData.isHidden,
         debtType: (formData.debtType as any) || 'Good',
         comment: formData.comment || '',
+        duplicateOverrideReason: duplicateOverrideReason.trim(),
 
         // Nested Data
         contactPersons: fullContactPersons,
@@ -301,6 +308,11 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
         is_deleted: isDeleted,
       };
 
+      if (!isEditMode && similarNameMatches.length > 0 && duplicateOverrideReason.trim() === '') {
+        setSubmitError('A matching or similar customer was found. Enter a reason before continuing.');
+        setLoading(false);
+        return;
+      }
       await onSubmit(newContact);
       if (enableToasts) {
         const successToast = toastOverrides?.success;
@@ -327,6 +339,27 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const checkCompanyName = async (company: string) => {
+    const trimmed = company.trim();
+    if (!trimmed) {
+      setSimilarNameMatches([]);
+      return;
+    }
+    setCheckingCompanyName(true);
+    try {
+      const matches = await fetchSimilarCustomerNames(trimmed, {
+        ...formData,
+        phone: contactPersons[0]?.telephone || '',
+        mobile: contactPersons[0]?.mobile || '',
+      }, isEditMode ? initialData?.id : undefined);
+      setSimilarNameMatches(matches);
+    } catch {
+      // Name checks are advisory; the server-side uniqueness guard remains authoritative.
+    } finally {
+      setCheckingCompanyName(false);
     }
   };
 
@@ -427,7 +460,10 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                              className={`input ${validationErrors.company ? 'border-rose-500' : ''}`}
                              value={formData.company}
                              onChange={e => setFormData({...formData, company: e.target.value})}
-                             onBlur={e => handleBlur('company', e.target.value)}
+                             onBlur={e => {
+                               handleBlur('company', e.target.value);
+                               void checkCompanyName(e.target.value);
+                             }}
                              placeholder="e.g. Acme Corp"
                            />
                            <FieldHelp
@@ -436,6 +472,31 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                            />
                            {validationErrors.company && (
                              <div className="mt-1 text-xs text-rose-600">{validationErrors.company}</div>
+                           )}
+                           {similarNameMatches.length > 0 && (
+                             <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900" role="status">
+                               <div className="font-semibold">Possible existing customer name{similarNameMatches.length > 1 ? 's' : ''} found{checkingCompanyName ? '…' : ':'}</div>
+                               {!checkingCompanyName && similarNameMatches.map((match) => (
+                                 <div key={`${match.session_id || match.company}-${match.is_blacklisted ? 'blocked' : 'customer'}`}>
+                                   <div>{match.company}{match.is_blacklisted ? ' — Do Not Contact' : ''}</div>
+                                   {match.matched_fields?.length ? <div className="text-amber-800">Matched: {match.matched_fields.join(', ')}</div> : null}
+                                 </div>
+                               ))}
+                               {!isEditMode && (
+                                 <div className="mt-2">
+                                   <label className="label normal-case">Reason for adding a separate record *</label>
+                                   <textarea
+                                     className="input"
+                                     rows={2}
+                                     value={duplicateOverrideReason}
+                                     onChange={e => setDuplicateOverrideReason(e.target.value)}
+                                     placeholder="e.g. Different contact number or different address"
+                                     aria-label="Reason for adding a separate record"
+                                   />
+                                   <div className="mt-1 text-[11px] text-amber-800">Review the possible match before continuing.</div>
+                                 </div>
+                               )}
+                             </div>
                            )}
                        </div>
                        <div>
@@ -479,7 +540,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="md:col-span-3">
                           <label className="label">Address (Street/Bldg)</label>
-                          <input className="input" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
+                          <input className="input" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} onBlur={() => void checkCompanyName(formData.company || '')} />
                       </div>
                       <div>
                           <label className="label">Province</label>
@@ -677,7 +738,11 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                                          className={`input ${idx === 0 && validationErrors.primaryMobile ? 'border-rose-500' : ''}`}
                                          value={person.mobile}
                                          onChange={e => handleContactPersonChange(idx, 'mobile', e.target.value)}
-                                         onBlur={e => idx === 0 && handleBlur('primaryMobile', e.target.value)}
+                                         onBlur={e => {
+                                           if (idx !== 0) return;
+                                           handleBlur('primaryMobile', e.target.value);
+                                           void checkCompanyName(formData.company || '');
+                                         }}
                                        />
                                        {idx === 0 && validationErrors.primaryMobile && (
                                          <div className="mt-1 text-xs text-rose-600">{validationErrors.primaryMobile}</div>
