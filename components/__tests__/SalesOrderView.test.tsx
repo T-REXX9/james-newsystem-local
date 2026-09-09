@@ -11,6 +11,8 @@ const getSalesOrderMock = vi.fn();
 const fetchContactsMock = vi.fn();
 const fetchContactByIdMock = vi.fn();
 const fetchProfilesMock = vi.fn();
+const getLedgerMock = vi.fn();
+const getVipTierConfigMock = vi.fn();
 
 vi.mock('html2canvas', () => ({
   default: (...args: any[]) => html2canvasMock(...args),
@@ -37,6 +39,14 @@ vi.mock('../../services/localAuthService', () => ({
 vi.mock('../../services/localDataService', () => ({
   dispatchWorkflowNotification: vi.fn(),
   fetchProfiles: (...args: any[]) => fetchProfilesMock(...args),
+}));
+
+vi.mock('../../services/customerLedgerService', () => ({
+  customerLedgerService: { getLedger: (...args: any[]) => getLedgerMock(...args) },
+}));
+
+vi.mock('../../services/vipTierSettingsService', () => ({
+  getVipTierConfig: (...args: any[]) => getVipTierConfigMock(...args),
 }));
 
 vi.mock('../../services/notificationLocalApiService', () => ({
@@ -97,6 +107,12 @@ describe('SalesOrderView', () => {
     fetchProfilesMock.mockResolvedValue([]);
     fetchContactByIdMock.mockResolvedValue(null);
     getSalesOrderMock.mockResolvedValue(null);
+    getLedgerMock.mockResolvedValue({ metrics: { ishinomoto_sales: 7800, monthly_sales: 29460 } });
+    getVipTierConfigMock.mockResolvedValue({
+      one_time_discount_threshold: 10000,
+      unlimited_discount_threshold: 30000,
+      discount_percentage: 10,
+    });
   });
 
   afterEach(() => {
@@ -146,6 +162,40 @@ describe('SalesOrderView', () => {
     ['Date', 'Customer', 'SI No.', 'SO No.', 'Transaction No.', 'Sales Person', 'Status'].forEach((heading) => {
       expect(within(list).getByText(heading)).toBeVisible();
     });
+  });
+
+  it('shows the customer summary bar with the Sales Inquiry metrics', async () => {
+    const order = makeOrder({ id: 'summary-order', order_no: 'SO-SUMMARY', sales_date: '2026-09-09' });
+    getAllSalesOrdersMock.mockResolvedValue([order]);
+    getSalesOrderMock.mockResolvedValue(order);
+    const customer = {
+      id: 'contact-1',
+      company: 'Acme Corp',
+      transactionType: 'Invoice',
+      customerSince: '2013-06-01',
+      creditLimit: 50000,
+      terms: '90DAYS PDC',
+      balance: 4556911.24,
+      priceCode: 'VIP 1',
+      discountCode: 'vip gold',
+      preferredBrand: 'ishinomoto',
+    };
+    fetchContactsMock.mockResolvedValue([customer]);
+    fetchContactByIdMock.mockResolvedValue(customer);
+
+    renderView({ initialOrderId: order.id });
+
+    const summary = await screen.findByTestId('sales-order-customer-summary');
+    ['Ishinomoto Sales', 'VIP Silver remaining', 'VIP Gold remaining', 'Total Sales for September', 'Customer Since', 'Credit Limit', 'Terms', 'Balance', 'Price Code', 'Discount Code', 'Preferred Brand'].forEach((label) => {
+      expect(within(summary).getByText(label)).toBeVisible();
+    });
+    await waitFor(() => expect(within(summary).getByText('₱7,800')).toBeVisible());
+    expect(within(summary).getByText('₱29,460')).toBeVisible();
+    expect(within(summary).getByText('Jun 1 2013')).toBeVisible();
+    expect(within(summary).getByText('VIP 1')).toBeVisible();
+    expect(within(summary).getByText('vip gold')).toBeVisible();
+    expect(within(summary).getByText('Ishinomoto')).toBeVisible();
+    expect(getLedgerMock).toHaveBeenCalledWith('contact-1', { reportType: 'summary', dateType: 'all' });
   });
 
   it('loads the redirected sales order even when it is not present in the initial list page', async () => {

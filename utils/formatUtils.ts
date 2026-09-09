@@ -1,5 +1,7 @@
 import { format } from 'date-fns';
 
+export const DISPLAY_TIME_ZONE = 'Asia/Manila';
+
 export const formatCurrency = (value: number, withDecimals: boolean = false) =>
   new Intl.NumberFormat('en-PH', {
     style: 'currency',
@@ -11,10 +13,10 @@ export const formatCurrency = (value: number, withDecimals: boolean = false) =>
 const parseDisplayDate = (value: string | Date): Date | null => {
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
 
-  // Date-only values are calendar dates, not UTC timestamps. Parsing them at
-  // local noon prevents a user's timezone from moving the displayed day.
+  // Date-only values are calendar dates, not timestamps. Use UTC noon so the
+  // Manila display timezone cannot move the displayed day backward or forward.
   const parsed = /^\d{4}-\d{2}-\d{2}$/.test(value)
-    ? new Date(`${value}T12:00:00`)
+    ? new Date(`${value}T12:00:00Z`)
     : new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
@@ -24,7 +26,7 @@ export const formatDate = (value?: string | Date | null) => {
   if (!value) return '—';
   const parsed = parseDisplayDate(value);
   if (!parsed) return '—';
-  return parsed.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+  return parsed.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric', timeZone: DISPLAY_TIME_ZONE });
 };
 
 /** Staff-facing Customer Since: abbreviated month, day without leading zero, year. */
@@ -50,6 +52,7 @@ export const formatDateTime = (value?: string | Date | null) => {
     year: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    timeZone: DISPLAY_TIME_ZONE,
   });
 };
 

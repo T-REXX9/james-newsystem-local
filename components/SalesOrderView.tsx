@@ -42,9 +42,15 @@ import CallCustomerButton from './CallCustomerButton';
 import SalesOrderPrintPreview from './SalesOrderPrintPreview';
 import { exportPrintSheetAsJpeg } from '../utils/exportPrintSheetJpeg';
 import { persistedVipDiscount } from '../utils/vipDocumentDiscount';
-import { formatCustomerSince } from '../utils/formatUtils';
+import { formatCustomerSince, formatDate as formatDisplayDate } from '../utils/formatUtils';
 import VipDocumentTotals from './VipDocumentTotals';
 import { canPerformAction } from '../utils/actionPermissions';
+import { formatPreferredBrand } from '../constants/customerPreferredBrand';
+import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
+import { buildSalesInquiryCustomerSummary } from '../utils/salesInquirySummary';
+import { getVipTierConfig } from '../services/vipTierSettingsService';
+import { customerLedgerService } from '../services/customerLedgerService';
+import type { VipTierConfig } from '../types';
 
 interface SalesOrderViewProps {
   initialOrderId?: string;
@@ -99,10 +105,7 @@ const sortByLatestOrder = (a: SalesOrder, b: SalesOrder): number => {
 };
 
 const formatDate = (value?: string | null): string => {
-  if (!value) return '-';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+  return formatDisplayDate(value);
 };
 
 const formatCurrency = (value?: number | string | null): string => {
@@ -146,6 +149,11 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
   const [exportingJpeg, setExportingJpeg] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [jpegCaptureMode, setJpegCaptureMode] = useState(false);
+  const [vipConfig, setVipConfig] = useState<VipTierConfig>(DEFAULT_VIP_TIER_CONFIG);
+  const [postedSales, setPostedSales] = useState({
+    ishinomotoSales: null as number | null,
+    currentMonthSales: null as number | null,
+  });
 
   useEffect(() => {
     if (!initialMonth || !initialYear) return;
@@ -416,6 +424,37 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
       });
     return () => {
       active = false;
+    };
+  }, [selectedOrder?.contact_id]);
+
+  useEffect(() => {
+    void getVipTierConfig().then(setVipConfig).catch(() => setVipConfig(DEFAULT_VIP_TIER_CONFIG));
+  }, []);
+
+  useEffect(() => {
+    const customerId = selectedOrder?.contact_id;
+    if (!customerId) {
+      setPostedSales({ ishinomotoSales: null, currentMonthSales: null });
+      return;
+    }
+
+    let cancelled = false;
+    setPostedSales({ ishinomotoSales: null, currentMonthSales: null });
+    void customerLedgerService
+      .getLedger(customerId, { reportType: 'summary', dateType: 'all' })
+      .then((ledger) => {
+        if (cancelled) return;
+        setPostedSales({
+          ishinomotoSales: ledger.metrics.ishinomoto_sales,
+          currentMonthSales: ledger.metrics.monthly_sales,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setPostedSales({ ishinomotoSales: null, currentMonthSales: null });
+      });
+
+    return () => {
+      cancelled = true;
     };
   }, [selectedOrder?.contact_id]);
 
@@ -782,7 +821,8 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
     return `${MONTH_OPTIONS[targetMonthYear.month - 1]} ${targetMonthYear.year}`;
   }, [targetMonthYear.month, targetMonthYear.year]);
 
-  const currentMonthLabel = new Date(selectedOrder?.sales_date || Date.now()).toLocaleDateString('en-PH', { month: 'long' });
+  const currentMonthLabel = new Intl.DateTimeFormat('en-PH', { month: 'long', timeZone: 'Asia/Manila' })
+    .format(new Date(selectedOrder?.sales_date || Date.now()));
   const summaryCustomer = selectedCustomer as (Contact & {
     dealershipSales?: number;
     monthlySales?: number;
@@ -800,6 +840,40 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
     if (isCurrency && Number.isFinite(numericValue)) return formatCurrency(numericValue);
     return String(value).trim() || '—';
   };
+  const summaryCells = useMemo(
+    () => buildSalesInquiryCustomerSummary({
+      selected: Boolean(selectedCustomer),
+      ishinomotoSales: postedSales.ishinomotoSales,
+      currentMonthSales: postedSales.currentMonthSales,
+      customerSince: summaryCustomer?.since || summaryCustomer?.customerSince || null,
+      creditLimit: selectedOrderCreditLimit,
+      terms: selectedOrder?.terms || selectedCustomer?.terms || null,
+      balance: selectedCustomer ? selectedOrderBalance : null,
+      priceCode: selectedCustomer ? (summaryCustomer?.priceCode || summaryCustomer?.priceGroup || selectedOrder?.price_group || null) : null,
+      discountCode: selectedCustomer ? (summaryCustomer?.discountCode || 'regular') : null,
+      preferredBrand: selectedCustomer ? formatPreferredBrand(summaryCustomer?.preferredBrand) : null,
+      monthLabel: currentMonthLabel,
+      vipConfig,
+    }),
+    [
+      currentMonthLabel,
+      postedSales.currentMonthSales,
+      postedSales.ishinomotoSales,
+      selectedCustomer,
+      selectedOrder?.price_group,
+      selectedOrder?.terms,
+      selectedOrderBalance,
+      selectedOrderCreditLimit,
+      summaryCustomer?.customerSince,
+      summaryCustomer?.discountCode,
+      summaryCustomer?.preferredBrand,
+      summaryCustomer?.priceCode,
+      summaryCustomer?.priceGroup,
+      summaryCustomer?.since,
+      summaryCustomer?.terms,
+      vipConfig,
+    ]
+  );
   const orderRowTone = (order: SalesOrder) => {
     const normalizedStatus = normalizeStatus(order.status);
     if (normalizedStatus === 'cancelled') return 'text-red-600';
@@ -979,14 +1053,10 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
 
           <div className="px-[25px] pb-[28px] pt-[31px]">
             <div className="mb-[18px] overflow-x-auto">
-              <table className="w-full min-w-[800px] table-fixed border-collapse text-center text-[13px]">
-                <thead><tr>{['Since', 'Class Code', 'Quota', 'Terms', 'Balance'].map((label) => <th key={label} className="border border-[#d7d7d7] px-2 py-[9px] font-normal">{label}</th>)}</tr></thead>
+              <table data-testid="sales-order-customer-summary" className="w-full min-w-[1100px] table-fixed border-collapse text-center text-[13px]">
+                <thead><tr>{summaryCells.map((cell) => <th key={cell.label} className="border border-[#d7d7d7] px-2 py-[9px] font-normal">{cell.label}</th>)}</tr></thead>
                 <tbody><tr>
-                  <td className="border border-[#d7d7d7] px-2 py-2">{legacyMetric(summaryCustomer?.since || summaryCustomer?.customerSince)}</td>
-                  <td className="border border-[#d7d7d7] px-2 py-2">{legacyMetric(summaryCustomer?.classCode)}</td>
-                  <td className="border border-[#d7d7d7] px-2 py-2">{legacyMetric(summaryCustomer?.quota ?? summaryCustomer?.dealershipQuota)}</td>
-                  <td className="border border-[#d7d7d7] px-2 py-2">{legacyMetric(selectedOrder?.terms || selectedCustomer?.terms)}</td>
-                  <td className="border border-[#d7d7d7] px-2 py-2">{legacyMetric(summaryCustomer?.balance, true)}</td>
+                  {summaryCells.map((cell) => <td key={cell.label} className="border border-[#d7d7d7] px-2 py-2">{displayMetricValue(cell.value, cell.isCurrency)}</td>)}
                 </tr></tbody>
               </table>
             </div>
