@@ -15,6 +15,7 @@ import {
   type InventoryAuditStockDetail,
   type InventoryAuditStockItem,
 } from '../services/inventoryAuditService';
+import { canPerformAction } from '../utils/actionPermissions';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -38,6 +39,10 @@ type CountDraft = { physical: string; remarks: string };
 
 const InventoryAuditReport: React.FC = () => {
   const { addToast } = useToast();
+  const canAdd = canPerformAction('can_add');
+  const canEdit = canPerformAction('can_edit');
+  const canDelete = canPerformAction('can_delete');
+  const canPost = canPerformAction('can_post');
   const now = new Date();
   const [filterMonth, setFilterMonth] = useState(now.getMonth() + 1);
   const [filterYear, setFilterYear] = useState(now.getFullYear());
@@ -128,6 +133,7 @@ const InventoryAuditReport: React.FC = () => {
   }, [detail]);
 
   const handleCreateNew = async () => {
+    if (!canAdd) return;
     setIsSaving(true);
     try {
       const created = await createInventoryAuditStockAdjustment();
@@ -203,7 +209,7 @@ const InventoryAuditReport: React.FC = () => {
   };
 
   const handleSaveCounts = async () => {
-    if (!detail || !isPending) return;
+    if (!canEdit || !detail || !isPending) return;
     const entries: InventoryAuditCountEntry[] = [];
     modalItems.forEach((item) => item.warehouses.forEach((warehouse) => {
       const draft = countDrafts[`${item.itemSession}::${warehouse.warehouse}`] || { physical: '', remarks: '' };
@@ -234,7 +240,7 @@ const InventoryAuditReport: React.FC = () => {
   };
 
   const handleDeleteItem = async (itemSession: string) => {
-    if (!detail || !isPending) return;
+    if (!canDelete || !detail || !isPending) return;
     setIsSaving(true);
     try {
       await deleteInventoryAuditItem(detail.header.refno, itemSession);
@@ -249,7 +255,7 @@ const InventoryAuditReport: React.FC = () => {
   };
 
   const handlePost = async () => {
-    if (!detail) return;
+    if (!canPost || !detail) return;
     setIsSaving(true);
     try {
       await postInventoryAuditStockAdjustment(detail.header.refno);
@@ -264,7 +270,7 @@ const InventoryAuditReport: React.FC = () => {
   };
 
   const handleDeleteAdjustment = async () => {
-    if (!detail) return;
+    if (!canDelete || !detail) return;
     setIsSaving(true);
     try {
       await deleteInventoryAuditStockAdjustment(detail.header.refno);
@@ -281,7 +287,7 @@ const InventoryAuditReport: React.FC = () => {
   };
 
   const handleSaveDate = async () => {
-    if (!detail || !dateDraft) return;
+    if (!canEdit || !detail || !dateDraft) return;
     setIsSaving(true);
     try {
       await updateInventoryAuditDate(detail.header.refno, dateDraft);
@@ -387,7 +393,7 @@ const InventoryAuditReport: React.FC = () => {
       <div className="mx-auto w-full max-w-[1140px] space-y-[26px] print:hidden">
         <section className="overflow-hidden rounded-[5px] border border-[#d7d7d7] bg-white">
           <div className="flex min-h-[82px] flex-col items-center gap-5 border-b border-[#d7d7d7] px-[35px] py-5 sm:flex-row sm:justify-between">
-            <button onClick={handleCreateNew} disabled={isSaving} className="rounded-[4px] bg-[#4caf50] px-[14px] py-[9px] text-[14px] text-white hover:bg-[#43a047] disabled:opacity-50">Create New</button>
+            {canAdd && <button onClick={handleCreateNew} disabled={isSaving} className="rounded-[4px] bg-[#4caf50] px-[14px] py-[9px] text-[14px] text-white hover:bg-[#43a047] disabled:opacity-50">Create New</button>}
             <div className="flex flex-wrap items-center justify-center gap-4">
               <span className="mr-3 text-[20px] font-semibold text-[#263f55]">Filter by Month:</span>
               <select value={filterMonth} onChange={(event) => { setFilterMonth(Number(event.target.value)); setSelectedRefno(''); }} className="h-[34px] w-[200px] rounded-[3px] border border-[#cfcfcf] bg-white px-4 text-[13px] outline-none">
@@ -418,7 +424,7 @@ const InventoryAuditReport: React.FC = () => {
           <div className="flex min-h-[63px] items-center justify-between border-b border-[#d7d7d7] px-5">
             <div className="relative flex min-h-[63px] items-center text-[18px] font-semibold text-[#29475f] after:absolute after:bottom-[-1px] after:left-0 after:h-px after:w-[140px] after:bg-[#6a92b3]">INVENTORY LIST</div>
             {detail && <div className="flex items-center gap-3 text-[#29475f]">
-              {isPending && <button onClick={() => setShowPostConfirm(true)} className="rounded-[3px] bg-[#4caf50] px-3 py-2 text-[12px] font-bold text-white">POST <u>ADJUSTMENT</u></button>}
+              {isPending && canPost && <button onClick={() => setShowPostConfirm(true)} className="rounded-[3px] bg-[#4caf50] px-3 py-2 text-[12px] font-bold text-white">POST <u>ADJUSTMENT</u></button>}
               <span className="text-[18px] font-semibold">SA No. : {detail.header.adjustmentNo} ({detail.header.status.toUpperCase()})</span>
             </div>}
           </div>
@@ -427,7 +433,7 @@ const InventoryAuditReport: React.FC = () => {
             <form onSubmit={handleSearch} className="px-[25px] pt-5">
               <div className="grid grid-cols-[90px_1fr_90px_1fr] items-center gap-x-3 gap-y-3 text-[13px]">
                 <div className="font-semibold">Date:</div>
-                <div className="col-span-3 flex items-center gap-2">{formatLegacyDate(detail.header.adjustmentDate)}{isPending && <button type="button" onClick={() => setShowDateEditor(true)} className="text-[#4e7392]" aria-label="Edit date"><Pencil className="h-4 w-4" /></button>}</div>
+                <div className="col-span-3 flex items-center gap-2">{formatLegacyDate(detail.header.adjustmentDate)}{isPending && canEdit && <button type="button" onClick={() => setShowDateEditor(true)} className="text-[#4e7392]" aria-label="Edit date"><Pencil className="h-4 w-4" /></button>}</div>
                 <label className="font-semibold">Part No.</label>
                 <input value={partNoInput} onChange={(event) => setPartNoInput(event.target.value)} className="h-[34px] rounded-[3px] border border-[#ccc] px-3 outline-none" placeholder="Input Part Number" />
                 <label className="font-semibold">Item Code</label>
@@ -462,7 +468,7 @@ const InventoryAuditReport: React.FC = () => {
         </section>
 
         {detail && <section className="flex min-h-[76px] items-center gap-1 rounded-t-[5px] border border-[#d7d7d7] bg-white px-5">
-          {isPending && <button onClick={() => setShowDeleteConfirm(true)} className="rounded-[4px] bg-[#d64b47] px-[18px] py-[9px] text-[14px] text-white">Delete SA</button>}
+          {isPending && canDelete && <button onClick={() => setShowDeleteConfirm(true)} className="rounded-[4px] bg-[#d64b47] px-[18px] py-[9px] text-[14px] text-white">Delete SA</button>}
           <button onClick={() => void handleExport()} disabled={isSaving} className="rounded-[4px] bg-[#55b457] px-[18px] py-[9px] text-[14px] text-white disabled:opacity-50">Export SA</button>
           <button onClick={() => void handlePrint()} disabled={isSaving} className="rounded-[4px] bg-[#55b457] px-[18px] py-[9px] text-[14px] text-white disabled:opacity-50">Print SA</button>
         </section>}
@@ -470,14 +476,14 @@ const InventoryAuditReport: React.FC = () => {
 
       {editingPartNo && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 print:hidden">
         <div className="flex max-h-[90vh] w-[min(1400px,96vw)] flex-col overflow-hidden rounded-[5px] bg-white shadow-xl">
-          <div className="flex items-center justify-between border-b border-[#ddd] px-5 py-4"><h3 className="text-[22px] font-semibold">Stock Adjustment</h3><div className="flex gap-2">{isPending && <button onClick={() => void handleSaveCounts()} disabled={isSaving} className="rounded bg-[#4caf50] px-4 py-2 text-sm text-white disabled:opacity-50">{isSaving ? 'Saving...' : 'Save'}</button>}<button onClick={closeCountEditor} className="rounded bg-[#6c757d] px-4 py-2 text-sm text-white">Close</button></div></div>
+          <div className="flex items-center justify-between border-b border-[#ddd] px-5 py-4"><h3 className="text-[22px] font-semibold">Stock Adjustment</h3><div className="flex gap-2">{isPending && canEdit && <button onClick={() => void handleSaveCounts()} disabled={isSaving} className="rounded bg-[#4caf50] px-4 py-2 text-sm text-white disabled:opacity-50">{isSaving ? 'Saving...' : 'Save'}</button>}<button onClick={closeCountEditor} className="rounded bg-[#6c757d] px-4 py-2 text-sm text-white">Close</button></div></div>
           <div className="inventory-audit-scrollbar overflow-auto p-5">
-            {isLoadingModal ? <div className="py-16 text-center">Loading...</div> : <table className="w-max min-w-full table-fixed border-collapse text-[11px]"><thead><tr className="bg-[#f5f5f5]">{isPending && <th className="w-[40px] border border-[#ccc] p-2" />}<th className="w-[90px] border border-[#ccc] p-2 text-left">Part No.</th><th className="w-[90px] border border-[#ccc] p-2 text-left">Item Code</th><th className="w-[120px] border border-[#ccc] p-2 text-left">Description</th>{detail?.warehouses.map((warehouse) => <React.Fragment key={warehouse}><th className="w-[70px] border border-[#ccc] p-2">{warehouse} Stock</th><th className="w-[80px] border border-[#ccc] p-2">Location</th><th className="w-[150px] border border-[#ccc] p-2">Physical Count / Remarks</th></React.Fragment>)}</tr></thead><tbody>{modalItems.map((item) => <tr key={item.itemSession}>{isPending && <td className="border border-[#ccc] p-2 text-center"><button onClick={() => void handleDeleteItem(item.itemSession)} className="text-[#d64b47]" title="Delete Adjustments"><Trash2 className="h-4 w-4" /></button></td>}<td className="border border-[#ccc] p-2">{item.partNo}</td><td className="border border-[#ccc] p-2">{item.itemCode}</td><td className="border border-[#ccc] p-2">{item.description}</td>{item.warehouses.map((warehouse) => { const key = `${item.itemSession}::${warehouse.warehouse}`; const draft = countDrafts[key] || { physical: '', remarks: '' }; return <React.Fragment key={warehouse.warehouse}><td className="border border-[#ccc] p-2 text-right">{warehouse.stock}</td><td className="border border-[#ccc] p-2">{warehouse.location}</td><td className="border border-[#ccc] p-2"><input type="number" disabled={!isPending} value={draft.physical} onChange={(event) => updateDraft(key, 'physical', event.target.value)} placeholder="Input Qty" className="mb-1 h-8 w-full rounded border border-[#ccc] px-2 disabled:bg-[#eee]" /><input disabled={!isPending} value={draft.remarks} onChange={(event) => updateDraft(key, 'remarks', event.target.value)} placeholder="Input Remarks" className="h-8 w-full rounded border border-[#ccc] px-2 disabled:bg-[#eee]" /></td></React.Fragment>; })}</tr>)}</tbody></table>}
+            {isLoadingModal ? <div className="py-16 text-center">Loading...</div> : <table className="w-max min-w-full table-fixed border-collapse text-[11px]"><thead><tr className="bg-[#f5f5f5]">{isPending && canDelete && <th className="w-[40px] border border-[#ccc] p-2" />}<th className="w-[90px] border border-[#ccc] p-2 text-left">Part No.</th><th className="w-[90px] border border-[#ccc] p-2 text-left">Item Code</th><th className="w-[120px] border border-[#ccc] p-2 text-left">Description</th>{detail?.warehouses.map((warehouse) => <React.Fragment key={warehouse}><th className="w-[70px] border border-[#ccc] p-2">{warehouse} Stock</th><th className="w-[80px] border border-[#ccc] p-2">Location</th><th className="w-[150px] border border-[#ccc] p-2">Physical Count / Remarks</th></React.Fragment>)}</tr></thead><tbody>{modalItems.map((item) => <tr key={item.itemSession}>{isPending && canDelete && <td className="border border-[#ccc] p-2 text-center"><button onClick={() => void handleDeleteItem(item.itemSession)} className="text-[#d64b47]" title="Delete Adjustments"><Trash2 className="h-4 w-4" /></button></td>}<td className="border border-[#ccc] p-2">{item.partNo}</td><td className="border border-[#ccc] p-2">{item.itemCode}</td><td className="border border-[#ccc] p-2">{item.description}</td>{item.warehouses.map((warehouse) => { const key = `${item.itemSession}::${warehouse.warehouse}`; const draft = countDrafts[key] || { physical: '', remarks: '' }; return <React.Fragment key={warehouse.warehouse}><td className="border border-[#ccc] p-2 text-right">{warehouse.stock}</td><td className="border border-[#ccc] p-2">{warehouse.location}</td><td className="border border-[#ccc] p-2"><input type="number" disabled={!isPending || !canEdit} value={draft.physical} onChange={(event) => updateDraft(key, 'physical', event.target.value)} placeholder="Input Qty" className="mb-1 h-8 w-full rounded border border-[#ccc] px-2 disabled:bg-[#eee]" /><input disabled={!isPending || !canEdit} value={draft.remarks} onChange={(event) => updateDraft(key, 'remarks', event.target.value)} placeholder="Input Remarks" className="h-8 w-full rounded border border-[#ccc] px-2 disabled:bg-[#eee]" /></td></React.Fragment>; })}</tr>)}</tbody></table>}
           </div>
         </div>
       </div>}
 
-      {(showPostConfirm || showDeleteConfirm || showDateEditor) && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 print:hidden"><div className="w-full max-w-md rounded-[5px] bg-white shadow-xl"><div className="flex items-center justify-between border-b border-[#ddd] px-5 py-4"><h3 className="text-xl font-semibold">{showPostConfirm ? 'Post Adjustment' : showDeleteConfirm ? 'Delete Adjustment' : 'Edit Date'}</h3><button onClick={() => { setShowPostConfirm(false); setShowDeleteConfirm(false); setShowDateEditor(false); }}><X className="h-5 w-5" /></button></div><div className="p-5 text-sm">{showPostConfirm ? <p>Are you sure you want to post this record? This record cannot be edited or deleted once posted.</p> : showDeleteConfirm ? <p>Are you sure you want to delete this record?</p> : <label className="flex items-center gap-4"><span>Date:</span><input type="date" value={dateDraft} onChange={(event) => setDateDraft(event.target.value)} className="h-9 flex-1 rounded border border-[#ccc] px-3" /></label>}</div><div className="flex justify-end gap-2 border-t border-[#ddd] px-5 py-4"><button onClick={() => { setShowPostConfirm(false); setShowDeleteConfirm(false); setShowDateEditor(false); }} className="rounded border border-[#ccc] px-4 py-2 text-sm">Close</button><button onClick={() => void (showPostConfirm ? handlePost() : showDeleteConfirm ? handleDeleteAdjustment() : handleSaveDate())} disabled={isSaving} className={`rounded px-4 py-2 text-sm text-white disabled:opacity-50 ${showDeleteConfirm ? 'bg-[#d64b47]' : 'bg-[#5d82a2]'}`}>{showPostConfirm ? 'Post' : showDeleteConfirm ? 'Delete' : 'Save'}</button></div></div></div>}
+      {(showPostConfirm || showDeleteConfirm || showDateEditor) && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 print:hidden"><div className="w-full max-w-md rounded-[5px] bg-white shadow-xl"><div className="flex items-center justify-between border-b border-[#ddd] px-5 py-4"><h3 className="text-xl font-semibold">{showPostConfirm ? 'Post Adjustment' : showDeleteConfirm ? 'Delete Adjustment' : 'Edit Date'}</h3><button onClick={() => { setShowPostConfirm(false); setShowDeleteConfirm(false); setShowDateEditor(false); }}><X className="h-5 w-5" /></button></div><div className="p-5 text-sm">{showPostConfirm ? <p>Are you sure you want to post this record? This record cannot be edited or deleted once posted.</p> : showDeleteConfirm ? <p>Are you sure you want to delete this record?</p> : <label className="flex items-center gap-4"><span>Date:</span><input type="date" disabled={!canEdit} value={dateDraft} onChange={(event) => setDateDraft(event.target.value)} className="h-9 flex-1 rounded border border-[#ccc] px-3" /></label>}</div><div className="flex justify-end gap-2 border-t border-[#ddd] px-5 py-4"><button onClick={() => { setShowPostConfirm(false); setShowDeleteConfirm(false); setShowDateEditor(false); }} className="rounded border border-[#ccc] px-4 py-2 text-sm">Close</button><button onClick={() => void (showPostConfirm ? handlePost() : showDeleteConfirm ? handleDeleteAdjustment() : handleSaveDate())} disabled={isSaving || (showPostConfirm ? !canPost : showDeleteConfirm ? !canDelete : !canEdit)} className={`rounded px-4 py-2 text-sm text-white disabled:opacity-50 ${showDeleteConfirm ? 'bg-[#d64b47]' : 'bg-[#5d82a2]'}`}>{showPostConfirm ? 'Post' : showDeleteConfirm ? 'Delete' : 'Save'}</button></div></div></div>}
 
       {detail && <div className="inventory-audit-print-area">
         <table className="inventory-audit-print-table"><thead><tr><th>PART NO</th><th>ITEM CODE</th><th>DESCRIPTION</th>{detail.warehouses.map((warehouse) => <React.Fragment key={warehouse}><th colSpan={2}>{warehouse.toUpperCase()}</th><th>PCNT</th><th>MSG</th></React.Fragment>)}<th>VAL</th></tr></thead><tbody>{printItems.map((item, index) => { const nextPartNo = printItems[index + 1]?.partNo; const totals = printPartTotals.get(item.partNo) || { missing: 0, missingValue: 0 }; return <React.Fragment key={item.itemSession}><tr><td>{item.partNo}</td><td>{item.itemCode}</td><td>{item.description}</td>{item.warehouses.map((warehouse) => <React.Fragment key={warehouse.warehouse}><td className="text-right">{warehouse.stock}</td><td className="text-right">{warehouse.location}</td><td className="text-right">{warehouse.physicalCount ?? ''}</td><td className="text-right">{warehouse.discrepancy ?? ''}</td></React.Fragment>)}<td className="text-right">{item.inventoryValue}</td></tr>{nextPartNo !== item.partNo && <><tr><td colSpan={detail.warehouses.length * 4 + 3} className="text-right">Total Missing:</td><td>{formatNumber(totals.missing)}</td></tr><tr><td colSpan={detail.warehouses.length * 4 + 3} className="text-right">Total Missing Value:</td><td>{formatNumber(totals.missingValue)}</td></tr><tr><td colSpan={detail.warehouses.length * 4 + 4}>&nbsp;</td></tr></>}</React.Fragment>; })}</tbody></table>

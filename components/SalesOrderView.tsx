@@ -17,7 +17,6 @@ import ModuleRecordLink from './ModuleRecordLink';
 import ModuleRecordAction from './ModuleRecordAction';
 import { navigateWorkflow } from '../utils/workflowNavigate';
 import {
-  confirmSalesOrder,
   convertToDocument,
   getSalesOrder,
   syncDocumentPolicyState,
@@ -34,7 +33,6 @@ import {
 import StatusBadge from './StatusBadge';
 import WorkflowStepper from './WorkflowStepper';
 import ConfirmModal from './ConfirmModal';
-import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 import { normalizePriceGroup } from '../constants/pricingGroups';
 import { useToast } from './ToastProvider';
 import { PageHeader, RecordTrustStrip, WorkflowGuidance } from './common/PageScaffold';
@@ -42,7 +40,7 @@ import CallCustomerButton from './CallCustomerButton';
 import SalesOrderPrintPreview from './SalesOrderPrintPreview';
 import { exportPrintSheetAsJpeg } from '../utils/exportPrintSheetJpeg';
 import { persistedVipDiscount } from '../utils/vipDocumentDiscount';
-import { formatCustomerSince, formatDate as formatDisplayDate } from '../utils/formatUtils';
+import { DISPLAY_TIME_ZONE, formatCustomerSince, formatDate as formatDisplayDate } from '../utils/formatUtils';
 import VipDocumentTotals from './VipDocumentTotals';
 import { canPerformAction } from '../utils/actionPermissions';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
@@ -104,10 +102,6 @@ const sortByLatestOrder = (a: SalesOrder, b: SalesOrder): number => {
   });
 };
 
-const formatDate = (value?: string | null): string => {
-  return formatDisplayDate(value);
-};
-
 const formatCurrency = (value?: number | string | null): string => {
   const amount = Number(value || 0);
   return `₱${amount.toLocaleString()}`;
@@ -116,7 +110,6 @@ const formatCurrency = (value?: number | string | null): string => {
 const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initialMonth, initialYear }) => {
   const canAdd = canPerformAction('can_add');
   const canDelete = canPerformAction('can_delete');
-  const canPost = canPerformAction('can_post');
   const canUnpost = canPerformAction('can_unpost');
   const { addToast } = useToast();
   const userId = String(getLocalAuthSession()?.userProfile?.id || '').trim();
@@ -128,7 +121,6 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
     if (!initialMonth || !initialYear) return { from: '', to: '' };
     return { from: `${initialYear}-${String(initialMonth).padStart(2, '0')}-01`, to: '' };
   });
-  const [confirming, setConfirming] = useState(false);
   const [conversionModalOpen, setConversionModalOpen] = useState(false);
   const [conversionLoading, setConversionLoading] = useState(false);
   const [documentMessage, setDocumentMessage] = useState('');
@@ -335,11 +327,6 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
     [customerMap]
   );
 
-  const applyOptimisticStatusUpdate = useCallback((orderId: string, status: string) => {
-    setOrders(prev => applyOptimisticUpdate(prev, orderId, { status } as Partial<SalesOrder>));
-    setSelectedOrder(prev => prev ? { ...prev, status } : null);
-  }, []);
-
   const resolveSubmitterProfileId = useCallback(async (order: SalesOrder): Promise<string | null> => (
     resolveNotificationUserId(
       order.submitter_profile_id,
@@ -476,78 +463,6 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
       entityId: selectedOrder.id,
     });
   }, [selectedOrder?.id, userId]);
-
-  const handleConfirmOrder = async () => {
-    if (!canPost || !selectedOrder) return;
-    setConfirming(true);
-
-    const currentStatus = normalizeStatus(selectedOrder.status);
-    const isApprover = Boolean(selectedOrder.can_approve);
-    if (currentStatus === 'submitted' && !isApprover) {
-      addToast({
-        type: 'warning',
-        title: 'Approval needed',
-        description: 'Only approver accounts can approve this sales order.',
-      });
-      setConfirming(false);
-      return;
-    }
-    const optimisticNextStatus = currentStatus === 'pending' ? 'Submitted' : 'Approved';
-
-    applyOptimisticStatusUpdate(selectedOrder.id, optimisticNextStatus);
-
-    try {
-      const refreshed = await confirmSalesOrder(selectedOrder.id);
-      const successStatus = refreshed?.status || optimisticNextStatus;
-      const successLabel = normalizeStatus(successStatus) === 'submitted' ? 'submitted' : 'approved';
-      const notificationTargetUserId = successLabel === 'approved'
-        ? await resolveSubmitterProfileId(refreshed || selectedOrder)
-        : null;
-      if (refreshed) {
-        setOrders(prev => prev.map(row => row.id === refreshed.id ? refreshed : row));
-        setSelectedOrder(refreshed);
-      }
-      await notifySalesOrderEvent(
-        successLabel === 'submitted' ? 'Sales Order Submitted' : 'Sales Order Approved',
-        successLabel === 'submitted'
-          ? `SO ${selectedOrder.reference_no || selectedOrder.order_no} is submitted and waiting for your approval.`
-          : `SO ${selectedOrder.reference_no || selectedOrder.order_no} has been approved.`,
-        'confirm',
-        successLabel === 'submitted' ? 'submitted' : 'approved',
-        selectedOrder.id,
-        successLabel === 'submitted'
-          ? { targetRoles: ['Owner'] }
-          : { targetUserIds: notificationTargetUserId ? [notificationTargetUserId] : [] }
-      );
-      addToast({
-        type: 'success',
-        title: successLabel === 'submitted' ? 'Sales order submitted' : 'Sales order approved',
-        description:
-          successLabel === 'submitted'
-            ? 'This order is now waiting for approval.'
-            : 'You can now generate the next document for this order.',
-      });
-    } catch (err) {
-      console.error('Error confirming sales order:', err);
-      await notifySalesOrderEvent(
-        'Sales Order Confirmation Failed',
-        `Failed to confirm order ${selectedOrder.order_no}.`,
-        'confirm',
-        'failed',
-        selectedOrder.id,
-        { targetRoles: ['Owner'] },
-        'error'
-      );
-      addToast({
-        type: 'error',
-        title: 'Unable to update sales order',
-        description: err instanceof Error ? err.message : 'Failed to confirm order.',
-      });
-    } finally {
-      setConfirming(false);
-      await loadOrders();
-    }
-  };
 
   const handleConversion = async () => {
     if (!canAdd || !selectedOrder) return;
@@ -761,9 +676,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
 
   const workflowStage = normalizeStatus(selectedOrder?.status) === 'posted' ? 'document' : 'order';
   const selectedOrderStatus = normalizeStatus(selectedOrder?.status);
-  const canConfirm = selectedOrderStatus === 'pending' || (selectedOrderStatus === 'submitted' && Boolean(selectedOrder?.can_approve));
-  const confirmLabel = selectedOrderStatus === 'pending' ? 'Approve SO' : 'Approve SO';
-  const canGenerate = selectedOrderStatus === 'approved';
+  const canGenerate = ['pending', 'submitted', 'approved'].includes(selectedOrderStatus);
   const nextStepGuidance = (() => {
     if (!selectedOrder) {
       return {
@@ -772,26 +685,10 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
         tone: 'default' as const,
       };
     }
-    if (selectedOrderStatus === 'pending') {
-      return {
-        title: 'Next step: submit for approval',
-        description: 'Review customer, credit, and item details before moving this order forward.',
-        tone: 'warning' as const,
-      };
-    }
-    if (selectedOrderStatus === 'submitted') {
-      return {
-        title: selectedOrder?.can_approve ? 'Next step: approve sales order' : 'Waiting for assigned approver',
-        description: selectedOrder?.can_approve
-          ? 'This order is ready for approval.'
-          : 'Only assigned approver accounts can approve this sales order.',
-        tone: selectedOrder?.can_approve ? 'info' as const : 'warning' as const,
-      };
-    }
-    if (selectedOrderStatus === 'approved') {
+    if (['pending', 'submitted', 'approved'].includes(selectedOrderStatus)) {
       return {
         title: 'Next step: generate order slip or invoice',
-        description: `Customer policy suggests ${documentSuggestion}. Generate the next document when the order is ready.`,
+        description: `Customer policy suggests ${documentSuggestion}. Generate the document directly when the order is ready.`,
         tone: 'success' as const,
       };
     }
@@ -821,8 +718,8 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
     return `${MONTH_OPTIONS[targetMonthYear.month - 1]} ${targetMonthYear.year}`;
   }, [targetMonthYear.month, targetMonthYear.year]);
 
-  const currentMonthLabel = new Intl.DateTimeFormat('en-PH', { month: 'long', timeZone: 'Asia/Manila' })
-    .format(new Date(selectedOrder?.sales_date || Date.now()));
+  const currentMonthLabel = new Intl.DateTimeFormat('en-PH', { month: 'long', timeZone: DISPLAY_TIME_ZONE })
+    .format(new Date());
   const summaryCustomer = selectedCustomer as (Contact & {
     dealershipSales?: number;
     monthlySales?: number;
@@ -904,9 +801,23 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
   });
   const legacyListDate = (value?: string | null) => {
     if (!value) return '';
-    const normalized = String(value).split('T')[0];
+    const rawValue = String(value);
+    const normalized = rawValue.split('T')[0];
     const [year, month, day] = normalized.split('-');
-    return year && month && day ? `${month}/${day}/${year}` : formatDate(value);
+    if (!year || !month || !day) return formatDisplayDate(value);
+    if (!rawValue.includes('T') && !/[Zz]|[+-]\d{2}:?\d{2}$/.test(rawValue)) {
+      return `${month}/${day}/${year}`;
+    }
+    const parsed = new Date(rawValue);
+    if (Number.isNaN(parsed.getTime())) return formatDisplayDate(value);
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: DISPLAY_TIME_ZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(parsed);
+    const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((entry) => entry.type === type)?.value || '';
+    return `${part('month')}/${part('day')}/${part('year')}`;
   };
   const legacyStatus = (status?: string | null) => {
     const normalized = normalizeStatus(status);
@@ -1108,7 +1019,6 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
               </div>
 
               {selectedOrder && <div data-jpeg-export-ignore className="mt-3 flex flex-wrap justify-end gap-[5px] border-t border-[#e3e3e3] pt-4 print:hidden">
-                {canConfirm && canPost && <button type="button" onClick={() => void handleConfirmOrder()} disabled={confirming} className="rounded-[4px] bg-[#4caf50] px-[18px] py-[9px] text-[13px] text-white disabled:opacity-50">{confirming ? 'Processing...' : confirmLabel}</button>}
                 {canGenerate && canAdd && <button type="button" onClick={() => setConversionModalOpen(true)} className="rounded-[4px] bg-[#4caf50] px-[18px] py-[9px] text-[13px] text-white">Generate Sales Transaction</button>}
                 {canGenerate && canAdd && <button type="button" onClick={handlePrint} className="rounded-[4px] bg-[#5d82a2] px-[18px] py-[9px] text-[13px] text-white">Print SO</button>}
                 {canGenerate && canDelete && <button type="button" onClick={() => setCancelModalOpen(true)} className="rounded-[4px] bg-[#d64b47] px-[18px] py-[9px] text-[13px] text-white">Cancel SO</button>}
@@ -1161,7 +1071,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
       <PageHeader
         eyebrow="Sales Transaction"
         title="Sales Order"
-        subtitle="Review approved customer orders, control status changes, and generate the next sales document."
+        subtitle="Review customer orders, control status changes, and generate the next sales document."
         icon={<FileText className="h-6 w-6 text-brand-blue" />}
         meta={
           <div className="flex flex-wrap gap-2 text-xs">
@@ -1290,7 +1200,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                         onClick={() => void selectOrder(order)}
                         className={`cursor-pointer ${index % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50 dark:bg-slate-900/60'} hover:bg-slate-100 dark:hover:bg-slate-800 ${orderRowTone(order)}`}
                       >
-                        <td className="px-3 py-2">{formatDate(order.sales_date)}</td>
+                        <td className="px-3 py-2">{formatDisplayDate(order.sales_date)}</td>
                         <td className="px-3 py-2">
                           <div className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" title={getCustomerLabel(order, customer)}>
                             {getCustomerLabel(order, customer)}
@@ -1379,7 +1289,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                   { label: 'Document No.', value: selectedOrder.order_no || selectedOrder.reference_no },
                   { label: 'Status', value: <StatusBadge status={selectedOrder.status} /> },
                   { label: 'Created By', value: selectedOrder.created_by || selectedOrder.sales_person },
-                  { label: 'Created Date', value: formatDate(selectedOrder.created_at || selectedOrder.sales_date) },
+                  { label: 'Created Date', value: formatDisplayDate(selectedOrder.created_at || selectedOrder.sales_date) },
                 ]}
               />
               <div className="overflow-x-auto">
@@ -1410,12 +1320,6 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                   </tbody>
                 </table>
               </div>
-
-              {selectedOrderStatus === 'submitted' && !selectedOrder?.can_approve && (
-                <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded p-2">
-                  This sales order is waiting for an assigned approver account.
-                </div>
-              )}
 
               {exceedsCreditLimit && (
                 <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded p-2">
@@ -1553,7 +1457,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                   <tbody>
                     <tr className="text-slate-700 dark:text-slate-200">
                       <td className="px-3 py-2">{formatCurrency(selectedCustomer?.balance || 0)}</td>
-                      <td className="px-3 py-2">{selectedOrder.approved_at ? formatDate(selectedOrder.approved_at) : '-'}</td>
+                      <td className="px-3 py-2">{selectedOrder.approved_at ? formatDisplayDate(selectedOrder.approved_at) : '-'}</td>
                       <td className="px-3 py-2">{selectedOrder.promise_to_pay || '-'}</td>
                       <td className="px-3 py-2">{selectedOrder.remarks || selectedOrder.reference_no || '-'}</td>
                     </tr>
@@ -1575,7 +1479,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                   </thead>
                   <tbody>
                     <tr className="text-slate-700 dark:text-slate-200">
-                      <td className="px-3 py-2">{selectedOrder.created_by || '-'} / {formatDate(selectedOrder.created_at)}</td>
+                      <td className="px-3 py-2">{selectedOrder.created_by || '-'} / {formatDisplayDate(selectedOrder.created_at)}</td>
                       <td className="px-3 py-2">{selectedOrder.po_number || '-'}</td>
                       <td className="px-3 py-2">{selectedOrder.send_by || '-'}</td>
                       <td className="px-3 py-2">{selectedOrder.reference_no || '-'}</td>
@@ -1587,16 +1491,6 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
               </div>
 
               <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 dark:border-slate-800 pt-4">
-                {canConfirm && canPost && (
-                  <button
-                    type="button"
-                    onClick={handleConfirmOrder}
-                    disabled={confirming}
-                    className="px-3 py-2 rounded bg-green-600 text-white text-sm disabled:opacity-50"
-                  >
-                    {confirming ? 'Processing...' : confirmLabel}
-                  </button>
-                )}
                 {canGenerate && canAdd && (
                   <button
                     type="button"

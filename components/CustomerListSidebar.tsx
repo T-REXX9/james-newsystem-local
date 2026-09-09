@@ -17,7 +17,7 @@ interface CustomerListSidebarProps {
     selectedIds: Set<string>;
     onToggleSelection: (id: string) => void;
     onToggleAll: () => void;
-    onCreateNew: () => void;
+    onCreateNew?: () => void;
 }
 
 const CustomerListSidebar: React.FC<CustomerListSidebarProps> = ({
@@ -61,12 +61,12 @@ const CustomerListSidebar: React.FC<CustomerListSidebarProps> = ({
             <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col gap-3">
                 <div className="flex items-center justify-between">
                     <h2 className="font-bold text-slate-800 dark:text-white">Customers ({filtered.length})</h2>
-                    <button
+                    {onCreateNew && <button
                         onClick={onCreateNew}
                         className="text-xs font-bold bg-brand-blue text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors"
                     >
                         + New
-                    </button>
+                    </button>}
                 </div>
 
                 <div className="relative">

@@ -198,6 +198,22 @@ describe('SalesOrderView', () => {
     expect(getLedgerMock).toHaveBeenCalledWith('contact-1', { reportType: 'summary', dateType: 'all' });
   });
 
+  it('renders sales order dates in Manila time for timestamps near midnight', async () => {
+    const order = makeOrder({
+      id: 'manila-date-order',
+      order_no: 'SO-MANILA-DATE',
+      sales_date: '2026-09-08T16:30:00Z',
+    });
+    getAllSalesOrdersMock.mockResolvedValue([order]);
+    getSalesOrderMock.mockResolvedValue(order);
+    fetchContactsMock.mockResolvedValue([{ id: 'contact-1', company: 'Acme Corp' }]);
+    fetchContactByIdMock.mockResolvedValue({ id: 'contact-1', company: 'Acme Corp' });
+
+    renderView({ initialOrderId: order.id });
+
+    expect(await screen.findByDisplayValue('09/09/2026')).toBeVisible();
+  });
+
   it('loads the redirected sales order even when it is not present in the initial list page', async () => {
     getAllSalesOrdersMock.mockResolvedValue([
         {
@@ -405,5 +421,26 @@ describe('SalesOrderView', () => {
     renderView({ initialOrderId: 'target-order' });
 
     expect(await screen.findByText(/balance exceeds credit limit\./i)).toHaveTextContent(/does not block the sales order flow/i);
+  });
+
+  it('lets a non-approver generate the next document from a submitted sales order', async () => {
+    const user = userEvent.setup();
+    const order = makeOrder({ id: 'submitted-order', order_no: 'SO-SUBMITTED', status: 'Submitted' });
+    getAllSalesOrdersMock.mockResolvedValue([order]);
+    getSalesOrderMock.mockResolvedValue(order);
+    fetchContactsMock.mockResolvedValue([
+      { id: 'contact-1', company: 'Acme Corp', transactionType: 'Invoice' },
+    ]);
+    fetchContactByIdMock.mockResolvedValue({
+      id: 'contact-1', company: 'Acme Corp', transactionType: 'Invoice',
+    });
+
+    renderView({ initialOrderId: order.id });
+
+    await screen.findByDisplayValue('SO-SUBMITTED');
+    expect(screen.queryByText(/waiting for an assigned approver/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /generate sales transaction/i }));
+    expect(screen.getByRole('button', { name: /^convert$/i })).toBeInTheDocument();
   });
 });

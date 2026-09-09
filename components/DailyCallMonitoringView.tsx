@@ -90,6 +90,7 @@ import { DO_NOT_CONTACT_LABEL, isBlockedContact } from '../utils/dailyCallBlocke
 import { VERIFIED_PROSPECT_POTENTIAL, averageMonthlyPaidSales } from '../utils/dailyCallPotentialSales';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import { DEFAULT_CUSTOMER_VAT_TYPE } from '../constants/customerVat';
+import { canPerformAction } from '../utils/actionPermissions';
 import {
   BUTTON_BASE,
   BUTTON_PRIMARY,
@@ -535,6 +536,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
   }, [initialSelectedDate]);
   const { addToast } = useToast();
+  const canAdd = canPerformAction('can_add');
+  const canEdit = canPerformAction('can_edit');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [callLogs, setCallLogs] = useState<CallLogEntry[]>([]);
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
@@ -614,6 +617,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   }, [selectedClientId]);
 
   const handleOpenSalesInquiry = useCallback((contactId?: string) => {
+    if (!canAdd) return;
     const targetContactId = contactId || selectedClientId || undefined;
     const targetContact = contacts.find((contact) => contact.id === targetContactId);
     if (targetContact && isBlockedContact(targetContact)) {
@@ -626,7 +630,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       return;
     }
     navigateWorkflow('sales-transaction-sales-inquiry', buildSalesInquiryPayload(contactId));
-  }, [addToast, buildSalesInquiryPayload, contacts, selectedClientId]);
+  }, [addToast, buildSalesInquiryPayload, canAdd, contacts, selectedClientId]);
 
   const notifyDoNotContact = useCallback((contact: Contact) => {
     addToast({
@@ -893,6 +897,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   };
 
   const handleSubmitNewCustomer = useCallback(async (data: Omit<Contact, 'id'>) => {
+    if (!canAdd) return;
     const assignedName = currentUser?.full_name?.trim() || currentUser?.email || agentDisplayName;
     const payload = {
       ...data,
@@ -924,7 +929,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       });
       throw error;
     }
-  }, [addToast, agentDisplayName, currentUser?.email, currentUser?.full_name, currentUser?.id, currentUser?.team, loadAgentData]);
+  }, [addToast, agentDisplayName, canAdd, currentUser?.email, currentUser?.full_name, currentUser?.id, currentUser?.team, loadAgentData]);
 
   const handleEmailContact = (contact: Contact) => {
     if (isBlockedContact(contact)) {
@@ -1021,7 +1026,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   }, [addToast, detailsPanelOpen, selectedClientId]);
 
   const handleSaveCustomerLog = useCallback(async () => {
-    if (!selectedClientId) return;
+    if (!canEdit || !selectedClientId) return;
     if (!customerLogNote.trim() && !customerLogPromiseToPay.trim() && !customerLogComments.trim()) {
       addToast({ type: 'error', message: 'Add a note, promise to pay, or comment first.' });
       return;
@@ -1057,11 +1062,12 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     customerLogPromiseToPay,
     customerLogStatus,
     customerLogTopic,
+    canEdit,
     selectedClientId
   ]);
 
   const handleSaveCustomerStatus = useCallback(async () => {
-    if (!selectedClientId) return;
+    if (!canEdit || !selectedClientId) return;
 
     setSavingStatusLog(true);
     try {
@@ -1080,7 +1086,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     } finally {
       setSavingStatusLog(false);
     }
-  }, [addToast, customerLogStatus, selectedClientId]);
+  }, [addToast, canEdit, customerLogStatus, selectedClientId]);
 
   const handleEnableCallForwarding = (forwardingNumber: string) => {
     if (!forwardingNumber) return;
@@ -1647,6 +1653,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   }, [handleOpenSMSModal]);
 
   const handleRequestProspectVerification = useCallback(async (contact: Contact) => {
+    if (!canEdit) return;
     try {
       await updateContact(contact.id, {
         status: CustomerStatus.PROSPECTIVE,
@@ -1672,7 +1679,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         durationMs: 6000,
       });
     }
-  }, [addToast, loadAgentData]);
+  }, [addToast, canEdit, loadAgentData]);
 
   useEffect(() => {
     if (!isFiltering) return;
@@ -1824,7 +1831,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           </p>}
         </div>
         <div className="flex items-center gap-2">
-          <button
+          {canAdd && <button
             onClick={() => {
               setAddCustomerKind('prospect');
               setShowAddCustomerModal(true);
@@ -1834,8 +1841,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           >
             <UserPlus className="w-4 h-4" />
             Add Prospect
-          </button>
-          <button
+          </button>}
+          {canEdit && <button
             onClick={() => {
               setAddCustomerKind('verifiedProspect');
               setShowAddCustomerModal(true);
@@ -1845,8 +1852,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           >
             <UserCheck className="w-4 h-4" />
             Request Verification
-          </button>
-          <button
+          </button>}
+          {canAdd && <button
             onClick={() => {
               setAddCustomerKind('customer');
               setShowAddCustomerModal(true);
@@ -1856,7 +1863,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           >
             <UserPlus className="w-4 h-4" />
             New Customer
-          </button>
+          </button>}
           <button
             onClick={loadAgentData}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
@@ -2027,7 +2034,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                 </span>
                               </span>
                               <span className="flex justify-end gap-1">
-                                {summary.id === 'unverified' && (
+                                {canEdit && summary.id === 'unverified' && (
                                   <button
                                     type="button"
                                     onClick={(event) => {
@@ -2168,7 +2175,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 <Mail className="w-4 h-4" />
                 Email
               </button>
-              <ModuleRecordAction
+              {canAdd && <ModuleRecordAction
                 tab="sales-transaction-sales-inquiry"
                 payload={buildSalesInquiryPayload(selectedClient.id)}
                 onOpen={() => handleOpenSalesInquiry(selectedClient.id)}
@@ -2177,8 +2184,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               >
                 <FileText className="w-4 h-4" />
                 Sales Inquiry
-              </ModuleRecordAction>
-              <button
+              </ModuleRecordAction>}
+              {canAdd && <button
                 type="button"
                 onClick={() => setShowIncidentReportModal(true)}
                 className="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 transition-colors hover:bg-rose-100 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-950/50"
@@ -2186,7 +2193,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               >
                 <AlertTriangle className="h-4 w-4" />
                 Incident Report
-              </button>
+              </button>}
             </div>
             )}
             {!selectedClientBlocked && (
@@ -2196,7 +2203,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                   <h4 className="text-sm font-bold text-slate-800 dark:text-white">Customer Log</h4>
                   <p className="text-xs text-slate-500 dark:text-slate-400">Matches the old daily call monitoring note and status workflow.</p>
                 </div>
-                <button
+                {canEdit && <button
                   type="button"
                   onClick={handleSaveCustomerStatus}
                   disabled={savingStatusLog}
@@ -2204,7 +2211,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 >
                   {savingStatusLog ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                   {savingStatusLog ? 'Updating...' : 'Update Status'}
-                </button>
+                </button>}
               </div>
               <div className="flex flex-wrap gap-2">
                 {CUSTOMER_LOG_TOPICS.map((topic) => (
@@ -2286,7 +2293,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 </label>
               </div>
               <div className="flex justify-end">
-                <button
+                {canEdit && <button
                   type="button"
                   onClick={handleSaveCustomerLog}
                   disabled={savingCustomerLog}
@@ -2294,7 +2301,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 >
                   {savingCustomerLog ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
                   {savingCustomerLog ? 'Saving...' : 'Save Note'}
-                </button>
+                </button>}
               </div>
               <div className="grid gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
                 <div className="space-y-3">

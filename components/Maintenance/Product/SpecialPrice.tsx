@@ -33,6 +33,7 @@ import {
     removeCustomer,
     updateSpecialPrice,
 } from '../../../services/specialPriceService';
+import { canPerformAction } from '../../../utils/actionPermissions';
 
 interface ConfirmState {
     open: boolean;
@@ -547,6 +548,9 @@ const DetailTableSection: React.FC<{
 );
 
 export default function SpecialPrice() {
+    const canAdd = canPerformAction('can_add');
+    const canEdit = canPerformAction('can_edit');
+    const canDelete = canPerformAction('can_delete');
     const { addToast } = useToast();
     const [records, setRecords] = useState<SpecialPriceRecord[]>([]);
     const [meta, setMeta] = useState<PaginationMeta>(createDefaultMeta());
@@ -683,6 +687,7 @@ export default function SpecialPrice() {
 
     const handleCreate = async (event: React.FormEvent) => {
         event.preventDefault();
+        if (!canAdd) return;
         if (!createItemSession || createAmount.trim() === '') return;
 
         setSubmittingCreate(true);
@@ -717,6 +722,7 @@ export default function SpecialPrice() {
 
     const handleUpdate = async (event: React.FormEvent) => {
         event.preventDefault();
+        if (!canEdit) return;
         if (!selectedRefno || editAmount.trim() === '') return;
 
         setSubmittingUpdate(true);
@@ -772,22 +778,22 @@ export default function SpecialPrice() {
                         </div>
                         {selectedRefno ? (
                             <div className="flex flex-wrap gap-2">
-                                <button
+                                {canAdd && <button
                                     type="button"
                                     onClick={() => setSelectedRefno(null)}
                                     className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg flex items-center gap-2 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600"
                                 >
                                     <ArrowLeft size={18} />
                                     Add New
-                                </button>
-                                <button
+                                </button>}
+                                {canDelete && <button
                                     type="button"
                                     onClick={() => setConfirmDelete({ open: true, refno: selectedRefno })}
                                     className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg flex items-center gap-2"
                                 >
                                     <Trash2 size={18} />
                                     Delete
-                                </button>
+                                </button>}
                             </div>
                         ) : null}
                     </div>
@@ -898,14 +904,14 @@ export default function SpecialPrice() {
                                     </div>
                                 </div>
                                 <div className="flex justify-end">
-                                    <button
+                                    {canAdd && <button
                                         type="submit"
                                         disabled={submittingCreate || productsLoading}
                                         className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2 disabled:opacity-50"
                                     >
                                         <Plus size={18} />
                                         {submittingCreate ? 'Saving...' : 'Submit'}
-                                    </button>
+                                    </button>}
                                 </div>
                             </form>
                         ) : (
@@ -952,34 +958,34 @@ export default function SpecialPrice() {
                                         </div>
                                     </div>
                                     <div className="flex flex-wrap gap-3">
-                                        <button
+                                        {canEdit && <button
                                             type="submit"
                                             disabled={submittingUpdate || detailLoading}
                                             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50"
                                         >
                                             {submittingUpdate ? 'Saving...' : 'Update Changes'}
-                                        </button>
-                                        <button
+                                        </button>}
+                                        {canAdd && <button
                                             type="button"
                                             onClick={() => setAddCustomerOpen(true)}
                                             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg"
                                         >
                                             Add Customer
-                                        </button>
-                                        <button
+                                        </button>}
+                                        {canAdd && <button
                                             type="button"
                                             onClick={() => setAddAreaOpen(true)}
                                             className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg"
                                         >
                                             Add Area
-                                        </button>
-                                        <button
+                                        </button>}
+                                        {canAdd && <button
                                             type="button"
                                             onClick={() => setAddCategoryOpen(true)}
                                             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg"
                                         >
                                             Add Category
-                                        </button>
+                                        </button>}
                                     </div>
                                 </form>
 
@@ -992,7 +998,7 @@ export default function SpecialPrice() {
                                     {customerRows.map((customer: SpecialPriceCustomer) => (
                                         <tr key={`${customer.patient_refno}-${customer.patient_code}`} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                                             <td className="px-4 py-3 text-sm">
-                                                <button
+                                                {canDelete && <button
                                                     type="button"
                                                     onClick={() =>
                                                         setConfirmRemoveCustomer({
@@ -1005,7 +1011,7 @@ export default function SpecialPrice() {
                                                     className="p-1 text-rose-600 hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-300"
                                                 >
                                                     <Trash2 size={16} />
-                                                </button>
+                                                </button>}
                                             </td>
                                             <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{customer.patient_code || '-'}</td>
                                             <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{customer.company || '-'}</td>
@@ -1023,7 +1029,7 @@ export default function SpecialPrice() {
                                     {areaRows.map((area: SpecialPriceArea) => (
                                         <tr key={`${area.area_code}-${area.area_name}`} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                                             <td className="px-4 py-3 text-sm">
-                                                <button
+                                                {canDelete && <button
                                                     type="button"
                                                     onClick={() =>
                                                         setConfirmRemoveArea({
@@ -1036,7 +1042,7 @@ export default function SpecialPrice() {
                                                     className="p-1 text-rose-600 hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-300"
                                                 >
                                                     <Trash2 size={16} />
-                                                </button>
+                                                </button>}
                                             </td>
                                             <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{area.area_code || '-'}</td>
                                             <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{area.area_name || '-'}</td>
@@ -1053,7 +1059,7 @@ export default function SpecialPrice() {
                                     {categoryRows.map((category: SpecialPriceCategory) => (
                                         <tr key={`${category.category_id}-${category.name}`} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                                             <td className="px-4 py-3 text-sm">
-                                                <button
+                                                {canDelete && <button
                                                     type="button"
                                                     onClick={() =>
                                                         setConfirmRemoveCategory({
@@ -1066,7 +1072,7 @@ export default function SpecialPrice() {
                                                     className="p-1 text-rose-600 hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-300"
                                                 >
                                                     <Trash2 size={16} />
-                                                </button>
+                                                </button>}
                                             </td>
                                             <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{category.name || '-'}</td>
                                         </tr>
@@ -1194,7 +1200,7 @@ export default function SpecialPrice() {
                 isOpen={confirmDelete.open}
                 onClose={() => setConfirmDelete({ open: false, refno: null })}
                 onConfirm={async () => {
-                    if (!confirmDelete.refno) return;
+                    if (!canDelete || !confirmDelete.refno) return;
 
                     try {
                         await deleteSpecialPrice(confirmDelete.refno);
@@ -1233,7 +1239,7 @@ export default function SpecialPrice() {
                     })
                 }
                 onConfirm={async () => {
-                    if (!confirmRemoveCustomer.refno || !confirmRemoveCustomer.targetId) return;
+                    if (!canDelete || !confirmRemoveCustomer.refno || !confirmRemoveCustomer.targetId) return;
 
                     try {
                         await removeCustomer(confirmRemoveCustomer.refno, confirmRemoveCustomer.targetId);
@@ -1270,7 +1276,7 @@ export default function SpecialPrice() {
                     })
                 }
                 onConfirm={async () => {
-                    if (!confirmRemoveArea.refno || !confirmRemoveArea.targetId) return;
+                    if (!canDelete || !confirmRemoveArea.refno || !confirmRemoveArea.targetId) return;
 
                     try {
                         await removeArea(confirmRemoveArea.refno, confirmRemoveArea.targetId);
@@ -1307,7 +1313,7 @@ export default function SpecialPrice() {
                     })
                 }
                 onConfirm={async () => {
-                    if (!confirmRemoveCategory.refno || !confirmRemoveCategory.targetId) return;
+                    if (!canDelete || !confirmRemoveCategory.refno || !confirmRemoveCategory.targetId) return;
 
                     try {
                         await removeCategory(confirmRemoveCategory.refno, confirmRemoveCategory.targetId);

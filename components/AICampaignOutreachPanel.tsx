@@ -8,6 +8,7 @@ import {
 import { UserProfile, AICampaignOutreach, AICampaignStats, AIMessageLanguage } from '../types';
 import * as aiSalesAgentService from '../services/aiSalesAgentService';
 import { useToast } from './ToastProvider';
+import { hasActionPermission } from '../constants';
 
 interface AICampaignOutreachPanelProps {
     currentUser: UserProfile | null;
@@ -20,6 +21,7 @@ const AICampaignOutreachPanel: React.FC<AICampaignOutreachPanelProps> = ({
     campaignId,
     campaignTitle,
 }) => {
+    const canEdit = hasActionPermission(currentUser, 'can_edit');
     const [outreachList, setOutreachList] = useState<AICampaignOutreach[]>([]);
     const [stats, setStats] = useState<AICampaignStats | null>(null);
     const [loading, setLoading] = useState(true);
@@ -57,6 +59,7 @@ const AICampaignOutreachPanel: React.FC<AICampaignOutreachPanelProps> = ({
     }, [outreachList, searchQuery]);
 
     const handleProcessQueue = async () => {
+        if (!canEdit) return;
         setProcessing(true);
         try {
             const result = await aiSalesAgentService.processOutreachQueue();
@@ -125,13 +128,13 @@ const AICampaignOutreachPanel: React.FC<AICampaignOutreachPanelProps> = ({
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    <button
+                    {canEdit && <button
                         onClick={loadData}
                         className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
                         title="Refresh"
                     >
                         <RefreshCw className="w-4 h-4 text-slate-500" />
-                    </button>
+                    </button>}
                     <button
                         onClick={handleProcessQueue}
                         disabled={processing}

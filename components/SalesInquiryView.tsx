@@ -73,6 +73,7 @@ import {
   resolveNotificationUserId,
 } from '../services/notificationLocalApiService';
 import { PageHeader, RecordTrustStrip, WorkflowGuidance } from './common/PageScaffold';
+import { canPerformAction } from '../utils/actionPermissions';
 
 interface InquiryItemRow extends Omit<SalesInquiryItem, 'id' | 'inquiry_id' | 'qty' | 'unit_price'> {
   qty: number | '';
@@ -161,6 +162,9 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   today,
 }) => {
   const { addToast } = useToast();
+  const canAdd = canPerformAction('can_add');
+  const canEdit = canPerformAction('can_edit');
+  const canDelete = canPerformAction('can_delete');
   const lastAppliedPrefillRef = React.useRef<string | null>(null);
   const salesInquiryExportRef = React.useRef<HTMLElement | null>(null);
   // Data
@@ -697,12 +701,13 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   }, [customerMap]);
 
   const startNewInquiry = useCallback(() => {
+    if (!canAdd) return;
     setIsCreatingNew(true);
     setClearedRouteInquiryId(initialInquiryId || null);
     setSelectedInquiry(null);
     resetFormForNew();
     navigateWorkflow(SALES_INQUIRY_TAB_ID, undefined, 'replace');
-  }, [initialInquiryId, resetFormForNew]);
+  }, [canAdd, initialInquiryId, resetFormForNew]);
 
   const selectInquiry = useCallback(async (inquiry: SalesInquiry) => {
     setIsCreatingNew(false);
@@ -856,6 +861,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
   // Add new item row
   const addItemRow = () => {
+    if (isCreatingNew ? !canAdd : !canEdit) return;
     const tempId = `temp-${Date.now()}`;
     setItems((prev) => [
       ...prev,
@@ -879,6 +885,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   };
 
   const addManualItemRow = () => {
+    if (isCreatingNew ? !canAdd : !canEdit) return;
     setItems([
       ...items,
       {
@@ -916,6 +923,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
   // Remove item row
   const removeItemRow = (tempId: string | undefined) => {
+    if (isCreatingNew ? !canAdd : !canEdit) return;
     setItems(items.filter(item => item.tempId !== tempId));
   };
 
@@ -994,7 +1002,9 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
     return {
       ...selectedInquiry,
-      inquiry_no: inquiryNo || selectedInquiry.inquiry_no,
+      // Saved inquiries must print their persisted number, never the local
+      // draft counter that was shown before the server assigned the number.
+      inquiry_no: selectedInquiry.inquiry_no || inquiryNo,
       sales_date: salesDate || selectedInquiry.sales_date,
       sales_time: salesTime || selectedInquiry.sales_time,
       sales_person: salesPerson || selectedInquiry.sales_person,
@@ -1049,6 +1059,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   // Handle submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (isCreatingNew ? !canAdd : !canEdit) return;
 
     if (!isCreatingNew && selectedInquiry && selectedInquiry.is_editable === false) {
       addToast({
@@ -1186,6 +1198,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
   // Handle delete
   const handleDeleteClick = () => {
+    if (isCreatingNew ? !canAdd : !canDelete) return;
     if (!isCreatingNew && selectedInquiry && selectedInquiry.is_editable === false) {
       addToast({
         type: 'warning',
@@ -1198,6 +1211,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   };
 
   const handleDeleteConfirm = async () => {
+    if (selectedInquiry && !isCreatingNew ? !canDelete : !canAdd) return;
     setDeleteConfirming(true);
     try {
       if (selectedInquiry && !isCreatingNew) {
@@ -1223,6 +1237,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   };
 
   const handleFinalizeInquiry = async () => {
+    if (!canAdd) return;
     if (
       !selectedInquiry ||
       isCreatingNew ||
@@ -1342,7 +1357,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     setSubmitCount(0);
   };
   const isConversionLocked = Boolean(selectedInquiry && !isCreatingNew && selectedInquiry.is_editable === false);
-  const isReadOnly = selectedInquiry?.status === SalesInquiryStatus.CANCELLED || isConversionLocked;
+  const isReadOnly = selectedInquiry?.status === SalesInquiryStatus.CANCELLED || isConversionLocked || (isCreatingNew ? !canAdd : !canEdit);
+  const canWriteInquiry = isCreatingNew ? canAdd : canEdit;
   const handlePrint = () => {
     if (!printableInquiry) return;
     setJpegCaptureMode(false);
@@ -1387,11 +1403,12 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   }, [activeInquiryNumberDisplay, addToast, jpegCaptureMode]);
   const priceGroupDisplay = priceGroup || normalizePriceGroup(priceGroup);
   const canGenerateSO = Boolean(
+    canAdd &&
     selectedInquiry &&
     !isCreatingNew &&
     !isReadOnly &&
     (
-      selectedInquiry.status === SalesInquiryStatus.DRAFT ||
+      (selectedInquiry.status === SalesInquiryStatus.DRAFT && canEdit) ||
       selectedInquiry.status === SalesInquiryStatus.APPROVED
     )
   );
@@ -1542,7 +1559,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
             <div className="flex flex-wrap items-center gap-[5px]">
               <button type="button" onClick={() => setShowSearchModal(true)} className="rounded-[4px] bg-[#5d82a2] px-[13px] py-[9px] text-[14px] text-white hover:bg-[#50738f]">Search</button>
               <button type="button" onClick={clearInquiryFilters} className="rounded-[4px] bg-[#4caf50] px-[13px] py-[9px] text-[14px] text-white hover:bg-[#43a047]">Refresh</button>
-              <button type="button" onClick={startNewInquiry} className="rounded-[4px] bg-[#4caf50] px-[13px] py-[9px] text-[14px] text-white hover:bg-[#43a047]">Create New</button>
+              {canAdd && <button type="button" onClick={startNewInquiry} className="rounded-[4px] bg-[#4caf50] px-[13px] py-[9px] text-[14px] text-white hover:bg-[#43a047]">Create New</button>}
               <ModuleRecordAction
                 tab="maintenance-customer-customer-database"
                 payload={{ action: 'create', status: 'Prospective' }}
@@ -1686,9 +1703,9 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
             </div>
 
             {(items.length > 0 || (!isCreatingNew && selectedInquiry)) && <div data-jpeg-export-ignore className="mt-3 flex flex-wrap items-center gap-[5px] border-t border-[#e3e3e3] pt-4">
-              <button type="button" onClick={handleDeleteClick} className="rounded-[4px] bg-[#d64b47] px-[20px] py-[9px] text-[13px] text-white">{isCreatingNew ? 'Clear' : 'Cancel'}</button>
+              {(isCreatingNew ? canAdd : canDelete) && <button type="button" onClick={handleDeleteClick} className="rounded-[4px] bg-[#d64b47] px-[20px] py-[9px] text-[13px] text-white">{isCreatingNew ? 'Clear' : 'Cancel'}</button>}
               {printableInquiry && <button type="button" onClick={handlePrint} className="rounded-[4px] bg-[#4caf50] px-[20px] py-[9px] text-[13px] text-white">Print</button>}
-              <button type="submit" disabled={loading || isReadOnly} className="rounded-[4px] bg-[#4caf50] px-[20px] py-[9px] text-[13px] text-white disabled:opacity-50">{loading ? 'Saving...' : 'Save'}</button>
+              {canWriteInquiry && <button type="submit" disabled={loading || isReadOnly} className="rounded-[4px] bg-[#4caf50] px-[20px] py-[9px] text-[13px] text-white disabled:opacity-50">{loading ? 'Saving...' : 'Save'}</button>}
               {canGenerateSO && <button type="button" onClick={handleFinalizeInquiry} disabled={loading} className="ml-auto rounded-[4px] bg-[#4caf50] px-[20px] py-[9px] text-[13px] text-white disabled:opacity-50">Generate SO</button>}
               {canOpenConvertedOrder && (
                 <ModuleRecordAction
@@ -1701,7 +1718,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                   Open Sales Order
                 </ModuleRecordAction>
               )}
-              <button type="button" onClick={addManualItemRow} disabled={isReadOnly} className="rounded-[4px] bg-[#5d82a2] px-[16px] py-[9px] text-[13px] text-white disabled:opacity-50">Not Listed Product</button>
+              {canWriteInquiry && <button type="button" onClick={addManualItemRow} disabled={isReadOnly} className="rounded-[4px] bg-[#5d82a2] px-[16px] py-[9px] text-[13px] text-white disabled:opacity-50">Not Listed Product</button>}
             </div>}
           </form>
         </section>

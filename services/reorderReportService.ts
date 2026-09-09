@@ -128,7 +128,10 @@ const parseApiErrorMessage = async (response: Response): Promise<string> => {
 };
 
 const requestApi = async (url: string, init?: RequestInit, retries = 1): Promise<any> => {
-  const response = await fetch(url, init);
+  const headers = new Headers(init?.headers);
+  const token = getLocalAuthSession()?.token;
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const response = await fetch(url, { ...init, headers });
   const method = String(init?.method || 'GET').toUpperCase();
   if (method === 'GET' && retries > 0 && [500, 502, 503, 504].includes(response.status)) {
     await new Promise((resolve) => window.setTimeout(resolve, 300));

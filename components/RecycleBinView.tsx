@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { RefreshCw, RotateCcw, Search } from 'lucide-react';
 import { RecoveryItem, getAllRecycleBinItems, restoreRecycleBinItem } from '../services/recycleBinService';
+import { canPerformAction } from '../utils/actionPermissions';
 
 const TYPE_LABELS: Record<string, string> = {
   contact: 'Customer',
@@ -35,6 +36,7 @@ const formatDeletedAt = (value: string): string => {
 };
 
 export default function RecycleBinView() {
+  const canEdit = canPerformAction('can_edit');
   const [items, setItems] = useState<RecoveryItem[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -55,6 +57,7 @@ export default function RecycleBinView() {
   }, [revision]);
 
   const handleRestore = async (item: RecoveryItem) => {
+    if (!canEdit) return;
     setRestoringId(item.id);
     setError('');
     try {
@@ -150,7 +153,7 @@ export default function RecycleBinView() {
                       <td className="px-4 py-3 text-slate-600">{formatDeletedAt(item.deleted_at)}</td>
                       <td className="max-w-[260px] px-4 py-3 text-slate-600">{item.delete_reason || '-'}</td>
                       <td className="px-4 py-3">
-                        <button
+                        {canEdit && <button
                           type="button"
                           disabled={restoringId === item.id}
                           onClick={() => handleRestore(item)}
@@ -158,7 +161,7 @@ export default function RecycleBinView() {
                         >
                           <RotateCcw className={`h-3.5 w-3.5 ${restoringId === item.id ? 'animate-spin' : ''}`} />
                           {restoringId === item.id ? 'Restoring...' : 'Restore'}
-                        </button>
+                        </button>}
                       </td>
                     </tr>
                   );

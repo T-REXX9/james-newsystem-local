@@ -5,7 +5,10 @@ const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
 
 const requestApi = async (url: string, init?: RequestInit): Promise<any> => {
-  const response = await fetch(url, init);
+  const headers = new Headers(init?.headers);
+  const token = getLocalAuthSession()?.token;
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const response = await fetch(url, { ...init, headers });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || !payload?.ok) {
     throw new Error(payload?.error || `API request failed (${response.status})`);

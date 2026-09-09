@@ -10,6 +10,7 @@ import { getAllOrderSlips } from '../services/orderSlipLocalApiService';
 import { Contact, Invoice, OrderSlip } from '../types';
 import { fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { useDebounce } from '../hooks/useDebounce';
+import { canPerformAction } from '../utils/actionPermissions';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
@@ -222,6 +223,12 @@ const FreightChargesDebitView: React.FC = () => {
     invoiceNo: '',
   });
 
+  const canAdd = canPerformAction('can_add');
+  const canEditPermission = canPerformAction('can_edit');
+  const canDelete = canPerformAction('can_delete');
+  const canPost = canPerformAction('can_post');
+  const canUnpost = canPerformAction('can_unpost');
+
   const fetchList = async () => {
     setLoadingList(true);
     setError('');
@@ -404,9 +411,10 @@ const FreightChargesDebitView: React.FC = () => {
     return '';
   }, [customers, form.customerId, selected]);
 
-  const canEdit = isCreating || selected?.lstatus === 'Pending';
+  const canEdit = (isCreating && canAdd) || (selected?.lstatus === 'Pending' && canEditPermission);
 
   const handleCreateMode = async () => {
+    if (!canAdd) return;
     setIsCreating(true);
     setSelectedRefno('');
     setSelected(null);
@@ -430,6 +438,7 @@ const FreightChargesDebitView: React.FC = () => {
   };
 
   const handleCreate = async () => {
+    if (!canAdd) return;
     if (!form.customerId || !form.date || !form.courierName.trim() || !form.trackingNo.trim()) {
       setError('Customer, date, courier, and tracking no are required');
       return;
@@ -467,7 +476,7 @@ const FreightChargesDebitView: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!selected) return;
+    if (!canEditPermission || !selected) return;
     if (!form.customerId || !form.date || !form.courierName.trim() || !form.trackingNo.trim()) {
       setError('Customer, date, courier, and tracking no are required');
       return;
@@ -498,7 +507,7 @@ const FreightChargesDebitView: React.FC = () => {
   };
 
   const handleAction = async (action: 'post' | 'unpost') => {
-    if (!selected) return;
+    if ((action === 'post' && !canPost) || (action === 'unpost' && !canUnpost) || !selected) return;
     const promptText = action === 'post'
       ? 'Post this freight charge? It will write to customer ledger.'
       : 'Unpost this freight charge? It will remove related ledger entries.';
@@ -517,7 +526,7 @@ const FreightChargesDebitView: React.FC = () => {
   };
 
   const handleDelete = async () => {
-    if (!selected) return;
+    if (!canDelete || !selected) return;
     if (!window.confirm(`Delete freight charge ${selected.ldm_no}?`)) return;
 
     setSaving(true);
@@ -616,7 +625,7 @@ const FreightChargesDebitView: React.FC = () => {
           <div className="flex flex-wrap items-center justify-between gap-4 rounded-t-[5px] border border-[#ddd] px-5 py-5">
             <div className="flex flex-wrap gap-[5px]">
               <button type="button" onClick={() => setShowSearchModal(true)} className={secondaryButton}>Search</button>
-              <button type="button" onClick={handleCreateMode} className={successButton}>Create New</button>
+              {canAdd && <button type="button" onClick={handleCreateMode} className={successButton}>Create New</button>}
               <button type="button" onClick={clearFilters} className={successButton}>Refresh</button>
             </div>
             <div className="flex flex-wrap items-center gap-[10px]">
@@ -679,7 +688,7 @@ const FreightChargesDebitView: React.FC = () => {
           <div className="flex min-h-[75px] flex-wrap items-center justify-between gap-4 rounded-t-[5px] border border-[#ddd] px-5 py-5">
             <h2 className="relative m-0 text-[18px] font-medium after:absolute after:-bottom-[23px] after:left-0 after:h-px after:w-full after:bg-[#6685a4]">Freight Charges</h2>
             <div className="flex items-center gap-2 text-[14px]">
-              {!isCreating && selected?.lstatus === 'Pending' && (
+              {!isCreating && selected?.lstatus === 'Pending' && canPost && (
                 <button type="button" disabled={saving} onClick={() => handleAction('post')} className={successButton}>
                   <b>POST <u>Freight Charges</u></b>
                 </button>
@@ -776,7 +785,7 @@ const FreightChargesDebitView: React.FC = () => {
                     <tr>
                       <td className={labelCellClass}></td>
                       <td colSpan={3} className={valueCellClass}>
-                        <button type="button" disabled={saving} onClick={handleCreate} className={secondaryButton}>{saving ? 'Saving...' : 'Add Record'}</button>
+                        {canAdd && <button type="button" disabled={saving} onClick={handleCreate} className={secondaryButton}>{saving ? 'Saving...' : 'Add Record'}</button>}
                       </td>
                     </tr>
                   )}
@@ -791,13 +800,13 @@ const FreightChargesDebitView: React.FC = () => {
             <div className="flex min-h-[75px] flex-wrap items-center gap-[5px] px-5 py-5">
               {selected?.lstatus === 'Pending' && (
                 <>
-                  <button type="button" disabled={saving} onClick={handleDelete} className={`${dangerButton} w-[90px]`}>Delete</button>
-                  <button type="button" disabled={saving} onClick={handleSave} className={`${successButton} w-[90px]`}>{saving ? 'Saving...' : 'Save'}</button>
+                  {canDelete && <button type="button" disabled={saving} onClick={handleDelete} className={`${dangerButton} w-[90px]`}>Delete</button>}
+                  {canEditPermission && <button type="button" disabled={saving} onClick={handleSave} className={`${successButton} w-[90px]`}>{saving ? 'Saving...' : 'Save'}</button>}
                 </>
               )}
               {selected?.lstatus === 'Posted' && (
                 <>
-                  <button type="button" disabled={saving} onClick={() => handleAction('unpost')} className={`${dangerButton} w-[90px]`}>UnPost</button>
+                  {canUnpost && <button type="button" disabled={saving} onClick={() => handleAction('unpost')} className={`${dangerButton} w-[90px]`}>UnPost</button>}
                   <button type="button" onClick={() => window.print()} className={`${successButton} w-[90px]`}>Print</button>
                 </>
               )}

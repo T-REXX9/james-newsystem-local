@@ -7,6 +7,7 @@ import {
   AdjustmentType,
   LedgerCustomer,
 } from '../services/adjustmentEntryService';
+import { canPerformAction } from '../utils/actionPermissions';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -64,6 +65,12 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
     amount: '',
     remark: '',
   });
+
+  const canAdd = canPerformAction('can_add');
+  const canEditPermission = canPerformAction('can_edit');
+  const canDelete = canPerformAction('can_delete');
+  const canPost = canPerformAction('can_post');
+  const canUnpost = canPerformAction('can_unpost');
 
   const fetchList = async () => {
     setLoadingList(true);
@@ -164,10 +171,11 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
     return '';
   }, [customers, form.customerId, selected]);
 
-  const canEdit = isCreating || selected?.lstatus === 'Pending';
+  const canEdit = (isCreating && canAdd) || (selected?.lstatus === 'Pending' && canEditPermission);
   const isZeroOut = form.type === 'Zero-Out';
 
   const handleCreateMode = async () => {
+    if (!canAdd) return;
     setIsCreating(true);
     setSelectedRefno('');
     setSelected(null);
@@ -185,6 +193,7 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
   };
 
   const handleCreate = async () => {
+    if (!canAdd) return;
     if (!form.customerId) {
       setError('Customer is required');
       return;
@@ -221,7 +230,7 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
   };
 
   const handleSave = async () => {
-    if (!selected) return;
+    if (!canEditPermission || !selected) return;
     if (!form.customerId || !form.date) {
       setError('Customer and date are required');
       return;
@@ -246,7 +255,7 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
   };
 
   const handleAction = async (action: 'post' | 'unpost') => {
-    if (!selected) return;
+    if ((action === 'post' && !canPost) || (action === 'unpost' && !canUnpost) || !selected) return;
     const promptText = action === 'post'
       ? 'Post this adjustment? It will write to customer ledger.'
       : 'Unpost this adjustment? It will remove ledger entries.';
@@ -265,7 +274,7 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
   };
 
   const handleDelete = async () => {
-    if (!selected) return;
+    if (!canDelete || !selected) return;
     if (!window.confirm(`Delete adjustment ${selected.lno}?`)) return;
 
     setSaving(true);
@@ -289,7 +298,7 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
           <div className="flex min-h-[82px] flex-wrap items-center justify-between gap-4 border-b border-[#ddd] px-9 py-5">
             <div className="flex gap-1">
               <button type="button" onClick={() => setShowSearchModal(true)} className="rounded-[4px] bg-[#5d82a2] px-4 py-2 text-white">Search</button>
-              <button type="button" onClick={handleCreateMode} className="rounded-[4px] bg-[#51b957] px-4 py-2 text-white">Create New</button>
+              {canAdd && <button type="button" onClick={handleCreateMode} className="rounded-[4px] bg-[#51b957] px-4 py-2 text-white">Create New</button>}
             </div>
             <div className="flex items-center gap-4">
               <span className="font-['Oswald'] text-[20px] text-[#263f52]">Filter by Month:</span>
@@ -341,7 +350,7 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
           <div className="flex min-h-[64px] items-center justify-between border-b border-[#ddd] px-5">
             <h2 className="border-b border-[#5d82a2] py-5 pr-24 font-['Oswald'] text-[18px] uppercase text-[#315574]">Adjustment Entry</h2>
             <div className="flex items-center gap-2 font-['Oswald'] text-[18px] text-[#263f52]">
-              {!isCreating && selected?.lstatus === 'Pending' && (
+              {!isCreating && selected?.lstatus === 'Pending' && canPost && (
                 <button type="button" onClick={() => handleAction('post')} disabled={saving} className="rounded-[4px] bg-[#51b957] px-4 py-2 text-[12px] font-bold text-white">
                   POST <u>Adjustment</u>
                 </button>
@@ -389,16 +398,16 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
                 <div className="mt-7 ml-[126px] flex gap-2">
                   {isCreating ? (
                     <>
-                      <button type="button" onClick={handleCreate} disabled={saving} className="rounded-[4px] bg-[#5d82a2] px-4 py-2 text-white disabled:opacity-50">Add Record</button>
+                      {canAdd && <button type="button" onClick={handleCreate} disabled={saving} className="rounded-[4px] bg-[#5d82a2] px-4 py-2 text-white disabled:opacity-50">Add Record</button>}
                       <button type="button" onClick={() => { setIsCreating(false); setSelectedRefno(rows[0]?.lrefno || ''); }} className="rounded-[4px] border border-[#ccc] bg-white px-4 py-2">Cancel</button>
                     </>
                   ) : selected?.lstatus === 'Pending' ? (
                     <>
-                      <button type="button" onClick={handleSave} disabled={saving} className="rounded-[4px] bg-[#5d82a2] px-4 py-2 text-white disabled:opacity-50">Save</button>
-                      <button type="button" onClick={handleDelete} disabled={saving} className="inline-flex items-center gap-1 rounded-[4px] bg-[#d9534f] px-4 py-2 text-white disabled:opacity-50"><Trash2 className="h-3.5 w-3.5" />Delete</button>
+                      {canEditPermission && <button type="button" onClick={handleSave} disabled={saving} className="rounded-[4px] bg-[#5d82a2] px-4 py-2 text-white disabled:opacity-50">Save</button>}
+                      {canDelete && <button type="button" onClick={handleDelete} disabled={saving} className="inline-flex items-center gap-1 rounded-[4px] bg-[#d9534f] px-4 py-2 text-white disabled:opacity-50"><Trash2 className="h-3.5 w-3.5" />Delete</button>}
                     </>
                   ) : selected?.lstatus === 'Posted' ? (
-                    <button type="button" onClick={() => handleAction('unpost')} disabled={saving} className="rounded-[4px] bg-[#f0ad4e] px-4 py-2 text-white disabled:opacity-50">Unpost</button>
+                    canUnpost ? <button type="button" onClick={() => handleAction('unpost')} disabled={saving} className="rounded-[4px] bg-[#f0ad4e] px-4 py-2 text-white disabled:opacity-50">Unpost</button> : null
                   ) : null}
                 </div>
               </div>

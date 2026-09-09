@@ -24,6 +24,13 @@ const getUserContext = () => {
   };
 };
 
+const authHeaders = (headers?: HeadersInit): Headers => {
+  const next = new Headers(headers);
+  const token = getLocalAuthSession()?.token;
+  if (token) next.set('Authorization', `Bearer ${token}`);
+  return next;
+};
+
 const toSupplier = (raw: any): Supplier => ({
   id: String(raw?.id ?? ''),
   name: String(raw?.name ?? ''),
@@ -45,7 +52,7 @@ export const fetchSuppliers = async (search?: string): Promise<Supplier[]> => {
     query.set('search', String(search).trim());
   }
 
-  const response = await fetch(`${API_BASE_URL}/suppliers?${query.toString()}`);
+  const response = await fetch(`${API_BASE_URL}/suppliers?${query.toString()}`, { headers: authHeaders() });
   if (!response.ok) throw new Error(await parseApiErrorMessage(response));
 
   const payload = await response.json();
@@ -56,7 +63,8 @@ export const fetchSuppliers = async (search?: string): Promise<Supplier[]> => {
 
 export const fetchSupplierById = async (id: string): Promise<Supplier> => {
   const response = await fetch(
-    `${API_BASE_URL}/suppliers/${encodeURIComponent(String(id))}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`
+    `${API_BASE_URL}/suppliers/${encodeURIComponent(String(id))}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`,
+    { headers: authHeaders() }
   );
   if (!response.ok) throw new Error(await parseApiErrorMessage(response));
 
@@ -69,7 +77,7 @@ export const createSupplier = async (data: Partial<Supplier>): Promise<Supplier>
 
   const response = await fetch(`${API_BASE_URL}/suppliers`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       main_id: mainId,
       name: data?.name || '',
@@ -89,7 +97,7 @@ export const createSupplier = async (data: Partial<Supplier>): Promise<Supplier>
 export const updateSupplier = async (id: string, data: Partial<Supplier>): Promise<Supplier> => {
   const response = await fetch(`${API_BASE_URL}/suppliers/${encodeURIComponent(String(id))}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       main_id: API_MAIN_ID,
       name: data?.name || '',
@@ -109,7 +117,7 @@ export const updateSupplier = async (id: string, data: Partial<Supplier>): Promi
 export const deleteSupplier = async (id: string): Promise<void> => {
   const response = await fetch(
     `${API_BASE_URL}/suppliers/${encodeURIComponent(String(id))}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`,
-    { method: 'DELETE' }
+    { method: 'DELETE', headers: authHeaders() }
   );
   if (!response.ok) throw new Error(await parseApiErrorMessage(response));
 };

@@ -20,19 +20,9 @@ import DeleteCollectionReportModal from './DeleteCollectionReportModal';
 import ConfirmModal from './ConfirmModal';
 import { BUTTON_BASE, BUTTON_PRIMARY, BUTTON_SUCCESS } from '../utils/uiConstants';
 import { useDialogAccessibility } from '../hooks/useDialogAccessibility';
+import { canPerformAction } from '../utils/actionPermissions';
 
-const COLLECTION_PAGE_NO = '21';
 const COLLECTION_TAB_ID = 'accounting-transactions-daily-collection-entry';
-
-const hasDeletePermission = (): boolean => {
-  const session = getLocalAuthSession();
-  const webPerms = session?.context?.permissions?.web;
-  if (!Array.isArray(webPerms)) return false;
-  const perm = webPerms.find(
-    (p) => String(p.lpageno) === COLLECTION_PAGE_NO,
-  );
-  return String(perm?.ldelete_action) === '1';
-};
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
@@ -139,6 +129,10 @@ const DailyCollectionEntryView: React.FC = () => {
   const session = getLocalAuthSession();
   const actorId = session?.userProfile?.id;
   const actorRole = session?.userProfile?.role || 'Unknown';
+  const canAdd = canPerformAction('can_add');
+  const canEdit = canPerformAction('can_edit');
+  const canDelete = canPerformAction('can_delete');
+  const canPost = canPerformAction('can_post');
 
   const selectedAmount = useMemo(() => {
     return unpaidRows
@@ -413,6 +407,7 @@ const DailyCollectionEntryView: React.FC = () => {
   }, [selectedAmount]);
 
   const handleCreate = async () => {
+    if (!canAdd) return;
     setWorkingAction('create');
     setError('');
     try {
@@ -430,6 +425,9 @@ const DailyCollectionEntryView: React.FC = () => {
     action: 'submitrecord' | 'approverecord' | 'disapproverecord' | 'cancelrecord' | 'postrecord' | 'posttoledger',
   ) => {
     if (!selectedRefno) return;
+    if (action === 'submitrecord' && !canEdit) return;
+    if ((action === 'postrecord' || action === 'posttoledger') && !canPost) return;
+    if (action === 'cancelrecord' && !canDelete) return;
     let remarks = '';
     if (action === 'disapproverecord') {
       remarks = window.prompt('Reason for disapproval', '') || '';
@@ -511,7 +509,7 @@ const DailyCollectionEntryView: React.FC = () => {
   };
 
   const handleDeleteCollectionReport = async () => {
-    if (!selectedRefno) return;
+    if (!canDelete || !selectedRefno) return;
     setWorkingAction('delete-report');
     setError('');
     try {
@@ -530,7 +528,7 @@ const DailyCollectionEntryView: React.FC = () => {
   };
 
   const handlePostSelectedItems = async () => {
-    if (!selectedRefno || selectedItemIds.length === 0) return;
+    if (!canPost || !selectedRefno || selectedItemIds.length === 0) return;
     setWorkingAction('post-items');
     setError('');
     try {
@@ -544,7 +542,7 @@ const DailyCollectionEntryView: React.FC = () => {
   };
 
   const performDeleteItem = async (itemId: number) => {
-    if (!selectedRefno) return;
+    if (!canDelete || !selectedRefno) return;
     setWorkingAction(`delete-${itemId}`);
     setError('');
     try {
@@ -558,12 +556,12 @@ const DailyCollectionEntryView: React.FC = () => {
   };
 
   const handleDeleteItem = (itemId: number) => {
-    if (!selectedRefno) return;
+    if (!canDelete || !selectedRefno) return;
     setLineDeleteConfirm({ isOpen: true, itemId, mode: 'single' });
   };
 
   const performDeleteSelectedItems = async () => {
-    if (!selectedRefno || selectedItemIds.length === 0) return;
+    if (!canDelete || !selectedRefno || selectedItemIds.length === 0) return;
     setWorkingAction('delete-selected');
     setError('');
     try {
@@ -579,7 +577,7 @@ const DailyCollectionEntryView: React.FC = () => {
   };
 
   const handleDeleteSelectedItems = () => {
-    if (!selectedRefno || selectedItemIds.length === 0) return;
+    if (!canDelete || !selectedRefno || selectedItemIds.length === 0) return;
     setLineDeleteConfirm({ isOpen: true, itemId: null, mode: 'bulk' });
   };
 
@@ -607,7 +605,7 @@ const DailyCollectionEntryView: React.FC = () => {
   };
 
   const handleItemStatusChange = async (item: DailyCollectionItem, nextStatus: LegacyCollectionItemStatus) => {
-    if (!selectedRefno || item.lstatus === nextStatus) return;
+    if (!canEdit || !selectedRefno || item.lstatus === nextStatus) return;
 
     setSavingItemStatusId(item.lid);
     setError('');
@@ -622,7 +620,7 @@ const DailyCollectionEntryView: React.FC = () => {
   };
 
   const handleSavePayment = async () => {
-    if (!selectedRefno) return;
+    if (!canAdd || !selectedRefno) return;
     if (!form.customerId) {
       setError('Customer is required');
       return;
@@ -677,14 +675,14 @@ const DailyCollectionEntryView: React.FC = () => {
     }
   };
 
-  const canAddPayment = selectedHeader?.lstatus === 'Pending' || selectedHeader?.lstatus === 'Submitted' || selectedHeader?.lstatus === 'Posted';
+  const canAddPayment = canAdd && (selectedHeader?.lstatus === 'Pending' || selectedHeader?.lstatus === 'Submitted' || selectedHeader?.lstatus === 'Posted');
 
   const renderStatusButtons = () => {
     const status = selectedHeader?.lstatus;
     const primary: React.ReactNode[] = [];
     const secondary: React.ReactNode[] = [];
 
-    if (status === 'Pending') {
+    if (status === 'Pending' && canEdit) {
       primary.push(
         <button
           key="submit"
@@ -716,7 +714,7 @@ const DailyCollectionEntryView: React.FC = () => {
         </button>,
       );
     }
-    if (status === 'Approved') {
+    if (status === 'Approved' && canPost) {
       primary.push(
         <button
           key="post"
@@ -752,7 +750,7 @@ const DailyCollectionEntryView: React.FC = () => {
           Approver Logs
         </button>,
       );
-      if (status === 'Pending' && hasDeletePermission()) {
+      if (status === 'Pending' && canDelete) {
         secondary.push(
           <button
             key="delete-report"
@@ -846,13 +844,13 @@ const DailyCollectionEntryView: React.FC = () => {
               >
                 Search Check
               </button>
-              <button
+              {canAdd && <button
                 className="rounded-[4px] bg-[#51b957] px-4 py-2 text-white disabled:opacity-50"
                 onClick={handleCreate}
                 disabled={workingAction === 'create'}
               >
                 Create New
-              </button>
+              </button>}
               <div className="relative ml-3">
                 <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
@@ -976,20 +974,20 @@ const DailyCollectionEntryView: React.FC = () => {
                 {!detailLoading && canAddPayment && (
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
                     <div className="flex gap-2">
-                      <button
+                      {canDelete && <button
                         className={`${BUTTON_BASE} text-red-600 border-red-300 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed`}
                         onClick={handleDeleteSelectedItems}
                         disabled={selectedItemIds.length === 0 || !!workingAction}
                       >
                         Delete Selected
-                      </button>
-                      <button
+                      </button>}
+                      {canPost && <button
                         className={`${BUTTON_SUCCESS} disabled:opacity-50 disabled:cursor-not-allowed`}
                         onClick={handlePostSelectedItems}
                         disabled={selectedItemIds.length === 0 || !!workingAction}
                       >
                         Post Selected
-                      </button>
+                      </button>}
                     </div>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                       <div className="flex flex-col">

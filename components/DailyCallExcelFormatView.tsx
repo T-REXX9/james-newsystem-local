@@ -15,6 +15,7 @@ import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
 import { getVipTierConfig } from '../services/vipTierSettingsService';
 import { VipTierConfig } from '../types';
 import AddContactModal from './AddContactModal';
+import { canPerformAction } from '../utils/actionPermissions';
 
 interface DailyCallExcelFormatViewProps {
   currentUser: UserProfile | null;
@@ -59,6 +60,7 @@ const firstDisplayDate = (...values: Array<string | undefined>) =>
   }) || '—';
 
 const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ currentUser }) => {
+  const canAdd = canPerformAction('can_add');
   const { addToast } = useToast();
   const [allCustomers, setAllCustomers] = useState<DailyCallCustomerRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -164,6 +166,7 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
   }, []);
 
   const handleSubmitNewCustomer = useCallback(async (data: Omit<Contact, 'id'>) => {
+    if (!canAdd) throw new Error('You do not have permission to add customer records.');
     const assignedName = currentUser?.full_name?.trim() || currentUser?.email || 'Sales Agent';
     const payload = {
       ...data,
@@ -229,14 +232,14 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
           </div>
 
           <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
-            <button
+            {canAdd && <button
               type="button"
               onClick={() => setShowAddCustomerModal(true)}
               className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
             >
               <UserPlus className="h-4 w-4" />
               New Customer
-            </button>
+            </button>}
             <div className="relative w-full lg:w-80">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input

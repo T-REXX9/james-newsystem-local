@@ -104,7 +104,10 @@ const parseApiError = async (response: Response): Promise<string> => {
 };
 
 const requestApi = async <T>(url: string): Promise<T> => {
-  const response = await fetch(url);
+  const token = getLocalAuthSession()?.token;
+  const response = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
   if (!response.ok) throw new Error(await parseApiError(response));
 
   const payload = await response.json();
@@ -113,9 +116,13 @@ const requestApi = async <T>(url: string): Promise<T> => {
 };
 
 const mutateApi = async <T>(url: string, method: string, body?: Record<string, unknown>): Promise<T> => {
+  const token = getLocalAuthSession()?.token;
   const response = await fetch(url, {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!response.ok) throw new Error(await parseApiError(response));

@@ -26,6 +26,7 @@ import {
 } from '../hooks/useSuggestedStockReportQuery';
 import { useToast } from './ToastProvider';
 import { navigateWorkflow } from '../utils/workflowNavigate';
+import { canPerformAction } from '../utils/actionPermissions';
 
 interface SuggestedStockReportProps {
   currentUser?: UserProfile | null;
@@ -39,6 +40,8 @@ const SORT_OPTIONS: Array<{ value: SuggestedStockSortOption; label: string }> = 
 ];
 
 const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser: _currentUser }) => {
+  const canAdd = canPerformAction('can_add');
+  const canDelete = canPerformAction('can_delete');
   const { addToast } = useToast();
   const query = useSuggestedStockReportQuery();
   const {
@@ -130,7 +133,7 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
   };
 
   const handleAddSelectedItemsToPr = async () => {
-    if (selectedItems.length === 0 || isAddingToPr || isAddingToPrRef.current) return;
+    if (!canAdd || selectedItems.length === 0 || isAddingToPr || isAddingToPrRef.current) return;
     const notCreated = selectedItems.filter((item) => !item.productCreated);
     if (notCreated.length > 0) {
       addToast({ type: 'warning', title: 'Create the product first', description: 'Only rows marked Product Created can be added to a purchase request.' });
@@ -172,6 +175,7 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
 
   const handleKivSelection = async () => {
     if (selectedItems.length === 0 || isUpdatingKiv) return;
+    if (kivFolder ? !canDelete : !canAdd) return;
     setIsUpdatingKiv(true);
     try {
       if (kivFolder) {
@@ -295,11 +299,9 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
             >
               <Download className="h-4 w-4" /> Export CSV
             </button>
-            {!cartFolder && (
-            <button type="button" onClick={() => void handleAddSelectedItemsToPr()} disabled={selectedItems.length === 0 || selectedItems.length !== prSelectedItems.length || isAddingToPr} title={selectedItems.length > prSelectedItems.length ? 'Create every selected product before adding the selection to a PR.' : undefined} className="inline-flex items-center gap-2 rounded-md bg-[#173c83] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#102f76] disabled:cursor-not-allowed disabled:opacity-50">
+            {!cartFolder && canAdd && <button type="button" onClick={() => void handleAddSelectedItemsToPr()} disabled={selectedItems.length === 0 || selectedItems.length !== prSelectedItems.length || isAddingToPr} title={selectedItems.length > prSelectedItems.length ? 'Create every selected product before adding the selection to a PR.' : undefined} className="inline-flex items-center gap-2 rounded-md bg-[#173c83] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#102f76] disabled:cursor-not-allowed disabled:opacity-50">
               {isAddingToPr ? 'Adding to PR...' : `Add Selected Items to PR (${prSelectedItems.length})`}
-            </button>
-            )}
+            </button>}
           </div>
         </header>
 
@@ -473,14 +475,14 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
                       className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#175fd3] focus:ring-2 focus:ring-blue-100"
                     />
                   </label>
-                  <button
+                  {(kivFolder ? canDelete : canAdd) && <button
                     type="button"
                     onClick={applyFilters}
                     disabled={Boolean(dateRangeError)}
                     className="h-10 rounded-md bg-[#175fd3] px-4 text-sm font-bold text-white transition hover:bg-[#0e4fb7] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Apply Filters
-                  </button>
+                  </button>}
                   <button
                     type="button"
                     onClick={resetDateRange}
@@ -651,11 +653,11 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
                                 )
                               ) : item.productCreated ? (
                                 <span className="text-xs font-semibold text-emerald-700">Ready for PR</span>
-                              ) : (
+                              ) : canAdd ? (
                                 <button type="button" onClick={() => handleCreateProduct(item)} className="inline-flex items-center gap-1 rounded-md border border-[#175fd3] bg-white px-3 py-1.5 text-xs font-bold text-[#175fd3] transition hover:bg-blue-50">
                                   <Plus className="h-3.5 w-3.5" /> Create
                                 </button>
-                              )}
+                              ) : null}
                             </td>
                           </tr>
                         );

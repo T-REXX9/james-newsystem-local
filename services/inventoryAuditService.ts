@@ -35,7 +35,9 @@ const parseApiErrorMessage = async (response: Response): Promise<string> => {
 };
 
 const requestApi = async (url: string): Promise<any> => {
-  const response = await fetch(url);
+  const token = getLocalAuthSession()?.token;
+  const headers = new Headers(token ? { Authorization: `Bearer ${token}` } : undefined);
+  const response = await fetch(url, { headers });
   if (!response.ok) {
     throw new Error(await parseApiErrorMessage(response));
   }
@@ -47,9 +49,12 @@ const requestApi = async (url: string): Promise<any> => {
 };
 
 const mutateApi = async (url: string, method: string, body?: Record<string, unknown>): Promise<any> => {
+  const token = getLocalAuthSession()?.token;
+  const headers = new Headers({ 'Content-Type': 'application/json' });
+  if (token) headers.set('Authorization', `Bearer ${token}`);
   const response = await fetch(url, {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!response.ok) {

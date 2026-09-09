@@ -17,6 +17,7 @@ import FieldHelp from './FieldHelp';
 import { validateNumeric, validateRequired } from '../utils/formValidation';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
+import { canPerformAction } from '../utils/actionPermissions';
 
 interface AddToPurchaseRequestModalProps {
   item: SuggestedStockItem;
@@ -29,6 +30,7 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
   onClose,
   currentUser,
 }) => {
+  const canAdd = canPerformAction('can_add');
   const { addToast } = useToast();
   const [mode, setMode] = useState<'existing' | 'new'>('existing');
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
@@ -88,6 +90,7 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canAdd) return;
     if (!validateForm()) {
       setSubmitCount((prev) => prev + 1);
       return;
@@ -391,7 +394,7 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={isSubmitting || (mode === 'existing' && purchaseOrders.length === 0) || (mode === 'new' && suppliers.length === 0)}
+                disabled={!canAdd || isSubmitting || (mode === 'existing' && purchaseOrders.length === 0) || (mode === 'new' && suppliers.length === 0)}
                 className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-brand-blue to-blue-700 text-white text-sm font-bold rounded-xl shadow-lg shadow-brand-blue/20 hover:shadow-brand-blue/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? (

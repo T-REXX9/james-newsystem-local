@@ -11,6 +11,7 @@ import TransactionAutocomplete from './TransactionAutocomplete';
 import ValidationSummary from './ValidationSummary';
 import FieldHelp from './FieldHelp';
 import { validateMinLength, validateRequired } from '../utils/formValidation';
+import { canPerformAction } from '../utils/actionPermissions';
 
 interface CreateIncidentReportModalProps {
   contactId: string;
@@ -47,6 +48,7 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
   currentUser,
 }) => {
   const { addToast } = useToast();
+  const canAdd = canPerformAction('can_add');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<ContactTransaction[]>([]);
@@ -184,6 +186,7 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canAdd) return;
     setError(null);
 
     if (!validateForm()) {
@@ -677,7 +680,7 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !canAdd}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2"
             >
               {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}

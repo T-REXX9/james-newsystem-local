@@ -9,18 +9,21 @@ import {
     fetchCouriers,
     updateCourier,
 } from '../../../services/courierLocalApiService';
+import { canPerformAction } from '../../../utils/actionPermissions';
 
 const CourierForm: React.FC<{
     initialData?: CourierRecord | null;
     onClose: () => void;
     onSuccess: () => void;
-}> = ({ initialData, onClose, onSuccess }) => {
+    canSave: boolean;
+}> = ({ initialData, onClose, onSuccess, canSave }) => {
     const { addToast } = useToast();
     const [name, setName] = useState(initialData?.name || '');
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!canSave) return;
         const trimmed = name.trim();
         if (!trimmed) {
             return;
@@ -78,7 +81,7 @@ const CourierForm: React.FC<{
                 </button>
                 <button
                     type="submit"
-                    disabled={loading}
+                    disabled={loading || !canSave}
                     className="rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
                 >
                     {loading ? 'Saving...' : 'Save'}
@@ -89,6 +92,9 @@ const CourierForm: React.FC<{
 };
 
 export default function Couriers() {
+    const canAdd = canPerformAction('can_add');
+    const canEdit = canPerformAction('can_edit');
+    const canDelete = canPerformAction('can_delete');
     const { addToast } = useToast();
     const [data, setData] = useState<CourierRecord[]>([]);
     const [loading, setLoading] = useState(true);
@@ -120,6 +126,7 @@ export default function Couriers() {
     }, [loadData]);
 
     const handleDelete = async (id: number) => {
+        if (!canDelete) return;
         if (!confirm('Are you sure you want to delete this courier?')) return;
 
         try {
@@ -151,7 +158,7 @@ export default function Couriers() {
                         Manage the old-system courier master list used in delivery workflows.
                     </p>
                 </div>
-                <button
+                {canAdd && <button
                     onClick={() => {
                         setEditingItem(null);
                         setIsModalOpen(true);
@@ -160,7 +167,7 @@ export default function Couriers() {
                 >
                     <Plus size={18} />
                     Add New
-                </button>
+                </button>}
             </div>
 
             <div className="flex flex-1 flex-col overflow-hidden p-6">
@@ -212,7 +219,7 @@ export default function Couriers() {
                                             </td>
                                             <td className="px-6 py-4 text-right text-sm font-medium">
                                                 <div className="flex justify-end gap-2">
-                                                    <button
+                                                    {canEdit && <button
                                                         onClick={() => {
                                                             setEditingItem(courier);
                                                             setIsModalOpen(true);
@@ -220,13 +227,13 @@ export default function Couriers() {
                                                         className="p-1 text-blue-600 transition-colors hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
                                                     >
                                                         <Edit2 size={16} />
-                                                    </button>
-                                                    <button
+                                                    </button>}
+                                                    {canDelete && <button
                                                         onClick={() => handleDelete(courier.id)}
                                                         className="p-1 text-red-600 transition-colors hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
                                                     >
                                                         <Trash2 size={16} />
-                                                    </button>
+                                                    </button>}
                                                 </div>
                                             </td>
                                         </tr>
@@ -253,14 +260,15 @@ export default function Couriers() {
                             </button>
                         </div>
                         <div className="p-6">
-                            <CourierForm
+                <CourierForm
                                 initialData={editingItem}
                                 onClose={() => setIsModalOpen(false)}
-                                onSuccess={() => {
-                                    setIsModalOpen(false);
-                                    loadData();
-                                }}
-                            />
+                    onSuccess={() => {
+                        setIsModalOpen(false);
+                        loadData();
+                    }}
+                    canSave={editingItem ? canEdit : canAdd}
+                />
                         </div>
                     </div>
                 </div>

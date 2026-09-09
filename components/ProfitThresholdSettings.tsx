@@ -6,12 +6,14 @@ import {
 import { UserProfile, ProfitThresholdConfig } from '../types';
 import * as profitProtectionService from '../services/profitProtectionService';
 import { useToast } from './ToastProvider';
+import { hasActionPermission } from '../constants';
 
 interface ProfitThresholdSettingsProps {
     currentUser: UserProfile | null;
 }
 
 const ProfitThresholdSettings: React.FC<ProfitThresholdSettingsProps> = ({ currentUser }) => {
+    const canEdit = hasActionPermission(currentUser, 'can_edit');
     const [config, setConfig] = useState<ProfitThresholdConfig>({
         percentage: 50,
         enforce_approval: true,
@@ -44,6 +46,7 @@ const ProfitThresholdSettings: React.FC<ProfitThresholdSettingsProps> = ({ curre
     }, [loadData]);
 
     const handleSave = async () => {
+        if (!canEdit) return;
         if (!currentUser) {
             addToast('User not authenticated', 'error');
             return;
@@ -92,7 +95,7 @@ const ProfitThresholdSettings: React.FC<ProfitThresholdSettingsProps> = ({ curre
                         <p className="text-sm text-slate-500 dark:text-slate-400">Configure minimum profit thresholds</p>
                     </div>
                 </div>
-                {hasChanges && (
+                {hasChanges && canEdit && (
                     <button
                         onClick={handleSave}
                         disabled={saving}
@@ -124,6 +127,7 @@ const ProfitThresholdSettings: React.FC<ProfitThresholdSettingsProps> = ({ curre
                                 max={90}
                                 value={config.percentage}
                                 onChange={(e) => updateConfig({ percentage: parseInt(e.target.value) })}
+                                disabled={!canEdit}
                                 className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-brand-blue"
                             />
                             <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 px-4 py-2 rounded-xl min-w-[100px] justify-center">
@@ -164,6 +168,7 @@ const ProfitThresholdSettings: React.FC<ProfitThresholdSettingsProps> = ({ curre
                         </div>
                         <button
                             onClick={() => updateConfig({ enforce_approval: !config.enforce_approval })}
+                            disabled={!canEdit}
                             className="p-1"
                         >
                             {config.enforce_approval ? (
@@ -189,6 +194,7 @@ const ProfitThresholdSettings: React.FC<ProfitThresholdSettingsProps> = ({ curre
                         </div>
                         <button
                             onClick={() => updateConfig({ allow_override: !config.allow_override })}
+                            disabled={!canEdit}
                             className="p-1"
                         >
                             {config.allow_override ? (

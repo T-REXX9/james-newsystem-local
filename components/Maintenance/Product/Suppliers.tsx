@@ -3,12 +3,14 @@ import { Supplier } from '../../../maintenance.types';
 import { createSupplier, deleteSupplier, fetchSuppliers, updateSupplier } from '../../../services/supplierService';
 import { useToast } from '../../ToastProvider';
 import { Edit2, Plus, Search, Trash2, X } from 'lucide-react';
+import { canPerformAction } from '../../../utils/actionPermissions';
 
 const SupplierForm: React.FC<{
     initialData?: Supplier | null;
     onClose: () => void;
     onSuccess: () => void;
-}> = ({ initialData, onClose, onSuccess }) => {
+    canSave: boolean;
+}> = ({ initialData, onClose, onSuccess, canSave }) => {
     const { addToast } = useToast();
     const [formData, setFormData] = useState<Partial<Supplier>>(
         initialData || { name: '', code: '', remarks: '', address: '', contact_person: '', tin: '' }
@@ -17,6 +19,7 @@ const SupplierForm: React.FC<{
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!canSave) return;
         if (!formData.name?.trim()) {
             addToast({
                 type: 'error',
@@ -124,7 +127,7 @@ const SupplierForm: React.FC<{
                 </button>
                 <button
                     type="submit"
-                    disabled={loading || !formData.name?.trim()}
+                    disabled={loading || !formData.name?.trim() || !canSave}
                     className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
                 >
                     {loading ? 'Saving...' : 'Save'}
@@ -135,6 +138,9 @@ const SupplierForm: React.FC<{
 };
 
 export default function Suppliers() {
+    const canAdd = canPerformAction('can_add');
+    const canEdit = canPerformAction('can_edit');
+    const canDelete = canPerformAction('can_delete');
     const { addToast } = useToast();
     const [data, setData] = useState<Supplier[]>([]);
     const [loading, setLoading] = useState(true);
@@ -167,7 +173,7 @@ export default function Suppliers() {
     }, [searchTerm]);
 
     const handleDeleteConfirm = async () => {
-        if (!deleteTargetId) return;
+        if (!deleteTargetId || !canDelete) return;
         setDeleteLoading(true);
         try {
             await deleteSupplier(deleteTargetId);
@@ -199,7 +205,7 @@ export default function Suppliers() {
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Suppliers</h1>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Manage your suppliers</p>
                 </div>
-                <button
+                {canAdd && <button
                     onClick={() => {
                         setEditingItem(null);
                         setIsModalOpen(true);
@@ -208,7 +214,7 @@ export default function Suppliers() {
                 >
                     <Plus size={18} />
                     Add New
-                </button>
+                </button>}
             </div>
 
             <div className="p-6 flex-1 overflow-hidden flex flex-col">
@@ -259,7 +265,7 @@ export default function Suppliers() {
                                             <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">{item.remarks || '-'}</td>
                                             <td className="px-6 py-4 text-right text-sm font-medium">
                                                 <div className="flex justify-end gap-2">
-                                                    <button
+                                                    {canEdit && <button
                                                         onClick={() => {
                                                             setEditingItem(item);
                                                             setIsModalOpen(true);
@@ -267,13 +273,13 @@ export default function Suppliers() {
                                                         className="p-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
                                                     >
                                                         <Edit2 size={16} />
-                                                    </button>
-                                                    <button
+                                                    </button>}
+                                                    {canDelete && <button
                                                         onClick={() => setDeleteTargetId(item.id)}
                                                         className="p-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors"
                                                     >
                                                         <Trash2 size={16} />
-                                                    </button>
+                                                    </button>}
                                                 </div>
                                             </td>
                                         </tr>
@@ -307,6 +313,7 @@ export default function Suppliers() {
                                     setIsModalOpen(false);
                                     await loadSuppliers(searchTerm);
                                 }}
+                                canSave={editingItem ? canEdit : canAdd}
                             />
                         </div>
                     </div>

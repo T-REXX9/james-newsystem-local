@@ -20,7 +20,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { updateContact } from '../services/customerDatabaseLocalApiService';
 import { requestCustomerUpdate } from '../services/customerWorkflowLocalApiService';
 import CustomerRequestsTab from './CustomerRequestsTab';
-import { isCompanyOwnerRole } from '../constants';
+import { hasActionPermission, isMasterUserAccount } from '../constants';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import { normalizePriceGroup } from '../constants/pricingGroups';
 
@@ -59,7 +59,9 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
     commentsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [comments]);
 
-  const isOwner = isCompanyOwnerRole(currentUser?.role);
+  const isOwner = isMasterUserAccount(currentUser);
+  const canAdd = hasActionPermission(currentUser, 'can_add');
+  const canEdit = hasActionPermission(currentUser, 'can_edit');
 
   const buildChangedFields = (previous: Contact, next: Omit<Contact, 'id'>) => {
     const changed: Record<string, { oldValue: unknown; newValue: unknown }> = {};
@@ -85,6 +87,9 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
   };
 
   const handleSubmitContactEdit = async (data: Omit<Contact, 'id'>) => {
+    if (!canEdit) {
+      throw new Error('You do not have permission to edit customer records.');
+    }
     if (!currentUser?.id) {
       throw new Error('User not authenticated');
     }
@@ -168,20 +173,20 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
               <span className="font-medium text-sm">Back to Customer Database</span>
           </div>
           <div className="flex items-center gap-3">
-               <button 
+               {canAdd && <button
                 onClick={() => setIsDiscountModalOpen(true)}
                 className="flex items-center gap-2 px-3 py-2 bg-yellow-100 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:hover:bg-yellow-900/50 text-yellow-700 dark:text-yellow-300 rounded-lg text-sm font-bold transition-colors"
                >
                    <Gift className="w-4 h-4" />
                    Request Discount
-               </button>
-               <button 
+               </button>}
+               {canEdit && <button
                 onClick={() => setIsEditModalOpen(true)}
                 className="flex items-center gap-2 px-3 py-2 bg-blue-100 hover:bg-blue-200 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded-lg text-sm font-bold transition-colors"
                >
                    <Pencil className="w-4 h-4" />
                    {isOwner ? 'Edit Details' : 'Request Update'}
-               </button>
+               </button>}
 
                <button className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 transition-colors">
                    <Star className="w-5 h-5" />

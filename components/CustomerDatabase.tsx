@@ -14,7 +14,7 @@ import { useToast } from './ToastProvider';
 import { EmptyState, PageHeader } from './common/PageScaffold';
 import ApprovalRequestsView from './ApprovalRequestsView';
 import { getLocalAuthSession } from '../services/localAuthService';
-import { isMasterUserAccount } from '../constants';
+import { isMasterUserAccount, hasActionPermission } from '../constants';
 
 const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: string; initialApprovalRequestId?: string }> = ({ initialStatus = 'All', initialContactId, initialApprovalRequestId }) => {
     const { addToast } = useToast();
@@ -35,6 +35,8 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
 
     const currentUser = getLocalAuthSession()?.userProfile ?? null;
     const canViewApprovals = isMasterUserAccount(currentUser);
+    const canAdd = hasActionPermission(currentUser, 'can_add');
+    const canEdit = hasActionPermission(currentUser, 'can_edit');
 
     React.useEffect(() => {
         if (initialApprovalRequestId && canViewApprovals) setViewMode('approvals');
@@ -108,7 +110,7 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
 
   // Bulk Actions
   const handleBulkHide = async (hide: boolean) => {
-    if (selectedIds.size === 0) return;
+    if (!canEdit || selectedIds.size === 0) return;
     try {
       await bulkUpdateContacts(Array.from(selectedIds), { isHidden: hide });
       addToast({
@@ -128,7 +130,7 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
   };
 
   const handleBulkAssignAgent = async (agentName: string) => {
-    if (!agentName || selectedIds.size === 0) return;
+    if (!isMasterUserAccount(currentUser) || !agentName || selectedIds.size === 0) return;
 
     try {
       await bulkUpdateContacts(Array.from(selectedIds), { assignedAgent: agentName, salesman: agentName });
@@ -151,7 +153,7 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
   };
 
   const handleBulkSetPriceGroup = async (priceGroup: string) => {
-    if (!priceGroup || selectedIds.size === 0) return;
+    if (!canEdit || !priceGroup || selectedIds.size === 0) return;
 
     const selectedOption = WRITABLE_PRICING_GROUP_OPTIONS.find((option) => option.value === priceGroup);
     if (!selectedOption) return;
@@ -176,15 +178,18 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
   };
 
   const handleCreateNew = () => {
+    if (!canAdd) return;
     setShowAddCustomerModal(true);
   };
 
   const handleEditCustomer = (contact: Contact) => {
+    if (!canEdit) return;
     setEditingCustomer(contact);
     setShowEditCustomerModal(true);
   };
 
   const handleSubmitNewCustomer = async (data: Omit<Contact, 'id'>) => {
+    if (!canAdd) return;
     try {
       const created = await createContact(data);
       // Optimistically add/merge in case realtime hasn't delivered yet
@@ -210,7 +215,7 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
   };
 
   const handleSubmitEditCustomer = async (data: Omit<Contact, 'id'>) => {
-    if (!editingCustomer) return;
+    if (!canEdit || !editingCustomer) return;
     try {
       await updateContact(editingCustomer.id, data);
       const updated = { ...editingCustomer, ...data, id: editingCustomer.id };
@@ -298,14 +303,14 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
                 </button>
               </div>
             )}
-            <button
+            {canAdd && <button
               type="button"
               onClick={handleCreateNew}
               className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
             >
               <UserPlus className="h-4 w-4" />
               Add Customer
-            </button>
+            </button>}
           </div>
         }
       />
@@ -342,7 +347,7 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
         selectedIds={selectedIds}
         onToggleSelection={handleToggleSelection}
         onToggleAll={handleToggleAll}
-        onCreateNew={handleCreateNew}
+        onCreateNew={canAdd ? handleCreateNew : undefined}
       />
 
       {/* Main Content (Detail Panel) */}
@@ -362,7 +367,7 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
             initialData={customers.find(c => c.id === selectedCustomerId)}
             onClose={() => setSelectedCustomerId(null)}
             onUpdate={handleUpdateContact}
-            onEditContact={handleEditCustomer}
+            onEditContact={canEdit ? handleEditCustomer : undefined}
             currentUser={currentUser}
           />
         ) : pendingContactResolution ? (
@@ -396,12 +401,12 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
                   <UserPlus className="w-4 h-4" />
                 </button>
               )}
-              <button onClick={() => setShowSetPriceGroupModal(true)} className="p-2 hover:bg-slate-800 rounded-lg tooltip" title="Set Price Group">
+              {canEdit && <button onClick={() => setShowSetPriceGroupModal(true)} className="p-2 hover:bg-slate-800 rounded-lg tooltip" title="Set Price Group">
                 <Tag className="w-4 h-4" />
-              </button>
-              <button onClick={() => handleBulkHide(true)} className="p-2 hover:bg-slate-800 rounded-lg tooltip" title="Hide Customers">
+              </button>}
+              {canEdit && <button onClick={() => handleBulkHide(true)} className="p-2 hover:bg-slate-800 rounded-lg tooltip" title="Hide Customers">
                 <EyeOff className="w-4 h-4" />
-              </button>
+              </button>}
             </div>
 
             <button onClick={() => setSelectedIds(new Set())} className="ml-2 hover:text-slate-300">

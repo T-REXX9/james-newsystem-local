@@ -3,6 +3,7 @@ import { MessageSquare, Plus, Search, Edit2, Trash2, X, Save, ToggleLeft, Toggle
 import { UserProfile, AIMessageTemplate, CreateAIMessageTemplateDTO } from '../types';
 import * as aiSalesAgentService from '../services/aiSalesAgentService';
 import { useToast } from './ToastProvider';
+import { hasActionPermission } from '../constants';
 
 interface Props {
   currentUser: UserProfile | null;
@@ -18,6 +19,9 @@ const SMS_CAMPAIGN_TYPES = [
 ];
 
 export const SmsTemplatesView: React.FC<Props> = ({ currentUser }) => {
+  const canAdd = hasActionPermission(currentUser, 'can_add');
+  const canEdit = hasActionPermission(currentUser, 'can_edit');
+  const canDelete = hasActionPermission(currentUser, 'can_delete');
   const [templates, setTemplates] = useState<AIMessageTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -55,6 +59,7 @@ export const SmsTemplatesView: React.FC<Props> = ({ currentUser }) => {
   }, [loadData]);
 
   const handleOpenModal = (template?: AIMessageTemplate) => {
+    if ((template && !canEdit) || (!template && !canAdd)) return;
     if (template) {
       setEditingTemplate(template);
       setForm({
@@ -83,6 +88,7 @@ export const SmsTemplatesView: React.FC<Props> = ({ currentUser }) => {
   };
 
   const handleSave = async () => {
+    if ((editingTemplate && !canEdit) || (!editingTemplate && !canAdd)) return;
     if (!form.name.trim() || !form.content.trim() || !form.template_type) {
       addToast({ type: 'warning', message: 'Name, Type, and Content are required' });
       return;
@@ -108,6 +114,7 @@ export const SmsTemplatesView: React.FC<Props> = ({ currentUser }) => {
   };
 
   const handleDelete = async (id: string) => {
+    if (!canDelete) return;
     if (!window.confirm('Are you sure you want to delete this template?')) return;
     try {
       setDeleting(id);
@@ -123,6 +130,7 @@ export const SmsTemplatesView: React.FC<Props> = ({ currentUser }) => {
   };
 
   const handleToggleActive = async (template: AIMessageTemplate) => {
+    if (!canEdit) return;
     try {
       await aiSalesAgentService.updateMessageTemplate(template.id, {
         is_active: !template.is_active
@@ -150,13 +158,13 @@ export const SmsTemplatesView: React.FC<Props> = ({ currentUser }) => {
           <h1 className="text-xl font-bold text-[#315574]">SMS Templates</h1>
           <p className="text-sm text-slate-500">Manage templates for automated SMS Blasting campaigns.</p>
         </div>
-        <button
+        {canAdd && <button
           onClick={() => handleOpenModal()}
           className="flex items-center gap-2 rounded bg-[#1675bd] px-4 py-2 font-medium text-white hover:bg-[#125d98]"
         >
           <Plus className="h-4 w-4" />
           New Template
-        </button>
+        </button>}
       </div>
 
       <div className="mb-4 flex gap-4">
@@ -201,30 +209,30 @@ export const SmsTemplatesView: React.FC<Props> = ({ currentUser }) => {
                     {template.content}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <button
+                    {canEdit && <button
                       onClick={() => handleToggleActive(template)}
                       className={`inline-flex ${template.is_active ? 'text-green-600' : 'text-slate-400'}`}
                     >
                       {template.is_active ? <ToggleRight className="h-6 w-6" /> : <ToggleLeft className="h-6 w-6" />}
-                    </button>
+                    </button>}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-2">
-                      <button
+                      {canEdit && <button
                         onClick={() => handleOpenModal(template)}
                         className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-[#1675bd]"
                         title="Edit"
                       >
                         <Edit2 className="h-4 w-4" />
-                      </button>
-                      <button
+                      </button>}
+                      {canDelete && <button
                         onClick={() => handleDelete(template.id)}
                         disabled={deleting === template.id}
                         className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
                         title="Delete"
                       >
                         <Trash2 className="h-4 w-4" />
-                      </button>
+                      </button>}
                     </div>
                   </td>
                 </tr>

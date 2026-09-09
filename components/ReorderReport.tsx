@@ -21,6 +21,7 @@ import CustomLoadingSpinner from './CustomLoadingSpinner';
 import ConfirmModal from './ConfirmModal';
 import ModuleRecordLink from './ModuleRecordLink';
 import { buildModuleRecordUrl } from '../utils/workflowNavigate';
+import { canPerformAction } from '../utils/actionPermissions';
 
 const isMasterUser = (user?: UserProfile | null) => {
   const role = String(user?.role || '').trim().toLowerCase();
@@ -35,6 +36,7 @@ interface AddToPrModalProps {
 }
 
 const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, supplierChoiceById, onClose, onSaved }) => {
+  const canAdd = canPerformAction('can_add');
   const { addToast } = useToast();
   const [mode, setMode] = useState<'existing' | 'new'>('new');
   const [loading, setLoading] = useState(true);
@@ -91,6 +93,7 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, supplierChoiceById, 
   };
 
   const handleSave = async () => {
+    if (!canAdd) return;
     if (mode === 'existing' && !existingPrId) return;
     if (mode === 'new' && unresolvedSupplierCount > 0) return;
 
@@ -237,7 +240,7 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, supplierChoiceById, 
           </button>
           <button
             type="button"
-            disabled={loading || saving || (mode === 'existing' && !existingPrId) || (mode === 'new' && unresolvedSupplierCount > 0)}
+            disabled={!canAdd || loading || saving || (mode === 'existing' && !existingPrId) || (mode === 'new' && unresolvedSupplierCount > 0)}
             onClick={handleSave}
             className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
           >
@@ -288,6 +291,8 @@ interface ReorderReportProps {
 
 const ReorderReport: React.FC<ReorderReportProps> = ({ currentUser = null }) => {
   const { addToast } = useToast();
+  const canAdd = canPerformAction('can_add');
+  const canEdit = canPerformAction('can_edit');
   const masterUser = isMasterUser(currentUser);
   const initialSnapshotRef = useRef<ReorderReportHistorySnapshot | null>(readReorderHistorySnapshot());
   const [rows, setRows] = useState<ReorderReportEntry[]>(() => initialSnapshotRef.current?.rows || []);
@@ -682,7 +687,7 @@ const ReorderReport: React.FC<ReorderReportProps> = ({ currentUser = null }) => 
   const selectedVisibleCount = selectedRows.length;
 
   const handleMarkHidden = async () => {
-    if (selectedIds.size === 0) return;
+    if (!canEdit || selectedIds.size === 0) return;
 
     setProcessing(true);
     try {
@@ -935,9 +940,9 @@ const ReorderReport: React.FC<ReorderReportProps> = ({ currentUser = null }) => 
           <div data-testid="reorder-selection-actions" className="z-10 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white/95 px-5 py-3 shadow-sm backdrop-blur">
             <div className="flex items-center gap-4">
               <span className="text-sm font-bold text-slate-700">{selectingAll ? 'Selecting all eligible items...' : `${selectedVisibleCount} item(s) selected`}</span>
-              <button type="button" onClick={() => setShowAddPrModal(true)} disabled={selectedVisibleCount === 0 || processing} className="rounded-md border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-bold text-orange-600 transition hover:bg-orange-100 disabled:opacity-50">
+              {canAdd && <button type="button" onClick={() => setShowAddPrModal(true)} disabled={selectedVisibleCount === 0 || processing} className="rounded-md border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-bold text-orange-600 transition hover:bg-orange-100 disabled:opacity-50">
                 <ShoppingCart className="mr-2 inline h-4 w-4" /> Add to PR
-              </button>
+              </button>}
               {latestCreatedPr ? (
                 <ModuleRecordLink openInNewTab tab="warehouse-purchasing-purchase-request" payload={{ prId: latestCreatedPr.id }} className="inline-flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700 transition hover:bg-emerald-100">
                   <span>PR Created:</span><span className="underline">{latestCreatedPr.number}</span>

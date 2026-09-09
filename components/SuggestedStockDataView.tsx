@@ -25,6 +25,7 @@ import {
   SuggestedStockDetail,
 } from '../services/suggestedStockService';
 import AddToPurchaseRequestModal from './AddToPurchaseRequestModal';
+import { canPerformAction } from '../utils/actionPermissions';
 
 interface SuggestedStockDataViewProps {
   dateFrom: string;
@@ -45,6 +46,8 @@ const SuggestedStockDataView: React.FC<SuggestedStockDataViewProps> = ({
   onBack,
   currentUser,
 }) => {
+  const canAdd = canPerformAction('can_add');
+  const canEdit = canPerformAction('can_edit');
   const [viewMode, setViewMode] = useState<ViewMode>('summary');
   const [summaryData, setSummaryData] = useState<SuggestedStockItem[]>([]);
   const [detailData, setDetailData] = useState<SuggestedStockDetail[]>([]);
@@ -115,6 +118,7 @@ const SuggestedStockDataView: React.FC<SuggestedStockDataViewProps> = ({
   };
 
   const handleSaveRemark = async () => {
+    if (!canEdit) return;
     if (!editingRemarkId) return;
     setSavingRemark(true);
     const success = await updateItemRemark(editingRemarkId, editingRemarkValue);
@@ -135,6 +139,7 @@ const SuggestedStockDataView: React.FC<SuggestedStockDataViewProps> = ({
   };
 
   const handleAddToPR = (item: SuggestedStockItem) => {
+    if (!canAdd) return;
     setSelectedItem(item);
     setShowPRModal(true);
   };
@@ -424,7 +429,7 @@ const SuggestedStockDataView: React.FC<SuggestedStockDataViewProps> = ({
                               className="w-full px-2 py-1 text-sm border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:ring-2 focus:ring-brand-blue outline-none"
                               autoFocus
                             />
-                            <button
+                            {canEdit && <button
                               onClick={handleSaveRemark}
                               disabled={savingRemark}
                               className="p-1 text-emerald-600 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 rounded"
@@ -434,7 +439,7 @@ const SuggestedStockDataView: React.FC<SuggestedStockDataViewProps> = ({
                               ) : (
                                 <Check className="w-4 h-4" />
                               )}
-                            </button>
+                            </button>}
                             <button
                               onClick={handleCancelEditRemark}
                               className="p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"
@@ -447,23 +452,23 @@ const SuggestedStockDataView: React.FC<SuggestedStockDataViewProps> = ({
                             <span className="text-sm text-slate-600 dark:text-slate-400 truncate max-w-[120px]">
                               {item.remark || '-'}
                             </span>
-                            <button
+                            {canEdit && <button
                               onClick={() => handleStartEditRemark(item)}
                               className="p-1 text-slate-400 hover:text-brand-blue opacity-0 group-hover:opacity-100 transition-opacity print:hidden"
                             >
                               <Edit2 className="w-3 h-3" />
-                            </button>
+                            </button>}
                           </div>
                         )}
                       </td>
                       <td className="px-4 py-3 text-center print:hidden">
-                        <button
+                        {canAdd && <button
                           onClick={() => handleAddToPR(item)}
                           className="inline-flex items-center gap-1 px-3 py-1.5 bg-brand-blue hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors"
                         >
                           <ShoppingCart className="w-3 h-3" />
                           Add to PO
-                        </button>
+                        </button>}
                       </td>
                     </tr>
                   ))}

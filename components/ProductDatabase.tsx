@@ -20,6 +20,7 @@ import { fetchSuppliers } from '../services/supplierService';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { validateMinLength, validateRequired } from '../utils/formValidation';
 import { getCentralStock } from '../utils/productStock';
+import { canPerformAction } from '../utils/actionPermissions';
 
 interface ProductDatabaseProps {
   currentUser: UserProfile | null;
@@ -195,6 +196,9 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
   fromSuggestedStock = false,
   initialDetailTab,
 }) => {
+  const canAdd = canPerformAction('can_add');
+  const canEdit = canPerformAction('can_edit');
+  const canDelete = canPerformAction('can_delete');
   const { addToast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
   const [page, setPage] = useState(1);
@@ -405,6 +409,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
   };
 
   const saveProduct = async (mode: 'add' | 'edit') => {
+    if ((mode === 'add' && !canAdd) || (mode === 'edit' && !canEdit)) return;
     if (!validateForm(mode)) {
       setSubmitCount((count) => count + 1);
       return;
@@ -482,7 +487,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
   };
 
   const handleDelete = () => {
-    if (!editingProduct || Number(editingProduct.transaction_count || 0) > 0) return;
+    if (!canDelete || !editingProduct || Number(editingProduct.transaction_count || 0) > 0) return;
     setConfirmModal({
       isOpen: true,
       title: 'Delete Product',
@@ -502,6 +507,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
   };
 
   const addSupplierCost = () => {
+    if (!canEdit) return;
     setFormData((current) => ({
       ...current,
       supplier_costs: [...(current.supplier_costs || []), { supplier_id: '', supplier_name: '', cost: 0 }],
@@ -516,6 +522,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
   };
 
   const deleteSelectedSupplierCosts = () => {
+    if (!canEdit) return;
     setFormData((current) => ({
       ...current,
       supplier_costs: (current.supplier_costs || []).filter((_, index) => !selectedSupplierRows.includes(index)),
@@ -545,9 +552,9 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
             </h1>
             <div className="flex flex-wrap items-center gap-1">
               <button type="button" onClick={handleSearch} className="rounded-[4px] bg-[#5d82a2] px-4 py-2 text-white">Search</button>
-              <button type="button" onClick={() => void saveProduct('add')} disabled={isSaving} className="rounded-[4px] bg-[#51b957] px-4 py-2 text-white disabled:opacity-50">Add</button>
-              <button type="button" onClick={() => void saveProduct('edit')} disabled={!editingProduct || isSaving} className="rounded-[4px] bg-[#51b957] px-4 py-2 text-white disabled:opacity-50">Save</button>
-              <button
+              {canAdd && <button type="button" onClick={() => void saveProduct('add')} disabled={isSaving} className="rounded-[4px] bg-[#51b957] px-4 py-2 text-white disabled:opacity-50">Add</button>}
+              {canEdit && <button type="button" onClick={() => void saveProduct('edit')} disabled={!editingProduct || isSaving} className="rounded-[4px] bg-[#51b957] px-4 py-2 text-white disabled:opacity-50">Save</button>}
+              {canDelete && <button
                 type="button"
                 onClick={handleDelete}
                 disabled={!editingProduct || Number(editingProduct.transaction_count || 0) > 0 || isSaving}
@@ -555,7 +562,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
                 className="rounded-[4px] bg-[#d9534f] px-4 py-2 text-white disabled:opacity-50"
               >
                 Delete
-              </button>
+              </button>}
               <button type="button" onClick={handleRefresh} className="rounded-[4px] bg-[#5d82a2] px-4 py-2 text-white">Refresh</button>
             </div>
           </header>
@@ -628,8 +635,8 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
             <div className="flex items-center justify-between">
               <h2 className="font-semibold">Supplier COG</h2>
               <div className="flex gap-1">
-                <button type="button" onClick={addSupplierCost} className="rounded-[4px] bg-[#51b957] px-3 py-2 text-white">Add Supplier</button>
-                <button type="button" onClick={deleteSelectedSupplierCosts} disabled={selectedSupplierRows.length === 0} className="rounded-[4px] bg-[#d9534f] px-3 py-2 text-white disabled:opacity-50">Delete Supplier</button>
+                {canEdit && <button type="button" onClick={addSupplierCost} className="rounded-[4px] bg-[#51b957] px-3 py-2 text-white">Add Supplier</button>}
+                {canDelete && <button type="button" onClick={deleteSelectedSupplierCosts} disabled={selectedSupplierRows.length === 0} className="rounded-[4px] bg-[#d9534f] px-3 py-2 text-white disabled:opacity-50">Delete Supplier</button>}
               </div>
             </div>
             <div className="mt-3 overflow-x-auto">

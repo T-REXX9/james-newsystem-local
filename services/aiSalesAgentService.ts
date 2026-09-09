@@ -8,11 +8,19 @@ import {
     AIMessageLanguage,
     AISentiment,
 } from '../types';
+import { getLocalAuthToken } from './localAuthService';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 
 const buildApiUrl = (path: string): string =>
     `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
+
+const authenticatedFetch = (input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> => {
+    const headers = new Headers(init.headers);
+    const token = getLocalAuthToken();
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    return fetch(input, { ...init, headers });
+};
 
 // ============================================================================
 // Message Templates
@@ -34,7 +42,7 @@ export async function getMessageTemplates(
             params.append('language', language);
         }
 
-        const response = await fetch(buildApiUrl(`/message-templates?${params}`));
+        const response = await authenticatedFetch(buildApiUrl(`/message-templates?${params}`));
         if (!response.ok) {
             console.error('Error fetching message templates:', response.statusText);
             return [];
@@ -62,7 +70,7 @@ export async function getMessageTemplates(
  */
 export async function getTemplate(id: string): Promise<AIMessageTemplate | null> {
     try {
-        const response = await fetch(buildApiUrl(`/message-templates/${encodeURIComponent(id)}`));
+        const response = await authenticatedFetch(buildApiUrl(`/message-templates/${encodeURIComponent(id)}`));
 
         if (response.status === 404) {
             return null;
@@ -103,7 +111,7 @@ export async function createTemplate(
     createdBy: string
 ): Promise<AIMessageTemplate | null> {
     try {
-        const response = await fetch(buildApiUrl('/message-templates'), {
+        const response = await authenticatedFetch(buildApiUrl('/message-templates'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -133,7 +141,7 @@ export async function updateTemplate(
     updates: Partial<Omit<AIMessageTemplate, 'id' | 'created_at' | 'created_by'>>
 ): Promise<AIMessageTemplate | null> {
     try {
-        const response = await fetch(buildApiUrl(`/message-templates/${encodeURIComponent(id)}`), {
+        const response = await authenticatedFetch(buildApiUrl(`/message-templates/${encodeURIComponent(id)}`), {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(updates),
@@ -161,7 +169,7 @@ export async function updateTemplate(
  */
 export async function deleteTemplate(id: string): Promise<boolean> {
     try {
-        const response = await fetch(buildApiUrl(`/message-templates/${encodeURIComponent(id)}`), {
+        const response = await authenticatedFetch(buildApiUrl(`/message-templates/${encodeURIComponent(id)}`), {
             method: 'DELETE',
         });
 
@@ -215,7 +223,7 @@ export async function createCampaignOutreach(
             created_by: createdBy,
         }));
 
-        const response = await fetch(buildApiUrl(`/campaigns/${encodeURIComponent(dto.campaign_id)}/outreach`), {
+        const response = await authenticatedFetch(buildApiUrl(`/campaigns/${encodeURIComponent(dto.campaign_id)}/outreach`), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ records }),
@@ -258,7 +266,7 @@ export async function getCampaignOutreach(
             params.append('outcome', filters.outcome);
         }
 
-        const response = await fetch(
+        const response = await authenticatedFetch(
             buildApiUrl(`/campaigns/${encodeURIComponent(campaignId)}/outreach?${params}`)
         );
 
@@ -288,7 +296,7 @@ export async function updateOutreachStatus(
     }
 ): Promise<boolean> {
     try {
-        const response = await fetch(buildApiUrl(`/outreach/${encodeURIComponent(outreachId)}`), {
+        const response = await authenticatedFetch(buildApiUrl(`/outreach/${encodeURIComponent(outreachId)}`), {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -316,7 +324,7 @@ export async function recordOutreachResponse(
     }
 ): Promise<boolean> {
     try {
-        const fetchResponse = await fetch(buildApiUrl(`/outreach/${encodeURIComponent(outreachId)}/response`), {
+        const fetchResponse = await authenticatedFetch(buildApiUrl(`/outreach/${encodeURIComponent(outreachId)}/response`), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(response),
@@ -334,7 +342,7 @@ export async function recordOutreachResponse(
  */
 export async function getPendingOutreach(limit = 50): Promise<AICampaignOutreach[]> {
     try {
-        const response = await fetch(buildApiUrl(`/outreach/pending?limit=${limit}`));
+        const response = await authenticatedFetch(buildApiUrl(`/outreach/pending?limit=${limit}`));
 
         if (!response.ok) {
             console.error('Error fetching pending outreach:', response.statusText);
@@ -361,7 +369,7 @@ export async function logCampaignFeedback(
 ): Promise<AICampaignFeedback | null> {
     try {
         const campaignId = feedback.campaign_id;
-        const response = await fetch(buildApiUrl(`/campaigns/${encodeURIComponent(campaignId)}/feedback`), {
+        const response = await authenticatedFetch(buildApiUrl(`/campaigns/${encodeURIComponent(campaignId)}/feedback`), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(feedback),
@@ -404,7 +412,7 @@ export async function getCampaignFeedback(
             params.append('sentiment', filters.sentiment);
         }
 
-        const response = await fetch(
+        const response = await authenticatedFetch(
             buildApiUrl(`/campaigns/${encodeURIComponent(campaignId)}/feedback?${params}`)
         );
 
@@ -433,7 +441,7 @@ export async function analyzeCampaignFeedback(
     common_tags: Array<{ tag: string; count: number }>;
 }> {
     try {
-        const response = await fetch(buildApiUrl(`/campaigns/${encodeURIComponent(campaignId)}/feedback/analysis`));
+        const response = await authenticatedFetch(buildApiUrl(`/campaigns/${encodeURIComponent(campaignId)}/feedback/analysis`));
 
         if (!response.ok) {
             console.error('Error analyzing campaign feedback:', response.statusText);
@@ -466,7 +474,7 @@ export async function analyzeCampaignFeedback(
  */
 export async function getCampaignStats(campaignId: string): Promise<AICampaignStats> {
     try {
-        const response = await fetch(buildApiUrl(`/campaigns/${encodeURIComponent(campaignId)}/stats`));
+        const response = await authenticatedFetch(buildApiUrl(`/campaigns/${encodeURIComponent(campaignId)}/stats`));
 
         if (!response.ok) {
             console.error('Error fetching campaign stats:', response.statusText);
@@ -576,7 +584,7 @@ export async function processOutreachQueue(): Promise<{
     failed: number;
 }> {
     try {
-        const response = await fetch(buildApiUrl('/outreach/queue/process'), {
+        const response = await authenticatedFetch(buildApiUrl('/outreach/queue/process'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ limit: 20 }),

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fetchStaff } from '../staffLocalApiService';
+import { fetchProfilesLocal } from '../accessLocalApiService';
 
 describe('staffLocalApiService authentication', () => {
   afterEach(() => {
@@ -24,5 +25,20 @@ describe('staffLocalApiService authentication', () => {
     );
     const headers = (fetchMock.mock.calls[0][1] as RequestInit).headers as Headers;
     expect(headers.get('Authorization')).toBe('Bearer test-bearer-token');
+  });
+
+  it('sends the bearer token for the system access staff listing', async () => {
+    window.localStorage.setItem('local_api_auth_session', JSON.stringify({
+      token: 'access-page-token',
+      context: { user: { id: 1 } },
+    }));
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      data: { items: [], meta: { page: 1, per_page: 500, total: 0, total_pages: 1 } },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    await fetchProfilesLocal({ page: 1, perPage: 500 });
+
+    const headers = (fetchMock.mock.calls[0][1] as RequestInit).headers as Headers;
+    expect(headers.get('Authorization')).toBe('Bearer access-page-token');
   });
 });
