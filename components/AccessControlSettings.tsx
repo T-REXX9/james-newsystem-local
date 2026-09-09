@@ -222,11 +222,13 @@ const AccessControlSettings: React.FC = () => {
         if (profile.id !== userId) return profile;
 
         const groupRights = nextGroupId ? groupMap[nextGroupId]?.access_rights || [] : [];
+        const groupActionPermissions = nextGroupId ? groupMap[nextGroupId]?.action_permissions : undefined;
         return {
           ...profile,
           group_id: nextGroupId,
           access_rights: [...groupRights],
           access_override: false,
+          action_permissions: groupActionPermissions,
         };
       })
     );
@@ -289,20 +291,22 @@ const AccessControlSettings: React.FC = () => {
   };
 
   const savePermissions = async (user: UserProfile) => {
+    const originalProfile = originalProfiles.find((profile) => profile.id === user.id);
+    const groupChanged = (user.group_id || null) !== (originalProfile?.group_id || null);
     const hasPermOverride = permissionChanges[user.id] || false;
     const nextRights = canonicalizeAccessRights(user.access_rights || []);
     const actionPermissions = user.action_permissions?.pages || user.action_permissions?.global
-      ? user.action_permissions
+      ? (groupChanged ? null : user.action_permissions)
       : actionPermissionChanges[user.id]
         ? { global: { ...DEFAULT_ACTION_PERMISSIONS, ...(user.action_permissions || {}) }, pages: {} }
-        : undefined;
+        : (groupChanged ? null : undefined);
     setSavingId(user.id);
     try {
       await updateProfileLocal(user.id, {
         group_id: user.group_id ?? null,
         access_rights: nextRights,
         access_override: hasPermOverride,
-        ...(actionPermissions ? { action_permissions: actionPermissions } : {}),
+        ...(actionPermissions !== undefined ? { action_permissions: actionPermissions } : {}),
       });
       setProfiles((prev) =>
         prev.map((profile) =>

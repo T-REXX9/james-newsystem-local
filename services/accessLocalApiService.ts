@@ -175,7 +175,7 @@ export const fetchProfilesLocal = async (
 
 export const updateProfileLocal = async (
   staffId: string | number,
-  data: { access_rights?: string[]; access_override?: boolean; group_id?: string | null; action_permissions?: Record<string, unknown> }
+  data: { access_rights?: string[]; access_override?: boolean; group_id?: string | null; action_permissions?: Record<string, unknown> | null }
 ): Promise<UserProfile> => {
     const body: Record<string, unknown> = {
         main_id: API_MAIN_ID,
