@@ -266,6 +266,126 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(within(unverifiedTable).getByText('No Purchase Shop')).toBeInTheDocument();
   });
 
+  it('does not show lifetime purchase totals as Potential Sales (client report: ₱25M priority / ₱105K recovery)', async () => {
+    // Feedback loop for dashboard Potential Sales: cards must not surface lifetime totals
+    // as "Potential Sales" (documented formula uses average monthly sales instead).
+    fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
+      ...baseSnapshot,
+      contacts: [
+        {
+          ...baseSnapshot.contacts[0],
+          id: 'priority-lifetime',
+          shopName: 'Priority Lifetime Shop',
+          status: 'active',
+          verification: 'Verified',
+        },
+        {
+          ...baseSnapshot.contacts[0],
+          id: 'recovery-lifetime',
+          shopName: 'Recovery Lifetime Shop',
+          status: 'active',
+          verification: 'Verified',
+        },
+        {
+          ...baseSnapshot.contacts[0],
+          id: 'test-client-prospect',
+          shopName: 'Test Client',
+          status: 'prospective',
+          verification: 'Unverified',
+        },
+      ],
+      purchases: [
+        {
+          id: 'purchase-priority-1',
+          contact_id: 'priority-lifetime',
+          amount: 5_000_000,
+          status: 'paid',
+          purchased_at: '2026-01-15T00:00:00.000Z',
+        },
+        {
+          id: 'purchase-priority-2',
+          contact_id: 'priority-lifetime',
+          amount: 5_000_000,
+          status: 'paid',
+          purchased_at: '2026-02-15T00:00:00.000Z',
+        },
+        {
+          id: 'purchase-priority-3',
+          contact_id: 'priority-lifetime',
+          amount: 5_000_000,
+          status: 'paid',
+          purchased_at: '2026-03-15T00:00:00.000Z',
+        },
+        {
+          id: 'purchase-priority-4',
+          contact_id: 'priority-lifetime',
+          amount: 5_000_000,
+          status: 'paid',
+          purchased_at: '2026-04-15T00:00:00.000Z',
+        },
+        {
+          id: 'purchase-priority-5',
+          contact_id: 'priority-lifetime',
+          amount: 5_000_000,
+          status: 'paid',
+          purchased_at: '2026-05-15T00:00:00.000Z',
+        },
+        {
+          id: 'purchase-recovery-1',
+          contact_id: 'recovery-lifetime',
+          amount: 35_000,
+          status: 'paid',
+          purchased_at: '2024-01-10T00:00:00.000Z',
+        },
+        {
+          id: 'purchase-recovery-2',
+          contact_id: 'recovery-lifetime',
+          amount: 35_000,
+          status: 'paid',
+          purchased_at: '2024-02-10T00:00:00.000Z',
+        },
+        {
+          id: 'purchase-recovery-3',
+          contact_id: 'recovery-lifetime',
+          amount: 35_000,
+          status: 'paid',
+          purchased_at: '2024-03-10T00:00:00.000Z',
+        },
+      ],
+    });
+
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    expect(await screen.findByRole('heading', { name: 'Customer List' })).toBeInTheDocument();
+
+    const categorySummaries = screen.getByLabelText('Customer category summaries');
+    const prioritySummary = within(categorySummaries)
+      .getByTitle('Priority List (Any ledger activity since October 2025 onwards)')
+      .closest('article')!;
+    const recoverySummary = within(categorySummaries)
+      .getByTitle('Recovery List (Purchase history before October 2025, with none since)')
+      .closest('article')!;
+
+    const priorityPotential = within(prioritySummary).getByText('Potential Sales').parentElement!;
+    const recoveryPotential = within(recoverySummary).getByText('Potential Sales').parentElement!;
+
+    // Lifetime totals would compact to ₱25M / ₱105K — Potential Sales must use monthly averages instead.
+    expect(within(priorityPotential).queryByText('₱25M')).not.toBeInTheDocument();
+    expect(within(recoveryPotential).queryByText('₱105K')).not.toBeInTheDocument();
+    expect(within(priorityPotential).getByText('₱5M')).toBeInTheDocument();
+    expect(within(recoveryPotential).getByText('₱35K')).toBeInTheDocument();
+
+    // Client symptom: a Test Client record still appears in the prospect list.
+    // (Deletion is handled by migration 039; this UI assertion documents the unwanted inclusion path.)
+    const categoryTables = screen.getByLabelText('Segregated customer category tables');
+    const unverifiedTable = within(categoryTables)
+      .getByTitle('Unverified Prospects (No purchases yet)')
+      .closest('article')!;
+    // Soft-delete is a data migration; until deleted, prospective Test Client still lists here.
+    // After migration 039, API no longer returns these rows. Keep the fixture to prove list membership rules.
+    expect(within(unverifiedTable).getByText('Test Client')).toBeInTheDocument();
+  });
+
   it('keeps verified no-purchase prospects in the verified prospects list after refresh', async () => {
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
       ...baseSnapshot,
@@ -371,9 +491,9 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(createCallLogForDailyCallMock).not.toHaveBeenCalled();
     expect(openSpy).not.toHaveBeenCalled();
 
-    const reportInput = screen.getByPlaceholderText('Write a report about the customer conversation...');
-    await user.type(reportInput, 'Customer requested updated quotation.');
     await user.selectOptions(screen.getByLabelText('Conversation outcome'), 'follow_up');
+    await user.type(screen.getByLabelText('Customer concern'), 'Customer requested updated quotation.');
+    await user.type(screen.getByLabelText('Action taken'), 'Sent revised quotation draft.');
     await user.click(screen.getByRole('button', { name: 'Submit Report' }));
 
     await waitFor(() => {
@@ -383,8 +503,10 @@ describe('DailyCallMonitoringView communication actions', () => {
           agent_name: 'Jane Doe',
           channel: 'call',
           direction: 'outbound',
-          notes: '[Sales Agent Report] Customer requested updated quotation.',
+          notes: '[Sales Agent Report] Concern: Customer requested updated quotation.\nAction: Sent revised quotation draft.',
           outcome: 'follow_up',
+          concern: 'Customer requested updated quotation.',
+          action: 'Sent revised quotation draft.',
         })
       );
     });

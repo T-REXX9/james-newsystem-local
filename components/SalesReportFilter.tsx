@@ -11,16 +11,31 @@ interface SalesReportFilterProps {
 
 export type SalesReportPeriod = 'all' | 'today' | 'week' | 'month' | 'year' | 'custom';
 
-const todayInput = () => new Date().toISOString().slice(0, 10);
+const toLocalIsoDate = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
-const startForPeriod = (type: SalesReportPeriod): string => {
-  const today = new Date();
-  const start = new Date(today);
+export const todayInput = () => toLocalIsoDate(new Date());
+
+/** Start date (inclusive) for a Sales Report period preset, through today. */
+export const startForPeriod = (type: SalesReportPeriod, today = new Date()): string => {
   if (type === 'all') return '2013-06-01';
-  if (type === 'week') start.setDate(today.getDate() - 7);
-  if (type === 'month') start.setMonth(today.getMonth() - 1);
-  if (type === 'year') start.setFullYear(today.getFullYear() - 1);
-  return start.toISOString().slice(0, 10);
+  if (type === 'today' || type === 'custom') return toLocalIsoDate(today);
+  if (type === 'week') {
+    const start = new Date(today);
+    start.setDate(today.getDate() - 6);
+    return toLocalIsoDate(start);
+  }
+  if (type === 'month') {
+    return toLocalIsoDate(new Date(today.getFullYear(), today.getMonth(), 1));
+  }
+  if (type === 'year') {
+    return toLocalIsoDate(new Date(today.getFullYear(), 0, 1));
+  }
+  return toLocalIsoDate(today);
 };
 
 const SALES_REPORT_TAB = 'sales-reports-sales-report';

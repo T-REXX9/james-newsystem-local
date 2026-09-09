@@ -88,6 +88,7 @@ import {
 } from '../utils/formatUtils';
 import { DO_NOT_CONTACT_LABEL, isBlockedContact } from '../utils/dailyCallBlockedCustomer';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
+import { DEFAULT_CUSTOMER_VAT_TYPE } from '../constants/customerVat';
 import {
   BUTTON_BASE,
   BUTTON_PRIMARY,
@@ -127,6 +128,8 @@ interface MasterRow {
   lastContact?: string;
   lastPurchase?: string;
   totalSales: number;
+  currentMonthSales: number;
+  averageMonthlySales: number;
   totalInteractions: number;
   latestOutcome?: string;
 }
@@ -171,6 +174,52 @@ const ManagementInstructionsPanel: React.FC<{
 const getCurrentMonthPurchases = (purchases: Purchase[], referenceDate: Date) =>
   purchases.filter((purchase) => isWithinCurrentMonth(purchase.purchased_at, referenceDate) && purchase.status === 'paid');
 
+const VERIFIED_PROSPECT_POTENTIAL = 5_000;
+const priorityListStart = new Date('2025-10-01T00:00:00');
+
+const sumPaidPurchasesInMonth = (purchases: Purchase[], referenceDate: Date) =>
+  getCurrentMonthPurchases(purchases, referenceDate).reduce((sum, purchase) => sum + purchase.amount, 0);
+
+/** Average of monthly paid totals in the window used for Potential Sales (not lifetime totals). */
+const averageMonthlyPaidSales = (
+  purchases: Purchase[],
+  mode: 'priority' | 'recovery',
+  referenceDate: Date = new Date()
+) => {
+  const paid = purchases.filter((purchase) => purchase.status === 'paid' && purchase.purchased_at && !Number.isNaN(Date.parse(purchase.purchased_at)));
+  if (!paid.length) return 0;
+
+  const monthTotals = new Map<string, number>();
+  const pushMonth = (purchase: Purchase) => {
+    const date = new Date(purchase.purchased_at);
+    const key = `${date.getFullYear()}-${date.getMonth()}`;
+    monthTotals.set(key, (monthTotals.get(key) || 0) + purchase.amount);
+  };
+
+  if (mode === 'priority') {
+    const year = referenceDate.getFullYear();
+    paid
+      .filter((purchase) => {
+        const date = new Date(purchase.purchased_at);
+        return date.getFullYear() === year || date >= priorityListStart;
+      })
+      .forEach(pushMonth);
+  } else {
+    let lastActiveYear = 0;
+    paid.forEach((purchase) => {
+      const year = new Date(purchase.purchased_at).getFullYear();
+      if (year > lastActiveYear) lastActiveYear = year;
+    });
+    paid
+      .filter((purchase) => new Date(purchase.purchased_at).getFullYear() === lastActiveYear)
+      .forEach(pushMonth);
+  }
+
+  if (!monthTotals.size) return 0;
+  const total = Array.from(monthTotals.values()).reduce((sum, value) => sum + value, 0);
+  return total / monthTotals.size;
+};
+
 const clientsNoPurchaseThisMonth = (contacts: Contact[], purchases: Purchase[], referenceDate: Date) => {
   const currentIds = new Set(
     getCurrentMonthPurchases(purchases, referenceDate).map((purchase) => purchase.contact_id)
@@ -205,8 +254,6 @@ const getPurchaseAgeGroup = (lastPurchase?: string): 'priority' | 'recovery' | '
 
 const hasPurchaseHistory = (lastPurchase?: string) =>
   Boolean(lastPurchase && !Number.isNaN(Date.parse(lastPurchase)));
-
-const priorityListStart = new Date('2025-10-01T00:00:00');
 
 const isPriorityListPurchase = (lastPurchase?: string) => {
   if (!hasPurchaseHistory(lastPurchase)) return false;
@@ -284,7 +331,7 @@ const toContactModel = (row: any): Contact => ({
   businessLine: '',
   terms: String(row?.terms || row?.modeOfPayment || ''),
   transactionType: '',
-  vatType: '',
+  vatType: DEFAULT_CUSTOMER_VAT_TYPE,
   vatPercentage: '',
   dealershipTerms: String(row?.terms || ''),
   dealershipSince: String(row?.ishinomotoDealerSince || ''),
@@ -509,6 +556,8 @@ const MasterTableRow = React.memo(({
     previousProps.row.lastContact === nextProps.row.lastContact &&
     previousProps.row.lastPurchase === nextProps.row.lastPurchase &&
     previousProps.row.totalSales === nextProps.row.totalSales &&
+    previousProps.row.currentMonthSales === nextProps.row.currentMonthSales &&
+    previousProps.row.averageMonthlySales === nextProps.row.averageMonthlySales &&
     previousProps.row.priority === nextProps.row.priority &&
     previousProps.tableRowHeight === nextProps.tableRowHeight &&
     previousProps.selectedClientId === nextProps.selectedClientId &&
@@ -1314,6 +1363,16 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       const totalSales = contactPurchases
         .filter((purchase) => purchase.status === 'paid')
         .reduce((sum, purchase) => sum + purchase.amount, 0);
+      const lastPurchase = lastPaid?.purchased_at;
+      const listMode = isPriorityListPurchase(lastPurchase)
+        ? 'priority'
+        : isRecoveryListPurchase(lastPurchase)
+          ? 'recovery'
+          : null;
+      const currentMonthSales = sumPaidPurchasesInMonth(contactPurchases, selectedReferenceDate);
+      const averageMonthlySales = listMode
+        ? averageMonthlyPaidSales(contactPurchases, listMode, selectedReferenceDate)
+        : 0;
       const lastContact = lastContactMap.get(contact.id);
       const totalInteractions =
         (callLogsByContact.get(contact.id)?.length || 0) + (inquiriesByContact.get(contact.id)?.length || 0);
@@ -1322,14 +1381,16 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         contact,
         priority,
         lastContact,
-        lastPurchase: lastPaid?.purchased_at,
+        lastPurchase,
         totalSales,
+        currentMonthSales,
+        averageMonthlySales,
         totalInteractions,
         latestOutcome: callLogsByContact.get(contact.id)?.[0]?.outcome
       };
     });
     return rows;
-  }, [contacts, purchasesByContact, lastContactMap, callLogsByContact, inquiriesByContact]);
+  }, [contacts, purchasesByContact, lastContactMap, callLogsByContact, inquiriesByContact, selectedReferenceDate]);
 
   const masterRows = useMemo<MasterRow[]>(() => {
     const filtered = baseMasterRows.filter((row) => {
@@ -1351,9 +1412,28 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       tone: 'emerald' | 'rose' | 'blue' | 'orange' | 'red',
       metricLabel: string
     ) => {
-      const sales = rows.reduce((sum, row) => sum + row.totalSales, 0);
-      const average = rows.length ? Math.round(sales / rows.length) : 0;
-      return { id, label, note, tone, rows, sales, average, metricLabel };
+      const currentMonthSales = rows.reduce((sum, row) => sum + row.currentMonthSales, 0);
+      const averageMonthlySales = rows.reduce((sum, row) => sum + row.averageMonthlySales, 0);
+      const primaryMetric = id === 'priority'
+        ? currentMonthSales
+        : id === 'verified' || id === 'unverified' || id === 'blocked'
+          ? 0
+          : averageMonthlySales;
+      const potentialSales = id === 'verified'
+        ? rows.length * VERIFIED_PROSPECT_POTENTIAL
+        : id === 'unverified' || id === 'blocked'
+          ? 0
+          : averageMonthlySales;
+      return {
+        id,
+        label,
+        note,
+        tone,
+        rows,
+        primaryMetric,
+        potentialSales,
+        metricLabel,
+      };
     };
 
     const blockedRows = masterRows.filter((row) => isBlockedContact(row.contact));
@@ -1869,14 +1949,14 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 <div className="min-w-0 space-y-1 text-right">
                   <div>
                     <p className="truncate text-[10px] font-semibold leading-tight text-[#10244c] dark:text-slate-300" title={summary.metricLabel}>{summary.metricLabel}</p>
-                    <p className={`truncate text-base font-extrabold leading-tight ${tone.value}`} title={formatCurrency(summary.id === 'priority' ? 0 : summary.average)}>
-                      {formatCompactCurrency(summary.id === 'priority' ? 0 : summary.average)}
+                    <p className={`truncate text-base font-extrabold leading-tight ${tone.value}`} title={formatCurrency(summary.primaryMetric)}>
+                      {formatCompactCurrency(summary.primaryMetric)}
                     </p>
                   </div>
                   <div>
                     <p className="truncate text-[10px] font-semibold leading-tight text-[#10244c] dark:text-slate-300">Potential Sales</p>
-                    <p className={`truncate text-base font-extrabold leading-tight ${tone.value}`} title={formatCurrency(summary.sales)}>
-                      {formatCompactCurrency(summary.sales)}
+                    <p className={`truncate text-base font-extrabold leading-tight ${tone.value}`} title={formatCurrency(summary.potentialSales)}>
+                      {formatCompactCurrency(summary.potentialSales)}
                     </p>
                   </div>
                 </div>
