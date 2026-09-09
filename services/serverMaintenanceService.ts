@@ -7,6 +7,29 @@ export type ServerMaintenanceStatus = {
   backup_available: boolean;
   format: string;
   description: string;
+  automatic_backup?: AutomaticBackupSettings;
+};
+
+export type AutomaticBackupFrequency = 'daily' | 'weekly';
+
+export type AutomaticBackupSettings = {
+  enabled: boolean;
+  frequency: AutomaticBackupFrequency;
+  weekly_days: number[];
+  time: string;
+  timezone: string;
+  destination_path: string;
+  retention_count: number;
+  last_success_at: string | null;
+  last_failure_at: string | null;
+  last_failure_message: string | null;
+  last_run_key: string | null;
+};
+
+export type BackupDestination = {
+  id: string;
+  label: string;
+  path: string;
 };
 
 const authHeaders = (): HeadersInit => {
@@ -33,6 +56,17 @@ const throwApiError = async (response: Response): Promise<never> => {
   throw new Error(message);
 };
 
+const unwrapData = async <T,>(response: Response): Promise<T> => {
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  const payload = await response.json();
+  if (payload.ok === false) {
+    throw new Error(payload.error || payload.message || 'Request failed');
+  }
+  return payload.data as T;
+};
+
 export async function fetchServerMaintenanceStatus(): Promise<ServerMaintenanceStatus> {
   const response = await fetch(`${API_BASE_URL}/server-maintenance/status`, {
     method: 'GET',
@@ -41,14 +75,52 @@ export async function fetchServerMaintenanceStatus(): Promise<ServerMaintenanceS
       ...authHeaders(),
     },
   });
-  if (!response.ok) {
-    await throwApiError(response);
+  return unwrapData<ServerMaintenanceStatus>(response);
+}
+
+export async function fetchAutomaticBackupSettings(): Promise<AutomaticBackupSettings> {
+  const response = await fetch(`${API_BASE_URL}/server-maintenance/automatic-backup`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...authHeaders(),
+    },
+  });
+  return unwrapData<AutomaticBackupSettings>(response);
+}
+
+export async function saveAutomaticBackupSettings(
+  settings: Partial<AutomaticBackupSettings> & {
+    enabled: boolean;
+    frequency: AutomaticBackupFrequency;
+    time: string;
+    destination_path: string;
+    retention_count: number;
+    weekly_days?: number[];
   }
-  const payload = await response.json();
-  if (payload.ok === false) {
-    throw new Error(payload.error || payload.message || 'Unable to load server maintenance status');
-  }
-  return payload.data as ServerMaintenanceStatus;
+): Promise<AutomaticBackupSettings> {
+  const response = await fetch(`${API_BASE_URL}/server-maintenance/automatic-backup`, {
+    method: 'PATCH',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      ...authHeaders(),
+    },
+    body: JSON.stringify(settings),
+  });
+  return unwrapData<AutomaticBackupSettings>(response);
+}
+
+export async function fetchBackupDestinations(): Promise<BackupDestination[]> {
+  const response = await fetch(`${API_BASE_URL}/server-maintenance/backup-destinations`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...authHeaders(),
+    },
+  });
+  const payload = await unwrapData<{ items: BackupDestination[] }>(response);
+  return Array.isArray(payload.items) ? payload.items : [];
 }
 
 const filenameFromDisposition = (value: string | null): string | null => {
