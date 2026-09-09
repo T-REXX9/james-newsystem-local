@@ -3,7 +3,13 @@ import { TOPBAR_MENU_CONFIG } from './topbarMenuConfig';
 export interface AccessModule {
   id: string;
   label: string;
+  pages: AccessPage[];
   pageIds: string[];
+}
+
+export interface AccessPage {
+  id: string;
+  label: string;
 }
 
 const moduleIds = ['home', 'warehouse', 'sales', 'accounting', 'maintenance', 'communication'] as const;
@@ -20,9 +26,21 @@ const pageIdsForMenu = (menuId: string): string[] => {
   );
 };
 
+const pagesForMenu = (menuId: string): AccessPage[] => {
+  const menu = TOPBAR_MENU_CONFIG.find((candidate) => candidate.id === menuId);
+  if (!menu) return [];
+
+  return (menu.submenus || []).flatMap((submenu) =>
+    submenu.items
+      .filter((item) => !item.masterOnly)
+      .map((item) => ({ id: item.route, label: item.label }))
+  );
+};
+
 export const ACCESS_MODULES: AccessModule[] = moduleIds.map((id) => ({
   id,
   label: id === 'home' ? 'Dashboards' : id.charAt(0).toUpperCase() + id.slice(1),
+  pages: pagesForMenu(id),
   pageIds: pageIdsForMenu(id),
 }));
 
@@ -33,15 +51,27 @@ export const expandAccessModule = (moduleId: string): string[] => moduleById.get
 export const getAccessModuleState = (
   moduleId: string,
   grantedPageIds: Iterable<string>
-): { checked: boolean; indeterminate: false } => {
+): { checked: boolean; indeterminate: boolean } => {
   const pageIds = expandAccessModule(moduleId);
   const granted = new Set(grantedPageIds);
   if (granted.has('*')) return { checked: true, indeterminate: false };
-  const checked = pageIds.length > 0 && pageIds.every((pageId) => granted.has(pageId));
+  const grantedCount = pageIds.filter((pageId) => granted.has(pageId)).length;
+  return {
+    checked: pageIds.length > 0 && grantedCount === pageIds.length,
+    indeterminate: grantedCount > 0 && grantedCount < pageIds.length,
+  };
+};
 
-  // Module permissions are intentionally binary. Legacy partial page grants
-  // are shown as unchecked until the user enables the complete module.
-  return { checked, indeterminate: false };
+export const toggleAccessPage = (
+  grantedPageIds: Iterable<string>,
+  pageId: string,
+  enabled: boolean
+): string[] => {
+  const rights = new Set(grantedPageIds);
+  rights.delete('*');
+  if (enabled) rights.add(pageId);
+  else rights.delete(pageId);
+  return Array.from(rights);
 };
 
 export const toggleAccessModule = (
@@ -62,43 +92,25 @@ export const toggleAccessModule = (
   return Array.from(pageIds);
 };
 
-/**
- * Drop leftover page grants that belong to modules which are not fully checked.
- * Access Control treats modules as binary; partial/legacy grants otherwise leave
- * Sales/Maintenance visible while those checkboxes look unchecked.
- */
-export const canonicalizeBinaryModuleAccessRights = (grantedPageIds: Iterable<string>): string[] => {
+export const canonicalizeAccessRights = (grantedPageIds: Iterable<string>): string[] => {
   const granted = new Set(Array.from(grantedPageIds).filter((id): id is string => typeof id === 'string'));
   if (granted.has('*')) return ['*'];
-
-  const kept = new Set<string>();
-  ACCESS_MODULES.forEach((module) => {
-    if (!getAccessModuleState(module.id, granted).checked) return;
-    module.pageIds.forEach((pageId) => kept.add(pageId));
-  });
-  return Array.from(kept);
+  return Array.from(granted);
 };
 
-const pageIdToModuleId = (() => {
-  const map = new Map<string, string>();
-  ACCESS_MODULES.forEach((module) => {
-    module.pageIds.forEach((pageId) => map.set(pageId, module.id));
-  });
-  return map;
-})();
+/** @deprecated Kept for callers outside the new page-level access flow. */
+export const canonicalizeBinaryModuleAccessRights = canonicalizeAccessRights;
 
-/** Page access follows binary module checkboxes, not leftover partial page grants. */
-export const hasBinaryModulePageAccess = (
+export const hasPageAccess = (
   grantedPageIds: Iterable<string>,
   pageId: string
 ): boolean => {
   const granted = new Set(Array.from(grantedPageIds).filter((id): id is string => typeof id === 'string'));
   if (granted.has('*')) return true;
-
-  const moduleId = pageIdToModuleId.get(pageId);
-  if (!moduleId) {
-    return granted.has(pageId);
-  }
-
-  return getAccessModuleState(moduleId, granted).checked;
+  const containingModule = ACCESS_MODULES.find((module) => module.pageIds.includes(pageId));
+  if (containingModule && granted.has(containingModule.id)) return true;
+  return granted.has(pageId);
 };
+
+/** @deprecated Use hasPageAccess for page-level grants. */
+export const hasBinaryModulePageAccess = hasPageAccess;

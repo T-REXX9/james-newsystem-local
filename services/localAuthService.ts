@@ -121,7 +121,7 @@ const getRoleDefaultRights = (roleName: string): string[] => {
 
 const mapAccessRights = (userType?: string, persisted?: string[] | null, roleName?: string): string[] => {
   if (userType === '1') return ['*'];
-  if (Array.isArray(persisted) && persisted.length > 0) {
+  if (Array.isArray(persisted)) {
     return persisted.map(normalizeModuleId);
   }
   // Return role-specific defaults based on role_name

@@ -30,14 +30,14 @@ const staffWithPartialLegacyRights = {
   ],
 };
 
-describe('binary module access vs leftover page grants', () => {
+describe('page-level access and dashboard visibility', () => {
   afterEach(cleanup);
 
   it('treats Access Control Dashboards as Daily Call Monitoring only', () => {
     expect(expandAccessModule('home')).toEqual(['home']);
   });
 
-  it('hides Sales/Maintenance leftovers and master-only dashboards for staff', async () => {
+  it('shows granted pages while hiding ungranted pages and master-only dashboards for staff', async () => {
     const checkboxState = Object.fromEntries(
       ACCESS_MODULES.map((module) => [
         module.id,
@@ -48,10 +48,8 @@ describe('binary module access vs leftover page grants', () => {
     expect(checkboxState.sales).toBe(false);
     expect(checkboxState.maintenance).toBe(false);
 
-    expect(hasBinaryModulePageAccess(staffWithPartialLegacyRights.access_rights, 'sales-transaction-sales-inquiry')).toBe(
-      false
-    );
-    expect(canonicalizeBinaryModuleAccessRights(staffWithPartialLegacyRights.access_rights)).toEqual(['home']);
+    expect(hasBinaryModulePageAccess(staffWithPartialLegacyRights.access_rights, 'sales-transaction-sales-inquiry')).toBe(true);
+    expect(canonicalizeBinaryModuleAccessRights(staffWithPartialLegacyRights.access_rights)).toEqual(staffWithPartialLegacyRights.access_rights);
 
     const user = userEvent.setup();
     render(
@@ -62,8 +60,8 @@ describe('binary module access vs leftover page grants', () => {
     const compactMenu = document.querySelector('[data-responsive-nav="compact"]') as HTMLElement;
 
     expect(within(compactMenu).getByRole('button', { name: 'DASHBOARDS' })).toBeTruthy();
-    expect(within(compactMenu).queryByRole('button', { name: 'SALES' })).toBeNull();
-    expect(within(compactMenu).queryByRole('button', { name: 'MAINTENANCE' })).toBeNull();
+    expect(within(compactMenu).getByRole('button', { name: 'SALES' })).toBeTruthy();
+    expect(within(compactMenu).getByRole('button', { name: 'MAINTENANCE' })).toBeTruthy();
 
     await user.click(within(compactMenu).getByRole('button', { name: 'DASHBOARDS' }));
     expect(within(compactMenu).getByRole('menuitem', { name: 'Daily Call Monitoring Dashboard' })).toBeTruthy();

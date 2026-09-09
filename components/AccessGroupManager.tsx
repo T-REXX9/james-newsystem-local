@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, FolderPlus, Lock, Save, Trash2, Users } from 'lucide-react';
 import { MODULE_ID_ALIASES, isCoreAccessGroupName } from '../constants';
-import { ACCESS_MODULES, getAccessModuleState, toggleAccessModule } from '../utils/accessModules';
+import { ACCESS_MODULES, getAccessModuleState, toggleAccessModule, toggleAccessPage } from '../utils/accessModules';
 import { AccessGroup } from '../types';
 import ConfirmModal from './ConfirmModal';
 
@@ -77,6 +77,10 @@ const AccessGroupManager: React.FC<AccessGroupManagerProps> = ({
       const { checked } = getAccessModuleState(canonical, current);
       return toggleAccessModule(current, canonical, !checked);
     });
+  };
+
+  const togglePage = (pageId: string, enabled: boolean) => {
+    setDraftRights((current) => toggleAccessPage(current, pageId, enabled));
   };
 
   const handleCreate = async () => {
@@ -269,20 +273,22 @@ const AccessGroupManager: React.FC<AccessGroupManagerProps> = ({
                 Set Access For: {selectedGroup.name}
               </h2>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Choose which modules this group can access. Staff assigned to this group can inherit these permissions.
+                Choose individual pages, grouped by module. Staff assigned to this group can use these pages as a preset.
               </p>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <div className="space-y-4">
               {ACCESS_MODULES.map((module) => {
                 const state = getAccessModuleState(module.id, draftRights);
                 return (
-                  <label
+                  <div
                     key={module.id}
-                    className={`flex items-center gap-3 rounded-lg border px-3 py-3 text-sm transition-colors ${
+                    className="rounded-lg border border-slate-200 p-3 dark:border-slate-700"
+                  >
+                    <label className={`flex items-center gap-3 text-sm font-semibold ${
                       state.checked
-                        ? 'border-brand-blue bg-blue-50 dark:border-brand-blue dark:bg-blue-950/30'
-                        : 'border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800/60'
+                        ? 'text-brand-blue'
+                        : 'text-slate-700 dark:text-slate-200'
                     }`}
                   >
                     <input
@@ -296,8 +302,18 @@ const AccessGroupManager: React.FC<AccessGroupManagerProps> = ({
                       onChange={() => toggleRight(module.id)}
                       className="h-4 w-4 rounded border-slate-300 text-brand-blue focus:ring-brand-blue"
                     />
-                    <span className="text-slate-700 dark:text-slate-200">{module.label}</span>
+                    <span>{module.label}</span>
+                    {state.indeterminate && <span className="text-xs font-normal text-slate-500">Partial</span>}
                   </label>
+                  <div className="mt-3 grid gap-2 pl-7 md:grid-cols-2">
+                    {module.pages.map((page) => (
+                      <label key={page.id} className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                        <input type="checkbox" checked={draftRights.includes(page.id) || draftRights.includes('*')} disabled={draftRights.includes('*')} onChange={(event) => togglePage(page.id, event.target.checked)} />
+                        {page.label}
+                      </label>
+                    ))}
+                  </div>
+                  </div>
                 );
               })}
             </div>

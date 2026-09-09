@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ACCESS_MODULES,
   canonicalizeBinaryModuleAccessRights,
+  hasPageAccess,
   expandAccessModule,
   getAccessModuleState,
   hasBinaryModulePageAccess,
@@ -34,24 +35,24 @@ describe('access module permissions', () => {
     ]);
   });
 
-  it('keeps module access binary and only checks when all pages are granted', () => {
+  it('marks a module indeterminate when only some pages are granted', () => {
     const salesPages = expandAccessModule('sales');
 
     expect(getAccessModuleState('sales', salesPages)).toEqual({ checked: true, indeterminate: false });
-    expect(getAccessModuleState('sales', salesPages.slice(0, -1))).toEqual({ checked: false, indeterminate: false });
+    expect(getAccessModuleState('sales', salesPages.slice(0, -1))).toEqual({ checked: false, indeterminate: true });
     expect(getAccessModuleState('sales', [])).toEqual({ checked: false, indeterminate: false });
   });
 
-  it('strips leftover pages from modules that are not fully checked', () => {
+  it('preserves partial page grants and gates at the page boundary', () => {
     const partial = [
       ...expandAccessModule('home'),
       'sales-transaction-sales-inquiry',
       'maintenance-customer-customer-data',
     ];
 
-    expect(canonicalizeBinaryModuleAccessRights(partial)).toEqual(expandAccessModule('home'));
-    expect(hasBinaryModulePageAccess(partial, 'sales-transaction-sales-inquiry')).toBe(false);
-    expect(hasBinaryModulePageAccess(partial, 'home')).toBe(true);
+    expect(canonicalizeBinaryModuleAccessRights(partial)).toEqual(partial);
+    expect(hasPageAccess(partial, 'sales-transaction-sales-inquiry')).toBe(true);
+    expect(hasPageAccess(partial, 'sales-transaction-sales-order')).toBe(false);
   });
 
   it('uses navigated routes for pages whose menu id is only a display key', () => {

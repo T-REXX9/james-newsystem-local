@@ -39,7 +39,7 @@ import {
 import CustomLoadingSpinner from './CustomLoadingSpinner';
 import AccessGroupManager from './AccessGroupManager';
 import { useToast } from './ToastProvider';
-import { ACCESS_MODULES, getAccessModuleState, toggleAccessModule, canonicalizeBinaryModuleAccessRights } from '../utils/accessModules';
+import { ACCESS_MODULES, getAccessModuleState, toggleAccessModule, toggleAccessPage, canonicalizeAccessRights } from '../utils/accessModules';
 
 const STAFF_PER_PAGE = 50;
 const STAFF_MEMBER_COLUMN_WIDTH = 288;
@@ -216,7 +216,7 @@ const AccessControlSettings: React.FC = () => {
       prevProfiles.map((profile) => {
         if (profile.id !== userId) return profile;
 
-        const groupRights = nextGroupId ? groupMap[nextGroupId]?.access_rights || [] : profile.access_rights || [];
+        const groupRights = nextGroupId ? groupMap[nextGroupId]?.access_rights || [] : [];
         return {
           ...profile,
           group_id: nextGroupId,
@@ -252,9 +252,17 @@ const AccessControlSettings: React.FC = () => {
     setPermissionChanges((prev) => ({ ...prev, [userId]: true }));
   };
 
+  const handlePagePermissionToggle = (userId: string, pageId: string, enabled: boolean) => {
+    setProfiles((prevProfiles) => prevProfiles.map((profile) => {
+      if (profile.id !== userId) return profile;
+      return { ...profile, access_rights: toggleAccessPage(profile.access_rights || [], pageId, enabled), access_override: true };
+    }));
+    setPermissionChanges((prev) => ({ ...prev, [userId]: true }));
+  };
+
   const savePermissions = async (user: UserProfile) => {
     const hasPermOverride = permissionChanges[user.id] || false;
-    const nextRights = canonicalizeBinaryModuleAccessRights(user.access_rights || []);
+    const nextRights = canonicalizeAccessRights(user.access_rights || []);
     setSavingId(user.id);
     try {
       await updateProfileLocal(user.id, {
@@ -498,7 +506,7 @@ const AccessControlSettings: React.FC = () => {
             Access Control & Permissions
           </h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Manage legacy role groups and the module access they grant.
+            Grant individual pages directly, with modules used to organize and select them.
           </p>
         </div>
 
@@ -609,8 +617,9 @@ const AccessControlSettings: React.FC = () => {
                     {ACCESS_MODULES.map((module) => (
                       <th
                         key={module.id}
+                        colSpan={Math.max(1, module.pages.length)}
                         className="border-l border-slate-100 p-4 text-center dark:border-slate-800"
-                        style={{ minWidth: '112px', width: '112px' }}
+                        style={{ minWidth: `${Math.max(1, module.pages.length) * 150}px` }}
                       >
                         {module.label}
                       </th>
@@ -618,6 +627,12 @@ const AccessControlSettings: React.FC = () => {
                     <th className="sticky right-0 z-20 w-32 border-l border-slate-200 bg-slate-50 p-4 text-center dark:border-slate-700 dark:bg-slate-800">
                       Action
                     </th>
+                  </tr>
+                  <tr className="border-b border-slate-200 bg-slate-50/80 text-[10px] font-semibold uppercase text-slate-500 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-400">
+                    <th className="sticky left-0 z-20 bg-slate-50 dark:bg-slate-800" style={stickyStaffColumnStyle} />
+                    <th className="sticky z-20 bg-slate-50 dark:bg-slate-800" style={stickyGroupColumnStyle} />
+                    {ACCESS_MODULES.flatMap((module) => module.pages).map((pageItem) => <th key={pageItem.id} className="border-l border-slate-100 p-2 text-center dark:border-slate-800">{pageItem.label}</th>)}
+                    <th className="sticky right-0 z-20 bg-slate-50 dark:bg-slate-800" />
                   </tr>
                 </thead>
 
@@ -690,21 +705,16 @@ const AccessControlSettings: React.FC = () => {
                           </select>
                         </td>
 
-                        {ACCESS_MODULES.map((module) => {
+                        {ACCESS_MODULES.flatMap((module) => module.pages.map((pageItem, pageIndex) => ({ module, pageItem, pageIndex }))).map(({ module, pageItem, pageIndex }) => {
+                          const isAllowed = isOwner || hasFullAccess || effectiveCanonicalRights.has(pageItem.id);
                           const moduleState = getAccessModuleState(module.id, effectiveCanonicalRights);
-                          const isAllowed = isOwner || hasFullAccess || moduleState.checked;
-                          const assignedGroupRights = assignedGroup
-                            ? getEffectiveCanonicalRights(assignedGroup.access_rights)
-                            : null;
-                          const assignedGroupState = assignedGroupRights
-                            ? getAccessModuleState(module.id, assignedGroupRights)
-                            : null;
-                          const differsFromGroup = permissionsEdited && assignedGroupState
-                            ? isAllowed !== (assignedGroupState.checked || assignedGroupRights.has('*'))
+                          const assignedGroupRights = assignedGroup ? getEffectiveCanonicalRights(assignedGroup.access_rights) : null;
+                          const differsFromGroup = permissionsEdited && assignedGroupRights
+                            ? isAllowed !== (assignedGroupRights.has('*') || assignedGroupRights.has(pageItem.id))
                             : false;
                           return (
                             <td
-                              key={module.id}
+                              key={pageItem.id}
                               className={`border-l border-slate-100 p-4 text-center dark:border-slate-800 ${
                                 differsFromGroup
                                   ? 'bg-amber-50/70 dark:bg-amber-900/20'
@@ -712,15 +722,17 @@ const AccessControlSettings: React.FC = () => {
                               }`}
                               title={isOwner ? 'Owner — full access' : differsFromGroup ? 'Modified from group permissions' : 'Click to toggle access'}
                             >
-                              <div className="flex items-center justify-center">
+                              <div className="flex flex-col items-center justify-center gap-1">
+                                {pageIndex === 0 && !isOwner && <button type="button" className="text-[9px] text-brand-blue" onClick={() => handlePermissionToggle(user.id, module.id, getAccessModuleState(module.id, effectiveCanonicalRights).checked)}>Select all</button>}
+                                {pageIndex === 0 && <input type="checkbox" checked={isOwner || hasFullAccess || moduleState.checked} aria-label={`${module.label} module access for ${user.full_name}`} aria-checked={moduleState.indeterminate ? 'mixed' : moduleState.checked} disabled={isOwner} ref={(element) => { if (element) element.indeterminate = moduleState.indeterminate; }} onChange={() => handlePermissionToggle(user.id, module.id, moduleState.checked)} />}
                                   <input
                                     type="checkbox"
                                     checked={isAllowed}
-                                    aria-label={`${module.label} module access for ${user.full_name}`}
+                                    aria-label={`${pageItem.label} page access for ${user.full_name}`}
                                     aria-checked={isAllowed}
                                     disabled={isOwner}
                                   onChange={() => {
-                                    if (!isOwner) handlePermissionToggle(user.id, module.id, isAllowed);
+                                    if (!isOwner) handlePagePermissionToggle(user.id, pageItem.id, !isAllowed);
                                   }}
                                   className={`h-4 w-4 rounded border-gray-300 text-brand-blue ${
                                     isOwner ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer opacity-100'
