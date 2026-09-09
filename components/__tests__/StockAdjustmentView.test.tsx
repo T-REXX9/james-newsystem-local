@@ -67,7 +67,7 @@ describe('StockAdjustmentView', () => {
         price_cc: 0,
         price_dd: 0,
         price_vip1: 0,
-        price_vip2: 0,
+        price_vip2: 0, price_vip3: 0,
         stock_wh1: 5,
         stock_wh2: 0,
         stock_wh3: 0,

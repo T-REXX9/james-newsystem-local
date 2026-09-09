@@ -98,6 +98,7 @@ const EMPTY_PRODUCT: ProductForm = {
   price_dd: 0,
   price_vip1: 0,
   price_vip2: 0,
+  price_vip3: 0,
   price_baa: 0,
   price_bbb: 0,
   price_bcc: 0,
@@ -680,9 +681,10 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
             {detailTab === 'pricing' && <div>
             <h2 className="mb-3 font-semibold">Price List</h2>
             <div className="grid grid-cols-1 gap-x-5 gap-y-3 md:grid-cols-2 xl:grid-cols-4">
-              <LegacyField label="VIP 1">{fieldInput('price_aa', 'Input Amount', 'number')}</LegacyField>
-              <LegacyField label="VIP 2">{fieldInput('price_vip1', 'Input Amount', 'number')}</LegacyField>
-              <LegacyField label="VIP 3">{fieldInput('price_vip2', 'Input Amount', 'number')}</LegacyField>
+              <LegacyField label="VIP 1">{fieldInput('price_vip1', 'Input Amount', 'number')}</LegacyField>
+              <LegacyField label="VIP 2">{fieldInput('price_vip2', 'Input Amount', 'number')}</LegacyField>
+              <LegacyField label="VIP 3">{fieldInput('price_vip3', 'Input Amount', 'number')}</LegacyField>
+              <LegacyField label="AA">{fieldInput('price_aa', 'Input Amount', 'number')}</LegacyField>
             </div>
             <div className="mt-5 grid grid-cols-1 gap-x-5 gap-y-3 md:grid-cols-2 xl:grid-cols-4">
               <LegacyField label="Current Stock">
@@ -719,7 +721,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
               >
                 <table className="w-full table-fixed border-collapse text-left text-[clamp(8px,0.72vw,12px)] leading-[1.35] [&_td]:break-words [&_th]:break-normal [&_th]:[hyphens:none] [&_th]:[word-break:keep-all] [&_th]:[overflow-wrap:normal]">
                   <colgroup>
-                    {[1.8, 7.6, 6.0, 3.8, 5.6, 3.6, 6.6, 3.8, 4.2, 4.2, 3.4, 4.6, 4.4, 4.0, 4.0, 3.8, 3.8, 3.8, 5.6, 4.0, 4.0, 5.0].map((width, index) => (
+                    {[1.8, 7.6, 6.0, 3.8, 5.6, 3.6, 6.6, 3.8, 4.2, 4.2, 3.4, 4.6, 4.4, 4.0, 4.0, 3.4, 3.4, 3.4, 3.4, 5.6, 4.0, 4.0, 5.0].map((width, index) => (
                       <col key={index} style={{ width: `${width}%` }} />
                     ))}
                   </colgroup>
@@ -736,7 +738,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
                       <th colSpan={4} className="border border-[#ccc] bg-[#edf3f7] px-0.5 py-2 text-center text-[#315574]">Supplier (Cost of Goods)</th>
                       <th rowSpan={2} className="border border-[#ccc] px-0.5 py-2 text-center">Last Receive Qty<br />(Date)</th>
                       <th colSpan={2} className="border border-[#ccc] bg-[#eef6ee] px-0.5 py-2 text-center text-[#315b36]">Stock &amp; Reorder</th>
-                      <th colSpan={3} className="border border-[#ccc] bg-[#eef4fa] px-0.5 py-2 text-center text-[#315574]">Price List (Per Piece)</th>
+                      <th colSpan={4} className="border border-[#ccc] bg-[#eef4fa] px-0.5 py-2 text-center text-[#315574]">Price List (Per Piece)</th>
                       <th rowSpan={2} className="border border-[#ccc] px-0.5 py-2 text-center">Qty Sold Per Year<br />(pcs)</th>
                       <th rowSpan={2} className="border border-[#ccc] px-0.5 py-2 text-center">Incident Report<br />(Last 12 Months)</th>
                       <th rowSpan={2} className="border border-[#ccc] px-0.5 py-2 text-center">Return Report<br />(Last 12 Months)</th>
@@ -749,13 +751,14 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
                       <th className="border border-[#ccc] bg-[#edf3f7] px-0.5 py-1.5 text-center">Status</th>
                       <th className="border border-[#ccc] bg-[#eef6ee] px-0.5 py-1.5 text-center">Current Stock</th>
                       <th className="border border-[#ccc] bg-[#eef6ee] px-0.5 py-1.5 text-center">Reorder Qty</th>
-                      <th className="border border-[#ccc] bg-[#eef4fa] px-0.5 py-1.5 text-center">1st<br />(VIP 1)</th>
-                      <th className="border border-[#ccc] bg-[#eef4fa] px-0.5 py-1.5 text-center">2nd<br />(VIP 2)</th>
-                      <th className="border border-[#ccc] bg-[#eef4fa] px-0.5 py-1.5 text-center">3rd<br />(VIP 3)</th>
+                      <th className="border border-[#ccc] bg-[#eef4fa] px-0.5 py-1.5 text-center">VIP 1</th>
+                      <th className="border border-[#ccc] bg-[#eef4fa] px-0.5 py-1.5 text-center">VIP 2</th>
+                      <th className="border border-[#ccc] bg-[#eef4fa] px-0.5 py-1.5 text-center">VIP 3</th>
+                      <th className="border border-[#ccc] bg-[#eef4fa] px-0.5 py-1.5 text-center">AA</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {!isLoading && products.length === 0 && <tr><td colSpan={22} className="px-3 py-6 text-center text-slate-500">No products found.</td></tr>}
+                    {!isLoading && products.length === 0 && <tr><td colSpan={23} className="px-3 py-6 text-center text-slate-500">No products found.</td></tr>}
                     {products.map((product, productIndex) => {
                       const selected = highlightedProductId === product.id;
                       const yearlySales = Object.entries(product.sales_by_year || {}).sort(([a], [b]) => Number(b) - Number(a));
@@ -836,9 +839,10 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
                               : <span className={`font-bold ${isLowStock ? 'text-red-600' : 'text-emerald-700'}`}>{compactQuantity(currentStock)}</span>}
                           </td>
                           <td className="border border-[#ddd] px-0.5 py-2 text-center align-top">{compactQuantity(product.reorder_quantity)}</td>
-                          <td className="border border-[#ddd] px-0.5 py-2 text-right align-top font-bold text-[#1675bd]">{money(product.price_aa)}</td>
                           <td className="border border-[#ddd] px-0.5 py-2 text-right align-top font-bold text-[#1675bd]">{money(product.price_vip1)}</td>
                           <td className="border border-[#ddd] px-0.5 py-2 text-right align-top font-bold text-[#1675bd]">{money(product.price_vip2)}</td>
+                          <td className="border border-[#ddd] px-0.5 py-2 text-right align-top font-bold text-[#1675bd]">{money(product.price_vip3)}</td>
+                          <td className="border border-[#ddd] px-0.5 py-2 text-right align-top font-bold text-[#1675bd]">{money(product.price_aa)}</td>
                           <td className="border border-[#ddd] px-1 py-2 align-top text-slate-500">
                             {yearlySales.map(([year, quantity]) => (
                               <div key={year} className="grid grid-cols-[auto_1fr] gap-1">

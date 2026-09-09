@@ -450,7 +450,7 @@ export const MOCK_PRODUCTS: Product[] = [
     original_pn_no: 'MT-8100-OLD',
     application: 'Gasoline/Diesel Engines',
     no_of_cylinder: 'All',
-    price_aa: 550, price_bb: 520, price_cc: 500, price_dd: 480, price_vip1: 450, price_vip2: 430,
+    price_aa: 550, price_bb: 520, price_cc: 500, price_dd: 480, price_vip1: 450, price_vip2: 430, price_vip3: 0,
     stock_wh1: 200, stock_wh2: 150, stock_wh3: 0, stock_wh4: 50, stock_wh5: 100, stock_wh6: 0
   },
   {
@@ -472,7 +472,7 @@ export const MOCK_PRODUCTS: Product[] = [
     original_pn_no: 'BR-ORG-001',
     application: 'Toyota Hilux Vigo',
     no_of_cylinder: '4',
-    price_aa: 3200, price_bb: 3100, price_cc: 3000, price_dd: 2900, price_vip1: 2750, price_vip2: 2600,
+    price_aa: 3200, price_bb: 3100, price_cc: 3000, price_dd: 2900, price_vip1: 2750, price_vip2: 2600, price_vip3: 0,
     stock_wh1: 50, stock_wh2: 20, stock_wh3: 10, stock_wh4: 0, stock_wh5: 5, stock_wh6: 15
   },
   {
@@ -494,7 +494,7 @@ export const MOCK_PRODUCTS: Product[] = [
     original_pn_no: 'DN-K20R-U11',
     application: 'Honda/Toyota Universal',
     no_of_cylinder: '4',
-    price_aa: 450, price_bb: 420, price_cc: 400, price_dd: 380, price_vip1: 350, price_vip2: 320,
+    price_aa: 450, price_bb: 420, price_cc: 400, price_dd: 380, price_vip1: 350, price_vip2: 320, price_vip3: 0,
     stock_wh1: 500, stock_wh2: 300, stock_wh3: 100, stock_wh4: 200, stock_wh5: 150, stock_wh6: 50
   },
   {
@@ -516,7 +516,7 @@ export const MOCK_PRODUCTS: Product[] = [
     original_pn_no: 'MC-PS4-245',
     application: 'Sports Sedans',
     no_of_cylinder: 'N/A',
-    price_aa: 12500, price_bb: 12200, price_cc: 12000, price_dd: 11800, price_vip1: 11500, price_vip2: 11000,
+    price_aa: 12500, price_bb: 12200, price_cc: 12000, price_dd: 11800, price_vip1: 11500, price_vip2: 11000, price_vip3: 0,
     stock_wh1: 12, stock_wh2: 8, stock_wh3: 0, stock_wh4: 4, stock_wh5: 0, stock_wh6: 2
   },
   {
@@ -538,7 +538,7 @@ export const MOCK_PRODUCTS: Product[] = [
     original_pn_no: 'KYB-341000',
     application: 'Toyota Vios 2008-2013',
     no_of_cylinder: '4',
-    price_aa: 2800, price_bb: 2700, price_cc: 2600, price_dd: 2500, price_vip1: 2400, price_vip2: 2300,
+    price_aa: 2800, price_bb: 2700, price_cc: 2600, price_dd: 2500, price_vip1: 2400, price_vip2: 2300, price_vip3: 0,
     stock_wh1: 30, stock_wh2: 10, stock_wh3: 5, stock_wh4: 0, stock_wh5: 0, stock_wh6: 10
   },
   {
@@ -560,7 +560,7 @@ export const MOCK_PRODUCTS: Product[] = [
     original_pn_no: '',
     application: 'Toyota Corolla/Vios',
     no_of_cylinder: '4',
-    price_aa: 180, price_bb: 170, price_cc: 160, price_dd: 150, price_vip1: 140, price_vip2: 130,
+    price_aa: 180, price_bb: 170, price_cc: 160, price_dd: 150, price_vip1: 140, price_vip2: 130, price_vip3: 0,
     stock_wh1: 1000, stock_wh2: 500, stock_wh3: 200, stock_wh4: 300, stock_wh5: 100, stock_wh6: 50
   }
 ];

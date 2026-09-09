@@ -73,7 +73,7 @@ describe.skipIf(process.env.RUN_LOCAL_API_INTEGRATION !== '1')('Product Database
         price_cc: 140,
         price_dd: 150,
         price_vip1: 110,
-        price_vip2: 105,
+        price_vip2: 105, price_vip3: 0,
         stock_wh1: 1,
         stock_wh2: 0,
         stock_wh3: 0,

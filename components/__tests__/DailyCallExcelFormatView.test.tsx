@@ -156,7 +156,7 @@ describe('DailyCallExcelFormatView', () => {
 
     expect(await screen.findByText('VIP 2')).toBeInTheDocument();
     expect(screen.getByText('VIP 1')).toBeInTheDocument();
-    expect(screen.getByText('Regular')).toBeInTheDocument();
+    expect(screen.getByText('VIP 3')).toBeInTheDocument();
     expect(screen.getAllByAltText('VIP Gold badge').length).toBeGreaterThan(0);
     expect(screen.getAllByAltText('VIP Silver badge').length).toBeGreaterThan(0);
   });

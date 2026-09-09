@@ -1,5 +1,5 @@
 import type { Product } from '../types';
-import { normalizePriceGroup } from '../constants/pricingGroups';
+import { normalizePriceCode } from '../constants/pricingGroups';
 import { getLocalAuthSession } from './localAuthService';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
@@ -66,6 +66,7 @@ const normalizeApiProduct = (raw: any): Product => ({
   price_dd: toNumber(raw?.price_dd),
   price_vip1: toNumber(raw?.price_vip1),
   price_vip2: toNumber(raw?.price_vip2),
+  price_vip3: toNumber(raw?.price_vip3),
   price_baa: toNumber(raw?.price_baa),
   price_bbb: toNumber(raw?.price_bbb),
   price_bcc: toNumber(raw?.price_bcc),
@@ -332,55 +333,31 @@ export const deleteProduct = async (id: string): Promise<void> => {
 };
 
 /**
- * Get product price based on customer price group.
- * Accepts new names (`regular`, `silver`, `gold`, `platinum`) and
- * legacy-compatible names (`AA`, `BB`, `CC`, `DD`, `VIP1`, `VIP2`).
- * `platinum` currently reuses the gold pricing column because there is no
- * dedicated database column.
- * @param product The product object
- * @param priceGroup The customer's price group
- * @returns The calculated price
+ * Get product price for a customer price code.
+ *
+ * Price codes are only vip1 / vip2 / vip3.
+ * Database columns used:
+ *   vip1 → price_vip1 ("VIP 1"), fallback price_aa (AAA)
+ *   vip2 → price_vip2 ("VIP2"), fallback price_aa (AAA)
+ *   vip3 → price_vip3 ("VIP3"); empty (0) until set in the new system — no AA fallback
  */
 export const getProductPrice = (product: Product, priceGroup?: string): number => {
   if (!product) return 0;
-  if (!priceGroup?.trim()) return product.price_aa || 0;
 
-  const normalizedGroup = normalizePriceGroup(priceGroup);
-  const directGroup = priceGroup.trim();
-  const candidates = [
-    normalizedGroup,
-    directGroup,
-    directGroup.toLowerCase(),
-    directGroup.toUpperCase(),
-  ];
+  const aa = Number(product.price_aa) || 0;
+  if (!priceGroup?.trim()) return aa;
 
-  if (candidates.includes('Regular') || candidates.includes('regular') || candidates.includes('AA')) {
-    return product.price_aa || 0;
+  const withAaFallback = (amount: number): number => (amount > 0 ? amount : aa);
+  const code = normalizePriceCode(priceGroup);
+
+  if (code === 'vip1') {
+    return withAaFallback(Number(product.price_vip1) || 0);
   }
 
-  if (candidates.includes('Silver') || candidates.includes('silver') || candidates.includes('VIP1') || candidates.includes('vip 1')) {
-    return product.price_vip1 || 0;
+  if (code === 'vip2') {
+    return withAaFallback(Number(product.price_vip2) || 0);
   }
 
-  if (candidates.includes('Gold') || candidates.includes('gold') || candidates.includes('VIP2') || candidates.includes('vip 2') || candidates.includes('vip 3')) {
-    return product.price_vip2 || 0;
-  }
-
-  if (candidates.includes('Platinum') || candidates.includes('platinum')) {
-    return product.price_vip2 || 0;
-  }
-
-  if (candidates.includes('BB') || candidates.includes('bbb') || candidates.includes('BBB')) {
-    return product.price_bb || 0;
-  }
-
-  if (candidates.includes('CC') || candidates.includes('ccc') || candidates.includes('CCC')) {
-    return product.price_cc || 0;
-  }
-
-  if (candidates.includes('DD') || candidates.includes('ddd') || candidates.includes('DDD')) {
-    return product.price_dd || 0;
-  }
-
-  return product.price_aa || 0;
+  // vip3: new-system VIP3 row only; never inherit legacy AA/AAA.
+  return Number(product.price_vip3) || 0;
 };

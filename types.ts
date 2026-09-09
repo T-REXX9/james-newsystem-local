@@ -465,6 +465,7 @@ export interface Product {
   price_dd: number;
   price_vip1: number;
   price_vip2: number;
+  price_vip3: number;
   price_baa?: number;
   price_bbb?: number;
   price_bcc?: number;

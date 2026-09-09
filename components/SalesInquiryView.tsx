@@ -51,7 +51,7 @@ import { parseSupabaseError } from '../utils/errorHandler';
 import { exportPrintSheetAsJpeg } from '../utils/exportPrintSheetJpeg';
 import {
   normalizePriceGroup,
-  normalizePriceGroupToInternalKey,
+  normalizeToWritablePriceCode,
   WRITABLE_PRICING_GROUP_OPTIONS,
 } from '../constants/pricingGroups';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
@@ -140,17 +140,6 @@ const getLocalTimeInputValue = (date = new Date()): string => {
   const hours = String(date.getHours()).padStart(2, '0');
   const minutes = String(date.getMinutes()).padStart(2, '0');
   return `${hours}:${minutes}`;
-};
-
-const normalizeToWritablePriceCode = (raw: string | undefined | null): string => {
-  const cleaned = String(raw || '').trim().toLowerCase().replace(/[\s_-]+/g, ' ');
-  if (cleaned === 'vip 1' || cleaned === 'vip1') return 'vip 1';
-  if (cleaned === 'vip 2' || cleaned === 'vip2') return 'vip 2';
-  if (cleaned === 'vip 3' || cleaned === 'vip3') return 'vip 3';
-  const normalized = normalizePriceGroupToInternalKey(raw || '');
-  if (normalized === 'silver') return 'vip 1';
-  if (normalized === 'gold' || normalized === 'platinum') return 'vip 2';
-  return normalized || 'regular';
 };
 
 const getSessionSalesPerson = (): { id: string; name: string } => {
@@ -441,7 +430,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   const handleProductSelect = (product: any) => {
     if (!activeRowId) return;
 
-    const price = getProductPrice(product, normalizePriceGroupToInternalKey(priceGroup));
+    // Use writable VIP 1/2/3 codes — not silver/gold — so lookup matches Product Database columns.
+    const price = getProductPrice(product, normalizeToWritablePriceCode(priceGroup));
     setItems(prev => prev.map(item => {
       if (item.tempId === activeRowId) {
         return {
@@ -463,7 +453,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   };
 
   const repriceItemsForGroup = useCallback(async (targetGroup: string) => {
-    const effectiveGroup = normalizePriceGroupToInternalKey(targetGroup);
+    const effectiveGroup = normalizeToWritablePriceCode(targetGroup);
     const itemsWithProduct = items.filter((item) => item.item_id);
     if (itemsWithProduct.length === 0) return;
 

@@ -1158,9 +1158,9 @@ const StockMovementView: React.FC = () => {
                           <td className="border border-slate-200 px-3 py-3 dark:border-slate-800">{product.brand}</td>
                           <td className="border border-slate-200 px-3 py-3 dark:border-slate-800">{product.application || '-'}</td>
                           <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{product.reorder_quantity}</td>
-                          <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_aa)}</td>
                           <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_vip1)}</td>
                           <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_vip2)}</td>
+                          <td className="border border-slate-200 px-3 py-3 text-right dark:border-slate-800">{price(product.price_vip3)}</td>
                           <td className="border border-slate-200 px-3 py-3 text-right font-semibold dark:border-slate-800">{totalStock.toLocaleString()}</td>
                         </tr>
                       );

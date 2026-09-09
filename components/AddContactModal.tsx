@@ -6,7 +6,7 @@ import ValidationSummary from './ValidationSummary';
 import FieldHelp from './FieldHelp';
 import { CUSTOMER_VAT_TYPES, DEFAULT_CUSTOMER_VAT_TYPE } from '../constants/customerVat';
 import { CUSTOMER_PREFERRED_BRANDS, type CustomerPreferredBrand } from '../constants/customerPreferredBrand';
-import { WRITABLE_PRICING_GROUP_OPTIONS, normalizePriceGroupToInternalKey } from '../constants/pricingGroups';
+import { WRITABLE_PRICING_GROUP_OPTIONS, normalizeToWritablePriceCode } from '../constants/pricingGroups';
 import { validateMaxLength, validateOptionalEmail, validateOptionalPhone, validateRequired } from '../utils/formValidation';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { formatCustomerSince } from '../utils/formatUtils';
@@ -88,7 +88,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     deliveryAddress: '',
     area: '',
     tin: '',
-    priceGroup: 'regular',
+    priceGroup: 'vip 3',
     businessLine: '',
     terms: '',
     transactionType: '',
@@ -128,7 +128,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     deliveryAddress: contact?.deliveryAddress || '',
     area: contact?.area || '',
     tin: contact?.tin || '',
-    priceGroup: normalizePriceGroupToInternalKey(contact?.priceGroup),
+    priceGroup: normalizeToWritablePriceCode(contact?.priceGroup || contact?.priceCode),
     businessLine: contact?.businessLine || '',
     terms: contact?.terms || '',
     transactionType: contact?.transactionType || '',
@@ -255,7 +255,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
 
         // Financial / Legal
         tin: formData.tin || '',
-        priceGroup: formData.priceGroup || 'regular',
+        priceGroup: formData.priceGroup || 'vip 3',
         businessLine: formData.businessLine || '',
         terms: formData.terms || '',
         transactionType: formData.transactionType || '',

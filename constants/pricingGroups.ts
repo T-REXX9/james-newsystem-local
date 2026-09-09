@@ -1,135 +1,101 @@
-// DB values remain unchanged for MySQL compatibility, including legacy-only groups.
-export const PRICING_GROUP_DB_VALUES = ['aaa', 'vip1', 'vip2', 'vip3', 'bbb', 'ccc', 'ddd'] as const;
-
-// Internal values are the new application vocabulary; platinum is application-level only.
-export const PRICING_GROUP_INTERNAL = {
-  regular: 'regular',
-  silver: 'silver',
-  gold: 'gold',
-  platinum: 'platinum',
-} as const;
-
-export const DB_TO_INTERNAL_MAP = {
-  aaa: 'regular',
-  vip1: 'silver',
-  vip2: 'gold',
-  vip3: 'gold',
-} as const;
-
 /**
- * Legacy customer price group labels for UI display.
- * These are NOT the monthly VIP discount tiers (One-Time / Unlimited VIP).
+ * Customer / product price codes.
+ *
+ * Canonical codes are only: vip1, vip2, vip3.
+ * Monthly VIP Silver / VIP Gold discount standing is a separate concept.
+ *
+ * Database price groups used for lookup:
+ *   vip1 → "VIP 1" (price_vip1), fallback AAA (price_aa)
+ *   vip2 → "VIP2" (price_vip2), fallback AAA (price_aa)
+ *   vip3 → "VIP3" (price_vip3); empty until set — does not read legacy AAA
  */
-export const LEGACY_PRICE_GROUP_DISPLAY: Record<string, string> = {
-  aaa: 'Regular',
-  vip1: 'VIP 1',
-  vip2: 'VIP 2',
-  vip3: 'VIP 3',
-  bbb: 'BBB',
-  ccc: 'CCC',
-  ddd: 'DDD',
-  regular: 'Regular',
-  silver: 'VIP 1',
-  gold: 'VIP 2',
-  platinum: 'Platinum',
-};
 
-export const INTERNAL_TO_DISPLAY_LABEL = {
-  regular: 'Regular',
-  silver: 'Silver',
-  gold: 'Gold',
-  platinum: 'Platinum',
-} as const;
+export const PRICE_CODES = ['vip1', 'vip2', 'vip3'] as const;
+export type PriceCode = (typeof PRICE_CODES)[number];
 
-export const LEGACY_DB_DISPLAY_LABELS: Record<string, string> = {
-  bbb: 'BBB',
-  ccc: 'CCC',
-  ddd: 'DDD',
-} as const;
-
-// Legacy-only DB groups stay readable but are excluded from active new-system options.
-export const ACTIVE_PRICING_GROUP_OPTIONS = Object.values(PRICING_GROUP_INTERNAL).map((value) => ({
-  value,
-  label: INTERNAL_TO_DISPLAY_LABEL[value],
-}));
-
+/** Writable UI values (spaced for display in selects). */
 export const WRITABLE_PRICING_GROUP_OPTIONS = [
-  { value: 'regular', label: 'regular' },
   { value: 'vip 1', label: 'vip 1' },
   { value: 'vip 2', label: 'vip 2' },
   { value: 'vip 3', label: 'vip 3' },
-];
+] as const;
+
+/** @deprecated Use WRITABLE_PRICING_GROUP_OPTIONS — kept as an alias for callers. */
+export const ACTIVE_PRICING_GROUP_OPTIONS = WRITABLE_PRICING_GROUP_OPTIONS;
 
 /**
- * Collapses legacy spacing variants such as "VIP 1" and "VIP1" into "vip1".
+ * Collapses spacing/case variants such as "VIP 1" and "VIP1" into "vip1".
  */
 export const canonicalizePriceGroupLookupKey = (raw: string | undefined | null): string => {
   if (!raw) return '';
   return raw.trim().toLowerCase().replace(/[\s_-]+/g, '');
 };
 
-const resolveCanonicalPriceGroupKey = (raw: string | undefined | null): string | null => {
-  const canonical = canonicalizePriceGroupLookupKey(raw);
-  if (!canonical) return null;
+/**
+ * Maps any stored/legacy price-group string to vip1 | vip2 | vip3.
+ * Silent aliases (silver/gold/aaa/regular/…) are accepted on read only.
+ */
+export function normalizePriceCode(raw: string | undefined | null): PriceCode {
+  const key = canonicalizePriceGroupLookupKey(raw);
 
-  if (canonical in DB_TO_INTERNAL_MAP) {
-    return DB_TO_INTERNAL_MAP[canonical as keyof typeof DB_TO_INTERNAL_MAP];
-  }
+  if (key === 'vip1' || key === 'silver') return 'vip1';
+  if (key === 'vip2' || key === 'gold') return 'vip2';
+  if (key === 'vip3' || key === 'platinum') return 'vip3';
+  // Legacy AA/AAA/regular codes map to the vip3 *customer* tier, but vip3 pricing
+  // does not read those legacy product price rows (see getProductPrice).
+  if (key === 'aaa' || key === 'aa' || key === 'regular') return 'vip3';
 
-  if (canonical in PRICING_GROUP_INTERNAL) {
-    return canonical;
-  }
-
-  if (canonical in LEGACY_DB_DISPLAY_LABELS) {
-    return canonical;
-  }
-
-  return null;
-};
+  return 'vip3';
+}
 
 /**
- * Resolves any raw price-group value (legacy DB or internal) to its internal key.
- * Internal keys map to product price columns for lookups only — not discount tiers.
+ * Writable select value: "vip 1" | "vip 2" | "vip 3".
+ */
+export function normalizeToWritablePriceCode(raw: string | undefined | null): string {
+  const code = normalizePriceCode(raw);
+  if (code === 'vip1') return 'vip 1';
+  if (code === 'vip2') return 'vip 2';
+  return 'vip 3';
+}
+
+/**
+ * @deprecated Prefer normalizePriceCode. Returns vip1|vip2|vip3 (no silver/gold).
  */
 export function normalizePriceGroupToInternalKey(raw: string | undefined | null): string {
-  return resolveCanonicalPriceGroupKey(raw) ?? 'regular';
+  return normalizePriceCode(raw);
 }
 
 /**
- * Returns the legacy price group label for customer-facing UI (VIP 1, VIP 2, Regular, etc.).
+ * Customer-facing price code label.
  */
 export function formatLegacyPriceGroupLabel(raw: string | undefined | null): string {
-  const canonical = canonicalizePriceGroupLookupKey(raw);
-  if (canonical && canonical in LEGACY_PRICE_GROUP_DISPLAY) {
-    return LEGACY_PRICE_GROUP_DISPLAY[canonical];
-  }
+  if (!String(raw || '').trim()) return '—';
+  const code = normalizePriceCode(raw);
+  if (code === 'vip1') return 'VIP 1';
+  if (code === 'vip2') return 'VIP 2';
+  return 'VIP 3';
+}
 
-  const trimmed = String(raw || '').trim();
-  return trimmed || '—';
+export function isKnownPriceGroup(raw: string | undefined | null): boolean {
+  const key = canonicalizePriceGroupLookupKey(raw);
+  if (!key) return false;
+  return (
+    key === 'vip1' ||
+    key === 'vip2' ||
+    key === 'vip3' ||
+    key === 'silver' ||
+    key === 'gold' ||
+    key === 'platinum' ||
+    key === 'aaa' ||
+    key === 'aa' ||
+    key === 'regular'
+  );
 }
 
 /**
- * Returns true when the raw value maps to a known DB, internal, or legacy group.
+ * Display string for a price code (VIP 1 / VIP 2 / VIP 3).
  */
-export function isKnownPriceGroup(raw: string | undefined | null): boolean {
-  return resolveCanonicalPriceGroupKey(raw) !== null;
-}
-
 export function normalizePriceGroup(raw: string): string {
-  const cleaned = raw.trim();
-
-  if (!cleaned) {
-    return '';
-  }
-
-  const resolved = resolveCanonicalPriceGroupKey(cleaned);
-  if (resolved && resolved in INTERNAL_TO_DISPLAY_LABEL) {
-    return INTERNAL_TO_DISPLAY_LABEL[resolved as keyof typeof INTERNAL_TO_DISPLAY_LABEL];
-  }
-
-  if (resolved && resolved in LEGACY_DB_DISPLAY_LABELS) {
-    return LEGACY_DB_DISPLAY_LABELS[resolved];
-  }
-
-  return cleaned;
+  if (!raw.trim()) return '';
+  return formatLegacyPriceGroupLabel(raw);
 }

@@ -33,6 +33,7 @@ const product = {
   price_dd: 0,
   price_vip1: 0,
   price_vip2: 0,
+  price_vip3: 0,
   price_baa: 10,
   price_bbb: 20,
   price_bcc: 30,
@@ -212,6 +213,7 @@ describe('StockMovementView', () => {
       price_aa: 100,
       price_vip1: 90,
       price_vip2: 80,
+      price_vip3: 70,
       stock_wh1: 1,
       stock_wh2: 2,
       stock_wh3: 3,
@@ -228,9 +230,9 @@ describe('StockMovementView', () => {
     expect(screen.getByRole('columnheader', { name: 'VIP 2' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'VIP 3' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Total Stock' })).toBeInTheDocument();
-    expect(within(row).getByText('100.00')).toBeInTheDocument();
     expect(within(row).getByText('90.00')).toBeInTheDocument();
     expect(within(row).getByText('80.00')).toBeInTheDocument();
+    expect(within(row).getByText('70.00')).toBeInTheDocument();
     expect(within(row).getByText('21')).toBeInTheDocument();
     expect(screen.queryByRole('columnheader', { name: 'AA' })).not.toBeInTheDocument();
     expect(screen.queryByRole('columnheader', { name: 'WH1' })).not.toBeInTheDocument();

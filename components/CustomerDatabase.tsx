@@ -8,7 +8,7 @@ import BulkAssignAgentModal from './BulkAssignAgentModal';
 import BulkSetPriceGroupModal from './BulkSetPriceGroupModal';
 import { Users, UserPlus, EyeOff, Tag, CheckSquare, X, ClipboardList } from 'lucide-react';
 import AddContactModal from './AddContactModal';
-import { ACTIVE_PRICING_GROUP_OPTIONS } from '../constants/pricingGroups';
+import { WRITABLE_PRICING_GROUP_OPTIONS } from '../constants/pricingGroups';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
 import { EmptyState, PageHeader } from './common/PageScaffold';
@@ -153,7 +153,7 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
   const handleBulkSetPriceGroup = async (priceGroup: string) => {
     if (!priceGroup || selectedIds.size === 0) return;
 
-    const selectedOption = ACTIVE_PRICING_GROUP_OPTIONS.find((option) => option.value === priceGroup);
+    const selectedOption = WRITABLE_PRICING_GROUP_OPTIONS.find((option) => option.value === priceGroup);
     if (!selectedOption) return;
 
     try {

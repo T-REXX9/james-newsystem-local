@@ -155,7 +155,7 @@ const baseContacts = [
     address: '123 Main St',
     deliveryAddress: '123 Main St',
     salesman: 'Jane Doe',
-    priceGroup: 'regular',
+    priceGroup: 'vip 1',
     creditLimit: 10000,
     terms: '30 days',
     comment: 'Priority',
@@ -172,7 +172,7 @@ const baseContacts = [
     address: '456 Side St',
     deliveryAddress: '456 Side St',
     salesman: 'John Doe',
-    priceGroup: 'regular',
+    priceGroup: 'vip 1',
     creditLimit: 5000,
     terms: 'COD',
     comment: '',
@@ -245,12 +245,16 @@ describe('SalesInquiryView', () => {
             price_aa: 100,
             price_vip1: 200,
             price_vip2: 300,
+            price_vip3: 400,
           }
         : null
     ));
     getProductPriceMock.mockImplementation((_product: any, priceGroup?: string) => {
-      if (priceGroup === 'gold') return 300;
-      if (priceGroup === 'silver') return 200;
+      // vip1 → 200, vip2 → 300, vip3 → 400 (VIP3 column; 0 when unset)
+      const key = String(priceGroup || '').trim().toLowerCase().replace(/[\s_-]+/g, '');
+      if (key === 'vip1') return 200;
+      if (key === 'vip2') return 300;
+      if (key === 'vip3') return 400;
       return 100;
     });
     getVipTierConfigMock.mockResolvedValue({
@@ -585,10 +589,12 @@ describe('SalesInquiryView', () => {
     expect(screen.getByRole('button', { name: 'Select Product' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Select Product' }));
 
+    // Use writable vip 2 → DB VIP2 column
     expect(await screen.findByDisplayValue('300')).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText('Customer'), 'c-2');
 
+    // Use writable vip 1 → DB VIP 1 column
     expect(await screen.findByDisplayValue('200')).toBeInTheDocument();
   });
 
@@ -913,9 +919,9 @@ describe('SalesInquiryView', () => {
     await user.click(screen.getByRole('button', { name: 'Select Product' }));
 
     await waitFor(() => {
-      expect(screen.getByText('10% VIP GOLD = 10.00')).toBeInTheDocument();
+      expect(screen.getByText('10% VIP GOLD = 20.00')).toBeInTheDocument();
       expect(screen.getByText('TOTAL to pay :')).toBeInTheDocument();
-      expect(screen.getByText('90.00')).toBeInTheDocument();
+      expect(screen.getByText('180.00')).toBeInTheDocument();
     });
   });
 

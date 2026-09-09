@@ -69,6 +69,7 @@ const sampleProduct: Product = {
   price_dd: 0,
   price_vip1: 430,
   price_vip2: 420,
+  price_vip3: 0,
   stock_wh1: 5,
   stock_wh2: 2,
   stock_wh3: 3,
@@ -130,6 +131,7 @@ describe('ProductDatabase', () => {
     expect(screen.getAllByText('VIP 1').length).toBeGreaterThan(0);
     expect(screen.getAllByText('VIP 2').length).toBeGreaterThan(0);
     expect(screen.getAllByText('VIP 3').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('AA').length).toBeGreaterThan(0);
     expect(screen.queryByText('Platinum')).not.toBeInTheDocument();
     expect(screen.queryByText('Regular')).not.toBeInTheDocument();
     expect(screen.queryByText('Silver')).not.toBeInTheDocument();

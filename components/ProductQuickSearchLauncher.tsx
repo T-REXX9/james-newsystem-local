@@ -415,18 +415,18 @@ const ProductQuickSearchLauncher: React.FC = () => {
                     <div className="rounded-2xl border border-brand-blue/15 bg-brand-blue/[0.06] p-4 shadow-sm">
                       <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-blue/70">Product Price</div>
                       <div className="mt-3 grid gap-2">
-                        <div className="rounded-2xl bg-white/90 p-3">
-                          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Regular</div>
-                          <div className="mt-1.5 text-base font-semibold text-slate-900">{formatCurrency(selectedProduct.price_aa || 0)}</div>
-                        </div>
-                        <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
+                        <div className="grid gap-2 sm:grid-cols-3">
                           <div className="rounded-2xl bg-white/90 p-3">
-                            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Silver</div>
+                            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">VIP 1</div>
                             <div className="mt-1.5 text-sm font-semibold text-slate-900">{formatCurrency(selectedProduct.price_vip1 || 0)}</div>
                           </div>
                           <div className="rounded-2xl bg-white/90 p-3">
-                            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Gold</div>
+                            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">VIP 2</div>
                             <div className="mt-1.5 text-sm font-semibold text-slate-900">{formatCurrency(selectedProduct.price_vip2 || 0)}</div>
+                          </div>
+                          <div className="rounded-2xl bg-white/90 p-3">
+                            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">VIP 3</div>
+                            <div className="mt-1.5 text-sm font-semibold text-slate-900">{formatCurrency(selectedProduct.price_vip3 || 0)}</div>
                           </div>
                         </div>
                       </div>

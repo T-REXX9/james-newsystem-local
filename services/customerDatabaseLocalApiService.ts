@@ -807,6 +807,7 @@ export const purchasedItemToProduct = (item: PurchasedItem): Product => ({
   price_dd: 0,
   price_vip1: 0,
   price_vip2: 0,
+  price_vip3: 0,
   stock_wh1: item.remaining_qty,
   stock_wh2: 0,
   stock_wh3: 0,
