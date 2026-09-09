@@ -129,6 +129,34 @@ describe('DailyCallCustomerDetailExpansion', () => {
     expect(label.parentElement).toHaveTextContent('—');
   });
 
+  it('shows the Do Not Contact reason in the primary customer summary', async () => {
+    fetchContactCustomerLogsForDailyCallMock.mockResolvedValueOnce([{
+      id: 'status-1',
+      contact_id: 'customer-1',
+      entry_type: 'Status',
+      topic: 'Status',
+      status: 'Do Not Contact',
+      note: 'Customer requested no further calls',
+      promise_to_pay: '',
+      comments: '',
+      attachment: null,
+      occurred_at: '2026-09-10T00:00:00.000Z',
+      created_by: 'master-1',
+      created_by_name: 'Master User',
+    }]);
+
+    render(
+      <DailyCallCustomerDetailExpansion
+        customer={{ ...customer, status: 'Blacklisted' }}
+        currentUser={null}
+        viewOnlyDoNotContact
+      />
+    );
+
+    const summaryReason = await screen.findByText('Do Not Contact reason', { exact: true });
+    expect(summaryReason.parentElement).toHaveTextContent('Customer requested no further calls');
+  });
+
   it('points staff to the dedicated maintenance page for vip threshold changes', () => {
     render(
       <DailyCallCustomerDetailExpansion
