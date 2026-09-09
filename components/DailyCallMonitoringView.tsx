@@ -87,6 +87,7 @@ import {
   getPhoneNumber
 } from '../utils/formatUtils';
 import { DO_NOT_CONTACT_LABEL, isBlockedContact } from '../utils/dailyCallBlockedCustomer';
+import { VERIFIED_PROSPECT_POTENTIAL, averageMonthlyPaidSales } from '../utils/dailyCallPotentialSales';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import { DEFAULT_CUSTOMER_VAT_TYPE } from '../constants/customerVat';
 import {
@@ -174,51 +175,10 @@ const ManagementInstructionsPanel: React.FC<{
 const getCurrentMonthPurchases = (purchases: Purchase[], referenceDate: Date) =>
   purchases.filter((purchase) => isWithinCurrentMonth(purchase.purchased_at, referenceDate) && purchase.status === 'paid');
 
-const VERIFIED_PROSPECT_POTENTIAL = 5_000;
 const priorityListStart = new Date('2025-10-01T00:00:00');
 
 const sumPaidPurchasesInMonth = (purchases: Purchase[], referenceDate: Date) =>
   getCurrentMonthPurchases(purchases, referenceDate).reduce((sum, purchase) => sum + purchase.amount, 0);
-
-/** Average of monthly paid totals in the window used for Potential Sales (not lifetime totals). */
-const averageMonthlyPaidSales = (
-  purchases: Purchase[],
-  mode: 'priority' | 'recovery',
-  referenceDate: Date = new Date()
-) => {
-  const paid = purchases.filter((purchase) => purchase.status === 'paid' && purchase.purchased_at && !Number.isNaN(Date.parse(purchase.purchased_at)));
-  if (!paid.length) return 0;
-
-  const monthTotals = new Map<string, number>();
-  const pushMonth = (purchase: Purchase) => {
-    const date = new Date(purchase.purchased_at);
-    const key = `${date.getFullYear()}-${date.getMonth()}`;
-    monthTotals.set(key, (monthTotals.get(key) || 0) + purchase.amount);
-  };
-
-  if (mode === 'priority') {
-    const year = referenceDate.getFullYear();
-    paid
-      .filter((purchase) => {
-        const date = new Date(purchase.purchased_at);
-        return date.getFullYear() === year || date >= priorityListStart;
-      })
-      .forEach(pushMonth);
-  } else {
-    let lastActiveYear = 0;
-    paid.forEach((purchase) => {
-      const year = new Date(purchase.purchased_at).getFullYear();
-      if (year > lastActiveYear) lastActiveYear = year;
-    });
-    paid
-      .filter((purchase) => new Date(purchase.purchased_at).getFullYear() === lastActiveYear)
-      .forEach(pushMonth);
-  }
-
-  if (!monthTotals.size) return 0;
-  const total = Array.from(monthTotals.values()).reduce((sum, value) => sum + value, 0);
-  return total / monthTotals.size;
-};
 
 const clientsNoPurchaseThisMonth = (contacts: Contact[], purchases: Purchase[], referenceDate: Date) => {
   const currentIds = new Set(
@@ -1364,11 +1324,13 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         .filter((purchase) => purchase.status === 'paid')
         .reduce((sum, purchase) => sum + purchase.amount, 0);
       const lastPurchase = lastPaid?.purchased_at;
-      const listMode = isPriorityListPurchase(lastPurchase)
-        ? 'priority'
-        : isRecoveryListPurchase(lastPurchase)
-          ? 'recovery'
-          : null;
+      const listMode = isBlockedContact(contact)
+        ? 'recovery'
+        : isPriorityListPurchase(lastPurchase)
+          ? 'priority'
+          : isRecoveryListPurchase(lastPurchase)
+            ? 'recovery'
+            : null;
       const currentMonthSales = sumPaidPurchasesInMonth(contactPurchases, selectedReferenceDate);
       const averageMonthlySales = listMode
         ? averageMonthlyPaidSales(contactPurchases, listMode, selectedReferenceDate)
@@ -1416,12 +1378,12 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       const averageMonthlySales = rows.reduce((sum, row) => sum + row.averageMonthlySales, 0);
       const primaryMetric = id === 'priority'
         ? currentMonthSales
-        : id === 'verified' || id === 'unverified' || id === 'blocked'
+        : id === 'verified' || id === 'unverified'
           ? 0
           : averageMonthlySales;
       const potentialSales = id === 'verified'
         ? rows.length * VERIFIED_PROSPECT_POTENTIAL
-        : id === 'unverified' || id === 'blocked'
+        : id === 'unverified'
           ? 0
           : averageMonthlySales;
       return {

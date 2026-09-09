@@ -716,4 +716,148 @@ describe('DailyCallMasterListView', () => {
     expect(screen.queryByText(/Customer Case Overview/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Incident Report Flow/i)).not.toBeInTheDocument();
   });
+
+  it('shows category summary metrics without Average Monthly Sales on top', async () => {
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: '2026-09-09', count: 4 },
+      items: [
+        {
+          id: 'priority-1',
+          shopName: 'Priority Buyer Shop',
+          province: 'Manila',
+          city: 'Manila',
+          contactNumber: '0930',
+          assignedTo: 'Joan Jerusalem',
+          lastPurchaseDate: 'Sep 1, 2026',
+          lastPurchaseDateRaw: '2026-09-01',
+          purchaseCount: 2,
+          listCategory: 'priority',
+          totalSales: 20000,
+          currentMonthSales: 8000,
+          averageMonthlySales: 10000,
+          averageMonthlySalesMonthCount: 2,
+          daysSinceLastPurchase: 8,
+          monthsSinceLastPurchase: 0,
+          purchaseAgeGroup: 'recent',
+        },
+        {
+          id: 'recovery-1',
+          shopName: 'Recovery Shop',
+          province: 'Davao',
+          city: 'Davao City',
+          contactNumber: '0920',
+          assignedTo: 'Unassigned',
+          lastPurchaseDate: 'Sep 1, 2025',
+          lastPurchaseDateRaw: '2025-09-01',
+          purchaseCount: 4,
+          listCategory: 'recovery',
+          totalSales: 44000,
+          currentMonthSales: 0,
+          averageMonthlySales: 11000,
+          averageMonthlySalesMonthCount: 4,
+          daysSinceLastPurchase: 373,
+          monthsSinceLastPurchase: 12,
+          purchaseAgeGroup: 'over_one_month',
+        },
+        {
+          id: 'verified-1',
+          shopName: 'Verified Prospect Shop',
+          province: 'Laguna',
+          city: 'Calamba',
+          contactNumber: '0940',
+          assignedTo: 'Apostol Ella',
+          profileType: 'Prospect',
+          verification: 'Verified',
+          lastPurchaseDate: '—',
+          lastPurchaseDateRaw: '',
+          purchaseCount: 0,
+          listCategory: 'no_purchase',
+          totalSales: 0,
+          currentMonthSales: 0,
+          averageMonthlySales: 0,
+          daysSinceLastPurchase: 0,
+          monthsSinceLastPurchase: 0,
+          purchaseAgeGroup: 'no_purchase',
+        },
+        {
+          id: 'blocked-1',
+          shopName: 'Blocked Shop',
+          province: 'Cebu',
+          city: 'Cebu City',
+          contactNumber: '0917',
+          assignedTo: 'Unassigned',
+          customerStatus: 4,
+          debtType: 'Bad',
+          lastPurchaseDate: 'Aug 1, 2025',
+          lastPurchaseDateRaw: '2025-08-01',
+          purchaseCount: 3,
+          listCategory: 'recovery',
+          totalSales: 30000,
+          currentMonthSales: 0,
+          averageMonthlySales: 9000,
+          averageMonthlySalesMonthCount: 3,
+          daysSinceLastPurchase: 400,
+          monthsSinceLastPurchase: 13,
+          purchaseAgeGroup: 'over_one_month',
+        },
+      ],
+    });
+
+    render(<DailyCallMasterListView />);
+
+    const summaries = await screen.findByRole('region', { name: 'Customer category summaries' });
+    expect(within(summaries).queryByText('Average Monthly Sales')).not.toBeInTheDocument();
+    expect(within(summaries).queryByText('Average Monthly Purchase')).not.toBeInTheDocument();
+
+    const priorityCard = within(summaries).getByRole('heading', { name: /Priority List/i }).closest('article') as HTMLElement;
+    expect(within(priorityCard).getByText('Current Month Sales')).toBeInTheDocument();
+    expect(within(priorityCard).getByText('Monthly Sales Potential')).toBeInTheDocument();
+
+    const recoveryCard = within(summaries).getByRole('heading', { name: /Recovery List/i }).closest('article') as HTMLElement;
+    expect(within(recoveryCard).queryByText('Current Month Sales')).not.toBeInTheDocument();
+    expect(within(recoveryCard).getByText('Monthly Sales Potential')).toBeInTheDocument();
+
+    const verifiedCard = within(summaries).getByRole('heading', { name: /^Verified Prospects/i }).closest('article') as HTMLElement;
+    expect(within(verifiedCard).getByText('Monthly Potential Sales')).toBeInTheDocument();
+    expect(within(verifiedCard).queryByText('Current Month Sales')).not.toBeInTheDocument();
+
+    const blockedCard = within(summaries).getByRole('heading', { name: /blacklisted\/rejected -do not contact/i }).closest('article') as HTMLElement;
+    expect(within(blockedCard).getByText('Monthly Potential Sales')).toBeInTheDocument();
+    expect(within(blockedCard).queryByText('Current Month Sales')).not.toBeInTheDocument();
+  });
+
+  it('moves clients who start buying into the Priority List', async () => {
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: '2026-09-09', count: 1 },
+      items: [{
+        id: 'former-prospect-1',
+        shopName: 'First Purchase Shop',
+        province: 'Laguna',
+        city: 'Calamba',
+        contactNumber: '0940',
+        assignedTo: 'Apostol Ella',
+        profileType: 'Prospect',
+        verification: 'Verified',
+        lastPurchaseDate: 'Sep 5, 2026',
+        lastPurchaseDateRaw: '2026-09-05',
+        purchaseCount: 1,
+        priorityTransactionCount: 1,
+        // Stale prospect shape must still leave Verified once buying starts.
+        listCategory: 'no_purchase',
+        totalSales: 5000,
+        currentMonthSales: 5000,
+        averageMonthlySales: 5000,
+        averageMonthlySalesMonthCount: 1,
+        daysSinceLastPurchase: 4,
+        monthsSinceLastPurchase: 0,
+        purchaseAgeGroup: 'recent',
+      }],
+    });
+
+    render(<DailyCallMasterListView />);
+
+    expect(await screen.findByRole('button', { name: 'Priority List (1)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Verified Prospects (0)' })).toBeInTheDocument();
+    expect(screen.getByText('First Purchase Shop')).toBeInTheDocument();
+  });
 });

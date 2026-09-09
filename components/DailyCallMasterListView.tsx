@@ -26,6 +26,7 @@ import { Contact, CustomerStatus, DailyCallCustomerRow, DailyCallMasterCustomerR
 import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
 import { resolveVipDiscountLevel } from '../utils/vipStanding';
 import { DO_NOT_CONTACT_LABEL, isBlockedDailyCallMasterRow } from '../utils/dailyCallBlockedCustomer';
+import { VERIFIED_PROSPECT_POTENTIAL } from '../utils/dailyCallPotentialSales';
 import AddContactModal from './AddContactModal';
 import DailyCallCustomerDetailModal from './DailyCallCustomerDetailModal';
 import DailyCallInlineAgentSelect, { formatAssignmentDateLabel } from './DailyCallInlineAgentSelect';
@@ -76,7 +77,11 @@ const categories: CategoryDefinition[] = [
     border: 'border-emerald-200',
     softBg: 'bg-emerald-50/60',
     dot: 'bg-emerald-500',
-    matches: (row) => !isBlockedDailyCallMasterRow(row) && (row.listCategory ? row.listCategory === 'priority' : row.purchaseCount > 0),
+    matches: (row) => !isBlockedDailyCallMasterRow(row) && (
+      row.listCategory === 'priority'
+      || (row.priorityTransactionCount ?? 0) > 0
+      || (!row.listCategory && row.purchaseCount > 0)
+    ),
   },
   {
     id: 'recovery',
@@ -88,7 +93,9 @@ const categories: CategoryDefinition[] = [
     border: 'border-rose-200',
     softBg: 'bg-rose-50/60',
     dot: 'bg-rose-500',
-    matches: (row) => !isBlockedDailyCallMasterRow(row) && (row.listCategory ? row.listCategory === 'recovery' : row.purchaseAgeGroup === 'over_one_month'),
+    matches: (row) => !isBlockedDailyCallMasterRow(row)
+      && (row.priorityTransactionCount ?? 0) === 0
+      && (row.listCategory ? row.listCategory === 'recovery' : row.purchaseAgeGroup === 'over_one_month'),
   },
   {
     id: 'verified',
@@ -100,7 +107,12 @@ const categories: CategoryDefinition[] = [
     border: 'border-blue-200',
     softBg: 'bg-blue-50/60',
     dot: 'bg-blue-500',
-    matches: (row) => !isBlockedDailyCallMasterRow(row) && row.purchaseAgeGroup === 'no_purchase' && isProspectRow(row) && row.verification === 'Verified',
+    matches: (row) => !isBlockedDailyCallMasterRow(row)
+      && row.purchaseCount === 0
+      && (row.priorityTransactionCount ?? 0) === 0
+      && row.purchaseAgeGroup === 'no_purchase'
+      && isProspectRow(row)
+      && row.verification === 'Verified',
   },
   {
     id: 'unverified',
@@ -112,7 +124,12 @@ const categories: CategoryDefinition[] = [
     border: 'border-orange-200',
     softBg: 'bg-orange-50/60',
     dot: 'bg-orange-400',
-    matches: (row) => !isBlockedDailyCallMasterRow(row) && row.purchaseAgeGroup === 'no_purchase' && isProspectRow(row) && row.verification !== 'Verified',
+    matches: (row) => !isBlockedDailyCallMasterRow(row)
+      && row.purchaseCount === 0
+      && (row.priorityTransactionCount ?? 0) === 0
+      && row.purchaseAgeGroup === 'no_purchase'
+      && isProspectRow(row)
+      && row.verification !== 'Verified',
   },
   {
     id: 'blocked',
@@ -510,12 +527,13 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     const categoryRows = filteredRows.filter(category.matches);
     const currentSales = sumBy(categoryRows, 'currentMonthSales');
     const potentialSales = category.id === 'verified'
-      ? categoryRows.length * 5_000
-      : category.id === 'priority' || category.id === 'recovery'
-        ? sumBy(categoryRows, 'averageMonthlySales')
-        : 0;
-    const averageSales = sumBy(categoryRows, 'averageMonthlySales');
-    return { ...category, rows: categoryRows, currentSales, potentialSales, averageSales };
+      ? categoryRows.length * VERIFIED_PROSPECT_POTENTIAL
+      : category.id === 'unverified'
+        ? 0
+        : category.id === 'priority' || category.id === 'recovery' || category.id === 'blocked'
+          ? sumBy(categoryRows, 'averageMonthlySales')
+          : 0;
+    return { ...category, rows: categoryRows, currentSales, potentialSales };
   }), [filteredRows]);
   const summaryCategoryData = categoryData.filter((category) => category.id !== 'all');
   const now = new Date();
@@ -658,7 +676,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-xs text-slate-600">
         <p data-testid="potential-sales-formula">
-          Potential Sales = Priority average monthly sales + Recovery average monthly sales + ₱5,000 per verified prospect. Unverified prospects are excluded.
+          Potential Sales = Priority avg monthly (last 12 months) + Recovery avg monthly (last 12 months of active year) + Blacklisted avg monthly (same as Recovery) + ₱5,000 per verified prospect. Unverified prospects are ₱0.
         </p>
         <p className="font-bold text-blue-900" data-testid="total-potential-sales">
           Total Potential Sales: {compactPeso.format(totalPotentialSales)}
@@ -696,23 +714,31 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 <p className="text-xs">Customers</p>
               </div>
               <div className="space-y-2 text-right text-xs">
-                <div>
-                  <p>{category.id === 'priority' || category.id === 'recovery' ? 'Current Month Sales' : 'Average Monthly Purchase'}</p>
-                  <p className={`text-base font-bold ${category.accent}`}>
-                    {compactPeso.format(category.id === 'priority' || category.id === 'recovery' ? category.currentSales : category.averageSales)}
-                  </p>
-                </div>
-                <div>
-                  <p>{category.id === 'priority' || category.id === 'recovery' ? 'Average Monthly Sales' : 'Potential Sales'}</p>
-                  <p className={`text-base font-bold ${category.accent}`}>{compactPeso.format(category.id === 'priority' || category.id === 'recovery' ? category.averageSales : category.potentialSales)}</p>
-                </div>
+                {category.id === 'priority' && (
+                  <div>
+                    <p>Current Month Sales</p>
+                    <p className={`text-base font-bold ${category.accent}`}>{compactPeso.format(category.currentSales)}</p>
+                  </div>
+                )}
+                {(category.id === 'priority' || category.id === 'recovery') && (
+                  <div>
+                    <p>Monthly Sales Potential</p>
+                    <p className={`text-base font-bold ${category.accent}`}>{compactPeso.format(category.potentialSales)}</p>
+                  </div>
+                )}
+                {(category.id === 'verified' || category.id === 'blocked') && (
+                  <div>
+                    <p>Monthly Potential Sales</p>
+                    <p className={`text-base font-bold ${category.accent}`}>{compactPeso.format(category.potentialSales)}</p>
+                  </div>
+                )}
+                {category.id === 'unverified' && (
+                  <div>
+                    <p>Potential Sales</p>
+                    <p className={`text-base font-bold ${category.accent}`}>{compactPeso.format(category.potentialSales)}</p>
+                  </div>
+                )}
               </div>
-            </div>
-            <div className="mt-2 flex items-center justify-between border-t border-slate-200 pt-2 text-xs">
-              <span>{category.id === 'priority' || category.id === 'recovery' ? 'Monthly Sales Potential' : 'Potential Sales'}</span>
-              <strong className={`text-base ${category.accent}`}>
-                {compactPeso.format(category.id === 'priority' || category.id === 'recovery' ? category.averageSales : category.potentialSales)}
-              </strong>
             </div>
             {activeCategory.id === 'blocked' && (
               <p className="mt-2 border-t border-red-200 pt-2 text-xs font-semibold text-red-700">View only. Contact and sales inquiry actions are disabled.</p>
@@ -837,7 +863,11 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                         </td>
                         <td className="px-2 py-2.5">
                           <p className="text-base font-bold text-blue-950">{peso.format(row.averageMonthlySales)} <span className="text-[12px] font-medium text-slate-500">/ month</span></p>
-                          <p className="mt-0.5 text-[11px] text-slate-500">(Based on {row.averageMonthlySalesMonthCount} months{row.averageMonthlySalesYear ? ` in ${row.averageMonthlySalesYear}` : ''})</p>
+                          <p className="mt-0.5 text-[11px] text-slate-500">
+                            {isBlockedDailyCallMasterRow(row) || row.listCategory === 'recovery'
+                              ? `(Based on ${row.averageMonthlySalesMonthCount} months in last 12 months of active year${row.averageMonthlySalesYear ? ` ${row.averageMonthlySalesYear}` : ''})`
+                              : `(Based on ${row.averageMonthlySalesMonthCount} months in the last 12 months)`}
+                          </p>
                             <p className={`mt-0.5 inline-flex items-center gap-1 text-xs font-bold ${trend.className}`}>
                             <TrendIcon className="h-3.5 w-3.5 fill-current" />
                             {trend.label}

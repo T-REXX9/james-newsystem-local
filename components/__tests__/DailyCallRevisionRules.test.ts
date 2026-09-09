@@ -17,13 +17,21 @@ describe('Daily Call Monitoring revision rules', () => {
   });
 
   it('uses the documented potential formula and requested monitoring filters', () => {
-    expect(owner).toContain('+ (verified.length * 5_000)');
+    expect(owner).toContain('+ (verified.length * VERIFIED_PROSPECT_POTENTIAL)');
     expect(owner).not.toContain('[priority, recovery, verified, unverified]');
-    expect(master).toContain('Potential Sales = Priority average monthly sales + Recovery average monthly sales + ₱5,000 per verified prospect');
+    expect(master).toContain('Potential Sales = Priority avg monthly (last 12 months) + Recovery avg monthly (last 12 months of active year) + Blacklisted avg monthly (same as Recovery) + ₱5,000 per verified prospect. Unverified prospects are ₱0.');
     expect(master).toContain('Current VIP Status');
     expect(master).toContain('Next VIP Status');
     expect(master).toContain('Last Purchase');
     expect(master).toContain('Found: {unverifiedCreatedCounts.today} today');
     expect(master).toContain('to next VIP');
+  });
+
+  it('keeps category summary metrics to current month and monthly potential only', () => {
+    expect(master).not.toMatch(/category\.id === 'priority'[\s\S]*Average Monthly Sales/);
+    expect(master).toContain(">Current Month Sales</p>");
+    expect(master).toContain(">Monthly Sales Potential</p>");
+    expect(master).toContain(">Monthly Potential Sales</p>");
+    expect(master).toContain("listCategory === 'priority'");
   });
 });
