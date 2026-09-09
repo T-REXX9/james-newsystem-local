@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import {
   canonicalizeRoleName,
+  DEFAULT_ACTION_PERMISSIONS,
   DEFAULT_STAFF_ROLE,
   MODULE_ID_ALIASES,
   ROLE_DEFAULT_ACCESS_RIGHTS,
@@ -261,6 +262,26 @@ const AccessControlSettings: React.FC = () => {
     setPermissionChanges((prev) => ({ ...prev, [userId]: true }));
   };
 
+  const handleActionPermissionToggle = (
+    userId: string,
+    permission: keyof typeof DEFAULT_ACTION_PERMISSIONS,
+    enabled: boolean
+  ) => {
+    setProfiles((prevProfiles) => prevProfiles.map((profile) => {
+      if (profile.id !== userId) return profile;
+      return {
+        ...profile,
+        action_permissions: {
+          ...DEFAULT_ACTION_PERMISSIONS,
+          ...(profile.action_permissions || {}),
+          [permission]: enabled,
+          ...(permission === 'can_post' ? { can_unpost: enabled } : {}),
+        },
+      };
+    }));
+    setPermissionChanges((prev) => ({ ...prev, [userId]: true }));
+  };
+
   const toggleModuleExpanded = (userId: string, moduleId: string) => {
     setExpandedModules((current) => {
       const expanded = new Set(current[userId] || []);
@@ -279,6 +300,10 @@ const AccessControlSettings: React.FC = () => {
         group_id: user.group_id ?? null,
         access_rights: nextRights,
         access_override: hasPermOverride,
+        action_permissions: {
+          ...DEFAULT_ACTION_PERMISSIONS,
+          ...(user.action_permissions || {}),
+        },
       });
       setProfiles((prev) =>
         prev.map((profile) =>
@@ -702,6 +727,33 @@ const AccessControlSettings: React.FC = () => {
 
                         <td className="border-l border-slate-100 p-4 align-top dark:border-slate-800">
                           <div className="space-y-2">
+                            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/60 dark:bg-amber-950/20">
+                              <p className="mb-2 text-xs font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300">
+                                Action permissions
+                              </p>
+                              <div className="grid gap-2 sm:grid-cols-2">
+                                {([
+                                  ['can_add', 'Add'],
+                                  ['can_edit', 'Edit'],
+                                  ['can_delete', 'Delete'],
+                                  ['can_post', 'Post / Unpost'],
+                                ] as const).map(([permission, label]) => {
+                                  const enabled = user.action_permissions?.[permission] ?? DEFAULT_ACTION_PERMISSIONS[permission];
+                                  return (
+                                    <label key={permission} className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                                      <input
+                                        type="checkbox"
+                                        checked={enabled}
+                                        disabled={isOwner}
+                                        aria-label={`${label} action permission for ${user.full_name}`}
+                                        onChange={(event) => handleActionPermissionToggle(user.id, permission, event.target.checked)}
+                                      />
+                                      {label}
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
                             {ACCESS_MODULES.map((module) => {
                               const moduleState = getAccessModuleState(module.id, effectiveCanonicalRights);
                               const isExpanded = (expandedModules[user.id] || []).includes(module.id);

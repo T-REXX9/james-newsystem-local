@@ -121,6 +121,24 @@ export const isMasterUserAccount = (user?: { role?: string | null; user_type?: s
   return isCompanyOwnerRole(user?.role) || ['master user', 'owner', 'company owner', 'main'].includes(role);
 };
 
+export const DEFAULT_ACTION_PERMISSIONS = {
+  can_add: true,
+  can_edit: true,
+  can_delete: true,
+  can_post: true,
+  can_unpost: true,
+} as const;
+
+export type ActionPermissionName = keyof typeof DEFAULT_ACTION_PERMISSIONS;
+
+export const hasActionPermission = (
+  user: { role?: string | null; user_type?: string | number | null; action_permissions?: Partial<Record<ActionPermissionName, boolean>> } | null | undefined,
+  action: ActionPermissionName
+): boolean => {
+  if (isMasterUserAccount(user)) return true;
+  return user?.action_permissions?.[action] ?? DEFAULT_ACTION_PERMISSIONS[action];
+};
+
 /** Extra Dashboards pages visible only to Master User / owner accounts. */
 export const MASTER_ONLY_DASHBOARD_ROUTES = [
   'operations-management-dashboard',

@@ -13,6 +13,7 @@ import { getLocalAuthSession } from '../services/localAuthService';
 import CompanyName from './CompanyName';
 import { toast } from 'sonner';
 import { normalizePriceGroup } from '../constants/pricingGroups';
+import { isMasterUserAccount } from '../constants';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import { formatCurrency, formatCustomerSince } from '../utils/formatUtils';
 import CallCustomerButton from './CallCustomerButton';
@@ -25,6 +26,7 @@ interface CustomerDetailPanelProps {
     onClose: () => void;
     onUpdate: (updated: Contact) => void;
     onEditContact?: (contact: Contact) => void;
+    currentUser?: UserProfile | null;
 }
 
 interface CustomerTermsRow {
@@ -53,7 +55,8 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     initialData,
     onClose,
     onUpdate,
-    onEditContact
+    onEditContact,
+    currentUser,
 }) => {
     const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'calls' | 'inquiries' | 'incidents' | 'returns' | 'financials' | 'profile'>('overview');
     const [transactions, setTransactions] = useState<any[]>([]);
@@ -574,7 +577,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                     <UserCog className="w-4 h-4 text-brand-blue" />
                                     Sales Agent Assignment
                                 </h3>
-                                {!isEditingSalesAgent && (
+                                {!isEditingSalesAgent && isMasterUserAccount(currentUser) && (
                                     <button
                                         onClick={() => setIsEditingSalesAgent(true)}
                                         className="text-xs font-bold text-brand-blue hover:text-blue-700 transition-colors px-3 py-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20"

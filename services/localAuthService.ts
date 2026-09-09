@@ -1,4 +1,4 @@
-import { UserProfile } from '../types';
+import { ActionPermissionEntry, UserProfile } from '../types';
 import { canonicalizeRoleName, MODULE_ID_ALIASES, ROLE_DEFAULT_ACCESS_RIGHTS, ROLE_NAMES } from '../constants';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
@@ -18,7 +18,7 @@ type ApiPermissionPackage = {
   lstatus?: string | number;
 };
 
-type ActionPermissions = Record<string, { can_add: boolean; can_edit: boolean; can_delete: boolean }>;
+type ActionPermissions = ActionPermissionEntry;
 
 type ApiAuthUser = {
   id: number;
@@ -146,7 +146,7 @@ const mapUserProfile = (context: ApiAuthPayload): UserProfile => {
     access_rights: mapAccessRights(context.user_type || user.type, user.access_rights, role),
     group_id: user.group_id || null,
     monthly_quota: Number.isFinite(quota) ? quota : 0,
-    action_permissions: user.action_permissions || {},
+    action_permissions: user.action_permissions || undefined,
   };
 };
 

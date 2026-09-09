@@ -1,8 +1,16 @@
 import type { InventoryLogWithProduct } from '../types';
 import { fetchProductsPage } from './productLocalApiService';
+import { getLocalAuthSession } from './localAuthService';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
+
+const fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const headers = new Headers(init?.headers);
+  const token = getLocalAuthSession()?.token;
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  return globalThis.fetch(input, { ...init, headers });
+};
 
 export interface StockMovementFilterParams {
   item_id: string;

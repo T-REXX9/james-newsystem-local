@@ -96,6 +96,8 @@ export type ActionPermissionEntry = {
   can_add: boolean;
   can_edit: boolean;
   can_delete: boolean;
+  can_post: boolean;
+  can_unpost: boolean;
 };
 
 export interface UserProfile {
@@ -115,7 +117,7 @@ export interface UserProfile {
   birthday?: string;
   mobile?: string;
   monthly_quota?: number;
-  action_permissions?: Record<string, ActionPermissionEntry>; // Module-level action permissions
+  action_permissions?: ActionPermissionEntry; // Per-account action permissions
 }
 
 export interface AccessGroup {

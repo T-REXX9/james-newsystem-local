@@ -85,7 +85,7 @@ import { Filter, Lock } from 'lucide-react';
 import { ToastProvider } from './components/ToastProvider';
 import { NotificationProvider } from './components/NotificationProvider';
 import CustomLoadingSpinner from './components/CustomLoadingSpinner';
-import { AVAILABLE_APP_MODULES, isCompanyOwnerRole, isMasterOnlyDashboardRoute, isMasterUserAccount, isMasterUserType, MODULE_ID_ALIASES, ROLE_NAMES } from './constants';
+import { AVAILABLE_APP_MODULES, hasActionPermission, isCompanyOwnerRole, isMasterOnlyDashboardRoute, isMasterUserAccount, isMasterUserType, MODULE_ID_ALIASES, ROLE_NAMES } from './constants';
 import { hasBinaryModulePageAccess } from './utils/accessModules';
 import {
   getLocalAuthSession,
@@ -381,18 +381,9 @@ const App: React.FC = () => {
    * Returns true if the action is allowed, false otherwise.
    * Owner role always has full action permissions.
    */
-  const checkActionPermission = (moduleId: string, action: 'can_add' | 'can_edit' | 'can_delete'): boolean => {
+  const checkActionPermission = (_moduleId: string, action: 'can_add' | 'can_edit' | 'can_delete' | 'can_post' | 'can_unpost'): boolean => {
     if (!userProfile) return false;
-    if (isCompanyOwnerRole(userProfile.role)) return true;
-
-    const canonical = normalizeModuleId(moduleId);
-    const actionPerms = userProfile.action_permissions;
-    if (!actionPerms) return true; // If no action permissions defined, allow by default
-
-    const modulePerms = actionPerms[canonical];
-    if (!modulePerms) return true; // If no specific module action perms, allow by default
-
-    return modulePerms[action] ?? true;
+    return hasActionPermission(userProfile, action);
   };
 
   const renderContent = () => {

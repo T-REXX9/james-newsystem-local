@@ -14,7 +14,7 @@ import { useToast } from './ToastProvider';
 import { EmptyState, PageHeader } from './common/PageScaffold';
 import ApprovalRequestsView from './ApprovalRequestsView';
 import { getLocalAuthSession } from '../services/localAuthService';
-import { isCompanyOwnerRole } from '../constants';
+import { isMasterUserAccount } from '../constants';
 
 const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: string; initialApprovalRequestId?: string }> = ({ initialStatus = 'All', initialContactId, initialApprovalRequestId }) => {
     const { addToast } = useToast();
@@ -34,7 +34,7 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
     const [viewMode, setViewMode] = useState<'customers' | 'approvals'>('customers');
 
     const currentUser = getLocalAuthSession()?.userProfile ?? null;
-    const canViewApprovals = isCompanyOwnerRole(currentUser?.role);
+    const canViewApprovals = isMasterUserAccount(currentUser);
 
     React.useEffect(() => {
         if (initialApprovalRequestId && canViewApprovals) setViewMode('approvals');
@@ -363,6 +363,7 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
             onClose={() => setSelectedCustomerId(null)}
             onUpdate={handleUpdateContact}
             onEditContact={handleEditCustomer}
+            currentUser={currentUser}
           />
         ) : pendingContactResolution ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-3" data-testid="customer-loading">
@@ -390,9 +391,11 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
             </div>
 
             <div className="flex items-center gap-2">
-              <button onClick={() => setShowAssignAgentModal(true)} className="p-2 hover:bg-slate-800 rounded-lg tooltip" title="Assign Agent">
-                <UserPlus className="w-4 h-4" />
-              </button>
+              {isMasterUserAccount(currentUser) && (
+                <button onClick={() => setShowAssignAgentModal(true)} className="p-2 hover:bg-slate-800 rounded-lg tooltip" title="Assign Agent">
+                  <UserPlus className="w-4 h-4" />
+                </button>
+              )}
               <button onClick={() => setShowSetPriceGroupModal(true)} className="p-2 hover:bg-slate-800 rounded-lg tooltip" title="Set Price Group">
                 <Tag className="w-4 h-4" />
               </button>

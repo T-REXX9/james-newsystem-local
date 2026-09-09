@@ -91,8 +91,46 @@ describe('AccessControlSettings - create staff account', () => {
         group_id: '2',
         access_rights: [...homePages, ...expandAccessModule('warehouse')],
         access_override: true,
+        action_permissions: {
+          can_add: true,
+          can_edit: true,
+          can_delete: true,
+          can_post: true,
+          can_unpost: true,
+        },
       })
     );
+  });
+
+  it('saves disabled action permissions independently from page access', async () => {
+    const user = userEvent.setup();
+    fetchProfilesMock.mockResolvedValue({
+      items: [{
+        id: '2',
+        full_name: 'melson',
+        email: 'melson@example.com',
+        role: 'Sales Agent',
+        access_rights: expandAccessModule('home'),
+        group_id: '2',
+      }],
+      meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
+    });
+    updateProfileMock.mockResolvedValue({ id: '2', full_name: 'melson' });
+
+    renderWithProviders(<AccessControlSettings />);
+
+    await user.click(await screen.findByRole('checkbox', { name: 'Edit action permission for melson' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(updateProfileMock).toHaveBeenCalledWith('2', expect.objectContaining({
+      action_permissions: {
+        can_add: true,
+        can_edit: false,
+        can_delete: true,
+        can_post: true,
+        can_unpost: true,
+      },
+    })));
   });
 
   it('persists all six module toggles as complete page sets after reload', async () => {

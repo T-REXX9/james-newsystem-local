@@ -24,6 +24,7 @@ import {
 import ModuleRecordLink from './ModuleRecordLink';
 import ProcurementDocumentBanner from './ProcurementDocumentBanner';
 import { retraceWorkflowHistory } from '../utils/workflowHistory';
+import { canPerformAction } from '../utils/actionPermissions';
 
 // Inline StatusBadge if generic one is not suitable for POs, but I'll use simple spans for now to be safe, or try to use the imported one if generic.
 // I'll stick to my own badge logic or reuse if I knew it works. I'll use my own for safety.
@@ -63,7 +64,11 @@ const poItemReceivingPercent = (item: PurchaseOrderWithDetails['items'][number])
 const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, initialPORefNo, initialPRId }) => {
   const { addToast } = useToast();
   const currentUser = getLocalAuthSession()?.userProfile;
-  const canUnpost = ['owner', 'company owner', 'administrator', 'purchasing manager'].includes(String(currentUser?.role || '').trim().toLowerCase()) || String(currentUser?.user_type || '') === '1';
+  const canAdd = canPerformAction('can_add');
+  const canEdit = canPerformAction('can_edit');
+  const canDelete = canPerformAction('can_delete');
+  const canPost = canPerformAction('can_post');
+  const canUnpost = canPerformAction('can_unpost') && (['owner', 'company owner', 'administrator', 'purchasing manager'].includes(String(currentUser?.role || '').trim().toLowerCase()) || String(currentUser?.user_type || '') === '1');
   const today = new Date();
   // List State
   const [orders, setOrders] = useState<PurchaseOrderWithDetails[]>([]);
@@ -537,7 +542,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   };
 
   const handleStatusChange = (newStatus: string) => {
-    if (!selectedPO) return;
+    if (!selectedPO || (newStatus === 'Posted' ? !canPost : !canEdit)) return;
     const variant = newStatus === 'Cancelled' ? 'danger' : newStatus === 'Posted' ? 'success' : 'warning';
     const confirmLabel = newStatus === 'Posted' ? 'Post' : newStatus === 'Cancelled' ? 'Cancel PO' : 'Confirm';
     openConfirm({
@@ -570,7 +575,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   };
 
   const saveOrderDate = async () => {
-    if (!selectedPO || !canUnpost || !['Pending', 'Unposted'].includes(selectedPO.status) || !editOrderDate) return;
+    if (!selectedPO || !canEdit || !canUnpost || !['Pending', 'Unposted'].includes(selectedPO.status) || !editOrderDate) return;
     try {
       const updated = await purchaseOrderService.updatePurchaseOrder(selectedPO.id, { order_date: editOrderDate } as any);
       const fullPO = await purchaseOrderService.getPurchaseOrderById(updated.id || selectedPO.id);
@@ -620,7 +625,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   };
 
   const addItem = async () => {
-    if (!selectedPO || !newItemId) return;
+    if (!selectedPO || !canAdd || !newItemId) return;
     try {
       await purchaseOrderService.addPurchaseOrderItem({
         po_id: selectedPO.id,
@@ -644,7 +649,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   };
 
   const deleteItem = (itemId: string) => {
-    if (!selectedPO) return;
+    if (!selectedPO || !canDelete) return;
     openConfirm({
       title: 'Remove Item',
       message: 'Are you sure you want to remove this item from the purchase order?',
@@ -660,6 +665,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   };
 
   const startEditItem = (item: PurchaseOrderWithDetails['items'][number]) => {
+    if (!canEdit) return;
     setEditingItemId(item.id);
     setEditItemQty(Number(item.qty || 0));
     setEditItemUnitPrice(Number(item.unit_price || 0));
@@ -674,7 +680,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   };
 
   const saveEditItem = async () => {
-    if (!selectedPO || !editingItemId) return;
+    if (!selectedPO || !canEdit || !editingItemId) return;
     if (!Number.isFinite(editItemQty) || editItemQty <= 0) {
       addToast({ type: 'error', title: 'Quantity must be greater than zero', durationMs: 4000 });
       return;
@@ -1052,10 +1058,10 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                 <span className="text-sm font-bold text-slate-500">PO No:</span>
                 <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-bold text-slate-700">{selectedPO.po_number}</span>
                 <button onClick={() => setPrintMode(true)} className="ml-2 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Print</button>
-                {['Pending', 'Unposted'].includes(selectedPO.status) && <button onClick={() => handleStatusChange('Posted')} className="rounded-md bg-emerald-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-emerald-700">Post</button>}
+                {['Pending', 'Unposted'].includes(selectedPO.status) && canPost && <button onClick={() => handleStatusChange('Posted')} className="rounded-md bg-emerald-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-emerald-700">Post</button>}
                 {['Posted', 'Completed'].includes(selectedPO.status) && canUnpost && <button onClick={() => setRecoveryAction('unpost')} className="rounded-md bg-amber-500 px-4 py-1.5 text-sm font-bold text-white hover:bg-amber-600">Unpost</button>}
-                {['Pending', 'Unposted'].includes(selectedPO.status) && canUnpost && <button onClick={() => setRecoveryAction('delete')} className="rounded-md bg-rose-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-rose-700">Delete</button>}
-                {['Draft', 'Pending'].includes(selectedPO.status) && <button onClick={() => handleStatusChange('Cancelled')} className="rounded-md bg-rose-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-rose-700">Cancel</button>}
+                {['Pending', 'Unposted'].includes(selectedPO.status) && canDelete && <button onClick={() => setRecoveryAction('delete')} className="rounded-md bg-rose-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-rose-700">Delete</button>}
+                {['Draft', 'Pending'].includes(selectedPO.status) && canEdit && <button onClick={() => handleStatusChange('Cancelled')} className="rounded-md bg-rose-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-rose-700">Cancel</button>}
               </div>
             </div>
 
@@ -1210,7 +1216,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                         <td className="break-words px-2 py-3 font-semibold text-slate-700">{item.product?.description || '-'}</td>
                         <td className="break-words px-2 py-3 text-right font-bold">{isEditing ? <input aria-label={`Edit COGS ${index + 1}`} type="number" min="0" step="0.01" value={editItemUnitPrice} onChange={event => setEditItemUnitPrice(Number(event.target.value))} className="h-8 w-full min-w-0 rounded border border-slate-300 px-1 text-right" /> : item.unit_price ? item.unit_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
                         <td className="break-words px-2 py-3 text-center">
-                              {['Draft', 'Pending', 'Unposted'].includes(selectedPO.status) && (
+                              {['Draft', 'Pending', 'Unposted'].includes(selectedPO.status) && (canEdit || canDelete) && (
                             isEditing ? (
                               <div className="flex items-center justify-center gap-2">
                                 <button type="button" onClick={saveEditItem} className="text-emerald-600 hover:text-emerald-800" title="Save item"><Save size={16} /></button>
@@ -1218,8 +1224,8 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                               </div>
                             ) : (
                               <div className="flex items-center justify-center gap-2">
-                                <button type="button" onClick={() => startEditItem(item)} className="text-[#175fd3] hover:text-[#0e4fb7]" title="Edit item"><Pencil size={16} /></button>
-                                <button type="button" onClick={() => deleteItem(item.id)} className="text-rose-500 hover:text-rose-700" title="Remove item"><Trash2 size={16} /></button>
+                                {canEdit && <button type="button" onClick={() => startEditItem(item)} className="text-[#175fd3] hover:text-[#0e4fb7]" title="Edit item"><Pencil size={16} /></button>}
+                                {canDelete && <button type="button" onClick={() => deleteItem(item.id)} className="text-rose-500 hover:text-rose-700" title="Remove item"><Trash2 size={16} /></button>}
                               </div>
                             )
                           )}

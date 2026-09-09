@@ -6,6 +6,7 @@ import {
     UserProfile,
 } from '../types';
 import { DEFAULT_STAFF_ACCESS_RIGHTS, DEFAULT_STAFF_ROLE, ROLE_DEFAULT_ACCESS_RIGHTS } from '../constants';
+import { getLocalAuthSession } from './localAuthService';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
@@ -22,6 +23,7 @@ interface StaffRecord {
     birthday?: string;
     mobile?: string;
     monthly_quota?: number;
+    action_permissions?: Record<string, boolean> | null;
 }
 
 export interface StaffListResponse {
@@ -47,7 +49,10 @@ const parseApiErrorMessage = async (response: Response): Promise<string> => {
 };
 
 const requestJson = async (url: string, init?: RequestInit): Promise<any> => {
-    const response = await fetch(url, init);
+    const headers = new Headers(init?.headers);
+    const token = getLocalAuthSession()?.token;
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    const response = await fetch(url, { ...init, headers });
     if (!response.ok) {
         throw new Error(await parseApiErrorMessage(response));
     }
@@ -84,6 +89,7 @@ const mapStaffToProfile = (staff: StaffRecord): UserProfile => ({
     birthday: staff.birthday || undefined,
     mobile: staff.mobile || undefined,
     monthly_quota: staff.monthly_quota,
+    action_permissions: staff.action_permissions || undefined,
 });
 
 const toPositiveNumber = (value: unknown, fallback: number): number => {
@@ -169,7 +175,7 @@ export const fetchProfilesLocal = async (
 
 export const updateProfileLocal = async (
   staffId: string | number,
-  data: { access_rights?: string[]; access_override?: boolean; group_id?: string | null }
+  data: { access_rights?: string[]; access_override?: boolean; group_id?: string | null; action_permissions?: Record<string, boolean> }
 ): Promise<UserProfile> => {
     const body: Record<string, unknown> = {
         main_id: API_MAIN_ID,
@@ -185,6 +191,10 @@ export const updateProfileLocal = async (
 
     if (data.access_override !== undefined) {
         body.access_override = data.access_override;
+    }
+
+    if (data.action_permissions !== undefined) {
+        body.action_permissions = data.action_permissions;
     }
 
     const payload = await requestJson(`${API_BASE_URL}/staff/${staffId}`, {

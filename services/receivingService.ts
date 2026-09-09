@@ -14,6 +14,13 @@ import { fetchProductsPage } from './productLocalApiService';
 import { getLocalAuthSession } from './localAuthService';
 import { purchaseOrderService } from './purchaseOrderService';
 
+const fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const headers = new Headers(init?.headers);
+    const token = getLocalAuthSession()?.token;
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    return globalThis.fetch(input, { ...init, headers });
+};
+
 export interface EligiblePurchaseOrder {
     id: string;
     poNumber: string;

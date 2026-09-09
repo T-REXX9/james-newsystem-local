@@ -10,8 +10,16 @@ import {
     PostingStatus,
     NotificationType,
 } from '../types';
+import { getLocalAuthSession } from './localAuthService';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
+
+const authorizedFetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const headers = new Headers(init?.headers);
+    const token = getLocalAuthSession()?.token;
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    return fetch(input, { ...init, headers });
+};
 
 const parseApiErrorMessage = async (response: Response): Promise<string> => {
     try {
@@ -37,7 +45,7 @@ export async function createPromotion(
     createdBy: string
 ): Promise<Promotion> {
     try {
-        const response = await fetch(`${API_BASE_URL}/promotions`, {
+        const response = await authorizedFetch(`${API_BASE_URL}/promotions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -77,7 +85,7 @@ export async function getPromotion(
     includePostings = true
 ): Promise<Promotion | null> {
     try {
-        const response = await fetch(`${API_BASE_URL}/promotions/${encodeURIComponent(id)}`);
+        const response = await authorizedFetch(`${API_BASE_URL}/promotions/${encodeURIComponent(id)}`);
 
         if (response.status === 404) {
             return null;
@@ -93,7 +101,7 @@ export async function getPromotion(
 
         // Load products if requested
         if (includeProducts) {
-            const productsResponse = await fetch(
+            const productsResponse = await authorizedFetch(
                 `${API_BASE_URL}/promotions/${encodeURIComponent(id)}/products?per_page=500`
             );
             if (productsResponse.ok) {
@@ -105,7 +113,7 @@ export async function getPromotion(
 
         // Load postings if requested
         if (includePostings) {
-            const postingsResponse = await fetch(
+            const postingsResponse = await authorizedFetch(
                 `${API_BASE_URL}/promotions/${encodeURIComponent(id)}/postings?per_page=500`
             );
             if (postingsResponse.ok) {
@@ -146,7 +154,7 @@ export async function getAllPromotions(
             params.append('search', filters.search);
         }
 
-        const response = await fetch(`${API_BASE_URL}/promotions?${params}`);
+        const response = await authorizedFetch(`${API_BASE_URL}/promotions?${params}`);
 
         if (!response.ok) {
             console.error('Error fetching promotions:', response.statusText);
@@ -171,7 +179,7 @@ export async function updatePromotion(
     dto: UpdatePromotionDTO
 ): Promise<Promotion | null> {
     try {
-        const response = await fetch(`${API_BASE_URL}/promotions/${encodeURIComponent(id)}`, {
+        const response = await authorizedFetch(`${API_BASE_URL}/promotions/${encodeURIComponent(id)}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dto),
@@ -199,7 +207,7 @@ export async function updatePromotion(
  */
 export async function deletePromotion(id: string): Promise<boolean> {
     try {
-        const response = await fetch(`${API_BASE_URL}/promotions/${encodeURIComponent(id)}`, {
+        const response = await authorizedFetch(`${API_BASE_URL}/promotions/${encodeURIComponent(id)}`, {
             method: 'DELETE',
         });
 
@@ -222,7 +230,7 @@ export async function getPromotionsByStatus(
     limit = 100
 ): Promise<Promotion[]> {
     try {
-        const response = await fetch(
+        const response = await authorizedFetch(
             `${API_BASE_URL}/promotions/status/${encodeURIComponent(status)}?limit=${limit}`
         );
 
@@ -245,7 +253,7 @@ export async function getPromotionsByStatus(
  */
 export async function getActivePromotions(limit = 50): Promise<Promotion[]> {
     try {
-        const response = await fetch(`${API_BASE_URL}/promotions/active/list?limit=${limit}`);
+        const response = await authorizedFetch(`${API_BASE_URL}/promotions/active/list?limit=${limit}`);
 
         if (!response.ok) {
             console.error('Error fetching active promotions:', response.statusText);
@@ -274,7 +282,7 @@ export async function getPromotionProducts(
     perPage = 100
 ): Promise<{ data: PromotionProduct[]; pagination: any }> {
     try {
-        const response = await fetch(
+        const response = await authorizedFetch(
             `${API_BASE_URL}/promotions/${encodeURIComponent(promotionId)}/products?page=${page}&per_page=${perPage}`
         );
 
@@ -300,7 +308,7 @@ export async function addPromotionProduct(
     product: Omit<PromotionProduct, 'id' | 'created_at'>
 ): Promise<PromotionProduct | null> {
     try {
-        const response = await fetch(
+        const response = await authorizedFetch(
             `${API_BASE_URL}/promotions/${encodeURIComponent(promotionId)}/products`,
             {
                 method: 'POST',
@@ -330,7 +338,7 @@ export async function updatePromotionProduct(
     prices: Partial<PromotionProduct>
 ): Promise<PromotionProduct | null> {
     try {
-        const response = await fetch(
+        const response = await authorizedFetch(
             `${API_BASE_URL}/promotion-products/${encodeURIComponent(productId)}`,
             {
                 method: 'PATCH',
@@ -361,7 +369,7 @@ export async function updatePromotionProduct(
  */
 export async function deletePromotionProduct(productId: string): Promise<boolean> {
     try {
-        const response = await fetch(
+        const response = await authorizedFetch(
             `${API_BASE_URL}/promotion-products/${encodeURIComponent(productId)}`,
             { method: 'DELETE' }
         );
@@ -400,7 +408,7 @@ export async function getPromotionPostings(
             params.append('status', status);
         }
 
-        const response = await fetch(
+        const response = await authorizedFetch(
             `${API_BASE_URL}/promotions/${encodeURIComponent(promotionId)}/postings?${params}`
         );
 
@@ -426,7 +434,7 @@ export async function createPromotionPosting(
     posting: Omit<PromotionPosting, 'id' | 'created_at' | 'updated_at'>
 ): Promise<PromotionPosting | null> {
     try {
-        const response = await fetch(
+        const response = await authorizedFetch(
             `${API_BASE_URL}/promotions/${encodeURIComponent(promotionId)}/postings`,
             {
                 method: 'POST',
@@ -456,7 +464,7 @@ export async function updatePromotionPosting(
     updates: Partial<PromotionPosting>
 ): Promise<PromotionPosting | null> {
     try {
-        const response = await fetch(
+        const response = await authorizedFetch(
             `${API_BASE_URL}/promotion-postings/${encodeURIComponent(postingId)}`,
             {
                 method: 'PATCH',
@@ -492,7 +500,7 @@ export async function reviewPromotionPosting(
     rejectionReason = ''
 ): Promise<PromotionPosting | null> {
     try {
-        const response = await fetch(
+        const response = await authorizedFetch(
             `${API_BASE_URL}/promotion-postings/${encodeURIComponent(postingId)}/review`,
             {
                 method: 'POST',
@@ -527,7 +535,7 @@ export async function reviewPromotionPosting(
  */
 export async function getPendingReviewPostings(limit = 50): Promise<PromotionPosting[]> {
     try {
-        const response = await fetch(`${API_BASE_URL}/promotion-postings/review/pending?limit=${limit}`);
+        const response = await authorizedFetch(`${API_BASE_URL}/promotion-postings/review/pending?limit=${limit}`);
 
         if (!response.ok) {
             console.error('Error fetching pending postings:', response.statusText);
@@ -548,7 +556,7 @@ export async function getPendingReviewPostings(limit = 50): Promise<PromotionPos
  */
 export async function deletePromotionPosting(postingId: string): Promise<boolean> {
     try {
-        const response = await fetch(
+        const response = await authorizedFetch(
             `${API_BASE_URL}/promotion-postings/${encodeURIComponent(postingId)}`,
             { method: 'DELETE' }
         );
@@ -573,7 +581,7 @@ export async function deletePromotionPosting(postingId: string): Promise<boolean
  */
 export async function getPromotionStats(): Promise<PromotionStats> {
     try {
-        const response = await fetch(`${API_BASE_URL}/promotions/stats/summary`);
+        const response = await authorizedFetch(`${API_BASE_URL}/promotions/stats/summary`);
 
         if (!response.ok) {
             console.error('Error fetching promotion stats:', response.statusText);
@@ -593,7 +601,7 @@ export async function getPromotionStats(): Promise<PromotionStats> {
  */
 export async function getAssignedPromotions(userId: string): Promise<Promotion[]> {
     try {
-        const response = await fetch(
+        const response = await authorizedFetch(
             `${API_BASE_URL}/promotions/assigned/list?user_id=${encodeURIComponent(userId)}`
         );
 
@@ -629,7 +637,7 @@ export async function extendPromotion(
     }>
 ): Promise<Promotion | null> {
     try {
-        const response = await fetch(
+        const response = await authorizedFetch(
             `${API_BASE_URL}/promotions/${encodeURIComponent(id)}/extend`,
             {
                 method: 'POST',
@@ -676,7 +684,7 @@ export async function uploadScreenshot(
             reader.readAsDataURL(file);
         });
 
-        const response = await fetch(`${API_BASE_URL}/promotions/upload-screenshot`, {
+        const response = await authorizedFetch(`${API_BASE_URL}/promotions/upload-screenshot`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -755,7 +763,7 @@ export async function addPromotionProducts(
     }>
 ): Promise<boolean> {
     try {
-        const response = await fetch(
+        const response = await authorizedFetch(
             `${API_BASE_URL}/promotions/${encodeURIComponent(promotionId)}/products/batch`,
             {
                 method: 'POST',
@@ -780,7 +788,7 @@ export async function removePromotionProduct(
     productId: string
 ): Promise<boolean> {
     try {
-        const response = await fetch(
+        const response = await authorizedFetch(
             `${API_BASE_URL}/promotions/${encodeURIComponent(promotionId)}/products/by-product/${encodeURIComponent(productId)}`,
             { method: 'DELETE' }
         );

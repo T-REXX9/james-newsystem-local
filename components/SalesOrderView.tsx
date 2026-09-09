@@ -44,6 +44,7 @@ import { exportPrintSheetAsJpeg } from '../utils/exportPrintSheetJpeg';
 import { persistedVipDiscount } from '../utils/vipDocumentDiscount';
 import { formatCustomerSince } from '../utils/formatUtils';
 import VipDocumentTotals from './VipDocumentTotals';
+import { canPerformAction } from '../utils/actionPermissions';
 
 interface SalesOrderViewProps {
   initialOrderId?: string;
@@ -110,6 +111,7 @@ const formatCurrency = (value?: number | string | null): string => {
 };
 
 const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initialMonth, initialYear }) => {
+  const canUnpost = canPerformAction('can_unpost');
   const { addToast } = useToast();
   const userId = String(getLocalAuthSession()?.userProfile?.id || '').trim();
   const salesOrderExportRef = React.useRef<HTMLElement | null>(null);
@@ -669,7 +671,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
   };
 
   const handleUnpost = async () => {
-    if (!selectedOrder) return;
+    if (!selectedOrder || !canUnpost) return;
 
     setUnpostLoading(true);
     const orderToUnpost = selectedOrder;
@@ -1034,7 +1036,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                 {canGenerate && <button type="button" onClick={() => setConversionModalOpen(true)} className="rounded-[4px] bg-[#4caf50] px-[18px] py-[9px] text-[13px] text-white">Generate Sales Transaction</button>}
                 {canGenerate && <button type="button" onClick={handlePrint} className="rounded-[4px] bg-[#5d82a2] px-[18px] py-[9px] text-[13px] text-white">Print SO</button>}
                 {canGenerate && <button type="button" onClick={() => setCancelModalOpen(true)} className="rounded-[4px] bg-[#d64b47] px-[18px] py-[9px] text-[13px] text-white">Cancel SO</button>}
-                {selectedOrderStatus === 'posted' && <button type="button" onClick={() => setUnpostModalOpen(true)} disabled={unpostLoading} className="rounded-[4px] bg-[#d64b47] px-[18px] py-[9px] text-[13px] text-white disabled:opacity-50">{unpostLoading ? 'Unposting...' : 'Unpost'}</button>}
+                {selectedOrderStatus === 'posted' && canUnpost && <button type="button" onClick={() => setUnpostModalOpen(true)} disabled={unpostLoading} className="rounded-[4px] bg-[#d64b47] px-[18px] py-[9px] text-[13px] text-white disabled:opacity-50">{unpostLoading ? 'Unposting...' : 'Unpost'}</button>}
               </div>}
             </div>
           </div>
@@ -1546,7 +1548,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                     Cancel SO
                   </button>
                 )}
-                {selectedOrderStatus === 'posted' && (
+                {selectedOrderStatus === 'posted' && canUnpost && (
                   <button
                     type="button"
                     onClick={() => setUnpostModalOpen(true)}

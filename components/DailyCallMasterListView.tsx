@@ -26,6 +26,7 @@ import { Contact, CustomerStatus, DailyCallCustomerRow, DailyCallMasterCustomerR
 import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
 import { resolveVipDiscountLevel } from '../utils/vipStanding';
 import { DO_NOT_CONTACT_LABEL, isBlockedDailyCallMasterRow } from '../utils/dailyCallBlockedCustomer';
+import { isMasterUserAccount } from '../constants';
 import { VERIFIED_PROSPECT_POTENTIAL } from '../utils/dailyCallPotentialSales';
 import AddContactModal from './AddContactModal';
 import DailyCallCustomerDetailModal from './DailyCallCustomerDetailModal';
@@ -888,7 +889,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                             agents={salesAgents}
                             loadingAgents={loadingSalesAgents}
                             saving={assigningCustomerId === row.id}
-                            disabled={viewOnlyRow}
+                            disabled={viewOnlyRow || !isMasterUserAccount(currentUser)}
                             onAssign={handleAssignAgent}
                           />
                         </td>
