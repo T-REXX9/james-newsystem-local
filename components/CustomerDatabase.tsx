@@ -38,7 +38,7 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
     const canViewApprovals = isMasterUserAccount(currentUser);
     const canAdd = hasActionPermission(currentUser, 'can_add');
     const canEdit = hasActionPermission(currentUser, 'can_edit');
-    const canDelete = hasActionPermission(currentUser, 'can_delete');
+    const canDelete = hasActionPermission(currentUser, 'can_delete', 'Customer Database');
 
     React.useEffect(() => {
         if (initialApprovalRequestId && canViewApprovals) setViewMode('approvals');

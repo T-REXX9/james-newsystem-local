@@ -14,6 +14,8 @@ const realtimeState = {
   isLoading: true as boolean,
 };
 
+const authState = vi.hoisted(() => ({ session: null as any }));
+
 vi.mock('../../hooks/useRealtimeList', () => ({
   useRealtimeList: () => realtimeState,
 }));
@@ -24,6 +26,10 @@ vi.mock('../../services/customerDatabaseLocalApiService', () => ({
   updateContact: vi.fn(),
   createContact: vi.fn(),
   deleteCustomer: vi.fn(),
+}));
+
+vi.mock('../../services/localAuthService', () => ({
+  getLocalAuthSession: () => authState.session,
 }));
 
 vi.mock('../CustomerListSidebar', () => ({
@@ -52,6 +58,7 @@ describe('CustomerDatabase - initialContactId loading state', () => {
   beforeEach(() => {
     realtimeState.data = [];
     realtimeState.isLoading = true;
+    authState.session = null;
     vi.mocked(deleteCustomer).mockReset();
   });
 
@@ -148,5 +155,29 @@ describe('CustomerDatabase - initialContactId loading state', () => {
 
     await waitFor(() => expect(deleteCustomer).toHaveBeenCalledWith('c-42'));
     expect(await screen.findByText(/select a customer/i)).toBeInTheDocument();
+  });
+
+  it('hides customer deletion from users without Customer Database delete permission', async () => {
+    realtimeState.isLoading = false;
+    realtimeState.data = [{ id: 'c-42', company: 'Acme Hardware' }];
+    authState.session = {
+      userProfile: {
+        role: 'Sales Agent',
+        user_type: '2',
+        action_permissions: {
+          global: { can_delete: true },
+          pages: { 'Customer Database': { can_delete: false } },
+        },
+      },
+    };
+
+    render(
+      <ToastProvider>
+        <CustomerDatabase initialContactId="c-42" />
+      </ToastProvider>
+    );
+
+    await screen.findByText(/Acme Hardware/);
+    expect(screen.queryByRole('button', { name: 'Delete Customer' })).not.toBeInTheDocument();
   });
 });
