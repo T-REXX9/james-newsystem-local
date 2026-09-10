@@ -890,6 +890,7 @@ const mapCallReportThread = (row: any): CallReportThread => ({
   last_activity_at: String(row?.last_activity_at || row?.created_at || ''),
   unread_count: Number(row?.unread_count || 0),
   messages: Array.isArray(row?.messages) ? row.messages.map(mapCallReportMessage) : [],
+  replyable: row?.replyable !== false,
 });
 
 export const fetchCallReportThreads = async (contactId: string): Promise<CallReportThread[]> => {

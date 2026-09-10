@@ -224,7 +224,7 @@ const CallReportActivityPanel: React.FC<CallReportActivityPanelProps> = ({
                 );
               })}
 
-              {masterUser && !compact && (
+              {masterUser && !compact && thread.replyable !== false && (
                 <div className="rounded-xl border border-slate-200 bg-white p-3">
                   <label className="block space-y-2">
                     <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Reply to this report</span>

@@ -678,6 +678,7 @@ export interface CallReportThread {
   last_activity_at: string;
   unread_count: number;
   messages: CallReportMessage[];
+  replyable?: boolean;
 }
 
 export type DailyCallCustomerFilterStatus = 'all' | 'active' | 'inactive' | 'prospective';
