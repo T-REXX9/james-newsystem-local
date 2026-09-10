@@ -172,6 +172,7 @@ interface ApiCustomerDetailResponse {
 
 type ContactPayloadWithSalesPersonId = Partial<Contact> & {
   __salesPersonId?: string;
+  __salesTeamId?: string | number;
 };
 
 type LocalContact = Contact & {
@@ -425,6 +426,11 @@ export const mapContactUpdatesToApi = (contact: Partial<ContactPayloadWithSalesP
 
   if (hasOwn(contact, '__salesPersonId') || hasOwn(contact, 'salesman') || hasOwn(contact, 'assignedAgent')) {
     payload.sales_person_id = String(contact.__salesPersonId || contact.salesman || contact.assignedAgent || '').trim();
+  }
+  if (hasOwn(contact, '__salesTeamId')) {
+    payload.sales_team_id = contact.__salesTeamId === '' || contact.__salesTeamId == null
+      ? null
+      : Number(contact.__salesTeamId);
   }
 
   if (hasOwn(contact, 'referBy')) payload.refer_by = String(contact.referBy || '');

@@ -112,10 +112,20 @@ const resolveMainId = (): number => {
   return API_MAIN_ID || 1;
 };
 
+const resolveViewerId = (): string => {
+  const session = getLocalAuthSession();
+  return String(session?.userProfile?.id || session?.context?.user?.id || 'anonymous');
+};
+
+const getAuthHeaders = (): HeadersInit => {
+  const session = getLocalAuthSession();
+  return session?.token ? { Authorization: `Bearer ${session.token}` } : {};
+};
+
 const getDailyCallMasterListCacheKey = (mainId: number, params: DailyCallMasterListParams = {}) => {
   const fromDate = params.fromDate || '2025-10-01';
   const search = (params.search || '').trim().toLowerCase();
-  return `${mainId}|${fromDate}|${search}`;
+  return `${mainId}|${resolveViewerId()}|${fromDate}|${search}`;
 };
 
 export const getCachedDailyCallMasterList = (
@@ -430,6 +440,8 @@ const mapDailyCallCustomerRow = (row: any): DailyCallCustomerRow => ({
   id: String(row?.id || ''),
   source: cleanNullableText(row?.source, 'Manual'),
   assignedTo: cleanNullableText(row?.assignedTo ?? row?.assigned_to, 'Unassigned'),
+  assignedTeamId: cleanNullableText(row?.assignedTeamId ?? row?.assigned_team_id),
+  assignedTeam: cleanNullableText(row?.assignedTeam ?? row?.assigned_team),
   assignedDate: cleanNullableText(row?.assignedDate ?? row?.assigned_date),
   clientSince: cleanNullableText(row?.clientSince ?? row?.client_since),
   province: cleanNullableText(row?.province, ''),
@@ -476,6 +488,8 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
     contactNumber: cleanNullableText(row?.contactNumber ?? row?.contact_number, '—'),
     assignedTo: cleanNullableText(row?.assignedTo ?? row?.assigned_to, 'Unassigned'),
     assignedAgentId: cleanNullableText(row?.assignedAgentId ?? row?.assigned_agent_id),
+    assignedTeamId: cleanNullableText(row?.assignedTeamId ?? row?.assigned_team_id),
+    assignedTeam: cleanNullableText(row?.assignedTeam ?? row?.assigned_team),
     assignedDate: cleanNullableText(row?.assignedDate ?? row?.assigned_date),
     profileType: cleanNullableText(row?.profileType ?? row?.profile_type),
     verification: cleanNullableText(row?.verification),
@@ -544,7 +558,7 @@ export const fetchCustomerDailyActivity = async (
     url.searchParams.set('from_date', dateRange.from);
     url.searchParams.set('to_date', dateRange.to);
 
-    const response = await fetch(url.toString());
+    const response = await fetch(url.toString(), { headers: getAuthHeaders() });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
     const { data } = (await response.json()) as { data: CallLogRow[] };
@@ -564,7 +578,7 @@ export const fetchLBCRTOData = async (contactId: string): Promise<LBCRTORecord[]
     const url = new URL(`${API_BASE_URL}/daily-call-monitoring/customers/${contactId}/returns`, window.location.origin);
     url.searchParams.set('main_id', String(mainId));
 
-    const response = await fetch(url.toString());
+    const response = await fetch(url.toString(), { headers: getAuthHeaders() });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
     const { data } = (await response.json()) as { data: LBCRTORecord[] };
@@ -592,7 +606,9 @@ export const fetchCustomersForDailyCall = async (
     if (viewerUserId !== undefined && viewerUserId !== null && String(viewerUserId).trim() !== '') {
       params.set('viewer_user_id', String(viewerUserId));
     }
-    const response = await fetch(`${API_BASE_URL}/daily-call-monitoring/excel?${params.toString()}`);
+    const response = await fetch(`${API_BASE_URL}/daily-call-monitoring/excel?${params.toString()}`, {
+      headers: getAuthHeaders(),
+    });
     if (!response.ok) throw new Error(`API request failed (${response.status})`);
     const payload = await response.json();
     const data = payload?.data;

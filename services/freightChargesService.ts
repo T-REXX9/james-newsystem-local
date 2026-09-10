@@ -40,11 +40,6 @@ export type FreightChargeListResponse = {
   };
 };
 
-export type LedgerCustomer = {
-  sessionId: string;
-  company: string;
-};
-
 const parseApiErrorMessage = async (response: Response): Promise<string> => {
   try {
     const payload = await response.json();
@@ -242,23 +237,4 @@ export const freightChargesService = {
     });
   },
 
-  async getCustomers(search = ''): Promise<LedgerCustomer[]> {
-    const ctx = getContext();
-    const query = new URLSearchParams({
-      main_id: String(ctx.mainId),
-      status: 'all',
-      mode: 'picker',
-      page: '1',
-      per_page: search ? '50' : '100',
-      search,
-    });
-
-    const data = await requestApi(`${API_BASE_URL}/customer-database?${query.toString()}`);
-    const rows = Array.isArray(data?.items) ? data.items : [];
-    return rows.map((row: any) => ({
-      sessionId: String(row?.session_id || ''),
-      company: String(row?.company || ''),
-    })).filter((row: LedgerCustomer) => row.sessionId !== '')
-      .sort((a, b) => a.company.localeCompare(b.company));
-  },
 };

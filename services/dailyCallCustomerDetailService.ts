@@ -13,6 +13,11 @@ const resolveMainId = (): number => {
   return API_MAIN_ID || 1;
 };
 
+const getAuthHeaders = (): HeadersInit => {
+  const session = getLocalAuthSession();
+  return session?.token ? { Authorization: `Bearer ${session.token}` } : {};
+};
+
 const buildUrl = (path: string) => {
   const params = new URLSearchParams({ main_id: String(resolveMainId()) });
   return `${API_BASE_URL}${path}?${params.toString()}`;
@@ -20,7 +25,7 @@ const buildUrl = (path: string) => {
 
 const fetchList = async <T>(path: string): Promise<T[]> => {
   try {
-    const response = await fetch(buildUrl(path));
+    const response = await fetch(buildUrl(path), { headers: getAuthHeaders() });
     if (!response.ok) throw new Error(`API request failed (${response.status})`);
     const payload = await response.json();
     const data = payload?.data;

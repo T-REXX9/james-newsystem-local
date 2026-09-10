@@ -3,7 +3,6 @@ import {
   freightChargesService,
   FreightCharge,
   FreightTransactionType,
-  LedgerCustomer,
 } from '../services/freightChargesService';
 import { getAllInvoices } from '../services/invoiceLocalApiService';
 import { getAllOrderSlips } from '../services/orderSlipLocalApiService';
@@ -11,6 +10,7 @@ import { Contact, Invoice, OrderSlip } from '../types';
 import { fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { useDebounce } from '../hooks/useDebounce';
 import { canPerformAction } from '../utils/actionPermissions';
+import CustomerAutocomplete from './CustomerAutocomplete';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
@@ -203,8 +203,6 @@ const FreightChargesDebitView: React.FC = () => {
   const [perPage] = useState(50);
   const [totalPages, setTotalPages] = useState(1);
 
-  const [customerSearch, setCustomerSearch] = useState('');
-  const [customers, setCustomers] = useState<LedgerCustomer[]>([]);
   const [sourceDocs, setSourceDocs] = useState<SourceDocument[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<SourceDocument | null>(null);
@@ -285,18 +283,6 @@ const FreightChargesDebitView: React.FC = () => {
     }
   };
 
-  const fetchCustomers = async (searchText = '') => {
-    try {
-      const list = await freightChargesService.getCustomers(searchText);
-      setCustomers(list);
-      if (isCreating && !form.customerId && list[0]?.sessionId) {
-        setForm((prev) => ({ ...prev, customerId: list[0].sessionId }));
-      }
-    } catch {
-      setCustomers([]);
-    }
-  };
-
   const fetchSourceDocuments = async () => {
     try {
       const [customerRows, invoices, orderSlips] = await Promise.all([
@@ -349,11 +335,9 @@ const FreightChargesDebitView: React.FC = () => {
       return;
     }
 
-    const matchedCustomer = customers.find((customer) => customer.sessionId === doc.contact_id);
     const matchedContact = contacts.find((contact) => contact.id === doc.contact_id);
-    const customerName = matchedCustomer?.company || matchedContact?.company || doc.customer_name || '';
+    const customerName = matchedContact?.company || doc.customer_name || '';
 
-    setCustomerSearch(customerName);
     setForm((prev) => ({
       ...prev,
       customerId: doc.contact_id || prev.customerId,
@@ -370,13 +354,6 @@ const FreightChargesDebitView: React.FC = () => {
   }, [searchInput]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      fetchCustomers(customerSearch.trim());
-    }, 250);
-    return () => window.clearTimeout(timer);
-  }, [customerSearch]);
-
-  useEffect(() => {
     fetchList();
   }, [search, statusFilter, appliedMonth, appliedYear, page]);
 
@@ -389,7 +366,6 @@ const FreightChargesDebitView: React.FC = () => {
   }, [selectedRefno, isCreating]);
 
   useEffect(() => {
-    fetchCustomers('');
     fetchSourceDocuments();
   }, []);
 
@@ -405,11 +381,11 @@ const FreightChargesDebitView: React.FC = () => {
   }, [form.transactionRefNo, form.invoiceNo, form.transactionType, sourceDocs]);
 
   const selectedCustomerName = useMemo(() => {
-    const customer = customers.find((c) => c.sessionId === form.customerId);
+    const customer = contacts.find((c) => c.id === form.customerId);
     if (customer) return customer.company;
     if (selected?.lcustomer === form.customerId) return selected.lcustomer_lname;
     return '';
-  }, [customers, form.customerId, selected]);
+  }, [contacts, form.customerId, selected]);
 
   const canEdit = (isCreating && canAdd) || (selected?.lstatus === 'Pending' && canEditPermission);
 
@@ -420,7 +396,7 @@ const FreightChargesDebitView: React.FC = () => {
     setSelected(null);
     setError('');
     setForm({
-      customerId: customers[0]?.sessionId || '',
+      customerId: '',
       date: toDateInput(new Date().toISOString()),
       courierName: '',
       trackingNo: '',
@@ -432,9 +408,6 @@ const FreightChargesDebitView: React.FC = () => {
       invoiceNo: '',
     });
     setSelectedDoc(null);
-    if (customers.length === 0) {
-      await fetchCustomers('');
-    }
   };
 
   const handleCreate = async () => {
@@ -716,10 +689,13 @@ const FreightChargesDebitView: React.FC = () => {
                     <td className={labelCellClass}>{isCreating ? 'Sold to :' : 'Customer:'}</td>
                     <td className={valueCellClass}>
                       {canEdit ? (
-                        <select value={form.customerId} onChange={(event) => setForm((prev) => ({ ...prev, customerId: event.target.value }))} className={fieldClass}>
-                          <option value="">Select Customer</option>
-                          {customers.map((customer) => <option key={customer.sessionId} value={customer.sessionId}>{customer.company}</option>)}
-                        </select>
+                        <CustomerAutocomplete
+                          contacts={contacts}
+                          selectedCustomer={contacts.find((contact) => contact.id === form.customerId) || null}
+                          onSelect={(customer) => setForm((prev) => ({ ...prev, customerId: customer.id }))}
+                          placeholder="Select Customer"
+                          inputClassName="h-[34px] rounded-[3px] border-[#ccc] bg-white text-[13px] text-[#555]"
+                        />
                       ) : selectedCustomerName || selected?.lcustomer_lname || '-'}
                     </td>
                     <td className={labelCellClass}>Date :</td>
@@ -833,13 +809,16 @@ const FreightChargesDebitView: React.FC = () => {
                 <span className="text-right font-semibold pr-[15px]">Ref No.</span>
                 <input value={searchDraft.dmNo} onChange={(event) => setSearchDraft((prev) => ({ ...prev, dmNo: event.target.value }))} placeholder="Input DM No." className={fieldClass} />
               </label>
-              <label className="grid grid-cols-[25%_58.333%] items-center text-[13px]">
+              <div className="grid grid-cols-[25%_58.333%] items-center text-[13px]">
                 <span className="text-right font-semibold pr-[15px]">Customer</span>
-                <select value={searchDraft.customer} onChange={(event) => setSearchDraft((prev) => ({ ...prev, customer: event.target.value }))} className={fieldClass}>
-                  <option value="">Select Customer</option>
-                  {customers.map((customer) => <option key={customer.sessionId} value={customer.company}>{customer.company}</option>)}
-                </select>
-              </label>
+                <CustomerAutocomplete
+                  contacts={contacts}
+                  selectedCustomer={contacts.find((contact) => contact.company === searchDraft.customer) || null}
+                  onSelect={(customer) => setSearchDraft((prev) => ({ ...prev, customer: customer.company }))}
+                  placeholder="Search customer..."
+                  inputClassName="h-[34px] rounded-[3px] border-[#ccc] bg-white text-[13px] text-[#555]"
+                />
+              </div>
               <label className="grid grid-cols-[25%_58.333%] items-center text-[13px]">
                 <span className="text-right font-semibold pr-[15px]">Tracking No.</span>
                 <input value={searchDraft.trackingNo} onChange={(event) => setSearchDraft((prev) => ({ ...prev, trackingNo: event.target.value }))} placeholder="Input Tracking No." className={fieldClass} />

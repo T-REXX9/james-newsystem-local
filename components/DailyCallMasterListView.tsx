@@ -20,7 +20,8 @@ import {
 } from 'lucide-react';
 import { useDebounce } from '../hooks/useDebounce';
 import { createCustomerLogForDailyCall, fetchCustomersForDailyCall, fetchDailyCallMasterList, getCachedDailyCallMasterList } from '../services/dailyCallMonitoringService';
-import { createContact, fetchSalesAgents, updateContact } from '../services/customerDatabaseLocalApiService';
+import { bulkUpdateContacts, createContact, fetchSalesAgents, updateContact } from '../services/customerDatabaseLocalApiService';
+import { fetchTeams, TeamRecord } from '../services/teamLocalApiService';
 import { getVipTierConfig } from '../services/vipTierSettingsService';
 import { Contact, CustomerStatus, DailyCallCustomerRow, DailyCallMasterCustomerRow, DailyCallMasterListMeta, UserProfile, VipTierConfig } from '../types';
 import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
@@ -301,7 +302,10 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const [colorFilter, setColorFilter] = useState('all');
   const [vipConfig, setVipConfig] = useState<VipTierConfig>(DEFAULT_VIP_TIER_CONFIG);
   const [salesAgents, setSalesAgents] = useState<UserProfile[]>([]);
+  const [teams, setTeams] = useState<TeamRecord[]>([]);
+  const [selectedAssignmentTeamId, setSelectedAssignmentTeamId] = useState('');
   const [loadingSalesAgents, setLoadingSalesAgents] = useState(true);
+  const [loadingTeams, setLoadingTeams] = useState(true);
   const [assigningCustomerId, setAssigningCustomerId] = useState<string | null>(null);
   const debouncedSearch = useDebounce(search, 400);
 
@@ -469,6 +473,22 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     };
   }, [addToast]);
 
+  useEffect(() => {
+    let active = true;
+    setLoadingTeams(true);
+    void fetchTeams()
+      .then((response) => {
+        if (active) setTeams(response.items || []);
+      })
+      .catch(() => {
+        if (active) addToast({ type: 'error', title: 'Unable to load teams', description: 'Team assignment may be unavailable until you refresh.' });
+      })
+      .finally(() => {
+        if (active) setLoadingTeams(false);
+      });
+    return () => { active = false; };
+  }, [addToast]);
+
   const handleAssignAgent = useCallback(async (customerId: string, agent: UserProfile | null) => {
     const previousRows = rowsRef.current;
     const assignedTo = agent?.full_name?.trim() || 'Unassigned';
@@ -583,6 +603,34 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const visibleRows = activeCategory.rows.slice(0, visibleLimit);
   const hasMoreRows = visibleRows.length < activeCategory.rows.length;
   const showMasterActions = canUseMasterDailyCallActions(currentUser);
+
+  const handleAssignTeamToCategory = useCallback(async () => {
+    if (!selectedAssignmentTeamId || activeCategory.rows.length === 0) return;
+    const team = teams.find((item) => String(item.id) === selectedAssignmentTeamId);
+    if (!team) return;
+    const ids = activeCategory.rows.map((row) => row.id);
+    const previousRows = rowsRef.current;
+    setRows((prev) => prev.map((row) => ids.includes(row.id)
+      ? { ...row, assignedTeamId: selectedAssignmentTeamId, assignedTeam: team.name }
+      : row));
+    setAssigningCustomerId('__team__');
+    try {
+      await bulkUpdateContacts(ids, { __salesTeamId: selectedAssignmentTeamId } as any);
+      if (fullCustomerRowsRef.current) {
+        fullCustomerRowsRef.current = fullCustomerRowsRef.current.map((row) => ids.includes(row.id)
+          ? { ...row, assignedTeam: team.name }
+          : row);
+      }
+      addToast({ type: 'success', title: 'Team assigned', description: `${team.name} is now assigned to ${activeCategory.label}.` });
+      setSelectedAssignmentTeamId('');
+      await loadRows(false, true);
+    } catch {
+      setRows(previousRows);
+      addToast({ type: 'error', title: 'Unable to assign team', description: 'Please try again.' });
+    } finally {
+      setAssigningCustomerId(null);
+    }
+  }, [activeCategory, addToast, loadRows, selectedAssignmentTeamId, teams]);
 
   useEffect(() => {
     setVisibleLimit(INITIAL_VISIBLE_ROWS);
@@ -813,6 +861,28 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
               </h3>
               <div className="flex items-center gap-3">
                 <span className="flex items-center gap-2 text-sm"><i className={`h-3 w-3 rounded-full ${activeCategory.dot}`} />{activeCategory.state}</span>
+                {showMasterActions && activeCategory.id !== 'blocked' && (
+                  <div className="flex items-center gap-2">
+                    <select
+                      aria-label={`Assign team to ${activeCategory.label}`}
+                      value={selectedAssignmentTeamId}
+                      onChange={(event) => setSelectedAssignmentTeamId(event.target.value)}
+                      disabled={loadingTeams || assigningCustomerId === '__team__'}
+                      className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold"
+                    >
+                      <option value="">Assign team to list...</option>
+                      {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => void handleAssignTeamToCategory()}
+                      disabled={!selectedAssignmentTeamId || activeCategory.rows.length === 0 || assigningCustomerId === '__team__'}
+                      className="rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Assign {activeCategory.label}
+                    </button>
+                  </div>
+                )}
                 <button type="button" onClick={() => loadRows(false, true)} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-bold hover:bg-slate-50">
                   <RefreshCw className="h-4 w-4" /> Refresh
                 </button>
@@ -912,6 +982,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                             disabled={viewOnlyRow || !isMasterUserAccount(currentUser)}
                             onAssign={handleAssignAgent}
                           />
+                          {row.assignedTeam && <p className="mt-1 text-[10px] font-bold text-indigo-700">Team: {row.assignedTeam}</p>}
                         </td>
                         <td className="break-words px-2 py-2.5 text-sm font-semibold text-slate-600">
                           {row.verification === 'Verified' ? (row.verifiedBy || 'Verification recorded') : '—'}
