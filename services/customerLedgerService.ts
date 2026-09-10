@@ -211,7 +211,7 @@ export const customerLedgerService = {
     const items = Array.isArray(data?.items) ? data.items : [];
     return items
       .map(mapCustomer)
-      .filter((row) => row.sessionId !== '')
+      .filter((row) => row.sessionId !== '' && (row.company.trim() !== '' || row.customerCode.trim() !== ''))
       .sort((a, b) => a.company.localeCompare(b.company));
   },
 

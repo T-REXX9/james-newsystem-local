@@ -593,6 +593,7 @@ const CustomerLedgerView: React.FC = () => {
       .getCustomers(debouncedSearch)
       .then((rows) => {
         if (!active) return;
+        rows = rows.filter((row) => row.company.trim() !== '' || row.customerCode.trim() !== '');
         // Ensure the selected customer is always in the list
         if (
           selectedCustomerRef.current &&
@@ -693,6 +694,7 @@ const CustomerLedgerView: React.FC = () => {
 
       {/* Right panel: ledger report */}
       <div className="flex flex-1 flex-col min-w-0 p-5">
+        <h1 className="mb-3 text-xl font-bold text-[#333]">Customer Ledger</h1>
         <div className="flex-1 rounded border border-[#d5d5d5] bg-white p-5 shadow-sm">
           <LedgerReport
             ledgerData={ledgerData}

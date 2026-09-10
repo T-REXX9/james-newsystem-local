@@ -51,6 +51,23 @@ describe('customerLedgerService', () => {
     expect(new Headers(requestInit.headers).get('Authorization')).toBe('Bearer test-token');
   });
 
+  it('filters picker options without a company name and customer code', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue(okResponse({
+      items: [
+        { session_id: 'named', company: 'Acme', customer_code: '' },
+        { session_id: 'coded', company: '', customer_code: 'C-2' },
+        { session_id: 'unnamed', company: '', customer_code: '' },
+      ],
+    }));
+
+    const customers = await customerLedgerService.getCustomers();
+    expect(customers).toHaveLength(2);
+    expect(customers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ sessionId: 'named', company: 'Acme' }),
+      expect.objectContaining({ sessionId: 'coded', customerCode: 'C-2' }),
+    ]));
+  });
+
   it('falls back to all sales when older APIs do not return Ishinomoto sales', async () => {
     vi.spyOn(global, 'fetch').mockResolvedValue(okResponse({
       customer: { session_id: 'cust-1', company: 'Acme', customer_code: 'C-1' },

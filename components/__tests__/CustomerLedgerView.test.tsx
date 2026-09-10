@@ -129,6 +129,7 @@ describe('CustomerLedgerView', () => {
 
   it('renders the two-column layout with left search panel and right report area', async () => {
     render(<CustomerLedgerView />);
+    expect(screen.getByRole('heading', { name: 'Customer Ledger', level: 1 })).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Search customer...')).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByText('Alpha Corp')).toBeInTheDocument();
@@ -160,16 +161,15 @@ describe('CustomerLedgerView', () => {
     expect(screen.getByText('Old Name: Alpha Trading')).toBeInTheDocument();
   });
 
-  it('uses a safe placeholder when a customer has no display name or code', async () => {
+  it('does not display a customer that has neither a display name nor code', async () => {
     mockGetCustomers.mockResolvedValueOnce([
       { sessionId: '152021011303113643901', customerCode: '', company: '', oldName: '' },
     ]);
 
     render(<CustomerLedgerView />);
 
-    await waitFor(() => {
-      expect(screen.getByRole('option', { name: 'Unnamed customer' })).toBeInTheDocument();
-    });
+    await waitFor(() => expect(mockGetCustomers).toHaveBeenCalledWith(''));
+    expect(screen.queryByRole('option', { name: /Unnamed customer/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('option', { name: '152021011303113643901' })).not.toBeInTheDocument();
   });
 
