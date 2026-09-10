@@ -74,6 +74,11 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     const [isEditingSalesAgent, setIsEditingSalesAgent] = useState(false);
     const [selectedSalesAgent, setSelectedSalesAgent] = useState<string>('');
     const [isSaving, setIsSaving] = useState(false);
+    const [recordImageFailed, setRecordImageFailed] = useState(false);
+
+    useEffect(() => {
+        setRecordImageFailed(false);
+    }, [contact?.recordImage]);
 
     const [revision, setRevision] = useState(0);
     useEffect(() => {
@@ -173,9 +178,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                 <div className="flex flex-wrap items-start justify-between gap-3">
 
                     <div className="flex min-w-0 items-center gap-3">
-                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-blue to-blue-600 text-xl font-bold text-white shadow-lg shadow-blue-900/20">
-                            {Initials}
-                        </div>
+                        {contact.recordImage && !recordImageFailed ? <img src={contact.recordImage} alt="Customer record image" className="h-12 w-12 shrink-0 rounded-xl object-cover shadow-lg shadow-blue-900/20" style={{ objectPosition: contact.recordImagePosition?.replace(',', '% ') }} onError={() => setRecordImageFailed(true)} /> : <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-blue to-blue-600 text-xl font-bold text-white shadow-lg shadow-blue-900/20">{Initials}</div>}
                         <div className="min-w-0">
                             <h1 className="flex items-center gap-2 text-xl font-bold text-slate-900 dark:text-white">
                                 <CompanyName name={contact.company} pastName={contact.pastName} entity={contact} />
