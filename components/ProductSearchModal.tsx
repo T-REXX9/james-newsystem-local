@@ -181,9 +181,6 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({ isOpen, onClose
                                                         </span>
                                                     )}
                                                 </div>
-                                                <span className="font-mono text-sm font-medium text-slate-900 dark:text-white">
-                                                    ₱{product.price_aa?.toFixed(2)}
-                                                </span>
                                             </div>
 
                                             <p className="text-sm text-slate-600 dark:text-slate-300 mb-1.5 line-clamp-2">
@@ -199,6 +196,19 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({ isOpen, onClose
                                                         {getCentralStock(product)}
                                                     </span>
                                                 </span>
+                                            </div>
+
+                                            <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                                                {[
+                                                    ['VIP 1', product.price_vip1],
+                                                    ['VIP 2', product.price_vip2],
+                                                    ['VIP 3', product.price_vip3],
+                                                ].map(([label, amount]) => (
+                                                    <div key={label} className="rounded bg-slate-50 px-2 py-1.5 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                                        <div className="font-medium">{label}</div>
+                                                        <div className="font-mono font-semibold text-slate-900 dark:text-white">₱{Number(amount || 0).toFixed(2)}</div>
+                                                    </div>
+                                                ))}
                                             </div>
                                         </div>
 
