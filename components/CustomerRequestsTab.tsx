@@ -5,16 +5,16 @@ import {
     Wallet, UserCog, Hash
 } from 'lucide-react';
 import { CustomerRequest, createDiscountRequest, fetchCustomerRequests, requestCustomerUpdate, reviewCustomerRequest } from '../services/customerWorkflowLocalApiService';
-import { Contact, UserProfile } from '../types';
+import { Contact, CustomerStatus, UserProfile } from '../types';
 import { hasActionPermission, isMasterUserAccount } from '../constants';
 import { toast } from 'sonner';
-import { canPerformAction } from '../utils/actionPermissions';
 
-type RequestCategory = 'terms' | 'contact_details' | 'discount' | 'others';
+type RequestCategory = 'terms' | 'contact_details' | 'customer_standing' | 'discount' | 'others';
 
 const CATEGORY_LABELS: Record<RequestCategory, string> = {
     terms: 'Terms',
     contact_details: 'Contact Details',
+    customer_standing: 'Customer Standing',
     discount: 'Discount',
     others: 'Others',
 };
@@ -22,6 +22,7 @@ const CATEGORY_LABELS: Record<RequestCategory, string> = {
 const CATEGORY_FIELDS: Record<RequestCategory, (keyof Contact)[]> = {
     terms: ['terms', 'priceGroup', 'transactionType', 'vatType', 'creditLimit'],
     contact_details: ['company', 'name', 'phone', 'mobile', 'email', 'address', 'city', 'province', 'area', 'tin'],
+    customer_standing: [],
     discount: [],
     others: ['comment'],
 };
@@ -29,6 +30,7 @@ const CATEGORY_FIELDS: Record<RequestCategory, (keyof Contact)[]> = {
 const CATEGORY_ICONS: Record<RequestCategory, React.ComponentType<{ className?: string }>> = {
     terms: Wallet,
     contact_details: UserCog,
+    customer_standing: AlertCircle,
     discount: Tag,
     others: FileText,
 };
@@ -70,7 +72,10 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
     const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
     const owner = isMasterUserAccount(currentUser);
     const canAdd = hasActionPermission(currentUser, 'can_add');
-    const canApprove = canPerformAction('can_approve');
+    // Customer standing and detail requests are approved by the Master User,
+    // never by a staff member whose ambient session happens to have approval
+    // permissions for another page.
+    const canApprove = isMasterUserAccount(currentUser);
 
     useEffect(() => {
         let active = true;
@@ -118,6 +123,22 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
                     return;
                 }
                 await createDiscountRequest({ contact_id: contactId, discount_percentage: Number(discountPercent), reason: createNotes.trim() });
+            } else if (createCategory === 'customer_standing') {
+                if (!createNotes.trim()) {
+                    setError('Enter a reason before requesting Do Not Contact.');
+                    setBusy('');
+                    return;
+                }
+                const isUnverifiedProspect = contact.status === CustomerStatus.PROSPECTIVE
+                    && String(contact.verification || '').trim().toLowerCase() !== 'verified';
+                await requestCustomerUpdate(contactId, {
+                    status: CustomerStatus.BLACKLISTED,
+                    debtType: 'Bad',
+                    ...(isUnverifiedProspect ? { verification: 'Rejected' } : {}),
+                    // `comment` is the supported customer-update field and is
+                    // persisted in the approval payload as `notes`.
+                    comment: createNotes.trim(),
+                });
             } else {
                 if (!createValue.trim()) {
                     setError('Please enter a proposed value');
@@ -270,7 +291,7 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
                             </div>
                         </div>
 
-                        {createCategory !== 'discount' && CATEGORY_FIELDS[createCategory].length > 0 && (
+                        {createCategory !== 'discount' && createCategory !== 'customer_standing' && CATEGORY_FIELDS[createCategory].length > 0 && (
                             <>
                                 <div>
                                     <label htmlFor="cr-field" className="mb-1.5 block text-xs font-bold text-slate-700 dark:text-slate-300">
@@ -336,6 +357,15 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
                             </div>
                         )}
 
+                        {createCategory === 'customer_standing' && (
+                            <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900 dark:border-rose-900/60 dark:bg-rose-950/20 dark:text-rose-200">
+                                <p className="font-semibold">Request Do Not Contact</p>
+                                <p className="mt-1 text-xs leading-5">
+                                    This requests Blacklisted status and Bad debt type. For an unverified prospect, approval will also record Reject verification. No customer record changes until a Master User approves the request.
+                                </p>
+                            </div>
+                        )}
+
                         <div>
                             <label htmlFor="cr-notes" className="mb-1.5 block text-xs font-bold text-slate-700 dark:text-slate-300">
                                 <MessageSquare className="mr-1 inline h-3 w-3" />
@@ -348,7 +378,7 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
                                 maxLength={2000}
                                 rows={3}
                                 className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                                placeholder={createCategory === 'discount' ? 'Explain why this discount is needed (min 10 characters)...' : 'Optional notes for the reviewer...'}
+                                placeholder={createCategory === 'discount' ? 'Explain why this discount is needed (min 10 characters)...' : createCategory === 'customer_standing' ? 'Explain why this customer or prospect should not be contacted...' : 'Optional notes for the reviewer...'}
                             />
                             <p className="mt-1 text-right text-[10px] text-slate-400">{createNotes.length}/2000</p>
                         </div>

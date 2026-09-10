@@ -7,10 +7,9 @@ import {
     CustomerRequest, fetchAllCustomerRequests, reviewCustomerRequest,
 } from '../services/customerWorkflowLocalApiService';
 import { Contact, UserProfile } from '../types';
-import { isCompanyOwnerRole } from '../constants';
+import { isMasterUserAccount } from '../constants';
 import { fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { toast } from 'sonner';
-import { canPerformAction } from '../utils/actionPermissions';
 
 type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected';
 
@@ -62,9 +61,9 @@ export default function ApprovalRequestsView({
     initialRequestId,
     restrictToOwners = true,
 }: ApprovalRequestsViewProps) {
-    const owner = isCompanyOwnerRole(currentUser?.role);
-    const canApprove = canPerformAction('can_approve');
-    const visible = !restrictToOwners || owner || canApprove;
+    const owner = isMasterUserAccount(currentUser);
+    const canApprove = owner;
+    const visible = !restrictToOwners || owner;
 
     const [rows, setRows] = useState<CustomerRequest[]>([]);
     const [contacts, setContacts] = useState<Map<string, Contact>>(new Map());

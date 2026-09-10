@@ -490,6 +490,14 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   }, [addToast]);
 
   const handleAssignAgent = useCallback(async (customerId: string, agent: UserProfile | null) => {
+    if (!isMasterUserAccount(currentUser)) {
+      addToast({
+        type: 'error',
+        title: 'Assignment restricted',
+        description: 'Only the Master User can assign a sales agent.',
+      });
+      return;
+    }
     const previousRows = rowsRef.current;
     const assignedTo = agent?.full_name?.trim() || 'Unassigned';
     const assignedAgentId = agent?.id || '';
@@ -542,7 +550,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     } finally {
       setAssigningCustomerId(null);
     }
-  }, [addToast, currentUser?.id]);
+  }, [addToast, currentUser]);
 
   const getCurrentVip = (row: DailyCallMasterCustomerRow) => {
     return resolveVipDiscountLevel(row.lastMonthSales || 0, vipConfig);

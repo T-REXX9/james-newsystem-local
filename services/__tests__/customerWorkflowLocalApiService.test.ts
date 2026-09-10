@@ -29,6 +29,27 @@ describe('customer workflow local API contracts', () => {
     expect(fetchMock.mock.calls[0][1].method).toBe('POST');
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ main_id: 7, kind: 'customer_update', payload: { company: 'Updated', delivery_address: 'New address', credit_limit: 200 } });
   });
+  it('submits a do-not-contact request with the blacklisting, rejection, and reason fields intact', async () => {
+    fetchMock.mockResolvedValue(reply({ id: 'req-dnc', status: 'pending' }));
+    await requestCustomerUpdate('c1', {
+      status: 'Blacklisted' as any,
+      debtType: 'Bad',
+      verification: 'Rejected',
+      comment: 'The shop has permanently closed.',
+    });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      main_id: 7,
+      kind: 'customer_update',
+      payload: {
+        notes: 'The shop has permanently closed.',
+        debt_type: 'Bad',
+        verification: 'Rejected',
+        // The API represents Do Not Contact through `debt_type: Bad`; the
+        // regular active status code remains 1.
+        status: 1,
+      },
+    });
+  });
   it('saves discount requests and propagates rejection instead of claiming success', async () => {
     fetchMock.mockResolvedValueOnce(reply({ id: 'd1' })).mockResolvedValueOnce(reply(null, 422));
     await createDiscountRequest({ contact_id: 'c1', discount_percentage: 7, reason: 'Repeat customer' });

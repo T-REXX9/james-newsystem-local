@@ -13,6 +13,8 @@ import { formatCustomerSince } from '../utils/formatUtils';
 import { useToast } from './ToastProvider';
 import { fetchSimilarCustomerNames, type SimilarCustomerNameMatch } from '../services/customerDatabaseLocalApiService';
 import RecordImagePicker from './RecordImagePicker';
+import { getLocalAuthSession } from '../services/localAuthService';
+import { isMasterUserAccount } from '../constants';
 
 const TRANSACTION_TYPE_OPTIONS = ['Order Slip', 'Invoice'] as const;
 
@@ -65,6 +67,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
 
   const today = new Date().toISOString().split('T')[0];
   const isEditMode = mode === 'edit';
+  const canAssignSalesAgent = isMasterUserAccount(getLocalAuthSession()?.userProfile);
 
   const createEmptyContactPerson = (): ContactPersonDraft => ({
     id: undefined,
@@ -254,7 +257,10 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
         company: (formData.company || '').trim(),
         customerSince: isEditMode ? (formData.customerSince || '') : (formData.customerSince || today),
         team: formData.team || '',
-        salesman: formData.salesman || '',
+        // A staff member may create or edit a customer, but only a Master User
+        // can choose who owns the account. Preserve an existing assignment on
+        // staff edits and leave new records unassigned for their caller to own.
+        salesman: canAssignSalesAgent ? (formData.salesman || '') : (isEditMode ? (initialData?.salesman || '') : ''),
         referBy: formData.referBy || '',
 
         // Location
@@ -530,10 +536,12 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                            <label className="label">Team</label>
                            <input className="input" value={formData.team} onChange={e => setFormData({...formData, team: e.target.value})} />
                        </div>
-                       <div>
-                           <label className="label">Salesman</label>
-                           <input className="input" value={formData.salesman} onChange={e => setFormData({...formData, salesman: e.target.value})} />
-                       </div>
+                       {canAssignSalesAgent && (
+                           <div>
+                               <label className="label">Salesman</label>
+                               <input className="input" value={formData.salesman} onChange={e => setFormData({...formData, salesman: e.target.value})} />
+                           </div>
+                       )}
                        <div>
                            <label className="label">Refer By</label>
                            <input className="input" value={formData.referBy} onChange={e => setFormData({...formData, referBy: e.target.value})} />

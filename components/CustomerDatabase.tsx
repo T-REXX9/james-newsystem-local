@@ -16,6 +16,7 @@ import ApprovalRequestsView from './ApprovalRequestsView';
 import { getLocalAuthSession } from '../services/localAuthService';
 import { isMasterUserAccount, hasActionPermission } from '../constants';
 import HighLevelDeleteModal from './HighLevelDeleteModal';
+import { requestCustomerUpdate } from '../services/customerWorkflowLocalApiService';
 
 const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: string; initialApprovalRequestId?: string }> = ({ initialStatus = 'All', initialContactId, initialApprovalRequestId }) => {
     const { addToast } = useToast();
@@ -247,6 +248,26 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
   const handleSubmitEditCustomer = async (data: Omit<Contact, 'id'>) => {
     if (!canEdit || !editingCustomer) return;
     try {
+      if (!isMasterUserAccount(currentUser)) {
+        const changedFields = Object.fromEntries(
+          Object.entries(data).filter(([key, value]) => {
+            const previous = editingCustomer[key as keyof Contact];
+            return JSON.stringify(previous ?? null) !== JSON.stringify(value ?? null);
+          })
+        ) as Partial<Contact>;
+        if (Object.keys(changedFields).length === 0) return editingCustomer;
+
+        await requestCustomerUpdate(editingCustomer.id, changedFields);
+        addToast({
+          type: 'success',
+          title: 'Update request submitted',
+          description: 'Your customer changes are waiting for Master User approval.',
+          durationMs: 4000,
+        });
+        setShowEditCustomerModal(false);
+        setEditingCustomer(null);
+        return editingCustomer;
+      }
       await updateContact(editingCustomer.id, data);
       const updated = { ...editingCustomer, ...data, id: editingCustomer.id };
       setCustomers(prev => prev.map(c => c.id === editingCustomer.id ? updated : c));

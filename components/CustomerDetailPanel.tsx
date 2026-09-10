@@ -143,6 +143,11 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     // Handler for saving sales agent assignment
     const handleSaveSalesAgent = async () => {
         if (!contact || !contactId) return;
+        if (!isMasterUserAccount(currentUser)) {
+            toast.error('Only the Master User can assign a sales agent.');
+            setIsEditingSalesAgent(false);
+            return;
+        }
 
         setIsSaving(true);
         try {

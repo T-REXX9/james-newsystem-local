@@ -1,7 +1,9 @@
 import React from 'react';
-import { render, screen, fireEvent, within, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, within, cleanup, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import userEvent from '@testing-library/user-event';
 import CustomerRequestsTab from '../CustomerRequestsTab';
+import { requestCustomerUpdate } from '../../services/customerWorkflowLocalApiService';
 import type { Contact, UserProfile } from '../../types';
 
 afterEach(() => {
@@ -211,5 +213,29 @@ describe('CustomerRequestsTab - Field to Update dropdown', () => {
         expect(screen.queryByLabelText(/current value/i)).not.toBeInTheDocument();
         expect(screen.queryByLabelText(/new value/i)).not.toBeInTheDocument();
         expect(screen.getByLabelText(/discount percentage/i)).toBeInTheDocument();
+    });
+
+    it('lets staff submit a do-not-contact request for approval instead of changing the customer directly', async () => {
+        const user = userEvent.setup();
+        vi.mocked(requestCustomerUpdate).mockResolvedValue({ id: 'request-1' } as never);
+        render(
+            <CustomerRequestsTab
+                contactId="c1"
+                contact={{ ...mockContact, status: 'Prospective' as any, verification: 'Unverified' }}
+                currentUser={mockUser}
+            />
+        );
+
+        await user.click(screen.getByRole('button', { name: /new request/i }));
+        await user.click(screen.getByRole('button', { name: /customer standing/i }));
+        await user.type(screen.getByLabelText(/reason \/ notes/i), 'The shop has permanently closed.');
+        await user.click(screen.getByRole('button', { name: /submit for approval/i }));
+
+        await waitFor(() => expect(requestCustomerUpdate).toHaveBeenCalledWith('c1', {
+            status: 'Blacklisted',
+            debtType: 'Bad',
+            verification: 'Rejected',
+            comment: 'The shop has permanently closed.',
+        }));
     });
 });
