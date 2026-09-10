@@ -246,7 +246,19 @@ export const cancelInvoice = async (id: string, reason: string): Promise<Invoice
   return mapInvoiceDetail(data);
 };
 
-export const unpostInvoice = async (id: string): Promise<Invoice | null> => runInvoiceAction(id, 'unpost');
+export const unpostInvoice = async (id: string): Promise<void> => {
+  const payload = {
+    main_id: API_MAIN_ID,
+    user_id: getUserContext().userId,
+  };
+  // Unpost deletes the invoice via the linked sales order; response is the
+  // sales-order payload, so do not map it as an Invoice.
+  await requestApi(`${API_BASE_URL}/invoices/${encodeURIComponent(id)}/actions/unpost`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+};
 
 export const updateInvoiceNumber = async (
   id: string,

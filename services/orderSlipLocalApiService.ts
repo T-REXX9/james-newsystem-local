@@ -272,15 +272,16 @@ export const cancelOrderSlip = async (id: string, reason: string): Promise<{ del
   return { deleted: Boolean(payload?.ok || payload?.deleted) };
 };
 
-export const unpostOrderSlip = async (id: string): Promise<OrderSlip | null> => {
+export const unpostOrderSlip = async (id: string): Promise<void> => {
   const payload = {
     main_id: API_MAIN_ID,
     user_id: getUserContext().userId,
   };
-  const data = await requestApi(`${API_BASE_URL}/order-slips/${encodeURIComponent(id)}/actions/unpost`, {
+  // Unpost deletes the order slip via the linked sales order; response is the
+  // sales-order payload, so do not map it as an Order Slip.
+  await requestApi(`${API_BASE_URL}/order-slips/${encodeURIComponent(id)}/actions/unpost`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  return mapOrderSlipDetail(data);
 };

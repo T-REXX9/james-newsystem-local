@@ -15,6 +15,7 @@ vi.mock('../../services/orderSlipLocalApiService', () => ({
   getOrderSlip: (...args: unknown[]) => getOrderSlipMock(...args),
   getAllOrderSlips: (...args: unknown[]) => getAllOrderSlipsMock(...args),
   printOrderSlip: vi.fn(),
+  unpostOrderSlip: vi.fn(),
   updateOrderSlip: vi.fn(),
 }));
 
@@ -26,7 +27,6 @@ vi.mock('../../services/customerDatabaseLocalApiService', () => ({
 vi.mock('../../services/salesOrderLocalApiService', () => ({
   isOrderSlipAllowedForTransactionType: () => true,
   syncDocumentPolicyState: vi.fn(),
-  unpostSalesOrder: vi.fn(),
 }));
 
 vi.mock('../../services/localAuthService', () => ({

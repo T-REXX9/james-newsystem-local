@@ -17,6 +17,7 @@ vi.mock('../../services/invoiceLocalApiService', () => ({
   printInvoice: vi.fn(),
   cancelInvoice: vi.fn(),
   updateInvoiceNumber: vi.fn(),
+  unpostInvoice: vi.fn(),
 }));
 
 vi.mock('../../services/customerDatabaseLocalApiService', () => ({
@@ -34,7 +35,6 @@ vi.mock('../../services/localAuthService', () => ({
 vi.mock('../../services/salesOrderLocalApiService', () => ({
   isInvoiceAllowedForTransactionType: () => true,
   syncDocumentPolicyState: vi.fn(),
-  unpostSalesOrder: vi.fn(),
 }));
 
 vi.mock('../../services/notificationLocalApiService', () => ({

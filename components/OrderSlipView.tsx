@@ -20,10 +20,11 @@ import {
   getOrderSlip,
   getAllOrderSlips,
   printOrderSlip,
+  unpostOrderSlip,
   updateOrderSlip,
 } from '../services/orderSlipLocalApiService';
 import { fetchContactById, fetchContacts } from '../services/customerDatabaseLocalApiService';
-import { isOrderSlipAllowedForTransactionType, syncDocumentPolicyState, unpostSalesOrder } from '../services/salesOrderLocalApiService';
+import { isOrderSlipAllowedForTransactionType, syncDocumentPolicyState } from '../services/salesOrderLocalApiService';
 import { Contact, OrderSlip, OrderSlipStatus } from '../types';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 import { getLocalAuthSession } from '../services/localAuthService';
@@ -626,7 +627,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
         throw new Error('This order slip is not linked to a sales order.');
       }
 
-      await unpostSalesOrder(salesOrderId);
+      await unpostOrderSlip(selectedSlip.id);
       const creatorUserId = await resolveNotificationUserId(selectedSlip.created_by);
       await notifyOrderSlipEvent(
         'Order Slip Unposted',
