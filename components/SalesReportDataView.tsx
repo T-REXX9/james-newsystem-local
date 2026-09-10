@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Printer } from 'lucide-react';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
-import type { SalesReportData, UserProfile } from '../types';
+import type { SalesReportData, SalesReportTransaction, UserProfile } from '../types';
 import { getSalesReportData } from '../services/salesReportService';
 import type { SalesReportPeriod } from './SalesReportFilter';
 
@@ -22,6 +22,58 @@ const money = new Intl.NumberFormat('en-US', {
 const formatDate = (value: string): string => {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+};
+
+type PaymentTermBucket = {
+  label: string;
+  category: 'cash' | 'terms';
+  key: string;
+  soAmount: number;
+  drAmount: number;
+  invoiceAmount: number;
+};
+
+const CASH_TERM_LABELS: Record<string, string> = {
+  'ap/ttpnb': 'AP/TT-PNB',
+  lbccod: 'LBC COD',
+  lbccop: 'LBC COP',
+};
+
+const normalizePaymentTerm = (value: string): string => value
+  .trim()
+  .toLowerCase()
+  .replace(/[^a-z0-9/]+/g, '');
+
+const getPaymentTermLabel = (value: string): { key: string; label: string; category: PaymentTermBucket['category'] } => {
+  const normalized = normalizePaymentTerm(value);
+  const cashLabel = CASH_TERM_LABELS[normalized];
+  if (cashLabel) return { key: normalized, label: cashLabel, category: 'cash' };
+
+  const dayTerm = normalized.match(/^(\d+)\s*days?$/);
+  if (dayTerm) return { key: `days:${dayTerm[1]}`, label: `${dayTerm[1]} DAYS`, category: 'terms' };
+
+  const displayLabel = value.trim().replace(/[^a-z0-9]+/gi, ' ').replace(/\s+/g, ' ').trim().toUpperCase();
+  return { key: normalized || 'unspecified', label: displayLabel || 'UNSPECIFIED TERMS', category: 'terms' };
+};
+
+const getPaymentTermBuckets = (transactions: SalesReportTransaction[]): PaymentTermBucket[] => {
+  const buckets = new Map<string, PaymentTermBucket>([
+    ['cash:ap/ttpnb', { key: 'ap/ttpnb', label: 'AP/TT-PNB', category: 'cash', soAmount: 0, drAmount: 0, invoiceAmount: 0 }],
+    ['cash:lbccod', { key: 'lbccod', label: 'LBC COD', category: 'cash', soAmount: 0, drAmount: 0, invoiceAmount: 0 }],
+    ['cash:lbccop', { key: 'lbccop', label: 'LBC COP', category: 'cash', soAmount: 0, drAmount: 0, invoiceAmount: 0 }],
+  ]);
+
+  transactions.forEach(transaction => {
+    const { key: termKey, label, category } = getPaymentTermLabel(transaction.terms);
+    const key = `${category}:${termKey}`;
+    const current = buckets.get(key) || { key: termKey, label, category, soAmount: 0, drAmount: 0, invoiceAmount: 0 };
+    current.soAmount += transaction.soAmount || 0;
+    current.drAmount += transaction.drAmount || 0;
+    current.invoiceAmount += transaction.invoiceAmount || 0;
+    buckets.set(key, current);
+  });
+
+  return Array.from(buckets.values());
 };
 
 const displayReportHeading = (reportType: SalesReportPeriod, dateFrom: string, dateTo: string) => {
@@ -64,6 +116,30 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
     )),
     [reportData],
   );
+
+  const paymentTermBuckets = useMemo(
+    () => getPaymentTermBuckets(transactions),
+    [transactions],
+  );
+
+  const cashPaymentTermBuckets = paymentTermBuckets.filter(bucket => bucket.category === 'cash');
+  const termPaymentTermBuckets = paymentTermBuckets.filter(bucket => bucket.category === 'terms');
+
+  const sumPaymentTermBuckets = (buckets: PaymentTermBucket[]): PaymentTermBucket => buckets.reduce(
+    (total, bucket) => ({
+      label: '',
+      category: total.category,
+      key: '',
+      soAmount: total.soAmount + bucket.soAmount,
+      drAmount: total.drAmount + bucket.drAmount,
+      invoiceAmount: total.invoiceAmount + bucket.invoiceAmount,
+    }),
+    { label: '', category: 'terms', key: '', soAmount: 0, drAmount: 0, invoiceAmount: 0 },
+  );
+
+  const cashTotal = sumPaymentTermBuckets(cashPaymentTermBuckets);
+  const termsTotal = sumPaymentTermBuckets(termPaymentTermBuckets);
+  const paymentTermsTotal = sumPaymentTermBuckets(paymentTermBuckets);
 
   if (isLoading) {
     return (
@@ -155,6 +231,63 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
                     <td className="border-y border-black px-2 py-3 text-right font-semibold">{money.format(reportData?.summary.grandTotal.drAmount || 0)}</td>
                     <td className="border-y border-black px-2 py-3 text-right font-semibold">{money.format(reportData?.summary.grandTotal.invoiceAmount || 0)}</td>
                     <td />
+                  </tr>
+
+                  <tr data-testid="payment-terms-breakdown">
+                    <td colSpan={9} className="pt-5">
+                      <table className="w-full border-collapse">
+                        <thead>
+                          <tr className="border-b border-black">
+                            <th colSpan={2} className="px-2 py-2 text-left">PAYMENT TERMS BREAKDOWN</th>
+                            <th className="px-2 py-2 text-right">Amount</th>
+                            <th className="px-2 py-2 text-right">DR</th>
+                            <th className="px-2 py-2 text-right">INVOICE</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td colSpan={5} className="px-2 pt-3 font-semibold">CASH SALES</td>
+                          </tr>
+                          {cashPaymentTermBuckets.map(bucket => (
+                            <tr key={`cash-${bucket.label}`}>
+                              <td colSpan={2} className="px-2 py-[5px]">{bucket.label}</td>
+                              <td className="px-2 py-[5px] text-right">{money.format(bucket.soAmount)}</td>
+                              <td className="px-2 py-[5px] text-right">{money.format(bucket.drAmount)}</td>
+                              <td className="px-2 py-[5px] text-right">{money.format(bucket.invoiceAmount)}</td>
+                            </tr>
+                          ))}
+                          <tr>
+                            <td colSpan={2} className="px-2 py-2 text-right font-semibold">CASH SALES TOTAL</td>
+                            <td className="border-y border-black px-2 py-2 text-right font-semibold">{money.format(cashTotal.soAmount)}</td>
+                            <td className="border-y border-black px-2 py-2 text-right font-semibold">{money.format(cashTotal.drAmount)}</td>
+                            <td className="border-y border-black px-2 py-2 text-right font-semibold">{money.format(cashTotal.invoiceAmount)}</td>
+                          </tr>
+                          <tr>
+                            <td colSpan={5} className="px-2 pt-3 font-semibold">TERMS SALES</td>
+                          </tr>
+                          {termPaymentTermBuckets.map(bucket => (
+                            <tr key={`terms-${bucket.label}`}>
+                              <td colSpan={2} className="px-2 py-[5px]">{bucket.label}</td>
+                              <td className="px-2 py-[5px] text-right">{money.format(bucket.soAmount)}</td>
+                              <td className="px-2 py-[5px] text-right">{money.format(bucket.drAmount)}</td>
+                              <td className="px-2 py-[5px] text-right">{money.format(bucket.invoiceAmount)}</td>
+                            </tr>
+                          ))}
+                          <tr>
+                            <td colSpan={2} className="px-2 py-2 text-right font-semibold">TERMS SALES TOTAL</td>
+                            <td className="border-y border-black px-2 py-2 text-right font-semibold">{money.format(termsTotal.soAmount)}</td>
+                            <td className="border-y border-black px-2 py-2 text-right font-semibold">{money.format(termsTotal.drAmount)}</td>
+                            <td className="border-y border-black px-2 py-2 text-right font-semibold">{money.format(termsTotal.invoiceAmount)}</td>
+                          </tr>
+                          <tr>
+                            <td colSpan={2} className="px-2 py-3 text-right text-[13px] font-semibold">PAYMENT TERMS TOTAL</td>
+                            <td className="border-y border-black px-2 py-3 text-right font-semibold">{money.format(paymentTermsTotal.soAmount)}</td>
+                            <td className="border-y border-black px-2 py-3 text-right font-semibold">{money.format(paymentTermsTotal.drAmount)}</td>
+                            <td className="border-y border-black px-2 py-3 text-right font-semibold">{money.format(paymentTermsTotal.invoiceAmount)}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </td>
                   </tr>
                 </tbody>
               </table>
