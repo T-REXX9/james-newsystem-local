@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   RefreshCw,
   ChevronLeft,
@@ -115,6 +115,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
   const [trackingSaveLoading, setTrackingSaveLoading] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [exportingJpeg, setExportingJpeg] = useState(false);
+  const deepLinkAttemptedRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!initialMonth || !initialYear) return;
@@ -290,15 +291,27 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
   }, [selectSlip]);
 
   useEffect(() => {
-    if (!orderSlips.length) return;
     const slipById = initialSlipId ? orderSlips.find(entry => entry.id === initialSlipId) : null;
     const slipByNo = initialSlipRefNo
       ? orderSlips.find(entry => String(entry.slip_no || '').toLowerCase() === initialSlipRefNo.toLowerCase())
       : null;
     const slip = slipById || slipByNo;
-    if (!slip) return;
-    if (selectedSlip?.id === slip.id) return;
-    void selectSlip(slip);
+    if (slip) {
+      if (selectedSlip?.id !== slip.id) void selectSlip(slip);
+      return;
+    }
+
+    if (!initialSlipId || deepLinkAttemptedRef.current === initialSlipId || selectedSlip?.id === initialSlipId) return;
+    deepLinkAttemptedRef.current = initialSlipId;
+    let active = true;
+    void getOrderSlip(initialSlipId).then((detail) => {
+      if (!active || !detail) return;
+      setSelectedSlip(detail);
+      setTrackingNoDraft(detail.tracking_no || '');
+    });
+    return () => {
+      active = false;
+    };
   }, [initialSlipId, initialSlipRefNo, orderSlips, selectSlip, selectedSlip?.id]);
 
   useEffect(() => {
