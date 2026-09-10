@@ -1135,6 +1135,7 @@ export interface SalesInquiryItem {
   item_code: string;
   location: string;
   description: string;
+  brand?: string;
   unit_price: number;
   amount: number;
   remark?: string;
@@ -1278,6 +1279,8 @@ export interface SalesOrder {
   inquiry_no?: string;
   order_slip_no?: string;
   invoice_no?: string;
+  /** A linked Order Slip or Invoice must be unposted before the order can change. */
+  is_editable?: boolean;
 }
 
 export interface SalesOrderDTO {

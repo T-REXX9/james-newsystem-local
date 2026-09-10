@@ -145,6 +145,38 @@ describe('SalesOrderView', () => {
     expect(getAllSalesOrdersMock).toHaveBeenCalledWith({});
   });
 
+  it('opens the linked Sales Inquiry for edits, matching the legacy Sales Order flow', async () => {
+    const user = userEvent.setup();
+    const order = makeOrder({ id: 'editable-order', order_no: 'SO-EDIT', inquiry_id: 'inq-1', items: [{ id: 'line-1', item_id: 'product-1', item_code: 'SKU-1', qty: 1, unit_price: 100, remark: '' }] });
+    getAllSalesOrdersMock.mockResolvedValue([order]);
+    getSalesOrderMock.mockResolvedValue(order);
+    fetchContactsMock.mockResolvedValue([{ id: 'contact-1', company: 'Acme Corp', transactionType: 'Invoice' }]);
+    const onNavigate = vi.fn();
+    window.addEventListener('workflow:navigate', onNavigate);
+
+    renderView({ initialOrderId: order.id });
+
+    await screen.findByDisplayValue('SO-EDIT');
+    await user.click(screen.getByRole('button', { name: /^edit$/i }));
+
+    expect(onNavigate).toHaveBeenCalledWith(expect.objectContaining({ detail: expect.objectContaining({ tab: 'sales-transaction-sales-inquiry', payload: { inquiryId: 'inq-1' } }) }));
+    expect(screen.queryByLabelText('Quantity for SKU-1')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument();
+    window.removeEventListener('workflow:navigate', onNavigate);
+  });
+
+  it('does not offer Sales Inquiry editing until the linked Invoice or Order Slip is unposted', async () => {
+    const order = makeOrder({ id: 'posted-document-order', order_no: 'SO-LOCKED', inquiry_id: 'inq-1', invoice_no: 'INV-1', is_editable: false, items: [{ id: 'line-1', item_id: 'product-1', item_code: 'SKU-1', qty: 1, unit_price: 100, remark: '' }] });
+    getAllSalesOrdersMock.mockResolvedValue([order]);
+    getSalesOrderMock.mockResolvedValue(order);
+    fetchContactsMock.mockResolvedValue([{ id: 'contact-1', company: 'Acme Corp', transactionType: 'Invoice' }]);
+
+    renderView({ initialOrderId: order.id });
+
+    await screen.findByDisplayValue('SO-LOCKED');
+    expect(screen.queryByRole('button', { name: /^edit$/i })).not.toBeInTheDocument();
+  });
+
   it('keeps every Sales Order list column visible without desktop horizontal scrolling', async () => {
     getAllSalesOrdersMock.mockResolvedValue([makeOrder()]);
     fetchContactsMock.mockResolvedValue([

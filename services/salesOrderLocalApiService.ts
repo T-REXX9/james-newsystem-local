@@ -67,6 +67,7 @@ const mapApiItem = (item: any, orderId: string): SalesOrderItem => ({
   item_code: String(item?.item_code || ''),
   location: String(item?.location || ''),
   description: String(item?.description || ''),
+  brand: String(item?.brand || ''),
   unit_price: toNumber(item?.unit_price, 0),
   amount: toNumber(item?.amount, toNumber(item?.qty, 0) * toNumber(item?.unit_price, 0)),
   remark: String(item?.remark || ''),
@@ -110,6 +111,7 @@ const mapApiOrderSummary = (raw: any): SalesOrder => {
     inquiry_no: String(raw?.inquiry_no || ''),
     order_slip_no: String(raw?.order_slip_no || ''),
     invoice_no: String(raw?.invoice_no || ''),
+    is_editable: toNumber(raw?.is_editable, 1) === 1,
   };
 };
 

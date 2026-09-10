@@ -109,6 +109,7 @@ const formatCurrency = (value?: number | string | null): string => {
 
 const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initialMonth, initialYear }) => {
   const canAdd = canPerformAction('can_add');
+  const canEdit = canPerformAction('can_edit');
   const canDelete = canPerformAction('can_delete');
   const canUnpost = canPerformAction('can_unpost');
   const { addToast } = useToast();
@@ -674,6 +675,20 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
     }
   };
 
+  // Legacy flow: the Sales Inquiry owns order details and line items. A Sales
+  // Order can send the user back to that inquiry only before an Order Slip or
+  // Invoice has been generated; saving the inquiry synchronizes this order.
+  const canEditThroughInquiry = canEdit
+    && Boolean(selectedOrder?.inquiry_id)
+    && selectedOrder?.is_editable !== false
+    && !selectedOrder?.order_slip_no
+    && !selectedOrder?.invoice_no;
+
+  const handleEditThroughInquiry = () => {
+    if (!selectedOrder?.inquiry_id || !canEditThroughInquiry) return;
+    navigateWorkflow('sales-transaction-sales-inquiry', { inquiryId: selectedOrder.inquiry_id });
+  };
+
   const workflowStage = normalizeStatus(selectedOrder?.status) === 'posted' ? 'document' : 'order';
   const selectedOrderStatus = normalizeStatus(selectedOrder?.status);
   const canGenerate = ['pending', 'submitted', 'approved'].includes(selectedOrderStatus);
@@ -791,7 +806,6 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
     product_type?: string;
   }) | null;
   const legacyItems = (selectedOrder?.items || []) as Array<SalesOrder['items'][number] & { brand?: string }>;
-  const totalQuantity = legacyItems.reduce((sum, item) => sum + Number(item.qty || 0), 0);
   const vipDiscount = persistedVipDiscount({
     grand_total: Number(selectedOrder?.grand_total || 0),
     vip_applied: selectedOrder?.vip_applied,
@@ -1002,12 +1016,16 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                   <thead><tr className="border-b-2 border-[#d5d5d5] text-center text-[14px] font-semibold">
                     <th className="px-2 pb-2">Item Code</th><th className="px-2 pb-2">Quantity</th><th className="px-2 pb-2">Location.</th><th className="px-2 pb-2">Part No.</th><th className="px-2 pb-2">Brand</th><th className="px-2 pb-2">Description</th><th className="px-2 pb-2">Unit price</th><th className="px-2 pb-2">Remark</th><th className="px-2 pb-2">Amount</th>
                   </tr></thead>
-                  <tbody>{legacyItems.map((item, index) => <tr key={item.id || `${item.item_code}-${index}`} className="border-b border-[#e1e1e1] text-center">
-                    <td className="px-2 py-2">{item.item_code || ''}</td><td className="px-2 py-2">{item.qty}</td><td className="px-2 py-2">{item.location || ''}</td><td className="px-2 py-2">{item.part_no || ''}</td><td className="px-2 py-2">{item.brand || ''}</td><td className="px-2 py-2 text-left">{item.description || ''}</td><td className="px-2 py-2 text-right">{Number(item.unit_price || 0).toFixed(2)}</td><td className="px-2 py-2">{item.remark || item.approval_status || ''}</td><td className="px-2 py-2 text-right">{Number(item.amount || 0).toFixed(2)}</td>
-                  </tr>)}</tbody>
+                  <tbody>{legacyItems.map((item, index) => {
+                    return <tr key={item.id || `${item.item_code}-${index}`} className="border-b border-[#e1e1e1] text-center">
+                      <td className="px-2 py-2">{item.item_code || ''}</td>
+                      <td className="px-1 py-2">{item.qty}</td>
+                      <td className="px-2 py-2">{item.location || ''}</td><td className="px-2 py-2">{item.part_no || ''}</td><td className="px-2 py-2">{item.brand || ''}</td><td className="px-2 py-2 text-left">{item.description || ''}</td><td className="px-2 py-2 text-right">{Number(item.unit_price || 0).toFixed(2)}</td><td className="px-2 py-2">{item.remark || item.approval_status || ''}</td><td className="px-2 py-2 text-right">{(Number(item.qty || 0) * Number(item.unit_price || 0)).toFixed(2)}</td>
+                    </tr>;
+                  })}</tbody>
                   <tfoot>
                     <tr>
-                    <td className="px-2 py-3 text-right font-bold">Total Qty:</td><td className="px-2 py-3"><span data-jpeg-export-plain-value className="inline-flex min-h-[24px] items-center rounded-full bg-[#6f91af] px-3 py-1 font-bold leading-tight text-white">{totalQuantity.toFixed(2)}</span></td><td colSpan={5}></td><td className="px-2 py-3 text-right font-bold">Grand Total:</td><td className="px-2 py-3"><span data-jpeg-export-plain-value className="inline-flex min-h-[24px] items-center rounded-full bg-[#ef4b4b] px-3 py-1 font-bold leading-tight text-white">{Number(selectedOrder?.grand_total || 0).toFixed(2)}</span></td>
+                    <td className="px-2 py-3 text-right font-bold">Total Qty:</td><td className="px-2 py-3"><span data-jpeg-export-plain-value className="inline-flex min-h-[24px] items-center rounded-full bg-[#6f91af] px-3 py-1 font-bold leading-tight text-white">{legacyItems.reduce((sum, item) => sum + Number(item.qty || 0), 0).toFixed(2)}</span></td><td colSpan={5}></td><td className="px-2 py-3 text-right font-bold">Grand Total:</td><td className="px-2 py-3"><span data-jpeg-export-plain-value className="inline-flex min-h-[24px] items-center rounded-full bg-[#ef4b4b] px-3 py-1 font-bold leading-tight text-white">{legacyItems.reduce((sum, item) => sum + Number(item.qty || 0) * Number(item.unit_price || 0), 0).toFixed(2)}</span></td>
                     </tr>
                     <VipDocumentTotals
                       discount={vipDiscount}
@@ -1019,6 +1037,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
               </div>
 
               {selectedOrder && <div data-jpeg-export-ignore className="mt-3 flex flex-wrap justify-end gap-[5px] border-t border-[#e3e3e3] pt-4 print:hidden">
+                {canEditThroughInquiry && <button type="button" onClick={handleEditThroughInquiry} className="rounded-[4px] bg-[#d64b47] px-[18px] py-[9px] text-[13px] text-white">Edit</button>}
                 {canGenerate && canAdd && <button type="button" onClick={() => setConversionModalOpen(true)} className="rounded-[4px] bg-[#4caf50] px-[18px] py-[9px] text-[13px] text-white">Generate Sales Transaction</button>}
                 {canGenerate && canAdd && <button type="button" onClick={handlePrint} className="rounded-[4px] bg-[#5d82a2] px-[18px] py-[9px] text-[13px] text-white">Print SO</button>}
                 {canGenerate && canDelete && <button type="button" onClick={() => setCancelModalOpen(true)} className="rounded-[4px] bg-[#d64b47] px-[18px] py-[9px] text-[13px] text-white">Cancel SO</button>}
@@ -1491,6 +1510,11 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
               </div>
 
               <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 dark:border-slate-800 pt-4">
+                {canEdit && (
+                  <button type="button" onClick={openEditOrder} className="px-3 py-2 rounded bg-brand-blue text-white text-sm">
+                    Edit SO
+                  </button>
+                )}
                 {canGenerate && canAdd && (
                   <button
                     type="button"
