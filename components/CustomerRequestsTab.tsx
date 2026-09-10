@@ -90,7 +90,7 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
     }, [createCategory]);
 
     const review = async (row: CustomerRequest, decision: 'approved' | 'rejected') => {
-        if (!owner || !canApprove) return;
+        if (!canApprove) return;
         setBusy(row.id);
         setError('');
         try {
@@ -467,7 +467,7 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
                                     </div>
                                 )}
 
-                                {owner && canApprove && row.status === 'pending' && (
+                                {canApprove && row.status === 'pending' && (
                                     <div className="space-y-2.5 border-t border-slate-100 bg-slate-50/30 p-4 dark:border-slate-800 dark:bg-slate-900/30">
                                         <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                                             Review note (optional)

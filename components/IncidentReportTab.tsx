@@ -19,8 +19,7 @@ const IncidentReportTab: React.FC<IncidentReportTabProps> = ({ contactId, curren
   const [dispositions, setDispositions] = useState<Record<string, 'return_to_stock' | 'return_to_factory'>>({});
   const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
 
-  const role = String(currentUser?.role || '').toLowerCase();
-  const canReview = canPerformAction('can_approve') && (currentUser?.user_type === 1 || currentUser?.user_type === '1' || ['owner', 'master user', 'master_user'].includes(role));
+  const canReview = canPerformAction('can_approve');
 
   const formatReportDateTime = (dateValue?: string, timeValue?: string) => {
     const date = String(dateValue || '').split('T')[0];

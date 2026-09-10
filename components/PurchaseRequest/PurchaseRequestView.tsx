@@ -385,7 +385,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
               >
                 <Printer className="h-4 w-4" /> Print
               </button>
-              {["Pending", "Submitted", "Unposted"].includes(request.status || "") && isApprover && (request.status === "Unposted" ? canPost : canApprove) && (generatedPOs.length === 0 || request.status === "Unposted") && (
+              {["Pending", "Submitted", "Unposted"].includes(request.status || "") && (request.status === "Unposted" ? canPost : canApprove) && (generatedPOs.length === 0 || request.status === "Unposted") && (
                 <button
                   onClick={() => handleStatusChange("Approved")}
                   className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700"

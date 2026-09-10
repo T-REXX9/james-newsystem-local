@@ -20,6 +20,7 @@ import {
   WarehouseIncidentReport,
 } from '../services/incidentItemsReportService';
 import { UserProfile } from '../types';
+import { canPerformAction } from '../utils/actionPermissions';
 
 interface WarehouseIncidentReportDetailProps {
   reportId: string;
@@ -38,11 +39,7 @@ const WarehouseIncidentReportDetail: React.FC<WarehouseIncidentReportDetailProps
   const [disposition, setDisposition] = useState<'return_to_stock' | 'return_to_factory'>('return_to_stock');
   const [decisionNote, setDecisionNote] = useState('');
 
-  const role = String(currentUser?.role || '').toLowerCase();
-  const canReview =
-    currentUser?.user_type === 1
-    || currentUser?.user_type === '1'
-    || ['owner', 'master user', 'master_user'].includes(role);
+  const canReview = canPerformAction('can_approve');
 
   const formatReportDateTime = (dateValue?: string, timeValue?: string) => {
     const date = String(dateValue || '').split('T')[0];
