@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshCw, ChevronLeft, ChevronRight, Search, Printer, Pencil, ReceiptText, Download } from 'lucide-react';
 import StatusBadge from './StatusBadge';
 import ModuleRecordLink from './ModuleRecordLink';
@@ -105,6 +105,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
   const [editTrackingNo, setEditTrackingNo] = useState('');
   const [editLoading, setEditLoading] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
+  const deepLinkAttemptedRef = useRef<string | null>(null);
 
   const isAdminOrOwner = useMemo(() => {
     const session = getLocalAuthSession();
@@ -269,15 +270,26 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
   }, [selectInvoice]);
 
   useEffect(() => {
-    if (!invoices.length) return;
     const invoiceById = initialInvoiceId ? invoices.find(entry => entry.id === initialInvoiceId) : null;
     const invoiceByNo = initialInvoiceRefNo
       ? invoices.find(entry => String(entry.invoice_no || '').toLowerCase() === initialInvoiceRefNo.toLowerCase())
       : null;
     const invoice = invoiceById || invoiceByNo;
-    if (!invoice) return;
-    if (selectedInvoice?.id === invoice.id) return;
-    void selectInvoice(invoice);
+    if (invoice) {
+      if (selectedInvoice?.id !== invoice.id) void selectInvoice(invoice);
+      return;
+    }
+
+    if (!initialInvoiceId || deepLinkAttemptedRef.current === initialInvoiceId || selectedInvoice?.id === initialInvoiceId) return;
+    deepLinkAttemptedRef.current = initialInvoiceId;
+    let active = true;
+    void getInvoice(initialInvoiceId).then((detail) => {
+      if (!active || !detail) return;
+      setSelectedInvoice(detail);
+    });
+    return () => {
+      active = false;
+    };
   }, [initialInvoiceId, initialInvoiceRefNo, invoices, selectInvoice, selectedInvoice?.id]);
 
   useEffect(() => {

@@ -152,6 +152,34 @@ describe('InvoiceView', () => {
     });
   });
 
+  it('loads an initial invoice directly when it is outside the loaded invoice list', async () => {
+    getAllInvoicesMock.mockResolvedValue([
+      {
+        id: 'invoice-current',
+        invoice_no: 'INV-CURRENT',
+        contact_id: 'c-1',
+        sales_date: '2026-09-08',
+        created_at: '2026-09-08T10:00:00',
+        status: InvoiceStatus.SENT,
+        items: [],
+      },
+    ]);
+    getInvoiceMock.mockResolvedValue({
+      id: 'invoice-old',
+      invoice_no: 'INV-OLD',
+      contact_id: 'c-1',
+      sales_date: '2025-12-15',
+      created_at: '2025-12-15T10:00:00',
+      status: InvoiceStatus.SENT,
+      items: [],
+    });
+
+    render(<InvoiceView initialInvoiceId="invoice-old" />);
+
+    await waitFor(() => expect(getInvoiceMock).toHaveBeenCalledWith('invoice-old'));
+    expect(screen.getByDisplayValue('INV-OLD')).toBeInTheDocument();
+  });
+
   it('warns and does not download when Export JPEG is clicked without a selected invoice', async () => {
     getAllInvoicesMock.mockResolvedValue([]);
 
