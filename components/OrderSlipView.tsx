@@ -32,6 +32,7 @@ import { normalizePriceGroup } from '../constants/pricingGroups';
 import OrderSlipPrintPreview from './OrderSlipPrintPreview';
 import { persistedVipDiscount } from '../utils/vipDocumentDiscount';
 import VipDocumentTotals from './VipDocumentTotals';
+import VipStandingBadge from './VipStandingBadge';
 import {
   dispatchWorkflowNotification,
   markNotificationsAsReadByEntityKey,
@@ -812,7 +813,10 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
 
         <section ref={orderSlipExportRef} className="min-h-[456px] overflow-hidden rounded-[5px] border border-[#d7d7d7] bg-white">
           <div className="flex h-[64px] items-center justify-between border-b border-[#d7d7d7] px-5">
-            <div className="relative flex h-full items-center text-[18px] font-semibold text-[#29475f] after:absolute after:bottom-[-1px] after:left-0 after:h-px after:w-[113px] after:bg-[#6a92b3]">ORDER SLIP</div>
+            <div className="flex items-center gap-3">
+              <div className="relative flex h-full items-center text-[18px] font-semibold text-[#29475f] after:absolute after:bottom-[-1px] after:left-0 after:h-px after:w-[113px] after:bg-[#6a92b3]">ORDER SLIP</div>
+              <VipStandingBadge tier={selectedSlip?.vip_tier} />
+            </div>
             <div className="flex items-center gap-[24px]">
               <button
                 type="button"

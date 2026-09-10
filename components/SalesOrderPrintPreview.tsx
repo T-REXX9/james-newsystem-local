@@ -3,6 +3,7 @@ import { Printer, XCircle } from 'lucide-react';
 import { Contact, SalesOrder } from '../types';
 import { persistedVipDiscount } from '../utils/vipDocumentDiscount';
 import VipDocumentTotals from './VipDocumentTotals';
+import VipStandingBadge from './VipStandingBadge';
 
 interface SalesOrderPrintPreviewProps {
   order: SalesOrder;
@@ -246,9 +247,12 @@ const SalesOrderPrintPreview: React.FC<SalesOrderPrintPreviewProps> = ({
         style={captureMode ? { width: '1100px' } : undefined}
       >
         <div className="sales-order-print-body">
-          <h1 className="sales-order-title">
-            <u>SALES ORDER</u>
-          </h1>
+          <div className="flex items-center justify-center gap-3">
+            <h1 className="sales-order-title">
+              <u>SALES ORDER</u>
+            </h1>
+            <VipStandingBadge tier={order.vip_tier} print />
+          </div>
           <p className="sales-order-number">
             <strong>SO No.:</strong> {order.order_no || '-'}
           </p>

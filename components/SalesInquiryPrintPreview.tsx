@@ -3,6 +3,7 @@ import { Printer, XCircle } from 'lucide-react';
 import { Contact, SalesInquiry } from '../types';
 import { persistedVipDiscount } from '../utils/vipDocumentDiscount';
 import VipDocumentTotals from './VipDocumentTotals';
+import VipStandingBadge from './VipStandingBadge';
 
 interface SalesInquiryPrintPreviewProps {
   inquiry: SalesInquiry;
@@ -267,21 +268,24 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
         style={captureMode ? { width: '1100px' } : undefined}
       >
         <div className="sales-inquiry-print-body">
-          <table className="sales-inquiry-title-table">
-            <tbody>
-              <tr>
-                <td style={{ width: '33%' }}>&nbsp;</td>
-                <td style={{ width: '34%', textAlign: 'center' }}>
-                  <h3>
-                    <u>CUSTOMER INQUIRY</u>
-                  </h3>
-                </td>
-                <td style={{ width: '33%', textAlign: 'right' }}>
-                  <h5>{inquiryNumberLabel || inquiry.inquiry_no || '-'}</h5>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <div className="flex items-center justify-center gap-3">
+            <table className="sales-inquiry-title-table">
+              <tbody>
+                <tr>
+                  <td style={{ width: '33%' }}>&nbsp;</td>
+                  <td style={{ width: '34%', textAlign: 'center' }}>
+                    <h3>
+                      <u>CUSTOMER INQUIRY</u>
+                    </h3>
+                  </td>
+                  <td style={{ width: '33%', textAlign: 'right' }}>
+                    <h5>{inquiryNumberLabel || inquiry.inquiry_no || '-'}</h5>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <VipStandingBadge tier={inquiry.vip_tier} print />
+          </div>
 
           <table className="sales-inquiry-meta-table" style={{ marginTop: '0.55rem' }}>
             <tbody>

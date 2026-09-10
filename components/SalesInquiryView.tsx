@@ -66,6 +66,7 @@ import {
   type VipDealDocument,
 } from '../utils/vipDocumentDiscount';
 import VipDocumentTotals from './VipDocumentTotals';
+import VipStandingBadge from './VipStandingBadge';
 import { fetchCouriers, CourierRecord } from '../services/courierLocalApiService';
 import { fetchRemarkTemplates, RemarkTemplateRecord } from '../services/remarkTemplateLocalApiService';
 import {
@@ -1623,7 +1624,10 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
         <section ref={salesInquiryExportRef} className="min-h-[695px] overflow-visible rounded-[5px] border border-[#d7d7d7] bg-white">
           <div className="flex h-[64px] items-center justify-between border-b border-[#d7d7d7] px-5">
-            <div className="relative flex h-full items-center text-[18px] font-semibold text-[#29475f] after:absolute after:bottom-[-1px] after:left-0 after:h-px after:w-[135px] after:bg-[#6a92b3]">SALES INQUIRY</div>
+            <div className="flex items-center gap-3">
+              <div className="relative flex h-full items-center text-[18px] font-semibold text-[#29475f] after:absolute after:bottom-[-1px] after:left-0 after:h-px after:w-[135px] after:bg-[#6a92b3]">SALES INQUIRY</div>
+              <VipStandingBadge tier={vipDiscount.tier} />
+            </div>
             <div className="flex items-center gap-[28px]">
               <button
                 type="button"

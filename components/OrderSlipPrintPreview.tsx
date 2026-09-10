@@ -4,6 +4,7 @@ import { Contact, OrderSlip } from '../types';
 import { getLocalAuthSession } from '../services/localAuthService';
 import { persistedVipDiscount } from '../utils/vipDocumentDiscount';
 import VipDocumentTotals from './VipDocumentTotals';
+import VipStandingBadge from './VipStandingBadge';
 
 interface OrderSlipPrintPreviewProps {
   orderSlip: OrderSlip;
@@ -264,7 +265,10 @@ const OrderSlipPrintPreview: React.FC<OrderSlipPrintPreviewProps> = ({
         style={captureMode ? { width: '1100px' } : undefined}
       >
         <div className="order-slip-print-body">
-          <h1 className="order-slip-title">ORDER SLIP</h1>
+          <div className="flex items-center justify-center gap-3">
+            <h1 className="order-slip-title">ORDER SLIP</h1>
+            <VipStandingBadge tier={orderSlip.vip_tier} print />
+          </div>
           <p className="order-slip-number">
             <strong>DR No.:</strong> {orderSlip.slip_no || '-'}
           </p>

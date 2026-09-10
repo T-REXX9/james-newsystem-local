@@ -42,6 +42,7 @@ import { exportPrintSheetAsJpeg } from '../utils/exportPrintSheetJpeg';
 import { persistedVipDiscount } from '../utils/vipDocumentDiscount';
 import { DISPLAY_TIME_ZONE, formatCustomerSince, formatDate as formatDisplayDate } from '../utils/formatUtils';
 import VipDocumentTotals from './VipDocumentTotals';
+import VipStandingBadge from './VipStandingBadge';
 import { canPerformAction } from '../utils/actionPermissions';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
@@ -959,7 +960,10 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
 
         <section ref={salesOrderExportRef} className="min-h-[576px] overflow-hidden rounded-[5px] border border-[#d7d7d7] bg-white">
           <div className="flex h-[64px] items-center justify-between border-b border-[#d7d7d7] px-5">
-            <div className="relative flex h-full items-center text-[18px] font-semibold text-[#29475f] after:absolute after:bottom-[-1px] after:left-0 after:h-px after:w-[135px] after:bg-[#6a92b3]">SALES ORDER</div>
+            <div className="flex items-center gap-3">
+              <div className="relative flex h-full items-center text-[18px] font-semibold text-[#29475f] after:absolute after:bottom-[-1px] after:left-0 after:h-px after:w-[135px] after:bg-[#6a92b3]">SALES ORDER</div>
+              <VipStandingBadge tier={selectedOrder?.vip_tier} />
+            </div>
             <div className="flex items-center gap-[24px]">
               <button
                 type="button"
