@@ -353,7 +353,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
   const fieldInput = (field: keyof ProductForm, placeholder: string, type: 'text' | 'number' = 'text') => (
     <input
       type={type}
-      value={type === 'number' && Number(formData[field] || 0) === 0 ? '' : String(formData[field] ?? '')}
+      value={String(formData[field] ?? '')}
       onChange={(event) => updateField(field, type === 'number' ? Number(event.target.value || 0) : event.target.value)}
       placeholder={placeholder}
       className={inputClass}

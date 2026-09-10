@@ -117,4 +117,27 @@ describe('OrderSlipView', () => {
     await waitFor(() => expect(getOrderSlipMock).toHaveBeenCalledWith('slip-old'));
     expect(screen.getByDisplayValue('N-OLD')).toBeInTheDocument();
   });
+
+  it('finishes opening a deep-linked order slip under React Strict Mode when it is outside the list', async () => {
+    getAllOrderSlipsMock.mockResolvedValue([]);
+    getOrderSlipMock.mockResolvedValue({
+      id: 'slip-ledger',
+      slip_no: 'N-LEDGER',
+      order_id: 'so-ledger',
+      contact_id: 'contact-1',
+      sales_date: '2025-12-15',
+      created_at: '2025-12-15T10:00:00',
+      sales_person: 'Jane',
+      status: OrderSlipStatus.FINALIZED,
+      items: [],
+    });
+
+    render(
+      <React.StrictMode>
+        <OrderSlipView initialSlipId="slip-ledger" />
+      </React.StrictMode>
+    );
+
+    expect(await screen.findByDisplayValue('N-LEDGER')).toBeInTheDocument();
+  });
 });

@@ -281,11 +281,13 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
     }
 
     if (!initialInvoiceId || deepLinkAttemptedRef.current === initialInvoiceId || selectedInvoice?.id === initialInvoiceId) return;
-    deepLinkAttemptedRef.current = initialInvoiceId;
+    // Mark attempted only after this effect instance completes. Setting the ref
+    // before the fetch races with React Strict Mode remounts and drops the record.
     let active = true;
     void getInvoice(initialInvoiceId).then((detail) => {
-      if (!active || !detail) return;
-      setSelectedInvoice(detail);
+      if (!active) return;
+      deepLinkAttemptedRef.current = initialInvoiceId;
+      if (detail) setSelectedInvoice(detail);
     });
     return () => {
       active = false;

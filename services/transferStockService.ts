@@ -64,7 +64,10 @@ const parseApiErrorMessage = async (response: Response): Promise<string> => {
 };
 
 const requestApi = async (url: string, init?: RequestInit): Promise<any> => {
-  const response = await fetch(url, init);
+  const session = getLocalAuthSession();
+  const headers = new Headers(init?.headers);
+  if (session?.token) headers.set('Authorization', `Bearer ${session.token}`);
+  const response = await fetch(url, { ...init, headers });
   if (!response.ok) {
     throw new Error(await parseApiErrorMessage(response));
   }
@@ -538,8 +541,10 @@ export async function deleteTransferStockItem(itemId: string): Promise<void> {
  * Get available stock for an item in a warehouse
  */
 export async function getAvailableStock(itemId: string, warehouseId: string): Promise<number> {
+  const session = getLocalAuthSession();
   const response = await fetch(
-    `${API_BASE_URL}/products/${encodeURIComponent(String(itemId))}?main_id=${encodeURIComponent(String(getMainId()))}`
+    `${API_BASE_URL}/products/${encodeURIComponent(String(itemId))}?main_id=${encodeURIComponent(String(getMainId()))}`,
+    { headers: session?.token ? { Authorization: `Bearer ${session.token}` } : undefined }
   );
 
   if (!response.ok) {

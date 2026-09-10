@@ -31,7 +31,8 @@ const parseApiError = async (response: Response): Promise<string> => {
 };
 
 const requestApi = async (url: string): Promise<any> => {
-  const response = await fetch(url);
+  const session = getLocalAuthSession();
+  const response = await fetch(url, { headers: session?.token ? { Authorization: `Bearer ${session.token}` } : undefined });
   if (!response.ok) throw new Error(await parseApiError(response));
   const payload = await response.json();
   if (!payload?.ok) throw new Error(payload?.error || 'API request failed');

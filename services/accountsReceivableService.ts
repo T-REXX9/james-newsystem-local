@@ -56,7 +56,10 @@ const requestApi = async (url: string, init?: RequestInit): Promise<any> => {
 
   let response: Response;
   try {
-    response = await fetch(url, { ...init, signal: controller.signal });
+    const session = getLocalAuthSession();
+    const headers = new Headers(init?.headers);
+    if (session?.token) headers.set('Authorization', `Bearer ${session.token}`);
+    response = await fetch(url, { ...init, headers, signal: controller.signal });
   } catch (error: any) {
     if (error?.name === 'AbortError') {
       throw new Error('Accounts receivable request timed out. Please try again.');

@@ -4,6 +4,7 @@ import type {
   FastSlowReportFilters,
   MovementCategory,
 } from '../types';
+import { getLocalAuthSession } from './localAuthService';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
@@ -20,7 +21,8 @@ const parseApiErrorMessage = async (response: Response): Promise<string> => {
 };
 
 const requestApi = async (url: string): Promise<any> => {
-  const response = await fetch(url);
+  const session = getLocalAuthSession();
+  const response = await fetch(url, { headers: session?.token ? { Authorization: `Bearer ${session.token}` } : undefined });
   if (!response.ok) {
     throw new Error(await parseApiErrorMessage(response));
   }

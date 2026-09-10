@@ -180,6 +180,27 @@ describe('InvoiceView', () => {
     expect(screen.getByDisplayValue('INV-OLD')).toBeInTheDocument();
   });
 
+  it('finishes opening a deep-linked invoice under React Strict Mode when it is outside the list', async () => {
+    getAllInvoicesMock.mockResolvedValue([]);
+    getInvoiceMock.mockResolvedValue({
+      id: 'invoice-ledger',
+      invoice_no: 'INV-LEDGER',
+      contact_id: 'c-1',
+      sales_date: '2025-12-15',
+      created_at: '2025-12-15T10:00:00',
+      status: InvoiceStatus.SENT,
+      items: [],
+    });
+
+    render(
+      <React.StrictMode>
+        <InvoiceView initialInvoiceId="invoice-ledger" />
+      </React.StrictMode>
+    );
+
+    expect(await screen.findByDisplayValue('INV-LEDGER')).toBeInTheDocument();
+  });
+
   it('warns and does not download when Export JPEG is clicked without a selected invoice', async () => {
     getAllInvoicesMock.mockResolvedValue([]);
 

@@ -302,10 +302,13 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
     }
 
     if (!initialSlipId || deepLinkAttemptedRef.current === initialSlipId || selectedSlip?.id === initialSlipId) return;
-    deepLinkAttemptedRef.current = initialSlipId;
+    // Mark attempted only after this effect instance completes. Setting the ref
+    // before the fetch races with React Strict Mode remounts and drops the record.
     let active = true;
     void getOrderSlip(initialSlipId).then((detail) => {
-      if (!active || !detail) return;
+      if (!active) return;
+      deepLinkAttemptedRef.current = initialSlipId;
+      if (!detail) return;
       setSelectedSlip(detail);
       setTrackingNoDraft(detail.tracking_no || '');
     });

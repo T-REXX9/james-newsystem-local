@@ -118,7 +118,10 @@ export const fetchStockMovementLogs = async (
   if (filters.date_to) params.set('date_to', filters.date_to);
   if (filters.search) params.set('search', filters.search);
 
-  const response = await fetch(`${API_BASE_URL}/stock-movements?${params.toString()}`);
+  const session = getLocalAuthSession();
+  const response = await fetch(`${API_BASE_URL}/stock-movements?${params.toString()}`, {
+    headers: session?.token ? { Authorization: `Bearer ${session.token}` } : undefined,
+  });
   if (!response.ok) {
     throw new Error(await parseApiErrorMessage(response));
   }
@@ -143,7 +146,7 @@ export const fetchStockMovementLogs = async (
 export const createStockMovementLog = async (payload: Record<string, unknown>) => {
   const response = await fetch(`${API_BASE_URL}/stock-movements`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(getLocalAuthSession()?.token ? { Authorization: `Bearer ${getLocalAuthSession()!.token}` } : {}) },
     body: JSON.stringify({
       ...payload,
       main_id: API_MAIN_ID,
@@ -157,7 +160,7 @@ export const createStockMovementLog = async (payload: Record<string, unknown>) =
 export const updateStockMovementLog = async (id: string | number, payload: Record<string, unknown>) => {
   const response = await fetch(`${API_BASE_URL}/stock-movements/${encodeURIComponent(String(id))}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(getLocalAuthSession()?.token ? { Authorization: `Bearer ${getLocalAuthSession()!.token}` } : {}) },
     body: JSON.stringify({
       ...payload,
       main_id: API_MAIN_ID,
@@ -172,7 +175,7 @@ export const deleteStockMovementLog = async (id: string | number) => {
   const params = new URLSearchParams({ main_id: String(API_MAIN_ID) });
   const response = await fetch(
     `${API_BASE_URL}/stock-movements/${encodeURIComponent(String(id))}?${params.toString()}`,
-    { method: 'DELETE' }
+    { method: 'DELETE', headers: getLocalAuthSession()?.token ? { Authorization: `Bearer ${getLocalAuthSession()!.token}` } : undefined }
   );
   if (!response.ok) throw new Error(await parseApiErrorMessage(response));
   return true;

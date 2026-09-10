@@ -377,11 +377,11 @@ describe('CustomerLedgerView', () => {
     await waitFor(() => {
       expect(screen.getByRole('link', { name: 'Open Invoice INV-001' })).toHaveAttribute(
         'href',
-        '#/sales-transaction-invoice?invoiceId=INV-REF-001',
+        '#/sales-transaction-invoice?invoiceId=INV-REF-001&invoiceRefNo=INV-001',
       );
       expect(screen.getByRole('link', { name: 'Open Order Slip OR-002' })).toHaveAttribute(
         'href',
-        '#/sales-transaction-order-slip?orderSlipId=OR-REF-002',
+        '#/sales-transaction-order-slip?orderSlipId=OR-REF-002&orderSlipRefNo=OR-002',
       );
     });
 
@@ -395,12 +395,12 @@ describe('CustomerLedgerView', () => {
     expect(navigationEvents).toHaveLength(2);
     expect(navigationEvents[0].detail).toEqual({
       tab: 'sales-transaction-invoice',
-      payload: { invoiceId: 'INV-REF-001' },
+      payload: { invoiceId: 'INV-REF-001', invoiceRefNo: 'INV-001' },
       mode: 'push',
     });
     expect(navigationEvents[1].detail).toEqual({
       tab: 'sales-transaction-order-slip',
-      payload: { orderSlipId: 'OR-REF-002' },
+      payload: { orderSlipId: 'OR-REF-002', orderSlipRefNo: 'OR-002' },
       mode: 'push',
     });
   });

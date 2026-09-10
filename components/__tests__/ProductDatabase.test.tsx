@@ -186,6 +186,18 @@ describe('ProductDatabase', () => {
     openWindow.mockRestore();
   });
 
+  it('keeps zero visible when clearing a product reorder quantity', async () => {
+    render(<ProductDatabase currentUser={{ role: 'Owner' } as any} />);
+
+    await screen.findByText('QK2-001');
+    fireEvent.click(screen.getByTitle('View full details'));
+
+    const reorderQuantity = screen.getAllByRole('spinbutton')[0];
+    fireEvent.change(reorderQuantity, { target: { value: '0' } });
+
+    expect(reorderQuantity).toHaveValue(0);
+  });
+
   it('loads and appends the next product batch when the list reaches the bottom', async () => {
     const secondProduct = {
       ...sampleProduct,

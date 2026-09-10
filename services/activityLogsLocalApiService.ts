@@ -45,7 +45,10 @@ const parseApiError = async (response: Response): Promise<string> => {
 };
 
 const requestApi = async (url: string, init?: RequestInit): Promise<any> => {
-  const response = await fetch(url, init);
+  const session = getLocalAuthSession();
+  const headers = new Headers(init?.headers);
+  if (session?.token) headers.set('Authorization', `Bearer ${session.token}`);
+  const response = await fetch(url, { ...init, headers });
   if (!response.ok) {
     throw new Error(await parseApiError(response));
   }

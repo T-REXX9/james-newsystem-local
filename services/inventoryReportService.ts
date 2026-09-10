@@ -1,3 +1,5 @@
+import { getLocalAuthSession } from './localAuthService';
+
 export interface InventoryReportFilters {
   description?: string;
   partNumber?: string;
@@ -45,7 +47,8 @@ const parseApiErrorMessage = async (response: Response): Promise<string> => {
 };
 
 const requestApi = async (url: string): Promise<any> => {
-  const response = await fetch(url);
+  const session = getLocalAuthSession();
+  const response = await fetch(url, { headers: session?.token ? { Authorization: `Bearer ${session.token}` } : undefined });
   if (!response.ok) {
     throw new Error(await parseApiErrorMessage(response));
   }

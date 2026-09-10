@@ -1,3 +1,5 @@
+import { getLocalAuthSession } from './localAuthService';
+
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 
 export type DashboardKpis = {
@@ -192,7 +194,10 @@ export const fetchManagementDashboardData = async (
     main_id: String(mainId),
     year: String(year),
   });
-  const response = await fetch(`${API_BASE_URL}/daily-call-monitoring/sales-performance-dashboard?${query.toString()}`);
+  const session = getLocalAuthSession();
+  const response = await fetch(`${API_BASE_URL}/daily-call-monitoring/sales-performance-dashboard?${query.toString()}`, {
+    headers: session?.token ? { Authorization: `Bearer ${session.token}` } : undefined,
+  });
   if (!response.ok) throw new Error(`Sales performance dashboard request failed (${response.status})`);
   const payload = await response.json();
   return normalizeDashboardData(payload?.data || {}, year);
