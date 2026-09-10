@@ -1417,6 +1417,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     canAdd &&
     selectedInquiry &&
     !isCreatingNew &&
+    !selectedInquiry.so_refno &&
     !isReadOnly &&
     (
       (selectedInquiry.status === SalesInquiryStatus.DRAFT && canEdit) ||
