@@ -21,6 +21,7 @@ import { parseSupabaseError } from '../utils/errorHandler';
 import { validateMinLength, validateRequired } from '../utils/formValidation';
 import { getCentralStock } from '../utils/productStock';
 import { canPerformAction } from '../utils/actionPermissions';
+import RecordImagePicker from './RecordImagePicker';
 
 interface ProductDatabaseProps {
   currentUser: UserProfile | null;
@@ -628,6 +629,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
                   <option value="Inactive">Hide</option>
                 </select>
               </LegacyField>
+              <div className="xl:col-span-2"><RecordImagePicker value={formData.recordImage} position={formData.recordImagePosition} onChange={(recordImage) => updateField('recordImage', recordImage)} onPositionChange={(recordImagePosition) => updateField('recordImagePosition', recordImagePosition)} label="Product image" /></div>
             </div>}
 
             {detailTab === 'suppliers' && <div>
@@ -784,6 +786,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
                         >
                           <td className="border border-[#ddd] px-0.5 py-2 text-center align-top font-semibold">
                             {productIndex + 1}
+                            {product.recordImage ? <img src={product.recordImage} alt="" className="mx-auto mt-1 h-8 w-8 rounded object-cover" style={{ objectPosition: product.recordImagePosition?.replace(',', '% ') }} onError={(event) => { event.currentTarget.style.display = 'none'; }} /> : null}
                             <button type="button" onClick={(event) => { event.stopPropagation(); selectProduct(product); }} className="mt-1 block w-full text-[#315574]" title="View full details"><Eye className="mx-auto h-3 w-3" /></button>
                           </td>
                           <td className="border border-[#ddd] px-1 py-2 align-top overflow-hidden whitespace-nowrap">

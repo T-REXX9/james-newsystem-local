@@ -309,6 +309,8 @@ export type CustomerVatType = 'Exclusive' | 'Inclusive' | 'Zero-Rated';
 
 export interface Contact {
   id: string;
+  recordImage?: string;
+  recordImagePosition?: string;
   // Core Identifiers
   company: string; // "customer_name"
   pastName?: string;
@@ -452,6 +454,8 @@ export interface PipelineColumn {
 // Product Database Type
 export interface Product {
   id: string;
+  recordImage?: string;
+  recordImagePosition?: string;
   part_no: string;
   oem_no: string;
   brand: string;

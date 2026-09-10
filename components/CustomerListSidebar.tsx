@@ -188,6 +188,8 @@ const CustomerListSidebar: React.FC<CustomerListSidebarProps> = ({
                                         </div>
                                     </div>
 
+                                    {customer.recordImage ? <img src={customer.recordImage} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover" style={{ objectPosition: customer.recordImagePosition?.replace(',', '% ') }} onError={(event) => { event.currentTarget.style.display = 'none'; }} /> : null}
+
                                     {isSelected && (
                                         <ChevronRight className="w-4 h-4 text-brand-blue opacity-100 self-center" />
                                     )}

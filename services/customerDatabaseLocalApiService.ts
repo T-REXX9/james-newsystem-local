@@ -84,6 +84,8 @@ interface ApiCustomerRow {
   profile_type?: string | null;
   notes?: string | null;
   duplicate_override_reason?: string | null;
+  record_image?: string | null;
+  record_image_position?: string | null;
   contacts?: ApiContactPersonRow[] | null;
   contact_persons?: ApiContactPersonRow[] | null;
   terms_history?: ApiCustomerTermsRow[] | null;
@@ -349,6 +351,8 @@ export const mapApiCustomerToContact = (row: ApiCustomerRow): LocalContact => {
     phone: primary?.telephone || primary?.mobile || fallbackPhone || fallbackMobile,
     mobile: primary?.mobile || fallbackMobile,
     avatar: `https://i.pravatar.cc/150?u=${encodeURIComponent(String(row?.session_id ?? row?.id ?? company ?? Date.now()))}`,
+    recordImage: sanitizeLegacyString(row?.record_image || ''),
+    recordImagePosition: sanitizeLegacyString(row?.record_image_position || '50,50') || '50,50',
     dealValue: 0,
     stage: DealStage.NEW,
     lastContactDate: sanitizeLegacyString(row?.date_registered || ''),
@@ -404,6 +408,8 @@ export const mapContactPayloadToApi = (contact: ContactPayloadWithSalesPersonId)
     profile_type: status === 3 ? 'Prospect' : 'Old',
     verification: verificationForUiStatus(contact?.status as CustomerStatus | undefined)
       ?? (status === 3 ? String(contact?.verification || 'Unverified') : ''),
+    record_image: String(contact?.recordImage || ''),
+    record_image_position: String(contact?.recordImagePosition || '50,50'),
   };
 };
 
@@ -443,6 +449,8 @@ export const mapContactUpdatesToApi = (contact: Partial<ContactPayloadWithSalesP
   if (hasOwn(contact, 'comment')) payload.notes = String(contact.comment || '');
   if (hasOwn(contact, 'debtType')) payload.debt_type = String(contact.debtType || 'Good');
   if (hasOwn(contact, 'verification')) payload.verification = String(contact.verification || '');
+  if (hasOwn(contact, 'recordImage')) payload.record_image = String(contact.recordImage || '');
+  if (hasOwn(contact, 'recordImagePosition')) payload.record_image_position = String(contact.recordImagePosition || '50,50');
 
   if (hasOwn(contact, 'status')) {
     const status = mapUiStatusToApi(contact.status as CustomerStatus | undefined);

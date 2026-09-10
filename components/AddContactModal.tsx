@@ -12,6 +12,7 @@ import { parseSupabaseError } from '../utils/errorHandler';
 import { formatCustomerSince } from '../utils/formatUtils';
 import { useToast } from './ToastProvider';
 import { fetchSimilarCustomerNames, type SimilarCustomerNameMatch } from '../services/customerDatabaseLocalApiService';
+import RecordImagePicker from './RecordImagePicker';
 
 const TRANSACTION_TYPE_OPTIONS = ['Order Slip', 'Invoice'] as const;
 
@@ -116,6 +117,8 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     salesHistory: [],
     topProducts: [],
     avatar: `https://i.pravatar.cc/150?u=${Date.now()}`,
+    recordImage: '',
+    recordImagePosition: '50,50',
   });
 
   const buildFormDataFromContact = (contact?: Contact): Partial<Contact> => ({
@@ -155,6 +158,8 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     salesHistory: contact?.salesHistory || [],
     topProducts: contact?.topProducts || [],
     avatar: contact?.avatar || `https://i.pravatar.cc/150?u=${Date.now()}`,
+    recordImage: contact?.recordImage || '',
+    recordImagePosition: contact?.recordImagePosition || '50,50',
   });
 
   const buildContactPersonsFromContact = (contact?: Contact): ContactPersonDraft[] => {
@@ -295,6 +300,8 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
         phone: customerPhone.length <= 15 ? customerPhone : '',
         mobile: customerMobile.length <= 15 ? customerMobile : '',
         avatar: formData.avatar || `https://i.pravatar.cc/150?u=${Date.now()}`,
+        recordImage: formData.recordImage || '',
+        recordImagePosition: formData.recordImagePosition || '50,50',
         dealValue: formData.dealValue ?? 0,
         stage: (formData.stage as DealStage) || DealStage.NEW,
         lastContactDate: formData.lastContactDate || today,
@@ -532,6 +539,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                            <input className="input" value={formData.referBy} onChange={e => setFormData({...formData, referBy: e.target.value})} />
                        </div>
                   </div>
+                  <div className="mt-4 max-w-sm"><RecordImagePicker value={formData.recordImage} position={formData.recordImagePosition} onChange={(recordImage) => setFormData({ ...formData, recordImage })} onPositionChange={(recordImagePosition) => setFormData({ ...formData, recordImagePosition })} label="Customer / Prospect image" /></div>
               </section>
 
               {/* Address */}

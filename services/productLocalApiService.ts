@@ -99,6 +99,8 @@ const normalizeApiProduct = (raw: any): Product => ({
   return_report_count: toNumber(raw?.return_report_count),
   last_price_update: String(raw?.last_price_update ?? ''),
   transaction_count: toNumber(raw?.transaction_count),
+  recordImage: String(raw?.record_image ?? ''),
+  recordImagePosition: String(raw?.record_image_position ?? '50,50'),
   is_deleted: toNumber(raw?.is_deleted) === 1,
 });
 
