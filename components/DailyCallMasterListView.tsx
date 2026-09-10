@@ -303,6 +303,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const [vipConfig, setVipConfig] = useState<VipTierConfig>(DEFAULT_VIP_TIER_CONFIG);
   const [salesAgents, setSalesAgents] = useState<UserProfile[]>([]);
   const [teams, setTeams] = useState<TeamRecord[]>([]);
+  const [selectedAssignmentAgentId, setSelectedAssignmentAgentId] = useState('');
   const [selectedAssignmentTeamId, setSelectedAssignmentTeamId] = useState('');
   const [loadingSalesAgents, setLoadingSalesAgents] = useState(true);
   const [loadingTeams, setLoadingTeams] = useState(true);
@@ -640,6 +641,52 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     }
   }, [activeCategory, addToast, loadRows, selectedAssignmentTeamId, teams]);
 
+  const handleAssignAgentToCategory = useCallback(async () => {
+    if (!selectedAssignmentAgentId || activeCategory.rows.length === 0) return;
+    const shouldClearAssignment = selectedAssignmentAgentId === '__unassigned__';
+    const agent = shouldClearAssignment
+      ? null
+      : salesAgents.find((item) => String(item.id) === selectedAssignmentAgentId);
+    if (!agent && !shouldClearAssignment) return;
+
+    const ids = activeCategory.rows.map((row) => row.id);
+    const previousRows = rowsRef.current;
+    const assignedTo = agent?.full_name?.trim() || 'Unassigned';
+    const assignedAgentId = agent?.id || '';
+    const assignedDate = agent ? formatAssignmentDateLabel() : undefined;
+    setRows((prev) => prev.map((row) => ids.includes(row.id)
+      ? { ...row, assignedTo, assignedAgentId, assignedDate }
+      : row));
+    setAssigningCustomerId('__agent__');
+
+    try {
+      await bulkUpdateContacts(ids, {
+        __salesPersonId: assignedAgentId,
+        salesman: assignedTo === 'Unassigned' ? '' : assignedTo,
+        assignedAgent: assignedTo === 'Unassigned' ? '' : assignedTo,
+      } as any);
+      if (fullCustomerRowsRef.current) {
+        fullCustomerRowsRef.current = fullCustomerRowsRef.current.map((row) => ids.includes(row.id)
+          ? { ...row, assignedTo, assignedDate }
+          : row);
+      }
+      addToast({
+        type: 'success',
+        title: agent ? 'Agent assigned' : 'Agent assignment cleared',
+        description: agent
+          ? `${agent.full_name} is now assigned to ${activeCategory.label}.`
+          : `Agent assignment cleared for ${activeCategory.label}.`,
+      });
+      setSelectedAssignmentAgentId('');
+      await loadRows(false, true);
+    } catch {
+      setRows(previousRows);
+      addToast({ type: 'error', title: 'Unable to assign agent', description: 'Please try again.' });
+    } finally {
+      setAssigningCustomerId(null);
+    }
+  }, [activeCategory, addToast, loadRows, salesAgents, selectedAssignmentAgentId]);
+
   useEffect(() => {
     setVisibleLimit(INITIAL_VISIBLE_ROWS);
   }, [activeCategoryId, colorFilter, currentVipFilter, debouncedSearch, lastPurchaseFilter, nextVipFilter]);
@@ -872,10 +919,29 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 {showMasterActions && activeCategory.id !== 'blocked' && (
                   <div className="flex items-center gap-2">
                     <select
+                      aria-label={`Assign sales agent to ${activeCategory.label}`}
+                      value={selectedAssignmentAgentId}
+                      onChange={(event) => setSelectedAssignmentAgentId(event.target.value)}
+                      disabled={loadingSalesAgents || assigningCustomerId === '__agent__' || assigningCustomerId === '__team__'}
+                      className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold"
+                    >
+                      <option value="">Assign sales agent to list...</option>
+                      <option value="__unassigned__">Clear sales agent from list</option>
+                      {salesAgents.map((agent) => <option key={agent.id} value={agent.id}>{agent.full_name}</option>)}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => void handleAssignAgentToCategory()}
+                      disabled={!selectedAssignmentAgentId || activeCategory.rows.length === 0 || assigningCustomerId === '__agent__' || assigningCustomerId === '__team__'}
+                      className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Assign agent
+                    </button>
+                    <select
                       aria-label={`Assign team to ${activeCategory.label}`}
                       value={selectedAssignmentTeamId}
                       onChange={(event) => setSelectedAssignmentTeamId(event.target.value)}
-                      disabled={loadingTeams || assigningCustomerId === '__team__'}
+                      disabled={loadingTeams || assigningCustomerId === '__agent__' || assigningCustomerId === '__team__'}
                       className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold"
                     >
                       <option value="">Assign team to list...</option>
@@ -884,7 +950,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                     <button
                       type="button"
                       onClick={() => void handleAssignTeamToCategory()}
-                      disabled={!selectedAssignmentTeamId || activeCategory.rows.length === 0 || assigningCustomerId === '__team__'}
+                      disabled={!selectedAssignmentTeamId || activeCategory.rows.length === 0 || assigningCustomerId === '__agent__' || assigningCustomerId === '__team__'}
                       className="rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Assign {activeCategory.label}

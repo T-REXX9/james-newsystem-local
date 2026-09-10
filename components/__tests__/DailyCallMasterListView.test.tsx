@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import userEvent from '@testing-library/user-event';
 import DailyCallMasterListView from '../DailyCallMasterListView';
 import { createCustomerLogForDailyCall, fetchCustomersForDailyCall, fetchDailyCallMasterList } from '../../services/dailyCallMonitoringService';
-import { updateContact, fetchSalesAgents } from '../../services/customerDatabaseLocalApiService';
+import { bulkUpdateContacts, updateContact, fetchSalesAgents } from '../../services/customerDatabaseLocalApiService';
 import { getVipTierConfig } from '../../services/vipTierSettingsService';
 import type { UserProfile } from '../../types';
 
@@ -24,6 +24,7 @@ vi.mock('../../services/dailyCallMonitoringService', () => ({
 vi.mock('../../services/customerDatabaseLocalApiService', () => ({
   createContact: vi.fn(),
   updateContact: vi.fn(),
+  bulkUpdateContacts: vi.fn().mockResolvedValue(undefined),
   fetchSalesAgents: vi.fn().mockResolvedValue([
     { id: 'agent-1', full_name: 'Joan Jerusalem', email: '', role: 'Sales Agent' },
     { id: 'agent-2', full_name: 'Apostol Ella', email: '', role: 'Sales Agent' },
@@ -492,6 +493,53 @@ describe('DailyCallMasterListView', () => {
       );
     });
     expect(screen.getByLabelText('Assign sales agent for Priority Buyer Shop')).toHaveValue('agent-1');
+  });
+
+  it('assigns the active category to one sales agent in bulk', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 2 },
+      items: [
+        {
+          id: 'priority-1', shopName: 'Priority Buyer Shop', province: 'Manila', city: 'Manila',
+          contactNumber: '0930', assignedTo: 'Unassigned', listCategory: 'priority',
+          lastPurchaseDate: 'May 26, 2026', lastPurchaseDateRaw: '2026-05-26', purchaseCount: 1,
+          totalSales: 5000, currentMonthSales: 0, daysSinceLastPurchase: 20,
+          monthsSinceLastPurchase: 0, purchaseAgeGroup: 'two_weeks_to_one_month' as const,
+        },
+        {
+          id: 'priority-2', shopName: 'Second Priority Shop', province: 'Cebu', city: 'Cebu City',
+          contactNumber: '0940', assignedTo: 'Apostol Ella', listCategory: 'priority',
+          lastPurchaseDate: 'May 20, 2026', lastPurchaseDateRaw: '2026-05-20', purchaseCount: 1,
+          totalSales: 6000, currentMonthSales: 0, daysSinceLastPurchase: 26,
+          monthsSinceLastPurchase: 0, purchaseAgeGroup: 'two_weeks_to_one_month' as const,
+        },
+      ],
+    });
+
+    render(<DailyCallMasterListView currentUser={masterUser} />);
+
+    await user.selectOptions(
+      await screen.findByLabelText('Assign sales agent to Priority List'),
+      'agent-1'
+    );
+    await user.click(screen.getByRole('button', { name: 'Assign agent' }));
+
+    await waitFor(() => {
+      expect(bulkUpdateContacts).toHaveBeenCalledWith(
+        ['priority-1', 'priority-2'],
+        expect.objectContaining({
+          __salesPersonId: 'agent-1',
+          salesman: 'Joan Jerusalem',
+          assignedAgent: 'Joan Jerusalem',
+        })
+      );
+    });
+    expect(fetchDailyCallMasterList).toHaveBeenCalledWith({
+      fromDate: '2025-10-01',
+      search: '',
+      forceRefresh: true,
+    });
   });
 
   it('does not change a customer when do-not-contact confirmation is canceled', async () => {
