@@ -91,7 +91,7 @@ const CustomerSearchPanel: React.FC<{
                   }`}
                 >
                   <div className="font-medium truncate">
-                    {customer.company || customer.customerCode || customer.sessionId}
+                    {customer.company.trim() || customer.customerCode.trim() || 'Unnamed customer'}
                   </div>
                   {customer.oldName && (
                     <div className={`truncate text-xs ${isSelected ? 'text-[#dbeafe]' : 'text-[#666]'}`}>

@@ -368,8 +368,10 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
       status: CustomerStatus.PROSPECTIVE,
       verification: 'Unverified',
     });
-    await loadRows(false, true);
     setShowAddProspectModal(false);
+    // Do not keep the modal open while the analytics-heavy master list refreshes.
+    // The background refresh updates the dashboard once it completes.
+    void loadRows(false, true);
     return created;
   }, [loadRows]);
 

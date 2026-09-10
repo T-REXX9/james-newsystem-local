@@ -160,6 +160,19 @@ describe('CustomerLedgerView', () => {
     expect(screen.getByText('Old Name: Alpha Trading')).toBeInTheDocument();
   });
 
+  it('uses a safe placeholder when a customer has no display name or code', async () => {
+    mockGetCustomers.mockResolvedValueOnce([
+      { sessionId: '152021011303113643901', customerCode: '', company: '', oldName: '' },
+    ]);
+
+    render(<CustomerLedgerView />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'Unnamed customer' })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole('option', { name: '152021011303113643901' })).not.toBeInTheDocument();
+  });
+
   it('calls getCustomers with debounced search term', async () => {
     const user = userEvent.setup();
     render(<CustomerLedgerView />);

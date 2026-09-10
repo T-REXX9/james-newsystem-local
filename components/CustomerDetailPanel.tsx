@@ -41,6 +41,9 @@ interface CustomerTermsRow {
     status?: string;
 }
 
+export const formatLastPurchaseForDisplay = (lastPurchaseDate: string | null | undefined): string =>
+    lastPurchaseDate || 'Never';
+
 // Transaction Icon Helper
 const getTransactionIcon = (type: string) => {
     switch (type) {
@@ -313,7 +316,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                 <div className="flex justify-between items-center py-2 border-b border-slate-100 dark:border-slate-800">
                                     <span className="text-sm text-slate-500">Last Purchase</span>
                                     <span className="font-medium text-sm">
-                                        {metrics?.last_purchase_date || contact.lastContactDate || 'Never'}
+                                        {formatLastPurchaseForDisplay(metrics?.last_purchase_date)}
                                     </span>
                                 </div>
                                 <div className="flex justify-between items-center py-2">
