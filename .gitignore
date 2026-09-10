@@ -65,3 +65,7 @@ dist-codex*/
 !*.sql.gz
 # Dated archives under ./backups stay local / are scp'd — only ./backup.sql.gz is shipped for setup.sh.
 /backups/
+
+# Legacy application reference kept locally for migration comparison.
+/application/
+/application.zip
