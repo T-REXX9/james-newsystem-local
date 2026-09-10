@@ -36,6 +36,21 @@ describe('customerLedgerService', () => {
     expect(ledger.metrics.ishinomoto_sales).toBe(42000);
   });
 
+  it('sends the authenticated session when loading customer picker options', async () => {
+    const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue(okResponse({
+      items: [{ session_id: 'cust-1', company: 'Acme' }],
+    }));
+
+    await customerLedgerService.getCustomers();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/customer-database?'),
+      expect.objectContaining({ headers: expect.any(Headers) }),
+    );
+    const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(requestInit.headers).get('Authorization')).toBe('Bearer test-token');
+  });
+
   it('falls back to all sales when older APIs do not return Ishinomoto sales', async () => {
     vi.spyOn(global, 'fetch').mockResolvedValue(okResponse({
       customer: { session_id: 'cust-1', company: 'Acme', customer_code: 'C-1' },
