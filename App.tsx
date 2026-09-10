@@ -86,7 +86,7 @@ import { ToastProvider } from './components/ToastProvider';
 import { NotificationProvider } from './components/NotificationProvider';
 import CustomLoadingSpinner from './components/CustomLoadingSpinner';
 import { AVAILABLE_APP_MODULES, hasActionPermission, isCompanyOwnerRole, isMasterOnlyDashboardRoute, isMasterUserAccount, isMasterUserType, MODULE_ID_ALIASES, ROLE_NAMES } from './constants';
-import { hasBinaryModulePageAccess } from './utils/accessModules';
+import { hasBinaryModulePageAccess, getAccessPageLabel } from './utils/accessModules';
 import {
   getLocalAuthSession,
   LocalAuthSession,
@@ -357,7 +357,10 @@ const App: React.FC = () => {
     const rights = userProfile.access_rights || [];
     const hasExplicitRights = rights.length > 0;
 
-    if (hasExplicitRights && rights.includes('*')) return true;
+    if (hasExplicitRights && rights.includes('*')) {
+      const pageLabel = getAccessPageLabel(canonical);
+      return !pageLabel || hasActionPermission(userProfile, 'can_view', pageLabel);
+    }
 
     // Sales Agents should always reach their home/dashboard even if access_rights is misconfigured.
     if (
@@ -373,7 +376,10 @@ const App: React.FC = () => {
 
     // Step 2: Binary module access — partial leftover page grants do not unlock a module.
     const idsToCheck = expandModuleIds(canonical);
-    return idsToCheck.some((id) => hasBinaryModulePageAccess(rights, id));
+    const grantedPage = idsToCheck.find((id) => hasBinaryModulePageAccess(rights, id));
+    if (!grantedPage) return false;
+    const pageLabel = getAccessPageLabel(grantedPage);
+    return !pageLabel || hasActionPermission(userProfile, 'can_view', pageLabel);
   };
 
   /**
@@ -381,7 +387,7 @@ const App: React.FC = () => {
    * Returns true if the action is allowed, false otherwise.
    * Owner role always has full action permissions.
    */
-  const checkActionPermission = (_moduleId: string, action: 'can_add' | 'can_edit' | 'can_delete' | 'can_post' | 'can_unpost'): boolean => {
+  const checkActionPermission = (_moduleId: string, action: 'can_view' | 'can_add' | 'can_edit' | 'can_delete' | 'can_post' | 'can_unpost'): boolean => {
     if (!userProfile) return false;
     return hasActionPermission(userProfile, action);
   };

@@ -9,8 +9,8 @@ import {
 import type { UserProfile } from '../types';
 import { useKeyboardShortcuts, getShortcutDisplay } from '../hooks/useKeyboardShortcuts';
 import { useSmartDropdownPosition } from '../hooks/useSmartDropdownPosition';
-import { hasBinaryModulePageAccess } from '../utils/accessModules';
-import { isMasterUserAccount, isMasterUserType, isMasterOnlyDashboardRoute, MODULE_ID_ALIASES } from '../constants';
+import { hasBinaryModulePageAccess, getAccessPageLabel } from '../utils/accessModules';
+import { hasActionPermission, isMasterUserAccount, isMasterUserType, isMasterOnlyDashboardRoute, MODULE_ID_ALIASES } from '../constants';
 import { openModuleInNewWindow } from '../utils/workflowNavigate';
 import {
   TOPBAR_MENU_CONFIG,
@@ -78,14 +78,24 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
     const rights = user.access_rights || [];
     const hasExplicitRights = rights.length > 0;
     if (!hasExplicitRights) return false;
-    if (rights.includes('*')) return true;
+    if (rights.includes('*')) {
+      const pageLabel = getAccessPageLabel(canonical);
+      return !pageLabel || hasActionPermission(user, 'can_view', pageLabel);
+    }
 
     // Module checkboxes are binary: leftover partial page grants from a module
     // that is not fully checked must not unlock that top-nav family.
-    if (hasBinaryModulePageAccess(rights, canonical)) return true;
+    if (hasBinaryModulePageAccess(rights, canonical)) {
+      const pageLabel = getAccessPageLabel(canonical);
+      return !pageLabel || hasActionPermission(user, 'can_view', pageLabel);
+    }
 
     const aliases = CANONICAL_TO_ALIASES[canonical] || [];
-    return aliases.some((aliasId) => hasBinaryModulePageAccess(rights, aliasId));
+    return aliases.some((aliasId) => {
+      if (!hasBinaryModulePageAccess(rights, aliasId)) return false;
+      const pageLabel = getAccessPageLabel(aliasId);
+      return !pageLabel || hasActionPermission(user, 'can_view', pageLabel);
+    });
   }, [user]);
 
   const filteredMenus = useMemo(() => {

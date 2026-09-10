@@ -93,6 +93,7 @@ export interface CreateNotificationInput {
 }
 
 export type ActionPermissionEntry = {
+  can_view: boolean;
   can_add: boolean;
   can_edit: boolean;
   can_delete: boolean;
@@ -106,6 +107,7 @@ export type PageActionPermissions = {
   /** Page labels map to independent action permissions. */
   pages?: Record<string, Partial<ActionPermissionEntry>>;
   /** Legacy flat values from accounts saved before page-scoped permissions. */
+  can_view?: boolean;
   can_add?: boolean;
   can_edit?: boolean;
   can_delete?: boolean;

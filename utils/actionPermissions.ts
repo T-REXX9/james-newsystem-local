@@ -1,6 +1,6 @@
 import { hasActionPermission, type ActionPermissionName } from '../constants';
 import { getLocalAuthSession } from '../services/localAuthService';
-import { ACCESS_MODULES } from './accessModules';
+import { ACCESS_MODULES, getAccessPageLabel } from './accessModules';
 
 const getCurrentPageLabel = (): string | undefined => {
   if (typeof window === 'undefined') return undefined;
@@ -14,3 +14,8 @@ const getCurrentPageLabel = (): string | undefined => {
 
 export const canPerformAction = (action: ActionPermissionName, pageLabel?: string): boolean =>
   hasActionPermission(getLocalAuthSession()?.userProfile, action, pageLabel || getCurrentPageLabel());
+
+export const canViewPage = (pageId: string): boolean => {
+  const pageLabel = getAccessPageLabel(pageId);
+  return hasActionPermission(getLocalAuthSession()?.userProfile, 'can_view', pageLabel);
+};

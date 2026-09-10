@@ -17,7 +17,7 @@ export interface AccessPage {
 const READ_ONLY_ROUTE_PARTS = ['report', 'dashboard', 'audit', 'activity-logs', 'call-records', 'sales-map', 'recycle-bin'];
 const supportedActionsForPage = (pageId: string): ActionPermissionName[] => {
   if (READ_ONLY_ROUTE_PARTS.some((part) => pageId.includes(part))) return [];
-  return ['can_add', 'can_edit', 'can_delete', 'can_post', 'can_unpost'];
+  return ['can_view', 'can_add', 'can_edit', 'can_delete', 'can_post', 'can_unpost'];
 };
 
 const moduleIds = ['home', 'warehouse', 'sales', 'accounting', 'maintenance', 'communication'] as const;
@@ -55,6 +55,14 @@ export const ACCESS_MODULES: AccessModule[] = moduleIds.map((id) => ({
 const moduleById = new Map(ACCESS_MODULES.map((module) => [module.id, module]));
 
 export const expandAccessModule = (moduleId: string): string[] => moduleById.get(moduleId)?.pageIds || [];
+
+export const getAccessPageLabel = (pageId: string): string | undefined => {
+  for (const module of ACCESS_MODULES) {
+    const page = module.pages.find((candidate) => candidate.id === pageId);
+    if (page) return page.label;
+  }
+  return undefined;
+};
 
 export const getAccessModuleState = (
   moduleId: string,

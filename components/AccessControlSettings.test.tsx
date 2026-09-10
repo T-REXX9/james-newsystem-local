@@ -114,12 +114,14 @@ describe('AccessControlSettings - create staff account', () => {
 
     await user.click(await screen.findByText('Sales', { selector: 'span' }));
     await user.click(await screen.findByRole('checkbox', { name: 'Sales Inquiry page access for melson' }));
+    await user.click(screen.getByRole('checkbox', { name: 'View action permission for Sales Inquiry for melson' }));
     await user.click(screen.getByRole('checkbox', { name: 'Edit action permission for Sales Inquiry for melson' }));
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(updateProfileMock).toHaveBeenCalledWith('2', expect.objectContaining({
       action_permissions: {
         global: {
+          can_view: true,
           can_add: true,
           can_edit: true,
           can_delete: true,
@@ -128,6 +130,7 @@ describe('AccessControlSettings - create staff account', () => {
         },
         pages: {
           'Sales Inquiry': {
+            can_view: false,
             can_add: true,
             can_edit: false,
             can_delete: true,

@@ -763,6 +763,7 @@ const AccessControlSettings: React.FC = () => {
                                           {pageActions.length > 0 && (
                                             <div className="ml-6 mt-1 grid gap-1 sm:grid-cols-2">
                                               {([
+                                                ['can_view', 'View'],
                                                 ['can_add', 'Add'],
                                                 ['can_edit', 'Edit'],
                                                 ['can_delete', 'Delete'],
