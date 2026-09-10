@@ -319,7 +319,7 @@ const AccessGroupManager: React.FC<AccessGroupManagerProps> = ({
                         </label>
                         {(page.supportedActions || []).length > 0 && <div className="ml-6 mt-1 grid gap-1 sm:grid-cols-2">
                           {([
-                            ['can_view', 'View'], ['can_add', 'Add'], ['can_edit', 'Edit'], ['can_delete', 'Delete'], ['can_post', 'Post'], ['can_unpost', 'Unpost'],
+                            ['can_view', 'View'], ['can_approve', 'Approve'], ['can_add', 'Add'], ['can_edit', 'Edit'], ['can_delete', 'Delete'], ['can_post', 'Post'], ['can_unpost', 'Unpost'],
                           ] as const).filter(([permission]) => page.supportedActions?.includes(permission)).map(([permission, label]) => {
                             const values = getPageActionPermissions(draftActionPermissions, page.label);
                             return <label key={permission} className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400"><input type="checkbox" checked={values[permission]} onChange={(event) => setDraftActionPermissions((current) => setPageActionPermission(current, page.label, permission, event.target.checked))} />{label}</label>;

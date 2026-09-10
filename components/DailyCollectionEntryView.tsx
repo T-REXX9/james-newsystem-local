@@ -133,6 +133,7 @@ const DailyCollectionEntryView: React.FC = () => {
   const canEdit = canPerformAction('can_edit');
   const canDelete = canPerformAction('can_delete');
   const canPost = canPerformAction('can_post');
+  const canApprove = canPerformAction('can_approve');
 
   const selectedAmount = useMemo(() => {
     return unpaidRows
@@ -694,7 +695,7 @@ const DailyCollectionEntryView: React.FC = () => {
         </button>,
       );
     }
-    if (status === 'Submitted') {
+    if (status === 'Submitted' && canApprove) {
       primary.push(
         <button
           key="approve"

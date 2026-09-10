@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle, Clock, Plus, FileText, Receipt, ShoppingCar
 import { fetchDailyCallIncidentReports, reviewDailyCallIncidentReport } from '../services/dailyCallCustomerDetailService';
 import CreateIncidentReportModal from './CreateIncidentReportModal';
 import { IncidentReport, UserProfile } from '../types';
+import { canPerformAction } from '../utils/actionPermissions';
 
 interface IncidentReportTabProps {
   contactId: string;
@@ -19,7 +20,7 @@ const IncidentReportTab: React.FC<IncidentReportTabProps> = ({ contactId, curren
   const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
 
   const role = String(currentUser?.role || '').toLowerCase();
-  const canReview = currentUser?.user_type === 1 || currentUser?.user_type === '1' || ['owner', 'master user', 'master_user'].includes(role);
+  const canReview = canPerformAction('can_approve') && (currentUser?.user_type === 1 || currentUser?.user_type === '1' || ['owner', 'master user', 'master_user'].includes(role));
 
   const formatReportDateTime = (dateValue?: string, timeValue?: string) => {
     const date = String(dateValue || '').split('T')[0];

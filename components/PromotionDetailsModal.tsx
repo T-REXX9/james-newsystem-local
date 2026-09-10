@@ -19,6 +19,7 @@ import {
     PostingStatus,
 } from '../types';
 import * as promotionService from '../services/promotionLocalApiService';
+import { canPerformAction } from '../utils/actionPermissions';
 
 interface Props {
     promotion: Promotion;
@@ -41,6 +42,7 @@ const PromotionDetailsModal: React.FC<Props> = ({
     const [rejectingId, setRejectingId] = useState<string | null>(null);
     const [rejectReason, setRejectReason] = useState('');
     const [processing, setProcessing] = useState<string | null>(null);
+    const canApprove = canPerformAction('can_approve');
 
     // Poll for posting updates (replaces Supabase realtime)
     useEffect(() => {
@@ -60,7 +62,7 @@ const PromotionDetailsModal: React.FC<Props> = ({
     }, [promotion.id]);
 
     const handleApprove = async (postingId: string) => {
-        if (!currentUser) return;
+        if (!currentUser || !canApprove) return;
         setProcessing(postingId);
         try {
             await promotionService.approveProof(postingId, currentUser.id);
@@ -347,19 +349,19 @@ const PromotionDetailsModal: React.FC<Props> = ({
                                                             >
                                                                 View Full Screenshot
                                                             </button>
-                                                            <button
+                                                            {canApprove && <button
                                                                 onClick={() => handleApprove(posting.id)}
                                                                 disabled={processing === posting.id}
                                                                 className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium flex items-center gap-1"
                                                             >
                                                                 <Check className="w-4 h-4" /> Approve
-                                                            </button>
-                                                            <button
+                                                            </button>}
+                                                            {canApprove && <button
                                                                 onClick={() => setRejectingId(posting.id)}
                                                                 className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-sm font-medium flex items-center gap-1"
                                                             >
                                                                 <XCircle className="w-4 h-4" /> Reject
-                                                            </button>
+                                                            </button>}
                                                         </>
                                                     )}
                                                 </div>

@@ -17,7 +17,7 @@ export interface AccessPage {
 const READ_ONLY_ROUTE_PARTS = ['report', 'dashboard', 'audit', 'activity-logs', 'call-records', 'sales-map', 'recycle-bin'];
 const supportedActionsForPage = (pageId: string): ActionPermissionName[] => {
   if (READ_ONLY_ROUTE_PARTS.some((part) => pageId.includes(part))) return [];
-  return ['can_view', 'can_add', 'can_edit', 'can_delete', 'can_post', 'can_unpost'];
+  return ['can_view', 'can_approve', 'can_add', 'can_edit', 'can_delete', 'can_post', 'can_unpost'];
 };
 
 const moduleIds = ['home', 'warehouse', 'sales', 'accounting', 'maintenance', 'communication'] as const;

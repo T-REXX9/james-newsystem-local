@@ -123,6 +123,7 @@ export const isMasterUserAccount = (user?: { role?: string | null; user_type?: s
 
 export const DEFAULT_ACTION_PERMISSIONS = {
   can_view: true,
+  can_approve: true,
   can_add: true,
   can_edit: true,
   can_delete: true,

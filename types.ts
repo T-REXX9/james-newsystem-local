@@ -94,6 +94,7 @@ export interface CreateNotificationInput {
 
 export type ActionPermissionEntry = {
   can_view: boolean;
+  can_approve: boolean;
   can_add: boolean;
   can_edit: boolean;
   can_delete: boolean;
@@ -108,6 +109,7 @@ export type PageActionPermissions = {
   pages?: Record<string, Partial<ActionPermissionEntry>>;
   /** Legacy flat values from accounts saved before page-scoped permissions. */
   can_view?: boolean;
+  can_approve?: boolean;
   can_add?: boolean;
   can_edit?: boolean;
   can_delete?: boolean;

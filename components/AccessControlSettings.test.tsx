@@ -122,6 +122,7 @@ describe('AccessControlSettings - create staff account', () => {
       action_permissions: {
         global: {
           can_view: true,
+          can_approve: true,
           can_add: true,
           can_edit: true,
           can_delete: true,
@@ -131,6 +132,7 @@ describe('AccessControlSettings - create staff account', () => {
         pages: {
           'Sales Inquiry': {
             can_view: false,
+            can_approve: true,
             can_add: true,
             can_edit: false,
             can_delete: true,

@@ -133,6 +133,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
   const canEdit = canPerformAction("can_edit");
   const canDelete = canPerformAction("can_delete");
   const canPost = canPerformAction("can_post");
+  const canApprove = canPerformAction("can_approve");
   const canUnpost = canPerformAction("can_unpost");
   const [showAddItem, setShowAddItem] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{
@@ -205,7 +206,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
       onConfirm: null,
     }));
   const handleStatusChange = (newStatus: PRStatus) => {
-    if ((newStatus === "Approved" && !canPost) || (newStatus === "Cancelled" && !canDelete)) return;
+    if ((newStatus === "Approved" && (request.status === "Unposted" ? !canPost : !canApprove)) || (newStatus === "Cancelled" && !canDelete)) return;
     setConfirmModal({
       isOpen: true,
       title: `${request.status === "Unposted" && newStatus === "Approved" ? "Post" : newStatus} Purchase Request`,
@@ -384,7 +385,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
               >
                 <Printer className="h-4 w-4" /> Print
               </button>
-              {["Pending", "Submitted", "Unposted"].includes(request.status || "") && isApprover && canPost && (generatedPOs.length === 0 || request.status === "Unposted") && (
+              {["Pending", "Submitted", "Unposted"].includes(request.status || "") && isApprover && (request.status === "Unposted" ? canPost : canApprove) && (generatedPOs.length === 0 || request.status === "Unposted") && (
                 <button
                   onClick={() => handleStatusChange("Approved")}
                   className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700"

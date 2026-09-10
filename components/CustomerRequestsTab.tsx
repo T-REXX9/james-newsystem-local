@@ -8,6 +8,7 @@ import { CustomerRequest, createDiscountRequest, fetchCustomerRequests, requestC
 import { Contact, UserProfile } from '../types';
 import { hasActionPermission, isMasterUserAccount } from '../constants';
 import { toast } from 'sonner';
+import { canPerformAction } from '../utils/actionPermissions';
 
 type RequestCategory = 'terms' | 'contact_details' | 'discount' | 'others';
 
@@ -69,6 +70,7 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
     const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
     const owner = isMasterUserAccount(currentUser);
     const canAdd = hasActionPermission(currentUser, 'can_add');
+    const canApprove = canPerformAction('can_approve');
 
     useEffect(() => {
         let active = true;
@@ -88,7 +90,7 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
     }, [createCategory]);
 
     const review = async (row: CustomerRequest, decision: 'approved' | 'rejected') => {
-        if (!owner) return;
+        if (!owner || !canApprove) return;
         setBusy(row.id);
         setError('');
         try {
@@ -465,7 +467,7 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
                                     </div>
                                 )}
 
-                                {owner && row.status === 'pending' && (
+                                {owner && canApprove && row.status === 'pending' && (
                                     <div className="space-y-2.5 border-t border-slate-100 bg-slate-50/30 p-4 dark:border-slate-800 dark:bg-slate-900/30">
                                         <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                                             Review note (optional)

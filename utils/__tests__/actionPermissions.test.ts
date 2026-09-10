@@ -49,7 +49,7 @@ describe('canPerformAction', () => {
     const user = {
       role: 'Sales Agent',
       action_permissions: {
-        global: { can_view: true, can_add: true, can_edit: true, can_delete: true, can_post: true, can_unpost: true },
+        global: { can_view: true, can_approve: true, can_add: true, can_edit: true, can_delete: true, can_post: true, can_unpost: true },
         pages: {
           'Sales Inquiry': { can_delete: true },
           'Product Database': { can_delete: false },
@@ -60,6 +60,8 @@ describe('canPerformAction', () => {
     expect(hasActionPermission(user, 'can_delete', 'Sales Inquiry')).toBe(true);
     expect(hasActionPermission(user, 'can_delete', 'Product Database')).toBe(false);
     expect(hasActionPermission(user, 'can_view', 'Sales Inquiry')).toBe(true);
+    expect(hasActionPermission(user, 'can_approve', 'Sales Inquiry')).toBe(true);
+    expect(hasActionPermission({ ...user, action_permissions: { ...user.action_permissions, pages: { 'Product Database': { can_approve: false } } } }, 'can_approve', 'Product Database')).toBe(false);
     expect(hasActionPermission({ ...user, action_permissions: { ...user.action_permissions, pages: { 'Product Database': { can_view: false } } } }, 'can_view', 'Product Database')).toBe(false);
   });
 });

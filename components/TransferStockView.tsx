@@ -66,6 +66,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
   const canEdit = canPerformAction('can_edit');
   const canDelete = canPerformAction('can_delete');
   const canPost = canPerformAction('can_post');
+  const canApprove = canPerformAction('can_approve');
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [transfers, setTransfers] = useState<TransferStock[]>([]);
@@ -411,7 +412,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
   };
 
   const performApprove = async () => {
-    if (!canPost || !selectedTransfer) return;
+    if (!canApprove || !selectedTransfer) return;
     setBusy(true);
     try {
       const updated = await approveTransferStock(selectedTransfer.id);
@@ -642,7 +643,7 @@ const TransferStockView: React.FC<TransferStockViewProps> = ({ initialTransferId
                   SUBMIT <u>TRANSFER</u>
                 </button>
               )}
-              {selectedTransfer?.status === 'submitted' && !createMode && canPost && (
+              {selectedTransfer?.status === 'submitted' && !createMode && canApprove && (
                 <button
                   type="button"
                   onClick={() => setDialog('approve')}
