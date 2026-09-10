@@ -56,7 +56,7 @@ const buildMockLedgerDetailed = () => ({
       date: '2026-07-15',
       datetime: '2026-07-15T10:30:00',
       reference: 'INV-001',
-      ref_no: 'INV-001',
+      ref_no: 'INV-REF-001',
       ref_type: 'Invoice',
       check_no: 'CHK-100',
       check_date: '2026-07-20',
@@ -73,7 +73,7 @@ const buildMockLedgerDetailed = () => ({
       date: '2026-07-16',
       datetime: '2026-07-16T14:00:00',
       reference: 'OR-002',
-      ref_no: 'OR-002',
+      ref_no: 'OR-REF-002',
       ref_type: 'OrderSlip',
       check_no: '',
       check_date: null,
@@ -377,11 +377,11 @@ describe('CustomerLedgerView', () => {
     await waitFor(() => {
       expect(screen.getByRole('link', { name: 'Open Invoice INV-001' })).toHaveAttribute(
         'href',
-        '#/sales-transaction-invoice?invoiceRefNo=INV-001',
+        '#/sales-transaction-invoice?invoiceId=INV-REF-001',
       );
       expect(screen.getByRole('link', { name: 'Open Order Slip OR-002' })).toHaveAttribute(
         'href',
-        '#/sales-transaction-order-slip?orderSlipRefNo=OR-002',
+        '#/sales-transaction-order-slip?orderSlipId=OR-REF-002',
       );
     });
 
@@ -395,12 +395,12 @@ describe('CustomerLedgerView', () => {
     expect(navigationEvents).toHaveLength(2);
     expect(navigationEvents[0].detail).toEqual({
       tab: 'sales-transaction-invoice',
-      payload: { invoiceRefNo: 'INV-001' },
+      payload: { invoiceId: 'INV-REF-001' },
       mode: 'push',
     });
     expect(navigationEvents[1].detail).toEqual({
       tab: 'sales-transaction-order-slip',
-      payload: { orderSlipRefNo: 'OR-002' },
+      payload: { orderSlipId: 'OR-REF-002' },
       mode: 'push',
     });
   });

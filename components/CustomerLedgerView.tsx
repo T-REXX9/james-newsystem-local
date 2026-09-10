@@ -57,13 +57,13 @@ const getLedgerDocumentLink = (row: CustomerLedgerResponse['rows'][number]): Led
   if (normalizedType === 'invoice' || normalizedType === 'sales invoice') {
     return {
       tab: 'sales-transaction-invoice',
-      payload: { invoiceRefNo: reference },
+      payload: { invoiceId: reference },
     };
   }
   if (normalizedType === 'order slip' || normalizedType === 'orderslip') {
     return {
       tab: 'sales-transaction-order-slip',
-      payload: { orderSlipRefNo: reference },
+      payload: { orderSlipId: reference },
     };
   }
   return null;
