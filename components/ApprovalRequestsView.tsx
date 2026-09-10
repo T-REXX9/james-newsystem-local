@@ -10,6 +10,7 @@ import { Contact, UserProfile } from '../types';
 import { isCompanyOwnerRole } from '../constants';
 import { fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { toast } from 'sonner';
+import { canPerformAction } from '../utils/actionPermissions';
 
 type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected';
 
@@ -62,7 +63,8 @@ export default function ApprovalRequestsView({
     restrictToOwners = true,
 }: ApprovalRequestsViewProps) {
     const owner = isCompanyOwnerRole(currentUser?.role);
-    const visible = !restrictToOwners || owner;
+    const canApprove = canPerformAction('can_approve');
+    const visible = !restrictToOwners || owner || canApprove;
 
     const [rows, setRows] = useState<CustomerRequest[]>([]);
     const [contacts, setContacts] = useState<Map<string, Contact>>(new Map());
@@ -153,6 +155,7 @@ export default function ApprovalRequestsView({
     }, [rows, statusFilter, search, contacts]);
 
     const review = async (row: CustomerRequest, decision: 'approved' | 'rejected') => {
+        if (!canApprove) return;
         setBusyId(row.id);
         try {
             await reviewCustomerRequest(
@@ -368,7 +371,7 @@ export default function ApprovalRequestsView({
                                             </p>
                                         )}
 
-                                        {owner && row.status === 'pending' && (
+                                {canApprove && row.status === 'pending' && (
                                             <div className="mt-3 space-y-2 border-t border-slate-200 pt-3 dark:border-slate-700">
                                                 <input
                                                     maxLength={2000}
