@@ -750,6 +750,7 @@ export interface DailyCallMasterCustomerRow {
   debtType?: 'Good' | 'Bad' | string;
   verifiedBy?: string;
   createdAt?: string;
+  prospectComment?: string;
   priceGroup?: string;
   lastPurchaseDate: string;
   lastPurchaseDateRaw: string;

@@ -921,6 +921,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                     </th>
                     <th className="w-[135px] px-2 py-2.5">Last Purchase</th>
                     <th className="w-[135px] px-2 py-2.5">Agent</th>
+                    <th className="min-w-[220px] px-2 py-2.5">Staff comment</th>
                     <th className="w-[150px] px-2 py-2.5">Verified By</th>
                     <th className="w-[105px] px-2 py-2.5 text-center">Action</th>
                   </tr>
@@ -991,6 +992,13 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                             onAssign={handleAssignAgent}
                           />
                           {row.assignedTeam && <p className="mt-1 text-[10px] font-bold text-indigo-700">Team: {row.assignedTeam}</p>}
+                        </td>
+                        <td className="max-w-[280px] break-words px-2 py-2.5 text-sm">
+                          {row.prospectComment ? (
+                            <span className="block whitespace-pre-wrap text-slate-700" title={row.prospectComment}>{row.prospectComment}</span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
                         </td>
                         <td className="break-words px-2 py-2.5 text-sm font-semibold text-slate-600">
                           {row.verification === 'Verified' ? (row.verifiedBy || 'Verification recorded') : '—'}
@@ -1065,7 +1073,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                     );
                   })}
                   {activeCategory.rows.length === 0 && (
-                    <tr><td colSpan={9} className="px-3 py-12 text-center text-xs text-slate-400">No customers in this category.</td></tr>
+                    <tr><td colSpan={10} className="px-3 py-12 text-center text-xs text-slate-400">No customers in this category.</td></tr>
                   )}
                 </tbody>
               </table>

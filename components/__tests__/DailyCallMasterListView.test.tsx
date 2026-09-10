@@ -67,6 +67,27 @@ describe('DailyCallMasterListView', () => {
     });
   });
 
+  it('shows a prospect comment in the unverified prospects list', async () => {
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: '2026-09-10', count: 1 },
+      items: [{
+        id: 'prospect-1', shopName: 'New Prospect Shop', province: 'Manila', city: 'Manila',
+        contactNumber: '0917', assignedTo: 'Joan Jerusalem', profileType: 'Prospect',
+        verification: 'Unverified', prospectComment: 'Interested in fleet pricing after the call.',
+        lastPurchaseDate: '—', lastPurchaseDateRaw: '', purchaseCount: 0,
+        totalSales: 0, currentMonthSales: 0, averageMonthlySales: 0,
+        averageMonthlySalesMonthCount: 0, recentThreeMonthSales: 0,
+        previousThreeMonthSales: 0, salesTrendPercent: 0, daysSinceLastPurchase: 0,
+        monthsSinceLastPurchase: 0, purchaseAgeGroup: 'no_purchase', listCategory: 'no_purchase',
+      }],
+    });
+
+    render(<DailyCallMasterListView currentUser={masterUser} />);
+
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Unverified Prospects (1)' }));
+    expect(await screen.findByText('Interested in fleet pricing after the call.')).toBeInTheDocument();
+  });
+
   it('lets master user approve a pending verification request into verified prospects', async () => {
     const user = userEvent.setup();
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({

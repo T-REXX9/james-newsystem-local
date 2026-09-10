@@ -496,6 +496,7 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
     customerStatus: Number(row?.customerStatus ?? row?.customer_status ?? 1),
     debtType: cleanNullableText(row?.debtType ?? row?.debt_type, 'Good'),
     verifiedBy: cleanNullableText(row?.verifiedBy ?? row?.verified_by),
+    prospectComment: cleanNullableText(row?.prospectComment ?? row?.prospect_comment),
     createdAt: cleanNullableText(row?.createdAt ?? row?.created_at ?? row?.statusDate ?? row?.status_date),
     priceGroup: cleanNullableText(row?.priceGroup ?? row?.price_group),
     lastPurchaseDate: cleanNullableText(row?.lastPurchaseDate ?? row?.last_purchase_date, '—'),
