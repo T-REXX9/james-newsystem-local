@@ -693,7 +693,6 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
               <LegacyField label="VIP 1">{fieldInput('price_vip1', 'Input Amount', 'number')}</LegacyField>
               <LegacyField label="VIP 2">{fieldInput('price_vip2', 'Input Amount', 'number')}</LegacyField>
               <LegacyField label="VIP 3">{fieldInput('price_vip3', 'Input Amount', 'number')}</LegacyField>
-              <LegacyField label="AA">{fieldInput('price_aa', 'Input Amount', 'number')}</LegacyField>
             </div>
             <div className="mt-5 grid grid-cols-1 gap-x-5 gap-y-3 md:grid-cols-2 xl:grid-cols-4">
               <LegacyField label="Current Stock">
@@ -747,7 +746,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
                       <th colSpan={4} className="border border-[#ccc] bg-[#edf3f7] px-0.5 py-2 text-center text-[#315574]">Supplier (Cost of Goods)</th>
                       <th rowSpan={2} className="border border-[#ccc] px-0.5 py-2 text-center">Last Receive Qty<br />(Date)</th>
                       <th colSpan={2} className="border border-[#ccc] bg-[#eef6ee] px-0.5 py-2 text-center text-[#315b36]">Stock &amp; Reorder</th>
-                      <th colSpan={4} className="border border-[#ccc] bg-[#eef4fa] px-0.5 py-2 text-center text-[#315574]">Price List (Per Piece)</th>
+                      <th colSpan={3} className="border border-[#ccc] bg-[#eef4fa] px-0.5 py-2 text-center text-[#315574]">Price List (Per Piece)</th>
                       <th rowSpan={2} className="border border-[#ccc] px-0.5 py-2 text-center">Qty Sold Per Year<br />(pcs)</th>
                       <th rowSpan={2} className="border border-[#ccc] px-0.5 py-2 text-center">Incident Report<br />(Last 12 Months)</th>
                       <th rowSpan={2} className="border border-[#ccc] px-0.5 py-2 text-center">Return Report<br />(Last 12 Months)</th>
@@ -763,7 +762,6 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
                       <th className="border border-[#ccc] bg-[#eef4fa] px-0.5 py-1.5 text-center">VIP 1</th>
                       <th className="border border-[#ccc] bg-[#eef4fa] px-0.5 py-1.5 text-center">VIP 2</th>
                       <th className="border border-[#ccc] bg-[#eef4fa] px-0.5 py-1.5 text-center">VIP 3</th>
-                      <th className="border border-[#ccc] bg-[#eef4fa] px-0.5 py-1.5 text-center">AA</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -852,7 +850,6 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
                           <td className="border border-[#ddd] px-0.5 py-2 text-right align-top font-bold text-[#1675bd]">{money(product.price_vip1)}</td>
                           <td className="border border-[#ddd] px-0.5 py-2 text-right align-top font-bold text-[#1675bd]">{money(product.price_vip2)}</td>
                           <td className="border border-[#ddd] px-0.5 py-2 text-right align-top font-bold text-[#1675bd]">{money(product.price_vip3)}</td>
-                          <td className="border border-[#ddd] px-0.5 py-2 text-right align-top font-bold text-[#1675bd]">{money(product.price_aa)}</td>
                           <td className="border border-[#ddd] px-1 py-2 align-top text-slate-500">
                             {yearlySales.map(([year, quantity]) => (
                               <div key={year} className="grid grid-cols-[auto_1fr] gap-1">
