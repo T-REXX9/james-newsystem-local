@@ -544,12 +544,11 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                     Product
                   </label>
                   <ProductAutocomplete
-                    reorderOnly
                     onSelect={(product) => {
                       setSelectedProduct(product as ProductWithMetadata);
                       setSelectedProductId(product.id);
                     }}
-                    placeholder="Low-stock part no. or item code"
+                    placeholder="Part no. or item code"
                   />
                   <p className="mt-1 text-[11px] text-slate-500">
                     {selectedProduct

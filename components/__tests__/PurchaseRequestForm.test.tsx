@@ -24,6 +24,7 @@ vi.mock('../ProductAutocomplete', () => ({
           item_code: 'ITEM-001',
           description: 'Widget Alpha',
           cost: 55,
+          reorder_quantity: 0,
         })
       }
     >
@@ -51,7 +52,7 @@ describe('PurchaseRequestForm', () => {
       />
     );
 
-    expect(screen.getByRole('button', { name: 'Pick Product' })).toHaveAttribute('data-reorder-only', 'true');
+    expect(screen.getByRole('button', { name: 'Pick Product' })).toHaveAttribute('data-reorder-only', 'false');
 
     await user.click(screen.getByRole('button', { name: 'Pick Product' }));
     const qtyInput = screen.getByLabelText('Line item quantity');
