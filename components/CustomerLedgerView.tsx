@@ -15,6 +15,7 @@ import {
   LedgerDateType,
   LedgerReportType,
 } from '../services/customerLedgerService';
+import ModuleRecordLink from './ModuleRecordLink';
 import { formatCustomerSince } from '../utils/formatUtils';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
@@ -41,6 +42,32 @@ const dateTypeOptions: Array<{ value: LedgerDateType; label: string }> = [
   { value: 'year', label: 'This Year' },
   { value: 'custom', label: 'Custom Date' },
 ];
+
+type LedgerDocumentLink = {
+  tab: 'sales-transaction-invoice' | 'sales-transaction-order-slip';
+  payload: Record<string, string>;
+};
+
+const getLedgerDocumentLink = (row: CustomerLedgerResponse['rows'][number]): LedgerDocumentLink | null => {
+  const reference = String(row.ref_no || '').trim();
+  const displayReference = String(row.reference || '').trim();
+  if (!reference || !displayReference || displayReference.toUpperCase() === 'OPENING BALANCE') return null;
+
+  const normalizedType = row.ref_type.trim().toLowerCase().replace(/_/g, ' ');
+  if (normalizedType === 'invoice' || normalizedType === 'sales invoice') {
+    return {
+      tab: 'sales-transaction-invoice',
+      payload: { invoiceRefNo: reference },
+    };
+  }
+  if (normalizedType === 'order slip' || normalizedType === 'orderslip') {
+    return {
+      tab: 'sales-transaction-order-slip',
+      payload: { orderSlipRefNo: reference },
+    };
+  }
+  return null;
+};
 
 /* -------------------------------------------------------------------------- */
 /*  Left Panel — Permanent Customer Search                                     */
@@ -233,7 +260,25 @@ const DetailedTable: React.FC<{ data: CustomerLedgerResponse }> = ({ data }) => 
           <td className="whitespace-nowrap px-2 py-1.5">
             {row.reference === 'OPENING BALANCE' ? '' : formatDate(row.date)}
           </td>
-          <td className="whitespace-nowrap px-2 py-1.5">{row.reference || '-'}</td>
+          <td className="whitespace-nowrap px-2 py-1.5">
+            {(() => {
+              const documentLink = getLedgerDocumentLink(row);
+              if (!documentLink) return row.reference || '-';
+              const documentLabel = documentLink.tab === 'sales-transaction-order-slip'
+                ? 'Order Slip'
+                : 'Invoice';
+              return (
+                <ModuleRecordLink
+                  tab={documentLink.tab}
+                  payload={documentLink.payload}
+                  className="text-brand-blue underline decoration-dotted underline-offset-2 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
+                  aria-label={`Open ${documentLabel} ${row.reference}`}
+                >
+                  {row.reference || '-'}
+                </ModuleRecordLink>
+              );
+            })()}
+          </td>
           <td className="whitespace-nowrap px-2 py-1.5">{row.check_no || '-'}</td>
           <td className="whitespace-nowrap px-2 py-1.5">{formatDate(row.check_date)}</td>
           <td className="whitespace-nowrap px-2 py-1.5">{row.dcr || '-'}</td>

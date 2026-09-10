@@ -372,6 +372,76 @@ describe('CustomerLedgerView', () => {
     });
   });
 
+  it('links invoice and Order Slip numbers to their document views', async () => {
+    const user = await selectCustomer('Alpha Corp');
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: 'Open Invoice INV-001' })).toHaveAttribute(
+        'href',
+        '#/sales-transaction-invoice?invoiceRefNo=INV-001',
+      );
+      expect(screen.getByRole('link', { name: 'Open Order Slip OR-002' })).toHaveAttribute(
+        'href',
+        '#/sales-transaction-order-slip?orderSlipRefNo=OR-002',
+      );
+    });
+
+    const navigationEvents: CustomEvent[] = [];
+    const handleNavigation = (event: Event) => navigationEvents.push(event as CustomEvent);
+    window.addEventListener('workflow:navigate', handleNavigation);
+    await user.click(screen.getByRole('link', { name: 'Open Invoice INV-001' }));
+    await user.click(screen.getByRole('link', { name: 'Open Order Slip OR-002' }));
+    window.removeEventListener('workflow:navigate', handleNavigation);
+
+    expect(navigationEvents).toHaveLength(2);
+    expect(navigationEvents[0].detail).toEqual({
+      tab: 'sales-transaction-invoice',
+      payload: { invoiceRefNo: 'INV-001' },
+      mode: 'push',
+    });
+    expect(navigationEvents[1].detail).toEqual({
+      tab: 'sales-transaction-order-slip',
+      payload: { orderSlipRefNo: 'OR-002' },
+      mode: 'push',
+    });
+  });
+
+  it('leaves non-document and missing-reference rows as plain text', async () => {
+    mockGetLedger.mockResolvedValueOnce({
+      ...buildMockLedgerDetailed(),
+      rows: [
+        {
+          ...buildMockLedgerDetailed().rows[0],
+          reference: 'OPENING BALANCE',
+          ref_no: 'INV-OPENING',
+          ref_type: 'Invoice',
+        },
+        {
+          ...buildMockLedgerDetailed().rows[1],
+          reference: 'PAY-003',
+          ref_no: 'PAY-003',
+          ref_type: 'Payment',
+        },
+        {
+          ...buildMockLedgerDetailed().rows[1],
+          id: 3,
+          reference: 'INV-MISSING',
+          ref_no: '',
+          ref_type: 'Invoice',
+        },
+      ],
+    });
+
+    await selectCustomer('Alpha Corp');
+    await waitFor(() => {
+      expect(screen.getByText('OPENING BALANCE')).toBeInTheDocument();
+      expect(screen.getByText('PAY-003')).toBeInTheDocument();
+      expect(screen.getByText('INV-MISSING')).toBeInTheDocument();
+    });
+    expect(screen.queryByRole('link', { name: /OPENING BALANCE/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /PAY-003/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /INV-MISSING/i })).not.toBeInTheDocument();
+  });
+
   it('shows totals row with TOTAL label', async () => {
     await selectCustomer('Alpha Corp');
     await waitFor(() => {
