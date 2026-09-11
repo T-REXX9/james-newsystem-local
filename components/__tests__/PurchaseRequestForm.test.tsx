@@ -24,6 +24,10 @@ vi.mock('../ProductAutocomplete', () => ({
           item_code: 'ITEM-001',
           description: 'Widget Alpha',
           cost: 55,
+          supplier_costs: [
+            { supplier_id: 'sup-1', supplier_name: 'Supplier One', cost: 48 },
+            { supplier_id: 'sup-2', supplier_name: 'Supplier Two', cost: 52 },
+          ],
           reorder_quantity: 0,
         })
       }
@@ -106,5 +110,30 @@ describe('PurchaseRequestForm', () => {
     await user.click(screen.getByRole('button', { name: /save as draft/i }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ status: 'Draft' })));
+  });
+
+  it('shows only suppliers recorded on the selected product', async () => {
+    const user = userEvent.setup();
+    render(
+      <PurchaseRequestForm
+        onCancel={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(undefined)}
+        initialPRNumber="PR-2603"
+        suppliers={[
+          { id: 'sup-1', company: 'Supplier One' },
+          { id: 'sup-2', company: 'Supplier Two' },
+          { id: 'sup-3', company: 'Unrelated Supplier' },
+        ] as any}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Pick Product' }));
+
+    const supplierSelect = screen.getByLabelText('Line item supplier') as HTMLSelectElement;
+    expect(Array.from(supplierSelect.options).map(option => option.textContent)).toEqual([
+      'Select Supplier',
+      'Supplier One',
+      'Supplier Two',
+    ]);
   });
 });

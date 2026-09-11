@@ -45,7 +45,12 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({ onCancel, onS
   const [submitError, setSubmitError] = useState('');
   const [showPreview, setShowPreview] = useState(false);
 
-  const selectedSupplier = suppliers.find(supplier => supplier.id === selectedSupplierId);
+  const productSupplierCosts = selectedProduct?.supplier_costs || [];
+  const productSuppliers = suppliers.filter(supplier =>
+    productSupplierCosts.some(cost => String(cost.supplier_id) === String(supplier.id) && !cost.is_blacklisted)
+  );
+  const selectedSupplier = productSuppliers.find(supplier => supplier.id === selectedSupplierId);
+  const selectedSupplierCost = productSupplierCosts.find(cost => String(cost.supplier_id) === String(selectedSupplierId));
   const totalQuantity = items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
   const totalAmount = items.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unit_cost || 0), 0);
 
@@ -71,7 +76,7 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({ onCancel, onS
       description: product?.description,
       quantity: resolvedQuantity,
       unit: 'PCS',
-      unit_cost: Number(product?.cost || 0),
+      unit_cost: Number(selectedSupplierCost?.cost ?? product?.cost ?? 0),
       supplier_id: selectedSupplierId || undefined,
       supplier_name: selectedSupplier?.company,
       eta_date: etaDate || undefined,
@@ -84,6 +89,7 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({ onCancel, onS
   const clearEditor = () => {
     setSelectedProductId('');
     setSelectedProduct(null);
+    setSelectedSupplierId('');
     setQuantity(1);
     setEtaDate('');
     setValidationErrors({});
@@ -180,7 +186,7 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({ onCancel, onS
                   <tr id="purchase-request-item-picker" className="border-b border-blue-100 bg-blue-50/40 align-middle">
                     <td className="px-3 py-3 text-center text-slate-400">+</td>
                     <td colSpan={3} className="px-3 py-3">
-                      <ProductAutocomplete onSelect={product => { setSelectedProduct(product as ProductWithMetadata); setSelectedProductId(product.id); setValidationErrors(current => ({ ...current, selectedProductId: '' })); }} placeholder="Select product by part no. or item code" className={validationErrors.selectedProductId ? 'ring-1 ring-rose-500' : ''} />
+                      <ProductAutocomplete onSelect={product => { setSelectedProduct(product as ProductWithMetadata); setSelectedProductId(product.id); setSelectedSupplierId(''); setValidationErrors(current => ({ ...current, selectedProductId: '' })); }} placeholder="Select product by part no. or item code" className={validationErrors.selectedProductId ? 'ring-1 ring-rose-500' : ''} />
                       {selectedProduct ? (
                         <div className="mt-1.5 flex items-center gap-2 rounded border border-blue-200 bg-blue-50 px-2.5 py-1.5">
                           <span className="text-xs font-bold text-[#173c83]">{selectedProduct.part_no || '-'}</span>
@@ -203,9 +209,9 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({ onCancel, onS
                     </td>
                     <td className="px-3 py-3"><input aria-label="Line item quantity" type="number" min={1} value={quantity} onChange={event => { const v = event.target.value; setQuantity(v === '' ? '' : Math.max(1, Number(v))); }} onBlur={() => { if (quantity === '') setQuantity(1); }} className="h-9 w-20 rounded border border-slate-300 px-2 text-center outline-none focus:border-[#175fd3]" /></td>
                     <td className="px-3 py-3 font-semibold text-slate-500">PCS</td>
-                    <td className="px-3 py-3"><select aria-label="Line item supplier" value={selectedSupplierId} onChange={event => setSelectedSupplierId(event.target.value)} className="h-9 w-full rounded border border-slate-300 bg-white px-2 outline-none focus:border-[#175fd3]"><option value="">Select Supplier</option>{suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.company}</option>)}</select></td>
-                    <td className="px-3 py-3 text-right font-semibold">{money(Number(selectedProduct?.cost || 0))}</td>
-                    <td className="px-3 py-3 text-right font-semibold">{money(Number(quantity || 0) * Number(selectedProduct?.cost || 0))}</td>
+                    <td className="px-3 py-3"><select aria-label="Line item supplier" value={selectedSupplierId} onChange={event => setSelectedSupplierId(event.target.value)} disabled={!selectedProduct} className="h-9 w-full rounded border border-slate-300 bg-white px-2 outline-none focus:border-[#175fd3] disabled:bg-slate-100"><option value="">Select Supplier</option>{productSuppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.company}</option>)}</select></td>
+                    <td className="px-3 py-3 text-right font-semibold">{money(Number(selectedSupplierCost?.cost ?? selectedProduct?.cost ?? 0))}</td>
+                    <td className="px-3 py-3 text-right font-semibold">{money(Number(quantity || 0) * Number(selectedSupplierCost?.cost ?? selectedProduct?.cost ?? 0))}</td>
                     <td className="px-3 py-3 text-center text-emerald-700">0</td><td className="px-3 py-3 text-center text-emerald-700">0</td><td className="px-3 py-3"><span className="inline-flex items-center gap-1 whitespace-nowrap font-bold text-emerald-700"><CheckCircle2 className="h-4 w-4" /> Good</span></td>
                     <td className="px-3 py-3 text-center"><button type="button" aria-label="Add line item" onClick={handleAddItem} className="rounded-md bg-[#175fd3] p-2 text-white transition hover:bg-[#0e4fb7]"><Plus className="h-4 w-4" /></button></td>
                   </tr>
