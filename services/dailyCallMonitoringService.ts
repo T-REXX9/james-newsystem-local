@@ -38,6 +38,7 @@ export interface DailyCallRealtimeCallbacks {
 
 export interface DailyCallAgentSnapshot {
   contacts: DailyCallCustomerRow[];
+  masterList: DailyCallMasterCustomerRow[];
   callLogs: CallLogEntry[];
   inquiries: Inquiry[];
   purchases: Purchase[];
@@ -683,6 +684,7 @@ export const fetchAgentSnapshotForDailyCall = async (
 
     return {
       contacts: Array.isArray(data?.contacts) ? data.contacts.map(mapDailyCallCustomerRow) : [],
+      masterList: Array.isArray(data?.master_list) ? data.master_list.map(mapDailyCallMasterCustomerRow) : [],
       callLogs: Array.isArray(data?.call_logs) ? data.call_logs.map(mapCallLog) : [],
       inquiries: Array.isArray(data?.inquiries) ? data.inquiries.map(mapInquiry) : [],
       purchases: Array.isArray(data?.purchases) ? data.purchases.map(mapPurchase) : [],
@@ -705,6 +707,7 @@ export const fetchAgentSnapshotForDailyCall = async (
       const fallbackData = Array.isArray(fallbackPayload?.data) ? fallbackPayload.data : [];
       return {
         contacts: fallbackData.map(mapDailyCallCustomerRow),
+        masterList: [],
         callLogs: [],
         inquiries: [],
         purchases: [],

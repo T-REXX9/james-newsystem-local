@@ -131,6 +131,7 @@ describe('dailyCallMonitoringService', () => {
       json: async () => ({
         data: {
           contacts: [{ id: '1', shopName: 'Test Shop' }],
+          master_list: [{ id: '1', shop_name: 'Test Shop', list_category: 'recovery', purchase_count: 1 }],
           call_logs: [{ id: 'log-1', contact_id: '1', agent_name: 'Jane Doe', channel: 'text', outcome: 'logged', occurred_at: '2026-03-07T00:00:00Z' }],
           inquiries: [{ id: 'inq-1', contact_id: '1', sales_date: '2026-03-07T00:00:00Z', status: 'Submitted' }],
           purchases: [{ id: 'pur-1', contact_id: '1', total_amount: 1200, purchase_date: '2026-03-07T00:00:00Z' }],
@@ -143,6 +144,7 @@ describe('dailyCallMonitoringService', () => {
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(result.contacts).toHaveLength(1);
+    expect(result.masterList).toMatchObject([{ id: '1', listCategory: 'recovery' }]);
     expect(result.callLogs[0]).toMatchObject({ id: 'log-1', agent_name: 'Jane Doe', channel: 'text' });
     expect(result.inquiries[0]).toMatchObject({ id: 'inq-1', title: 'Submitted' });
     expect(result.purchases[0]).toMatchObject({ id: 'pur-1', amount: 1200 });

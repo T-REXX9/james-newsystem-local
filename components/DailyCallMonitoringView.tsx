@@ -70,6 +70,7 @@ import {
   CustomerLogStatus,
   CustomerLogTopic,
   CustomerStatus,
+  DailyCallMasterCustomerRow,
   DealStage,
   Inquiry,
   Purchase,
@@ -540,6 +541,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const canAdd = canPerformAction('can_add');
   const canEdit = canPerformAction('can_edit');
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [masterListRows, setMasterListRows] = useState<DailyCallMasterCustomerRow[]>([]);
   const [callLogs, setCallLogs] = useState<CallLogEntry[]>([]);
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
@@ -686,6 +688,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       const teamScopedContacts = snapshot.contacts.map(toContactModel);
 
       setContacts(teamScopedContacts);
+      setMasterListRows(snapshot.masterList || []);
       setCallLogs(snapshot.callLogs.filter((log) => log.agent_name === agentDataName));
       setInquiries(snapshot.inquiries);
       setPurchases(snapshot.purchases);
@@ -1375,10 +1378,10 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const customerListSummaries = useMemo(() => {
     const summarize = (
       rows: MasterRow[],
-      id: 'priority' | 'recovery' | 'verified' | 'unverified' | 'blocked' | 'other',
+      id: 'priority' | 'recovery' | 'verified' | 'unverified' | 'blocked',
       label: string,
       note: string,
-      tone: 'emerald' | 'rose' | 'blue' | 'orange' | 'red' | 'slate',
+      tone: 'emerald' | 'rose' | 'blue' | 'orange' | 'red',
       metricLabel: string
     ) => {
       const currentMonthSales = rows.reduce((sum, row) => sum + row.currentMonthSales, 0);
@@ -1405,22 +1408,38 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       };
     };
 
-    const blockedRows = masterRows.filter((row) => isBlockedContact(row.contact));
-    const priorityRows = masterRows.filter((row) => !isBlockedContact(row.contact) && isPriorityListPurchase(row.lastPurchase));
-    const recoveryRows = masterRows.filter((row) => !isBlockedContact(row.contact) && isRecoveryListPurchase(row.lastPurchase));
+    const classificationById = new Map(masterListRows.map((row) => [row.id, row]));
+    const isMasterBlocked = (row: MasterRow) => {
+      const classification = classificationById.get(row.contact.id);
+      return classification
+        ? classification.customerStatus === 4 || String(classification.debtType || '').trim().toLowerCase() === 'bad'
+        : isBlockedContact(row.contact);
+    };
+    const priorityRows = masterRows.filter((row) => {
+      if (isMasterBlocked(row)) return false;
+      const classification = classificationById.get(row.contact.id);
+      return classification ? classification.listCategory === 'priority' : isPriorityListPurchase(row.lastPurchase);
+    });
+    const recoveryRows = masterRows.filter((row) => {
+      if (isMasterBlocked(row)) return false;
+      const classification = classificationById.get(row.contact.id);
+      return classification ? classification.listCategory === 'recovery' : isRecoveryListPurchase(row.lastPurchase);
+    });
     const noPurchaseProspectRows = masterRows.filter((row) =>
-      !isBlockedContact(row.contact) && getPurchaseAgeGroup(row.lastPurchase) === 'unverified' && isProspectContact(row.contact)
+      !isMasterBlocked(row) && (() => {
+        const classification = classificationById.get(row.contact.id);
+        return classification
+          ? classification.listCategory === 'no_purchase' && String(classification.profileType || '').toLowerCase().includes('prospect')
+          : getPurchaseAgeGroup(row.lastPurchase) === 'unverified' && isProspectContact(row.contact);
+      })()
     );
-    const verifiedRows = noPurchaseProspectRows.filter((row) => row.contact.verification === 'Verified');
-    const unverifiedRows = noPurchaseProspectRows.filter((row) => row.contact.verification !== 'Verified');
-    const categorizedIds = new Set([
-      ...blockedRows,
-      ...priorityRows,
-      ...recoveryRows,
-      ...verifiedRows,
-      ...unverifiedRows,
-    ].map((row) => row.contact.id));
-    const otherRows = masterRows.filter((row) => !categorizedIds.has(row.contact.id));
+    const verifiedRows = noPurchaseProspectRows.filter((row) =>
+      (classificationById.get(row.contact.id)?.verification || row.contact.verification) === 'Verified'
+    );
+    const unverifiedRows = noPurchaseProspectRows.filter((row) =>
+      (classificationById.get(row.contact.id)?.verification || row.contact.verification) !== 'Verified'
+    );
+    const blockedRows = masterRows.filter(isMasterBlocked);
 
     return [
       summarize(priorityRows, 'priority', 'Priority List', 'Any ledger activity since October 2025 onwards', 'emerald', 'Current Month Sales'),
@@ -1428,9 +1447,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       summarize(verifiedRows, 'verified', 'Verified Prospects', 'Verified, awaiting first purchase', 'blue', 'Average Monthly Purchase'),
       summarize(unverifiedRows, 'unverified', 'Unverified Prospects', 'No purchases yet', 'orange', 'Average Monthly Purchase'),
       summarize(blockedRows, 'blocked', DO_NOT_CONTACT_LABEL, 'View only — no contact or sales inquiry', 'red', 'Average Monthly Sales'),
-      summarize(otherRows, 'other', 'Other Customers', 'Assigned customers outside the purchase and prospect lists', 'slate', 'Average Monthly Sales'),
     ];
-  }, [masterRows]);
+  }, [masterListRows, masterRows]);
 
   useEffect(() => {
     if (!masterRows.length) {

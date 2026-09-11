@@ -758,11 +758,54 @@ describe('DailyCallMonitoringView communication actions', () => {
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
       ...baseSnapshot,
       contacts: assignedContacts,
+      masterList: assignedContacts.map((contact) => ({
+        id: contact.id,
+        shopName: contact.shopName,
+        listCategory: 'recovery',
+        purchaseCount: 1,
+        priorityTransactionCount: 0,
+        ledgerTransactionCount: 1,
+        purchaseAgeGroup: 'over_one_month',
+      })),
     });
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
 
     expect(await screen.findByText('Assigned Customer 400')).toBeInTheDocument();
     expect(screen.getByText('400 customers')).toBeInTheDocument();
+  });
+
+  it('uses the master-list classification for the sales-agent view without an Other Customers bucket', async () => {
+    fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
+      ...baseSnapshot,
+      contacts: [{
+        ...baseSnapshot.contacts[0],
+        id: 'legacy-recovery',
+        shopName: 'Legacy Recovery Customer',
+        status: 'active',
+        verification: '',
+      }],
+      purchases: [],
+      masterList: [{
+        id: 'legacy-recovery',
+        shopName: 'Legacy Recovery Customer',
+        listCategory: 'recovery',
+        purchaseCount: 1,
+        priorityTransactionCount: 0,
+        ledgerTransactionCount: 1,
+        purchaseAgeGroup: 'over_one_month',
+      }],
+    });
+
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    expect(await screen.findByRole('heading', { name: 'Customer List' })).toBeInTheDocument();
+    expect(screen.queryByText('Other Customers')).not.toBeInTheDocument();
+
+    const categoryTables = screen.getByLabelText('Segregated customer category tables');
+    const recoveryTable = within(categoryTables)
+      .getByTitle('Recovery List (Purchase history before October 2025, with none since)')
+      .closest('article')!;
+    expect(within(recoveryTable).getByText('Legacy Recovery Customer')).toBeInTheDocument();
   });
 });
