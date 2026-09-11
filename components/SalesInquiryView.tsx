@@ -110,6 +110,8 @@ type LoadedFormSnapshot = {
   items: InquiryItemRow[];
 };
 
+const INVOICE_ENTRY_LIMIT = 16;
+
 interface SalesInquiryViewProps {
   initialContactId?: string;
   initialInquiryId?: string;
@@ -393,6 +395,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
   // Items Table
   const [items, setItems] = useState<InquiryItemRow[]>([]);
+  const isInvoiceSaleCustomer = selectedCustomer?.transactionType?.trim().toLowerCase() === 'invoice';
+  const invoiceEntryLimitReached = isInvoiceSaleCustomer && items.length >= INVOICE_ENTRY_LIMIT;
 
   // Modals
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -887,7 +891,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
   // Add new item row
   const addItemRow = () => {
-    if (isCreatingNew ? !canAdd : !canEdit) return;
+    if ((isCreatingNew ? !canAdd : !canEdit) || invoiceEntryLimitReached) return;
     const tempId = `temp-${Date.now()}`;
     setItems((prev) => [
       ...prev,
@@ -911,12 +915,12 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   };
 
   const addManualItemRow = () => {
-    if (isCreatingNew ? !canAdd : !canEdit) return;
+    if ((isCreatingNew ? !canAdd : !canEdit) || invoiceEntryLimitReached) return;
     setShowNotListedItemModal(true);
   };
 
   const handleConfirmNotListedItem = (draft: NotListedItemDraft) => {
-    if (isReadOnly || (isCreatingNew ? !canAdd : !canEdit)) {
+    if (isReadOnly || (isCreatingNew ? !canAdd : !canEdit) || invoiceEntryLimitReached) {
       setShowNotListedItemModal(false);
       return;
     }
@@ -1210,6 +1214,9 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     if (!timeCheck.isValid) errors.salesTime = timeCheck.message;
     if (items.length === 0) {
       errors.items = 'Please add at least one item to the inquiry.';
+    }
+    if (isInvoiceSaleCustomer && items.length > INVOICE_ENTRY_LIMIT) {
+      errors.items = 'Invoice-sale customers are limited to 16 entries per Sales Inquiry.';
     }
     const invalidItems = items.filter(item => !item.item_id && !item.isManual);
     if (invalidItems.length > 0) {
@@ -1695,7 +1702,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
               </tbody>
             </table>
 
-            <button type="button" aria-label="Add Item" onClick={addItemRow} disabled={isReadOnly} data-jpeg-export-ignore className="ml-[190px] mt-[9px] rounded-[3px] bg-[#91a9bd] px-[12px] py-[8px] text-[12px] text-white hover:bg-[#7e99b0] disabled:opacity-50">Add Inquiry</button>
+            <button type="button" aria-label="Add Item" onClick={addItemRow} disabled={isReadOnly || invoiceEntryLimitReached} data-jpeg-export-ignore className="ml-[190px] mt-[9px] rounded-[3px] bg-[#91a9bd] px-[12px] py-[8px] text-[12px] text-white hover:bg-[#7e99b0] disabled:opacity-50">Add Inquiry</button>
+            {isInvoiceSaleCustomer && <p className="ml-[190px] mt-2 text-[12px] text-[#6b7280]">Invoice-sale customers can have up to {INVOICE_ENTRY_LIMIT} entries ({items.length}/{INVOICE_ENTRY_LIMIT}).</p>}
             <button type="submit" aria-label="Create Inquiry" className="sr-only">Create Inquiry</button>
 
             <div className="mt-[24px] overflow-x-auto">
@@ -1747,7 +1755,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                   Open Sales Order
                 </ModuleRecordAction>
               )}
-              {canWriteInquiry && <button type="button" onClick={addManualItemRow} disabled={isReadOnly} className="rounded-[4px] bg-[#5d82a2] px-[16px] py-[9px] text-[13px] text-white disabled:opacity-50">Not Listed Product</button>}
+              {canWriteInquiry && <button type="button" onClick={addManualItemRow} disabled={isReadOnly || invoiceEntryLimitReached} className="rounded-[4px] bg-[#5d82a2] px-[16px] py-[9px] text-[13px] text-white disabled:opacity-50">Not Listed Product</button>}
             </div>}
           </form>
         </section>
@@ -2311,7 +2319,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                   <button
                     type="button"
                     onClick={addItemRow}
-                    disabled={isReadOnly}
+                    disabled={isReadOnly || invoiceEntryLimitReached}
                     className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-brand-blue font-semibold text-sm hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <Plus className="w-4 h-4" />
@@ -2353,7 +2361,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                           <td className="px-3 py-2 border-b border-slate-200 dark:border-slate-800">
                             <input
                               type="number"
-                              disabled={isReadOnly}
+                              disabled={isReadOnly || invoiceEntryLimitReached}
                               value={item.qty}
                               onChange={(e) =>
                                 updateItemRow(
