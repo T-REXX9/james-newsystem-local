@@ -43,7 +43,6 @@ const PurchaseHistoryReportView: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [report, setReport] = useState<PurchaseHistoryReport | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
   const requestController = useRef<AbortController | null>(null);
   const requestVersion = useRef(0);
 
@@ -134,10 +133,9 @@ const PurchaseHistoryReportView: React.FC = () => {
     const version = ++requestVersion.current;
     setReport(null);
     setLoading(true);
-    setLoadingMore(false);
     setError('');
     try {
-      const payload = await purchaseHistoryReportService.getReport({
+      let payload = await purchaseHistoryReportService.getReport({
         customerId: selectedCustomerId,
         dateType,
         customDateFrom: dateType === 'custom' ? dateFrom : undefined,
@@ -146,37 +144,39 @@ const PurchaseHistoryReportView: React.FC = () => {
         perPage: 50,
         signal: controller.signal,
       });
-      if (version === requestVersion.current) setReport(payload);
-    } catch (err: any) {
-      if (version === requestVersion.current && err?.name !== 'AbortError') {
+
+      const allItems = [...payload.items];
+      while (payload.pagination?.has_more) {
+        const nextPayload = await purchaseHistoryReportService.getReport({
+          customerId: selectedCustomerId,
+          dateType,
+          customDateFrom: dateType === 'custom' ? dateFrom : undefined,
+          customDateTo: dateType === 'custom' ? dateTo : undefined,
+          page: payload.pagination.page + 1,
+          perPage: 50,
+          signal: controller.signal,
+        });
+        allItems.push(...nextPayload.items);
+        payload = nextPayload;
+      }
+
+      if (version === requestVersion.current) {
+        const historyDates = allItems.map((item) => item.ldate).filter(Boolean).sort();
+        setReport({
+          ...payload,
+          date_from: dateType === 'all' ? historyDates[0] || null : payload.date_from,
+          date_to: dateType === 'all' ? historyDates[historyDates.length - 1] || null : payload.date_to,
+          items: allItems,
+        });
+      }
+    } catch (err: unknown) {
+      const requestError = err as { name?: string; message?: string };
+      if (version === requestVersion.current && requestError?.name !== 'AbortError') {
         setReport(null);
-        setError(err?.message || 'Failed to load purchase history report');
+        setError(requestError?.message || 'Failed to load purchase history report');
       }
     } finally {
       if (version === requestVersion.current) setLoading(false);
-    }
-  };
-
-  const loadNextPage = async () => {
-    if (!report?.pagination?.has_more || loading || loadingMore || !selectedCustomerId) return;
-
-    setLoadingMore(true);
-    try {
-      const payload = await purchaseHistoryReportService.getReport({
-        customerId: selectedCustomerId,
-        dateType,
-        customDateFrom: dateType === 'custom' ? dateFrom : undefined,
-        customDateTo: dateType === 'custom' ? dateTo : undefined,
-        page: report.pagination.page + 1,
-        perPage: 50,
-      });
-      setReport((current) => current ? {
-        ...current,
-        items: [...current.items, ...payload.items],
-        pagination: payload.pagination,
-      } : current);
-    } finally {
-      setLoadingMore(false);
     }
   };
 
@@ -353,10 +353,6 @@ const PurchaseHistoryReportView: React.FC = () => {
           <div
             data-testid="purchase-history-scroll"
             className="flex-1 overflow-auto p-4 space-y-4"
-            onScroll={(event) => {
-              const element = event.currentTarget;
-              if (element.scrollHeight - element.scrollTop - element.clientHeight < 320) void loadNextPage();
-            }}
           >
             {error && <p className="text-sm text-rose-600">{error}</p>}
             {loading ? (
@@ -439,11 +435,6 @@ const PurchaseHistoryReportView: React.FC = () => {
                           <td className="px-3 py-2 text-right">{peso.format(summary.totalAmountSold)}</td>
                           <td className="px-3 py-2 text-right">{peso.format(summary.totalAmountReturn)}</td>
                         </tr>
-                      ) : null}
-                      {loadingMore ? (
-                        <tr><td colSpan={11} className="px-3 py-3 text-center text-slate-500">Loading more purchase history...</td></tr>
-                      ) : report.pagination?.has_more ? (
-                        <tr><td colSpan={11} className="px-3 py-3 text-center text-slate-500">Scroll for more rows</td></tr>
                       ) : null}
                     </tbody>
                   </table>

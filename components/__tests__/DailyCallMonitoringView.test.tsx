@@ -746,4 +746,23 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(statusHistory).toBeInTheDocument();
     expect(within(statusHistory.closest('div')?.parentElement as HTMLElement).getByText('No Answer')).toBeInTheDocument();
   });
+
+  it('renders every one of 400 customers returned for the assigned sales agent', async () => {
+    const assignedContacts = Array.from({ length: 400 }, (_, index) => ({
+      ...baseSnapshot.contacts[0],
+      id: `contact-${index + 1}`,
+      shopName: `Assigned Customer ${index + 1}`,
+      status: 'active',
+      verification: '',
+    }));
+    fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
+      ...baseSnapshot,
+      contacts: assignedContacts,
+    });
+
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    expect(await screen.findByText('Assigned Customer 400')).toBeInTheDocument();
+    expect(screen.getByText('400 customers')).toBeInTheDocument();
+  });
 });

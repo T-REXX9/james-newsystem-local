@@ -321,6 +321,7 @@ export interface Contact {
   customerSince: string; // "since"
   team: string;
   salesman: string; // "salesman" (Assigned Agent)
+  assignedAgentId?: string; // Staff account ID used for access filtering
   referBy: string;
 
   // Location

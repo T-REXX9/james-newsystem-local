@@ -95,7 +95,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     // Sync prop data
     useEffect(() => {
         setContact(initialData);
-        setSelectedSalesAgent(initialData?.salesman || '');
+        setSelectedSalesAgent(initialData?.assignedAgentId || '');
     }, [initialData]);
 
     // Fetch Deep Data
@@ -114,6 +114,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                 ]);
                 if (detail) {
                     setContact((previous) => ({ ...(previous || {}), ...detail } as Contact));
+                    setSelectedSalesAgent(detail.assignedAgentId || '');
                     onUpdate(detail);
                 }
                 const ledgerTransactions = ledgerRowsToContactTransactions(ledger.rows);
@@ -151,8 +152,17 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
 
         setIsSaving(true);
         try {
-            await updateContact(contactId, { salesman: selectedSalesAgent });
-            const updatedContact = { ...contact, salesman: selectedSalesAgent };
+            const selectedAgentName = salesAgents.find((agent) => agent.id === selectedSalesAgent)?.full_name || '';
+            await updateContact(contactId, {
+                assignedAgentId: selectedSalesAgent,
+                salesman: selectedAgentName,
+            });
+            const updatedContact = {
+                ...contact,
+                assignedAgentId: selectedSalesAgent,
+                assignedAgent: selectedAgentName,
+                salesman: selectedAgentName,
+            };
             setContact(updatedContact);
             onUpdate(updatedContact);
             setIsEditingSalesAgent(false);
@@ -166,7 +176,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     };
 
     const handleCancelEditSalesAgent = () => {
-        setSelectedSalesAgent(contact?.salesman || '');
+        setSelectedSalesAgent(contact?.assignedAgentId || '');
         setIsEditingSalesAgent(false);
     };
 
@@ -650,7 +660,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                         >
                                             <option value="">-- No Agent --</option>
                                             {salesAgents.map((agent) => (
-                                                <option key={agent.id} value={agent.full_name}>
+                                                <option key={agent.id} value={agent.id}>
                                                     {agent.full_name}
                                                 </option>
                                             ))}

@@ -281,6 +281,7 @@ const toContactModel = (row: any): Contact => ({
   customerSince: String(row?.clientSince || ''),
   team: '',
   salesman: String(row?.assignedTo || 'Unassigned'),
+  assignedAgentId: String(row?.assignedAgentId || ''),
   referBy: String(row?.source || ''),
   address: String(row?.courier || ''),
   province: String(row?.province || ''),
@@ -1374,10 +1375,10 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const customerListSummaries = useMemo(() => {
     const summarize = (
       rows: MasterRow[],
-      id: 'priority' | 'recovery' | 'verified' | 'unverified' | 'blocked',
+      id: 'priority' | 'recovery' | 'verified' | 'unverified' | 'blocked' | 'other',
       label: string,
       note: string,
-      tone: 'emerald' | 'rose' | 'blue' | 'orange' | 'red',
+      tone: 'emerald' | 'rose' | 'blue' | 'orange' | 'red' | 'slate',
       metricLabel: string
     ) => {
       const currentMonthSales = rows.reduce((sum, row) => sum + row.currentMonthSales, 0);
@@ -1412,6 +1413,14 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     );
     const verifiedRows = noPurchaseProspectRows.filter((row) => row.contact.verification === 'Verified');
     const unverifiedRows = noPurchaseProspectRows.filter((row) => row.contact.verification !== 'Verified');
+    const categorizedIds = new Set([
+      ...blockedRows,
+      ...priorityRows,
+      ...recoveryRows,
+      ...verifiedRows,
+      ...unverifiedRows,
+    ].map((row) => row.contact.id));
+    const otherRows = masterRows.filter((row) => !categorizedIds.has(row.contact.id));
 
     return [
       summarize(priorityRows, 'priority', 'Priority List', 'Any ledger activity since October 2025 onwards', 'emerald', 'Current Month Sales'),
@@ -1419,6 +1428,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       summarize(verifiedRows, 'verified', 'Verified Prospects', 'Verified, awaiting first purchase', 'blue', 'Average Monthly Purchase'),
       summarize(unverifiedRows, 'unverified', 'Unverified Prospects', 'No purchases yet', 'orange', 'Average Monthly Purchase'),
       summarize(blockedRows, 'blocked', DO_NOT_CONTACT_LABEL, 'View only — no contact or sales inquiry', 'red', 'Average Monthly Sales'),
+      summarize(otherRows, 'other', 'Other Customers', 'Assigned customers outside the purchase and prospect lists', 'slate', 'Average Monthly Sales'),
     ];
   }, [masterRows]);
 
@@ -1805,6 +1815,12 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       title: 'text-red-700',
       icon: 'bg-[#f94449]',
       value: 'text-red-700',
+    },
+    slate: {
+      card: 'border-slate-200 bg-slate-50/60',
+      title: 'text-slate-700',
+      icon: 'bg-slate-600',
+      value: 'text-slate-700',
     },
   } as const;
 

@@ -6,7 +6,7 @@ import { fetchSalesAgents } from '../services/customerDatabaseLocalApiService';
 interface BulkAssignAgentModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onAssign: (agentName: string) => void;
+    onAssign: (agentId: string, agentName: string) => void;
     selectedCount: number;
 }
 
@@ -39,8 +39,9 @@ const BulkAssignAgentModal: React.FC<BulkAssignAgentModalProps> = ({
     };
 
     const handleAssign = () => {
-        if (selectedAgent) {
-            onAssign(selectedAgent);
+        const agent = salesAgents.find((candidate) => candidate.id === selectedAgent);
+        if (agent) {
+            onAssign(agent.id, agent.full_name);
             setSelectedAgent('');
             onClose();
         }
@@ -102,7 +103,7 @@ const BulkAssignAgentModal: React.FC<BulkAssignAgentModalProps> = ({
                                 >
                                     <option value="">-- Select an Agent --</option>
                                     {salesAgents.map((agent) => (
-                                        <option key={agent.id} value={agent.full_name}>
+                                        <option key={agent.id} value={agent.id}>
                                             {agent.full_name}
                                         </option>
                                     ))}

@@ -238,7 +238,11 @@ export const updateInquiryStatus = async (id: string, status: SalesInquiryStatus
 };
 
 export const approveInquiry = async (id: string): Promise<SalesInquiry | null> => {
-  await updateInquiryStatus(id, SalesInquiryStatus.APPROVED);
+  await requestApi(`${API_BASE_URL}/sales-inquiries/${encodeURIComponent(id)}/actions/approve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ main_id: API_MAIN_ID }),
+  });
   return getSalesInquiry(id);
 };
 

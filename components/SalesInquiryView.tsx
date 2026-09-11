@@ -129,13 +129,17 @@ export const canGenerateSalesOrderFromInquiry = (
   canEdit: boolean,
   isCreatingNew: boolean,
   isReadOnly: boolean,
+  canApprove = true,
 ): boolean => Boolean(
   canAdd
   && inquiry
   && !isCreatingNew
   && !inquiry.so_refno
   && !isReadOnly
-  && ((inquiry.status === SalesInquiryStatus.DRAFT && canEdit) || inquiry.status === SalesInquiryStatus.APPROVED)
+  && (
+    (inquiry.status === SalesInquiryStatus.DRAFT && canEdit && canApprove)
+    || inquiry.status === SalesInquiryStatus.APPROVED
+  )
 );
 
 const inquiryListColumnWidths = [
@@ -184,6 +188,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   const canAdd = canPerformAction('can_add');
   const canEdit = canPerformAction('can_edit');
   const canDelete = canPerformAction('can_delete');
+  const canApprove = canPerformAction('can_approve');
   const lastAppliedPrefillRef = React.useRef<string | null>(null);
   const salesInquiryExportRef = React.useRef<HTMLElement | null>(null);
   const customerSelectionDirtyRef = React.useRef(false);
@@ -1279,7 +1284,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   };
 
   const handleFinalizeInquiry = async () => {
-    if (!canAdd) return;
+    if (!canAdd && !canApprove) return;
     if (
       !selectedInquiry ||
       isCreatingNew ||
@@ -1292,6 +1297,11 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     try {
       const creatorUserId = await resolveNotificationUserId(selectedInquiry.created_by, selectedInquiry.sales_person);
       if (selectedInquiry.status === SalesInquiryStatus.DRAFT) {
+        if (!canApprove) {
+          addToast({ type: 'error', message: 'You do not have Approve permission for Sales Inquiry.' });
+          setLoading(false);
+          return;
+        }
         const approvedInquiry = await approveInquiry(selectedInquiry.id);
         if (approvedInquiry?.id) {
           setSelectedInquiry(approvedInquiry);
@@ -1444,7 +1454,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     }
   }, [activeInquiryNumberDisplay, addToast, jpegCaptureMode]);
   const priceGroupDisplay = priceGroup || normalizePriceGroup(priceGroup);
-  const canGenerateSO = canGenerateSalesOrderFromInquiry(selectedInquiry, canAdd, canEdit, isCreatingNew, isReadOnly);
+  const canGenerateSO = canGenerateSalesOrderFromInquiry(selectedInquiry, canAdd, canEdit, isCreatingNew, isReadOnly, canApprove);
   const inquiryGuidance = (() => {
     if (isCreatingNew) {
       return {

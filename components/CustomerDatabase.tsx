@@ -133,11 +133,15 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
     }
   };
 
-  const handleBulkAssignAgent = async (agentName: string) => {
-    if (!isMasterUserAccount(currentUser) || !agentName || selectedIds.size === 0) return;
+  const handleBulkAssignAgent = async (agentId: string, agentName: string) => {
+    if (!isMasterUserAccount(currentUser) || !agentId || !agentName || selectedIds.size === 0) return;
 
     try {
-      await bulkUpdateContacts(Array.from(selectedIds), { assignedAgent: agentName, salesman: agentName });
+      await bulkUpdateContacts(Array.from(selectedIds), {
+        assignedAgentId: agentId,
+        assignedAgent: agentName,
+        salesman: agentName,
+      });
       addToast({
         type: 'success',
         title: 'Agent assigned',

@@ -1,5 +1,6 @@
 import { Contact, Invoice, InvoiceStatus, OrderSlip, OrderSlipStatus, SalesOrder, SalesOrderItem, SalesOrderStatus } from '../types';
 import { getLocalAuthSession } from './localAuthService';
+import { canPerformAction } from '../utils/actionPermissions';
 import { readPersistedVip } from '../utils/vipDocumentDiscount';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
@@ -98,7 +99,7 @@ const mapApiOrderSummary = (raw: any): SalesOrder => {
     grand_total: toNumber(raw?.grand_total, 0),
     ...readPersistedVip(raw),
     status: normalizeOldSystemStatus(raw?.status || raw?.transaction_status) as SalesOrderStatus,
-    can_approve: Boolean(raw?.viewer_is_approver),
+    can_approve: canPerformAction('can_approve', 'Sales Order'),
     approved_by: '',
     approved_at: '',
     created_by: String(raw?.created_by || ''),

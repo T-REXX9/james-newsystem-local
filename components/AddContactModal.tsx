@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Loader2, Eye, EyeOff, Plus, Trash2 } from 'lucide-react';
-import { CustomerStatus, DealStage, Contact, ContactPerson, type CustomerVatType } from '../types';
+import { CustomerStatus, DealStage, Contact, ContactPerson, type CustomerVatType, type UserProfile } from '../types';
 import ValidationSummary from './ValidationSummary';
 import FieldHelp from './FieldHelp';
 import { CUSTOMER_VAT_TYPES, DEFAULT_CUSTOMER_VAT_TYPE } from '../constants/customerVat';
@@ -11,7 +11,7 @@ import { validateMaxLength, validateOptionalEmail, validateOptionalPhone, valida
 import { parseSupabaseError } from '../utils/errorHandler';
 import { formatCustomerSince } from '../utils/formatUtils';
 import { useToast } from './ToastProvider';
-import { fetchSimilarCustomerNames, type SimilarCustomerNameMatch } from '../services/customerDatabaseLocalApiService';
+import { fetchSalesAgents, fetchSimilarCustomerNames, type SimilarCustomerNameMatch } from '../services/customerDatabaseLocalApiService';
 import RecordImagePicker from './RecordImagePicker';
 import { getLocalAuthSession } from '../services/localAuthService';
 import { isMasterUserAccount } from '../constants';
@@ -61,6 +61,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
   const [similarNameMatches, setSimilarNameMatches] = useState<SimilarCustomerNameMatch[]>([]);
   const [checkingCompanyName, setCheckingCompanyName] = useState(false);
   const [duplicateOverrideReason, setDuplicateOverrideReason] = useState('');
+  const [salesAgents, setSalesAgents] = useState<UserProfile[]>([]);
   const { addToast } = useToast();
   
   type ContactPersonDraft = Omit<ContactPerson, 'id'> & { id?: string };
@@ -89,6 +90,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     lastContactDate: today,
     team: '',
     salesman: '',
+    assignedAgentId: '',
     referBy: '',
     address: '',
     province: '',
@@ -131,6 +133,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     lastContactDate: contact?.lastContactDate || today,
     team: contact?.team || '',
     salesman: contact?.salesman || '',
+    assignedAgentId: contact?.assignedAgentId || '',
     referBy: contact?.referBy || '',
     address: contact?.address || '',
     province: contact?.province || '',
@@ -201,6 +204,19 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, isEditMode, initialData]);
 
+  useEffect(() => {
+    if (!isOpen || !canAssignSalesAgent) return;
+    let active = true;
+    fetchSalesAgents()
+      .then((agents) => {
+        if (active) setSalesAgents(agents);
+      })
+      .catch((error) => console.error('Failed to load sales agents:', error));
+    return () => {
+      active = false;
+    };
+  }, [isOpen, canAssignSalesAgent]);
+
   // Safe status options
   const statusOptions = (CustomerStatus && Object.keys(CustomerStatus).length > 0)
     ? Object.values(CustomerStatus)
@@ -261,6 +277,9 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
         // can choose who owns the account. Preserve an existing assignment on
         // staff edits and leave new records unassigned for their caller to own.
         salesman: canAssignSalesAgent ? (formData.salesman || '') : (isEditMode ? (initialData?.salesman || '') : ''),
+        assignedAgentId: canAssignSalesAgent
+          ? (formData.assignedAgentId || '')
+          : (isEditMode ? (initialData?.assignedAgentId || '') : ''),
         referBy: formData.referBy || '',
 
         // Location
@@ -539,7 +558,21 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                        {canAssignSalesAgent && (
                            <div>
                                <label className="label">Salesman</label>
-                               <input className="input" value={formData.salesman} onChange={e => setFormData({...formData, salesman: e.target.value})} />
+                               <select
+                                 aria-label="Salesman"
+                                 className="input"
+                                 value={formData.assignedAgentId || ''}
+                                 onChange={(event) => {
+                                   const assignedAgentId = event.target.value;
+                                   const salesman = salesAgents.find((agent) => agent.id === assignedAgentId)?.full_name || '';
+                                   setFormData({ ...formData, assignedAgentId, salesman });
+                                 }}
+                               >
+                                 <option value="">-- No Agent --</option>
+                                 {salesAgents.map((agent) => (
+                                   <option key={agent.id} value={agent.id}>{agent.full_name}</option>
+                                 ))}
+                               </select>
                            </div>
                        )}
                        <div>

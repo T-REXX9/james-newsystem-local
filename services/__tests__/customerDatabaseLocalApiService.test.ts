@@ -1,7 +1,7 @@
 import { CustomerStatus } from '../../types';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchDailyCallMasterList } from '../dailyCallMonitoringService';
-import { deleteCustomer, mapApiCustomerToContact, mapContactPayloadToApi, mapContactUpdatesToApi, updateContact } from '../customerDatabaseLocalApiService';
+import { bulkUpdateContacts, deleteCustomer, mapApiCustomerToContact, mapContactPayloadToApi, mapContactUpdatesToApi, updateContact } from '../customerDatabaseLocalApiService';
 
 const reloadStanding = (patch: Record<string, unknown>) =>
   mapApiCustomerToContact({
@@ -49,6 +49,31 @@ describe('customer database price and discount codes', () => {
 describe('customer database saves and daily call cache', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('uses the selected staff account ID for customer-agent reassignment', () => {
+    expect(mapContactUpdatesToApi({
+      assignedAgentId: '63',
+      salesman: 'Sales Agent Demo',
+    })).toEqual({ sales_person_id: '63' });
+  });
+
+  it('sends all 400 selected customer IDs in one reassignment request', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { updated: true, updated_count: 400 } }),
+    } as Response);
+    const customerIds = Array.from({ length: 400 }, (_, index) => `customer-${index + 1}`);
+
+    await bulkUpdateContacts(customerIds, {
+      assignedAgentId: '63',
+      salesman: 'Sales Agent Demo',
+    });
+
+    const request = fetchSpy.mock.calls[0];
+    const body = JSON.parse(String((request[1] as RequestInit).body));
+    expect(body.session_ids).toEqual(customerIds);
+    expect(body.updates).toEqual({ sales_person_id: '63' });
   });
 
   it('does not let the master daily call list serve a pre-save cache after updateContact succeeds', async () => {

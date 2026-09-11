@@ -218,6 +218,11 @@ describe('SalesInquiryView', () => {
     expect(canGenerateSalesOrderFromInquiry({ status: 'Submitted', so_refno: '' }, true, true, false, false)).toBe(true);
   });
 
+  it('requires System Access Approve before generating from a draft inquiry', () => {
+    expect(canGenerateSalesOrderFromInquiry({ status: 'Pending', so_refno: '' }, true, true, false, false, false)).toBe(false);
+    expect(canGenerateSalesOrderFromInquiry({ status: 'Pending', so_refno: '' }, true, true, false, false, true)).toBe(true);
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     html2canvasMock.mockResolvedValue({

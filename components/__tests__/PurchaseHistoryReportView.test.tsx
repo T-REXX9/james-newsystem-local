@@ -1,5 +1,5 @@
 import React from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PurchaseHistoryReportView from '../PurchaseHistoryReportView';
 
@@ -68,7 +68,7 @@ describe('PurchaseHistoryReportView', () => {
     expect(getReportMock).toHaveBeenCalledWith(expect.objectContaining({ page: 1, perPage: 50 }));
   });
 
-  it('appends the next page when the report scroll nears the end', async () => {
+  it('loads every page automatically and shows the full history range', async () => {
     const firstRow = {
       source_type: 'INVOICE', source_refno: 'ref-1', source_no: 'D1', ldate: '2026-09-08',
       litemcode: 'ITEM-1', lpartno: 'P-1', ldesc: 'First item', lbrand: 'BRAND',
@@ -87,11 +87,8 @@ describe('PurchaseHistoryReportView', () => {
     render(<PurchaseHistoryReportView />);
     expect((await screen.findAllByText('First item')).length).toBeGreaterThan(0);
 
-    const scroll = screen.getByTestId('purchase-history-scroll');
-    Object.defineProperties(scroll, { scrollHeight: { value: 1000 }, clientHeight: { value: 500 }, scrollTop: { value: 600 } });
-    fireEvent.scroll(scroll);
-
     expect((await screen.findAllByText('Second item')).length).toBeGreaterThan(0);
     await waitFor(() => expect(getReportMock).toHaveBeenCalledWith(expect.objectContaining({ page: 2, perPage: 50 })));
+    expect(screen.getByText(/Customer Purchase History for the Period/)).toHaveTextContent('SEP‑08‑26 and SEP‑08‑26');
   });
 });

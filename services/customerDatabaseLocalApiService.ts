@@ -319,6 +319,7 @@ export const mapApiCustomerToContact = (row: ApiCustomerRow): LocalContact => {
     customerSince: sanitizeCustomerDate(row?.since || row?.customer_since || row?.lsince || ''),
     team: sanitizeLegacyString(row?.team || ''),
     salesman: resolvedSalesName,
+    assignedAgentId: salesPersonId,
     referBy: sanitizeLegacyString(row?.refer_by || ''),
     address: sanitizeLegacyString(row?.address || ''),
     province: sanitizeLegacyString(row?.province || ''),
@@ -374,7 +375,7 @@ export const mapApiCustomerToContact = (row: ApiCustomerRow): LocalContact => {
 export const mapContactPayloadToApi = (contact: ContactPayloadWithSalesPersonId) => {
   const status = mapUiStatusToApi(contact?.status as CustomerStatus | undefined);
   const debtType = debtTypeForUiStatus(contact?.status as CustomerStatus | undefined);
-  const resolvedSalesPerson = String(contact?.__salesPersonId || contact?.salesman || '').trim();
+  const resolvedSalesPerson = String(contact?.assignedAgentId || contact?.__salesPersonId || contact?.salesman || '').trim();
 
   return {
     company: String(contact?.company || ''),
@@ -424,8 +425,8 @@ export const mapContactUpdatesToApi = (contact: Partial<ContactPayloadWithSalesP
   if (hasOwn(contact, 'phone')) payload.phone = String(contact.phone || '');
   if (hasOwn(contact, 'mobile')) payload.mobile = String(contact.mobile || '');
 
-  if (hasOwn(contact, '__salesPersonId') || hasOwn(contact, 'salesman') || hasOwn(contact, 'assignedAgent')) {
-    payload.sales_person_id = String(contact.__salesPersonId || contact.salesman || contact.assignedAgent || '').trim();
+  if (hasOwn(contact, 'assignedAgentId') || hasOwn(contact, '__salesPersonId') || hasOwn(contact, 'salesman') || hasOwn(contact, 'assignedAgent')) {
+    payload.sales_person_id = String(contact.assignedAgentId || contact.__salesPersonId || contact.salesman || contact.assignedAgent || '').trim();
   }
   if (hasOwn(contact, '__salesTeamId')) {
     payload.sales_team_id = contact.__salesTeamId === '' || contact.__salesTeamId == null
@@ -758,7 +759,7 @@ const mapApiTermRow = (row: ApiCustomerTermsRow, index: number) => ({
   status: sanitizeLegacyString(row?.status || row?.lstatus || ''),
 });
 
-export const bulkUpdateContacts = async (ids: string[], updates: Partial<Contact>): Promise<void> => {
+export const bulkUpdateContacts = async (ids: string[], updates: Partial<ContactPayloadWithSalesPersonId>): Promise<void> => {
   if (!Array.isArray(ids) || ids.length === 0) return;
 
   if (updates?.contactPersons) {

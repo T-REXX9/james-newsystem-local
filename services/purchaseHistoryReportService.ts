@@ -95,7 +95,7 @@ const resolveDateRange = (
   dateType: PurchaseHistoryDateType,
   customFrom?: string,
   customTo?: string
-): { dateFrom: string; dateTo: string } => {
+): { dateFrom: string | null; dateTo: string | null } => {
   const now = new Date();
   const today = toYmd(now);
 
@@ -128,8 +128,7 @@ const resolveDateRange = (
     return { dateFrom: toYmd(first), dateTo: toYmd(last) };
   }
 
-  // Old-system parity for "All" default lower bound.
-  return { dateFrom: '2013-06-01', dateTo: today };
+  return { dateFrom: null, dateTo: null };
 };
 
 const getMainId = (): number => {
@@ -172,11 +171,11 @@ export const purchaseHistoryReportService = {
   }): Promise<PurchaseHistoryReport> {
     const { dateFrom, dateTo } = resolveDateRange(params.dateType, params.customDateFrom, params.customDateTo);
     const query = new URLSearchParams({
-      date_from: dateFrom,
-      date_to: dateTo,
       page: String(Math.max(1, params.page || 1)),
       per_page: String(Math.min(50, Math.max(1, params.perPage || 50))),
     });
+    if (dateFrom) query.set('date_from', dateFrom);
+    if (dateTo) query.set('date_to', dateTo);
 
     const data = await requestApi(
       `${API_BASE_URL}/customers/${encodeURIComponent(params.customerId)}/purchase-history?${query.toString()}`,
