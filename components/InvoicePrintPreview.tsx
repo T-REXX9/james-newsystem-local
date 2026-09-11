@@ -29,7 +29,7 @@ const COMPANY = {
   city: 'Taguig City',
 };
 
-const MAX_ITEM_ROWS = 12;
+const MAX_ITEM_ROWS = 16;
 
 const printStyles = `
   @page {

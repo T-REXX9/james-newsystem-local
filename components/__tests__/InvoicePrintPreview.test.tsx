@@ -79,4 +79,18 @@ describe('InvoicePrintPreview', () => {
     expect(screen.getAllByText('6,804.00').length).toBeGreaterThan(0);
     expect(screen.queryByText('Less: SC/PWD Discount')).not.toBeInTheDocument();
   });
+
+  it('shows up to 16 invoice item entries before reporting an overflow', () => {
+    const items = Array.from({ length: 17 }, (_, index) => ({
+      ...invoice.items[0],
+      id: `item-${index + 1}`,
+      description: `Item ${index + 1}`,
+    }));
+
+    render(<InvoicePrintPreview invoice={{ ...invoice, items }} customer={null} onClose={() => undefined} />);
+
+    expect(screen.getByText('Item 16')).toBeInTheDocument();
+    expect(screen.queryByText('Item 17')).not.toBeInTheDocument();
+    expect(screen.getByText('1 additional item exceed the first-page A5 layout.')).toBeInTheDocument();
+  });
 });
