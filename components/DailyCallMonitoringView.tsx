@@ -451,12 +451,12 @@ const MasterTableRow = React.memo(({
         </span>
       </td>
       <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding}`}>
-        <p className="text-[12px] font-bold text-[#10244c] dark:text-slate-200" title={row.lastContact ? new Date(row.lastContact).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : 'No activity yet'}>
+        <p className="text-[12px] font-bold text-[#10244c] dark:text-slate-200" title={row.lastContact ? new Date(row.lastContact).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase() : 'No activity yet'}>
           {formatRelativeTime(row.lastContact)}
         </p>
       </td>
       <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding}`}>
-        <p className="text-[12px] font-medium text-slate-600 dark:text-slate-300" title={row.lastPurchase ? new Date(row.lastPurchase).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : 'No purchases'}>
+        <p className="text-[12px] font-medium text-slate-600 dark:text-slate-300" title={row.lastPurchase ? new Date(row.lastPurchase).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase() : 'No purchases'}>
           {formatDate(row.lastPurchase)}
         </p>
       </td>
@@ -1832,7 +1832,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             All customers assigned to <span className="font-semibold">{agentDisplayName}</span>, ordered by priority
           </p>
           {initialSelectedDate && <p className="mt-1 text-xs font-semibold text-blue-700 dark:text-blue-300">
-            Opened from dashboard date: {new Date(`${initialSelectedDate}T12:00:00`).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
+            Opened from dashboard date: {new Date(`${initialSelectedDate}T12:00:00`).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase()}
           </p>}
         </div>
         <div className="flex items-center gap-2">

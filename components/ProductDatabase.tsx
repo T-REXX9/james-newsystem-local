@@ -131,7 +131,7 @@ const formatBlueprintDate = (value?: string): string => {
   if (match) return `${match[3]}/${match[2]}/${match[1]}`;
   const parsed = new Date(text);
   if (Number.isNaN(parsed.getTime())) return text;
-  return parsed.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+  return parsed.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
 };
 
 const compactQuantity = (value?: number): string => {

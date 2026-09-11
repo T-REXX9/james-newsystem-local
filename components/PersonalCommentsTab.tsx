@@ -167,7 +167,7 @@ const PersonalCommentsTab: React.FC<PersonalCommentsTabProps> = ({
                         {comment.author_name}
                       </p>
                       <span className="text-xs text-slate-500 dark:text-slate-400 flex-shrink-0">
-                        {new Date(comment.timestamp).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })} {new Date(comment.timestamp).toLocaleTimeString()}
+                        {new Date(comment.timestamp).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase()} {new Date(comment.timestamp).toLocaleTimeString()}
                       </span>
                     </div>
                   </div>

@@ -815,24 +815,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
     vip_discount_amount: selectedOrder?.vip_discount_amount,
   });
   const legacyListDate = (value?: string | null) => {
-    if (!value) return '';
-    const rawValue = String(value);
-    const normalized = rawValue.split('T')[0];
-    const [year, month, day] = normalized.split('-');
-    if (!year || !month || !day) return formatDisplayDate(value);
-    if (!rawValue.includes('T') && !/[Zz]|[+-]\d{2}:?\d{2}$/.test(rawValue)) {
-      return `${month}/${day}/${year}`;
-    }
-    const parsed = new Date(rawValue);
-    if (Number.isNaN(parsed.getTime())) return formatDisplayDate(value);
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: DISPLAY_TIME_ZONE,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).formatToParts(parsed);
-    const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((entry) => entry.type === type)?.value || '';
-    return `${part('month')}/${part('day')}/${part('year')}`;
+    return formatDisplayDate(value);
   };
   const legacyStatus = (status?: string | null) => {
     const normalized = normalizeStatus(status);
@@ -1374,7 +1357,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                         </div>
                       </td>
                       <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Date:</td>
-                      <td><input readOnly value={selectedOrder.sales_date || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                      <td><input readOnly value={formatDisplayDate(selectedOrder.sales_date)} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
                       <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Sales Person:</td>
                       <td><input readOnly value={selectedOrder.sales_person || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
                     </tr>

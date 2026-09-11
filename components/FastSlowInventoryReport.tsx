@@ -3,6 +3,7 @@ import { ArrowLeft, Loader2, Printer } from 'lucide-react';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
 import { generateFastSlowReport } from '../services/inventoryMovementService';
 import type { FastSlowMovementItem, FastSlowReportData, FastSlowReportFilters } from '../types';
+import { formatDate as formatDisplayDate } from '../utils/formatUtils';
 
 const DEFAULT_FILTERS: FastSlowReportFilters = {
   sortBy: 'part_no',
@@ -19,14 +20,7 @@ const sortOptions: Array<{ value: FastSlowReportFilters['sortBy']; label: string
 ];
 
 const formatDate = (value: string | null): string => {
-  if (!value) return 'N/A';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'N/A';
-  return date.toLocaleDateString('en-US', {
-    month: '2-digit',
-    day: '2-digit',
-    year: 'numeric',
-  });
+  return value ? formatDisplayDate(value) : 'N/A';
 };
 
 const formatPrice = (value: number): string => new Intl.NumberFormat('en-PH', {
@@ -263,11 +257,7 @@ const FastSlowInventoryReport: React.FC = () => {
                   <strong>FAST MOVING/SLOW MOVING ITEMS SUMMARY</strong>
                   <br />
                   <strong>
-                    AS OF {new Date(reportData.generatedAt).toLocaleDateString('en-US', {
-                      month: 'long',
-                      day: '2-digit',
-                      year: 'numeric',
-                    }).toUpperCase()}
+                    AS OF {formatDisplayDate(reportData.generatedAt).toUpperCase()}
                   </strong>
                 </p>
 

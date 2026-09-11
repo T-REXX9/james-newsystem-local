@@ -19,9 +19,9 @@ const numberFormatter = new Intl.NumberFormat('en-PH', {
 });
 
 const dateFormatter = new Intl.DateTimeFormat('en-PH', {
-  month: 'long',
-  day: 'numeric',
-  year: 'numeric',
+  month: 'short',
+  day: '2-digit',
+  year: '2-digit',
 });
 
 const COMPANY = {
@@ -228,7 +228,7 @@ const formatDate = (value?: string | null): string => {
   if (!value) return '';
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return dateFormatter.format(parsed);
+  return dateFormatter.format(parsed).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
 };
 
 const lineAmount = (item: Invoice['items'][number]): number => {

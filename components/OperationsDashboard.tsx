@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CalendarDays, CheckCircle2, CircleDollarSign, ClipboardCheck, Clock3, FileText, FolderOpen, Loader2, PackageCheck, Phone, PhoneCall, PhoneIncoming, PhoneMissed, PhoneOutgoing, RefreshCw, RotateCcw, ShoppingCart, Truck, XCircle } from 'lucide-react';
 import { fetchOperationsDashboardSnapshot, OperationsDashboardSnapshot, toLocalDateInputValue } from '../services/operationsDashboardService';
 import OperationsCallBreakdownModal, { OperationsCallBreakdownKind } from './OperationsCallBreakdownModal';
+import { formatDate as formatDisplayDate } from '../utils/formatUtils';
 
 interface OperationsDashboardProps {
   onNavigate: (route: string, payload?: Record<string, string>) => void;
@@ -58,7 +59,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({ onNavigate })
     finally { setLoading(false); }
   }, [selectedDate]);
   useEffect(() => { void load(); }, [load]);
-  const displayDate = useMemo(() => new Intl.DateTimeFormat('en-PH', { year: 'numeric', month: 'long', day: 'numeric' }).format(new Date(`${selectedDate}T12:00:00`)), [selectedDate]);
+  const displayDate = useMemo(() => formatDisplayDate(`${selectedDate}T12:00:00`), [selectedDate]);
   const selectedPeriod = useMemo(() => {
     const date = new Date(`${selectedDate}T12:00:00`);
     const month = String(date.getMonth() + 1).padStart(2, '0');

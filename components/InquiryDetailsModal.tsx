@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, Calendar, User, Briefcase, Package, DollarSign, Inbox, Code, FileText, Users } from 'lucide-react';
+import { formatDate } from '../utils/formatUtils';
 
 interface InquiryDetailsModalProps {
   isOpen: boolean;
@@ -18,11 +19,7 @@ const InquiryDetailsModal: React.FC<InquiryDetailsModalProps> = ({ isOpen, onClo
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-PH', {
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    });
+    return formatDate(dateString);
   };
 
   return (

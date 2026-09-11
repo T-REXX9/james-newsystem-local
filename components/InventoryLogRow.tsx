@@ -26,7 +26,7 @@ const InventoryLogRow: React.FC<InventoryLogRowProps> = ({ log, showWarehouse, o
   };
 
   const date = parseDate(log.date);
-  const dateStr = date.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+  const dateStr = date.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
   const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return (

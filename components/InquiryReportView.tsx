@@ -3,6 +3,7 @@ import { ArrowLeft, List, Printer, Tags } from 'lucide-react';
 import type { InquiryReportFilters } from '../types';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
 import { inquiryReportLocalApiService } from '../services/inquiryReportLocalApiService';
+import { formatDateTime } from '../utils/formatUtils';
 
 interface InquiryReportViewProps {
   filters: InquiryReportFilters;
@@ -16,7 +17,7 @@ const numberFormat = new Intl.NumberFormat('en-US', {
 
 const displayDate = (value: unknown): string => {
   const date = new Date(String(value || ''));
-  return Number.isNaN(date.getTime()) ? String(value || '') : date.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+  return Number.isNaN(date.getTime()) ? String(value || '') : date.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
 };
 
 const displayTime = (value: unknown): string => {
@@ -107,9 +108,9 @@ const InquiryReportView: React.FC<InquiryReportViewProps> = ({ filters, onBack }
               <div className="mb-5 text-center text-[13px]">
                 <strong className="text-[20px]">Inquiry Report</strong>
                 <br />
-                Date from <strong>{filters.dateFrom}</strong> date to <strong>{filters.dateTo}</strong>
+                Date from <strong>{displayDate(filters.dateFrom)}</strong> date to <strong>{displayDate(filters.dateTo)}</strong>
                 <br />
-                System generated <strong>{new Date().toLocaleString('en-PH', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</strong>
+                System generated <strong>{formatDateTime(new Date())}</strong>
               </div>
 
               <table className="w-full border-collapse text-[13px]">

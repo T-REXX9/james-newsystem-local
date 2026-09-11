@@ -5,6 +5,7 @@ import { getLocalAuthSession } from '../services/localAuthService';
 import { persistedVipDiscount } from '../utils/vipDocumentDiscount';
 import VipDocumentTotals from './VipDocumentTotals';
 import VipStandingBadge from './VipStandingBadge';
+import { formatDateTime as formatDisplayDateTime } from '../utils/formatUtils';
 
 interface OrderSlipPrintPreviewProps {
   orderSlip: OrderSlip;
@@ -172,8 +173,8 @@ const formatDateTime = (value?: string | null): string => {
   if (Number.isNaN(parsed.getTime())) return value;
   const hasTime = /T|\d{1,2}:\d{2}/.test(value);
   return hasTime
-    ? parsed.toLocaleString('en-PH', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
-    : parsed.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+    ? formatDisplayDateTime(parsed)
+    : parsed.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
 };
 
 const OrderSlipPrintPreview: React.FC<OrderSlipPrintPreviewProps> = ({

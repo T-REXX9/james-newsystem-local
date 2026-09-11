@@ -317,7 +317,7 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
                                                 <div className="flex items-center justify-between gap-3">
                                                     <span className="font-semibold text-gray-900 dark:text-white">{rr.rr_no || rr.rr_number}</span>
                                                     <span className="whitespace-nowrap text-xs text-gray-500">
-                                                        {new Date(rr.receive_date || rr.received_date || rr.created_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
+                                                        {new Date(rr.receive_date || rr.received_date || rr.created_at).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase()}
                                                     </span>
                                                 </div>
                                                 <div className="mt-0.5 text-sm text-gray-600 dark:text-gray-400">

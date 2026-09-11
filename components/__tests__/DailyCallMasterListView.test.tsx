@@ -768,6 +768,47 @@ describe('DailyCallMasterListView', () => {
     expect(screen.queryByText('Priority Buyer Shop')).not.toBeInTheDocument();
   });
 
+  it('allows a client with Customer Database edit permission to mark a buyer do-not-contact', async () => {
+    const user = userEvent.setup();
+    const clientUser: UserProfile = {
+      id: 'client-1',
+      email: 'client@example.com',
+      role: 'Sales Agent',
+      action_permissions: {
+        pages: {
+          'Customer Database': {
+            can_view: true,
+            can_edit: true,
+          },
+        },
+      },
+    };
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 1 },
+      items: [{
+        id: 'sunny-1', shopName: 'Sunny Dalapo', province: 'Manila', city: 'Manila',
+        contactNumber: '0930', assignedTo: 'Joan Jerusalem', verification: 'Verified',
+        lastPurchaseDate: 'May 26, 2026', lastPurchaseDateRaw: '2026-05-26', purchaseCount: 1,
+        listCategory: 'priority', totalSales: 5000, currentMonthSales: 0, daysSinceLastPurchase: 20,
+        monthsSinceLastPurchase: 0, purchaseAgeGroup: 'two_weeks_to_one_month',
+      }],
+    });
+    vi.mocked(updateContact).mockResolvedValue(undefined);
+
+    render(<DailyCallMasterListView currentUser={clientUser} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Mark Sunny Dalapo as Do Not Contact' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Mark as Do Not Contact' });
+    await user.type(within(dialog).getByLabelText('Reason for Do Not Contact'), 'Client requested no further calls');
+    await user.click(within(dialog).getByRole('button', { name: 'Mark Do Not Contact' }));
+
+    await waitFor(() => expect(updateContact).toHaveBeenCalledWith(
+      'sunny-1',
+      { status: 'Blacklisted', debtType: 'Bad' },
+      'client-1',
+    ));
+  });
+
   it('shows the blocked do-not-contact quick go to category', async () => {
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
       meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 1 },

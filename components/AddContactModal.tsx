@@ -521,7 +521,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                                aria-label="Customer Since"
                                className="input w-full"
                                value={formData.customerSince ? formatCustomerSince(formData.customerSince) : ''}
-                               placeholder="Sep 9 2026"
+                               placeholder="SEP-09-26"
                              />
                              <input
                                type="date"

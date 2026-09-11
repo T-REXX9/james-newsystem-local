@@ -21,6 +21,7 @@ import {
 } from '../services/incidentItemsReportService';
 import { UserProfile } from '../types';
 import { canPerformAction } from '../utils/actionPermissions';
+import { formatDate } from '../utils/formatUtils';
 
 interface WarehouseIncidentReportDetailProps {
   reportId: string;
@@ -47,7 +48,7 @@ const WarehouseIncidentReportDetail: React.FC<WarehouseIncidentReportDetailProps
     if (!date && !time) return '-';
     const parsed = date ? new Date(`${date}T${time || '00:00'}:00`) : null;
     const dateLabel = parsed && !Number.isNaN(parsed.getTime())
-      ? parsed.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })
+      ? parsed.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase()
       : date;
     return time ? `${dateLabel} ${time}` : dateLabel;
   };
@@ -217,13 +218,7 @@ const WarehouseIncidentReportDetail: React.FC<WarehouseIncidentReportDetailProps
                       {transaction.transaction_number}
                     </span>
                     <span className="text-xs text-slate-500">
-                      {transaction.transaction_date
-                        ? new Date(transaction.transaction_date).toLocaleDateString('en-PH', {
-                            month: 'long',
-                            day: 'numeric',
-                            year: 'numeric',
-                          })
-                        : '-'}
+                      {transaction.transaction_date ? formatDate(transaction.transaction_date) : '-'}
                     </span>
                   </div>
                 ))}

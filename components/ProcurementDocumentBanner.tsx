@@ -19,7 +19,7 @@ const formatDate = (value?: string | null) => {
   if (!value) return '-';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+  return date.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
 };
 
 const normalizeDocuments = (value?: ProcurementDocument | ProcurementDocument[] | null) =>

@@ -34,7 +34,7 @@ const statuses = ['All Statuses', 'Draft', 'Pending', 'Submitted', 'Approved', '
 const formatDate = (value: string | null | undefined) => {
   if (!value) return '-';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
 };
 
 const statusClass = (status: string) => {

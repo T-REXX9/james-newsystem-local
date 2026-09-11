@@ -22,6 +22,7 @@ import ConfirmModal from './ConfirmModal';
 import ModuleRecordLink from './ModuleRecordLink';
 import { buildModuleRecordUrl } from '../utils/workflowNavigate';
 import { canPerformAction } from '../utils/actionPermissions';
+import { formatDate } from '../utils/formatUtils';
 
 const isMasterUser = (user?: UserProfile | null) => {
   const role = String(user?.role || '').trim().toLowerCase();
@@ -254,10 +255,7 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, supplierChoiceById, 
 };
 
 const formatReportDate = (date: Date): string => {
-  const month = date.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
-  const day = String(date.getDate()).padStart(2, '0');
-  const year = String(date.getFullYear()).slice(-2);
-  return `${month}-${day}-${year}`;
+  return formatDate(date).toUpperCase();
 };
 
 interface ReorderReportHistorySnapshot {
@@ -771,7 +769,7 @@ const ReorderReport: React.FC<ReorderReportProps> = ({ currentUser = null }) => 
           <ModuleRecordLink openInNewTab tab="warehouse-purchasing-purchase-request" payload={{ prId: document.refno }} className="font-bold text-brand-blue hover:underline">
             {document.number || document.refno}
           </ModuleRecordLink>
-          <div className="text-[11px] text-slate-500">{document.request_date ? document.request_date.slice(0, 10) : 'No date'} · {document.status}</div>
+          <div className="text-[11px] text-slate-500">{formatDate(document.request_date)} · {document.status}</div>
         </div>
       ))}
     </div>

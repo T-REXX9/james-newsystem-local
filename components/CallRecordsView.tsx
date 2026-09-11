@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Loader2, Phone, RefreshCw } from 'lucide-rea
 import { toast } from 'sonner';
 import { CallRecord, fetchCallRecords } from '../services/callingSystemService';
 import { UserProfile } from '../types';
+import { formatDate as formatDisplayDate } from '../utils/formatUtils';
 
 interface CallRecordsViewProps {
   currentUser: UserProfile | null;
@@ -17,7 +18,7 @@ const formatDate = (timestamp: string): string => {
   if (!timestamp) return '—';
   const date = new Date(timestamp.replace(' ', 'T') + (timestamp.includes('T') ? '' : 'Z'));
   if (Number.isNaN(date.getTime())) return timestamp;
-  return date.toLocaleDateString('en-PH', { month: '2-digit', day: '2-digit', year: '2-digit' });
+  return formatDisplayDate(timestamp);
 };
 
 const formatTime = (timestamp: string): string => {

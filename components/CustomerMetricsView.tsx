@@ -108,7 +108,7 @@ const CustomerMetricsView: React.FC<CustomerMetricsViewProps> = ({ contactId }) 
             <div>
               <p className="text-xs text-slate-500 dark:text-slate-400">Last Purchase</p>
               <p className="text-lg font-bold text-slate-800 dark:text-white mt-1">
-                {new Date(metrics.last_purchase_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
+                {new Date(metrics.last_purchase_date).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase()}
               </p>
             </div>
           )}

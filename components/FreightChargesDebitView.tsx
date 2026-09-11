@@ -11,6 +11,7 @@ import { fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { useDebounce } from '../hooks/useDebounce';
 import { canPerformAction } from '../utils/actionPermissions';
 import CustomerAutocomplete from './CustomerAutocomplete';
+import { formatDate } from '../utils/formatUtils';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
@@ -162,7 +163,7 @@ const SourceDocumentAutocomplete: React.FC<{
                   </div>
                   <div className="truncate text-xs text-[#777]">{doc.customer_name || 'Unknown Customer'}</div>
                   <div className="text-[11px] text-[#999]">
-                    {doc.sales_date || '-'} | {doc.sales_person || '-'} | {peso.format(doc.grand_total || 0)}
+                    {formatDate(doc.sales_date)} | {doc.sales_person || '-'} | {peso.format(doc.grand_total || 0)}
                   </div>
                 </li>
               ))}
@@ -533,14 +534,7 @@ const FreightChargesDebitView: React.FC = () => {
   ];
 
   const formatShortDate = (value?: string) => {
-    if (!value) return '-';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
-    return date.toLocaleDateString('en-US', {
-      month: '2-digit',
-      day: '2-digit',
-      year: 'numeric',
-    });
+    return value ? formatDate(value) : '—';
   };
 
   const getTransactionNo = (row: FreightCharge | null) => {

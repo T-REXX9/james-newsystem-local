@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { RefreshCw, RotateCcw, Search } from 'lucide-react';
 import { RecoveryItem, getAllRecycleBinItems, restoreRecycleBinItem } from '../services/recycleBinService';
 import { canPerformAction } from '../utils/actionPermissions';
+import { formatDateTime } from '../utils/formatUtils';
 
 const TYPE_LABELS: Record<string, string> = {
   contact: 'Customer',
@@ -26,13 +27,7 @@ const formatDeletedAt = (value: string): string => {
   if (!value) return 'No delete date recorded';
   const date = new Date(value.replace(' ', 'T'));
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString('en-PH', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatDateTime(date);
 };
 
 export default function RecycleBinView() {

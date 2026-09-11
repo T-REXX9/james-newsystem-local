@@ -26,6 +26,7 @@ import {
 import { fetchContactById, fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { isOrderSlipAllowedForTransactionType, syncDocumentPolicyState } from '../services/salesOrderLocalApiService';
 import { Contact, OrderSlip, OrderSlipStatus } from '../types';
+import { formatDateTime } from '../utils/formatUtils';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 import { getLocalAuthSession } from '../services/localAuthService';
 import { normalizePriceGroup } from '../constants/pricingGroups';
@@ -81,7 +82,7 @@ const formatDate = (value?: string | null): string => {
   if (!value) return '-';
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+  return parsed.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
 };
 
 const formatCurrency = (value?: number | string | null): string => {
@@ -1151,7 +1152,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Sold to:</td>
                     <td><input readOnly value={selectedCustomerLabel} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Date:</td>
-                    <td><input readOnly value={selectedSlip.sales_date || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                <td><input readOnly value={formatDate(selectedSlip.sales_date)} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Terms Strictly:</td>
                     <td><input readOnly value={selectedSlip.terms || 'N/A'} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
                   </tr>
@@ -1270,7 +1271,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
             {selectedSlip.printed_at && (
               <div className="text-xs text-slate-500 flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                Printed {new Date(selectedSlip.printed_at).toLocaleString('en-PH', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                Printed {formatDateTime(selectedSlip.printed_at)}
               </div>
             )}
 

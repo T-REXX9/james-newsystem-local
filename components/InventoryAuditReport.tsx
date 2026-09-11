@@ -16,6 +16,7 @@ import {
   type InventoryAuditStockItem,
 } from '../services/inventoryAuditService';
 import { canPerformAction } from '../utils/actionPermissions';
+import { formatDate } from '../utils/formatUtils';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -23,10 +24,7 @@ const MONTHS = [
 ];
 
 const formatLegacyDate = (value?: string | null): string => {
-  if (!value) return '';
-  const [datePart] = String(value).split('T');
-  const [year, month, day] = datePart.split('-');
-  return year && month && day ? `${month}/${day}/${year}` : value;
+  return formatDate(value);
 };
 
 const formatNumber = (value: number, decimals = 2): string =>

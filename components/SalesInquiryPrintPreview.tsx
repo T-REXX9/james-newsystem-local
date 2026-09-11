@@ -4,6 +4,7 @@ import { Contact, SalesInquiry } from '../types';
 import { persistedVipDiscount } from '../utils/vipDocumentDiscount';
 import VipDocumentTotals from './VipDocumentTotals';
 import VipStandingBadge from './VipStandingBadge';
+import { formatDateTime as formatDisplayDateTime } from '../utils/formatUtils';
 
 interface SalesInquiryPrintPreviewProps {
   inquiry: SalesInquiry;
@@ -171,14 +172,14 @@ const formatDate = (value?: string | null): string => {
   if (!value) return '';
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+  return parsed.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
 };
 
 const formatDateTime = (value?: string | null): string => {
   if (!value) return '';
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString('en-PH', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return formatDisplayDateTime(parsed);
 };
 
 const formatInquiryDateTime = (dateValue?: string | null, timeValue?: string | null): string => {

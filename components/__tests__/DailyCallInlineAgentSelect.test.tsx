@@ -33,7 +33,7 @@ describe('DailyCallInlineAgentSelect', () => {
     await user.selectOptions(screen.getByLabelText('Assign sales agent for CM CALIBRATION CENTER'), '12');
 
     expect(onAssign).toHaveBeenCalledWith('customer-1', agents[0]);
-    expect(formatAssignmentDateLabel(new Date('2026-09-04T12:00:00'))).toBe('September 4, 2026');
+    expect(formatAssignmentDateLabel(new Date('2026-09-04T12:00:00'))).toBe('SEP‑04‑26');
   });
 
   it('shows a highlighted assignment date when assigned', () => {
@@ -43,12 +43,12 @@ describe('DailyCallInlineAgentSelect', () => {
         shopName="CM CALIBRATION CENTER"
         assignedTo="Joan Jerusalem"
         assignedAgentId="12"
-        assignedDate="September 4, 2026"
+        assignedDate="SEP-04-26"
         agents={agents}
         onAssign={vi.fn()}
       />
     );
 
-    expect(screen.getByText('Assigned September 4, 2026')).toHaveClass('bg-amber-100');
+    expect(screen.getByText('Assigned SEP-04-26')).toHaveClass('bg-amber-100');
   });
 });

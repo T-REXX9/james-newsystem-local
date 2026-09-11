@@ -100,7 +100,7 @@ const TransactionAutocomplete: React.FC<TransactionAutocompleteProps> = ({
                 {transaction.number}
               </span>
               <span className="text-gray-500 dark:text-gray-400 text-xs">
-                {new Date(transaction.date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
+                {new Date(transaction.date).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase()}
               </span>
               {!disabled && (
                 <button
@@ -154,7 +154,7 @@ const TransactionAutocomplete: React.FC<TransactionAutocompleteProps> = ({
                       {transaction.number}
                     </div>
                     <div className="text-xs text-gray-500 dark:text-gray-400">
-                      {new Date(transaction.date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })} • ₱{transaction.amount.toLocaleString()}
+                      {new Date(transaction.date).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase()} • ₱{transaction.amount.toLocaleString()}
                     </div>
                   </div>
                 </div>

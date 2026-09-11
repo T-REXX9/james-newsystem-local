@@ -18,6 +18,7 @@ import {
 } from '../services/salesDevelopmentReportLocalApiService';
 import InquiryDetailsModal from './InquiryDetailsModal';
 import DemandSummaryModal from './DemandSummaryModal';
+import { formatDate as formatDisplayDate } from '../utils/formatUtils';
 
 interface SalesDevelopmentReportDataViewProps {
   dateFrom: string;
@@ -107,11 +108,7 @@ const SalesDevelopmentReportDataView: React.FC<SalesDevelopmentReportDataViewPro
     const date = new Date(dateString);
     if (Number.isNaN(date.getTime())) return dateString || 'N/A';
 
-    return date.toLocaleDateString('en-PH', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
+    return formatDisplayDate(date);
   };
 
   const handlePrint = () => {

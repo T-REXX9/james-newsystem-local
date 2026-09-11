@@ -10,6 +10,7 @@ import { Contact, UserProfile } from '../types';
 import { isMasterUserAccount } from '../constants';
 import { fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { toast } from 'sonner';
+import { formatDateTime } from '../utils/formatUtils';
 
 type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected';
 
@@ -23,10 +24,7 @@ const formatDate = (value?: string | null) => {
     if (!value) return '—';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return value;
-    return new Intl.DateTimeFormat('en-PH', {
-        month: 'long', day: 'numeric', year: 'numeric',
-        hour: 'numeric', minute: '2-digit',
-    }).format(date);
+    return formatDateTime(date);
 };
 
 const summarizePayload = (row: CustomerRequest): string => {

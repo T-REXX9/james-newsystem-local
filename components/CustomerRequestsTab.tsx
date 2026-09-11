@@ -8,6 +8,7 @@ import { CustomerRequest, createDiscountRequest, fetchCustomerRequests, requestC
 import { Contact, CustomerStatus, UserProfile } from '../types';
 import { hasActionPermission, isMasterUserAccount } from '../constants';
 import { toast } from 'sonner';
+import { formatDateTime } from '../utils/formatUtils';
 
 type RequestCategory = 'terms' | 'contact_details' | 'customer_standing' | 'discount' | 'others';
 
@@ -51,7 +52,7 @@ const formatDate = (value?: string | null) => {
     if (!value) return '—';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return value;
-    return new Intl.DateTimeFormat('en-PH', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(date);
+    return formatDateTime(date);
 };
 
 export default function CustomerRequestsTab({ contactId, contact: contactProp, currentUser }: { contactId: string; contact?: Contact | null; currentUser: UserProfile | null }) {

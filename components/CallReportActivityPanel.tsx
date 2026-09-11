@@ -7,6 +7,7 @@ import {
 } from '../services/dailyCallMonitoringService';
 import { CallOutcome, CallReportThread, UserProfile } from '../types';
 import { useToast } from './ToastProvider';
+import { formatDateTime } from '../utils/formatUtils';
 
 interface CallReportActivityPanelProps {
   contactId: string;
@@ -34,13 +35,7 @@ const formatTimestamp = (value?: string) => {
   if (!value) return '—';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('en-PH', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(date);
+  return formatDateTime(date);
 };
 
 const formatDuration = (seconds: number) => {

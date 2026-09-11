@@ -28,6 +28,7 @@ import ModuleRecordLink from "../ModuleRecordLink";
 import ProcurementDocumentBanner from "../ProcurementDocumentBanner";
 import type { Product as SearchProduct } from "../../types";
 import { canPerformAction } from "../../utils/actionPermissions";
+import { formatDate } from "../../utils/formatUtils";
 
 interface PurchaseRequestViewProps {
   request: PurchaseRequestWithItems;
@@ -374,7 +375,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                 </span>
               </div>
               <p className="mt-2 text-sm text-slate-500">
-                Created {request.request_date || "-"}{" "}
+                Created {formatDate(request.request_date)}{" "}
                 {request.created_by_name ? `by ${request.created_by_name}` : ""}
               </p>
             </div>

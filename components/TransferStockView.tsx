@@ -23,6 +23,7 @@ import type { Product, TransferStock, TransferStockItem, UserProfile } from '../
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
 import { canPerformAction } from '../utils/actionPermissions';
+import { formatDate } from '../utils/formatUtils';
 
 const TRANSFER_STOCK_TAB_ID = 'warehouse-inventory-transfer-stock';
 const MONTHS = [
@@ -41,9 +42,7 @@ interface TransferStockViewProps {
 const today = () => new Date().toISOString().slice(0, 10);
 
 const formatLegacyDate = (value?: string | null): string => {
-  if (!value) return '';
-  const date = String(value).slice(0, 10).split('-');
-  return date.length === 3 ? `${date[1]}/${date[2]}/${date[0]}` : String(value);
+  return formatDate(value);
 };
 
 const statusLabel = (value?: string): string => {

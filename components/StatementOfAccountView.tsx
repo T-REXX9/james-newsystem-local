@@ -20,11 +20,9 @@ const dateTypeOptions: Array<{ value: SoaDateType; label: string }> = [
 
 const formatDate = (value?: string | null): string => {
   if (!value) return '-';
-  const dateOnly = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (dateOnly) return `${Number(dateOnly[2])}/${Number(dateOnly[3])}/${dateOnly[1]}`;
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+  return d.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
 };
 
 const StatementOfAccountView: React.FC = () => {

@@ -13,28 +13,32 @@ export const formatCurrency = (value: number, withDecimals: boolean = false) =>
 const parseDisplayDate = (value: string | Date): Date | null => {
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
 
+  const normalizedValue = value.includes(' ') && !value.includes('T')
+    ? value.replace(' ', 'T')
+    : value;
+
   // Date-only values are calendar dates, not UTC timestamps. Parsing them at
   // local noon prevents a user's timezone from moving the displayed day.
-  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(value)
-    ? new Date(`${value}T12:00:00`)
-    : new Date(value);
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(normalizedValue)
+    ? new Date(`${normalizedValue}T12:00:00`)
+    : new Date(normalizedValue);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
-/** The single date format used in all customer-facing screens and printouts. */
+/** The single date format used in all customer-facing screens and printouts: MAR-26-25. */
 export const formatDate = (value?: string | Date | null) => {
   if (!value) return '—';
   const parsed = parseDisplayDate(value);
   if (!parsed) return '—';
-  return parsed.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+  return format(parsed, 'MMM‑dd‑yy').toUpperCase();
 };
 
-/** Staff-facing Customer Since: abbreviated month, day without leading zero, year. */
+/** Staff-facing Customer Since uses the same system-wide date format. */
 export const formatCustomerSince = (value?: string | Date | null): string => {
   if (!value) return '';
   const parsed = parseDisplayDate(typeof value === 'string' ? value.slice(0, 10) : value);
   if (!parsed) return '';
-  return format(parsed, 'MMM d yyyy');
+  return format(parsed, 'MMM‑dd‑yy').toUpperCase();
 };
 
 export const formatDateFull = (value?: string | Date | null) => {
@@ -46,13 +50,10 @@ export const formatDateTime = (value?: string | Date | null) => {
   if (!value) return '—';
   const parsed = parseDisplayDate(value);
   if (!parsed) return '—';
-  return parsed.toLocaleString('en-PH', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
+  return `${format(parsed, 'MMM‑dd‑yy').toUpperCase()} ${parsed.toLocaleTimeString('en-PH', {
     hour: 'numeric',
     minute: '2-digit',
-  });
+  })}`;
 };
 
 export const formatRelativeTime = (value?: string | null) => {

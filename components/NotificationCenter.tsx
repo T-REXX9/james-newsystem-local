@@ -105,7 +105,7 @@ const NotificationCenter: React.FC = () => {
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+    return date.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
   };
 
   const handleNotificationClick = async (notification: Notification) => {

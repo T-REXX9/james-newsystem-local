@@ -12,6 +12,7 @@ import {
 import InventoryLogRow from './InventoryLogRow';
 import { resolveStockMovementNavigationTarget } from '../utils/stockMovementNavigation';
 import { getCentralStock } from '../utils/productStock';
+import { formatDate } from '../utils/formatUtils';
 
 const TRANSACTION_TYPES = ['Purchase Order', 'Invoice', 'Order Slip', 'Transfer Product', 'Transfer Receipt', 'Credit Memo', 'Stock Adjustment'];
 type MovementViewMode = 'audit' | 'legacy';
@@ -53,11 +54,7 @@ const matchesProductSearch = (product: Product, filters: ProductSearchFilters) =
   includesSearch(product.original_pn_no || '', filters.originalPn);
 
 const formatLegacyDate = (dateString: string) => {
-  const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) return '';
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${month}/${day}/${date.getFullYear()}`;
+  return formatDate(dateString);
 };
 
 const formatLegacyPrice = (log: InventoryLogWithProduct) => {

@@ -69,7 +69,7 @@ const formatDate = (value?: string | null): string => {
   if (!value) return '-';
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+  return parsed.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
 };
 
 const formatCurrency = (value?: number | string | null): string => {
@@ -1078,7 +1078,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                       <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Sold To M/S:</td>
                       <td><input readOnly value={selectedCustomerLabel} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
                       <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Date:</td>
-                      <td><input readOnly value={selectedInvoice.sales_date || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                      <td><input readOnly value={formatDisplayDate(selectedInvoice.sales_date)} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
                       <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Your Reference:</td>
                       <td><input readOnly value={selectedInvoice.customer_reference || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
                     </tr>

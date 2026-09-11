@@ -9,6 +9,7 @@ import {
   SuggestedStockSortOption,
   SUGGESTED_STOCK_DEFAULT_SORT,
 } from '../services/suggestedStockService';
+import { formatDate } from '../utils/formatUtils';
 
 type SuggestedStockPeriod = 'today' | 'week' | 'month' | 'year' | 'custom';
 type SuggestedStockReportView = 'active' | 'kiv' | 'cart';
@@ -56,11 +57,7 @@ const getSuggestedStockPeriodRange = (period: Exclude<SuggestedStockPeriod, 'cus
 };
 
 export const formatSuggestedStockDate = (value: string) =>
-  new Date(`${value}T00:00:00`).toLocaleDateString('en-PH', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  formatDate(`${value}T12:00:00`);
 
 export const useSuggestedStockReportQuery = () => {
   const { addToast } = useToast();

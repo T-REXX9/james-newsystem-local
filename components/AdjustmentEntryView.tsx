@@ -8,6 +8,7 @@ import {
   LedgerCustomer,
 } from '../services/adjustmentEntryService';
 import { canPerformAction } from '../utils/actionPermissions';
+import { formatDate } from '../utils/formatUtils';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -25,10 +26,7 @@ const toDateInput = (value?: string): string => {
 };
 
 const formatLegacyDate = (value?: string): string => {
-  const input = toDateInput(value);
-  if (!input) return '';
-  const [yyyy, mm, dd] = input.split('-');
-  return `${mm}/${dd}/${yyyy}`;
+  return formatDate(value);
 };
 
 interface AdjustmentEntryViewProps {

@@ -613,7 +613,7 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
                             <td className="px-4 py-3 font-semibold text-[#173c83]">{item.description || '-'}</td>
                             <td className="px-4 py-3 text-center font-semibold text-emerald-700">{item.customerCount} customers</td>
                             <td className="px-4 py-3 text-center font-bold text-slate-700">{item.totalQty} pcs</td>
-                            <td className="px-4 py-3 text-center font-semibold text-slate-600">{item.lastInquiryDate ? new Date(item.lastInquiryDate).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : '-'}</td>
+                            <td className="px-4 py-3 text-center font-semibold text-slate-600">{item.lastInquiryDate ? new Date(item.lastInquiryDate).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase() : '-'}</td>
                             <td className="px-4 py-3 text-center">
                               {cartFolder ? (
                                 <span className="inline-flex rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-800">On a PR</span>

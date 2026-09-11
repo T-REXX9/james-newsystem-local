@@ -35,7 +35,7 @@ const formatDate = (value: string) => {
   if (!value) return '-';
   const date = new Date(value.replace(' ', 'T'));
   if (Number.isNaN(date.getTime())) return value.slice(0, 10);
-  return date.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+  return date.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
 };
 
 const StatBox: React.FC<{ label: string; value: string | number; icon: React.ReactNode }> = ({ label, value, icon }) => (

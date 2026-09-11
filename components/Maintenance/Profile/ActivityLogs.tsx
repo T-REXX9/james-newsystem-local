@@ -5,12 +5,13 @@ import {
   ActivityLogRecord,
   ActivityLogUser,
 } from '../../../services/activityLogsLocalApiService';
+import { formatDateTime } from '../../../utils/formatUtils';
 
 const formatDate = (value?: string): string => {
   if (!value) return '-';
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString('en-PH', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return formatDateTime(d);
 };
 
 const normalizeActionTone = (action: string): string => {

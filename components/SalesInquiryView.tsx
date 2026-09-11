@@ -527,7 +527,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     if (!value) return '-';
     const parsed = new Date(value);
     if (Number.isNaN(parsed.getTime())) return value;
-    return parsed.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+    return parsed.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
   };
 
   const notifyInquiryEvent = useCallback(async (
@@ -1955,7 +1955,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                           onClick={() => void selectInquiry(inquiry)}
                           className={`cursor-pointer border-b border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40 ${rowTone}`}
                         >
-                          <td className="px-3 py-2">{inquiry.sales_date ? new Date(inquiry.sales_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : '—'}</td>
+                          <td className="px-3 py-2">{inquiry.sales_date ? new Date(inquiry.sales_date).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase() : '—'}</td>
                           <td className="px-3 py-2">
                             <div className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" title={customer?.company || '—'}>
                               {customer?.company || '—'}

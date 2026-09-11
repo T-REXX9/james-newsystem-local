@@ -27,7 +27,7 @@ import { Contact, CustomerStatus, DailyCallCustomerRow, DailyCallMasterCustomerR
 import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
 import { resolveVipDiscountLevel } from '../utils/vipStanding';
 import { DO_NOT_CONTACT_LABEL, isBlockedDailyCallMasterRow } from '../utils/dailyCallBlockedCustomer';
-import { isMasterUserAccount } from '../constants';
+import { hasActionPermission, isMasterUserAccount } from '../constants';
 import { VERIFIED_PROSPECT_POTENTIAL } from '../utils/dailyCallPotentialSales';
 import AddContactModal from './AddContactModal';
 import DailyCallCustomerDetailModal from './DailyCallCustomerDetailModal';
@@ -613,6 +613,11 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const visibleRows = activeCategory.rows.slice(0, visibleLimit);
   const hasMoreRows = visibleRows.length < activeCategory.rows.length;
   const showMasterActions = canUseMasterDailyCallActions(currentUser);
+  // Daily Call actions follow the explicit Customer Database edit grant. Keep
+  // the legacy master-user access, but do not treat missing action metadata as
+  // permission (the shared helper defaults missing metadata to allow).
+  const canEditCustomerDatabase = showMasterActions || Boolean(currentUser?.action_permissions)
+    && hasActionPermission(currentUser, 'can_edit', 'Customer Database');
 
   const handleAssignTeamToCategory = useCallback(async () => {
     if (!selectedAssignmentTeamId || activeCategory.rows.length === 0) return;
@@ -1075,7 +1080,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                         </td>
                         <td className="px-2 py-2.5">
                           <div className="flex justify-center gap-1.5">
-                            {activeCategory.id === 'unverified' && showMasterActions && (
+                            {activeCategory.id === 'unverified' && canEditCustomerDatabase && (
                               <><button
                                 type="button"
                                 aria-label={`Approve verification for ${row.shopName}`}
@@ -1099,7 +1104,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                               >
                                 <Eye className="h-4 w-4" />
                               </button>
-                            ) : showMasterActions ? (
+                            ) : canEditCustomerDatabase ? (
                               <>
                                 <button
                                   type="button"

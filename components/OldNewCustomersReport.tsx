@@ -32,7 +32,7 @@ const formatDate = (dateValue: string): string => {
   if (!dateValue) return 'N/A';
   const dt = new Date(dateValue);
   if (Number.isNaN(dt.getTime())) return dateValue;
-  return dt.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+  return dt.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
 };
 
 const OldNewCustomersReport: React.FC = () => {

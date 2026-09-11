@@ -26,6 +26,7 @@ import {
 } from '../services/suggestedStockService';
 import AddToPurchaseRequestModal from './AddToPurchaseRequestModal';
 import { canPerformAction } from '../utils/actionPermissions';
+import { formatDate } from '../utils/formatUtils';
 
 interface SuggestedStockDataViewProps {
   dateFrom: string;
@@ -218,17 +219,9 @@ const SuggestedStockDataView: React.FC<SuggestedStockDataViewProps> = ({
                 Item Suggested for Stock Report
               </h1>
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                {new Date(dateFrom).toLocaleDateString('en-PH', {
-                  month: 'long',
-                  day: 'numeric',
-                  year: 'numeric',
-                })}{' '}
+                {formatDate(dateFrom)}{' '}
                 -{' '}
-                {new Date(dateTo).toLocaleDateString('en-PH', {
-                  month: 'long',
-                  day: 'numeric',
-                  year: 'numeric',
-                })}
+                {formatDate(dateTo)}
               </p>
             </div>
           </div>
@@ -416,7 +409,7 @@ const SuggestedStockDataView: React.FC<SuggestedStockDataViewProps> = ({
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
                         {item.lastInquiryDate
-                          ? new Date(item.lastInquiryDate).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })
+                          ? new Date(item.lastInquiryDate).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase()
                           : '-'}
                       </td>
                       <td className="px-4 py-3">
@@ -519,7 +512,7 @@ const SuggestedStockDataView: React.FC<SuggestedStockDataViewProps> = ({
                     >
                       <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400 whitespace-nowrap">
                         {item.inquiryDate
-                          ? new Date(item.inquiryDate).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })
+                          ? new Date(item.inquiryDate).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase()
                           : '-'}
                       </td>
                       <td className="px-4 py-3 text-sm font-medium text-slate-800 dark:text-white">

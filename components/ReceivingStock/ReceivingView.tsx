@@ -15,6 +15,7 @@ import RecoveryReasonModal from '../RecoveryReasonModal';
 import ModuleRecordLink from '../ModuleRecordLink';
 import ProcurementDocumentBanner from '../ProcurementDocumentBanner';
 import { canPerformAction } from '../../utils/actionPermissions';
+import { formatDate, formatDateTime } from '../../utils/formatUtils';
 
 interface ReceivingViewProps {
     rrId: string;
@@ -404,11 +405,11 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                         </div>
                         <dl className="mt-5 divide-y divide-slate-100 rounded-lg border border-slate-200 text-sm">
                             <div className="flex justify-between gap-4 px-4 py-3"><dt className="font-semibold text-slate-500">Created / received by</dt><dd className="text-right text-slate-800">{rr.received_by || '—'}</dd></div>
-                            <div className="flex justify-between gap-4 px-4 py-3"><dt className="font-semibold text-slate-500">Report date</dt><dd className="text-right text-slate-800">{rr.receive_date || '—'}</dd></div>
+                            <div className="flex justify-between gap-4 px-4 py-3"><dt className="font-semibold text-slate-500">Report date</dt><dd className="text-right text-slate-800">{formatDate(rr.receive_date)}</dd></div>
                             <div className="flex justify-between gap-4 px-4 py-3"><dt className="font-semibold text-slate-500">Current status</dt><dd className="text-right font-semibold text-slate-800">{rr.status || 'Draft'}</dd></div>
                             <div className="flex justify-between gap-4 px-4 py-3"><dt className="font-semibold text-slate-500">Items received</dt><dd className="text-right text-slate-800">{rr.item_count ?? rr.items?.length ?? 0}</dd></div>
                             {rr.remarks ? <div className="flex justify-between gap-4 px-4 py-3"><dt className="font-semibold text-slate-500">Receiving / incomplete delivery note</dt><dd className="max-w-xs text-right text-slate-800">{rr.remarks}</dd></div> : null}
-                            <div className="flex justify-between gap-4 px-4 py-3"><dt className="font-semibold text-slate-500">Last recorded timestamp</dt><dd className="text-right text-slate-800">{rr.created_at ? new Date(rr.created_at).toLocaleString('en-PH', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'}</dd></div>
+                            <div className="flex justify-between gap-4 px-4 py-3"><dt className="font-semibold text-slate-500">Last recorded timestamp</dt><dd className="text-right text-slate-800">{formatDateTime(rr.created_at)}</dd></div>
                         </dl>
                         <div className="mt-5 flex justify-end"><button type="button" onClick={() => setShowHistory(false)} className="rounded-md bg-[#175fd3] px-4 py-2 text-sm font-bold text-white hover:bg-[#0e4fb7]">Close</button></div>
                     </div>

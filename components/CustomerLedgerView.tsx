@@ -16,17 +16,12 @@ import {
   LedgerReportType,
 } from '../services/customerLedgerService';
 import ModuleRecordLink from './ModuleRecordLink';
-import { formatCustomerSince } from '../utils/formatUtils';
+import { formatCustomerSince, formatDate as formatDisplayDate, formatDateTime } from '../utils/formatUtils';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
 const formatDate = (value: string | null | undefined): string => {
-  if (!value) return '-';
-  const dateOnly = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (dateOnly) return `${Number(dateOnly[2])}/${Number(dateOnly[3])}/${dateOnly[1]}`;
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+  return formatDisplayDate(value);
 };
 
 const vipLabel = (status: string | null | undefined): string => {
@@ -512,7 +507,7 @@ const LedgerReport: React.FC<{
               </span>
             )}
           </h3>
-          <p className="text-xs text-[#555]">System generated: {new Date().toLocaleString('en-PH', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</p>
+          <p className="text-xs text-[#555]">System generated: {formatDateTime(new Date())}</p>
         </div>
         <div className="mt-3 flex flex-wrap justify-end gap-3">
           <ReportControls

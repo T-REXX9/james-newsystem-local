@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Activity, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Phone, RefreshCw, Smartphone } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatDateTime as formatDisplayDateTime } from '../utils/formatUtils';
 import {
   CallDeviceHealth,
   fetchCallDeviceHealth,
@@ -38,7 +39,7 @@ const formatDateTime = (value?: string | null) => {
   const timestamp = value.trim();
   const hasTimeZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(timestamp);
   const parsed = new Date(`${timestamp.replace(' ', 'T')}${hasTimeZone ? '' : 'Z'}`);
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString('en-PH', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return Number.isNaN(parsed.getTime()) ? value : formatDisplayDateTime(parsed);
 };
 
 const statusLabel = (status?: string) => {

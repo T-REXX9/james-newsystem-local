@@ -27,6 +27,7 @@ import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
 import { getVipTierConfig } from '../services/vipTierSettingsService';
 import { fetchContactCustomerLogsForDailyCall, fetchManagementInstructions } from '../services/dailyCallMonitoringService';
 import { DO_NOT_CONTACT_LABEL, isBlockedDailyCallCustomerRow } from '../utils/dailyCallBlockedCustomer';
+import { formatDate as formatDisplayDate } from '../utils/formatUtils';
 
 export type DetailTabId =
   | 'overview'
@@ -68,9 +69,7 @@ const formatCurrency = (value: number) =>
 const formatDate = (value?: string) => {
   if (!value || value === '—') return '—';
   const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? value
-    : new Intl.DateTimeFormat('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }).format(date);
+  return Number.isNaN(date.getTime()) ? value : formatDisplayDate(date);
 };
 
 const vipBadgeIconUrl = new URL('../vip-svgrepo-com.svg', import.meta.url).href;

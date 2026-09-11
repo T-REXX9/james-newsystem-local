@@ -21,7 +21,7 @@ const money = new Intl.NumberFormat('en-US', {
 
 const formatDate = (value: string): string => {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
 };
 
 type PaymentTermBucket = {
@@ -78,7 +78,7 @@ const getPaymentTermBuckets = (transactions: SalesReportTransaction[]): PaymentT
 
 const displayReportHeading = (reportType: SalesReportPeriod, dateFrom: string, dateTo: string) => {
   const from = new Date(dateFrom);
-  const fromLong = from.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase();
+  const fromLong = from.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase().toUpperCase();
   if (reportType === 'today') {
     return <><p className="text-[18px] font-semibold">DAILY SALES</p><p className="-mt-1 text-[16px] font-semibold">{fromLong}</p></>;
   }

@@ -26,7 +26,7 @@ const IncidentReportTab: React.FC<IncidentReportTabProps> = ({ contactId, curren
     const time = String(timeValue || '').slice(0, 5);
     if (!date && !time) return '-';
     const parsed = date ? new Date(`${date}T${time || '00:00'}:00`) : null;
-    const dateLabel = parsed && !Number.isNaN(parsed.getTime()) ? parsed.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : date;
+    const dateLabel = parsed && !Number.isNaN(parsed.getTime()) ? parsed.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase() : date;
     return time ? `${dateLabel} ${time}` : dateLabel;
   };
 
@@ -224,7 +224,7 @@ const IncidentReportTab: React.FC<IncidentReportTabProps> = ({ contactId, curren
                       {transaction.transaction_number}
                     </span>
                     <span className="text-slate-500 dark:text-slate-400 text-xs">
-                      {new Date(transaction.transaction_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
+                      {new Date(transaction.transaction_date).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase()}
                     </span>
                   </div>
                 ))}

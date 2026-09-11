@@ -35,7 +35,7 @@ export const resolveInlineAgentSelectValue = (
 };
 
 export const formatAssignmentDateLabel = (value = new Date()): string =>
-  value.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+  value.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
 
 const DailyCallInlineAgentSelect: React.FC<DailyCallInlineAgentSelectProps> = ({
   customerId,

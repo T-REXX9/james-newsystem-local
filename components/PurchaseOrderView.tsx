@@ -717,7 +717,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
         <div>
           <h1 className="text-3xl font-bold uppercase">Purchase Order</h1>
           <p className="mt-1 font-mono text-lg">{po.po_number}</p>
-          <p>Date: {new Date(po.order_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+          <p>Date: {new Date(po.order_date).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase()}</p>
         </div>
         <div className="text-right">
           <h2 className="text-xl font-bold">TND OPC</h2>
@@ -851,7 +851,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                       <span className="font-semibold text-slate-700">{po.item_count ?? po.items?.length ?? 0} Items</span>
                     </div>
                     <div className="mt-1 text-[10px] text-slate-500">
-                      ETA: {etaDate ? new Date(etaDate).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : '-'}
+                      ETA: {etaDate ? new Date(etaDate).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase() : '-'}
                     </div>
                   </button>
                 );
@@ -1105,7 +1105,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                       </button>
                     </div>
                   ) : (
-                    <p className="font-semibold text-slate-700">{new Date(selectedPO.order_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+                    <p className="font-semibold text-slate-700">{new Date(selectedPO.order_date).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase()}</p>
                   )}
                 </div>
               </div>
@@ -1208,7 +1208,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                         </td>
                         <td className="break-words px-2 py-3 text-center font-bold text-slate-700">{isEditing ? <input aria-label={`Edit quantity ${index + 1}`} type="number" min="1" value={editItemQty} onChange={event => setEditItemQty(Number(event.target.value))} className="h-8 w-full min-w-0 rounded border border-slate-300 px-1 text-center" /> : item.qty}</td>
                         <td className="break-words px-2 py-3 font-semibold">{selectedPO.supplier?.company || '-'}</td>
-                        <td className="break-words px-2 py-3 font-semibold text-slate-600">{isEditing ? <input aria-label={`Edit ETA ${index + 1}`} type="date" value={editItemEta} onChange={event => setEditItemEta(event.target.value)} className="h-8 w-full min-w-0 rounded border border-slate-300 px-1" /> : item.eta_date ? new Date(item.eta_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : '-'}</td>
+                        <td className="break-words px-2 py-3 font-semibold text-slate-600">{isEditing ? <input aria-label={`Edit ETA ${index + 1}`} type="date" value={editItemEta} onChange={event => setEditItemEta(event.target.value)} className="h-8 w-full min-w-0 rounded border border-slate-300 px-1" /> : item.eta_date ? new Date(item.eta_date).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase() : '-'}</td>
                         <td className="break-words px-2 py-3 font-semibold text-slate-600">{item.original_part_no || '-'}</td>
                         <td className="break-words px-2 py-3 text-[13px] font-bold text-[#173c83]">{item.product?.part_no || '-'}</td>
                         <td className="break-words px-2 py-3 text-[13px] font-bold text-slate-700">{item.product?.item_code || '-'}</td>

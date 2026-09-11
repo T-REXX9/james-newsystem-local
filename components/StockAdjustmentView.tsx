@@ -377,7 +377,7 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
                     <StatusBadge status={adj.status} />
                   </div>
                   <p className="text-xs text-slate-500">Centralized inventory</p>
-                  <p className="text-[11px] text-slate-400">{new Date(adj.adjustment_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+                  <p className="text-[11px] text-slate-400">{new Date(adj.adjustment_date).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase()}</p>
                 </button>
               );
             })}
@@ -402,7 +402,7 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
                   <div>
                     <p className="text-xs text-slate-500">Stock Adjustment</p>
                     <h2 className="text-2xl font-semibold text-slate-800 dark:text-white">{selectedAdjustment.adjustment_no}</h2>
-                    <p className="text-xs text-slate-500">{new Date(selectedAdjustment.adjustment_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })} · Centralized inventory</p>
+                    <p className="text-xs text-slate-500">{new Date(selectedAdjustment.adjustment_date).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase()} · Centralized inventory</p>
                   </div>
                   <StatusBadge status={selectedAdjustment.status} />
                 </div>
@@ -420,7 +420,7 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
                     <p className="font-semibold text-slate-500">Date</p>
                     <p className="flex items-center gap-1">
                       <Calendar className="w-3 h-3" />
-                      {new Date(selectedAdjustment.adjustment_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
+                      {new Date(selectedAdjustment.adjustment_date).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase()}
                     </p>
                   </div>
                 </div>

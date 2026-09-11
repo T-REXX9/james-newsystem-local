@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowDownLeft, ArrowUpRight, Phone, RefreshCw } from 'lucide-react';
 import { fetchHardwareCallLogs, HardwareCallLog } from '../services/callingSystemService';
+import { formatDateTime } from '../utils/formatUtils';
 
 interface CustomerCallHistoryCardProps {
   customerId: string | number;
@@ -8,7 +9,7 @@ interface CustomerCallHistoryCardProps {
 
 const formatDate = (value: string) => {
   const parsed = new Date(String(value || '').replace(' ', 'T'));
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString('en-PH', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return Number.isNaN(parsed.getTime()) ? value : formatDateTime(parsed);
 };
 
 const formatDuration = (value: number | string) => {

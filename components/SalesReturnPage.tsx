@@ -22,7 +22,7 @@ const formatDate = (value?: string): string => {
   if (!value) return 'N/A';
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+  return d.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
 };
 
 const MONTHS = [
@@ -409,7 +409,7 @@ export const SourceDocAutocomplete: React.FC<{
                           {customerMap.get(doc.contact_id)?.company || 'Unknown Customer'}
                         </div>
                         <div className="flex items-center gap-3 mt-1 text-[10px] text-slate-400">
-                          <span>Date: {doc.sales_date || '—'}</span>
+                          <span>Date: {formatDate(doc.sales_date)}</span>
                           <span>•</span>
                           <span>Salesman: {doc.sales_person || '—'}</span>
                           <span>•</span>

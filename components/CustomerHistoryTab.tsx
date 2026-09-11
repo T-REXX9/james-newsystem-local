@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { CustomerHistoryRecord, fetchCustomerInquiries, fetchCustomerReturns } from '../services/customerWorkflowLocalApiService';
+import { formatDate } from '../utils/formatUtils';
 
 export default function CustomerHistoryTab({ contactId, kind }: { contactId: string; kind: 'inquiries' | 'returns' }) {
   const [rows, setRows] = useState<CustomerHistoryRecord[]>([]);
@@ -23,7 +24,7 @@ export default function CustomerHistoryTab({ contactId, kind }: { contactId: str
     {kind === 'returns' && <p className="text-sm text-slate-500">These are local sales-return credit records. Review and post returns in <a className="text-blue-600 underline" href="#/accounting-transactions-sales-return-credit">Accounting → Sales Return Credit</a>.</p>}
     {error ? <p role="alert" className="text-red-600">{error}</p> : loading ? <p role="status">Loading customer history…</p> : rows.length === 0 ? <p>No {kind === 'returns' ? 'sales returns' : 'sales inquiries'} for this customer.</p> : <div className="overflow-x-auto"><table className="w-full text-left text-sm">
       <thead><tr>{['Document', 'Date', 'Status', 'Amount', 'Notes'].map(label => <th key={label} className="border-b p-2">{label}</th>)}</tr></thead>
-      <tbody>{rows.map(row => <tr key={row.id}><td className="p-2 font-medium">{row.number}</td><td className="p-2">{row.date || '—'}</td><td className="p-2">{row.status}</td><td className="p-2">{new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(row.amount)}</td><td className="p-2">{row.notes || '—'}</td></tr>)}</tbody>
+      <tbody>{rows.map(row => <tr key={row.id}><td className="p-2 font-medium">{row.number}</td><td className="p-2">{formatDate(row.date)}</td><td className="p-2">{row.status}</td><td className="p-2">{new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(row.amount)}</td><td className="p-2">{row.notes || '—'}</td></tr>)}</tbody>
     </table></div>}
   </section>;
 }
