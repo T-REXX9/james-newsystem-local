@@ -89,6 +89,27 @@ describe('DailyCallMasterListView', () => {
     expect(await screen.findByText('Interested in fleet pricing after the call.')).toBeInTheDocument();
   });
 
+  it('shows the contact person name beside the contact number', async () => {
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: '2026-09-10', count: 1 },
+      items: [{
+        id: 'contact-person-1', shopName: 'Named Contact Shop', province: 'Manila', city: 'Manila',
+        contactNumber: '0917', contactPersonName: 'Maria Santos', assignedTo: 'Joan Jerusalem',
+        lastPurchaseDate: 'Sep 1, 2026', lastPurchaseDateRaw: '2026-09-01', purchaseCount: 1, totalSales: 0,
+        currentMonthSales: 0, averageMonthlySales: 0, averageMonthlySalesMonthCount: 0,
+        recentThreeMonthSales: 0, previousThreeMonthSales: 0, salesTrendPercent: 0,
+        daysSinceLastPurchase: 10, monthsSinceLastPurchase: 0, purchaseAgeGroup: 'recent',
+        listCategory: 'priority',
+      }],
+    });
+
+    render(<DailyCallMasterListView currentUser={masterUser} />);
+
+    const row = (await screen.findByText('Named Contact Shop')).closest('tr');
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getByText((_, element) => element?.textContent === '0917 · Maria Santos')).toBeInTheDocument();
+  });
+
   it('lets master user approve a pending verification request into verified prospects', async () => {
     const user = userEvent.setup();
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({

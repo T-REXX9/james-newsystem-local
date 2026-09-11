@@ -486,6 +486,7 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
     province: cleanNullableText(row?.province, '—'),
     city: cleanNullableText(row?.city, '—'),
     contactNumber: cleanNullableText(row?.contactNumber ?? row?.contact_number, '—'),
+    contactPersonName: cleanNullableText(row?.contactPersonName ?? row?.contact_person_name),
     assignedTo: cleanNullableText(row?.assignedTo ?? row?.assigned_to, 'Unassigned'),
     assignedAgentId: cleanNullableText(row?.assignedAgentId ?? row?.assigned_agent_id),
     assignedTeamId: cleanNullableText(row?.assignedTeamId ?? row?.assigned_team_id),

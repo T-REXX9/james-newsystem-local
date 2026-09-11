@@ -216,6 +216,7 @@ const masterRowFallback = (row: DailyCallMasterCustomerRow): DailyCallCustomerRo
   city: row.city,
   shopName: row.shopName,
   contactNumber: row.contactNumber,
+  contactPersonName: row.contactPersonName,
   codeDate: '—',
   ishinomotoDealerSince: '—',
   ishinomotoSignageSince: '—',
@@ -1015,7 +1016,10 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                             {loadingCustomerId === row.id && <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />}
                             {row.shopName}
                           </button>
-                          <p className={`mt-0.5 truncate text-xs font-semibold ${highlight.muted}`}>{row.contactNumber}</p>
+                          <p className={`mt-0.5 truncate text-xs font-semibold ${highlight.muted}`}>
+                            {row.contactNumber}
+                            {row.contactPersonName && <span className="font-normal"> · {row.contactPersonName}</span>}
+                          </p>
                         </td>
                         <td className="px-2 py-2.5 text-center">
                           <div className={`mx-auto inline-flex min-w-24 items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-[12px] font-bold uppercase ${vip.className}`}>

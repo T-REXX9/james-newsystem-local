@@ -96,6 +96,21 @@ describe('dailyCallMonitoringService', () => {
     expect(requestUrl).toContain('search=priority');
   });
 
+  it('maps the contact person name from the master-list API row', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { items: [{
+        id: '1', shop_name: 'Named Contact Shop', contact_number: '0917',
+        contact_person_name: 'Maria Santos', purchase_count: 0,
+        purchase_age_group: 'no_purchase',
+      }], meta: { from_date: '2025-10-01' } } }),
+    } as Response);
+
+    const result = await fetchDailyCallMasterList();
+
+    expect(result.items[0]).toMatchObject({ contactNumber: '0917', contactPersonName: 'Maria Santos' });
+  });
+
   it('retries the owner snapshot once after a temporary network failure', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
       .mockRejectedValueOnce(new TypeError('NetworkError when attempting to fetch resource.'))

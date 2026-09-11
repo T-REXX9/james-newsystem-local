@@ -713,6 +713,7 @@ export interface DailyCallCustomerRow {
   city: string;
   shopName: string;
   contactNumber: string;
+  contactPersonName?: string;
   codeDate: string;
   dealerPriceGroup?: string;
   dealerPriceDate?: string;
