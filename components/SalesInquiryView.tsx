@@ -184,6 +184,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   const canDelete = canPerformAction('can_delete');
   const lastAppliedPrefillRef = React.useRef<string | null>(null);
   const salesInquiryExportRef = React.useRef<HTMLElement | null>(null);
+  const customerSelectionDirtyRef = React.useRef(false);
   // Data
   const [loading, setLoading] = useState(false);
   const [exportingJpeg, setExportingJpeg] = useState(false);
@@ -653,6 +654,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   }, [generateInquiryNumber]);
 
   const loadInquiryIntoForm = useCallback((inquiry: SalesInquiry) => {
+    customerSelectionDirtyRef.current = false;
     const customer = customerMap.get(inquiry.contact_id) || null;
     const normalizedSalesDate = (inquiry.sales_date || '').split('T')[0];
     const normalizedSalesTime = String(inquiry.sales_time || '').slice(0, 5);
@@ -752,9 +754,14 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   useEffect(() => {
     if (!selectedInquiry || isCreatingNew) return;
     if (customers.length === 0) return;
+    if (customerSelectionDirtyRef.current) return;
     if (selectedCustomer?.id === selectedInquiry.contact_id) return;
+    // Hydrate the form when the inquiry or customer list loads. Do not rerun this
+    // when the user deliberately changes the customer: selectedInquiry still
+    // contains the persisted customer until the edit is saved, so doing so would
+    // overwrite the user's new selection with the old persisted customer.
     loadInquiryIntoForm(selectedInquiry);
-  }, [customers, isCreatingNew, loadInquiryIntoForm, selectedCustomer?.id, selectedInquiry]);
+  }, [customers, isCreatingNew, loadInquiryIntoForm, selectedInquiry]);
 
   useEffect(() => {
     const userId = String(getLocalAuthSession()?.userProfile?.id || '').trim();
@@ -784,6 +791,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
   // When customer is selected, populate metrics and delivery address
   const handleCustomerSelect = useCallback(async (selected: string | Contact) => {
+    customerSelectionDirtyRef.current = true;
     const customerId = typeof selected === 'string' ? selected : selected.id;
     const fallbackCustomer = typeof selected === 'string'
       ? (customers.find((customer) => customer.id === customerId) || null)
