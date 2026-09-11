@@ -876,6 +876,48 @@ describe('SalesInquiryView', () => {
     expect(updateSalesInquiryMock.mock.calls[0][1].reference_no).toBe('INQ26-501');
   });
 
+  it('saves the newly selected customer instead of restoring the original customer', async () => {
+    const user = userEvent.setup();
+    const inquiry = makeInquiry({
+      id: 'inq-customer-change',
+      contact_id: 'c-1',
+      items: [{
+        id: 'item-customer-change',
+        inquiry_id: 'inq-customer-change',
+        item_id: 'p-1',
+        qty: 1,
+        part_no: 'PN-1',
+        item_code: 'IC-1',
+        location: '',
+        description: 'Widget',
+        unit_price: 100,
+        amount: 100,
+        remark: '',
+        approval_status: 'approved',
+      }],
+    });
+    const replacementCustomer = { ...baseContacts[1], id: 'c-sunle', company: 'Sunle Diesel Calibration' };
+    fetchContactsMock.mockResolvedValue([...baseContacts, replacementCustomer]);
+    fetchContactByIdMock.mockImplementation(async (id: string) => (
+      [...baseContacts, replacementCustomer].find((contact) => contact.id === id) || null
+    ));
+    getAllSalesInquiriesMock.mockResolvedValue([inquiry]);
+    getSalesInquiryMock.mockResolvedValue(inquiry);
+    updateSalesInquiryMock.mockResolvedValue({ ...inquiry, contact_id: replacementCustomer.id });
+
+    render(<SalesInquiryView />);
+
+    await user.click(await screen.findByText('INQ26-1'));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Customer' })).toHaveValue('c-1'));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Customer' }), replacementCustomer.id);
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Customer' })).toHaveValue(replacementCustomer.id));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled());
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(updateSalesInquiryMock).toHaveBeenCalledTimes(1));
+    expect(updateSalesInquiryMock.mock.calls[0][1].contact_id).toBe(replacementCustomer.id);
+  });
+
   it('shows preferred brand from the selected customer profile', async () => {
     const user = userEvent.setup();
     fetchContactsMock.mockResolvedValue([
