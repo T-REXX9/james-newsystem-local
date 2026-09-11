@@ -121,6 +121,21 @@ interface SalesInquiryViewProps {
   today?: Date;
 }
 
+export const canGenerateSalesOrderFromInquiry = (
+  inquiry: Pick<SalesInquiry, 'so_refno' | 'status'> | null | undefined,
+  canAdd: boolean,
+  canEdit: boolean,
+  isCreatingNew: boolean,
+  isReadOnly: boolean,
+): boolean => Boolean(
+  canAdd
+  && inquiry
+  && !isCreatingNew
+  && !inquiry.so_refno
+  && !isReadOnly
+  && ((inquiry.status === SalesInquiryStatus.DRAFT && canEdit) || inquiry.status === SalesInquiryStatus.APPROVED)
+);
+
 const inquiryListColumnWidths = [
   '10%',
   '23%',
@@ -1414,17 +1429,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     }
   }, [activeInquiryNumberDisplay, addToast, jpegCaptureMode]);
   const priceGroupDisplay = priceGroup || normalizePriceGroup(priceGroup);
-  const canGenerateSO = Boolean(
-    canAdd &&
-    selectedInquiry &&
-    !isCreatingNew &&
-    !selectedInquiry.so_refno &&
-    !isReadOnly &&
-    (
-      (selectedInquiry.status === SalesInquiryStatus.DRAFT && canEdit) ||
-      selectedInquiry.status === SalesInquiryStatus.APPROVED
-    )
-  );
+  const canGenerateSO = canGenerateSalesOrderFromInquiry(selectedInquiry, canAdd, canEdit, isCreatingNew, isReadOnly);
   const inquiryGuidance = (() => {
     if (isCreatingNew) {
       return {

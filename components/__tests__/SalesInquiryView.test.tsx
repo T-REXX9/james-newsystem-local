@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import SalesInquiryView from '../SalesInquiryView';
+import SalesInquiryView, { canGenerateSalesOrderFromInquiry } from '../SalesInquiryView';
 
 const html2canvasMock = vi.hoisted(() => vi.fn());
 const addToastMock = vi.fn();
@@ -213,6 +213,11 @@ const makeInquiry = (overrides: Record<string, any> = {}) => ({
 });
 
 describe('SalesInquiryView', () => {
+  it('blocks Sales Order generation when an inquiry already has a Sales Order reference', () => {
+    expect(canGenerateSalesOrderFromInquiry({ status: 'Submitted', so_refno: 'so-22' }, true, true, false, false)).toBe(false);
+    expect(canGenerateSalesOrderFromInquiry({ status: 'Submitted', so_refno: '' }, true, true, false, false)).toBe(true);
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     html2canvasMock.mockResolvedValue({
@@ -310,6 +315,38 @@ describe('SalesInquiryView', () => {
     ['Date', 'Customer', 'SI No.', 'SO No.', 'Transaction No.', 'Sales Person', 'Status'].forEach((heading) => {
       expect(within(list).getByText(heading)).toBeVisible();
     });
+  });
+
+  it('does not offer Generate SO when the inquiry already has a Sales Order', async () => {
+    const inquiry = makeInquiry({
+      id: 'inq-with-so',
+      inquiry_no: 'INQ26-22',
+      status: 'Approved',
+      so_refno: 'so-22',
+      so_no: 'SO-22',
+      items: [{
+        id: 'item-22',
+        inquiry_id: 'inq-with-so',
+        item_id: 'p-1',
+        qty: 1,
+        part_no: 'PN-1',
+        item_code: 'IC-1',
+        location: '',
+        description: 'Widget',
+        unit_price: 100,
+        amount: 100,
+        remark: 'OnStock',
+        approval_status: 'approved',
+      }],
+    });
+    getAllSalesInquiriesMock.mockResolvedValue([inquiry]);
+    getSalesInquiryMock.mockResolvedValue(inquiry);
+
+    render(<SalesInquiryView initialInquiryId="inq-with-so" />);
+
+    await waitFor(() => expect(screen.getAllByDisplayValue('INQ26-22').length).toBeGreaterThan(0));
+    expect(screen.queryByRole('button', { name: /generate so/i })).not.toBeInTheDocument();
+    expect(screen.getAllByText('Open Sales Order').length).toBeGreaterThan(0);
   });
 
   it('opens a blank draft from Create New when routed to an existing inquiry', async () => {
