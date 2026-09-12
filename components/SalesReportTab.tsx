@@ -18,6 +18,7 @@ interface SalesReportTabProps {
 const SalesReportTab: React.FC<SalesReportTabProps> = ({ contactId, currentUserId, onApprove }) => {
   const [reports, setReports] = useState<DailyCallSalesReportRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [selectedProduct, setSelectedProduct] = useState('');
@@ -25,6 +26,7 @@ const SalesReportTab: React.FC<SalesReportTabProps> = ({ contactId, currentUserI
   useEffect(() => {
     const loadReports = async () => {
       setLoading(true);
+      setLoadError(null);
       setFromDate('');
       setToDate('');
       setSelectedProduct('');
@@ -35,6 +37,7 @@ const SalesReportTab: React.FC<SalesReportTabProps> = ({ contactId, currentUserI
       } catch (err) {
         console.error('Error loading sales inquiry reports:', err);
         setReports([]);
+        setLoadError(err instanceof Error ? err.message : 'Sales reports are unavailable.');
       } finally {
         setLoading(false);
       }
@@ -87,6 +90,9 @@ const SalesReportTab: React.FC<SalesReportTabProps> = ({ contactId, currentUserI
   }
 
   if (reports.length === 0) {
+    if (loadError) {
+      return <div className="p-6 text-center text-rose-700" role="alert">{loadError}</div>;
+    }
     return (
       <div className="p-6 text-center text-slate-500">
         <FileText className="mx-auto mb-2 h-8 w-8 opacity-50" />

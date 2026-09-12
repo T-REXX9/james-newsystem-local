@@ -11,6 +11,9 @@ import { formatCustomerSince } from '../utils/formatUtils';
 import { buildDateSubtotals } from '../utils/purchaseHistoryAggregates';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
+const INITIAL_VISIBLE_ROWS = 100;
+const VISIBLE_ROWS_STEP = 100;
+const INITIAL_VISIBLE_PARTS = 100;
 
 const dateTypeOptions: Array<{ value: PurchaseHistoryDateType; label: string }> = [
   { value: 'all', label: 'All' },
@@ -41,6 +44,9 @@ const PurchaseHistoryReportView: React.FC = () => {
 
   const [loadingCustomers, setLoadingCustomers] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [visibleRowCount, setVisibleRowCount] = useState(INITIAL_VISIBLE_ROWS);
+  const [visiblePartCount, setVisiblePartCount] = useState(INITIAL_VISIBLE_PARTS);
   const [error, setError] = useState('');
   const [report, setReport] = useState<PurchaseHistoryReport | null>(null);
   const requestController = useRef<AbortController | null>(null);
@@ -115,6 +121,14 @@ const PurchaseHistoryReportView: React.FC = () => {
   }, [report]);
 
   const dateSubtotals = useMemo(() => buildDateSubtotals(report?.items || []), [report?.items]);
+  const visibleItems = useMemo(
+    () => (report?.items || []).slice(0, visibleRowCount),
+    [report?.items, visibleRowCount]
+  );
+  const visiblePartNos = useMemo(
+    () => summary.topPartNos.slice(0, visiblePartCount),
+    [summary.topPartNos, visiblePartCount]
+  );
 
   const generate = async () => {
     if (!selectedCustomerId) {
@@ -132,8 +146,12 @@ const PurchaseHistoryReportView: React.FC = () => {
     requestController.current = controller;
     const version = ++requestVersion.current;
     setReport(null);
+    setVisibleRowCount(INITIAL_VISIBLE_ROWS);
+    setVisiblePartCount(INITIAL_VISIBLE_PARTS);
     setLoading(true);
+    setLoadingMore(false);
     setError('');
+    let displayedFirstPage = false;
     try {
       let payload = await purchaseHistoryReportService.getReport({
         customerId: selectedCustomerId,
@@ -146,6 +164,13 @@ const PurchaseHistoryReportView: React.FC = () => {
       });
 
       const allItems = [...payload.items];
+      if (version === requestVersion.current) {
+        setReport({ ...payload, items: allItems });
+        setLoading(false);
+        setLoadingMore(Boolean(payload.pagination?.has_more));
+        displayedFirstPage = true;
+      }
+
       while (payload.pagination?.has_more) {
         const nextPayload = await purchaseHistoryReportService.getReport({
           customerId: selectedCustomerId,
@@ -168,15 +193,21 @@ const PurchaseHistoryReportView: React.FC = () => {
           date_to: dateType === 'all' ? historyDates[historyDates.length - 1] || null : payload.date_to,
           items: allItems,
         });
+        setLoadingMore(false);
       }
     } catch (err: unknown) {
       const requestError = err as { name?: string; message?: string };
       if (version === requestVersion.current && requestError?.name !== 'AbortError') {
-        setReport(null);
-        setError(requestError?.message || 'Failed to load purchase history report');
+        if (!displayedFirstPage) setReport(null);
+        setError(displayedFirstPage
+          ? 'Some older purchase history could not be loaded. Try Generate again.'
+          : requestError?.message || 'Failed to load purchase history report');
       }
     } finally {
-      if (version === requestVersion.current) setLoading(false);
+      if (version === requestVersion.current) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
   };
 
@@ -355,6 +386,9 @@ const PurchaseHistoryReportView: React.FC = () => {
             className="flex-1 overflow-auto p-4 space-y-4"
           >
             {error && <p className="text-sm text-rose-600">{error}</p>}
+            {loadingMore ? (
+              <p className="text-sm text-blue-600 dark:text-blue-300" role="status">Loading more purchase history in the background...</p>
+            ) : null}
             {loading ? (
               <p className="text-sm text-slate-500">Loading purchase history...</p>
             ) : !report ? (
@@ -399,7 +433,7 @@ const PurchaseHistoryReportView: React.FC = () => {
                           <td colSpan={11} className="px-3 py-6 text-center text-slate-500">No purchase history rows found.</td>
                         </tr>
                       ) : (
-                        report.items.map((row, idx) => {
+                        visibleItems.map((row, idx) => {
                           const nextDate = report.items[idx + 1]?.ldate;
                           const showDateSubtotal = !nextDate || formatDate(nextDate) !== formatDate(row.ldate);
                           const dateSubtotal = dateSubtotals[row.ldate] || { sold: 0, returned: 0 };
@@ -440,6 +474,21 @@ const PurchaseHistoryReportView: React.FC = () => {
                   </table>
                 </div>
 
+                {visibleItems.length < report.items.length ? (
+                  <div className="flex items-center justify-center gap-3">
+                    <p className="text-sm text-slate-500">
+                      Showing {visibleItems.length.toLocaleString()} of {report.items.length.toLocaleString()} rows
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setVisibleRowCount((count) => count + VISIBLE_ROWS_STEP)}
+                      className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                    >
+                      Show more rows
+                    </button>
+                  </div>
+                ) : null}
+
                 <div className="overflow-auto rounded-xl border border-slate-200 dark:border-slate-800">
                   <table className="min-w-full text-sm">
                     <thead className="bg-slate-50 dark:bg-slate-900/60 text-slate-600 dark:text-slate-300">
@@ -455,7 +504,7 @@ const PurchaseHistoryReportView: React.FC = () => {
                           <td colSpan={3} className="px-3 py-6 text-center text-slate-500">No part-no totals available.</td>
                         </tr>
                       ) : (
-                        summary.topPartNos.map((row, idx) => (
+                        visiblePartNos.map((row, idx) => (
                           <tr key={`${row.partNo}-${idx}`}>
                             <td className="px-3 py-2">{row.partNo}</td>
                             <td className="px-3 py-2">{row.desc || '-'}</td>
@@ -473,6 +522,20 @@ const PurchaseHistoryReportView: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
+                {visiblePartNos.length < summary.topPartNos.length ? (
+                  <div className="flex items-center justify-center gap-3">
+                    <p className="text-sm text-slate-500">
+                      Showing {visiblePartNos.length.toLocaleString()} of {summary.topPartNos.length.toLocaleString()} part numbers
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setVisiblePartCount((count) => count + VISIBLE_ROWS_STEP)}
+                      className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                    >
+                      Show more part numbers
+                    </button>
+                  </div>
+                ) : null}
               </>
             )}
           </div>

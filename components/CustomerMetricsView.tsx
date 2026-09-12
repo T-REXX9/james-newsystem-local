@@ -1,22 +1,27 @@
 import React, { useEffect, useState } from 'react';
 import { BarChart3, TrendingUp, Calendar, DollarSign } from 'lucide-react';
-import { fetchCustomerMetrics } from '../services/customerDatabaseLocalApiService';
+import { fetchDailyCallCustomerMetrics } from '../services/dailyCallCustomerDetailService';
 
 interface CustomerMetricsViewProps {
   contactId: string;
 }
 
 const CustomerMetricsView: React.FC<CustomerMetricsViewProps> = ({ contactId }) => {
-  const [metrics, setMetrics] = useState<Awaited<ReturnType<typeof fetchCustomerMetrics>>>(null);
+  const [metrics, setMetrics] = useState<Awaited<ReturnType<typeof fetchDailyCallCustomerMetrics>> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     const loadMetrics = async () => {
+      setLoading(true);
+      setLoadError(null);
       try {
-        const data = await fetchCustomerMetrics(contactId);
+        const data = await fetchDailyCallCustomerMetrics(contactId);
         setMetrics(data);
       } catch (err) {
         console.error('Error loading metrics:', err);
+        setMetrics(null);
+        setLoadError(err instanceof Error ? err.message : 'Customer metrics are unavailable.');
       } finally {
         setLoading(false);
       }
@@ -35,8 +40,8 @@ const CustomerMetricsView: React.FC<CustomerMetricsViewProps> = ({ contactId }) 
 
   if (!metrics) {
     return (
-      <div className="flex items-center justify-center h-64 text-slate-500">
-        No metrics data available
+      <div className="flex items-center justify-center h-64 text-rose-700" role={loadError ? 'alert' : undefined}>
+        {loadError || 'No metrics data available'}
       </div>
     );
   }

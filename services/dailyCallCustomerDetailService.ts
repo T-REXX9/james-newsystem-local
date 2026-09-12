@@ -1,5 +1,8 @@
 import { getLocalAuthSession } from './localAuthService';
 import { CreateIncidentReportInput, IncidentReport } from '../types';
+import type { CustomerLedgerResponse } from './customerLedgerService';
+import { ledgerRowsToContactTransactions } from './customerLedgerService';
+import type { LocalCustomerMetrics } from './customerDatabaseLocalApiService';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
@@ -32,8 +35,32 @@ const fetchList = async <T>(path: string): Promise<T[]> => {
     return Array.isArray(data) ? (data as T[]) : [];
   } catch (error) {
     console.error('Daily call detail API error:', error);
-    return [];
+    throw error;
   }
+};
+
+export const fetchDailyCallCustomerMetrics = async (contactId: string): Promise<LocalCustomerMetrics> => {
+  const response = await fetch(
+    buildUrl(`/daily-call-monitoring/customers/${encodeURIComponent(contactId)}/metrics`),
+    { headers: getAuthHeaders() }
+  );
+  if (!response.ok) throw new Error(await parseApiErrorMessage(response));
+  const payload = await response.json();
+  const ledger = payload?.data as CustomerLedgerResponse | undefined;
+  if (!ledger?.metrics || !Array.isArray(ledger.rows)) {
+    throw new Error('Customer metrics are unavailable.');
+  }
+  const transactions = ledgerRowsToContactTransactions(ledger.rows);
+  const total = Number(ledger.metrics.dealership_sales || 0);
+  return {
+    contact_id: contactId,
+    total_purchases: total,
+    average_order_value: transactions.length > 0 ? total / transactions.length : 0,
+    last_purchase_date: transactions[0]?.date || null,
+    outstanding_balance: Number(ledger.metrics.balance || 0),
+    credit_limit: Number(ledger.metrics.credit_limit || 0),
+    currency: 'PHP',
+  };
 };
 
 export const fetchDailyCallPurchaseHistory = async (contactId: string) =>

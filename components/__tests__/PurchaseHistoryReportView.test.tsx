@@ -91,4 +91,47 @@ describe('PurchaseHistoryReportView', () => {
     await waitFor(() => expect(getReportMock).toHaveBeenCalledWith(expect.objectContaining({ page: 2, perPage: 50 })));
     expect(screen.getByText(/Customer Purchase History for the Period/)).toHaveTextContent('SEP‑08‑26 and SEP‑08‑26');
   });
+
+  it('shows the first page while the rest of a long history is still loading', async () => {
+    const firstRow = {
+      source_type: 'INVOICE', source_refno: 'ref-1', source_no: 'D1', ldate: '2026-09-08',
+      litemcode: 'ITEM-1', lpartno: 'P-1', ldesc: 'First page item', lbrand: 'BRAND',
+      lqty: 1, lprice: 10, return_qty: 0, net_qty: 1, line_total: 10,
+    };
+    const customer = { company: '3R MAN CALIBRATION', old_name: '', customer_since: '', vip_status: 'REGULAR', price_code: 'VIP1', current_month_sales: 0, outstanding_balance: 0, terms: '', credit_limit: 0, agent_name: '' };
+    const pendingNextPage = new Promise<never>(() => {});
+    getReportMock
+      .mockResolvedValueOnce({
+        customer_session: 'customer-1', date_from: null, date_to: null, generated_at: '',
+        customer,
+        items: [firstRow], pagination: { page: 1, per_page: 50, has_more: true },
+      })
+      .mockReturnValueOnce(pendingNextPage);
+
+    render(<PurchaseHistoryReportView />);
+
+    expect((await screen.findAllByText('First page item', {}, { timeout: 500 })).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Loading more purchase history/)).toBeInTheDocument();
+  });
+
+  it('keeps CM CALIBRATION CENTER responsive with thousands of history rows', async () => {
+    const items = Array.from({ length: 3_404 }, (_, index) => ({
+      source_type: 'INVOICE', source_refno: `ref-${index}`, source_no: `D-${index}`, ldate: '2026-09-08',
+      litemcode: `ITEM-${index}`, lpartno: `PART-${index}`, ldesc: `Product ${index}`, lbrand: 'BRAND',
+      lqty: 1, lprice: 10, return_qty: 0, net_qty: 1, line_total: 10,
+    }));
+    getReportMock.mockResolvedValueOnce({
+      customer_session: 'customer-1', date_from: '2026-09-08', date_to: '2026-09-08', generated_at: '',
+      customer: { company: 'CM CALIBRATION CENTER', old_name: '', customer_since: '', vip_status: 'REGULAR', price_code: 'VIP1', current_month_sales: 0, outstanding_balance: 0, terms: '', credit_limit: 0, agent_name: '' },
+      items,
+      pagination: { page: 1, per_page: 3_404, has_more: false },
+    });
+
+    render(<PurchaseHistoryReportView />);
+
+    expect(await screen.findByText('Showing 100 of 3,404 rows')).toBeInTheDocument();
+    expect(screen.getByText('Showing 100 of 3,404 part numbers')).toBeInTheDocument();
+    expect(screen.queryByText('D-150')).not.toBeInTheDocument();
+    expect(screen.getAllByText(/^Product \d+$/)).toHaveLength(200);
+  });
 });

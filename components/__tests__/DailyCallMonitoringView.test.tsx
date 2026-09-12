@@ -17,6 +17,7 @@ const subscribeToDailyCallMonitoringUpdatesMock = vi.fn(() => () => {});
 const createContactMock = vi.fn();
 const updateContactMock = vi.fn();
 const fetchContactByIdMock = vi.fn();
+const fetchContactForDailyCallMock = vi.fn();
 
 vi.mock('../ToastProvider', () => ({
   useToast: () => ({
@@ -39,6 +40,7 @@ vi.mock('../../services/customerDatabaseLocalApiService', () => ({
   createContact: (...args: unknown[]) => createContactMock(...args),
   updateContact: (...args: unknown[]) => updateContactMock(...args),
   fetchContactById: (...args: unknown[]) => fetchContactByIdMock(...args),
+  fetchContactForDailyCall: (...args: unknown[]) => fetchContactForDailyCallMock(...args),
 }));
 
 vi.mock('../CustomLoadingSpinner', () => ({
@@ -50,7 +52,9 @@ vi.mock('../AgentCallActivity', () => ({
 }));
 
 vi.mock('../ContactDetails', () => ({
-  default: ({ contact }: { contact: { id: string } }) => <div data-testid="full-contact-details">{contact.id}</div>,
+  default: ({ contact }: { contact: { id: string; businessLine?: string } }) => (
+    <div data-testid="full-contact-details">{contact.id}:{contact.businessLine || 'blank-overview'}</div>
+  ),
 }));
 
 vi.mock('../CreateIncidentReportModal', () => ({
@@ -130,6 +134,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     createContactMock.mockReset();
     updateContactMock.mockReset();
     fetchContactByIdMock.mockReset();
+    fetchContactForDailyCallMock.mockReset();
     updateContactMock.mockResolvedValue(undefined);
 
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue(baseSnapshot);
@@ -151,6 +156,11 @@ describe('DailyCallMonitoringView communication actions', () => {
         mobile: '09987654321',
         email: 'juan@example.com',
       }],
+    });
+    fetchContactForDailyCallMock.mockResolvedValue({
+      id: 'contact-1',
+      company: 'Test Shop',
+      businessLine: 'Diesel Injection',
     });
     claimCustomerCallForDailyCallMock.mockResolvedValue({
       contact_id: 'contact-1', status: 'in_progress', agent_user_id: 'agent-1', agent_name: 'Jane Doe',
@@ -614,7 +624,8 @@ describe('DailyCallMonitoringView communication actions', () => {
     await user.click(await screen.findByText('Test Shop'));
     await user.click(screen.getByRole('button', { name: 'Open Full Details' }));
 
-    expect(screen.getByTestId('full-contact-details')).toHaveTextContent('contact-1');
+    expect(await screen.findByTestId('full-contact-details')).toHaveTextContent('contact-1:Diesel Injection');
+    expect(fetchContactForDailyCallMock).toHaveBeenCalledWith('contact-1');
   });
 
   it('logs an outbound SMS and opens the messaging app with the composed body', async () => {

@@ -3,7 +3,7 @@ import { AlertTriangle, CheckCircle, Clock, Plus, FileText, Receipt, ShoppingCar
 import { fetchDailyCallIncidentReports, reviewDailyCallIncidentReport } from '../services/dailyCallCustomerDetailService';
 import CreateIncidentReportModal from './CreateIncidentReportModal';
 import { IncidentReport, UserProfile } from '../types';
-import { canPerformAction } from '../utils/actionPermissions';
+import { isMasterUserAccount } from '../constants';
 
 interface IncidentReportTabProps {
   contactId: string;
@@ -16,10 +16,11 @@ const IncidentReportTab: React.FC<IncidentReportTabProps> = ({ contactId, curren
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [reviewError, setReviewError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [dispositions, setDispositions] = useState<Record<string, 'return_to_stock' | 'return_to_factory'>>({});
   const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
 
-  const canReview = canPerformAction('can_approve');
+  const canReview = isMasterUserAccount(currentUser);
 
   const formatReportDateTime = (dateValue?: string, timeValue?: string) => {
     const date = String(dateValue || '').split('T')[0];
@@ -32,12 +33,14 @@ const IncidentReportTab: React.FC<IncidentReportTabProps> = ({ contactId, curren
 
   const loadReports = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await fetchDailyCallIncidentReports(contactId);
       setReports(data || []);
     } catch (err) {
       console.error('Error loading incident reports:', err);
       setReports([]);
+      setLoadError(err instanceof Error ? err.message : 'Incident reports are unavailable.');
     } finally {
       setLoading(false);
     }
@@ -110,6 +113,9 @@ const IncidentReportTab: React.FC<IncidentReportTabProps> = ({ contactId, curren
   }
 
   if (reports.length === 0) {
+    if (loadError) {
+      return <div className="p-6 text-center text-rose-700" role="alert">{loadError}</div>;
+    }
     return (
       <div className="p-6">
         <div className="mb-4">

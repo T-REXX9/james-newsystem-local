@@ -83,6 +83,15 @@ describe('SalesReportTab', () => {
     ]);
   });
 
+  it('shows a load error instead of claiming there are no reports', async () => {
+    fetchDailyCallSalesReportsMock.mockRejectedValueOnce(new Error('Sales reports unavailable'));
+
+    render(<SalesReportTab contactId="contact-1" />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sales reports unavailable');
+    expect(screen.queryByText('No sales inquiry reports yet')).not.toBeInTheDocument();
+  });
+
   it('filters reports by Date From inclusively', async () => {
     const user = userEvent.setup();
     render(<SalesReportTab contactId="contact-1" />);

@@ -59,7 +59,7 @@ import {
   subscribeToDailyCallMonitoringUpdates
 } from '../services/dailyCallMonitoringService';
 import type { ManagementInstruction } from '../services/dailyCallMonitoringService';
-import { createContact, fetchContactById, updateContact } from '../services/customerDatabaseLocalApiService';
+import { createContact, fetchContactById, fetchContactForDailyCall, updateContact } from '../services/customerDatabaseLocalApiService';
 import { queueCallRequest } from '../services/callingSystemService';
 import { navigateWorkflow } from '../utils/workflowNavigate';
 import {
@@ -598,6 +598,9 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [activeTab, setActiveTab] = useState<'master' | 'today' | 'activity'>('master');
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(false);
   const [showContactDetails, setShowContactDetails] = useState(false);
+  const [fullDetailsContact, setFullDetailsContact] = useState<Contact | null>(null);
+  const [fullDetailsLoading, setFullDetailsLoading] = useState(false);
+  const [fullDetailsError, setFullDetailsError] = useState<string | null>(null);
   const [showIncidentReportModal, setShowIncidentReportModal] = useState(false);
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
   const [addCustomerKind, setAddCustomerKind] = useState<'customer' | 'prospect' | 'verifiedProspect'>('customer');
@@ -1124,6 +1127,28 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     [contacts, selectedClientId]
   );
   const selectedClientBlocked = selectedClient ? isBlockedContact(selectedClient) : false;
+
+  const handleOpenFullDetails = useCallback(async (contact: Contact) => {
+    setShowContactDetails(true);
+    setFullDetailsContact(null);
+    setFullDetailsError(null);
+    setFullDetailsLoading(true);
+    try {
+      setFullDetailsContact(await fetchContactForDailyCall(contact.id));
+    } catch (error) {
+      console.error('Error loading full customer details:', error);
+      setFullDetailsError(error instanceof Error ? error.message : 'Customer details could not be loaded.');
+    } finally {
+      setFullDetailsLoading(false);
+    }
+  }, []);
+
+  const handleCloseFullDetails = useCallback(() => {
+    setShowContactDetails(false);
+    setFullDetailsContact(null);
+    setFullDetailsError(null);
+    setFullDetailsLoading(false);
+  }, []);
   const callContactPerson = useMemo(
     () => callContact?.contactPersons?.find((person) => person.enabled !== false) || callContact?.contactPersons?.[0] || null,
     [callContact]
@@ -2160,7 +2185,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setShowContactDetails(true)}
+                onClick={() => void handleOpenFullDetails(selectedClient)}
                 className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-brand-blue transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
                 title="Open Full Details"
                 aria-label="Open Full Details"
@@ -2794,14 +2819,42 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
       {showContactDetails && selectedClient && (
         <div className="fixed inset-0 z-50 bg-white dark:bg-slate-950">
-          <ContactDetails
-            contact={selectedClient}
-            currentUser={currentUser}
-            onClose={() => setShowContactDetails(false)}
-            onUpdate={(updated) => {
-              setContacts((prev) => prev.map((c) => c.id === updated.id ? updated : c));
-            }}
-          />
+          {fullDetailsLoading ? (
+            <div className="flex h-full items-center justify-center gap-3 text-slate-600 dark:text-slate-300" role="status">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Loading customer details...
+            </div>
+          ) : fullDetailsError ? (
+            <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
+              <div className="max-w-md text-rose-700" role="alert">{fullDetailsError}</div>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => void handleOpenFullDetails(selectedClient)}
+                  className="rounded-lg bg-brand-blue px-4 py-2 font-semibold text-white"
+                >
+                  Retry
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCloseFullDetails}
+                  className="rounded-lg border border-slate-300 px-4 py-2 font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          ) : fullDetailsContact ? (
+            <ContactDetails
+              contact={fullDetailsContact}
+              currentUser={currentUser}
+              onClose={handleCloseFullDetails}
+              onUpdate={(updated) => {
+                setFullDetailsContact(updated);
+                setContacts((prev) => prev.map((c) => c.id === updated.id ? updated : c));
+              }}
+            />
+          ) : null}
         </div>
       )}
 

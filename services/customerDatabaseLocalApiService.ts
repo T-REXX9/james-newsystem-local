@@ -750,6 +750,21 @@ export const fetchContactById = async (id: string): Promise<Contact | null> => {
   }
 };
 
+export const fetchContactForDailyCall = async (id: string): Promise<Contact> => {
+  const session = getLocalAuthSession();
+  const sessionMainId = Number(
+    session?.context?.main_userid || session?.context?.user?.main_userid || session?.userProfile?.main_userid || 0
+  );
+  const mainId = Number.isFinite(sessionMainId) && sessionMainId > 0 ? sessionMainId : API_MAIN_ID;
+  const payload = await requestJson<ApiCustomerDetailResponse>(
+    `${API_BASE_URL}/daily-call-monitoring/customers/${encodeURIComponent(String(id))}/profile?main_id=${encodeURIComponent(String(mainId))}`
+  );
+  if (!payload?.data) {
+    throw new Error('Customer details are unavailable.');
+  }
+  return mapApiCustomerToContact(payload.data);
+};
+
 const mapApiTermRow = (row: ApiCustomerTermsRow, index: number) => ({
   id: String(row?.id ?? row?.lid ?? `term-${index}`),
   since: sanitizeLegacyString(row?.since || row?.lsince || ''),

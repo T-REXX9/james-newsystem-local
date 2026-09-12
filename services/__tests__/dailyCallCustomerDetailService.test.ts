@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDailyCallIncidentReport, reviewDailyCallIncidentReport } from '../dailyCallCustomerDetailService';
+import {
+  createDailyCallIncidentReport,
+  fetchDailyCallCustomerMetrics,
+  fetchDailyCallSalesReports,
+  reviewDailyCallIncidentReport,
+} from '../dailyCallCustomerDetailService';
 
 describe('dailyCallCustomerDetailService incident reports', () => {
   beforeEach(() => {
@@ -151,5 +156,48 @@ describe('dailyCallCustomerDetailService incident reports', () => {
       disposition: 'return_to_stock',
       reviewerName: 'Master User',
     })).rejects.toThrow('This incident has already been reviewed');
+  });
+
+  it('loads and maps customer metrics through the Daily Call scope', async () => {
+    localStorage.setItem('local_api_auth_session', JSON.stringify({
+      token: 'metrics-token',
+      context: { main_userid: 42, user: { id: 7, main_userid: 42 } },
+      userProfile: { id: '7', main_userid: 42 },
+    }));
+    (global.fetch as any).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        data: {
+          metrics: { dealership_sales: 12000, balance: 2500, credit_limit: 50000 },
+          rows: [
+            { id: 1, date: '2026-09-01', datetime: '2026-09-01 10:00:00', reference: 'INV-1', ref_no: '1', ref_type: 'invoice', debit: 7000 },
+            { id: 2, date: '2026-08-01', datetime: '2026-08-01 10:00:00', reference: 'INV-2', ref_no: '2', ref_type: 'invoice', debit: 5000 },
+          ],
+        },
+      }),
+    } as Response);
+
+    await expect(fetchDailyCallCustomerMetrics('contact-1')).resolves.toMatchObject({
+      contact_id: 'contact-1',
+      total_purchases: 12000,
+      average_order_value: 6000,
+      last_purchase_date: '2026-09-01',
+      outstanding_balance: 2500,
+    });
+    const [url, options] = (global.fetch as any).mock.calls[0];
+    expect(String(url)).toContain('/daily-call-monitoring/customers/contact-1/metrics?main_id=42');
+    expect(options.headers).toEqual({ Authorization: 'Bearer metrics-token' });
+  });
+
+  it('rejects failed list requests so tabs do not show false empty states', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    (global.fetch as any).mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: async () => ({ error: 'Sales reports unavailable' }),
+    } as Response);
+
+    await expect(fetchDailyCallSalesReports('contact-1')).rejects.toThrow('API request failed (503)');
   });
 });

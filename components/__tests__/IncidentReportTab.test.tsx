@@ -133,6 +133,15 @@ describe('IncidentReportTab approval workflow', () => {
     expect(screen.queryByRole('button', { name: 'Approve Sales Return' })).not.toBeInTheDocument();
   });
 
+  it('shows a load error instead of claiming there are no incidents', async () => {
+    fetchReportsMock.mockRejectedValueOnce(new Error('Incident reports unavailable'));
+
+    render(<IncidentReportTab contactId="customer-1" currentUser={{ id: 'agent-1', role: 'Sales Agent' } as any} />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Incident reports unavailable');
+    expect(screen.queryByText(/No incident reports yet/)).not.toBeInTheDocument();
+  });
+
   it('allows Master User review actions on legacy customer log incidents', async () => {
     fetchReportsMock.mockResolvedValueOnce([{ ...pendingReport, record_source: 'customer_log' }]);
 

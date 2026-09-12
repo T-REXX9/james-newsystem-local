@@ -1,7 +1,7 @@
 import { CustomerStatus } from '../../types';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchDailyCallMasterList } from '../dailyCallMonitoringService';
-import { bulkUpdateContacts, deleteCustomer, mapApiCustomerToContact, mapContactPayloadToApi, mapContactUpdatesToApi, updateContact } from '../customerDatabaseLocalApiService';
+import { bulkUpdateContacts, deleteCustomer, fetchContactForDailyCall, mapApiCustomerToContact, mapContactPayloadToApi, mapContactUpdatesToApi, updateContact } from '../customerDatabaseLocalApiService';
 
 const reloadStanding = (patch: Record<string, unknown>) =>
   mapApiCustomerToContact({
@@ -125,6 +125,30 @@ describe('customer database saves and daily call cache', () => {
       expect.stringContaining('/customer-database/customer-1?main_id=1'),
       expect.objectContaining({ method: 'DELETE' }),
     );
+  });
+});
+
+describe('Daily Call customer profile', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  it('loads the complete profile through the assigned-customer endpoint', async () => {
+    localStorage.setItem('local_api_auth_session', JSON.stringify({
+      token: 'profile-token',
+      context: { main_userid: 42, user: { id: 7, main_userid: 42 } },
+      userProfile: { id: '7', main_userid: 42 },
+    }));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { session_id: 'contact-1', company: 'Test Shop', business_line: 'Diesel Injection' } }),
+    } as Response);
+
+    const contact = await fetchContactForDailyCall('contact-1');
+
+    expect(contact).toMatchObject({ id: 'contact-1', company: 'Test Shop', businessLine: 'Diesel Injection' });
+    expect(String(fetchSpy.mock.calls[0][0])).toContain('/daily-call-monitoring/customers/contact-1/profile?main_id=42');
   });
 });
 

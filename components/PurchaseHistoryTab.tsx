@@ -9,10 +9,13 @@ interface PurchaseHistoryTabProps {
 const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ contactId }) => {
   const [purchases, setPurchases] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [totalValue, setTotalValue] = useState(0);
 
   useEffect(() => {
     const loadPurchases = async () => {
+      setLoading(true);
+      setLoadError(null);
       try {
         const data = await fetchDailyCallPurchaseHistory(contactId);
         setPurchases(data || []);
@@ -22,6 +25,9 @@ const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ contactId }) =>
         setTotalValue(total);
       } catch (err) {
         console.error('Error loading purchase history:', err);
+        setPurchases([]);
+        setTotalValue(0);
+        setLoadError(err instanceof Error ? err.message : 'Purchase history is unavailable.');
       } finally {
         setLoading(false);
       }
@@ -35,6 +41,9 @@ const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ contactId }) =>
   }
 
   if (purchases.length === 0) {
+    if (loadError) {
+      return <div className="p-6 text-center text-rose-700" role="alert">{loadError}</div>;
+    }
     return (
       <div className="p-6 text-center text-slate-500">
         <ShoppingCart className="w-8 h-8 mx-auto mb-2 opacity-50" />
