@@ -43,10 +43,15 @@ export interface PurchaseOrderItemWithProduct extends PurchaseOrderItem {
 
 export type POStatus = 'Draft' | 'Pending' | 'Posted' | 'Partial Delivery' | 'Cancelled';
 
+// Doubles as the status filter list on the purchase order screen, so every
+// status a purchase order can actually reach needs an entry or documents in
+// that status cannot be filtered for.
 export const PO_STATUS_COLORS: Record<string, string> = {
     Draft: 'bg-gray-100 text-gray-800',
     Pending: 'bg-yellow-100 text-yellow-800',
     Cancelled: 'bg-red-100 text-red-800',
     Posted: 'bg-green-100 text-green-800',
+    Completed: 'bg-emerald-100 text-emerald-800',
+    Unposted: 'bg-orange-100 text-orange-800',
     'Partial Delivery': 'bg-amber-100 text-amber-800',
 };

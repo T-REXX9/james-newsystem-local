@@ -7,6 +7,7 @@ import ReceivingList from './ReceivingList';
 import ReceivingForm from './ReceivingForm';
 import ReceivingView from './ReceivingView';
 import { retraceWorkflowHistory } from '../../utils/workflowHistory';
+import { useToast } from '../ToastProvider';
 
 interface ReceivingStockProps {
     initialRRId?: string;
@@ -14,6 +15,7 @@ interface ReceivingStockProps {
 }
 
 const ReceivingStock: React.FC<ReceivingStockProps> = ({ initialRRId, initialRRRefNo }) => {
+    const { addToast } = useToast();
     const [loading, setLoading] = useState(true);
     const [rrs, setRrs] = useState<ReceivingReportWithDetails[]>([]);
 
@@ -38,8 +40,12 @@ const ReceivingStock: React.FC<ReceivingStockProps> = ({ initialRRId, initialRRR
                 search: search || undefined
             });
             setRrs(data);
-        } catch (error) {
-            console.error("Error fetching receiving reports:", error);
+        } catch (error: any) {
+            addToast({
+                type: 'error',
+                title: 'Unable to load receiving reports',
+                description: error?.message || 'Please try again.',
+            });
         } finally {
             setLoading(false);
         }
@@ -145,6 +151,7 @@ const ReceivingStock: React.FC<ReceivingStockProps> = ({ initialRRId, initialRRR
                             <option value="Draft">Draft</option>
                             <option value="Pending">Pending</option>
                             <option value="Posted">Posted</option>
+                            <option value="Unposted">Unposted</option>
                             <option value="Cancelled">Cancelled</option>
                         </select>
                     </div>

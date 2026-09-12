@@ -581,7 +581,16 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
       variant,
       confirmLabel,
       onConfirm: async () => {
-        await purchaseOrderService.updatePurchaseOrder(selectedPO.id, { status: newStatus });
+        try {
+          await purchaseOrderService.updatePurchaseOrder(selectedPO.id, { status: newStatus });
+        } catch (error: any) {
+          addToast({
+            type: 'error',
+            title: `Unable to ${newStatus === 'Posted' ? 'post' : 'cancel'} purchase order`,
+            description: error.message,
+          });
+          throw error;
+        }
         const updated = await purchaseOrderService.getPurchaseOrderById(selectedPO.id);
         setSelectedPO(updated as unknown as PurchaseOrderWithDetails);
         await notifyPurchaseOrderEvent(
@@ -656,7 +665,12 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
       variant: 'danger',
       confirmLabel: 'Delete',
       onConfirm: async () => {
-        await purchaseOrderService.deletePurchaseOrder(selectedPO.id, reason);
+        try {
+          await purchaseOrderService.deletePurchaseOrder(selectedPO.id, reason);
+        } catch (error: any) {
+          addToast({ type: 'error', title: 'Unable to delete purchase order', description: error.message });
+          throw error;
+        }
         setSelectedPO(null);
         await fetchOrders();
         addToast({ type: 'success', title: 'Purchase order deleted' });
@@ -683,8 +697,8 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
       setSelectedNewItemProduct(null);
       setNewItemQty(1);
       setNewItemEta('');
-    } catch (err: any) {
-      alert('Error adding item: ' + err.message);
+    } catch (error: any) {
+      addToast({ type: 'error', title: 'Unable to add item', description: error.message });
     }
   };
 
@@ -696,7 +710,12 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
       variant: 'danger',
       confirmLabel: 'Remove',
       onConfirm: async () => {
-        await purchaseOrderService.deletePurchaseOrderItem(itemId);
+        try {
+          await purchaseOrderService.deletePurchaseOrderItem(itemId);
+        } catch (error: any) {
+          addToast({ type: 'error', title: 'Unable to remove item', description: error.message });
+          throw error;
+        }
         const updated = await purchaseOrderService.getPurchaseOrderById(selectedPO.id);
         setSelectedPO(updated as unknown as PurchaseOrderWithDetails);
         addToast({ type: 'success', title: 'Item removed', durationMs: 3000 });

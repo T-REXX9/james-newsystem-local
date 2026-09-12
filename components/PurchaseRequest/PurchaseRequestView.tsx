@@ -10,6 +10,7 @@ import {
   Package2,
   Plus,
   Printer,
+  RotateCcw,
   Send,
   Trash2,
   X,
@@ -280,6 +281,17 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
       onConfirm: async () => onUpdate(request.id, { status: "Pending" }),
     });
   };
+  const handleReopenRequest = () => {
+    if (!canEdit) return;
+    setConfirmModal({
+      isOpen: true,
+      title: "Reopen Purchase Request",
+      message: `Reopen ${request.pr_number}? It returns to Pending so it can be approved and ordered again.`,
+      confirmLabel: "Reopen",
+      variant: "info",
+      onConfirm: async () => onUpdate(request.id, { status: "Pending" }),
+    });
+  };
   const handleDeleteItemRequest = (itemId: string, partNumber?: string) => {
     if (!canDelete) return;
     setConfirmModal({
@@ -490,6 +502,14 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                   className="inline-flex items-center gap-2 rounded-md bg-[#175fd3] px-3 py-2 text-sm font-bold text-white hover:bg-[#0e4fb7] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Send className="h-4 w-4" /> Submit for Approval
+                </button>
+              )}
+              {request.status === "Cancelled" && canEdit && (
+                <button
+                  onClick={handleReopenRequest}
+                  className="inline-flex items-center gap-2 rounded-md bg-[#175fd3] px-3 py-2 text-sm font-bold text-white hover:bg-[#0e4fb7]"
+                >
+                  <RotateCcw className="h-4 w-4" /> Reopen
                 </button>
               )}
               {["Pending", "Submitted", "Unposted"].includes(request.status || "") && (request.status === "Unposted" ? canPost : canApprove) && (generatedPOs.length === 0 || request.status === "Unposted") && (

@@ -7,7 +7,10 @@ const service = {
   getReceivingReports: vi.fn(),
 };
 
+const addToast = vi.fn();
+
 vi.mock('../../services/receivingService', () => ({ receivingService: service }));
+vi.mock('../ToastProvider', () => ({ useToast: () => ({ addToast }) }));
 vi.mock('../ReceivingStock/ReceivingForm', () => ({ default: ({ onClose, onSuccess }: { onClose: () => void; onSuccess: (report: unknown) => void }) => <div><button type="button" onClick={onClose}>Close form</button><button type="button" onClick={() => onSuccess({ id: 'RRREF-1' })}>Save receiving report</button></div> }));
 vi.mock('../ReceivingStock/ReceivingView', () => ({ default: ({ rrId, onBack, onCreateNew }: { rrId: string; onBack: () => void; onCreateNew: () => void }) => <div><span>Receiving detail {rrId}</span><button type="button" onClick={onBack}>Back to receiving list</button><button type="button" onClick={onCreateNew}>New RR</button></div> }));
 
@@ -23,6 +26,23 @@ beforeEach(() => {
 });
 
 describe('ReceivingStock module', () => {
+  it('tells the user when the list cannot load instead of showing nothing', async () => {
+    service.getReceivingReports.mockRejectedValueOnce(new Error('Receiving service unavailable'));
+    const { default: ReceivingStock } = await import('../ReceivingStock');
+    render(<ReceivingStock />);
+    await waitFor(() =>
+      expect(addToast).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'error', description: 'Receiving service unavailable' })
+      )
+    );
+  });
+
+  it('offers Unposted as a status filter so corrected reports stay findable', async () => {
+    const { default: ReceivingStock } = await import('../ReceivingStock');
+    render(<ReceivingStock />);
+    expect(await screen.findByRole('option', { name: 'Unposted' })).toBeInTheDocument();
+  });
+
   it('renders server item counts and opens a selected report', async () => {
     const { default: ReceivingStock } = await import('../ReceivingStock');
     render(<ReceivingStock />);

@@ -24,7 +24,8 @@ const prService = {
 
 vi.mock('../../services/purchaseOrderService', () => ({ purchaseOrderService: service }));
 vi.mock('../../services/purchaseRequestService', () => ({ purchaseRequestService: prService }));
-vi.mock('../ToastProvider', () => ({ useToast: () => ({ addToast: vi.fn() }) }));
+const addToast = vi.fn();
+vi.mock('../ToastProvider', () => ({ useToast: () => ({ addToast }) }));
 vi.mock('../../services/localAuthService', () => ({ getLocalAuthSession: () => ({ userProfile: { id: '7', role: 'Purchasing Manager' } }) }));
 vi.mock('../../services/notificationLocalApiService', () => ({
   dispatchWorkflowNotification: vi.fn().mockResolvedValue(undefined),
@@ -186,6 +187,27 @@ describe('PurchaseOrderView', () => {
     fireEvent.change(screen.getAllByLabelText('Edit COGS 1')[0], { target: { value: '12.5' } });
     fireEvent.click(screen.getByTitle('Save item'));
     await waitFor(() => expect(service.updatePurchaseOrderItem).toHaveBeenCalledWith('ITEM-1', expect.objectContaining({ qty: 3, unit_price: 12.5 })));
+  });
+
+  it('explains why a post failed instead of leaving the screen unchanged', async () => {
+    service.updatePurchaseOrder.mockRejectedValueOnce(new Error('Purchase order cannot be modified because RR-2601 already depends on it'));
+    const { default: PurchaseOrderView } = await import('../PurchaseOrderView');
+    render(<PurchaseOrderView initialPOId="POREF-1" />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /^post$/i }));
+    // The header button and the confirmation both read "Post"; confirm on the modal.
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /^post$/i }).length).toBeGreaterThan(1));
+    const postButtons = screen.getAllByRole('button', { name: /^post$/i });
+    fireEvent.click(postButtons[postButtons.length - 1]);
+
+    await waitFor(() =>
+      expect(addToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'error',
+          description: 'Purchase order cannot be modified because RR-2601 already depends on it',
+        })
+      )
+    );
   });
 
   it('retraces the previous workflow from a linked purchase order', async () => {

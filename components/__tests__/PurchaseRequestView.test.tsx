@@ -200,6 +200,33 @@ describe('PurchaseRequestView', () => {
     await waitFor(() => expect(onAddItem).toHaveBeenCalled());
   });
 
+  it('lets the user reopen a Cancelled request instead of leaving it stranded', async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn().mockResolvedValue(undefined);
+
+    renderView(
+      <PurchaseRequestView
+        request={{ ...baseRequest, status: 'Cancelled' } as any}
+        onBack={vi.fn()}
+        onUpdate={onUpdate}
+        onUpdateItem={vi.fn()}
+        onDeleteItem={vi.fn()}
+        onAddItem={vi.fn()}
+        onConvert={vi.fn()}
+        onPrint={vi.fn()}
+        products={[]}
+        suppliers={[]}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /^reopen$/i }));
+    // The header button and the confirmation both read "Reopen"; confirm on the modal.
+    const confirmButtons = screen.getAllByRole('button', { name: /^reopen$/i });
+    await user.click(confirmButtons[confirmButtons.length - 1]);
+
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledWith('PRREF-1', { status: 'Pending' }));
+  });
+
   it('lets the user submit a Draft for approval so it can reach the purchase order stage', async () => {
     const user = userEvent.setup();
     const onUpdate = vi.fn().mockResolvedValue(undefined);

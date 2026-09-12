@@ -29,7 +29,9 @@ const months = [
   ['09', 'September'], ['10', 'October'], ['11', 'November'], ['12', 'December'],
 ];
 
-const statuses = ['All Statuses', 'Draft', 'Pending', 'Submitted', 'Approved', 'Cancelled'];
+// Unposted belongs here too, otherwise a request that was unposted for
+// correction can only be found by clearing the filter entirely.
+const statuses = ['All Statuses', 'Draft', 'Pending', 'Submitted', 'Approved', 'Unposted', 'Cancelled'];
 
 const formatDate = (value: string | null | undefined) => {
   if (!value) return '-';
@@ -42,6 +44,7 @@ const statusClass = (status: string) => {
     case 'Approved': return 'bg-emerald-50 text-emerald-700';
     case 'Submitted': return 'bg-blue-50 text-blue-700';
     case 'Cancelled': return 'bg-rose-50 text-rose-700';
+    case 'Unposted': return 'bg-orange-50 text-orange-700';
     case 'Draft': return 'bg-slate-100 text-slate-600';
     default: return 'bg-amber-50 text-amber-700';
   }
