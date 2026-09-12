@@ -33,6 +33,7 @@ import {
 import { PageHeader, RecordTrustStrip, WorkflowGuidance } from './common/PageScaffold';
 import { exportPrintSheetAsJpeg, waitForPrintSheet } from '../utils/exportPrintSheetJpeg';
 import { cascadeSalesDocumentDate } from '../services/salesDocumentDateService';
+import { formatDate as formatPhilippineDate } from '../utils/formatUtils';
 import { canBackdatePosting, canPerformAction } from '../utils/actionPermissions';
 import {
   canMutateDocumentDateField,
@@ -76,9 +77,7 @@ const documentStatusMeta: Record<InvoiceStatus, { label: string; tone: 'neutral'
 
 const formatDate = (value?: string | null): string => {
   if (!value) return '-';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
+  return formatPhilippineDate(value);
 };
 
 const formatCurrency = (value?: number | string | null): string => {

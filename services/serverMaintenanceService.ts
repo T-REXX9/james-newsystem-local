@@ -2,12 +2,20 @@ import { clearInvalidLocalAuthSession, getLocalAuthSession } from './localAuthSe
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 
+export type CorporateDumpImportInfo = {
+  supported_extensions: string[];
+  max_bytes: number;
+  chunk_max_bytes: number;
+  safety: string;
+};
+
 export type ServerMaintenanceStatus = {
   database_name: string;
   backup_available: boolean;
   format: string;
   description: string;
   automatic_backup?: AutomaticBackupSettings;
+  corporate_dump_import?: CorporateDumpImportInfo;
 };
 
 export type AutomaticBackupFrequency = 'daily' | 'weekly';
@@ -30,6 +38,20 @@ export type BackupDestination = {
   id: string;
   label: string;
   path: string;
+};
+
+export type CorporateDumpImportReport = {
+  filename: string;
+  bytes: number;
+  import: {
+    staging_database?: string;
+    tables_merged: number;
+    tables_skipped_missing: string[];
+    tables_skipped_keyless: string[];
+    tables_skipped_no_shared_columns: string[];
+    affected_rows: number;
+    details: string[];
+  };
 };
 
 const authHeaders = (): HeadersInit => {
@@ -174,4 +196,81 @@ export async function downloadFullDatabaseBackup(): Promise<{ filename: string; 
   }
 
   return { filename, bytes: blob.size };
+}
+
+export async function importCorporateDumpFile(
+  file: File,
+  options?: {
+    chunkSize?: number;
+    onProgress?: (progress: { uploadedBytes: number; totalBytes: number; phase: 'upload' | 'import' }) => void;
+  }
+): Promise<CorporateDumpImportReport> {
+  const totalBytes = file.size;
+  if (!totalBytes) {
+    throw new Error('Selected dump file is empty');
+  }
+  if (!/\.(sql|sql\.gz)$/i.test(file.name)) {
+    throw new Error('Only .sql or .sql.gz dumps are supported');
+  }
+
+  const createResponse = await fetch(`${API_BASE_URL}/server-maintenance/corporate-dump/uploads`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      ...authHeaders(),
+    },
+    body: JSON.stringify({
+      filename: file.name,
+      bytes: totalBytes,
+    }),
+  });
+  const session = await unwrapData<{
+    upload_id: string;
+    filename: string;
+    bytes_expected: number;
+  }>(createResponse);
+
+  const chunkSize = Math.max(64 * 1024, Math.min(options?.chunkSize ?? 1024 * 1024, 2 * 1024 * 1024));
+  let uploadedBytes = 0;
+  options?.onProgress?.({ uploadedBytes, totalBytes, phase: 'upload' });
+
+  while (uploadedBytes < totalBytes) {
+    const chunk = file.slice(uploadedBytes, uploadedBytes + chunkSize);
+    const buffer = await chunk.arrayBuffer();
+    const response = await fetch(
+      `${API_BASE_URL}/server-maintenance/corporate-dump/uploads/${encodeURIComponent(session.upload_id)}/chunks`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/octet-stream',
+          ...authHeaders(),
+        },
+        body: buffer,
+      }
+    );
+    const progress = await unwrapData<{
+      bytes_received: number;
+      bytes_expected: number;
+      complete: boolean;
+    }>(response);
+    uploadedBytes = progress.bytes_received;
+    options?.onProgress?.({ uploadedBytes, totalBytes, phase: 'upload' });
+  }
+
+  options?.onProgress?.({ uploadedBytes: totalBytes, totalBytes, phase: 'import' });
+  const importResponse = await fetch(
+    `${API_BASE_URL}/server-maintenance/corporate-dump/uploads/${encodeURIComponent(session.upload_id)}/import`,
+    {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...authHeaders(),
+      },
+      body: JSON.stringify({}),
+    }
+  );
+  return unwrapData<CorporateDumpImportReport>(importResponse);
 }

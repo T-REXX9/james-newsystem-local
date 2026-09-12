@@ -14,6 +14,7 @@ import CustomerAutocomplete from './CustomerAutocomplete';
 import { useDebounce } from '../hooks/useDebounce';
 import { canBackdatePosting, canPerformAction } from '../utils/actionPermissions';
 import { canMutateDocumentDateField, localTodayYmd, validateDocumentDateWrite } from '../utils/backdatedPosting';
+import { formatDate as formatPhilippineDate } from '../utils/formatUtils';
 
 type SourceDocument = SalesReturnSourceDocument;
 
@@ -21,9 +22,7 @@ const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP'
 
 const formatDate = (value?: string): string => {
   if (!value) return 'N/A';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
+  return formatPhilippineDate(value);
 };
 
 const MONTHS = [

@@ -1,14 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CalendarClock, DatabaseBackup, Download, HardDrive, RefreshCw, Save } from 'lucide-react';
+import { AlertTriangle, CalendarClock, DatabaseBackup, Download, FileUp, HardDrive, RefreshCw, Save } from 'lucide-react';
 import { UserProfile } from '../types';
 import { isMasterUserType } from '../constants';
 import {
   AutomaticBackupFrequency,
   AutomaticBackupSettings,
   BackupDestination,
+  CorporateDumpImportReport,
   downloadFullDatabaseBackup,
   fetchBackupDestinations,
   fetchServerMaintenanceStatus,
+  importCorporateDumpFile,
   saveAutomaticBackupSettings,
   ServerMaintenanceStatus,
 } from '../services/serverMaintenanceService';
@@ -62,6 +64,10 @@ export const ServerMaintenanceView: React.FC<ServerMaintenanceViewProps> = ({ cu
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState('');
+  const [importReport, setImportReport] = useState<CorporateDumpImportReport | null>(null);
+  const [selectedDumpName, setSelectedDumpName] = useState('');
   const [loadError, setLoadError] = useState('');
 
   const loadAll = useCallback(async () => {
@@ -171,13 +177,13 @@ export const ServerMaintenanceView: React.FC<ServerMaintenanceViewProps> = ({ cu
               <HardDrive className="h-7 w-7 text-blue-700" /> Server Maintenance
             </h1>
             <p className="mt-1 max-w-2xl text-sm text-slate-600 dark:text-slate-400">
-              Create a complete logical dump of the live database and configure Automatic Backup to a connected drive.
+              Create a complete logical dump of the live database, import a corporate SQL dump safely, and configure Automatic Backup to a connected drive.
             </p>
           </div>
           <button
             type="button"
             onClick={() => void loadAll()}
-            disabled={loading || downloading || saving}
+            disabled={loading || downloading || saving || importing}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
           >
             <RefreshCw className={loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} /> Refresh
@@ -240,6 +246,97 @@ export const ServerMaintenanceView: React.FC<ServerMaintenanceViewProps> = ({ cu
             <p className="mt-4 text-sm text-slate-500">
               Building the dump can take a while on large databases. Keep this tab open until the download starts.
             </p>
+          ) : null}
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-center gap-2 text-slate-900 dark:text-white">
+            <FileUp className="h-5 w-5 text-blue-700" />
+            <h2 className="text-lg font-bold">Import corporate dump</h2>
+          </div>
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+            {status?.corporate_dump_import?.safety ||
+              'Loads a corporate .sql / .sql.gz dump into a temporary staging database, then inserts or updates only shared columns on existing tables. Never drops tables, never truncates, and never deletes rows. Local-only tables and columns stay untouched.'}
+          </p>
+
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
+              <input
+                type="file"
+                accept=".sql,.gz,application/sql,application/gzip"
+                className="sr-only"
+                disabled={importing || loading}
+                onChange={(event) => {
+                  const file = event.target.files?.[0] || null;
+                  setSelectedDumpName(file?.name || '');
+                  setImportReport(null);
+                  if (!file) return;
+                  void (async () => {
+                    setImporting(true);
+                    setImportProgress('Preparing upload…');
+                    try {
+                      const report = await importCorporateDumpFile(file, {
+                        onProgress: ({ uploadedBytes, totalBytes, phase }) => {
+                          if (phase === 'upload') {
+                            const pct = totalBytes > 0 ? Math.round((uploadedBytes / totalBytes) * 100) : 0;
+                            setImportProgress(`Uploading dump… ${pct}%`);
+                            return;
+                          }
+                          setImportProgress('Merging into live database (no drops)…');
+                        },
+                      });
+                      setImportReport(report);
+                      addToast({
+                        type: 'success',
+                        message: `Imported ${report.filename}: ${report.import.tables_merged} tables merged, ${report.import.affected_rows} rows affected.`,
+                      });
+                    } catch (error) {
+                      addToast({
+                        type: 'error',
+                        message: error instanceof Error ? error.message : 'Unable to import corporate dump.',
+                      });
+                    } finally {
+                      setImporting(false);
+                      setImportProgress('');
+                      event.target.value = '';
+                    }
+                  })();
+                }}
+              />
+              Choose .sql / .sql.gz…
+            </label>
+            {selectedDumpName ? (
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{selectedDumpName}</p>
+            ) : (
+              <p className="text-sm text-slate-500">No dump selected yet.</p>
+            )}
+          </div>
+
+          {importing ? (
+            <p className="mt-4 text-sm text-slate-500" role="status">
+              {importProgress || 'Import in progress… Keep this tab open.'}
+            </p>
+          ) : null}
+
+          {importReport ? (
+            <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+              <p className="font-bold">
+                Last import: {importReport.filename} ({formatBytes(importReport.bytes)})
+              </p>
+              <p className="mt-1">
+                Merged {importReport.import.tables_merged} tables · affected rows {importReport.import.affected_rows}
+              </p>
+              {importReport.import.tables_skipped_missing.length > 0 ? (
+                <p className="mt-2 text-xs">
+                  Skipped missing tables: {importReport.import.tables_skipped_missing.join(', ')}
+                </p>
+              ) : null}
+              {importReport.import.tables_skipped_keyless.length > 0 ? (
+                <p className="mt-1 text-xs">
+                  Skipped keyless tables: {importReport.import.tables_skipped_keyless.join(', ')}
+                </p>
+              ) : null}
+            </div>
           ) : null}
         </section>
 

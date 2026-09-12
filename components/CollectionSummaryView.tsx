@@ -6,6 +6,7 @@ import {
   dailyCollectionService,
 } from '../services/dailyCollectionService';
 import { BUTTON_BASE, BUTTON_PRIMARY } from '../utils/uiConstants';
+import { formatDate as formatDisplayDate } from '../utils/formatUtils';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
@@ -19,9 +20,7 @@ const dateTypeOptions: Array<{ value: CollectionSummaryDateType; label: string }
 
 const formatDate = (value?: string): string => {
   if (!value) return '-';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
+  return formatDisplayDate(value);
 };
 
 const formatTimestamp = (value?: Date | null): string => {

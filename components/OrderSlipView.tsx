@@ -26,7 +26,7 @@ import {
 import { fetchContactById, fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { isOrderSlipAllowedForTransactionType, syncDocumentPolicyState } from '../services/salesOrderLocalApiService';
 import { Contact, OrderSlip, OrderSlipStatus } from '../types';
-import { formatDateTime } from '../utils/formatUtils';
+import { formatDate as formatPhilippineDate, formatDateTime } from '../utils/formatUtils';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 import { getLocalAuthSession } from '../services/localAuthService';
 import { normalizePriceGroup } from '../constants/pricingGroups';
@@ -86,9 +86,7 @@ const ORDER_SLIP_TAB_ID = 'sales-transaction-order-slip';
 
 const formatDate = (value?: string | null): string => {
   if (!value) return '-';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
+  return formatPhilippineDate(value);
 };
 
 const formatCurrency = (value?: number | string | null): string => {

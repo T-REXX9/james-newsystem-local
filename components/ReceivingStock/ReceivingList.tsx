@@ -1,6 +1,7 @@
 import React from 'react';
 import { ReceivingReportWithDetails, RR_STATUS_COLORS } from '../../receiving.types';
 import ModuleRecordLink from '../ModuleRecordLink';
+import { formatDate } from '../../utils/formatUtils';
 
 interface ReceivingListProps {
     rrs: ReceivingReportWithDetails[];
@@ -25,7 +26,7 @@ const ReceivingList: React.FC<ReceivingListProps> = ({ rrs, onView }) => {
                     {rrs.length === 0 && <tr><td colSpan={6} className="py-10 text-center text-gray-500">No records found.</td></tr>}
                     {rrs.map((rr) => (
                         <tr key={rr.id} className="cursor-pointer border-b border-[#e5e5e5] hover:bg-[#f5f5f5]" onClick={() => onView(rr.id)}>
-                            <td className="px-2 py-3">{new Date(rr.receive_date).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase()}</td>
+                            <td className="px-2 py-3">{formatDate(rr.receive_date)}</td>
                             <td className="px-2 py-3 font-semibold text-[#337ab7]">
                                 <ModuleRecordLink tab="warehouse-purchasing-receiving-stock" payload={{ rrId: rr.id, rrRefNo: rr.rr_no }} onOpen={() => onView(rr.id)}>
                                     {rr.rr_no}

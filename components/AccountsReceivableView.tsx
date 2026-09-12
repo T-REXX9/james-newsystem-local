@@ -9,6 +9,7 @@ import {
 } from '../services/accountsReceivableService';
 import { LedgerCustomer, customerLedgerService } from '../services/customerLedgerService';
 import { BUTTON_BASE, BUTTON_PRIMARY } from '../utils/uiConstants';
+import { formatDate as formatPhilippineDate } from '../utils/formatUtils';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
@@ -31,9 +32,7 @@ const INPUT_CLASS = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-
 
 const formatDate = (value?: string | null): string => {
   if (!value) return '-';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
+  return formatPhilippineDate(value);
 };
 
 const buildDateRangeLabel = (report: ArResponse | null): string => {

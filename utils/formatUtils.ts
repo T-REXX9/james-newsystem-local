@@ -1,5 +1,3 @@
-import { format } from 'date-fns';
-
 export const DISPLAY_TIME_ZONE = 'Asia/Manila';
 
 export const formatCurrency = (value: number, withDecimals: boolean = false) =>
@@ -17,20 +15,29 @@ const parseDisplayDate = (value: string | Date): Date | null => {
     ? value.replace(' ', 'T')
     : value;
 
-  // Date-only values are calendar dates, not UTC timestamps. Parsing them at
-  // local noon prevents a user's timezone from moving the displayed day.
+  // Date-only and MySQL datetime values are Philippine business dates.
   const parsed = /^\d{4}-\d{2}-\d{2}$/.test(normalizedValue)
-    ? new Date(`${normalizedValue}T12:00:00`)
-    : new Date(normalizedValue);
+    ? new Date(`${normalizedValue}T12:00:00+08:00`)
+    : /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalizedValue)
+      ? new Date(normalizedValue)
+      : new Date(`${normalizedValue}+08:00`);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
+
+const formatPhilippineDate = (value: Date): string =>
+  new Intl.DateTimeFormat('en-US', {
+    timeZone: DISPLAY_TIME_ZONE,
+    month: 'short',
+    day: '2-digit',
+    year: '2-digit',
+  }).format(value).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
 
 /** The single date format used in all customer-facing screens and printouts: MAR-26-25. */
 export const formatDate = (value?: string | Date | null) => {
   if (!value) return '—';
   const parsed = parseDisplayDate(value);
   if (!parsed) return '—';
-  return format(parsed, 'MMM‑dd‑yy').toUpperCase();
+  return formatPhilippineDate(parsed);
 };
 
 /** Staff-facing Customer Since uses the same system-wide date format. */
@@ -38,7 +45,7 @@ export const formatCustomerSince = (value?: string | Date | null): string => {
   if (!value) return '';
   const parsed = parseDisplayDate(typeof value === 'string' ? value.slice(0, 10) : value);
   if (!parsed) return '';
-  return format(parsed, 'MMM‑dd‑yy').toUpperCase();
+  return formatPhilippineDate(parsed);
 };
 
 export const formatDateFull = (value?: string | Date | null) => {
@@ -50,9 +57,10 @@ export const formatDateTime = (value?: string | Date | null) => {
   if (!value) return '—';
   const parsed = parseDisplayDate(value);
   if (!parsed) return '—';
-  return `${format(parsed, 'MMM‑dd‑yy').toUpperCase()} ${parsed.toLocaleTimeString('en-PH', {
+  return `${formatPhilippineDate(parsed)} ${parsed.toLocaleTimeString('en-PH', {
     hour: 'numeric',
     minute: '2-digit',
+    timeZone: DISPLAY_TIME_ZONE,
   })}`;
 };
 

@@ -8,6 +8,7 @@ const fetchStatus = vi.fn();
 const downloadBackup = vi.fn();
 const fetchDestinations = vi.fn();
 const saveAutomaticBackup = vi.fn();
+const importCorporateDump = vi.fn();
 const addToast = vi.fn();
 
 vi.mock('../../services/serverMaintenanceService', () => ({
@@ -15,6 +16,7 @@ vi.mock('../../services/serverMaintenanceService', () => ({
   downloadFullDatabaseBackup: (...args: unknown[]) => downloadBackup(...args),
   fetchBackupDestinations: (...args: unknown[]) => fetchDestinations(...args),
   saveAutomaticBackupSettings: (...args: unknown[]) => saveAutomaticBackup(...args),
+  importCorporateDumpFile: (...args: unknown[]) => importCorporateDump(...args),
 }));
 
 vi.mock('../ToastProvider', () => ({
@@ -27,12 +29,19 @@ describe('ServerMaintenanceView', () => {
     downloadBackup.mockReset();
     fetchDestinations.mockReset();
     saveAutomaticBackup.mockReset();
+    importCorporateDump.mockReset();
     addToast.mockReset();
     fetchStatus.mockResolvedValue({
       database_name: 'topnotch_migrate',
       backup_available: true,
       format: 'sql.gz',
       description: 'Full logical dump of the application database.',
+      corporate_dump_import: {
+        supported_extensions: ['.sql', '.sql.gz'],
+        max_bytes: 2147483648,
+        chunk_max_bytes: 2097152,
+        safety: 'Never drops or truncates live tables.',
+      },
       automatic_backup: {
         enabled: false,
         frequency: 'daily',
@@ -125,5 +134,41 @@ describe('ServerMaintenanceView', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Backup Destination is missing, unmounted, or not writable.'
     );
+  });
+
+  it('shows corporate dump import and runs it for Master User', async () => {
+    const user = userEvent.setup();
+    importCorporateDump.mockResolvedValue({
+      filename: 'corp.sql.gz',
+      bytes: 1024,
+      import: {
+        tables_merged: 10,
+        tables_skipped_missing: [],
+        tables_skipped_keyless: [],
+        tables_skipped_no_shared_columns: [],
+        affected_rows: 42,
+        details: [],
+      },
+    });
+
+    render(
+      <ServerMaintenanceView
+        currentUser={{ id: '1', email: 'owner@example.com', role: 'Master User', user_type: '1' } as any}
+      />
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Import corporate dump' })).toBeInTheDocument();
+    expect(screen.getByText(/Never drops or truncates live tables/i)).toBeInTheDocument();
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(fileInput).toBeTruthy();
+    const file = new File(['dump'], 'corp.sql.gz', { type: 'application/gzip' });
+    await user.upload(fileInput, file);
+
+    await waitFor(() => {
+      expect(importCorporateDump).toHaveBeenCalled();
+      expect(addToast).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
+    });
+    expect(await screen.findByText(/Merged 10 tables/i)).toBeInTheDocument();
   });
 });
