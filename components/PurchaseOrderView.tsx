@@ -73,7 +73,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   const canEdit = canPerformAction('can_edit');
   const canDelete = canPerformAction('can_delete');
   const canPost = canPerformAction('can_post');
-  const canUnpost = canPerformAction('can_unpost') && (['owner', 'company owner', 'administrator', 'purchasing manager'].includes(String(currentUser?.role || '').trim().toLowerCase()) || String(currentUser?.user_type || '') === '1');
+  const canUnpost = canPerformAction('can_unpost');
   const hasBackdatedPosting = canBackdatePosting();
   const canMutateCreateDate = canMutateDocumentDateField({
     canEdit: canAdd || canEdit,
