@@ -204,13 +204,14 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
       setError('Customer is required');
       return;
     }
-    if (!form.date) {
+    const resolvedDate = canMutateDocDate ? form.date : dateMax;
+    if (!resolvedDate) {
       setError('Date is required');
       return;
     }
     const dateCheck = validateDocumentDateWrite({
       hasBackdatedPosting,
-      proposedYmd: form.date,
+      proposedYmd: resolvedDate,
       previousYmd: null,
       todayYmd: dateMax,
     });
@@ -226,7 +227,6 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
     setSaving(true);
     setError('');
     try {
-      const resolvedDate = canMutateDocDate ? form.date : dateMax;
       const created = await adjustmentEntryService.create({
         customerId: form.customerId,
         date: resolvedDate,
@@ -248,14 +248,20 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
 
   const handleSave = async () => {
     if (!canEditPermission || !selected) return;
-    if (!form.customerId || !form.date) {
+    if (!form.customerId) {
+      setError('Customer and date are required');
+      return;
+    }
+    const previousYmd = selected.ldate ? toDateInput(selected.ldate) : null;
+    const resolvedDate = canMutateDocDate ? form.date : (previousYmd || dateMax);
+    if (!resolvedDate) {
       setError('Customer and date are required');
       return;
     }
     const dateCheck = validateDocumentDateWrite({
       hasBackdatedPosting,
-      proposedYmd: form.date,
-      previousYmd: selected.ldate ? toDateInput(selected.ldate) : null,
+      proposedYmd: resolvedDate,
+      previousYmd,
       todayYmd: dateMax,
     });
     if (!dateCheck.ok) {
@@ -268,7 +274,7 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
     try {
       const updated = await adjustmentEntryService.update(selected.lrefno, {
         customerId: form.customerId,
-        date: form.date,
+        date: resolvedDate,
         amount: isZeroOut ? undefined : Number(form.amount || 0),
         remark: form.remark,
       });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BACKDATED_POSTING_PAGE_LABELS,
   canMutateDocumentDateField,
   hasBackdatedPostingPermission,
   setBackdatedPostingPermission,
@@ -21,6 +22,11 @@ describe('Backdated posting permission', () => {
     const master = { role: 'Company Owner', user_type: '1', action_permissions: { can_backdate: false } };
     expect(isMasterUserAccount(master)).toBe(true);
     expect(hasBackdatedPostingPermission(master)).toBe(true);
+  });
+
+  it('covers the fixed 13-page set and excludes Transfer Stock', () => {
+    expect(BACKDATED_POSTING_PAGE_LABELS).toHaveLength(13);
+    expect(BACKDATED_POSTING_PAGE_LABELS).not.toContain('Transfer Stock');
   });
 });
 

@@ -421,13 +421,18 @@ const FreightChargesDebitView: React.FC = () => {
 
   const handleCreate = async () => {
     if (!canAdd) return;
-    if (!form.customerId || !form.date || !form.courierName.trim() || !form.trackingNo.trim()) {
+    if (!form.customerId || !form.courierName.trim() || !form.trackingNo.trim()) {
+      setError('Customer, date, courier, and tracking no are required');
+      return;
+    }
+    const resolvedDate = canMutateDocDate ? form.date : dateMax;
+    if (!resolvedDate) {
       setError('Customer, date, courier, and tracking no are required');
       return;
     }
     const dateCheck = validateDocumentDateWrite({
       hasBackdatedPosting,
-      proposedYmd: form.date,
+      proposedYmd: resolvedDate,
       previousYmd: null,
       todayYmd: dateMax,
     });
@@ -443,7 +448,6 @@ const FreightChargesDebitView: React.FC = () => {
     setSaving(true);
     setError('');
     try {
-      const resolvedDate = canMutateDocDate ? form.date : dateMax;
       const created = await freightChargesService.create({
         customerId: form.customerId,
         date: resolvedDate,
@@ -470,14 +474,20 @@ const FreightChargesDebitView: React.FC = () => {
 
   const handleSave = async () => {
     if (!canEditPermission || !selected) return;
-    if (!form.customerId || !form.date || !form.courierName.trim() || !form.trackingNo.trim()) {
+    if (!form.customerId || !form.courierName.trim() || !form.trackingNo.trim()) {
+      setError('Customer, date, courier, and tracking no are required');
+      return;
+    }
+    const previousYmd = selected.ldate ? toDateInput(selected.ldate) : null;
+    const resolvedDate = canMutateDocDate ? form.date : (previousYmd || dateMax);
+    if (!resolvedDate) {
       setError('Customer, date, courier, and tracking no are required');
       return;
     }
     const dateCheck = validateDocumentDateWrite({
       hasBackdatedPosting,
-      proposedYmd: form.date,
-      previousYmd: selected.ldate ? toDateInput(selected.ldate) : null,
+      proposedYmd: resolvedDate,
+      previousYmd,
       todayYmd: dateMax,
     });
     if (!dateCheck.ok) {
@@ -490,7 +500,7 @@ const FreightChargesDebitView: React.FC = () => {
     try {
       const updated = await freightChargesService.update(selected.lrefno, {
         customerId: form.customerId,
-        date: form.date,
+        date: resolvedDate,
         courierName: form.courierName.trim(),
         trackingNo: form.trackingNo.trim(),
         amount: Number(form.amount || 0),

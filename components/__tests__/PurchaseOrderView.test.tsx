@@ -93,7 +93,7 @@ describe('PurchaseOrderView', () => {
     const { default: PurchaseOrderView } = await import('../PurchaseOrderView');
     render(<PurchaseOrderView />);
     expect(await screen.findByText('1 Items')).toBeInTheDocument();
-    expect(screen.getByText(/ETA: August 22, 2026/i)).toBeInTheDocument();
+    expect(screen.getByText(/ETA:/i).closest('p,div,span') || screen.getByText(/ETA:/i).parentElement).toHaveTextContent(/AUG‑22‑26/i);
     fireEvent.click(screen.getByRole('button', { name: /generate purchase order/i }));
     expect(await screen.findByText('New Purchase Order')).toBeInTheDocument();
     expect(service.generatePONumber).toHaveBeenCalled();
@@ -197,5 +197,17 @@ describe('PurchaseOrderView', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Back' }));
     expect(backSpy).toHaveBeenCalledOnce();
     backSpy.mockRestore();
+  });
+
+  it('locks create Order Date without Backdated posting on an already-editable page', async () => {
+    const { default: PurchaseOrderView } = await import('../PurchaseOrderView');
+    render(<PurchaseOrderView />);
+    fireEvent.click(await screen.findByRole('button', { name: /generate purchase order/i }));
+    expect(await screen.findByText('New Purchase Order')).toBeInTheDocument();
+    const orderDateLabel = screen.getByText('Order Date');
+    const orderDate = orderDateLabel.parentElement?.querySelector('input[type="date"]') as HTMLInputElement | null;
+    expect(orderDate).toBeTruthy();
+    expect(orderDate).toBeDisabled();
+    expect(orderDate?.readOnly).toBe(true);
   });
 });

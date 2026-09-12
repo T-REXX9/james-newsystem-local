@@ -91,6 +91,22 @@ describe('DailyCollectionEntryView scrolling', () => {
     expect(screen.getByText('Daily Collection Entry')).toBeInTheDocument();
   });
 
+  it('disables every collection date field without Backdated posting', async () => {
+    render(<DailyCollectionEntryView />);
+    await waitFor(() => expect(screen.getAllByText('DCR-1').length).toBeGreaterThan(0));
+    fireEvent.click(screen.getAllByText('DCR-1')[0]);
+    await waitFor(() => expect(screen.getByText('Collection Date')).toBeInTheDocument());
+
+    const collectionDateLabel = screen.getByText('Collection Date');
+    const collectionDateInput = collectionDateLabel.parentElement?.querySelector('input[type="date"]');
+    expect(collectionDateInput).toBeTruthy();
+    expect(collectionDateInput).toBeDisabled();
+
+    const dateInputs = Array.from(document.querySelectorAll('input[type="date"]'));
+    expect(dateInputs.length).toBeGreaterThanOrEqual(1);
+    dateInputs.forEach((input) => expect(input).toBeDisabled());
+  });
+
   it('provides vertical scrolling for the page, record list, and detail rows', async () => {
     render(<DailyCollectionEntryView />);
 

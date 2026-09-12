@@ -395,8 +395,14 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
         order_slip_refno: selectedSlip.id,
         sales_order_refno: selectedSlip.order_id || undefined,
       });
-      setSelectedSlip((prev) => (prev ? { ...prev, sales_date: salesDateDraft } : prev));
-      setOrderSlips((prev) => prev.map((row) => (row.id === selectedSlip.id ? { ...row, sales_date: salesDateDraft } : row)));
+      const refreshed = await getOrderSlip(selectedSlip.id);
+      if (refreshed) {
+        setSelectedSlip(refreshed);
+        setOrderSlips((prev) => prev.map((row) => (row.id === refreshed.id ? { ...row, sales_date: refreshed.sales_date } : row)));
+      } else {
+        setSelectedSlip((prev) => (prev ? { ...prev, sales_date: salesDateDraft } : prev));
+        setOrderSlips((prev) => prev.map((row) => (row.id === selectedSlip.id ? { ...row, sales_date: salesDateDraft } : row)));
+      }
       addToast({ type: 'success', title: 'Sales date updated' });
     } catch (error) {
       addToast({

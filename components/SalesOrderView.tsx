@@ -22,7 +22,6 @@ import {
   syncDocumentPolicyState,
   getAllSalesOrders,
   unpostSalesOrder,
-  updateSalesOrder,
 } from '../services/salesOrderLocalApiService';
 import { fetchContactById, fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { getLocalAuthSession } from '../services/localAuthService';
@@ -731,10 +730,10 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
         sales_order_refno: selectedOrder.id,
         inquiry_refno: selectedOrder.inquiry_id || undefined,
       });
-      const updated = await updateSalesOrder(selectedOrder.id, {});
-      if (updated) {
-        setSelectedOrder({ ...updated, sales_date: salesDateDraft });
-        setOrders((prev) => prev.map((row) => (row.id === selectedOrder.id ? { ...row, sales_date: salesDateDraft } : row)));
+      const refreshed = await getSalesOrder(selectedOrder.id);
+      if (refreshed) {
+        setSelectedOrder(refreshed);
+        setOrders((prev) => prev.map((row) => (row.id === refreshed.id ? { ...row, sales_date: refreshed.sales_date } : row)));
       } else {
         setSelectedOrder((prev) => (prev ? { ...prev, sales_date: salesDateDraft } : prev));
         setOrders((prev) => prev.map((row) => (row.id === selectedOrder.id ? { ...row, sales_date: salesDateDraft } : row)));

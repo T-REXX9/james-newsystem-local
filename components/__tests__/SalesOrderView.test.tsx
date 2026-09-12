@@ -32,8 +32,33 @@ vi.mock('../../services/customerDatabaseLocalApiService', () => ({
   fetchContactById: (...args: any[]) => fetchContactByIdMock(...args),
 }));
 
+const getLocalAuthSessionMock = vi.hoisted(() =>
+  vi.fn(() => ({
+    userProfile: {
+      id: 'user-1',
+      role: 'Sales Agent',
+      action_permissions: {
+        global: {
+          can_view: true,
+          can_approve: true,
+          can_add: true,
+          can_edit: true,
+          can_delete: true,
+          can_post: true,
+          can_unpost: true,
+        },
+        can_backdate: false,
+      },
+    },
+  }))
+);
+
 vi.mock('../../services/localAuthService', () => ({
-  getLocalAuthSession: vi.fn(() => ({ userProfile: { id: 'user-1', role: 'Owner' } })),
+  getLocalAuthSession: (...args: unknown[]) => getLocalAuthSessionMock(...args),
+}));
+
+vi.mock('../../services/salesDocumentDateService', () => ({
+  cascadeSalesDocumentDate: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../../services/localDataService', () => ({
@@ -95,6 +120,24 @@ describe('SalesOrderView', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    getLocalAuthSessionMock.mockReturnValue({
+      userProfile: {
+        id: 'user-1',
+        role: 'Sales Agent',
+        action_permissions: {
+          global: {
+            can_view: true,
+            can_approve: true,
+            can_add: true,
+            can_edit: true,
+            can_delete: true,
+            can_post: true,
+            can_unpost: true,
+          },
+          can_backdate: false,
+        },
+      },
+    });
     html2canvasMock.mockResolvedValue({
       toBlob: (callback: BlobCallback) => callback(new Blob(['jpeg-data'], { type: 'image/jpeg' })),
     });
@@ -223,7 +266,7 @@ describe('SalesOrderView', () => {
     });
     await waitFor(() => expect(within(summary).getByText('₱7,800')).toBeVisible());
     expect(within(summary).getByText('₱29,460')).toBeVisible();
-    expect(within(summary).getByText('Jun 1 2013')).toBeVisible();
+    expect(within(summary).getByText('JUN‑01‑13')).toBeVisible();
     expect(within(summary).getByText('VIP 1')).toBeVisible();
     expect(within(summary).getByText('vip gold')).toBeVisible();
     expect(within(summary).getByText('Ishinomoto')).toBeVisible();
@@ -243,7 +286,7 @@ describe('SalesOrderView', () => {
 
     renderView({ initialOrderId: order.id });
 
-    expect(await screen.findByDisplayValue('09/09/2026')).toBeVisible();
+    expect(await screen.findByDisplayValue('SEP‑09‑26')).toBeVisible();
   });
 
   it('loads the redirected sales order even when it is not present in the initial list page', async () => {
@@ -474,5 +517,71 @@ describe('SalesOrderView', () => {
 
     await user.click(screen.getByRole('button', { name: /generate sales transaction/i }));
     expect(screen.getByRole('button', { name: /^convert$/i })).toBeInTheDocument();
+  });
+
+  it('keeps the sales date read-only without Backdated posting (previously locked page)', async () => {
+    getLocalAuthSessionMock.mockReturnValue({
+      userProfile: {
+        id: 'agent-1',
+        role: 'Sales Agent',
+        action_permissions: {
+          global: {
+            can_view: true,
+            can_edit: true,
+            can_add: true,
+            can_delete: true,
+            can_post: true,
+            can_unpost: true,
+          },
+          can_backdate: false,
+        },
+      },
+    });
+    const order = makeOrder({ id: 'date-order', order_no: 'SO-DATE', status: 'Submitted', sales_date: '2026-03-13' });
+    getAllSalesOrdersMock.mockResolvedValue([order]);
+    getSalesOrderMock.mockResolvedValue(order);
+    fetchContactsMock.mockResolvedValue([{ id: 'contact-1', company: 'Acme Corp', transactionType: 'Invoice' }]);
+    fetchContactByIdMock.mockResolvedValue({ id: 'contact-1', company: 'Acme Corp', transactionType: 'Invoice' });
+
+    renderView({ initialOrderId: order.id });
+    await screen.findByDisplayValue('SO-DATE');
+
+    expect(document.querySelectorAll('input[type="date"]').length).toBe(0);
+    expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument();
+  });
+
+  it('unlocks the sales date with Backdated posting and Edit', async () => {
+    getLocalAuthSessionMock.mockReturnValue({
+      userProfile: {
+        id: 'agent-1',
+        role: 'Sales Agent',
+        action_permissions: {
+          global: {
+            can_view: true,
+            can_edit: true,
+            can_add: true,
+            can_delete: true,
+            can_post: true,
+            can_unpost: true,
+          },
+          can_backdate: true,
+        },
+      },
+    });
+    const order = makeOrder({ id: 'date-order', order_no: 'SO-DATE', status: 'Submitted', sales_date: '2026-03-13' });
+    getAllSalesOrdersMock.mockResolvedValue([order]);
+    getSalesOrderMock.mockResolvedValue(order);
+    fetchContactsMock.mockResolvedValue([{ id: 'contact-1', company: 'Acme Corp', transactionType: 'Invoice' }]);
+    fetchContactByIdMock.mockResolvedValue({ id: 'contact-1', company: 'Acme Corp', transactionType: 'Invoice' });
+
+    renderView({ initialOrderId: order.id });
+    await screen.findByDisplayValue('SO-DATE');
+
+    await waitFor(() => {
+      const dateInputs = Array.from(document.querySelectorAll('input[type="date"]')) as HTMLInputElement[];
+      expect(dateInputs.length).toBeGreaterThan(0);
+      expect(dateInputs.some((input) => input.value === '2026-03-13')).toBe(true);
+    });
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeInTheDocument();
   });
 });
