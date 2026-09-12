@@ -452,6 +452,7 @@ const mapDailyCallCustomerRow = (row: any): DailyCallCustomerRow => ({
   city: cleanNullableText(row?.city, ''),
   shopName: cleanNullableText(row?.shopName ?? row?.shop_name, 'Unnamed Shop'),
   contactNumber: cleanNullableText(row?.contactNumber ?? row?.contact_number, ''),
+  contactPersonName: cleanNullableText(row?.contactPersonName ?? row?.contact_person_name),
   codeDate: cleanNullableText(row?.codeDate ?? row?.code_date, '—'),
   dealerPriceGroup: cleanNullableText(row?.dealerPriceGroup ?? row?.dealer_price_group),
   dealerPriceDate: cleanNullableText(row?.dealerPriceDate ?? row?.dealer_price_date),
@@ -465,6 +466,7 @@ const mapDailyCallCustomerRow = (row: any): DailyCallCustomerRow => ({
   status: mapApiStatusToCustomerStatus(String(row?.status || row?.statusLabel || row?.status_label || 'active')),
   verification: cleanNullableText(row?.verification),
   statusDate: cleanNullableText(row?.statusDate ?? row?.status_date),
+  lastPurchaseDate: cleanNullableText(row?.lastPurchaseDate ?? row?.last_purchase_date),
   outstandingBalance: Number(row?.outstandingBalance ?? row?.outstanding_balance ?? 0),
   averageMonthlyOrder: Number(row?.averageMonthlyOrder ?? row?.average_monthly_purchase ?? 0),
   monthlyOrder: Number(row?.monthlyOrder ?? row?.monthly_order ?? 0),
@@ -504,6 +506,8 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
     prospectComment: cleanNullableText(row?.prospectComment ?? row?.prospect_comment),
     createdAt: cleanNullableText(row?.createdAt ?? row?.created_at ?? row?.statusDate ?? row?.status_date),
     priceGroup: cleanNullableText(row?.priceGroup ?? row?.price_group),
+    firstPurchaseDate: cleanNullableText(row?.firstPurchaseDate ?? row?.first_purchase_date, '—'),
+    firstPurchaseDateRaw: cleanNullableText(row?.firstPurchaseDateRaw ?? row?.first_purchase_date_raw),
     lastPurchaseDate: cleanNullableText(row?.lastPurchaseDate ?? row?.last_purchase_date, '—'),
     lastPurchaseDateRaw: cleanNullableText(row?.lastPurchaseDateRaw ?? row?.last_purchase_date_raw),
     purchaseCount: Number(row?.purchaseCount ?? row?.purchase_count ?? 0),
@@ -1026,6 +1030,32 @@ export const fetchSalesReportUnreadCounts = async (
     result[String(contactId)] = Number(value) || 0;
   });
   return result;
+};
+
+export const fetchSalesReportDirectoryState = async (
+  contactIds: string[]
+): Promise<{ unreadByContact: Record<string, number>; reportedContactIds: Set<string> }> => {
+  const uniqueIds = Array.from(new Set(contactIds.map((id) => String(id || '').trim()).filter(Boolean)));
+  if (uniqueIds.length === 0) {
+    return { unreadByContact: {}, reportedContactIds: new Set() };
+  }
+  const params = new URLSearchParams({
+    main_id: String(resolveMainId()),
+    contact_ids: uniqueIds.join(','),
+  });
+  const payload = await requestJson(
+    `${API_BASE_URL}/daily-call-monitoring/sales-report-unread-counts?${params.toString()}`
+  );
+  const unreadByContact: Record<string, number> = {};
+  Object.entries(payload?.data?.counts || payload?.counts || {}).forEach(([contactId, value]) => {
+    unreadByContact[String(contactId)] = Number(value) || 0;
+  });
+  const reportedContactIds = new Set(
+    (payload?.data?.reported_contact_ids || payload?.reported_contact_ids || [])
+      .map((contactId: unknown) => String(contactId || '').trim())
+      .filter(Boolean)
+  );
+  return { unreadByContact, reportedContactIds };
 };
 
 /** Resolve a sales-report attachment URL to a browser-usable blob URL (auth required for API paths). */

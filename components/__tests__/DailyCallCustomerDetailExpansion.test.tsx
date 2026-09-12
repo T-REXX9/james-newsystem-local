@@ -68,7 +68,7 @@ const customer = {
   source: 'Manual',
   assignedTo: 'Jane Doe',
   assignedDate: '2026-04-01',
-  clientSince: '2026-02-24',
+  clientSince: '2013-06-01',
   province: 'Cebu',
   city: 'Cebu City',
   shopName: 'Injector Cebu Diesel Injection Specialist',
@@ -84,6 +84,7 @@ const customer = {
   courier: 'AP REGULAR',
   status: 'Active',
   statusDate: 'Sep 22, 2020',
+  lastPurchaseDate: '2026-09-11',
   outstandingBalance: 1115072,
   averageMonthlyOrder: 48666,
   monthlyOrder: 80000,
@@ -169,6 +170,35 @@ describe('DailyCallCustomerDetailExpansion', () => {
     await user.click(screen.getByRole('tab', { name: 'Item Issues' }));
 
     expect(screen.getByText('Item issue tab content')).toBeInTheDocument();
+  });
+
+  it('labels the displayed date as Last Purchase', () => {
+    render(<DailyCallCustomerDetailExpansion customer={customer} currentUser={null} />);
+
+    const lastPurchase = screen.getByText('Last Purchase');
+    expect(lastPurchase.parentElement).toHaveTextContent('SEP‑11‑26');
+    expect(screen.queryByText('Last Activity')).not.toBeInTheDocument();
+  });
+
+  it('labels the first-transaction date as Customer Since', () => {
+    render(<DailyCallCustomerDetailExpansion customer={customer} currentUser={null} />);
+
+    const customerSince = screen.getByText('Customer Since');
+    expect(customerSince.parentElement).toHaveTextContent('JUN‑01‑13');
+    expect(screen.queryByText('Member Since')).not.toBeInTheDocument();
+  });
+
+  it('shows the contact person immediately above the contact number', () => {
+    render(
+      <DailyCallCustomerDetailExpansion
+        customer={{ ...customer, contactPersonName: 'Maria Santos' }}
+        currentUser={null}
+      />
+    );
+
+    const contactLabel = screen.getByText('Contact');
+    expect(contactLabel.parentElement).toHaveTextContent('Maria Santos');
+    expect(contactLabel.parentElement).toHaveTextContent('09177081946');
   });
 
   it('shows preferred brand on the master customer profile', () => {

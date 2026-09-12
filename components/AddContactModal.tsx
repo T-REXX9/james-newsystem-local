@@ -744,8 +744,15 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                       </div>
                   </div>
                    <div className="mt-4">
-                      <label className="label">Comment</label>
-                      <textarea className="input" rows={2} value={formData.comment} onChange={e => setFormData({...formData, comment: e.target.value})}></textarea>
+                      <label className="label">Customer comment {isEditMode ? '' : 'for management review'}</label>
+                      <textarea
+                        aria-label="Customer comment"
+                        className="input"
+                        rows={2}
+                        value={formData.comment}
+                        onChange={e => setFormData({...formData, comment: e.target.value})}
+                        placeholder={isEditMode ? 'Add an internal customer note' : 'What management needs to know about this prospective customer'}
+                      />
                    </div>
               </section>
 

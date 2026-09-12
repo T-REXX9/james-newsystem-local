@@ -56,7 +56,7 @@ import {
   createCustomerLogForDailyCall,
   fetchAgentSnapshotForDailyCall,
   fetchContactCustomerLogsForDailyCall,
-  fetchSalesReportUnreadCounts,
+  fetchSalesReportDirectoryState,
   subscribeToDailyCallMonitoringUpdates
 } from '../services/dailyCallMonitoringService';
 import { createContact, fetchContactById, fetchContactForDailyCall, updateContact } from '../services/customerDatabaseLocalApiService';
@@ -539,6 +539,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [callReportOutcome, setCallReportOutcome] = useState<CallOutcome>('note');
   const [submittingCallReport, setSubmittingCallReport] = useState(false);
   const [salesReportUnreadByContact, setSalesReportUnreadByContact] = useState<Record<string, number>>({});
+  const [salesReportContactIds, setSalesReportContactIds] = useState<Set<string>>(() => new Set());
   const [smsMessage, setSMSMessage] = useState('');
   const [sendingSMS, setSendingSMS] = useState(false);
   const [customerLogs, setCustomerLogs] = useState<CustomerLogEntry[]>([]);
@@ -556,6 +557,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [statusFilters, setStatusFilters] = useState<CustomerStatus[]>([]);
   const [noPurchaseOnly, setNoPurchaseOnly] = useState(false);
   const [colorFilter, setColorFilter] = useState<'all' | PurchaseHighlightColor>('all');
+  const [salesReportFilter, setSalesReportFilter] = useState<'all' | 'reported' | 'unread'>('all');
   const [searchValue, setSearchValue] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sortField, setSortField] = useState<'priority' | 'lastContact' | 'lastPurchase' | 'salesValue'>('priority');
@@ -672,17 +674,19 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       setLoadError(null);
       setHasLoadedData(true);
       const contactIds = teamScopedContacts.map((contact) => contact.id);
-      void fetchSalesReportUnreadCounts(contactIds)
-        .then((counts) => {
+      void fetchSalesReportDirectoryState(contactIds)
+        .then(({ unreadByContact, reportedContactIds }) => {
           // finally clears snapshotAbortControllerRef before this microtask; only honor abort.
           if (controller.signal.aborted) {
             return;
           }
-          setSalesReportUnreadByContact(counts);
+          setSalesReportUnreadByContact(unreadByContact);
+          setSalesReportContactIds(reportedContactIds);
         })
         .catch(() => {
           if (!controller.signal.aborted) {
             setSalesReportUnreadByContact({});
+            setSalesReportContactIds(new Set());
           }
         });
     } catch (error) {
@@ -1374,13 +1378,15 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const masterRows = useMemo<MasterRow[]>(() => {
     const filtered = baseMasterRows.filter((row) => {
       if (!matchesSearch(row.contact, debouncedSearch)) return false;
+      if (salesReportFilter === 'reported' && !salesReportContactIds.has(row.contact.id)) return false;
+      if (salesReportFilter === 'unread' && !(salesReportUnreadByContact[row.contact.id] || 0)) return false;
       return colorFilter === 'all' || getStaffPurchaseHighlight(row, selectedReferenceDate).color === colorFilter;
     });
 
     return filtered.sort((a, b) =>
       (b.priority - a.priority) || a.contact.company.localeCompare(b.contact.company)
     );
-  }, [baseMasterRows, colorFilter, debouncedSearch, selectedReferenceDate]);
+  }, [baseMasterRows, colorFilter, debouncedSearch, salesReportContactIds, salesReportFilter, salesReportUnreadByContact, selectedReferenceDate]);
 
   const customerListSummaries = useMemo(() => {
     const summarize = (
@@ -1993,6 +1999,19 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               <option value="purple">Purple — 2 months no purchase</option>
               <option value="white">White — 3+ months / no purchase</option>
               <option value="red">Red — blacklisted/rejected -do not contact</option>
+            </select>
+          </label>
+          <label className="min-w-[220px] text-xs font-bold text-slate-600 dark:text-slate-300">
+            Agent Sales Report
+            <select
+              aria-label="Agent Sales Report filter"
+              value={salesReportFilter}
+              onChange={(event) => setSalesReportFilter(event.target.value as 'all' | 'reported' | 'unread')}
+              className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:border-brand-blue dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+            >
+              <option value="all">All customers</option>
+              <option value="reported">Has a sales report</option>
+              <option value="unread">Unread sales reports</option>
             </select>
           </label>
           <span className="shrink-0 text-sm font-bold text-slate-500 dark:text-slate-400">

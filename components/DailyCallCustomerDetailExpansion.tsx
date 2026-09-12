@@ -293,9 +293,9 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
               {vipStanding.badgeVisible && <span className="inline-flex items-center gap-1.5 rounded bg-amber-400 px-2.5 py-1 text-[10px] font-bold text-amber-950"><img src={vipBadgeIconUrl} alt={`${vipStanding.tierLabel} badge`} className="h-3.5 w-3.5" /> {vipStanding.tierLabel.toUpperCase()}</span>}
             </div>
             <div className="mt-5 grid grid-cols-3 divide-x divide-slate-200 text-xs">
-              <dl className="space-y-4 pr-4"><div><dt className="text-slate-500">Contact</dt><dd className="mt-1 font-bold">{customer.contactNumber || '—'}</dd></div><div><dt className="text-slate-500">Source</dt><dd className="mt-1 font-bold">{customer.source || '—'}</dd></div></dl>
+              <dl className="space-y-4 pr-4"><div><dt className="text-slate-500">Contact</dt>{customer.contactPersonName && <dd className="mt-1 font-bold">{customer.contactPersonName}</dd>}<dd className={`${customer.contactPersonName ? 'mt-0.5' : 'mt-1'} font-bold`}>{customer.contactNumber || '—'}</dd></div><div><dt className="text-slate-500">Source</dt><dd className="mt-1 font-bold">{customer.source || '—'}</dd></div></dl>
               <dl className="space-y-4 px-4"><div><dt className="text-slate-500">Location</dt><dd className="mt-1 font-bold">{location}</dd></div><div><dt className="text-slate-500">Assigned Agent (Human)</dt><dd className="mt-1 font-bold">{customer.assignedTo || 'Unassigned'}</dd></div></dl>
-              <dl className="space-y-4 pl-4"><div><dt className="text-slate-500">Last Activity</dt><dd className="mt-1 font-bold">{formatDate(activities[0]?.activity_date || customer.statusDate)}</dd></div><div><dt className="text-slate-500">Member Since</dt><dd className="mt-1 font-bold">{formatDate(customer.clientSince)}</dd></div></dl>
+              <dl className="space-y-4 pl-4"><div><dt className="text-slate-500">Last Purchase</dt><dd className="mt-1 font-bold">{formatDate(customer.lastPurchaseDate)}</dd></div><div><dt className="text-slate-500">Customer Since</dt><dd className="mt-1 font-bold">{formatDate(customer.clientSince)}</dd></div></dl>
             </div>
             {readOnly && doNotContactReason && (
               <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">

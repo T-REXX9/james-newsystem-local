@@ -8,7 +8,7 @@ import DailyCallMonitoringView from '../DailyCallMonitoringView';
 const addToastMock = vi.fn();
 const fetchAgentSnapshotForDailyCallMock = vi.fn();
 const fetchContactCustomerLogsForDailyCallMock = vi.fn();
-const fetchSalesReportUnreadCountsMock = vi.fn();
+const fetchSalesReportDirectoryStateMock = vi.fn();
 const createCallLogForDailyCallMock = vi.fn();
 const claimCustomerCallForDailyCallMock = vi.fn();
 const releaseCustomerCallForDailyCallMock = vi.fn();
@@ -28,7 +28,7 @@ vi.mock('../ToastProvider', () => ({
 vi.mock('../../services/dailyCallMonitoringService', () => ({
   fetchAgentSnapshotForDailyCall: (...args: unknown[]) => fetchAgentSnapshotForDailyCallMock(...args),
   fetchContactCustomerLogsForDailyCall: (...args: unknown[]) => fetchContactCustomerLogsForDailyCallMock(...args),
-  fetchSalesReportUnreadCounts: (...args: unknown[]) => fetchSalesReportUnreadCountsMock(...args),
+  fetchSalesReportDirectoryState: (...args: unknown[]) => fetchSalesReportDirectoryStateMock(...args),
   createCallLogForDailyCall: (...args: unknown[]) => createCallLogForDailyCallMock(...args),
   claimCustomerCallForDailyCall: (...args: unknown[]) => claimCustomerCallForDailyCallMock(...args),
   releaseCustomerCallForDailyCall: (...args: unknown[]) => releaseCustomerCallForDailyCallMock(...args),
@@ -131,7 +131,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     addToastMock.mockReset();
     fetchAgentSnapshotForDailyCallMock.mockReset();
     fetchContactCustomerLogsForDailyCallMock.mockReset();
-    fetchSalesReportUnreadCountsMock.mockReset();
+    fetchSalesReportDirectoryStateMock.mockReset();
     createCallLogForDailyCallMock.mockReset();
     claimCustomerCallForDailyCallMock.mockReset();
     releaseCustomerCallForDailyCallMock.mockReset();
@@ -145,7 +145,7 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue(baseSnapshot);
     fetchContactCustomerLogsForDailyCallMock.mockResolvedValue([]);
-    fetchSalesReportUnreadCountsMock.mockResolvedValue({});
+    fetchSalesReportDirectoryStateMock.mockResolvedValue({ unreadByContact: {}, reportedContactIds: new Set() });
     fetchContactByIdMock.mockResolvedValue({
       id: 'contact-1',
       company: 'Test Shop',
@@ -533,7 +533,10 @@ describe('DailyCallMonitoringView communication actions', () => {
   });
 
   it('shows the unified Agent Sales Report chat when a sales agent opens a customer', async () => {
-    fetchSalesReportUnreadCountsMock.mockResolvedValue({ 'contact-1': 2 });
+    fetchSalesReportDirectoryStateMock.mockResolvedValue({
+      unreadByContact: { 'contact-1': 2 },
+      reportedContactIds: new Set(['contact-1']),
+    });
     const user = userEvent.setup();
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
@@ -542,6 +545,22 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     const panel = await screen.findByRole('region', { name: 'Agent Sales Report' });
     expect(within(panel).getByText(/Agent Sales Report chat for contact-1/i)).toBeInTheDocument();
+  });
+
+  it('filters the long customer list to reported or unread Agent Sales Report conversations', async () => {
+    fetchSalesReportDirectoryStateMock.mockResolvedValue({
+      unreadByContact: { 'contact-1': 2 },
+      reportedContactIds: new Set(['contact-1']),
+    });
+    const user = userEvent.setup();
+
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+    const filter = await screen.findByLabelText('Agent Sales Report filter');
+    await user.selectOptions(filter, 'reported');
+    expect(screen.getByText('1 customer')).toBeInTheDocument();
+
+    await user.selectOptions(filter, 'unread');
+    expect(screen.getByText('1 customer')).toBeInTheDocument();
   });
 
   it('blocks the contact window when another agent already claimed the customer', async () => {

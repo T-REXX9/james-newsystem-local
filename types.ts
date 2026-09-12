@@ -772,6 +772,7 @@ export interface DailyCallCustomerRow {
   status: CustomerStatus;
   verification?: string;
   statusDate?: string;
+  lastPurchaseDate?: string;
   outstandingBalance: number;
   averageMonthlyOrder: number;
   monthlyOrder: number;
@@ -800,6 +801,8 @@ export interface DailyCallMasterCustomerRow {
   createdAt?: string;
   prospectComment?: string;
   priceGroup?: string;
+  firstPurchaseDate?: string;
+  firstPurchaseDateRaw?: string;
   lastPurchaseDate: string;
   lastPurchaseDateRaw: string;
   purchaseCount: number;

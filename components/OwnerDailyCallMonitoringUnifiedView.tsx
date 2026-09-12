@@ -4,6 +4,7 @@ import { VERIFIED_PROSPECT_POTENTIAL } from '../utils/dailyCallPotentialSales';
 import { matchesDailyCallMonitorBucket } from '../utils/dailyCallListCategory';
 import DailyCallMasterListView from './DailyCallMasterListView';
 import { fetchDailyCallMasterList } from '../services/dailyCallMonitoringService';
+import { getSalesReportData } from '../services/salesReportService';
 import { DailyCallMasterCustomerRow, UserProfile } from '../types';
 
 interface OwnerDailyCallMonitoringUnifiedViewProps {
@@ -29,7 +30,6 @@ const peso = new Intl.NumberFormat('en-PH', {
 });
 
 const calculateSummary = (rows: DailyCallMasterCustomerRow[]) => {
-  const current = rows.reduce((sum, row) => sum + row.currentMonthSales, 0);
   const priority = rows.filter((row) => matchesDailyCallMonitorBucket(row, 'priority'));
   const recovery = rows.filter((row) => matchesDailyCallMonitorBucket(row, 'recovery'));
   const blocked = rows.filter((row) => matchesDailyCallMonitorBucket(row, 'blocked'));
@@ -39,7 +39,20 @@ const calculateSummary = (rows: DailyCallMasterCustomerRow[]) => {
     + blocked.reduce((sum, row) => sum + row.averageMonthlySales, 0)
     + (verified.length * VERIFIED_PROSPECT_POTENTIAL);
 
-  return { current, totalPotential };
+  return { totalPotential };
+};
+
+const currentMonthRange = (): { from: string; to: string } => {
+  const today = new Date();
+  const from = new Date(today.getFullYear(), today.getMonth(), 1);
+  // Format in the browser's local calendar. `toISOString()` would shift a
+  // Philippine midnight back into the previous UTC day/month.
+  const format = (value: Date) => [
+    value.getFullYear(),
+    String(value.getMonth() + 1).padStart(2, '0'),
+    String(value.getDate()).padStart(2, '0'),
+  ].join('-');
+  return { from: format(from), to: format(today) };
 };
 
 class LocalErrorBoundary extends Component<LocalErrorBoundaryProps, LocalErrorBoundaryState> {
@@ -72,10 +85,19 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
 
   useEffect(() => {
     let isMounted = true;
-    fetchDailyCallMasterList({ fromDate })
-      .then((result) => {
+    const { from, to } = currentMonthRange();
+    Promise.all([
+      fetchDailyCallMasterList({ fromDate }),
+      // The Sales Report is the authoritative sales calculation. Daily Call must
+      // not add ledger and transaction figures on top of it.
+      getSalesReportData({ dateFrom: from, dateTo: to, customerId: 'all' }),
+    ])
+      .then(([masterList, salesReport]) => {
         if (!isMounted) return;
-        setSummary(calculateSummary(result.items));
+        setSummary({
+          current: salesReport.summary.grandTotal.total,
+          totalPotential: calculateSummary(masterList.items).totalPotential,
+        });
       })
       .catch(() => {
         if (isMounted) setSummary({ current: 0, totalPotential: 0 });
@@ -91,7 +113,7 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
 
     return [
       {
-        label: 'Current Month Sales',
+        label: 'Current Month Sales (Sales Report)',
         value: peso.format(summary.current),
         Icon: Wallet,
         tone: 'border-blue-200 bg-blue-50/70 text-blue-700',
