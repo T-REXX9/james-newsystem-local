@@ -10,6 +10,7 @@ import {
   Package2,
   Plus,
   Printer,
+  Send,
   Trash2,
   X,
   XCircle,
@@ -268,6 +269,17 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
       onConfirm: async () => onUpdate(request.id, { status: newStatus }),
     });
   };
+  const handleSubmitDraft = () => {
+    if (!canAdd || items.length === 0) return;
+    setConfirmModal({
+      isOpen: true,
+      title: "Submit Purchase Request",
+      message: `Submit ${request.pr_number} for approval with ${items.length} item${items.length === 1 ? "" : "s"}?`,
+      confirmLabel: "Submit",
+      variant: "info",
+      onConfirm: async () => onUpdate(request.id, { status: "Pending" }),
+    });
+  };
   const handleDeleteItemRequest = (itemId: string, partNumber?: string) => {
     if (!canDelete) return;
     setConfirmModal({
@@ -389,6 +401,13 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
     }))
     : generatedRRsFromItems.map((rr) => ({ ...rr, date: "" }));
   const requestEtaDate = items.find((item) => String(item.eta_date || "").trim())?.eta_date || generatedPOs.find((po) => po.etaDate)?.etaDate || null;
+  const dependentDocumentLabels = [
+    ...generatedPOs.map((po) => po.number),
+    ...generatedRRs.map((rr) => rr.number),
+  ].filter(Boolean);
+  const unpostDescription = dependentDocumentLabels.length === 0
+    ? "This returns the purchase request to Unposted so it can be corrected."
+    : `This also unposts ${dependentDocumentLabels.join(", ")} so the whole chain can be corrected together.`;
   const togglePOItemSelection = (itemId: string, checked: boolean) => {
     setSelectedPOItemIds((current) => {
       const item = convertibleItems.find((candidate) => String(candidate.id || "") === itemId);
@@ -463,6 +482,16 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
               >
                 <Printer className="h-4 w-4" /> Print
               </button>
+              {request.status === "Draft" && canAdd && (
+                <button
+                  onClick={handleSubmitDraft}
+                  disabled={items.length === 0}
+                  title={items.length === 0 ? "Add at least one item before submitting" : undefined}
+                  className="inline-flex items-center gap-2 rounded-md bg-[#175fd3] px-3 py-2 text-sm font-bold text-white hover:bg-[#0e4fb7] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Send className="h-4 w-4" /> Submit for Approval
+                </button>
+              )}
               {["Pending", "Submitted", "Unposted"].includes(request.status || "") && (request.status === "Unposted" ? canPost : canApprove) && (generatedPOs.length === 0 || request.status === "Unposted") && (
                 <button
                   onClick={() => handleStatusChange("Approved")}
@@ -1018,7 +1047,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
         isOpen={recoveryAction !== null}
         action={recoveryAction || "unpost"}
         recordLabel={request.pr_number}
-        description={recoveryAction === "unpost" ? "This returns the purchase request to Unposted once related purchase orders have also been unposted, cancelled, or deleted." : "This keeps an audit trail and removes this draft request from active work."}
+        description={recoveryAction === "unpost" ? unpostDescription : "This keeps an audit trail and removes this draft request from active work."}
         onClose={() => setRecoveryAction(null)}
         onConfirm={(reason) => handleRecovery(recoveryAction || "unpost", reason)}
       />

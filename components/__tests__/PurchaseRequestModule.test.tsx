@@ -15,13 +15,17 @@ const service = {
   deletePRItem: vi.fn(),
   addPRItem: vi.fn(),
   convertToPO: vi.fn(),
+  unpostPurchaseRequest: vi.fn(),
+  deletePurchaseRequest: vi.fn(),
 };
 
+const addToast = vi.fn();
+
 vi.mock('../../services/purchaseRequestService', () => ({ purchaseRequestService: service }));
-vi.mock('../ToastProvider', () => ({ useToast: () => ({ addToast: vi.fn() }) }));
+vi.mock('../ToastProvider', () => ({ useToast: () => ({ addToast }) }));
 vi.mock('../PurchaseRequest/PurchaseRequestList', () => ({ default: ({ loading, error, onCreate, onSelect }: { loading: boolean; error?: string; onCreate: () => void; onSelect: (request: unknown) => void }) => <div>{loading && <span>Sidebar loading</span>}{error && <span role="alert">{error}</span>}<button type="button" onClick={onCreate}>New PR</button><button type="button" onClick={() => onSelect({ id: 'PRREF-1', pr_number: 'PR-2601' })}>Select PR</button></div> }));
 vi.mock('../PurchaseRequest/PurchaseRequestForm', () => ({ default: ({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: (payload: unknown) => void }) => <div><button type="button" onClick={() => onSubmit({ pr_number: 'PR-2601', request_date: '2026-08-23', items: [] })}>Submit PR</button><button type="button" onClick={onCancel}>Cancel PR</button></div> }));
-vi.mock('../PurchaseRequest/PurchaseRequestView', () => ({ default: ({ onBack, onUpdate, onUpdateItem, onDeleteItem, onAddItem, onConvert, onPrint }: { onBack: () => void; onUpdate: (...args: unknown[]) => void; onUpdateItem: (...args: unknown[]) => void; onDeleteItem: (...args: unknown[]) => void; onAddItem: (...args: unknown[]) => void; onConvert: (itemIds?: string[]) => void; onPrint: () => void }) => <div><button type="button" onClick={onBack}>Back PR</button><button type="button" onClick={() => onUpdate('PRREF-1', { status: 'Approved' })}>Update PR</button><button type="button" onClick={() => onUpdateItem('ITEM-1', { quantity: 2 })}>Update PR item</button><button type="button" onClick={() => onDeleteItem('ITEM-1')}>Delete PR item</button><button type="button" onClick={() => onAddItem({ item_id: 'P1', quantity: 1 })}>Add PR item</button><button type="button" onClick={() => onConvert()}>Convert PR</button><button type="button" onClick={onPrint}>Print PR</button></div> }));
+vi.mock('../PurchaseRequest/PurchaseRequestView', () => ({ default: ({ onBack, onUpdate, onUpdateItem, onDeleteItem, onAddItem, onConvert, onPrint, onUnpost }: { onBack: () => void; onUpdate: (...args: unknown[]) => void; onUpdateItem: (...args: unknown[]) => void; onDeleteItem: (...args: unknown[]) => void; onAddItem: (...args: unknown[]) => void; onConvert: (itemIds?: string[]) => void; onPrint: () => void; onUnpost?: (reason: string) => Promise<void> }) => <div><button type="button" onClick={onBack}>Back PR</button><button type="button" onClick={() => onUpdate('PRREF-1', { status: 'Approved' })}>Update PR</button><button type="button" onClick={() => onUpdateItem('ITEM-1', { quantity: 2 })}>Update PR item</button><button type="button" onClick={() => onDeleteItem('ITEM-1')}>Delete PR item</button><button type="button" onClick={() => onAddItem({ item_id: 'P1', quantity: 1 })}>Add PR item</button><button type="button" onClick={() => onConvert()}>Convert PR</button><button type="button" onClick={onPrint}>Print PR</button><button type="button" onClick={() => { void onUnpost?.('Wrong supplier').catch(() => {}); }}>Unpost PR</button></div> }));
 vi.mock('../PurchaseRequest/PurchaseRequestPrint', () => ({ default: ({ onClose }: { onClose: () => void }) => <div><button type="button" onClick={onClose}>Close PR print</button></div> }));
 
 const request = { id: 'PRREF-1', pr_number: 'PR-2601', request_date: '2026-08-23', status: 'Pending', items: [] };
@@ -41,6 +45,8 @@ beforeEach(() => {
   service.deletePRItem.mockResolvedValue(undefined);
   service.addPRItem.mockResolvedValue(undefined);
   service.convertToPO.mockResolvedValue('POREF-1');
+  service.unpostPurchaseRequest.mockResolvedValue({ purchaseOrders: [], receivingReports: [] });
+  service.deletePurchaseRequest.mockResolvedValue(undefined);
 });
 
 afterEach(() => cleanup());
@@ -130,6 +136,36 @@ describe('PurchaseRequestModule', () => {
     expect(service.addPRItem).toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Back PR' }));
     expect(await screen.findByRole('button', { name: 'New PR' })).toBeInTheDocument();
+  });
+
+  it('names the purchase orders and receiving reports unposted along with the request', async () => {
+    service.unpostPurchaseRequest.mockResolvedValue({ purchaseOrders: ['PO-2601'], receivingReports: ['RR-2601'] });
+    const { default: PurchaseRequestModule } = await import('../PurchaseRequest');
+    render(<PurchaseRequestModule initialPRId="PRREF-1" />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Unpost PR' }));
+
+    await waitFor(() => expect(service.unpostPurchaseRequest).toHaveBeenCalledWith('PRREF-1', 'Wrong supplier'));
+    expect(addToast).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'success',
+      title: 'Purchase request unposted',
+      description: 'Purchase order PO-2601 and receiving report RR-2601 were unposted with it.',
+    }));
+  });
+
+  it('shows why an unpost was refused instead of leaving it in the console', async () => {
+    const reason = 'Purchase request cannot be unposted because purchase order PO-2601 (Pending) depends on it';
+    service.unpostPurchaseRequest.mockRejectedValue(new Error(reason));
+    const { default: PurchaseRequestModule } = await import('../PurchaseRequest');
+    render(<PurchaseRequestModule initialPRId="PRREF-1" />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Unpost PR' }));
+
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'error',
+      title: 'Unable to unpost purchase request',
+      description: reason,
+    })));
   });
 
   it('retraces the previous workflow when a linked request uses Back', async () => {

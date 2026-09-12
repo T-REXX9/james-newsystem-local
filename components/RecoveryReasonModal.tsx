@@ -26,6 +26,9 @@ const RecoveryReasonModal: React.FC<RecoveryReasonModalProps> = ({ isOpen, actio
     try {
       await onConfirm(value);
       onClose();
+    } catch {
+      // Callers report the failure themselves. Stay open so the typed reason
+      // survives and the rejection never lands as a console-only error.
     } finally {
       setSaving(false);
     }

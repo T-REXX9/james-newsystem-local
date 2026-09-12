@@ -68,6 +68,12 @@ const requestApi = async (url: string, init?: RequestInit): Promise<any> => {
   }
 };
 
+/** Documents that were unposted alongside a purchase request. */
+export interface UnpostCascadeSummary {
+  purchaseOrders: string[];
+  receivingReports: string[];
+}
+
 const toNumber = (value: unknown, fallback = 0): number => {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
@@ -248,13 +254,19 @@ export const purchaseRequestService = {
     );
   },
 
-  async unpostPurchaseRequest(id: string, reason: string): Promise<void> {
+  async unpostPurchaseRequest(id: string, reason: string): Promise<UnpostCascadeSummary> {
     const ctx = getUserContext();
-    await requestApi(`${API_BASE_URL}/purchase-requests/${encodeURIComponent(id)}/actions/unpost`, {
+    const data = await requestApi(`${API_BASE_URL}/purchase-requests/${encodeURIComponent(id)}/actions/unpost`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(getLocalAuthSession()?.token ? { Authorization: `Bearer ${getLocalAuthSession()?.token}` } : {}) },
       body: JSON.stringify({ main_id: ctx.mainId, user_id: ctx.userId, reason }),
     });
+    const toNumbers = (value: unknown): string[] =>
+      Array.isArray(value) ? value.map(entry => String(entry).trim()).filter(Boolean) : [];
+    return {
+      purchaseOrders: toNumbers(data?.cascade?.purchase_orders),
+      receivingReports: toNumbers(data?.cascade?.receiving_reports),
+    };
   },
 
   async addPRItem(prId: string, item: CreatePRItemPayload): Promise<void> {

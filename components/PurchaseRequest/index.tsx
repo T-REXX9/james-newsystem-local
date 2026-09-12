@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertCircle, Loader2 } from 'lucide-react';
-import { purchaseRequestService } from '../../services/purchaseRequestService';
+import { purchaseRequestService, type UnpostCascadeSummary } from '../../services/purchaseRequestService';
 import type { Contact, CreatePRPayload, Product, PurchaseRequestWithItems } from '../../purchaseRequest.types';
 import PurchaseRequestList from './PurchaseRequestList';
 import PurchaseRequestForm from './PurchaseRequestForm';
@@ -14,6 +14,20 @@ interface PurchaseRequestModuleProps {
 }
 
 type ViewMode = 'list' | 'create' | 'detail' | 'print';
+
+const describeUnpostCascade = ({ purchaseOrders, receivingReports }: UnpostCascadeSummary): string => {
+  const parts: string[] = [];
+  if (purchaseOrders.length > 0) {
+    parts.push(`${purchaseOrders.length === 1 ? 'purchase order' : 'purchase orders'} ${purchaseOrders.join(', ')}`);
+  }
+  if (receivingReports.length > 0) {
+    parts.push(`${receivingReports.length === 1 ? 'receiving report' : 'receiving reports'} ${receivingReports.join(', ')}`);
+  }
+  if (parts.length === 0) return 'No other documents depended on it.';
+  const total = purchaseOrders.length + receivingReports.length;
+  const sentence = `${parts.join(' and ')} ${total === 1 ? 'was' : 'were'} unposted with it.`;
+  return sentence.charAt(0).toUpperCase() + sentence.slice(1);
+};
 
 const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPRId }) => {
   const { addToast } = useToast();
@@ -168,17 +182,35 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
 
   const handleUnpost = async (reason: string) => {
     if (!selectedRequest) return;
-    await purchaseRequestService.unpostPurchaseRequest(selectedRequest.id, reason);
-    setSelectedRequest(await purchaseRequestService.getPurchaseRequestById(selectedRequest.id));
-    await fetchRequests();
+    try {
+      const cascade = await purchaseRequestService.unpostPurchaseRequest(selectedRequest.id, reason);
+      setSelectedRequest(await purchaseRequestService.getPurchaseRequestById(selectedRequest.id));
+      await fetchRequests();
+      addToast({
+        type: 'success',
+        title: 'Purchase request unposted',
+        description: describeUnpostCascade(cascade),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      addToast({ type: 'error', title: 'Unable to unpost purchase request', description: message });
+      throw error;
+    }
   };
 
   const handleDeleteRequest = async (reason: string) => {
     if (!selectedRequest) return;
-    await purchaseRequestService.deletePurchaseRequest(selectedRequest.id, reason);
-    setSelectedRequest(null);
-    setViewMode('list');
-    await fetchRequests();
+    try {
+      await purchaseRequestService.deletePurchaseRequest(selectedRequest.id, reason);
+      setSelectedRequest(null);
+      setViewMode('list');
+      await fetchRequests();
+      addToast({ type: 'success', title: 'Purchase request deleted' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      addToast({ type: 'error', title: 'Unable to delete purchase request', description: message });
+      throw error;
+    }
   };
 
   const handleAddItem = async (item: Record<string, unknown>) => {

@@ -73,6 +73,9 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
         try {
             await onConfirm();
             onClose();
+        } catch {
+            // Callers report the failure themselves. Stay open instead of letting
+            // the rejection surface only in the console.
         } finally {
             setIsLoading(false);
         }

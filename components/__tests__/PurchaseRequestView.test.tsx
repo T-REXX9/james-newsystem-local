@@ -200,6 +200,50 @@ describe('PurchaseRequestView', () => {
     await waitFor(() => expect(onAddItem).toHaveBeenCalled());
   });
 
+  it('lets the user submit a Draft for approval so it can reach the purchase order stage', async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn().mockResolvedValue(undefined);
+
+    renderView(
+      <PurchaseRequestView
+        request={{ ...baseRequest, status: 'Draft' } as any}
+        onBack={vi.fn()}
+        onUpdate={onUpdate}
+        onUpdateItem={vi.fn()}
+        onDeleteItem={vi.fn()}
+        onAddItem={vi.fn()}
+        onConvert={vi.fn()}
+        onPrint={vi.fn()}
+        products={[]}
+        suppliers={[]}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /submit for approval/i }));
+    await user.click(screen.getByRole('button', { name: /^submit$/i }));
+
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledWith('PRREF-1', { status: 'Pending' }));
+  });
+
+  it('does not offer submission for a Draft with no items', () => {
+    renderView(
+      <PurchaseRequestView
+        request={{ ...baseRequest, status: 'Draft', items: [] } as any}
+        onBack={vi.fn()}
+        onUpdate={vi.fn()}
+        onUpdateItem={vi.fn()}
+        onDeleteItem={vi.fn()}
+        onAddItem={vi.fn()}
+        onConvert={vi.fn()}
+        onPrint={vi.fn()}
+        products={[]}
+        suppliers={[]}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: /submit for approval/i })).toBeDisabled();
+  });
+
   it('opens the matching return records from the Review recommendation', async () => {
     const user = userEvent.setup();
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
