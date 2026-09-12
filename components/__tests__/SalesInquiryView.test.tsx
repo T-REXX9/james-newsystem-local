@@ -223,8 +223,13 @@ describe('SalesInquiryView', () => {
     expect(canGenerateSalesOrderFromInquiry({ status: 'Pending', so_refno: '' }, true, true, false, false, true)).toBe(true);
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    const { getLocalAuthSession } = await import('../../services/localAuthService');
+    vi.mocked(getLocalAuthSession).mockReturnValue({
+      context: { user: { id: 64 } },
+      userProfile: { id: '64', role: 'Sales Agent', full_name: 'test' },
+    } as any);
     html2canvasMock.mockResolvedValue({
       toBlob: (callback: BlobCallback) => callback(new Blob(['jpeg-data'], { type: 'image/jpeg' })),
     });
@@ -1238,6 +1243,73 @@ describe('SalesInquiryView', () => {
     render(<SalesInquiryView />);
     await userEvent.click(await screen.findByText('INQ26-701'));
     await waitFor(() => expect(getSalesInquiryMock).toHaveBeenCalledWith('inq-price-open'));
+
+    const priceInput = await screen.findByRole('spinbutton', { name: 'Unit price for PN-1' }) as HTMLInputElement;
+    expect(priceInput.readOnly).toBe(false);
+    expect(priceInput.disabled).toBe(false);
+  });
+
+  it('locks catalog unit price on Create New without Edit unit price permission', async () => {
+    const user = userEvent.setup();
+    render(<SalesInquiryView />);
+    await waitFor(() => expect(fetchContactsMock).toHaveBeenCalled());
+
+    await user.click(screen.getByRole('button', { name: 'Create New' }));
+    await user.selectOptions(screen.getByLabelText('Customer'), 'c-1');
+    await user.click(screen.getByRole('button', { name: /add item/i }));
+    await user.click(screen.getByRole('button', { name: 'Select Product' }));
+
+    const priceInput = await screen.findByRole('spinbutton', { name: 'Unit price for PN-1' }) as HTMLInputElement;
+    expect(priceInput.readOnly || priceInput.disabled).toBe(true);
+  });
+
+  it('allows catalog unit price edits on Create New when Edit unit price permission is granted', async () => {
+    const { getLocalAuthSession } = await import('../../services/localAuthService');
+    vi.mocked(getLocalAuthSession).mockReturnValue({
+      context: { user: { id: 64 } },
+      userProfile: {
+        id: '64',
+        role: 'Sales Agent',
+        full_name: 'test',
+        user_type: '2',
+        action_permissions: {
+          global: {
+            can_view: true,
+            can_approve: true,
+            can_add: true,
+            can_edit: true,
+            can_delete: true,
+            can_post: true,
+            can_unpost: true,
+            can_edit_invoice_number: false,
+            can_edit_unit_price: false,
+          },
+          pages: {
+            'Sales Inquiry': {
+              can_view: true,
+              can_approve: true,
+              can_add: true,
+              can_edit: true,
+              can_delete: true,
+              can_post: true,
+              can_unpost: true,
+              can_edit_invoice_number: false,
+              can_edit_unit_price: true,
+            },
+          },
+        },
+      },
+      token: 'token',
+    } as any);
+
+    const user = userEvent.setup();
+    render(<SalesInquiryView />);
+    await waitFor(() => expect(fetchContactsMock).toHaveBeenCalled());
+
+    await user.click(screen.getByRole('button', { name: 'Create New' }));
+    await user.selectOptions(screen.getByLabelText('Customer'), 'c-1');
+    await user.click(screen.getByRole('button', { name: /add item/i }));
+    await user.click(screen.getByRole('button', { name: 'Select Product' }));
 
     const priceInput = await screen.findByRole('spinbutton', { name: 'Unit price for PN-1' }) as HTMLInputElement;
     expect(priceInput.readOnly).toBe(false);

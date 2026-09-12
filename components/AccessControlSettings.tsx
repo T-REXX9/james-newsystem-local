@@ -279,6 +279,7 @@ const AccessControlSettings: React.FC = () => {
       };
     }));
     setPermissionChanges((prev) => ({ ...prev, [userId]: true }));
+    setActionPermissionChanges((prev) => ({ ...prev, [userId]: true }));
   };
 
   const toggleModuleExpanded = (userId: string, moduleId: string) => {

@@ -4,7 +4,7 @@ import { ContactTransaction } from '../types';
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
 
-export type LedgerReportType = 'detailed' | 'summary';
+export type LedgerReportType = 'detailed' | 'summary' | 'yearly';
 export type LedgerDateType = 'all' | 'today' | 'week' | 'month' | 'year' | 'custom';
 
 export type LedgerCustomer = {
@@ -131,6 +131,25 @@ export const buildYearlySales = (
     }));
 };
 
+/** Map ledger `yearly` report summary rows into year totals (oldest → newest). */
+export const buildYearlySalesFromSummary = (
+  summaryRows: CustomerLedgerSummaryRow[],
+  today = new Date(),
+): CustomerYearlySales[] => {
+  const currentYear = today.getFullYear();
+  const byYear = new Map<number, number>();
+
+  for (const row of summaryRows) {
+    const year = Number(row.year);
+    if (!Number.isFinite(year) || year <= 0 || year > currentYear) continue;
+    byYear.set(year, (byYear.get(year) || 0) + Number(row.debit || 0));
+  }
+
+  return [...byYear.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([year, total]) => ({ year, total, months: [] }));
+};
+
 /**
  * Customer Data sales history is a ledger view, not an item-line purchase list.
  * A ledger posting already represents the document amount, so never recompute
@@ -245,7 +264,9 @@ export const customerLedgerService = {
         company: String(data?.customer?.company || ''),
         customer_code: String(data?.customer?.customer_code || ''),
       },
-      report_type: data?.report_type === 'summary' ? 'summary' : 'detailed',
+      report_type: data?.report_type === 'summary' || data?.report_type === 'yearly'
+        ? data.report_type
+        : 'detailed',
       date_type: (data?.date_type || 'all') as LedgerDateType,
       date_from: data?.date_from || null,
       date_to: data?.date_to || null,

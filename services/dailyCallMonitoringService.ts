@@ -13,9 +13,12 @@ import {
   Inquiry,
   LBCRTORecord,
   Purchase,
+  SalesReportConversation,
+  SalesReportConversationMessage,
   TeamMessage,
 } from '../types';
 import { formatDateFull } from '../utils/formatUtils';
+import { resolveDailyCallListCategory } from '../utils/dailyCallListCategory';
 import { getLocalAuthSession } from './localAuthService';
 
 export interface DailyCallFilterParams {
@@ -507,11 +510,18 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
     priorityTransactionCount: Number(row?.priorityTransactionCount ?? row?.priority_transaction_count ?? 0),
     ledgerTransactionCount: Number(row?.ledgerTransactionCount ?? row?.ledger_transaction_count ?? 0),
     historicalTransactionCount: Number(row?.historicalTransactionCount ?? row?.historical_transaction_count ?? 0),
-    listCategory: (() => {
-      const category = String(row?.listCategory ?? row?.list_category ?? '');
-      if (category === 'priority' || category === 'recovery' || category === 'no_purchase') return category;
-      return Number(row?.purchaseCount ?? row?.purchase_count ?? 0) > 0 ? 'priority' : 'no_purchase';
-    })(),
+    listCategory: resolveDailyCallListCategory({
+      listCategory: (() => {
+        const category = String(row?.listCategory ?? row?.list_category ?? '');
+        return category === 'priority' || category === 'recovery' || category === 'no_purchase'
+          ? category
+          : undefined;
+      })(),
+      priorityTransactionCount: Number(row?.priorityTransactionCount ?? row?.priority_transaction_count ?? 0),
+      ledgerTransactionCount: Number(row?.ledgerTransactionCount ?? row?.ledger_transaction_count ?? 0),
+      purchaseCount: Number(row?.purchaseCount ?? row?.purchase_count ?? 0),
+      lastPurchaseDateRaw: cleanNullableText(row?.lastPurchaseDateRaw ?? row?.last_purchase_date_raw),
+    }),
     totalSales: Number(row?.totalSales ?? row?.total_sales ?? 0),
     currentMonthSales: Number(row?.currentMonthSales ?? row?.current_month_sales ?? 0),
     lastMonthSales: Number(row?.lastMonthSales ?? row?.last_month_sales ?? 0),
@@ -876,7 +886,40 @@ const mapCallReportMessage = (row: any): CallReportMessage => ({
   created_at: String(row?.created_at || ''),
   is_from_current_user: Boolean(row?.is_from_current_user),
   is_from_master: Boolean(row?.is_from_master ?? row?.sender_role === 'master'),
+  attachment_url: row?.attachment_url ? String(row.attachment_url) : null,
+  attachment_mime: row?.attachment_mime ? String(row.attachment_mime) : null,
 });
+
+const mapSalesReportConversationMessage = (row: any): SalesReportConversationMessage => {
+  const kindRaw = String(row?.kind || 'reply');
+  const kind: SalesReportConversationMessage['kind'] =
+    kindRaw === 'agent_report' ||
+    kindRaw === 'management_instruction' ||
+    kindRaw === 'staff_comment'
+      ? kindRaw
+      : 'reply';
+
+  return {
+    id: String(row?.id || ''),
+    thread_id: row?.thread_id ? String(row.thread_id) : undefined,
+    contact_id: String(row?.contact_id || ''),
+    kind,
+    sender_user_id: String(row?.sender_user_id || ''),
+    sender_name: String(row?.sender_name || ''),
+    sender_role: row?.sender_role === 'master' ? 'master' : 'agent',
+    body: String(row?.body || ''),
+    attachment_url: row?.attachment_url ? String(row.attachment_url) : null,
+    attachment_mime: row?.attachment_mime ? String(row.attachment_mime) : null,
+    created_at: String(row?.created_at || ''),
+    is_from_current_user: Boolean(row?.is_from_current_user),
+    is_from_master: Boolean(row?.is_from_master ?? row?.sender_role === 'master'),
+    outcome: row?.outcome || undefined,
+    call_started_at: row?.call_started_at ? String(row.call_started_at) : undefined,
+    call_ended_at: row?.call_ended_at ? String(row.call_ended_at) : undefined,
+    duration_seconds: row?.duration_seconds !== undefined ? Number(row.duration_seconds) : undefined,
+    replyable: row?.replyable !== false,
+  };
+};
 
 const mapCallReportThread = (row: any): CallReportThread => ({
   id: String(row?.id || ''),
@@ -906,10 +949,145 @@ export const fetchCallReportThreads = async (contactId: string): Promise<CallRep
   return Array.isArray(data) ? data.map(mapCallReportThread) : [];
 };
 
+export const fetchSalesReportConversation = async (contactId: string): Promise<SalesReportConversation> => {
+  const mainId = resolveMainId();
+  const payload = await requestJson(
+    `${API_BASE_URL}/daily-call-monitoring/customers/${encodeURIComponent(contactId)}/sales-report-conversation?main_id=${mainId}`
+  );
+  const data = payload?.data || {};
+  return {
+    contact_id: String(data.contact_id || contactId),
+    messages: Array.isArray(data.messages) ? data.messages.map(mapSalesReportConversationMessage) : [],
+    unread_count: Number(data.unread_count || 0),
+  };
+};
+
+export const sendSalesReportMessage = async (input: {
+  contactId: string;
+  body?: string;
+  senderName: string;
+  attachmentUrl?: string | null;
+  attachmentMime?: string | null;
+}): Promise<SalesReportConversationMessage> => {
+  const payload = await requestJson(
+    `${API_BASE_URL}/daily-call-monitoring/customers/${encodeURIComponent(input.contactId)}/sales-report-messages`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        main_id: resolveMainId(),
+        body: input.body || '',
+        sender_name: input.senderName,
+        attachment_url: input.attachmentUrl || undefined,
+        attachment_mime: input.attachmentMime || undefined,
+      }),
+    }
+  );
+  return mapSalesReportConversationMessage(payload?.data || {});
+};
+
+export const uploadSalesReportAttachment = async (
+  contactId: string,
+  imageData: string
+): Promise<{ url: string; mime: string }> => {
+  const payload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/sales-report-attachments/upload`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      main_id: resolveMainId(),
+      contact_id: contactId,
+      image_data: imageData,
+    }),
+  });
+  return {
+    url: String(payload?.data?.url || payload?.url || ''),
+    mime: String(payload?.data?.mime || payload?.mime || 'image/jpeg'),
+  };
+};
+
+
+export const fetchSalesReportUnreadCounts = async (
+  contactIds: string[]
+): Promise<Record<string, number>> => {
+  const uniqueIds = Array.from(new Set(contactIds.map((id) => String(id || '').trim()).filter(Boolean)));
+  if (uniqueIds.length === 0) {
+    return {};
+  }
+  const params = new URLSearchParams({
+    main_id: String(resolveMainId()),
+    contact_ids: uniqueIds.join(','),
+  });
+  const payload = await requestJson(
+    `${API_BASE_URL}/daily-call-monitoring/sales-report-unread-counts?${params.toString()}`
+  );
+  const counts = payload?.data?.counts || payload?.counts || {};
+  const result: Record<string, number> = {};
+  Object.entries(counts).forEach(([contactId, value]) => {
+    result[String(contactId)] = Number(value) || 0;
+  });
+  return result;
+};
+
+/** Resolve a sales-report attachment URL to a browser-usable blob URL (auth required for API paths). */
+export const resolveSalesReportAttachmentDisplayUrl = async (attachmentUrl: string): Promise<string> => {
+  const trimmed = String(attachmentUrl || '').trim();
+  if (!trimmed) {
+    return '';
+  }
+  if (trimmed.startsWith('blob:') || trimmed.startsWith('data:')) {
+    return trimmed;
+  }
+
+  const isApiAttachment = trimmed.includes('/sales-report-attachments/');
+  if (!isApiAttachment) {
+    // Legacy public /uploads/... URLs remain directly loadable.
+    return trimmed;
+  }
+
+  let absoluteUrl = trimmed;
+  if (!trimmed.startsWith('http')) {
+    if (API_BASE_URL.startsWith('http')) {
+      const origin = API_BASE_URL.replace(/\/api\/v1\/?$/, '');
+      absoluteUrl = `${origin}${trimmed.startsWith('/') ? trimmed : `/${trimmed}`}`;
+    } else {
+      absoluteUrl = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+    }
+  }
+
+  const session = getLocalAuthSession();
+  const headers = new Headers();
+  if (session?.token) {
+    headers.set('Authorization', `Bearer ${session.token}`);
+  }
+  const separator = absoluteUrl.includes('?') ? '&' : '?';
+  const withMainId = absoluteUrl.includes('main_id=')
+    ? absoluteUrl
+    : `${absoluteUrl}${separator}main_id=${resolveMainId()}`;
+  const response = await fetch(withMainId, { headers });
+  if (!response.ok) {
+    throw new Error(`Unable to load picture (${response.status})`);
+  }
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
+};
+
+export const markSalesReportConversationRead = async (contactId: string): Promise<void> => {
+  await requestJson(
+    `${API_BASE_URL}/daily-call-monitoring/customers/${encodeURIComponent(contactId)}/sales-report-conversation/read`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ main_id: resolveMainId() }),
+    }
+  );
+};
+
 export const sendCallReportReply = async (input: {
   threadId: string;
   body: string;
   senderName: string;
+  attachmentUrl?: string | null;
+  attachmentMime?: string | null;
 }): Promise<CallReportMessage> => {
   const payload = await requestJson(
     `${API_BASE_URL}/daily-call-monitoring/call-report-threads/${encodeURIComponent(input.threadId)}/messages`,
@@ -920,6 +1098,8 @@ export const sendCallReportReply = async (input: {
         main_id: resolveMainId(),
         body: input.body,
         sender_name: input.senderName,
+        attachment_url: input.attachmentUrl || undefined,
+        attachment_mime: input.attachmentMime || undefined,
       }),
     }
   );

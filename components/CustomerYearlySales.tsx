@@ -4,22 +4,121 @@ import { buildYearlySales } from '../services/customerLedgerService';
 import type { CustomerLedgerDetailedRow, CustomerYearlySales as CustomerYearlySalesEntry } from '../services/customerLedgerService';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
+const compactPeso = new Intl.NumberFormat('en-PH', {
+  style: 'currency',
+  currency: 'PHP',
+  maximumFractionDigits: 0,
+});
+
+const COMPACT_YEARS_PER_COLUMN = 10;
+
+const chunkYears = <T,>(items: T[], size: number): T[][] => {
+  if (size <= 0 || items.length === 0) return items.length ? [items] : [];
+  const columns: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    columns.push(items.slice(index, index + size));
+  }
+  return columns;
+};
 
 interface CustomerYearlySalesProps {
-  rows: CustomerLedgerDetailedRow[];
+  rows?: CustomerLedgerDetailedRow[];
+  /** Pre-aggregated year totals (e.g. ledger report_type=yearly). */
+  entries?: CustomerYearlySalesEntry[];
   error?: string;
   today?: Date;
+  /** Dense year/total chips for at-a-glance panels (no month accordion). */
+  compact?: boolean;
 }
 
-const CustomerYearlySales: React.FC<CustomerYearlySalesProps> = ({ rows, error, today }) => {
+const CustomerYearlySales: React.FC<CustomerYearlySalesProps> = ({
+  rows = [],
+  entries,
+  error,
+  today,
+  compact = false,
+}) => {
   const currentDate = useMemo(() => today || new Date(), [today]);
-  const years = useMemo(() => buildYearlySales(rows, currentDate), [rows, currentDate]);
+  const years = useMemo(() => {
+    if (entries) {
+      return [...entries].sort((left, right) =>
+        compact ? left.year - right.year : right.year - left.year
+      );
+    }
+    const built = buildYearlySales(rows, currentDate);
+    return compact ? [...built].sort((left, right) => left.year - right.year) : built;
+  }, [compact, currentDate, entries, rows]);
+  const yearColumns = useMemo(
+    () => (compact ? chunkYears(years, COMPACT_YEARS_PER_COLUMN) : []),
+    [compact, years]
+  );
   const currentYear = currentDate.getFullYear();
   const [expandedYear, setExpandedYear] = useState<number | null>(null);
 
   useEffect(() => {
+    if (compact) {
+      setExpandedYear(null);
+      return;
+    }
     setExpandedYear(years.find((entry) => entry.year === currentYear)?.year ?? years[0]?.year ?? null);
-  }, [currentYear, years]);
+  }, [compact, currentYear, years]);
+
+  if (compact) {
+    return (
+      <section
+        aria-labelledby="customer-yearly-sales-heading"
+        className="rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm"
+        data-testid="customer-yearly-sales"
+        data-compact="true"
+        data-year-count={years.length}
+        data-years-per-column={COMPACT_YEARS_PER_COLUMN}
+      >
+        <div className="mb-1.5 flex items-center justify-between gap-3">
+          <h3 id="customer-yearly-sales-heading" className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-800">
+            <TrendingUp className="h-3.5 w-3.5 text-brand-blue" /> Yearly Sales
+          </h3>
+          {years.length > 0 && (
+            <span className="text-[10px] font-semibold text-slate-400">
+              {years.length} year{years.length === 1 ? '' : 's'}
+            </span>
+          )}
+        </div>
+
+        {error ? (
+          <p role="alert" className="rounded-lg bg-rose-50 px-2.5 py-2 text-xs text-rose-700">{error}</p>
+        ) : years.length === 0 ? (
+          <p className="rounded-lg bg-slate-50 px-2.5 py-2 text-xs text-slate-500">No posted sales found in the customer ledger.</p>
+        ) : (
+          <div className="flex flex-wrap items-start gap-x-4 gap-y-2" role="list">
+            {yearColumns.map((column, columnIndex) => (
+              <div
+                key={`year-column-${column[0]?.year ?? columnIndex}`}
+                role="group"
+                aria-label={`Years column ${columnIndex + 1}`}
+                data-testid="customer-yearly-sales-column"
+                className="flex min-w-[7.5rem] flex-1 flex-col gap-1"
+              >
+                {column.map((entry) => (
+                  <div
+                    key={entry.year}
+                    role="listitem"
+                    className="flex items-baseline justify-between gap-2 rounded border border-slate-200 bg-slate-50 px-2 py-1"
+                    aria-label={`${entry.year} sales ${compactPeso.format(entry.total)}`}
+                  >
+                    <span className="text-[11px] font-semibold text-slate-600">
+                      {entry.year}
+                      {entry.year === currentYear ? <span className="ml-1 text-[9px] font-bold uppercase text-blue-700">YTD</span> : null}
+                    </span>
+                    <span className="font-mono text-[11px] font-bold text-slate-800">{compactPeso.format(entry.total)}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    );
+  }
 
   return (
     <section

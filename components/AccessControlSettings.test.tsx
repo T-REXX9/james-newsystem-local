@@ -95,6 +95,102 @@ describe('AccessControlSettings - create staff account', () => {
     );
   });
 
+  it('saves Edit invoice number for Invoice when that is the only action toggled', async () => {
+    const user = userEvent.setup();
+    const salesPages = expandAccessModule('sales');
+    fetchProfilesMock.mockResolvedValue({
+      items: [{
+        id: '2',
+        full_name: 'melson',
+        email: 'melson@example.com',
+        role: 'Sales Agent',
+        access_rights: salesPages,
+        group_id: '2',
+      }],
+      meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
+    });
+    updateProfileMock.mockResolvedValue({ id: '2', full_name: 'melson' });
+
+    renderWithProviders(<AccessControlSettings />);
+
+    await user.click(await screen.findByText('Sales', { selector: 'span' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Edit invoice number action permission for Invoice for melson' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(updateProfileMock).toHaveBeenCalledWith('2', expect.objectContaining({
+      action_permissions: expect.objectContaining({
+        pages: expect.objectContaining({
+          Invoice: expect.objectContaining({
+            can_edit_invoice_number: true,
+          }),
+        }),
+      }),
+    })));
+  });
+
+  it('persists Edit unit price onto Sales Inquiry when the account override lacked that page', async () => {
+    const user = userEvent.setup();
+    const salesPages = expandAccessModule('sales');
+    fetchProfilesMock.mockResolvedValue({
+      items: [{
+        id: '64',
+        full_name: 'test',
+        email: 'test@gmail.com',
+        role: 'Sales Agent',
+        access_rights: salesPages,
+        group_id: '9',
+        action_permissions: {
+          global: {
+            can_view: true,
+            can_approve: true,
+            can_add: true,
+            can_edit: true,
+            can_delete: true,
+            can_post: true,
+            can_unpost: true,
+            can_edit_invoice_number: false,
+            can_edit_unit_price: false,
+          },
+          pages: {
+            Invoice: {
+              can_view: true,
+              can_approve: true,
+              can_add: true,
+              can_edit: true,
+              can_delete: true,
+              can_post: true,
+              can_unpost: true,
+              can_edit_invoice_number: true,
+              can_edit_unit_price: false,
+            },
+          },
+        },
+      }],
+      meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
+    });
+    updateProfileMock.mockResolvedValue({ id: '64', full_name: 'test' });
+
+    renderWithProviders(<AccessControlSettings />);
+
+    await user.click(await screen.findByText('Sales', { selector: 'span' }));
+    const editUnitPrice = await screen.findByRole('checkbox', {
+      name: 'Edit unit price action permission for Sales Inquiry for test',
+    });
+    expect(editUnitPrice).not.toBeChecked();
+    await user.click(editUnitPrice);
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(updateProfileMock).toHaveBeenCalledWith('64', expect.objectContaining({
+      action_permissions: expect.objectContaining({
+        pages: expect.objectContaining({
+          'Sales Inquiry': expect.objectContaining({
+            can_edit_unit_price: true,
+          }),
+        }),
+      }),
+    })));
+  });
+
   it('saves disabled action permissions for one page without changing another page', async () => {
     const user = userEvent.setup();
     fetchProfilesMock.mockResolvedValue({

@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import CustomerYearlySales from '../CustomerYearlySales';
 
@@ -9,6 +9,9 @@ const row = (id: number, date: string, refType: string, debit: number) => ({
 });
 
 describe('CustomerYearlySales', () => {
+  afterEach(() => {
+    cleanup();
+  });
   it('shows ledger-backed yearly totals and expands months in calendar order', async () => {
     const user = userEvent.setup();
     render(<CustomerYearlySales rows={[
@@ -36,5 +39,46 @@ describe('CustomerYearlySales', () => {
   it('explains when the ledger has no posted sales', () => {
     render(<CustomerYearlySales rows={[row(1, '2025-01-01', 'Collection', 500)]} today={new Date('2025-08-01T12:00:00')} />);
     expect(screen.getByText('No posted sales found in the customer ledger.')).toBeInTheDocument();
+  });
+
+  it('renders compact years in vertical columns of ten', () => {
+    const years = Array.from({ length: 12 }, (_, index) => {
+      const year = 2013 + index;
+      return {
+        year,
+        total: (index + 1) * 10000,
+        months: [],
+      };
+    });
+
+    render(
+      <CustomerYearlySales
+        compact
+        entries={years}
+        today={new Date('2025-08-01T12:00:00')}
+      />
+    );
+
+    const yearlySales = screen.getByTestId('customer-yearly-sales');
+    expect(yearlySales).toHaveAttribute('data-compact', 'true');
+    expect(yearlySales).toHaveAttribute('data-year-count', '12');
+    expect(yearlySales).toHaveAttribute('data-years-per-column', '10');
+
+    const columns = screen.getAllByTestId('customer-yearly-sales-column');
+    expect(columns).toHaveLength(2);
+    expect(columns[0].querySelectorAll('[role="listitem"]')).toHaveLength(10);
+    expect(columns[1].querySelectorAll('[role="listitem"]')).toHaveLength(2);
+    expect(columns[0]).toHaveTextContent('2013');
+    expect(columns[0]).toHaveTextContent('2022');
+    expect(columns[1]).toHaveTextContent('2023');
+    expect(columns[1]).toHaveTextContent('2024');
+
+    for (const year of years) {
+      expect(screen.getByText(String(year.year))).toBeInTheDocument();
+    }
+    expect(screen.getByText('₱10,000')).toBeInTheDocument();
+    expect(screen.getByText('₱120,000')).toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.queryByText('January')).not.toBeInTheDocument();
   });
 });

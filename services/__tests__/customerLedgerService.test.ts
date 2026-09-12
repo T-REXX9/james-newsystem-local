@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildYearlySales, customerLedgerService, ledgerRowsToContactTransactions } from '../customerLedgerService';
+import { buildYearlySales, buildYearlySalesFromSummary, customerLedgerService, ledgerRowsToContactTransactions } from '../customerLedgerService';
 
 vi.mock('../localAuthService', () => ({
   getLocalAuthSession: () => ({ token: 'test-token', context: { user: { main_id: 1 } } }),
@@ -135,5 +135,16 @@ describe('customerLedgerService', () => {
       .reduce((sum, row) => sum + row.debit, 0);
     expect(years.reduce((sum, year) => sum + year.total, 0)).toBe(expectedLedgerSales);
     expect(years.flatMap((year) => year.months).reduce((sum, month) => sum + month.total, 0)).toBe(expectedLedgerSales);
+  });
+
+  it('maps yearly summary rows oldest to newest', () => {
+    const years = buildYearlySalesFromSummary([
+      { year: 2015, month: 0, month_name: '', debit: 45000, credit: 0, balance: 0 },
+      { year: 2013, month: 0, month_name: '', debit: 26000, credit: 0, balance: 0 },
+      { year: 2014, month: 0, month_name: '', debit: 90000, credit: 0, balance: 0 },
+    ], new Date('2025-08-01T12:00:00'));
+
+    expect(years.map((entry) => entry.year)).toEqual([2013, 2014, 2015]);
+    expect(years.map((entry) => entry.total)).toEqual([26000, 90000, 45000]);
   });
 });

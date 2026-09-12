@@ -10,12 +10,14 @@ import {
   fetchCustomersForDailyCall,
   fetchDailyCallMasterList,
   fetchOwnerSnapshotForDailyCall,
+  invalidateDailyCallMasterListCache,
   subscribeToDailyCallMonitoringUpdates,
 } from '../dailyCallMonitoringService';
 
 describe('dailyCallMonitoringService', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    invalidateDailyCallMasterListCache();
   });
 
   afterEach(() => {
@@ -94,6 +96,56 @@ describe('dailyCallMonitoringService', () => {
     expect(requestUrl).toContain('main_id=1');
     expect(requestUrl).toContain('from_date=2025-10-01');
     expect(requestUrl).toContain('search=priority');
+  });
+
+  it('strictly maps Priority vs Recovery from Oct 2025 activity (never purchaseCount alone)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: {
+          items: [
+            {
+              id: 'priority-1',
+              shop_name: 'Oct 2025 Activity Shop',
+              purchase_count: 2,
+              priority_transaction_count: 1,
+              ledger_transaction_count: 3,
+              last_purchase_date_raw: '2025-11-02',
+              purchase_age_group: 'over_one_month',
+            },
+            {
+              id: 'recovery-1',
+              shop_name: 'Pre-Oct Recovery Shop',
+              purchase_count: 4,
+              priority_transaction_count: 0,
+              ledger_transaction_count: 4,
+              last_purchase_date_raw: '2025-09-15',
+              purchase_age_group: 'over_one_month',
+            },
+            {
+              id: 'prospect-1',
+              shop_name: 'New Prospect Shop',
+              profile_type: 'Prospect',
+              verification: 'Unverified',
+              purchase_count: 0,
+              priority_transaction_count: 0,
+              ledger_transaction_count: 0,
+              last_purchase_date_raw: '',
+              purchase_age_group: 'no_purchase',
+            },
+          ],
+          meta: { from_date: '2025-10-01', to_date: '2026-09-12', count: 3 },
+        },
+      }),
+    } as Response);
+
+    const result = await fetchDailyCallMasterList();
+
+    expect(result.items).toEqual([
+      expect.objectContaining({ id: 'priority-1', listCategory: 'priority' }),
+      expect.objectContaining({ id: 'recovery-1', listCategory: 'recovery' }),
+      expect.objectContaining({ id: 'prospect-1', listCategory: 'no_purchase' }),
+    ]);
   });
 
   it('maps the contact person name from the master-list API row', async () => {

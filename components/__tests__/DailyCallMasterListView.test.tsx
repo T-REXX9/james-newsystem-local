@@ -987,6 +987,70 @@ describe('DailyCallMasterListView', () => {
     expect(within(blockedCard).queryByText('Current Month Sales')).not.toBeInTheDocument();
   });
 
+  it('moves Verified Prospects with purchase history out of the verified list into Recovery or Priority', async () => {
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: '2026-09-12', count: 2 },
+      items: [
+        {
+          id: 'verified-with-history',
+          shopName: 'Old Verified Buyer Shop',
+          province: 'Cebu',
+          city: 'Cebu City',
+          contactNumber: '0917',
+          assignedTo: 'Apostol Ella',
+          profileType: 'Prospective',
+          verification: 'Verified',
+          customerStatus: 3,
+          lastPurchaseDate: 'Aug 10, 2025',
+          lastPurchaseDateRaw: '2025-08-10',
+          purchaseCount: 8,
+          priorityTransactionCount: 0,
+          ledgerTransactionCount: 8,
+          listCategory: 'no_purchase',
+          totalSales: 40000,
+          currentMonthSales: 0,
+          averageMonthlySales: 5000,
+          averageMonthlySalesMonthCount: 3,
+          daysSinceLastPurchase: 398,
+          monthsSinceLastPurchase: 13,
+          purchaseAgeGroup: 'no_purchase',
+        },
+        {
+          id: 'true-verified-prospect',
+          shopName: 'True Verified Prospect',
+          province: 'Laguna',
+          city: 'Calamba',
+          contactNumber: '0940',
+          assignedTo: 'Apostol Ella',
+          profileType: 'Prospect',
+          verification: 'Verified',
+          customerStatus: 3,
+          lastPurchaseDate: '—',
+          lastPurchaseDateRaw: '',
+          purchaseCount: 0,
+          priorityTransactionCount: 0,
+          ledgerTransactionCount: 0,
+          listCategory: 'no_purchase',
+          totalSales: 0,
+          currentMonthSales: 0,
+          averageMonthlySales: 0,
+          averageMonthlySalesMonthCount: 0,
+          daysSinceLastPurchase: 0,
+          monthsSinceLastPurchase: 0,
+          purchaseAgeGroup: 'no_purchase',
+        },
+      ],
+    });
+
+    render(<DailyCallMasterListView />);
+
+    expect(await screen.findByRole('button', { name: 'Recovery List (1)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Verified Prospects (1)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Priority List (0)' })).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Recovery List (1)' }));
+    expect(screen.getByText('Old Verified Buyer Shop')).toBeInTheDocument();
+  });
+
   it('moves clients who start buying into the Priority List', async () => {
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
       meta: { fromDate: '2025-10-01', toDate: '2026-09-09', count: 1 },
@@ -1020,5 +1084,51 @@ describe('DailyCallMasterListView', () => {
     expect(await screen.findByRole('button', { name: 'Priority List (1)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Verified Prospects (0)' })).toBeInTheDocument();
     expect(screen.getByText('First Purchase Shop')).toBeInTheDocument();
+  });
+
+  it('filters already-loaded master rows instantly without refetching on search', async () => {
+    const priorityBase = {
+      province: 'Manila',
+      city: 'Quezon City',
+      contactNumber: '0917',
+      assignedTo: 'Joan Jerusalem',
+      lastPurchaseDate: 'Sep 1, 2026',
+      lastPurchaseDateRaw: '2026-09-01',
+      purchaseCount: 2,
+      totalSales: 1000,
+      currentMonthSales: 500,
+      averageMonthlySales: 500,
+      averageMonthlySalesMonthCount: 2,
+      recentThreeMonthSales: 500,
+      previousThreeMonthSales: 500,
+      salesTrendPercent: 0,
+      daysSinceLastPurchase: 10,
+      monthsSinceLastPurchase: 0,
+      purchaseAgeGroup: 'recent' as const,
+      listCategory: 'priority' as const,
+    };
+
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: '2026-09-10', count: 2 },
+      items: [
+        { id: 'shop-alpha', shopName: 'Alpha Auto Parts', ...priorityBase },
+        { id: 'shop-beta', shopName: 'Beta Bike Hub', ...priorityBase, contactNumber: '0918' },
+      ],
+    });
+
+    render(<DailyCallMasterListView currentUser={masterUser} />);
+
+    expect(await screen.findByText('Alpha Auto Parts')).toBeInTheDocument();
+    expect(screen.getByText('Beta Bike Hub')).toBeInTheDocument();
+    const callsAfterLoad = vi.mocked(fetchDailyCallMasterList).mock.calls.length;
+
+    fireEvent.change(screen.getByPlaceholderText('Search customer, city, contact...'), {
+      target: { value: 'Alpha' },
+    });
+
+    // Instant client-side filter: matching row stays, non-match leaves, no network round-trip.
+    expect(screen.getByText('Alpha Auto Parts')).toBeInTheDocument();
+    expect(screen.queryByText('Beta Bike Hub')).not.toBeInTheDocument();
+    expect(vi.mocked(fetchDailyCallMasterList).mock.calls.length).toBe(callsAfterLoad);
   });
 });

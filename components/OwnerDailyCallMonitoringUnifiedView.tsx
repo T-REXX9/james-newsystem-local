@@ -1,7 +1,7 @@
 import React, { Component, ReactNode, useEffect, useMemo, useState } from 'react';
 import { ArrowUp, BarChart3, Clock3, Table2, Target, Wallet } from 'lucide-react';
-import { isBlockedDailyCallMasterRow } from '../utils/dailyCallBlockedCustomer';
 import { VERIFIED_PROSPECT_POTENTIAL } from '../utils/dailyCallPotentialSales';
+import { matchesDailyCallMonitorBucket } from '../utils/dailyCallListCategory';
 import DailyCallMasterListView from './DailyCallMasterListView';
 import { fetchDailyCallMasterList } from '../services/dailyCallMonitoringService';
 import { DailyCallMasterCustomerRow, UserProfile } from '../types';
@@ -28,22 +28,12 @@ const peso = new Intl.NumberFormat('en-PH', {
   maximumFractionDigits: 0,
 });
 
-const isProspectRow = (row: DailyCallMasterCustomerRow) => {
-  const profileType = String(row.profileType || '').trim().toLowerCase();
-  return profileType.includes('prospect');
-};
-
 const calculateSummary = (rows: DailyCallMasterCustomerRow[]) => {
   const current = rows.reduce((sum, row) => sum + row.currentMonthSales, 0);
-  const priority = rows.filter((row) => !isBlockedDailyCallMasterRow(row) && row.listCategory === 'priority');
-  const recovery = rows.filter((row) => !isBlockedDailyCallMasterRow(row) && row.listCategory === 'recovery');
-  const blocked = rows.filter((row) => isBlockedDailyCallMasterRow(row));
-  const verified = rows.filter((row) => (
-    !isBlockedDailyCallMasterRow(row)
-    && row.purchaseAgeGroup === 'no_purchase'
-    && isProspectRow(row)
-    && row.verification === 'Verified'
-  ));
+  const priority = rows.filter((row) => matchesDailyCallMonitorBucket(row, 'priority'));
+  const recovery = rows.filter((row) => matchesDailyCallMonitorBucket(row, 'recovery'));
+  const blocked = rows.filter((row) => matchesDailyCallMonitorBucket(row, 'blocked'));
+  const verified = rows.filter((row) => matchesDailyCallMonitorBucket(row, 'verified'));
   const totalPotential = priority.reduce((sum, row) => sum + row.averageMonthlySales, 0)
     + recovery.reduce((sum, row) => sum + row.averageMonthlySales, 0)
     + blocked.reduce((sum, row) => sum + row.averageMonthlySales, 0)

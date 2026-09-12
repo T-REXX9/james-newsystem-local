@@ -18,7 +18,6 @@ import {
   Users,
   XCircle,
 } from 'lucide-react';
-import { useDebounce } from '../hooks/useDebounce';
 import { createCustomerLogForDailyCall, fetchCustomersForDailyCall, fetchDailyCallMasterList, getCachedDailyCallMasterList } from '../services/dailyCallMonitoringService';
 import { bulkUpdateContacts, createContact, fetchSalesAgents, updateContact } from '../services/customerDatabaseLocalApiService';
 import { fetchTeams, TeamRecord } from '../services/teamLocalApiService';
@@ -27,6 +26,7 @@ import { Contact, CustomerStatus, DailyCallCustomerRow, DailyCallMasterCustomerR
 import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
 import { resolveVipDiscountLevel } from '../utils/vipStanding';
 import { DO_NOT_CONTACT_LABEL, isBlockedDailyCallMasterRow } from '../utils/dailyCallBlockedCustomer';
+import { matchesDailyCallMonitorBucket, resolveDailyCallListCategory } from '../utils/dailyCallListCategory';
 import { hasActionPermission, isMasterUserAccount } from '../constants';
 import { VERIFIED_PROSPECT_POTENTIAL } from '../utils/dailyCallPotentialSales';
 import AddContactModal from './AddContactModal';
@@ -79,11 +79,7 @@ const categories: CategoryDefinition[] = [
     border: 'border-emerald-200',
     softBg: 'bg-emerald-50/60',
     dot: 'bg-emerald-500',
-    matches: (row) => !isBlockedDailyCallMasterRow(row) && (
-      row.listCategory === 'priority'
-      || (row.priorityTransactionCount ?? 0) > 0
-      || (!row.listCategory && row.purchaseCount > 0)
-    ),
+    matches: (row) => matchesDailyCallMonitorBucket(row, 'priority'),
   },
   {
     id: 'recovery',
@@ -95,9 +91,7 @@ const categories: CategoryDefinition[] = [
     border: 'border-rose-200',
     softBg: 'bg-rose-50/60',
     dot: 'bg-rose-500',
-    matches: (row) => !isBlockedDailyCallMasterRow(row)
-      && (row.priorityTransactionCount ?? 0) === 0
-      && (row.listCategory ? row.listCategory === 'recovery' : row.purchaseAgeGroup === 'over_one_month'),
+    matches: (row) => matchesDailyCallMonitorBucket(row, 'recovery'),
   },
   {
     id: 'verified',
@@ -109,12 +103,7 @@ const categories: CategoryDefinition[] = [
     border: 'border-blue-200',
     softBg: 'bg-blue-50/60',
     dot: 'bg-blue-500',
-    matches: (row) => !isBlockedDailyCallMasterRow(row)
-      && row.purchaseCount === 0
-      && (row.priorityTransactionCount ?? 0) === 0
-      && row.purchaseAgeGroup === 'no_purchase'
-      && isProspectRow(row)
-      && row.verification === 'Verified',
+    matches: (row) => matchesDailyCallMonitorBucket(row, 'verified'),
   },
   {
     id: 'unverified',
@@ -126,12 +115,7 @@ const categories: CategoryDefinition[] = [
     border: 'border-orange-200',
     softBg: 'bg-orange-50/60',
     dot: 'bg-orange-400',
-    matches: (row) => !isBlockedDailyCallMasterRow(row)
-      && row.purchaseCount === 0
-      && (row.priorityTransactionCount ?? 0) === 0
-      && row.purchaseAgeGroup === 'no_purchase'
-      && isProspectRow(row)
-      && row.verification !== 'Verified',
+    matches: (row) => matchesDailyCallMonitorBucket(row, 'unverified'),
   },
   {
     id: 'blocked',
@@ -143,7 +127,7 @@ const categories: CategoryDefinition[] = [
     border: 'border-red-200',
     softBg: 'bg-red-50/60',
     dot: 'bg-[#f94449]',
-    matches: (row) => isBlockedDailyCallMasterRow(row),
+    matches: (row) => matchesDailyCallMonitorBucket(row, 'blocked'),
   },
   {
     id: 'all',
@@ -172,6 +156,24 @@ const canUseMasterDailyCallActions = (user?: UserProfile | null) => {
 
 const sumBy = (rows: DailyCallMasterCustomerRow[], field: 'totalSales' | 'currentMonthSales' | 'purchaseCount' | 'averageMonthlySales') =>
   rows.reduce((sum, row) => sum + row[field], 0);
+
+/** Instant client-side match: every whitespace token must appear in the searchable fields. */
+const matchesDailyCallMasterSearch = (row: DailyCallMasterCustomerRow, query: string) => {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return true;
+  const haystack = [
+    row.shopName,
+    row.city,
+    row.province,
+    row.contactNumber,
+    row.contactPersonName || '',
+    row.assignedTo,
+    row.assignedTeam || '',
+  ]
+    .join(' ')
+    .toLowerCase();
+  return normalizedQuery.split(/\s+/).every((token) => haystack.includes(token));
+};
 
 const ageLabel = (row: DailyCallMasterCustomerRow) => {
   if (!row.lastPurchaseDateRaw || (row.ledgerTransactionCount ?? row.purchaseCount) === 0) return 'No purchase yet';
@@ -309,7 +311,6 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const [loadingSalesAgents, setLoadingSalesAgents] = useState(true);
   const [loadingTeams, setLoadingTeams] = useState(true);
   const [assigningCustomerId, setAssigningCustomerId] = useState<string | null>(null);
-  const debouncedSearch = useDebounce(search, 400);
 
   const handleSelectCategory = useCallback((categoryId: CategoryId) => {
     setActiveCategoryId(categoryId);
@@ -340,7 +341,8 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     if (withLoading && (forceRefresh || rowsRef.current.length === 0)) setLoading(true);
     setError(null);
     try {
-      const result = await fetchDailyCallMasterList({ fromDate, search: debouncedSearch, forceRefresh });
+      // Always fetch the full master list; search filters client-side so typing stays instant.
+      const result = await fetchDailyCallMasterList({ fromDate, search: '', forceRefresh });
       setRows(result.items);
       setMeta(result.meta);
     } catch {
@@ -348,7 +350,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     } finally {
       if (withLoading) setLoading(false);
     }
-  }, [debouncedSearch]);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -564,6 +566,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   };
 
   const filteredRows = useMemo(() => rows.filter((row) => {
+    if (!matchesDailyCallMasterSearch(row, search)) return false;
     if (currentVipFilter !== 'all' && getCurrentVip(row) !== currentVipFilter) return false;
     if (nextVipFilter !== 'all' && getNextVip(row) !== nextVipFilter) return false;
     if (lastPurchaseFilter === 'none' && row.purchaseAgeGroup !== 'no_purchase') return false;
@@ -572,7 +575,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     if (lastPurchaseFilter === 'older' && row.daysSinceLastPurchase <= 30) return false;
     if (colorFilter !== 'all' && purchaseHighlight(row).color !== colorFilter) return false;
     return true;
-  }), [colorFilter, currentVipFilter, lastPurchaseFilter, nextVipFilter, rows, vipConfig]);
+  }), [colorFilter, currentVipFilter, lastPurchaseFilter, nextVipFilter, rows, search, vipConfig]);
 
   const categoryData = useMemo(() => categories.map((category) => {
     const categoryRows = filteredRows.filter(category.matches);
@@ -695,7 +698,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
 
   useEffect(() => {
     setVisibleLimit(INITIAL_VISIBLE_ROWS);
-  }, [activeCategoryId, colorFilter, currentVipFilter, debouncedSearch, lastPurchaseFilter, nextVipFilter]);
+  }, [activeCategoryId, colorFilter, currentVipFilter, lastPurchaseFilter, nextVipFilter, search]);
 
   const loadMoreRows = useCallback(() => {
     setVisibleLimit((currentLimit) => Math.min(activeCategory.rows.length, currentLimit + VISIBLE_ROWS_STEP));
@@ -1039,7 +1042,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                         <td className="px-2 py-2.5">
                           <p className="text-base font-bold text-blue-950">{peso.format(row.averageMonthlySales)} <span className="text-[12px] font-medium text-slate-500">/ month</span></p>
                           <p className="mt-0.5 text-[11px] text-slate-500">
-                            {isBlockedDailyCallMasterRow(row) || row.listCategory === 'recovery'
+                            {isBlockedDailyCallMasterRow(row) || resolveDailyCallListCategory(row) === 'recovery'
                               ? `(Based on ${row.averageMonthlySalesMonthCount} months in last 12 months of active year${row.averageMonthlySalesYear ? ` ${row.averageMonthlySalesYear}` : ''})`
                               : `(Based on ${row.averageMonthlySalesMonthCount} months in the last 12 months)`}
                           </p>

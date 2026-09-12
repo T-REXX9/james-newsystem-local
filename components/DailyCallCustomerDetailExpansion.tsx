@@ -7,30 +7,31 @@ import {
   ClipboardList,
   CreditCard,
   FileWarning,
+  MessageSquare,
   PackageSearch,
-  Plus,
   ShieldCheck,
-  UserRound,
   WalletCards,
 } from 'lucide-react';
 import SalesReportTab from './SalesReportTab';
 import ItemIssueReportTab from './ItemIssueReportTab';
 import IncidentReportTab from './IncidentReportTab';
 import CustomerRequestsTab from './CustomerRequestsTab';
-import PersonalCommentsTab from './PersonalCommentsTab';
-import CallReportActivityPanel from './CallReportActivityPanel';
+import CustomerSalesReportChat from './CustomerSalesReportChat';
+import CustomerYearlySales from './CustomerYearlySales';
 import { DailyCallCustomerRow, UserProfile, VipTierConfig } from '../types';
 import { formatLegacyPriceGroupLabel } from '../constants/pricingGroups';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import { getVipStandingSummary } from '../utils/vipStanding';
 import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
 import { getVipTierConfig } from '../services/vipTierSettingsService';
-import { fetchContactCustomerLogsForDailyCall, fetchManagementInstructions } from '../services/dailyCallMonitoringService';
+import { fetchContactCustomerLogsForDailyCall } from '../services/dailyCallMonitoringService';
+import { buildYearlySalesFromSummary, customerLedgerService, type CustomerYearlySales as CustomerYearlySalesEntry } from '../services/customerLedgerService';
 import { DO_NOT_CONTACT_LABEL, isBlockedDailyCallCustomerRow } from '../utils/dailyCallBlockedCustomer';
 import { formatDate as formatDisplayDate } from '../utils/formatUtils';
 
 export type DetailTabId =
   | 'overview'
+  | 'sales-report'
   | 'comments'
   | 'human'
   | 'sales'
@@ -45,14 +46,18 @@ interface DailyCallCustomerDetailExpansionProps {
   viewOnlyDoNotContact?: boolean;
 }
 
+const normalizeTabId = (tab?: DetailTabId): DetailTabId => {
+  if (tab === 'comments' || tab === 'human') return 'sales-report';
+  return tab || 'overview';
+};
+
 const tabs: Array<{
   id: DetailTabId;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
 }> = [
   { id: 'overview', label: 'Overview', icon: ShieldCheck },
-  { id: 'comments', label: 'Management Instructions', icon: ClipboardList },
-  { id: 'human', label: 'Sales Agent Activity', icon: UserRound },
+  { id: 'sales-report', label: 'Agent Sales Report', icon: MessageSquare },
   { id: 'sales', label: 'Sales Inquiry', icon: BarChart3 },
   { id: 'item-issues', label: 'Item Issues', icon: PackageSearch },
   { id: 'incident', label: 'Incident Reports', icon: FileWarning },
@@ -108,13 +113,14 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
     () => (readOnly ? tabs.filter((tab) => tab.id !== 'sales') : tabs),
     [readOnly]
   );
-  const [activeTab, setActiveTab] = useState<DetailTabId>(initialTab);
+  const [activeTab, setActiveTab] = useState<DetailTabId>(normalizeTabId(initialTab));
   const [vipConfig, setVipConfig] = useState<VipTierConfig>(DEFAULT_VIP_TIER_CONFIG);
-  const [latestInstruction, setLatestInstruction] = useState<any | null>(null);
   const [doNotContactReason, setDoNotContactReason] = useState('');
+  const [yearlySalesEntries, setYearlySalesEntries] = useState<CustomerYearlySalesEntry[]>([]);
+  const [ledgerError, setLedgerError] = useState('');
 
   useEffect(() => {
-    setActiveTab(initialTab);
+    setActiveTab(normalizeTabId(initialTab));
   }, [initialTab, customer.id]);
 
   useEffect(() => {
@@ -133,12 +139,21 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
 
   useEffect(() => {
     let disposed = false;
-    setLatestInstruction(null);
-    fetchManagementInstructions(customer.id).then((comments) => {
-      if (!disposed) setLatestInstruction(comments[0] || null);
-    });
+    setYearlySalesEntries([]);
+    setLedgerError('');
+    void customerLedgerService
+      .getLedger(customer.id, { reportType: 'yearly', dateType: 'all' })
+      .then((ledger) => {
+        if (disposed) return;
+        setYearlySalesEntries(buildYearlySalesFromSummary(ledger.summary_rows || []));
+      })
+      .catch((error: unknown) => {
+        if (disposed) return;
+        setYearlySalesEntries([]);
+        setLedgerError(error instanceof Error ? error.message : 'Failed to load customer ledger sales.');
+      });
     return () => { disposed = true; };
-  }, [customer.id, activeTab]);
+  }, [customer.id]);
 
   useEffect(() => {
     let disposed = false;
@@ -183,24 +198,18 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
           Do Not Contact reason: <span className="font-normal">{doNotContactReason}</span>
         </div>
       )}
+      <CustomerYearlySales entries={yearlySalesEntries} error={ledgerError} compact />
       <div className="grid gap-3 xl:grid-cols-2">
         <div className="space-y-3">
-          <PanelCard title="Management Instructions" icon={ClipboardList} tone="text-violet-700" action="+ Add Instruction" onAction={() => setActiveTab('comments')}>
-            {latestInstruction ? (
-              <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-                <div className="flex items-center justify-between text-[10px] text-slate-500">
-                  <span className="font-bold text-slate-800">{latestInstruction.author_name || 'Management'}</span>
-                  <span>{formatDate(latestInstruction.timestamp)}</span>
-                </div>
-                <p className="mt-2 text-xs leading-5 text-slate-700">{latestInstruction.text}</p>
-              </div>
-            ) : (
-              <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-center text-xs text-slate-500">
-                No management instructions have been saved for this customer.
-              </p>
-            )}
-            <button type="button" onClick={() => setActiveTab('comments')} className="mt-3 w-full text-center text-[11px] font-bold text-blue-700 hover:underline">
-              View All Instructions →
+          <PanelCard title="Agent Sales Report" icon={MessageSquare} tone="text-violet-700" action="Open chat" onAction={() => setActiveTab('sales-report')}>
+            <CustomerSalesReportChat
+              contactId={customer.id}
+              currentUser={currentUser}
+              viewOnly={readOnly}
+              compact
+            />
+            <button type="button" onClick={() => setActiveTab('sales-report')} className="mt-3 w-full text-center text-[11px] font-bold text-blue-700 hover:underline">
+              Open full Agent Sales Report →
             </button>
           </PanelCard>
 
@@ -221,21 +230,10 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
         </div>
 
         <div className="space-y-3">
-          <PanelCard title={`Sales Agent Activity (${customer.assignedTo || 'Unassigned'})`} icon={UserRound} action="View All" onAction={() => setActiveTab('human')}>
-            <CallReportActivityPanel
-              contactId={customer.id}
-              currentUser={currentUser}
-              assignedAgentName={customer.assignedTo}
-              compact
-            />
-            <button type="button" onClick={() => setActiveTab('human')} className="mt-3 w-full text-center text-[11px] font-bold text-blue-700 hover:underline">View All Sales Agent Activity →</button>
-          </PanelCard>
-
           <PanelCard title="AI Agent Activity" icon={Bot} tone="text-violet-700">
-            <p className="py-5 text-center text-xs text-slate-500">No AI-agent activity has been recorded for this customer.</p>
+            <p className="py-3 text-center text-xs text-slate-500">No AI-agent activity has been recorded for this customer.</p>
           </PanelCard>
         </div>
-
       </div>
     </div>
   );
@@ -259,20 +257,20 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
     if (activeTab === 'item-issues') return <ItemIssueReportTab contactId={customer.id} />;
     if (activeTab === 'incident') return <IncidentReportTab contactId={customer.id} currentUser={currentUser} />;
     if (activeTab === 'requests') return <CustomerRequestsTab contactId={customer.id} currentUser={currentUser} />;
-    if (activeTab === 'comments') {
-      return <PersonalCommentsTab contactId={customer.id} currentUserId={currentUser?.id} currentUserName={currentUser?.full_name || currentUser?.email || 'Owner'} currentUserAvatar={currentUser?.avatar_url} mode="instruction" autoFocus />;
-    }
-    if (activeTab === 'human') {
-      return <div className="p-5"><PanelCard title={`Sales Agent Activity (${customer.assignedTo || 'Unassigned'})`} icon={UserRound}>
-        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-900">
-          Sales agents submit call reports from <strong>Sales → Daily Call Monitoring</strong>. Each report appears below as a conversation entry. Master Users can reply directly to each report.
+    if (activeTab === 'sales-report' || activeTab === 'comments' || activeTab === 'human') {
+      return (
+        <div className="p-5">
+          <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-900">
+            Sales agents submit call reports from <strong>Sales → Daily Call Monitoring</strong>. Management instructions and staff comments appear in the same conversation. Master Users and assigned agents can reply with text or pictures.
+            {readOnly ? ' This customer is Do Not Contact — chat history stays visible, but new messages are disabled.' : ''}
+          </div>
+          <CustomerSalesReportChat
+            contactId={customer.id}
+            currentUser={currentUser}
+            viewOnly={readOnly}
+          />
         </div>
-        <CallReportActivityPanel
-          contactId={customer.id}
-          currentUser={currentUser}
-          assignedAgentName={customer.assignedTo}
-        />
-      </PanelCard></div>;
+      );
     }
     return null;
   }, [activeTab, activities, currentUser, customer, overview, readOnly]);
@@ -346,8 +344,7 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
         <h3 className="text-[10px] font-bold uppercase tracking-wide text-slate-700">Quick Actions</h3>
         <div className="mt-2 grid grid-cols-3 gap-2 lg:grid-cols-6">
           {[
-            ['Add Instruction', Plus, 'text-cyan-700 border-cyan-200 bg-cyan-50', 'comments'],
-            ['Sales Agent Reports', UserRound, 'text-emerald-700 border-emerald-200 bg-emerald-50', 'human'],
+            ['Agent Sales Report', MessageSquare, 'text-violet-700 border-violet-200 bg-violet-50', 'sales-report'],
             ...(!readOnly ? [['Sales Inquiry', BarChart3, 'text-white border-blue-900 bg-blue-950', 'sales']] : []),
           ].map(([label, Icon, tone, target]) => <button key={String(label)} type="button" onClick={() => setActiveTab(target as DetailTabId)} className={`flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-[10px] font-bold ${tone}`}><Icon className="h-3.5 w-3.5" />{String(label)}</button>)}
         </div>

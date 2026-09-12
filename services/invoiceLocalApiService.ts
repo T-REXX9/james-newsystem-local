@@ -262,12 +262,15 @@ export const unpostInvoice = async (id: string): Promise<void> => {
 
 export const updateInvoiceNumber = async (
   id: string,
-  data: { invoice_no: string; sales_date: string; reason: string; tracking_no: string }
+  data: { invoice_no: string; sales_date?: string; reason?: string; tracking_no?: string }
 ): Promise<Invoice | null> => {
   const payload = {
     main_id: API_MAIN_ID,
     user_id: getUserContext().userId,
-    ...data,
+    invoice_no: data.invoice_no,
+    ...(data.sales_date !== undefined ? { sales_date: data.sales_date } : {}),
+    ...(data.reason !== undefined ? { reason: data.reason } : {}),
+    ...(data.tracking_no !== undefined ? { tracking_no: data.tracking_no } : {}),
   };
   const result = await requestApi(`${API_BASE_URL}/invoices/${encodeURIComponent(id)}/actions/update_number`, {
     method: 'POST',

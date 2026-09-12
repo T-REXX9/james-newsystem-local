@@ -32,6 +32,6 @@ describe('Daily Call Monitoring revision rules', () => {
     expect(master).toContain(">Current Month Sales</p>");
     expect(master).toContain(">Monthly Sales Potential</p>");
     expect(master).toContain(">Monthly Potential Sales</p>");
-    expect(master).toContain("listCategory === 'priority'");
+    expect(master).toContain("matchesDailyCallMonitorBucket(row, 'priority')");
   });
 });

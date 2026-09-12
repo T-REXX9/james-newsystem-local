@@ -104,9 +104,6 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
   const [unpostLoading, setUnpostLoading] = useState(false);
   const [editNumberModalOpen, setEditNumberModalOpen] = useState(false);
   const [editInvoiceNo, setEditInvoiceNo] = useState('');
-  const [editInvoiceDate, setEditInvoiceDate] = useState('');
-  const [editReason, setEditReason] = useState('');
-  const [editTrackingNo, setEditTrackingNo] = useState('');
   const [editLoading, setEditLoading] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [sequenceStartDraft, setSequenceStartDraft] = useState('');
@@ -533,15 +530,18 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
     await loadInvoices();
   };
 
+  const openEditInvoiceNumberModal = () => {
+    if (!selectedInvoice) return;
+    setEditInvoiceNo(selectedInvoice.invoice_no);
+    setEditNumberModalOpen(true);
+  };
+
   const handleEditInvoiceNumber = async () => {
-    if (!canEditInvoiceNumber || !selectedInvoice || !editInvoiceNo.trim() || !editReason.trim()) return;
+    if (!canEditInvoiceNumber || !selectedInvoice || !editInvoiceNo.trim()) return;
     setEditLoading(true);
     try {
       const updated = await updateInvoiceNumber(selectedInvoice.id, {
         invoice_no: editInvoiceNo.trim(),
-        sales_date: editInvoiceDate,
-        reason: editReason.trim(),
-        tracking_no: editTrackingNo,
       });
       if (updated) {
         setInvoices(prev => prev.map(row => row.id === updated.id ? updated : row));
@@ -787,7 +787,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
           </div>
           <div className="px-[25px] pb-[28px] pt-[31px]">
             <div className="space-y-[17px]">
-              <div className="grid grid-cols-[7%_38%_10%_18%_9%_18%] items-center"><div className="col-span-4"></div><label className={legacyLabelClass}>Invoice No:</label><div><input readOnly value={selectedInvoice?.invoice_no || ''} aria-label="Invoice number" className={`${legacyInputClass} !bg-[#eeeeee]`} /></div></div>
+              <div className="grid grid-cols-[7%_38%_10%_18%_9%_18%] items-center"><div className="col-span-4"></div><label className={legacyLabelClass}>Invoice No:</label><div className="flex items-center gap-2"><input readOnly value={selectedInvoice?.invoice_no || ''} aria-label="Invoice number" className={`${legacyInputClass} !bg-[#eeeeee]`} />{selectedInvoice && canEditInvoiceNumber && (<button type="button" onClick={openEditInvoiceNumberModal} className="inline-flex h-[35px] shrink-0 items-center justify-center rounded-[4px] border border-[#c9c9c9] bg-white px-2 text-[#29475f] hover:bg-[#f7f7f7]" title="Edit Invoice Number" aria-label="Edit Invoice Number"><Pencil className="h-[0.875rem] w-[0.875rem]" /></button>)}</div></div>
               <div className="grid grid-cols-[7%_38%_10%_18%_9%_18%] items-center"><label className={legacyLabelClass}>Sold to :</label><div className="relative"><select disabled value={selectedInvoice ? selectedCustomerLabel : ''} className={`${legacyInputClass} disabled:bg-white disabled:text-[#333]`} aria-label="Customer"><option value="">Select Customer</option>{selectedInvoice && <option value={selectedCustomerLabel}>{selectedCustomerLabel}</option>}</select><span className="pointer-events-none absolute right-[34px] top-1/2 -translate-y-1/2 text-[16px] text-[#999]">×</span></div><label className={legacyLabelClass}>Date :</label><div className="pl-2"><input readOnly value={legacyListDate(selectedInvoice?.sales_date || legacyToday.toISOString())} className={legacyInputClass} /></div><label className={legacyLabelClass}>Terms Strictly:</label><div><input readOnly value={selectedInvoice?.terms || ''} className={legacyInputClass} /></div></div>
               <div className="grid grid-cols-[7%_38%_10%_18%_9%_18%] items-center"><div className="col-span-2 pl-[25px] pr-[7px]"><input readOnly value={selectedInvoice?.delivery_address || ''} className={legacyInputClass} /></div><label className={legacyLabelClass}>Reference No.:</label><div className="pl-2"><input readOnly value={selectedInvoice?.reference_no || ''} className={legacyInputClass} /></div><label className={legacyLabelClass}>Salesperson:</label><div className="relative"><select disabled value={selectedInvoice?.sales_person || ''} className={`${legacyInputClass} disabled:bg-white disabled:text-[#333]`} aria-label="Sales person"><option value="">Select Sales Person</option>{selectedInvoice?.sales_person && <option value={selectedInvoice.sales_person}>{selectedInvoice.sales_person}</option>}</select><span className="pointer-events-none absolute right-[34px] top-1/2 -translate-y-1/2 text-[16px] text-[#999]">×</span></div></div>
               <div className="grid grid-cols-[7%_38%_10%_18%_9%_18%] items-center"><label className={legacyLabelClass}>Shipped Via:</label><div className="pl-[19px] pr-[3px]"><input readOnly value={selectedInvoice?.send_by || ''} className={legacyInputClass} /></div><div className="col-span-2"></div><label className={legacyLabelClass}>Prod Type:</label><div><input readOnly value={selectedInvoice?.inquiry_type || ''} className={legacyInputClass} /></div></div>
@@ -796,7 +796,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
 
             <div className="mt-[39px] border-t border-[#e5e5e5] pt-[29px] overflow-x-auto"><table className="w-full min-w-[950px] table-fixed border-collapse text-[12px]"><thead><tr className="border-b-2 border-[#d5d5d5] text-center text-[14px] font-semibold"><th className="px-2 pb-2">Item Code</th><th className="px-2 pb-2">Quantity</th><th className="px-2 pb-2">Location.</th><th className="px-2 pb-2">Part No.</th><th className="px-2 pb-2">Brand</th><th className="px-2 pb-2">Description</th><th className="px-2 pb-2">Unit price</th><th className="px-2 pb-2">Remark</th><th className="px-2 pb-2">Amount</th></tr></thead><tbody>{legacyItems.map((item, index) => <tr key={item.id || `${item.item_code}-${index}`} className="border-b border-[#e1e1e1] text-center"><td className="px-2 py-2">{item.item_code || ''}</td><td className="px-2 py-2">{item.qty}</td><td className="px-2 py-2">{item.location || ''}</td><td className="px-2 py-2">{item.part_no || ''}</td><td className="px-2 py-2">{item.brand || ''}</td><td className="px-2 py-2 text-left">{item.description || ''}</td><td className="px-2 py-2 text-right">{Number(item.unit_price || 0).toFixed(2)}</td><td className="px-2 py-2">{item.remark || ''}</td><td className="px-2 py-2 text-right">{Number(item.amount || 0).toFixed(2)}</td></tr>)}</tbody><tfoot><tr><td className="px-2 py-[9px] text-right font-bold">Total Qty:</td><td className="px-2 py-[9px]"><span className="rounded-full bg-[#6f91af] px-2 py-[2px] font-bold text-white">{totalQty}</span></td><td colSpan={5}></td><td className="px-2 py-[9px] text-right font-bold">Grand Total:</td><td className="px-2 py-[9px]"><span className="rounded-full bg-[#ef4b4b] px-2 py-[2px] font-bold text-white">{Number(selectedInvoice?.grand_total || 0).toFixed(2)}</span></td></tr><VipDocumentTotals discount={invoiceVipSummary.discount} formatMoney={(value) => value.toFixed(2)} grandTotalColSpan={8} variant="invoice" amountDue={invoiceVipSummary.totalAmountDue} /></tfoot></table></div>
 
-            {selectedInvoice && <div className="mt-2 flex flex-wrap justify-end gap-[5px] border-t border-[#e3e3e3] pt-3 print:hidden"><button type="button" onClick={() => void handlePrint()} disabled={printing || !canProcessInvoice} className="rounded-[4px] bg-[#5d82a2] px-[15px] py-[9px] text-[13px] text-white disabled:opacity-50">{printing ? 'Printing...' : 'Print INV'}</button>{isPostedOrSent && canUnpost && <button type="button" onClick={() => setUnpostModalOpen(true)} className="rounded-[4px] bg-[#d64b47] px-[15px] py-[9px] text-[13px] text-white">UNPOST</button>}{!isCancelled && <button type="button" onClick={() => setCancelModalOpen(true)} className="rounded-[4px] bg-[#d64b47] px-[15px] py-[9px] text-[13px] text-white">Cancel INV</button>}<button type="button" onClick={() => { setJpegCaptureMode(false); setShowPrintPreview(true); }} className="rounded-[4px] bg-[#5d82a2] px-[15px] py-[9px] text-[13px] text-white">Preview Layout</button>{canEditInvoiceNumber && <button type="button" onClick={() => { setEditInvoiceNo(selectedInvoice.invoice_no); setEditInvoiceDate(selectedInvoice.sales_date); setEditReason(''); setEditTrackingNo(selectedInvoice.send_by || ''); setEditNumberModalOpen(true); }} className="rounded-[4px] border border-[#ccc] px-[15px] py-[8px] text-[13px]">Edit Number</button>}{selectedInvoice.order_id && <ModuleRecordAction tab="sales-transaction-sales-order" payload={{ orderId: selectedInvoice.order_id }} className="rounded-[4px] border border-[#ccc] px-[15px] py-[8px] text-[13px]" newWindowLabel="Open sales order in new window">View Sales Order</ModuleRecordAction>}</div>}
+            {selectedInvoice && <div className="mt-2 flex flex-wrap justify-end gap-[5px] border-t border-[#e3e3e3] pt-3 print:hidden"><button type="button" onClick={() => void handlePrint()} disabled={printing || !canProcessInvoice} className="rounded-[4px] bg-[#5d82a2] px-[15px] py-[9px] text-[13px] text-white disabled:opacity-50">{printing ? 'Printing...' : 'Print INV'}</button>{isPostedOrSent && canUnpost && <button type="button" onClick={() => setUnpostModalOpen(true)} className="rounded-[4px] bg-[#d64b47] px-[15px] py-[9px] text-[13px] text-white">UNPOST</button>}{!isCancelled && <button type="button" onClick={() => setCancelModalOpen(true)} className="rounded-[4px] bg-[#d64b47] px-[15px] py-[9px] text-[13px] text-white">Cancel INV</button>}<button type="button" onClick={() => { setJpegCaptureMode(false); setShowPrintPreview(true); }} className="rounded-[4px] bg-[#5d82a2] px-[15px] py-[9px] text-[13px] text-white">Preview Layout</button>{canEditInvoiceNumber && <button type="button" onClick={openEditInvoiceNumberModal} className="rounded-[4px] border border-[#ccc] px-[15px] py-[8px] text-[13px]">Edit Number</button>}{selectedInvoice.order_id && <ModuleRecordAction tab="sales-transaction-sales-order" payload={{ orderId: selectedInvoice.order_id }} className="rounded-[4px] border border-[#ccc] px-[15px] py-[8px] text-[13px]" newWindowLabel="Open sales order in new window">View Sales Order</ModuleRecordAction>}</div>}
           </div>
         </section>
       </div>
@@ -817,7 +817,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
       )}
       {cancelModalOpen && selectedInvoice && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"><div className="w-full max-w-lg rounded-[5px] bg-white p-5 shadow-xl"><h3 className="mb-3 text-[18px] font-semibold">Cancel Invoice</h3><p className="mb-3 text-[13px] text-[#a33]">Are you sure you want to cancel this Invoice? All items will return to stock. This action cannot be undone!</p><label className="block text-[13px]"><span className="mb-1 block">Reason to Cancel:</span><input value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} className={legacyInputClass} /></label><div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => { setCancelModalOpen(false); setCancelReason(''); }} className="rounded border border-[#ccc] px-4 py-2 text-[13px]">Close</button><button type="button" onClick={() => void handleCancelInvoice()} disabled={!cancelReason.trim() || cancelLoading} className="rounded bg-[#337ab7] px-4 py-2 text-[13px] text-white disabled:opacity-50">{cancelLoading ? 'Processing...' : 'Save'}</button></div></div></div>}
       {unpostModalOpen && selectedInvoice && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"><div className="w-full max-w-lg rounded-[5px] bg-white p-5 shadow-xl"><h3 className="mb-3 text-[18px] font-semibold">Unpost Invoice</h3><p className="mb-4 rounded border border-[#e7bbbb] bg-[#fff1f1] px-3 py-2 text-[13px] text-[#a33]">Unposting will withdraw the Ledger entry, delete the DR/Invoice attached and open the sales inquiry.</p><div className="flex justify-end gap-2"><button type="button" onClick={() => setUnpostModalOpen(false)} className="rounded border border-[#ccc] px-4 py-2 text-[13px]">Close</button><button type="button" onClick={() => void handleUnpost()} disabled={unpostLoading} className="rounded bg-[#d64b47] px-4 py-2 text-[13px] text-white disabled:opacity-50">{unpostLoading ? 'Processing...' : 'Submit'}</button></div></div></div>}
-      {editNumberModalOpen && selectedInvoice && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"><div className="w-full max-w-lg rounded-[5px] bg-white p-5 shadow-xl"><h3 className="mb-4 text-[18px] font-semibold">Edit Invoice Number</h3><div className="space-y-3"><label className="block text-[13px]"><span className="mb-1 block">Invoice Number</span><input value={editInvoiceNo} onChange={(event) => setEditInvoiceNo(event.target.value)} className={legacyInputClass} /></label><label className="block text-[13px]"><span className="mb-1 block">Invoice Date</span><input type="date" value={editInvoiceDate} onChange={(event) => setEditInvoiceDate(event.target.value)} className={legacyInputClass} /></label><label className="block text-[13px]"><span className="mb-1 block">Reason to Change Number</span><input value={editReason} onChange={(event) => setEditReason(event.target.value)} className={legacyInputClass} /></label><label className="block text-[13px]"><span className="mb-1 block">Tracking No.</span><select value={editTrackingNo} onChange={(event) => setEditTrackingNo(event.target.value)} className={legacyInputClass}><option value="">Select Tracking No.</option><option value="Hand Carry">Hand Carry</option><option value="LBC">LBC</option><option value="JRS">JRS</option><option value="AP Cargo">AP Cargo</option><option value="Others">Others</option></select></label></div><div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setEditNumberModalOpen(false)} className="rounded border border-[#ccc] px-4 py-2 text-[13px]">Close</button><button type="button" onClick={() => void handleEditInvoiceNumber()} disabled={!editInvoiceNo.trim() || !editReason.trim() || editLoading} className="rounded bg-[#337ab7] px-4 py-2 text-[13px] text-white disabled:opacity-50">{editLoading ? 'Updating...' : 'Update'}</button></div></div></div>}
+      {editNumberModalOpen && selectedInvoice && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"><div className="w-full max-w-lg rounded-[5px] bg-white p-5 shadow-xl"><h3 className="mb-4 text-[18px] font-semibold">Edit Invoice Number</h3><div className="space-y-3"><label className="block text-[13px]"><span className="mb-1 block">Invoice Number</span><input value={editInvoiceNo} onChange={(event) => setEditInvoiceNo(event.target.value)} aria-label="Edit invoice number value" className={legacyInputClass} /></label></div><div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setEditNumberModalOpen(false)} className="rounded border border-[#ccc] px-4 py-2 text-[13px]">Close</button><button type="button" onClick={() => void handleEditInvoiceNumber()} disabled={!editInvoiceNo.trim() || editLoading} className="rounded bg-[#337ab7] px-4 py-2 text-[13px] text-white disabled:opacity-50">{editLoading ? 'Updating...' : 'Update'}</button></div></div></div>}
     </div>
   );
 
@@ -1116,13 +1116,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                           {canEditInvoiceNumber && (
                             <button
                               type="button"
-                              onClick={() => {
-                                setEditInvoiceNo(selectedInvoice.invoice_no);
-                                setEditInvoiceDate(selectedInvoice.sales_date);
-                                setEditReason('');
-                                setEditTrackingNo(selectedInvoice.send_by || '');
-                                setEditNumberModalOpen(true);
-                              }}
+                              onClick={openEditInvoiceNumberModal}
                               className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800"
                               title="Edit Invoice Number"
                             >
@@ -1362,41 +1356,9 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                   type="text"
                   value={editInvoiceNo}
                   onChange={(e) => setEditInvoiceNo(e.target.value)}
+                  aria-label="Edit invoice number value"
                   className="w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
                 />
-              </label>
-              <label className="block text-sm text-slate-700 dark:text-slate-200">
-                <span className="block mb-1">Invoice Date</span>
-                <input
-                  type="date"
-                  value={editInvoiceDate}
-                  onChange={(e) => setEditInvoiceDate(e.target.value)}
-                  className="w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
-                />
-              </label>
-              <label className="block text-sm text-slate-700 dark:text-slate-200">
-                <span className="block mb-1">Reason to Change Number</span>
-                <input
-                  type="text"
-                  value={editReason}
-                  onChange={(e) => setEditReason(e.target.value)}
-                  className="w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
-                />
-              </label>
-              <label className="block text-sm text-slate-700 dark:text-slate-200">
-                <span className="block mb-1">Tracking No.</span>
-                <select
-                  value={editTrackingNo}
-                  onChange={(e) => setEditTrackingNo(e.target.value)}
-                  className="w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
-                >
-                  <option value="">Select Tracking No.</option>
-                  <option value="Hand Carry">Hand Carry</option>
-                  <option value="LBC">LBC</option>
-                  <option value="JRS">JRS</option>
-                  <option value="AP Cargo">AP Cargo</option>
-                  <option value="Others">Others</option>
-                </select>
               </label>
             </div>
             <div className="flex justify-end gap-2">
@@ -1410,7 +1372,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
               <button
                 type="button"
                 onClick={handleEditInvoiceNumber}
-                disabled={!editInvoiceNo.trim() || !editReason.trim() || editLoading}
+                disabled={!editInvoiceNo.trim() || editLoading}
                 className="px-4 py-2 text-sm rounded bg-brand-blue text-white disabled:opacity-50"
               >
                 {editLoading ? 'Updating...' : 'Update'}
@@ -1419,6 +1381,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
           </div>
         </div>
       )}
+
 
     </div>
   );

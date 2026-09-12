@@ -39,6 +39,7 @@ import ContactDetails from './ContactDetails';
 import AddContactModal from './AddContactModal';
 import CreateIncidentReportModal from './CreateIncidentReportModal';
 import ModuleRecordAction from './ModuleRecordAction';
+import CustomerSalesReportChat from './CustomerSalesReportChat';
 import { useToast } from './ToastProvider';
 import {
   countCallLogsByChannelInRange,
@@ -55,10 +56,9 @@ import {
   createCustomerLogForDailyCall,
   fetchAgentSnapshotForDailyCall,
   fetchContactCustomerLogsForDailyCall,
-  fetchManagementInstructions,
+  fetchSalesReportUnreadCounts,
   subscribeToDailyCallMonitoringUpdates
 } from '../services/dailyCallMonitoringService';
-import type { ManagementInstruction } from '../services/dailyCallMonitoringService';
 import { createContact, fetchContactById, fetchContactForDailyCall, updateContact } from '../services/customerDatabaseLocalApiService';
 import { queueCallRequest } from '../services/callingSystemService';
 import { navigateWorkflow } from '../utils/workflowNavigate';
@@ -88,6 +88,10 @@ import {
   getPhoneNumber
 } from '../utils/formatUtils';
 import { DO_NOT_CONTACT_LABEL, isBlockedContact } from '../utils/dailyCallBlockedCustomer';
+import {
+  DAILY_CALL_PRIORITY_FROM_DATE,
+  resolveDailyCallListCategory,
+} from '../utils/dailyCallListCategory';
 import { VERIFIED_PROSPECT_POTENTIAL, averageMonthlyPaidSales } from '../utils/dailyCallPotentialSales';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import { DEFAULT_CUSTOMER_VAT_TYPE } from '../constants/customerVat';
@@ -141,43 +145,13 @@ type ClientListKey = 'active' | 'inactivePositive' | 'prospectivePositive';
 type PurchaseHighlightColor = 'green' | 'yellow' | 'purple' | 'white' | 'red';
 
 const PIE_COLORS = ['#2563eb', '#0ea5e9', '#059669', '#f97316'];
-const CUSTOMER_LOG_TOPICS: CustomerLogTopic[] = ['Sales', 'Payment', 'Comment'];
+const CUSTOMER_LOG_TOPICS: CustomerLogTopic[] = ['Sales', 'Payment'];
 const CUSTOMER_LOG_STATUSES: CustomerLogStatus[] = ['Note', 'Call Back', "Can't be Reach", 'No Answer'];
-
-const ManagementInstructionsPanel: React.FC<{
-  instructions: ManagementInstruction[];
-  loading?: boolean;
-}> = ({ instructions, loading = false }) => (
-  <section className="rounded-xl border border-violet-200 bg-violet-50/80 p-4 dark:border-violet-900 dark:bg-violet-950/20" aria-label="Management Instructions">
-    <div className="flex items-center gap-2">
-      <ClipboardList className="h-4 w-4 text-violet-700 dark:text-violet-300" />
-      <h4 className="text-xs font-bold uppercase tracking-wide text-violet-800 dark:text-violet-200">Management Instructions</h4>
-    </div>
-    {loading ? (
-      <div className="mt-3 flex items-center gap-2 text-sm text-violet-700 dark:text-violet-300">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading instructions…
-      </div>
-    ) : instructions.length > 0 ? (
-      <div className="mt-3 space-y-2">
-        {instructions.slice(0, 3).map((instruction) => (
-          <article key={instruction.id} className="rounded-lg border border-violet-100 bg-white p-3 dark:border-violet-900 dark:bg-slate-900">
-            <p className="text-sm font-medium leading-5 text-slate-800 dark:text-slate-100">{instruction.text}</p>
-            <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
-              {instruction.author_name || 'Management'} • {formatDate(instruction.timestamp)}
-            </p>
-          </article>
-        ))}
-      </div>
-    ) : (
-      <p className="mt-3 text-sm text-violet-700 dark:text-violet-300">No management instructions have been added for this customer.</p>
-    )}
-  </section>
-);
 
 const getCurrentMonthPurchases = (purchases: Purchase[], referenceDate: Date) =>
   purchases.filter((purchase) => isWithinCurrentMonth(purchase.purchased_at, referenceDate) && purchase.status === 'paid');
 
-const priorityListStart = new Date('2025-10-01T00:00:00');
+const priorityListStart = new Date(`${DAILY_CALL_PRIORITY_FROM_DATE}T00:00:00`);
 
 const sumPaidPurchasesInMonth = (purchases: Purchase[], referenceDate: Date) =>
   getCurrentMonthPurchases(purchases, referenceDate).reduce((sum, purchase) => sum + purchase.amount, 0);
@@ -191,8 +165,8 @@ const clientsNoPurchaseThisMonth = (contacts: Contact[], purchases: Purchase[], 
 
 const calculatePriority = (lastPurchase: string | undefined, daysSinceContact: number, totalSales: number) => {
   const daysSincePurchase = getDaysSince(lastPurchase);
-  const hasPurchaseHistory = Boolean(lastPurchase && !Number.isNaN(Date.parse(lastPurchase)));
-  const purchaseCadenceTier = !hasPurchaseHistory
+  const hasHistory = Boolean(lastPurchase && !Number.isNaN(Date.parse(lastPurchase)));
+  const purchaseCadenceTier = !hasHistory
     ? 2
     : daysSincePurchase >= 15 && daysSincePurchase <= 30
       ? 4
@@ -564,8 +538,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [callReportAction, setCallReportAction] = useState('');
   const [callReportOutcome, setCallReportOutcome] = useState<CallOutcome>('note');
   const [submittingCallReport, setSubmittingCallReport] = useState(false);
-  const [callManagementInstructions, setCallManagementInstructions] = useState<ManagementInstruction[]>([]);
-  const [callInstructionsLoading, setCallInstructionsLoading] = useState(false);
+  const [salesReportUnreadByContact, setSalesReportUnreadByContact] = useState<Record<string, number>>({});
   const [smsMessage, setSMSMessage] = useState('');
   const [sendingSMS, setSendingSMS] = useState(false);
   const [customerLogs, setCustomerLogs] = useState<CustomerLogEntry[]>([]);
@@ -698,6 +671,20 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       setTeamMessages(snapshot.teamMessages.filter((message) => message.is_from_owner));
       setLoadError(null);
       setHasLoadedData(true);
+      const contactIds = teamScopedContacts.map((contact) => contact.id);
+      void fetchSalesReportUnreadCounts(contactIds)
+        .then((counts) => {
+          // finally clears snapshotAbortControllerRef before this microtask; only honor abort.
+          if (controller.signal.aborted) {
+            return;
+          }
+          setSalesReportUnreadByContact(counts);
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) {
+            setSalesReportUnreadByContact({});
+          }
+        });
     } catch (error) {
       if ((error as Error).name === 'AbortError') {
         return;
@@ -765,8 +752,6 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     setCallContact(contact);
     callStartedAtRef.current = Date.now();
     setCallContactLoading(true);
-    setCallInstructionsLoading(true);
-    setCallManagementInstructions([]);
     setCallReport('');
     setCallReportOutcome('note');
 
@@ -779,14 +764,6 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         addToast({ type: 'error', message: 'Full contact details could not be loaded.' });
       })
       .finally(() => setCallContactLoading(false));
-
-    void fetchManagementInstructions(contact.id)
-      .then(setCallManagementInstructions)
-      .catch((error) => {
-        console.error('Error loading management instructions:', error);
-        setCallManagementInstructions([]);
-      })
-      .finally(() => setCallInstructionsLoading(false));
   }, [addToast, notifyDoNotContact]);
 
   const handleDialRequest = useCallback(async (phone: string) => {
@@ -880,8 +857,6 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       });
       callStartedAtRef.current = null;
       setCallContact(null);
-      setCallManagementInstructions([]);
-      setCallInstructionsLoading(false);
       setCallReport('');
       setCallReportConcern('');
       setCallReportAction('');
@@ -1127,6 +1102,13 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     [contacts, selectedClientId]
   );
   const selectedClientBlocked = selectedClient ? isBlockedContact(selectedClient) : false;
+
+  const handleSalesReportConversationRead = useCallback((contactId: string) => {
+    setSalesReportUnreadByContact((prev) => {
+      if (!prev[contactId]) return prev;
+      return { ...prev, [contactId]: 0 };
+    });
+  }, []);
 
   const handleOpenFullDetails = useCallback(async (contact: Contact) => {
     setShowContactDetails(true);
@@ -1440,24 +1422,25 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         ? classification.customerStatus === 4 || String(classification.debtType || '').trim().toLowerCase() === 'bad'
         : isBlockedContact(row.contact);
     };
-    const priorityRows = masterRows.filter((row) => {
-      if (isMasterBlocked(row)) return false;
+    const resolveRowListCategory = (row: MasterRow) => {
       const classification = classificationById.get(row.contact.id);
-      return classification ? classification.listCategory === 'priority' : isPriorityListPurchase(row.lastPurchase);
-    });
-    const recoveryRows = masterRows.filter((row) => {
+      if (classification) {
+        return resolveDailyCallListCategory(classification);
+      }
+      if (isPriorityListPurchase(row.lastPurchase)) return 'priority' as const;
+      if (isRecoveryListPurchase(row.lastPurchase)) return 'recovery' as const;
+      return 'no_purchase' as const;
+    };
+    const priorityRows = masterRows.filter((row) => !isMasterBlocked(row) && resolveRowListCategory(row) === 'priority');
+    const recoveryRows = masterRows.filter((row) => !isMasterBlocked(row) && resolveRowListCategory(row) === 'recovery');
+    const noPurchaseProspectRows = masterRows.filter((row) => {
       if (isMasterBlocked(row)) return false;
+      if (resolveRowListCategory(row) !== 'no_purchase') return false;
       const classification = classificationById.get(row.contact.id);
-      return classification ? classification.listCategory === 'recovery' : isRecoveryListPurchase(row.lastPurchase);
+      return classification
+        ? String(classification.profileType || '').toLowerCase().includes('prospect')
+        : isProspectContact(row.contact);
     });
-    const noPurchaseProspectRows = masterRows.filter((row) =>
-      !isMasterBlocked(row) && (() => {
-        const classification = classificationById.get(row.contact.id);
-        return classification
-          ? classification.listCategory === 'no_purchase' && String(classification.profileType || '').toLowerCase().includes('prospect')
-          : getPurchaseAgeGroup(row.lastPurchase) === 'unverified' && isProspectContact(row.contact);
-      })()
-    );
     const verifiedRows = noPurchaseProspectRows.filter((row) =>
       (classificationById.get(row.contact.id)?.verification || row.contact.verification) === 'Verified'
     );
@@ -1572,20 +1555,6 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const doNotContactStatusLog = useMemo(
     () => statusUpdateLogs.find((entry) => entry.status === 'Do Not Contact' && entry.note?.trim()),
     [statusUpdateLogs]
-  );
-
-  const managementInstructions = useMemo<ManagementInstruction[]>(
-    () => customerLogs
-      .filter((entry) => entry.entry_type === 'Note' && entry.topic === 'Comment' && entry.status === 'Management Instruction')
-      .map((entry) => ({
-        id: entry.id,
-        contact_id: entry.contact_id,
-        author_id: entry.created_by,
-        author_name: entry.created_by_name || 'Management',
-        text: entry.note || entry.comments || '',
-        timestamp: entry.occurred_at,
-      })),
-    [customerLogs]
   );
 
   const todayStart = useMemo(() => {
@@ -2079,8 +2048,20 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                               <div className={`grid w-full grid-cols-[1.25rem_minmax(0,1fr)_4.2rem_5.7rem] items-center gap-2 rounded-lg border p-2 text-left shadow-sm transition-colors group-hover:border-blue-200 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800 ${highlight.className} ${selectedClientId === row.contact.id ? 'border-blue-300 ring-1 ring-blue-200 dark:bg-brand-blue/10' : ''}`}>
                               <span className="text-[11px] font-extrabold text-slate-400">{index + 1}</span>
                               <span className="min-w-0">
-                                <span className="block truncate text-[11px] font-extrabold uppercase leading-tight text-[#10244c] dark:text-white" title={row.contact.company}>
-                                  {row.contact.company}
+                                <span className="flex min-w-0 items-center gap-1.5">
+                                  <span className="block truncate text-[11px] font-extrabold uppercase leading-tight text-[#10244c] dark:text-white" title={row.contact.company}>
+                                    {row.contact.company}
+                                  </span>
+                                  {(salesReportUnreadByContact[row.contact.id] || 0) > 0 && (
+                                    <span
+                                      className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-brand-blue px-1 text-[9px] font-bold text-white"
+                                      aria-label={`${salesReportUnreadByContact[row.contact.id]} unread Agent Sales Report messages`}
+                                    >
+                                      {salesReportUnreadByContact[row.contact.id] > 9
+                                        ? '9+'
+                                        : salesReportUnreadByContact[row.contact.id]}
+                                    </span>
+                                  )}
                                 </span>
                                 <span className={`mt-0.5 block truncate text-[10px] font-medium leading-tight ${highlight.mutedClassName} dark:text-slate-400`} title={getPhoneNumber(row.contact) || getContactLocationLabel(row.contact)}>
                                   {getPhoneNumber(row.contact) || getContactLocationLabel(row.contact)}
@@ -2203,7 +2184,12 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
-            <ManagementInstructionsPanel instructions={managementInstructions} loading={customerLogsLoading} />
+            <CustomerSalesReportChat
+              contactId={selectedClient.id}
+              currentUser={currentUser}
+              viewOnly={selectedClientBlocked}
+              onConversationRead={handleSalesReportConversationRead}
+            />
             {selectedClientBlocked && (
               <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
                 {DO_NOT_CONTACT_LABEL} — view only. Contact and sales inquiry actions are disabled.
@@ -2268,7 +2254,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h4 className="text-sm font-bold text-slate-800 dark:text-white">Customer Log</h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Matches the old daily call monitoring note and status workflow.</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Sales and Payment notes only. Staff comments and management replies use Agent Sales Report above.</p>
                 </div>
                 {canEdit && <button
                   type="button"
@@ -2618,7 +2604,12 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             </div>
 
             <div data-testid="call-contact-scroll-area" className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3 sm:p-5">
-              <ManagementInstructionsPanel instructions={callManagementInstructions} loading={callInstructionsLoading} />
+              <CustomerSalesReportChat
+                contactId={callContact.id}
+                currentUser={currentUser}
+                viewOnly={isBlockedContact(callContact)}
+                onConversationRead={handleSalesReportConversationRead}
+              />
               <div className="grid gap-4 md:grid-cols-2">
               <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
                 <div className="mb-3 flex items-center justify-between">

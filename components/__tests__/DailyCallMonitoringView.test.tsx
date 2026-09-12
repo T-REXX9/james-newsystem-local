@@ -8,7 +8,7 @@ import DailyCallMonitoringView from '../DailyCallMonitoringView';
 const addToastMock = vi.fn();
 const fetchAgentSnapshotForDailyCallMock = vi.fn();
 const fetchContactCustomerLogsForDailyCallMock = vi.fn();
-const fetchManagementInstructionsMock = vi.fn();
+const fetchSalesReportUnreadCountsMock = vi.fn();
 const createCallLogForDailyCallMock = vi.fn();
 const claimCustomerCallForDailyCallMock = vi.fn();
 const releaseCustomerCallForDailyCallMock = vi.fn();
@@ -28,7 +28,7 @@ vi.mock('../ToastProvider', () => ({
 vi.mock('../../services/dailyCallMonitoringService', () => ({
   fetchAgentSnapshotForDailyCall: (...args: unknown[]) => fetchAgentSnapshotForDailyCallMock(...args),
   fetchContactCustomerLogsForDailyCall: (...args: unknown[]) => fetchContactCustomerLogsForDailyCallMock(...args),
-  fetchManagementInstructions: (...args: unknown[]) => fetchManagementInstructionsMock(...args),
+  fetchSalesReportUnreadCounts: (...args: unknown[]) => fetchSalesReportUnreadCountsMock(...args),
   createCallLogForDailyCall: (...args: unknown[]) => createCallLogForDailyCallMock(...args),
   claimCustomerCallForDailyCall: (...args: unknown[]) => claimCustomerCallForDailyCallMock(...args),
   releaseCustomerCallForDailyCall: (...args: unknown[]) => releaseCustomerCallForDailyCallMock(...args),
@@ -45,6 +45,12 @@ vi.mock('../../services/customerDatabaseLocalApiService', () => ({
 
 vi.mock('../CustomLoadingSpinner', () => ({
   default: ({ label }: { label?: string }) => <div>{label || 'Loading'}</div>,
+}));
+
+vi.mock('../CustomerSalesReportChat', () => ({
+  default: ({ contactId }: { contactId: string }) => (
+    <div role="region" aria-label="Agent Sales Report">Agent Sales Report chat for {contactId}</div>
+  ),
 }));
 
 vi.mock('../AgentCallActivity', () => ({
@@ -125,7 +131,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     addToastMock.mockReset();
     fetchAgentSnapshotForDailyCallMock.mockReset();
     fetchContactCustomerLogsForDailyCallMock.mockReset();
-    fetchManagementInstructionsMock.mockReset();
+    fetchSalesReportUnreadCountsMock.mockReset();
     createCallLogForDailyCallMock.mockReset();
     claimCustomerCallForDailyCallMock.mockReset();
     releaseCustomerCallForDailyCallMock.mockReset();
@@ -139,7 +145,7 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue(baseSnapshot);
     fetchContactCustomerLogsForDailyCallMock.mockResolvedValue([]);
-    fetchManagementInstructionsMock.mockResolvedValue([]);
+    fetchSalesReportUnreadCountsMock.mockResolvedValue({});
     fetchContactByIdMock.mockResolvedValue({
       id: 'contact-1',
       company: 'Test Shop',
@@ -526,29 +532,16 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(callButton).toBeInTheDocument();
   });
 
-  it('shows management instructions as soon as a sales agent opens a customer', async () => {
-    fetchContactCustomerLogsForDailyCallMock.mockResolvedValue([{
-      id: 'instruction-1',
-      contact_id: 'contact-1',
-      entry_type: 'Note',
-      topic: 'Comment',
-      status: 'Management Instruction',
-      note: 'Confirm the updated delivery address before discussing the quotation.',
-      promise_to_pay: '',
-      comments: '',
-      attachment: null,
-      occurred_at: '2026-04-04T00:00:00.000Z',
-      created_by: 'manager-1',
-      created_by_name: 'Maria Manager',
-    }]);
+  it('shows the unified Agent Sales Report chat when a sales agent opens a customer', async () => {
+    fetchSalesReportUnreadCountsMock.mockResolvedValue({ 'contact-1': 2 });
     const user = userEvent.setup();
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
+    expect(await screen.findByLabelText(/2 unread Agent Sales Report messages/i)).toBeInTheDocument();
     await user.click(await screen.findByText('Test Shop'));
 
-    const panel = await screen.findByRole('region', { name: 'Management Instructions' });
-    expect(within(panel).getByText('Confirm the updated delivery address before discussing the quotation.')).toBeInTheDocument();
-    expect(within(panel).getByText(/Maria Manager/)).toBeInTheDocument();
+    const panel = await screen.findByRole('region', { name: 'Agent Sales Report' });
+    expect(within(panel).getByText(/Agent Sales Report chat for contact-1/i)).toBeInTheDocument();
   });
 
   it('blocks the contact window when another agent already claimed the customer', async () => {

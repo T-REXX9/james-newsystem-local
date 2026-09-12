@@ -34,8 +34,8 @@ vi.mock('../../services/customerDatabaseLocalApiService', () => ({
 
 vi.mock('../../services/localAuthService', () => ({
   getLocalAuthSession: vi.fn(() => ({
-    userProfile: { id: 'user-1', role: 'Owner' },
-    context: { user: { id: 1, type: 'Owner' }, user_type: 'Owner' },
+    userProfile: { id: 'user-1', role: 'Owner', user_type: '1' },
+    context: { user: { id: 1, type: '1' }, user_type: '1' },
   })),
 }));
 
@@ -301,5 +301,111 @@ describe('InvoiceView', () => {
     expect(element.closest('.invoice-print-root')).not.toHaveStyle({ left: '-10000px' });
     expect(element).not.toHaveTextContent('Export JPEG');
     expect(element).not.toHaveTextContent('Print INV');
+  });
+
+  it('hides Edit Number for a sales agent without can_edit_invoice_number', async () => {
+    const { getLocalAuthSession } = await import('../../services/localAuthService');
+    vi.mocked(getLocalAuthSession).mockReturnValue({
+      userProfile: {
+        id: '64',
+        role: 'Sales Agent',
+        user_type: '2',
+        action_permissions: {
+          global: { can_edit: true, can_edit_invoice_number: false },
+          pages: { Invoice: { can_edit: true, can_edit_invoice_number: false } },
+        },
+      },
+      context: { user: { id: 64, type: '2' }, user_type: '2' },
+      token: 'token',
+    } as any);
+
+    getAllInvoicesMock.mockResolvedValue([
+      {
+        id: 'inv-locked',
+        invoice_no: 'T-100',
+        contact_id: 'c-1',
+        sales_date: '2026-09-05',
+        status: InvoiceStatus.SENT,
+        items: [],
+      },
+    ]);
+
+    render(<InvoiceView />);
+    fireEvent.click(await screen.findByText('T-100'));
+
+    expect(screen.queryByRole('button', { name: 'Edit Number' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit Invoice Number' })).not.toBeInTheDocument();
+  });
+
+  it('shows Edit Number for a sales agent granted can_edit_invoice_number', async () => {
+    const { getLocalAuthSession } = await import('../../services/localAuthService');
+    vi.mocked(getLocalAuthSession).mockReturnValue({
+      userProfile: {
+        id: '64',
+        role: 'Sales Agent',
+        user_type: '2',
+        action_permissions: {
+          global: { can_edit: true, can_edit_invoice_number: false },
+          pages: { Invoice: { can_edit: true, can_edit_invoice_number: true } },
+        },
+      },
+      context: { user: { id: 64, type: '2' }, user_type: '2' },
+      token: 'token',
+    } as any);
+
+    getAllInvoicesMock.mockResolvedValue([
+      {
+        id: 'inv-editable',
+        invoice_no: 'T-200',
+        contact_id: 'c-1',
+        sales_date: '2026-09-05',
+        status: InvoiceStatus.SENT,
+        items: [],
+      },
+    ]);
+
+    render(<InvoiceView />);
+    fireEvent.click(await screen.findByText('T-200'));
+
+    expect(await screen.findByRole('button', { name: 'Edit Number' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit Invoice Number' })).toBeInTheDocument();
+  });
+
+  it('opens an invoice-number-only edit modal for a permitted sales agent', async () => {
+    const { getLocalAuthSession } = await import('../../services/localAuthService');
+    vi.mocked(getLocalAuthSession).mockReturnValue({
+      userProfile: {
+        id: '64',
+        role: 'Sales Agent',
+        user_type: '2',
+        action_permissions: {
+          global: { can_edit: true, can_edit_invoice_number: false },
+          pages: { Invoice: { can_edit: true, can_edit_invoice_number: true } },
+        },
+      },
+      context: { user: { id: 64, type: '2' }, user_type: '2' },
+      token: 'token',
+    } as any);
+
+    getAllInvoicesMock.mockResolvedValue([
+      {
+        id: 'inv-modal',
+        invoice_no: 'T-300',
+        contact_id: 'c-1',
+        sales_date: '2026-09-05',
+        status: InvoiceStatus.SENT,
+        items: [],
+      },
+    ]);
+
+    render(<InvoiceView />);
+    fireEvent.click(await screen.findByText('T-300'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Invoice Number' }));
+
+    expect(await screen.findByRole('heading', { name: 'Edit Invoice Number' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Edit invoice number value' })).toHaveValue('T-300');
+    expect(screen.queryByLabelText(/invoice date/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/reason to change number/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/tracking no/i)).not.toBeInTheDocument();
   });
 });
