@@ -227,6 +227,23 @@ export const getSalesOrderByInquiry = async (inquiryRefno: string): Promise<Sale
   }
 };
 
+export const updateSalesOrder = async (
+  id: string,
+  updates: Record<string, unknown>
+): Promise<SalesOrder | null> => {
+  const payload = {
+    main_id: API_MAIN_ID,
+    user_id: getUserContext().userId,
+    ...updates,
+  };
+  const data = await requestApi(`${API_BASE_URL}/sales-orders/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return mapApiOrderDetail(data);
+};
+
 export const confirmSalesOrder = async (id: string): Promise<SalesOrder | null> => {
   const existing = await getSalesOrder(id);
   if (!existing) throw new Error('Sales order not found');

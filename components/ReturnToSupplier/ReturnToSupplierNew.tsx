@@ -4,6 +4,12 @@ import { CreateReturnDTO, CreateReturnItemDTO, RRItemForReturn } from '../../ret
 import { returnToSupplierService } from '../../services/returnToSupplierService';
 import { parseSupabaseError } from '../../utils/errorHandler';
 import { useToast } from '../ToastProvider';
+import { canBackdatePosting, canPerformAction } from '../../utils/actionPermissions';
+import {
+  canMutateDocumentDateField,
+  localTodayYmd,
+  validateDocumentDateWrite,
+} from '../../utils/backdatedPosting';
 
 interface ReturnToSupplierNewProps {
     onClose: () => void;
@@ -12,6 +18,14 @@ interface ReturnToSupplierNewProps {
 
 const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSuccess }) => {
     const { addToast } = useToast();
+    const canAdd = canPerformAction('can_add');
+    const canEdit = canPerformAction('can_edit');
+    const hasBackdatedPosting = canBackdatePosting();
+    const canMutateDocDate = canMutateDocumentDateField({
+        canEdit: canAdd || canEdit,
+        hasBackdatedPosting,
+        isPosted: false,
+    });
     const [step, setStep] = useState<1 | 2>(1); // 1: Select RR, 2: Add Items
     const [loading, setLoading] = useState(false);
     const [rrSearch, setRrSearch] = useState('');
@@ -25,7 +39,7 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
         remarks: string;
         items: CreateReturnItemDTO[];
     }>({
-        return_date: new Date().toISOString().split('T')[0],
+        return_date: localTodayYmd(),
         remarks: '',
         items: []
     });
@@ -213,8 +227,25 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
         setLoading(true);
 
         try {
+            const resolvedReturnDate = canMutateDocDate ? formData.return_date : localTodayYmd();
+            const dateCheck = validateDocumentDateWrite({
+                hasBackdatedPosting,
+                proposedYmd: resolvedReturnDate,
+                todayYmd: localTodayYmd(),
+            });
+            if (!dateCheck.ok) {
+                addToast({
+                    type: 'error',
+                    title: 'Invalid document date',
+                    description: dateCheck.reason,
+                    durationMs: 6000,
+                });
+                setLoading(false);
+                return;
+            }
+
             const dto: CreateReturnDTO = {
-                return_date: formData.return_date,
+                return_date: resolvedReturnDate,
                 return_type: 'purchase',
                 rr_id: selectedRR.id,
                 rr_no: selectedRR.rr_no || selectedRR.rr_number || '',
@@ -359,8 +390,11 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
                                     <input
                                         type="date"
                                         value={formData.return_date}
+                                        max={localTodayYmd()}
+                                        disabled={!canMutateDocDate}
+                                        readOnly={!canMutateDocDate}
                                         onChange={(e) => setFormData({ ...formData, return_date: e.target.value })}
-                                        className="block w-full bg-white dark:bg-gray-800 border-none rounded px-2 py-1 mt-1 text-sm focus:ring-1 focus:ring-blue-500"
+                                        className="block w-full bg-white dark:bg-gray-800 border-none rounded px-2 py-1 mt-1 text-sm focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100"
                                     />
                                 </div>
                             </div>

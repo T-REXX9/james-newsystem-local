@@ -20,7 +20,8 @@ import DeleteCollectionReportModal from './DeleteCollectionReportModal';
 import ConfirmModal from './ConfirmModal';
 import { BUTTON_BASE, BUTTON_PRIMARY, BUTTON_SUCCESS } from '../utils/uiConstants';
 import { useDialogAccessibility } from '../hooks/useDialogAccessibility';
-import { canPerformAction } from '../utils/actionPermissions';
+import { canBackdatePosting, canPerformAction } from '../utils/actionPermissions';
+import { canMutateDocumentDateField, localTodayYmd, validateDocumentDateWrite } from '../utils/backdatedPosting';
 
 const COLLECTION_TAB_ID = 'accounting-transactions-daily-collection-entry';
 
@@ -134,6 +135,13 @@ const DailyCollectionEntryView: React.FC = () => {
   const canDelete = canPerformAction('can_delete');
   const canPost = canPerformAction('can_post');
   const canApprove = canPerformAction('can_approve');
+  const hasBackdatedPosting = canBackdatePosting();
+  const canMutateCollectionDates = canMutateDocumentDateField({
+    canEdit: canAdd || canEdit,
+    hasBackdatedPosting,
+    isPosted: false,
+  });
+  const collectionDateMax = localTodayYmd();
 
   const selectedAmount = useMemo(() => {
     return unpaidRows
@@ -635,6 +643,28 @@ const DailyCollectionEntryView: React.FC = () => {
       setError('Collection date is required');
       return;
     }
+    const collectCheck = validateDocumentDateWrite({
+      hasBackdatedPosting,
+      proposedYmd: form.collectDate,
+      previousYmd: null,
+      todayYmd: collectionDateMax,
+    });
+    if (!collectCheck.ok) {
+      setError(collectCheck.reason);
+      return;
+    }
+    if (form.checkDate) {
+      const checkDateCheck = validateDocumentDateWrite({
+        hasBackdatedPosting,
+        proposedYmd: form.checkDate,
+        previousYmd: null,
+        todayYmd: collectionDateMax,
+      });
+      if (!checkDateCheck.ok) {
+        setError(checkDateCheck.reason);
+        return;
+      }
+    }
 
     const transactions = unpaidRows
       .filter((row) => selectedTransactions[`${row.transactionType}:${row.lrefno}`])
@@ -648,16 +678,20 @@ const DailyCollectionEntryView: React.FC = () => {
     setSavingPayment(true);
     setError('');
     try {
+      const resolvedCollectDate = canMutateCollectionDates ? form.collectDate : collectionDateMax;
+      const resolvedCheckDate = form.checkDate
+        ? (canMutateCollectionDates ? form.checkDate : collectionDateMax)
+        : form.checkDate;
       await dailyCollectionService.addPayment(selectedRefno, {
         customerId: form.customerId,
         type: form.type,
         bank: form.bank,
         checkNo: form.checkNo,
-        checkDate: form.checkDate,
+        checkDate: resolvedCheckDate,
         amount,
         status: form.status,
         remarks: form.remarks,
-        collectDate: form.collectDate,
+        collectDate: resolvedCollectDate,
         transactions,
       });
       setForm((prev) => ({
@@ -997,6 +1031,8 @@ const DailyCollectionEntryView: React.FC = () => {
                           type="date"
                           className={INPUT_CLASS}
                           value={form.collectDate}
+                          max={collectionDateMax}
+                          disabled={!canMutateCollectionDates}
                           onChange={(e) => setForm((prev) => ({ ...prev, collectDate: e.target.value }))}
                         />
                       </div>
@@ -1222,6 +1258,8 @@ const DailyCollectionEntryView: React.FC = () => {
                               type="date"
                               className={INPUT_CLASS}
                               value={form.checkDate}
+                              max={collectionDateMax}
+                              disabled={!canMutateCollectionDates}
                               onChange={(e) => setForm((prev) => ({ ...prev, checkDate: e.target.value }))}
                             />
                           </td>

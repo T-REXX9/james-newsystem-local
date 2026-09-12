@@ -9,6 +9,12 @@ import { Product } from '../../types'; // Import from main types for compatibili
 import ValidationSummary from '../ValidationSummary';
 import FieldHelp from '../FieldHelp';
 import { validateNumeric, validateRequired, parseOptionalNumberInput } from '../../utils/formValidation';
+import { canBackdatePosting, canPerformAction } from '../../utils/actionPermissions';
+import {
+  canMutateDocumentDateField,
+  localTodayYmd,
+  validateDocumentDateWrite,
+} from '../../utils/backdatedPosting';
 
 interface ReceivingFormProps {
     onClose: () => void;
@@ -25,12 +31,20 @@ interface LineItem extends Omit<ReceivingReportItemInsert, 'rr_id'> {
 
 const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => {
     const { addToast } = useToast();
+    const canAdd = canPerformAction('can_add');
+    const canEdit = canPerformAction('can_edit');
+    const hasBackdatedPosting = canBackdatePosting();
+    const canMutateDocDate = canMutateDocumentDateField({
+        canEdit: canAdd || canEdit,
+        hasBackdatedPosting,
+        isPosted: false,
+    });
     const [loading, setLoading] = useState(false);
     const [initializing, setInitializing] = useState(true);
 
     // Form State
     const [rrNumber, setRrNumber] = useState('');
-    const [receiveDate, setReceiveDate] = useState(new Date().toISOString().split('T')[0]);
+    const [receiveDate, setReceiveDate] = useState(localTodayYmd());
     const [supplierId, setSupplierId] = useState('');
     const [supplierName, setSupplierName] = useState('');
     const [poNo, setPoNo] = useState('');
@@ -152,6 +166,17 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
             return;
         }
 
+        const resolvedReceiveDate = canMutateDocDate ? receiveDate : localTodayYmd();
+        const dateCheck = validateDocumentDateWrite({
+            hasBackdatedPosting,
+            proposedYmd: resolvedReceiveDate,
+            todayYmd: localTodayYmd(),
+        });
+        if (!dateCheck.ok) {
+            addToast({ type: 'error', title: 'Invalid document date', description: dateCheck.reason });
+            return;
+        }
+
         setLoading(true);
         try {
             const rrData: Omit<ReceivingReportInsert, 'rr_no' | 'grand_total' | 'status'> & {
@@ -159,7 +184,7 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                 status?: string;
             } = {
                 rr_no: rrNumber.trim() || null,
-                receive_date: receiveDate,
+                receive_date: resolvedReceiveDate,
                 supplier_id: supplierId,
                 supplier_name: supplierName,
                 po_no: poNo || null,
@@ -277,8 +302,11 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                                 <input
                                     type="date"
                                     value={receiveDate}
+                                    max={localTodayYmd()}
+                                    disabled={!canMutateDocDate}
+                                    readOnly={!canMutateDocDate}
                                     onChange={(e) => setReceiveDate(e.target.value)}
-                                    className="w-full pl-10 pr-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                    className="w-full pl-10 pr-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-slate-100"
                                 />
                             </div>
                         </div>

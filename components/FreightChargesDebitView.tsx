@@ -9,7 +9,8 @@ import { getAllOrderSlips } from '../services/orderSlipLocalApiService';
 import { Contact, Invoice, OrderSlip } from '../types';
 import { fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { useDebounce } from '../hooks/useDebounce';
-import { canPerformAction } from '../utils/actionPermissions';
+import { canBackdatePosting, canPerformAction } from '../utils/actionPermissions';
+import { canMutateDocumentDateField, localTodayYmd, validateDocumentDateWrite } from '../utils/backdatedPosting';
 import CustomerAutocomplete from './CustomerAutocomplete';
 import { formatDate } from '../utils/formatUtils';
 
@@ -227,6 +228,8 @@ const FreightChargesDebitView: React.FC = () => {
   const canDelete = canPerformAction('can_delete');
   const canPost = canPerformAction('can_post');
   const canUnpost = canPerformAction('can_unpost');
+  const hasBackdatedPosting = canBackdatePosting();
+  const dateMax = localTodayYmd();
 
   const fetchList = async () => {
     setLoadingList(true);
@@ -389,6 +392,11 @@ const FreightChargesDebitView: React.FC = () => {
   }, [contacts, form.customerId, selected]);
 
   const canEdit = (isCreating && canAdd) || (selected?.lstatus === 'Pending' && canEditPermission);
+  const canMutateDocDate = canMutateDocumentDateField({
+    canEdit,
+    hasBackdatedPosting,
+    isPosted: selected?.lstatus === 'Posted',
+  });
 
   const handleCreateMode = async () => {
     if (!canAdd) return;
@@ -417,6 +425,16 @@ const FreightChargesDebitView: React.FC = () => {
       setError('Customer, date, courier, and tracking no are required');
       return;
     }
+    const dateCheck = validateDocumentDateWrite({
+      hasBackdatedPosting,
+      proposedYmd: form.date,
+      previousYmd: null,
+      todayYmd: dateMax,
+    });
+    if (!dateCheck.ok) {
+      setError(dateCheck.reason);
+      return;
+    }
     if (!form.isFreightCollect && !(Number(form.amount) >= 0)) {
       setError('Amount must be zero or higher');
       return;
@@ -425,9 +443,10 @@ const FreightChargesDebitView: React.FC = () => {
     setSaving(true);
     setError('');
     try {
+      const resolvedDate = canMutateDocDate ? form.date : dateMax;
       const created = await freightChargesService.create({
         customerId: form.customerId,
-        date: form.date,
+        date: resolvedDate,
         courierName: form.courierName.trim(),
         trackingNo: form.trackingNo.trim(),
         amount: Number(form.amount || 0),
@@ -453,6 +472,16 @@ const FreightChargesDebitView: React.FC = () => {
     if (!canEditPermission || !selected) return;
     if (!form.customerId || !form.date || !form.courierName.trim() || !form.trackingNo.trim()) {
       setError('Customer, date, courier, and tracking no are required');
+      return;
+    }
+    const dateCheck = validateDocumentDateWrite({
+      hasBackdatedPosting,
+      proposedYmd: form.date,
+      previousYmd: selected.ldate ? toDateInput(selected.ldate) : null,
+      todayYmd: dateMax,
+    });
+    if (!dateCheck.ok) {
+      setError(dateCheck.reason);
       return;
     }
 
@@ -694,7 +723,7 @@ const FreightChargesDebitView: React.FC = () => {
                     </td>
                     <td className={labelCellClass}>Date :</td>
                     <td className={valueCellClass}>
-                      {canEdit ? <input type="date" value={form.date} onChange={(event) => setForm((prev) => ({ ...prev, date: event.target.value }))} className={fieldClass} /> : formatShortDate(selected?.ldate)}
+                      {canMutateDocDate ? <input type="date" value={form.date} max={dateMax} onChange={(event) => setForm((prev) => ({ ...prev, date: event.target.value }))} className={fieldClass} /> : formatShortDate(selected?.ldate || form.date)}
                     </td>
                   </tr>
                   <tr>

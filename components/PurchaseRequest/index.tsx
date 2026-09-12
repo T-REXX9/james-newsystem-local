@@ -20,7 +20,7 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [requests, setRequests] = useState<PurchaseRequestWithItems[]>([]);
   const [loading, setLoading] = useState(true);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Contact[]>([]);
   const [selectedRequest, setSelectedRequest] = useState<PurchaseRequestWithItems | null>(null);
   const [nextPRNumber, setNextPRNumber] = useState('');
@@ -64,16 +64,6 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
     void purchaseRequestService.getSuppliers().then(data => setSuppliers(data as unknown as Contact[])).catch(error => console.error('Failed to fetch suppliers', error));
   }, []);
 
-  const ensureProductsLoaded = async () => {
-    if (products.length > 0) return;
-    try {
-      const fetchedProducts = await purchaseRequestService.getProducts();
-      setProducts(fetchedProducts as unknown as Product[]);
-    } catch (error) {
-      console.error('Failed to fetch products', error);
-    }
-  };
-
   useEffect(() => {
     const target = String(initialPRId || '').trim();
     if (!target) return;
@@ -82,10 +72,8 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
     setDeepLinkLoading(true);
     setDeepLinkError('');
 
-    // Product lookup is useful for editing, but it must not block the requested
-    // PR from appearing. Load both concurrently and show the PR as soon as its
-    // own detail request finishes.
-    void ensureProductsLoaded();
+    // ProductAutocomplete searches on demand — never block opening the PR on
+    // a full catalog pagination.
     void purchaseRequestService.getPurchaseRequestById(target).then(request => {
       if (cancelled || deepLinkRequestRef.current !== requestId) return;
       setSelectedRequest(request);
@@ -123,13 +111,15 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
     setRequests(current => [newPR, ...current.filter(request => request.id !== newPR.id)]);
     setSelectedRequest(newPR);
     setViewMode('detail');
-    await Promise.all([fetchRequests(), ensureProductsLoaded()]);
+    await fetchRequests();
   };
 
   const handleSelectRequest = async (request: PurchaseRequestWithItems) => {
     setDetailLoading(true);
     try {
-      const [fullPR] = await Promise.all([purchaseRequestService.getPurchaseRequestById(request.id), ensureProductsLoaded()]);
+      // ProductAutocomplete searches the API on demand; do not block detail open
+      // on paginating the full product catalog.
+      const fullPR = await purchaseRequestService.getPurchaseRequestById(request.id);
       setSelectedRequest(fullPR);
       setViewMode('detail');
     } catch (error) {

@@ -75,7 +75,8 @@ import {
   resolveNotificationUserId,
 } from '../services/notificationLocalApiService';
 import { PageHeader, RecordTrustStrip, WorkflowGuidance } from './common/PageScaffold';
-import { canPerformAction } from '../utils/actionPermissions';
+import { canBackdatePosting, canPerformAction } from '../utils/actionPermissions';
+import { canMutateDocumentDateField, localTodayYmd, validateDocumentDateWrite } from '../utils/backdatedPosting';
 
 interface InquiryItemRow extends Omit<SalesInquiryItem, 'id' | 'inquiry_id' | 'qty' | 'unit_price'> {
   qty: number | '';
@@ -190,6 +191,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   const canDelete = canPerformAction('can_delete');
   const canApprove = canPerformAction('can_approve');
   const canEditUnitPrice = canPerformAction('can_edit_unit_price', 'Sales Inquiry');
+  const canBackdate = canBackdatePosting();
   const lastAppliedPrefillRef = React.useRef<string | null>(null);
   const salesInquiryExportRef = React.useRef<HTMLElement | null>(null);
   const customerSelectionDirtyRef = React.useRef(false);
@@ -1216,6 +1218,16 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     if (!customerCheck.isValid) errors.customer = customerCheck.message;
     const dateCheck = validateRequired(salesDate, 'a sales date');
     if (!dateCheck.isValid) errors.salesDate = dateCheck.message;
+    else {
+      const previousSalesDate = selectedInquiry?.sales_date ? String(selectedInquiry.sales_date).slice(0, 10) : null;
+      const backdateCheck = validateDocumentDateWrite({
+        hasBackdatedPosting: canBackdate,
+        proposedYmd: salesDate,
+        previousYmd: isCreatingNew ? null : previousSalesDate,
+        todayYmd: salesDateMax,
+      });
+      if (!backdateCheck.ok) errors.salesDate = backdateCheck.reason;
+    }
     const timeCheck = validateRequired(salesTime, 'a sales time');
     if (!timeCheck.isValid) errors.salesTime = timeCheck.message;
     if (items.length === 0) {
@@ -1412,6 +1424,20 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   const isConversionLocked = Boolean(selectedInquiry && !isCreatingNew && selectedInquiry.is_editable === false);
   const isReadOnly = selectedInquiry?.status === SalesInquiryStatus.CANCELLED || isConversionLocked || (isCreatingNew ? !canAdd : !canEdit);
   const canWriteInquiry = isCreatingNew ? canAdd : canEdit;
+  const isInquiryPostedLike = Boolean(
+    selectedInquiry
+    && (
+      selectedInquiry.status === SalesInquiryStatus.CONVERTED_TO_ORDER
+      || selectedInquiry.status === SalesInquiryStatus.CANCELLED
+      || isConversionLocked
+    )
+  );
+  const canEditSalesDate = canMutateDocumentDateField({
+    canEdit: canWriteInquiry && !isReadOnly,
+    hasBackdatedPosting: canBackdate,
+    isPosted: isInquiryPostedLike,
+  });
+  const salesDateMax = localTodayYmd();
   const handlePrint = () => {
     if (!printableInquiry) return;
     setJpegCaptureMode(false);
@@ -1705,7 +1731,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
             <table className="w-full border-separate border-spacing-y-[9px] text-[13px]">
               <tbody>
-                <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[15%_31%_9%_10%_9%_9%_8%_9%]"><label className={legacyLabelClass}>Sold to :</label><div className="pl-3"><CustomerAutocomplete contacts={customers} selectedCustomer={selectedCustomer} disabled={isReadOnly} onSelect={(customer) => handleCustomerSelect(customer)} placeholder="Select Customer" inputClassName={`h-[34px] rounded-[4px] border-[#c9c9c9] bg-white text-center text-[13px] ${validationErrors.customer ? 'border-red-400' : ''}`} /></div><label className={legacyLabelClass}>Date :</label><div className="pl-2"><input type="date" required disabled={isReadOnly} value={salesDate} onChange={(event) => setSalesDate(event.target.value)} className={legacyInputClass} /></div><label className={legacyLabelClass}>Time :</label><div className="pl-2"><input type="time" required disabled={isReadOnly} value={salesTime} onChange={(event) => setSalesTime(event.target.value)} className={legacyInputClass} /></div><label className={legacyLabelClass}>Sales Person:</label><div className="pl-2"><input type="text" disabled={isReadOnly} value={salesPerson} onChange={(event) => setSalesPerson(event.target.value)} className={legacyInputClass} /></div></div></td></tr>
+                <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[15%_31%_9%_10%_9%_9%_8%_9%]"><label className={legacyLabelClass}>Sold to :</label><div className="pl-3"><CustomerAutocomplete contacts={customers} selectedCustomer={selectedCustomer} disabled={isReadOnly} onSelect={(customer) => handleCustomerSelect(customer)} placeholder="Select Customer" inputClassName={`h-[34px] rounded-[4px] border-[#c9c9c9] bg-white text-center text-[13px] ${validationErrors.customer ? 'border-red-400' : ''}`} /></div><label className={legacyLabelClass}>Date :</label><div className="pl-2"><input type="date" required disabled={isReadOnly || !canEditSalesDate} max={salesDateMax} value={salesDate} onChange={(event) => setSalesDate(event.target.value)} className={legacyInputClass} /></div><label className={legacyLabelClass}>Time :</label><div className="pl-2"><input type="time" required disabled={isReadOnly} value={salesTime} onChange={(event) => setSalesTime(event.target.value)} className={legacyInputClass} /></div><label className={legacyLabelClass}>Sales Person:</label><div className="pl-2"><input type="text" disabled={isReadOnly} value={salesPerson} onChange={(event) => setSalesPerson(event.target.value)} className={legacyInputClass} /></div></div></td></tr>
                 <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[17%_40%_10.5%_10.5%_9.5%_12.5%]"><label className={legacyLabelClass}>Delivery Address :</label><div className="pl-3"><input type="text" disabled={isReadOnly} value={deliveryAddress} onChange={(event) => setDeliveryAddress(event.target.value)} className={legacyInputClass} /></div><label className={legacyLabelClass}>Our Reference:</label><div className="pl-2"><input type="text" readOnly value={activeInquiryReferenceNo} className={legacyInputClass} /></div><label className={legacyLabelClass}>Your Reference:</label><div className="pl-2"><select disabled={isReadOnly || !selectedCustomer} value={customerReference} onChange={(event) => setCustomerReference(event.target.value)} className={legacyInputClass}><option value="">Select reference</option>{customerReferenceOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div></div></td></tr>
                 <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[12%_20%_10%_19%_10%_11%_9%_9%]"><label className={legacyLabelClass}>Send By:</label><div className="pl-3"><SearchableSelect value={sendBy} options={courierOptions.map((option) => ({ value: option.name, label: option.name }))} onChange={setSendBy} placeholder="Select..." searchPlaceholder="Search courier..." disabled={isReadOnly} /></div><label className={legacyLabelClass}>Price Code:</label><div className="pl-2"><select disabled={isReadOnly || !selectedCustomer} value={priceGroup} onChange={(event) => void handlePriceGroupChange(event.target.value)} className={legacyInputClass}>{!selectedCustomer && <option value="">Select</option>}{WRITABLE_PRICING_GROUP_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div><label className={legacyLabelClass}>Credit Limit:</label><div className="pl-2"><input type="text" readOnly value={creditLimit ? creditLimit.toLocaleString('en-US', { minimumFractionDigits: 2 }) : ''} className={legacyInputClass} /></div><label className={legacyLabelClass}>Terms Strictly:</label><div className="pl-2"><input type="text" readOnly value={terms} className={legacyInputClass} /></div></div></td></tr>
                 <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[17%_63%_10%_10%]"><label className={legacyLabelClass}>Promise to Pay:</label><div className="pl-3"><input type="text" disabled={isReadOnly} value={promiseToPay} onChange={(event) => setPromiseToPay(event.target.value)} placeholder="if applicable" className={legacyInputClass} /></div><label className={legacyLabelClass}>PO No.:</label><div className="pl-2"><input type="text" disabled={isReadOnly} value={poNumber} onChange={(event) => setPoNumber(event.target.value)} placeholder="if applicable" className={legacyInputClass} /></div></div></td></tr>
@@ -2134,10 +2160,11 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                         <input
                           type="date"
                           required
-                          disabled={isReadOnly}
+                          disabled={isReadOnly || !canEditSalesDate}
+                          max={salesDateMax}
                           value={salesDate}
                           onChange={(e) => setSalesDate(e.target.value)}
-                          className={`w-full px-2 py-1.5 border rounded bg-white dark:bg-slate-800 text-sm ${validationErrors.salesDate ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'} ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          className={`w-full px-2 py-1.5 border rounded bg-white dark:bg-slate-800 text-sm ${validationErrors.salesDate ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'} ${isReadOnly || !canEditSalesDate ? 'opacity-60 cursor-not-allowed' : ''}`}
                         />
                         <input
                           type="time"

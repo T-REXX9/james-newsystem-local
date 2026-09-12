@@ -22,6 +22,7 @@ import {
   syncDocumentPolicyState,
   getAllSalesOrders,
   unpostSalesOrder,
+  updateSalesOrder,
 } from '../services/salesOrderLocalApiService';
 import { fetchContactById, fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { getLocalAuthSession } from '../services/localAuthService';
@@ -43,7 +44,13 @@ import { persistedVipDiscount } from '../utils/vipDocumentDiscount';
 import { DISPLAY_TIME_ZONE, formatCustomerSince, formatDate as formatDisplayDate } from '../utils/formatUtils';
 import VipDocumentTotals from './VipDocumentTotals';
 import VipStandingBadge from './VipStandingBadge';
-import { canPerformAction } from '../utils/actionPermissions';
+import { cascadeSalesDocumentDate } from '../services/salesDocumentDateService';
+import { canBackdatePosting, canPerformAction } from '../utils/actionPermissions';
+import {
+  canMutateDocumentDateField,
+  localTodayYmd,
+  validateDocumentDateWrite,
+} from '../utils/backdatedPosting';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
 import { buildSalesInquiryCustomerSummary } from '../utils/salesInquirySummary';
@@ -113,10 +120,13 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
   const canEdit = canPerformAction('can_edit');
   const canDelete = canPerformAction('can_delete');
   const canUnpost = canPerformAction('can_unpost');
+  const hasBackdatedPosting = canBackdatePosting();
   const { addToast } = useToast();
   const userId = String(getLocalAuthSession()?.userProfile?.id || '').trim();
   const salesOrderExportRef = React.useRef<HTMLElement | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null);
+  const [salesDateDraft, setSalesDateDraft] = useState(localTodayYmd());
+  const [savingSalesDate, setSavingSalesDate] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'all' | string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [dateRange, setDateRange] = useState<{ from: string; to: string }>(() => {
@@ -692,6 +702,55 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
 
   const workflowStage = normalizeStatus(selectedOrder?.status) === 'posted' ? 'document' : 'order';
   const selectedOrderStatus = normalizeStatus(selectedOrder?.status);
+  const canMutateSalesDate = canMutateDocumentDateField({
+    canEdit,
+    hasBackdatedPosting,
+    isPosted: selectedOrderStatus === 'posted' || selectedOrderStatus === 'cancelled' || selectedOrder?.is_editable === false,
+  });
+
+  useEffect(() => {
+    setSalesDateDraft((selectedOrder?.sales_date || '').slice(0, 10) || localTodayYmd());
+  }, [selectedOrder?.id, selectedOrder?.sales_date]);
+
+  const handleSaveSalesDate = async () => {
+    if (!selectedOrder || !canMutateSalesDate) return;
+    const dateCheck = validateDocumentDateWrite({
+      hasBackdatedPosting,
+      proposedYmd: salesDateDraft,
+      previousYmd: selectedOrder.sales_date,
+      todayYmd: localTodayYmd(),
+    });
+    if (!dateCheck.ok) {
+      addToast({ type: 'error', title: 'Invalid document date', description: dateCheck.reason });
+      return;
+    }
+    setSavingSalesDate(true);
+    try {
+      await cascadeSalesDocumentDate({
+        sales_date: salesDateDraft,
+        sales_order_refno: selectedOrder.id,
+        inquiry_refno: selectedOrder.inquiry_id || undefined,
+      });
+      const updated = await updateSalesOrder(selectedOrder.id, {});
+      if (updated) {
+        setSelectedOrder({ ...updated, sales_date: salesDateDraft });
+        setOrders((prev) => prev.map((row) => (row.id === selectedOrder.id ? { ...row, sales_date: salesDateDraft } : row)));
+      } else {
+        setSelectedOrder((prev) => (prev ? { ...prev, sales_date: salesDateDraft } : prev));
+        setOrders((prev) => prev.map((row) => (row.id === selectedOrder.id ? { ...row, sales_date: salesDateDraft } : row)));
+      }
+      addToast({ type: 'success', title: 'Sales date updated' });
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: 'Unable to update sales date',
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    } finally {
+      setSavingSalesDate(false);
+    }
+  };
+
   const canGenerate = ['pending', 'submitted', 'approved'].includes(selectedOrderStatus);
   const nextStepGuidance = (() => {
     if (!selectedOrder) {
@@ -978,7 +1037,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
             <div className="space-y-[9px]">
               <div className="grid grid-cols-[5%_38%_11%_18%_10%_18%] items-center">
                 <label className={legacyLabelClass}>Sold to :</label><div className="pl-3"><input readOnly value={selectedOrder ? selectedCustomerLabel : ''} placeholder="Select Customer" className={`${legacyInputClass} text-center`} /></div>
-                <label className={legacyLabelClass}>Date :</label><div className="pl-2"><input readOnly value={legacyListDate(selectedOrder?.sales_date)} className={legacyInputClass} /></div>
+                <label className={legacyLabelClass}>Date :</label><div className="pl-2 flex items-center gap-1">{canMutateSalesDate ? (<><input type="date" value={salesDateDraft} max={localTodayYmd()} onChange={(event) => setSalesDateDraft(event.target.value)} className={legacyInputClass} /><button type="button" onClick={() => void handleSaveSalesDate()} disabled={savingSalesDate || salesDateDraft === (selectedOrder?.sales_date || '').slice(0, 10)} className="rounded bg-[#5d82a2] px-2 py-1 text-[11px] text-white disabled:opacity-50">{savingSalesDate ? '...' : 'Save'}</button></>) : (<input readOnly value={legacyListDate(selectedOrder?.sales_date)} className={legacyInputClass} />)}</div>
                 <label className={legacyLabelClass}>Terms Strictly:</label><div className="pl-2"><input readOnly value={selectedOrder?.terms || selectedCustomer?.terms || ''} className={legacyInputClass} /></div>
               </div>
               <div className="grid grid-cols-[7%_36%_11%_18%_10%_18%] items-center">
@@ -1357,7 +1416,29 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                         </div>
                       </td>
                       <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Date:</td>
-                      <td><input readOnly value={formatDisplayDate(selectedOrder.sales_date)} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                      <td>
+                        {canMutateSalesDate ? (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="date"
+                              value={salesDateDraft}
+                              max={localTodayYmd()}
+                              onChange={(event) => setSalesDateDraft(event.target.value)}
+                              className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => void handleSaveSalesDate()}
+                              disabled={savingSalesDate || salesDateDraft === (selectedOrder.sales_date || '').slice(0, 10)}
+                              className="shrink-0 rounded bg-[#5d82a2] px-2 py-1.5 text-xs text-white disabled:opacity-50"
+                            >
+                              {savingSalesDate ? '...' : 'Save'}
+                            </button>
+                          </div>
+                        ) : (
+                          <input readOnly value={formatDisplayDate(selectedOrder.sales_date)} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" />
+                        )}
+                      </td>
                       <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Sales Person:</td>
                       <td><input readOnly value={selectedOrder.sales_person || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
                     </tr>

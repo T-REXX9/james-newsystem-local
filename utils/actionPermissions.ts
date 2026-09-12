@@ -1,6 +1,7 @@
 import { hasActionPermission, type ActionPermissionName } from '../constants';
 import { getLocalAuthSession } from '../services/localAuthService';
 import { ACCESS_MODULES, getAccessPageLabel } from './accessModules';
+import { hasBackdatedPostingPermission } from './backdatedPosting';
 
 const getCurrentPageLabel = (): string | undefined => {
   if (typeof window === 'undefined') return undefined;
@@ -19,3 +20,7 @@ export const canViewPage = (pageId: string): boolean => {
   const pageLabel = getAccessPageLabel(pageId);
   return hasActionPermission(getLocalAuthSession()?.userProfile, 'can_view', pageLabel);
 };
+
+/** Account-wide Backdated posting for the signed-in staff account. */
+export const canBackdatePosting = (): boolean =>
+  hasBackdatedPostingPermission(getLocalAuthSession()?.userProfile);

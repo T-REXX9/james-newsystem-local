@@ -4,7 +4,12 @@ import { returnToSupplierService } from '../../services/returnToSupplierService'
 import { Send, Printer, RotateCcw, Save, Trash2 } from 'lucide-react';
 import ConfirmModal from '../ConfirmModal';
 import { useToast } from '../ToastProvider';
-import { canPerformAction } from '../../utils/actionPermissions';
+import { canBackdatePosting, canPerformAction } from '../../utils/actionPermissions';
+import {
+  canMutateDocumentDateField,
+  localTodayYmd,
+  validateDocumentDateWrite,
+} from '../../utils/backdatedPosting';
 
 interface ReturnToSupplierViewProps {
     returnRecord: SupplierReturn;
@@ -17,6 +22,7 @@ const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecor
     const canDelete = canPerformAction('can_delete');
     const canPost = canPerformAction('can_post');
     const canUnpost = canPerformAction('can_unpost');
+    const hasBackdatedPosting = canBackdatePosting();
     const [items, setItems] = useState<SupplierReturnItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [processing, setProcessing] = useState(false);
@@ -58,6 +64,11 @@ const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecor
 
     const isPosted = returnRecord.status === 'Posted';
     const isEditable = returnRecord.status === 'Pending';
+    const canMutateDocDate = canMutateDocumentDateField({
+        canEdit,
+        hasBackdatedPosting,
+        isPosted,
+    });
 
     const headerChanged =
         draftHeader.return_date !== (returnRecord.return_date?.slice(0, 10) || '') ||
@@ -78,7 +89,23 @@ const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecor
     const persistChanges = async () => {
         if (!canEdit) return;
         if (headerChanged) {
-            await returnToSupplierService.updateReturn(returnRecord.id, draftHeader);
+            const nextReturnDate = canMutateDocDate
+                ? draftHeader.return_date
+                : (returnRecord.return_date?.slice(0, 10) || localTodayYmd());
+            const dateCheck = validateDocumentDateWrite({
+                hasBackdatedPosting,
+                proposedYmd: nextReturnDate,
+                previousYmd: returnRecord.return_date,
+                todayYmd: localTodayYmd(),
+            });
+            if (!dateCheck.ok) {
+                addToast({ type: 'error', title: 'Invalid document date', description: dateCheck.reason });
+                throw new Error(dateCheck.reason);
+            }
+            await returnToSupplierService.updateReturn(returnRecord.id, {
+                ...draftHeader,
+                return_date: nextReturnDate,
+            });
         }
 
         const deletedItems = items.filter((item) => !draftItems.some((draft) => draft.id === item.id));
@@ -264,11 +291,13 @@ const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecor
                     <div className="grid grid-cols-[100px_1fr] items-center gap-4">
                         <span className="text-sm font-bold text-slate-500">Date <span className="text-rose-500">*</span></span>
                         <input
-                            type={isEditable ? 'date' : 'text'}
+                            type={canMutateDocDate || isEditable ? 'date' : 'text'}
                             value={isEditable ? draftHeader.return_date : new Date(returnRecord.return_date).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase()}
-                            disabled={!isEditable}
+                            disabled={!canMutateDocDate}
+                            max={canMutateDocDate ? localTodayYmd() : undefined}
+                            readOnly={!canMutateDocDate}
                             onChange={(event) => setDraftHeader((current) => ({ ...current, return_date: event.target.value }))}
-                            className={`h-10 w-full rounded-md border px-3 text-sm font-semibold text-slate-700 ${isEditable ? 'border-slate-300 bg-white' : 'border-slate-200 bg-slate-50'}`}
+                            className={`h-10 w-full rounded-md border px-3 text-sm font-semibold text-slate-700 ${canMutateDocDate ? 'border-slate-300 bg-white' : 'border-slate-200 bg-slate-50'}`}
                         />
                     </div>
                     <div className="grid grid-cols-[100px_1fr] items-center gap-4">

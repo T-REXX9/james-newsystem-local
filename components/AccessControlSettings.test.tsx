@@ -244,6 +244,34 @@ describe('AccessControlSettings - create staff account', () => {
     })));
   });
 
+  it('persists account-wide Backdated posting on Save', async () => {
+    const user = userEvent.setup();
+    const salesPages = expandAccessModule('sales');
+    fetchProfilesMock.mockResolvedValue({
+      items: [{
+        id: '2',
+        full_name: 'melson',
+        email: 'melson@example.com',
+        role: 'Sales Agent',
+        access_rights: salesPages,
+        group_id: '2',
+      }],
+      meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
+    });
+    updateProfileMock.mockResolvedValue({ id: '2', full_name: 'melson' });
+
+    renderWithProviders(<AccessControlSettings />);
+
+    await user.click(await screen.findByRole('checkbox', { name: 'Backdated posting for melson' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(updateProfileMock).toHaveBeenCalledWith('2', expect.objectContaining({
+      action_permissions: expect.objectContaining({
+        can_backdate: true,
+      }),
+    })));
+  });
+
   it('persists all six module toggles as complete page sets after reload', async () => {
     const user = userEvent.setup();
     let persistedRights: string[] = [];

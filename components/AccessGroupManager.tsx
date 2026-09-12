@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, FolderPlus, Lock, Save, Trash2, Users } from 'lucide-react';
 import { DEFAULT_ACTION_PERMISSIONS, getPageActionPermissions, MODULE_ID_ALIASES, setPageActionPermission, isCoreAccessGroupName } from '../constants';
 import { ACCESS_MODULES, getAccessModuleState, toggleAccessModule, toggleAccessPage } from '../utils/accessModules';
+import { hasBackdatedPostingPermission, setBackdatedPostingPermission } from '../utils/backdatedPosting';
 import { AccessGroup } from '../types';
 import ConfirmModal from './ConfirmModal';
 
@@ -283,6 +284,15 @@ const AccessGroupManager: React.FC<AccessGroupManagerProps> = ({
             </div>
 
             <div className="space-y-4">
+              <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={hasBackdatedPostingPermission({ action_permissions: draftActionPermissions })}
+                  aria-label="Backdated posting"
+                  onChange={(event) => setDraftActionPermissions((current) => setBackdatedPostingPermission(current, event.target.checked))}
+                />
+                Backdated posting
+              </label>
               {ACCESS_MODULES.map((module) => {
                 const state = getAccessModuleState(module.id, draftRights);
                 return (

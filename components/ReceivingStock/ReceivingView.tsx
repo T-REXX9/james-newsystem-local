@@ -14,7 +14,12 @@ import CustomLoadingSpinner from '../CustomLoadingSpinner';
 import RecoveryReasonModal from '../RecoveryReasonModal';
 import ModuleRecordLink from '../ModuleRecordLink';
 import ProcurementDocumentBanner from '../ProcurementDocumentBanner';
-import { canPerformAction } from '../../utils/actionPermissions';
+import { canBackdatePosting, canPerformAction } from '../../utils/actionPermissions';
+import {
+  canMutateDocumentDateField,
+  localTodayYmd,
+  validateDocumentDateWrite,
+} from '../../utils/backdatedPosting';
 import { formatDate, formatDateTime } from '../../utils/formatUtils';
 
 interface ReceivingViewProps {
@@ -79,6 +84,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
     const canDelete = canPerformAction('can_delete');
     const canPost = canPerformAction('can_post');
     const canUnpost = canPerformAction('can_unpost');
+    const hasBackdatedPosting = canBackdatePosting();
     const [loading, setLoading] = useState(true);
     const [rr, setRr] = useState<ReceivingReportWithDetails | null>(null);
     const [finalizing, setFinalizing] = useState(false);
@@ -87,12 +93,15 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
     const [showHistory, setShowHistory] = useState(false);
     const [recoveryAction, setRecoveryAction] = useState<'unpost' | 'delete' | null>(null);
     const [lineDrafts, setLineDrafts] = useState<Record<string, LineDraft>>({});
+    const [receiveDateDraft, setReceiveDateDraft] = useState(localTodayYmd());
+    const [savingReceiveDate, setSavingReceiveDate] = useState(false);
 
     const fetchRR = async () => {
         setLoading(true);
         try {
             const data = await receivingService.getReceivingReportById(rrId);
             setRr(data);
+            setReceiveDateDraft((data.receive_date || '').slice(0, 10) || localTodayYmd());
             setLineDrafts(seedLineDrafts(data.items));
         } catch (error) {
             console.error("Error fetching RR:", error);
@@ -169,6 +178,35 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
     };
 
     const canEditItems = canEdit && ['Draft', 'Pending', 'Unposted'].includes(rr?.status || '');
+    const canMutateDocDate = canMutateDocumentDateField({
+        canEdit,
+        hasBackdatedPosting,
+        isPosted: !['Draft', 'Pending', 'Unposted'].includes(rr?.status || ''),
+    });
+
+    const saveReceiveDate = async () => {
+        if (!rr || !canMutateDocDate) return;
+        const dateCheck = validateDocumentDateWrite({
+            hasBackdatedPosting,
+            proposedYmd: receiveDateDraft,
+            previousYmd: rr.receive_date,
+            todayYmd: localTodayYmd(),
+        });
+        if (!dateCheck.ok) {
+            addToast({ type: 'error', title: 'Invalid document date', description: dateCheck.reason });
+            return;
+        }
+        setSavingReceiveDate(true);
+        try {
+            await receivingService.updateReceivingReport(rr.id, { receive_date: receiveDateDraft });
+            addToast({ type: 'success', title: 'Receive date updated' });
+            await fetchRR();
+        } catch (error: any) {
+            addToast({ type: 'error', title: 'Unable to update date', description: error?.message || 'Please try again.' });
+        } finally {
+            setSavingReceiveDate(false);
+        }
+    };
 
     const updateLineQty = (itemId: string, value: number | '') => {
         setLineDrafts((current) => ({
@@ -269,6 +307,32 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                     rr={{ number: rr.rr_no, date: rr.receive_date, id: rr.id }}
                     etaDate={etaDate}
                 />
+
+                <div className="mb-5 flex flex-wrap items-center gap-2 text-sm">
+                    <span className="font-bold text-slate-500">Receive Date</span>
+                    {canMutateDocDate ? (
+                        <>
+                            <input
+                                type="date"
+                                aria-label="Receive date"
+                                value={receiveDateDraft}
+                                max={localTodayYmd()}
+                                onChange={(event) => setReceiveDateDraft(event.target.value)}
+                                className="h-9 rounded border border-slate-300 px-2 font-semibold text-slate-700"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => void saveReceiveDate()}
+                                disabled={savingReceiveDate || receiveDateDraft === (rr.receive_date || '').slice(0, 10)}
+                                className="rounded border border-blue-200 px-3 py-1.5 text-xs font-bold text-[#175fd3] hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                {savingReceiveDate ? 'Saving...' : 'Save date'}
+                            </button>
+                        </>
+                    ) : (
+                        <span className="font-semibold text-slate-700">{formatDate(rr.receive_date)}</span>
+                    )}
+                </div>
 
                 <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-slate-800">Items Received</h3>
 

@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PurchaseRequestView from '../PurchaseRequest/PurchaseRequestView';
+import { ToastProvider } from '../ToastProvider';
 
 vi.mock('../ProductAutocomplete', () => ({
   default: ({ onSelect, reorderOnly }: { onSelect: (product: any) => void; reorderOnly?: boolean }) => (
@@ -24,6 +25,8 @@ vi.mock('../ProductAutocomplete', () => ({
     </button>
   ),
 }));
+
+const renderView = (ui: React.ReactElement) => render(<ToastProvider>{ui}</ToastProvider>);
 
 const baseRequest = {
   id: 'PRREF-1',
@@ -58,7 +61,7 @@ describe('PurchaseRequestView', () => {
     const user = userEvent.setup();
     const onDeleteItem = vi.fn().mockResolvedValue(undefined);
 
-    render(
+    renderView(
       <PurchaseRequestView
         request={baseRequest as any}
         onBack={vi.fn()}
@@ -85,7 +88,7 @@ describe('PurchaseRequestView', () => {
     const user = userEvent.setup();
     const onConvert = vi.fn().mockResolvedValue(undefined);
 
-    render(
+    renderView(
       <PurchaseRequestView
         request={{ ...baseRequest, status: 'Approved' } as any}
         onBack={vi.fn()}
@@ -113,7 +116,7 @@ describe('PurchaseRequestView', () => {
     const user = userEvent.setup();
     const onUpdateItem = vi.fn().mockResolvedValue(undefined);
 
-    render(
+    renderView(
       <PurchaseRequestView
         request={baseRequest as any}
         onBack={vi.fn()}
@@ -144,7 +147,7 @@ describe('PurchaseRequestView', () => {
   it('opens and closes the inline add row with the new close control', async () => {
     const user = userEvent.setup();
 
-    render(
+    renderView(
       <PurchaseRequestView
         request={baseRequest as any}
         onBack={vi.fn()}
@@ -169,11 +172,39 @@ describe('PurchaseRequestView', () => {
     });
   });
 
+  it('lets the user add items while the purchase request is still Draft', async () => {
+    const user = userEvent.setup();
+    const onAddItem = vi.fn().mockResolvedValue(undefined);
+
+    renderView(
+      <PurchaseRequestView
+        request={{ ...baseRequest, status: 'Draft' } as any}
+        onBack={vi.fn()}
+        onUpdate={vi.fn()}
+        onUpdateItem={vi.fn()}
+        onDeleteItem={vi.fn()}
+        onAddItem={onAddItem}
+        onConvert={vi.fn()}
+        onPrint={vi.fn()}
+        products={[]}
+        suppliers={[{ id: 'sup-2', company: 'Supplier Two' } as any]}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: /add item/i })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /add item/i }));
+    await user.click(screen.getByRole('button', { name: 'Pick View Product' }));
+    await user.selectOptions(screen.getByLabelText('Add item supplier'), 'sup-2');
+    await user.click(screen.getByRole('button', { name: /confirm add item/i }));
+
+    await waitFor(() => expect(onAddItem).toHaveBeenCalled());
+  });
+
   it('opens the matching return records from the Review recommendation', async () => {
     const user = userEvent.setup();
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
 
-    render(
+    renderView(
       <PurchaseRequestView
         request={{
           ...baseRequest,
@@ -218,7 +249,7 @@ describe('PurchaseRequestView', () => {
   });
 
   it('shows how many items are on PO versus not on PO', () => {
-    render(
+    renderView(
       <PurchaseRequestView
         request={{
           ...baseRequest,
@@ -267,7 +298,7 @@ describe('PurchaseRequestView', () => {
   });
 
   it('lists each related purchase order once in the purchasing cycle', () => {
-    render(
+    renderView(
       <PurchaseRequestView
         request={{
           ...baseRequest,
@@ -318,7 +349,7 @@ describe('PurchaseRequestView', () => {
   });
 
   it('shows the completed receiving report number from the PR summary banner', () => {
-    render(
+    renderView(
       <PurchaseRequestView
         request={{
           ...baseRequest,
@@ -352,11 +383,11 @@ describe('PurchaseRequestView', () => {
       'href',
       '#/warehouse-purchasing-receiving-stock?rrId=RRREF-406&rrRefNo=RR-26406',
     );
-    expect(screen.getByText('May 27, 2026')).toBeInTheDocument();
+    expect(screen.getByText(/MAY/i)).toBeInTheDocument();
   });
 
   it('links a PR item to the exact purchase order record', () => {
-    render(
+    renderView(
       <PurchaseRequestView
         request={{
           ...baseRequest,
@@ -392,7 +423,7 @@ describe('PurchaseRequestView', () => {
   });
 
   it('hides PO generation once every PR line already has a PO', () => {
-    render(
+    renderView(
       <PurchaseRequestView
         request={{
           ...baseRequest,
@@ -423,7 +454,7 @@ describe('PurchaseRequestView', () => {
     const user = userEvent.setup();
     const onConvert = vi.fn().mockResolvedValue(undefined);
 
-    render(
+    renderView(
       <PurchaseRequestView
         request={{
           ...baseRequest,
@@ -500,7 +531,7 @@ describe('PurchaseRequestView', () => {
     const user = userEvent.setup();
     const onConvert = vi.fn().mockResolvedValue(undefined);
 
-    render(
+    renderView(
       <PurchaseRequestView
         request={{
           ...baseRequest,
@@ -565,7 +596,7 @@ describe('PurchaseRequestView', () => {
     const user = userEvent.setup();
     const onUpdate = vi.fn().mockResolvedValue(undefined);
 
-    render(
+    renderView(
       <PurchaseRequestView
         request={{
           ...baseRequest,

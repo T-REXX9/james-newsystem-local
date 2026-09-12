@@ -32,7 +32,13 @@ import {
 } from '../services/notificationLocalApiService';
 import { PageHeader, RecordTrustStrip, WorkflowGuidance } from './common/PageScaffold';
 import { exportPrintSheetAsJpeg, waitForPrintSheet } from '../utils/exportPrintSheetJpeg';
-import { canPerformAction } from '../utils/actionPermissions';
+import { cascadeSalesDocumentDate } from '../services/salesDocumentDateService';
+import { canBackdatePosting, canPerformAction } from '../utils/actionPermissions';
+import {
+  canMutateDocumentDateField,
+  localTodayYmd,
+  validateDocumentDateWrite,
+} from '../utils/backdatedPosting';
 import { isMasterUserType } from '../constants';
 
 interface InvoiceViewProps {
@@ -105,6 +111,8 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
   const [editNumberModalOpen, setEditNumberModalOpen] = useState(false);
   const [editInvoiceNo, setEditInvoiceNo] = useState('');
   const [editLoading, setEditLoading] = useState(false);
+  const [salesDateDraft, setSalesDateDraft] = useState(localTodayYmd());
+  const [savingSalesDate, setSavingSalesDate] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [sequenceStartDraft, setSequenceStartDraft] = useState('');
   const [sequenceNextPreview, setSequenceNextPreview] = useState('');
@@ -626,7 +634,53 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
   const isCancelled = selectedInvoice?.status === InvoiceStatus.CANCELLED;
   const isPostedOrSent = selectedInvoice?.status === InvoiceStatus.SENT || selectedInvoice?.status === InvoiceStatus.PAID;
   const canDelete = canPerformAction('can_delete');
+  const canEdit = canPerformAction('can_edit');
   const canUnpost = canPerformAction('can_unpost');
+  const hasBackdatedPosting = canBackdatePosting();
+  const canMutateSalesDate = canMutateDocumentDateField({
+    canEdit,
+    hasBackdatedPosting,
+    isPosted: !selectedInvoice || isPostedOrSent || isCancelled || selectedInvoice.status === InvoiceStatus.OVERDUE,
+  });
+
+  useEffect(() => {
+    setSalesDateDraft((selectedInvoice?.sales_date || '').slice(0, 10) || localTodayYmd());
+  }, [selectedInvoice?.id, selectedInvoice?.sales_date]);
+
+  const handleSaveSalesDate = async () => {
+    if (!selectedInvoice || !canMutateSalesDate) return;
+    const dateCheck = validateDocumentDateWrite({
+      hasBackdatedPosting,
+      proposedYmd: salesDateDraft,
+      previousYmd: selectedInvoice.sales_date,
+      todayYmd: localTodayYmd(),
+    });
+    if (!dateCheck.ok) {
+      addToast({ type: 'error', title: 'Invalid document date', description: dateCheck.reason });
+      return;
+    }
+    setSavingSalesDate(true);
+    try {
+      await cascadeSalesDocumentDate({
+        sales_date: salesDateDraft,
+        invoice_refno: selectedInvoice.id,
+      });
+      const refreshed = await getInvoice(selectedInvoice.id);
+      if (refreshed) {
+        setSelectedInvoice(refreshed);
+        setInvoices((prev) => prev.map((row) => (row.id === refreshed.id ? refreshed : row)));
+      }
+      addToast({ type: 'success', title: 'Sales date updated' });
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: 'Unable to update sales date',
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    } finally {
+      setSavingSalesDate(false);
+    }
+  };
   const invoiceGuidance = (() => {
     if (!selectedInvoice) {
       return {
@@ -788,7 +842,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
           <div className="px-[25px] pb-[28px] pt-[31px]">
             <div className="space-y-[17px]">
               <div className="grid grid-cols-[7%_38%_10%_18%_9%_18%] items-center"><div className="col-span-4"></div><label className={legacyLabelClass}>Invoice No:</label><div className="flex items-center gap-2"><input readOnly value={selectedInvoice?.invoice_no || ''} aria-label="Invoice number" className={`${legacyInputClass} !bg-[#eeeeee]`} />{selectedInvoice && canEditInvoiceNumber && (<button type="button" onClick={openEditInvoiceNumberModal} className="inline-flex h-[35px] shrink-0 items-center justify-center rounded-[4px] border border-[#c9c9c9] bg-white px-2 text-[#29475f] hover:bg-[#f7f7f7]" title="Edit Invoice Number" aria-label="Edit Invoice Number"><Pencil className="h-[0.875rem] w-[0.875rem]" /></button>)}</div></div>
-              <div className="grid grid-cols-[7%_38%_10%_18%_9%_18%] items-center"><label className={legacyLabelClass}>Sold to :</label><div className="relative"><select disabled value={selectedInvoice ? selectedCustomerLabel : ''} className={`${legacyInputClass} disabled:bg-white disabled:text-[#333]`} aria-label="Customer"><option value="">Select Customer</option>{selectedInvoice && <option value={selectedCustomerLabel}>{selectedCustomerLabel}</option>}</select><span className="pointer-events-none absolute right-[34px] top-1/2 -translate-y-1/2 text-[16px] text-[#999]">×</span></div><label className={legacyLabelClass}>Date :</label><div className="pl-2"><input readOnly value={legacyListDate(selectedInvoice?.sales_date || legacyToday.toISOString())} className={legacyInputClass} /></div><label className={legacyLabelClass}>Terms Strictly:</label><div><input readOnly value={selectedInvoice?.terms || ''} className={legacyInputClass} /></div></div>
+              <div className="grid grid-cols-[7%_38%_10%_18%_9%_18%] items-center"><label className={legacyLabelClass}>Sold to :</label><div className="relative"><select disabled value={selectedInvoice ? selectedCustomerLabel : ''} className={`${legacyInputClass} disabled:bg-white disabled:text-[#333]`} aria-label="Customer"><option value="">Select Customer</option>{selectedInvoice && <option value={selectedCustomerLabel}>{selectedCustomerLabel}</option>}</select><span className="pointer-events-none absolute right-[34px] top-1/2 -translate-y-1/2 text-[16px] text-[#999]">×</span></div><label className={legacyLabelClass}>Date :</label><div className="pl-2 flex items-center gap-1">{canMutateSalesDate ? (<><input type="date" value={salesDateDraft} max={localTodayYmd()} onChange={(event) => setSalesDateDraft(event.target.value)} className={legacyInputClass} /><button type="button" onClick={() => void handleSaveSalesDate()} disabled={savingSalesDate || salesDateDraft === (selectedInvoice?.sales_date || '').slice(0, 10)} className="rounded bg-[#5d82a2] px-2 py-1 text-[11px] text-white disabled:opacity-50">{savingSalesDate ? '...' : 'Save'}</button></>) : (<input readOnly value={legacyListDate(selectedInvoice?.sales_date || legacyToday.toISOString())} className={legacyInputClass} />)}</div><label className={legacyLabelClass}>Terms Strictly:</label><div><input readOnly value={selectedInvoice?.terms || ''} className={legacyInputClass} /></div></div>
               <div className="grid grid-cols-[7%_38%_10%_18%_9%_18%] items-center"><div className="col-span-2 pl-[25px] pr-[7px]"><input readOnly value={selectedInvoice?.delivery_address || ''} className={legacyInputClass} /></div><label className={legacyLabelClass}>Reference No.:</label><div className="pl-2"><input readOnly value={selectedInvoice?.reference_no || ''} className={legacyInputClass} /></div><label className={legacyLabelClass}>Salesperson:</label><div className="relative"><select disabled value={selectedInvoice?.sales_person || ''} className={`${legacyInputClass} disabled:bg-white disabled:text-[#333]`} aria-label="Sales person"><option value="">Select Sales Person</option>{selectedInvoice?.sales_person && <option value={selectedInvoice.sales_person}>{selectedInvoice.sales_person}</option>}</select><span className="pointer-events-none absolute right-[34px] top-1/2 -translate-y-1/2 text-[16px] text-[#999]">×</span></div></div>
               <div className="grid grid-cols-[7%_38%_10%_18%_9%_18%] items-center"><label className={legacyLabelClass}>Shipped Via:</label><div className="pl-[19px] pr-[3px]"><input readOnly value={selectedInvoice?.send_by || ''} className={legacyInputClass} /></div><div className="col-span-2"></div><label className={legacyLabelClass}>Prod Type:</label><div><input readOnly value={selectedInvoice?.inquiry_type || ''} className={legacyInputClass} /></div></div>
               <div className="grid grid-cols-[7%_38%_10%_18%_9%_18%] items-center"><div className="col-span-2"></div><label className={legacyLabelClass}>Del. to:</label><div className="pl-2"><input readOnly value="" className={legacyInputClass} /></div><label className={legacyLabelClass}>PO No.:</label><div><input readOnly value={selectedInvoice?.po_number || ''} className={legacyInputClass} /></div></div>
@@ -1137,7 +1191,29 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                       <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Sold To M/S:</td>
                       <td><input readOnly value={selectedCustomerLabel} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
                       <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Date:</td>
-                      <td><input readOnly value={formatDisplayDate(selectedInvoice.sales_date)} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                      <td>
+                        {canMutateSalesDate ? (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="date"
+                              value={salesDateDraft}
+                              max={localTodayYmd()}
+                              onChange={(event) => setSalesDateDraft(event.target.value)}
+                              className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => void handleSaveSalesDate()}
+                              disabled={savingSalesDate || salesDateDraft === (selectedInvoice.sales_date || '').slice(0, 10)}
+                              className="shrink-0 rounded bg-[#5d82a2] px-2 py-1.5 text-xs text-white disabled:opacity-50"
+                            >
+                              {savingSalesDate ? '...' : 'Save'}
+                            </button>
+                          </div>
+                        ) : (
+                          <input readOnly value={formatDate(selectedInvoice.sales_date)} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" />
+                        )}
+                      </td>
                       <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Your Reference:</td>
                       <td><input readOnly value={selectedInvoice.customer_reference || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
                     </tr>

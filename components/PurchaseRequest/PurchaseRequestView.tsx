@@ -27,8 +27,14 @@ import ProductAutocomplete from "../ProductAutocomplete";
 import ModuleRecordLink from "../ModuleRecordLink";
 import ProcurementDocumentBanner from "../ProcurementDocumentBanner";
 import type { Product as SearchProduct } from "../../types";
-import { canPerformAction } from "../../utils/actionPermissions";
+import { canBackdatePosting, canPerformAction } from "../../utils/actionPermissions";
+import {
+  canMutateDocumentDateField,
+  localTodayYmd,
+  validateDocumentDateWrite,
+} from "../../utils/backdatedPosting";
 import { formatDate } from "../../utils/formatUtils";
+import { useToast } from "../ToastProvider";
 
 interface PurchaseRequestViewProps {
   request: PurchaseRequestWithItems;
@@ -130,12 +136,25 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
   suppliers,
   isApprover = true,
 }) => {
+  const { addToast } = useToast();
   const canAdd = canPerformAction("can_add");
   const canEdit = canPerformAction("can_edit");
   const canDelete = canPerformAction("can_delete");
   const canPost = canPerformAction("can_post");
   const canApprove = canPerformAction("can_approve");
   const canUnpost = canPerformAction("can_unpost");
+  const hasBackdatedPosting = canBackdatePosting();
+  const isPosted = ["Approved", "Submitted", "Cancelled", "Posted"].includes(
+    request.status || "",
+  );
+  const canMutateDocDate = canMutateDocumentDateField({
+    canEdit,
+    hasBackdatedPosting,
+    isPosted,
+  });
+  const [requestDateDraft, setRequestDateDraft] = useState(
+    (request.request_date || "").slice(0, 10) || localTodayYmd(),
+  );
   const [showAddItem, setShowAddItem] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -161,6 +180,38 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
   const [recoveryAction, setRecoveryAction] = useState<"unpost" | "delete" | null>(null);
   const [historyItem, setHistoryItem] = useState<EnrichedItem | null>(null);
   const [selectedPOItemIds, setSelectedPOItemIds] = useState<string[]>([]);
+  const [savingRequestDate, setSavingRequestDate] = useState(false);
+
+  useEffect(() => {
+    setRequestDateDraft((request.request_date || "").slice(0, 10) || localTodayYmd());
+  }, [request.id, request.request_date]);
+
+  const saveRequestDate = async () => {
+    if (!canMutateDocDate) return;
+    const dateCheck = validateDocumentDateWrite({
+      hasBackdatedPosting,
+      proposedYmd: requestDateDraft,
+      previousYmd: request.request_date,
+      todayYmd: localTodayYmd(),
+    });
+    if (!dateCheck.ok) {
+      addToast({ type: "error", title: "Invalid document date", description: dateCheck.reason });
+      return;
+    }
+    setSavingRequestDate(true);
+    try {
+      await onUpdate(request.id, { request_date: requestDateDraft });
+      addToast({ type: "success", title: "Request date updated" });
+    } catch (error) {
+      addToast({
+        type: "error",
+        title: "Unable to update request date",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    } finally {
+      setSavingRequestDate(false);
+    }
+  };
 
   const items = (request.items || []) as EnrichedItem[];
   const convertibleItems = useMemo(
@@ -374,10 +425,36 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                   {request.status}
                 </span>
               </div>
-              <p className="mt-2 text-sm text-slate-500">
-                Created {formatDate(request.request_date)}{" "}
-                {request.created_by_name ? `by ${request.created_by_name}` : ""}
-              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                <span>Created</span>
+                {canMutateDocDate ? (
+                  <>
+                    <input
+                      type="date"
+                      aria-label="Request date"
+                      value={requestDateDraft}
+                      max={localTodayYmd()}
+                      onChange={(event) => setRequestDateDraft(event.target.value)}
+                      className="h-8 rounded border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-700"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void saveRequestDate()}
+                      disabled={
+                        savingRequestDate ||
+                        !requestDateDraft ||
+                        requestDateDraft === (request.request_date || "").slice(0, 10)
+                      }
+                      className="rounded border border-blue-200 px-2 py-1 text-xs font-bold text-[#175fd3] hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {savingRequestDate ? "Saving..." : "Save date"}
+                    </button>
+                  </>
+                ) : (
+                  <span className="font-semibold text-slate-700">{formatDate(request.request_date)}</span>
+                )}
+                {request.created_by_name ? <span>by {request.created_by_name}</span> : null}
+              </div>
             </div>
             <div className="flex flex-wrap gap-2 lg:justify-end">
               <button
@@ -529,7 +606,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                 </button>
               </div>
             )}
-            {["Pending", "Unposted"].includes(request.status || "") && canAdd && (
+            {["Draft", "Pending", "Unposted"].includes(request.status || "") && canAdd && (
               <button
                 onClick={() => setShowAddItem(true)}
                 className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
@@ -782,7 +859,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                           {item.description || "-"}
                         </td>
                         <td className="px-1.5 py-2.5 text-center">
-                          {["Pending", "Unposted"].includes(request.status || "") && canEdit ? (
+                          {["Draft", "Pending", "Unposted"].includes(request.status || "") && canEdit ? (
                             <input
                               aria-label={`Quantity ${item.part_number || index + 1}`}
                               type="number"
@@ -801,7 +878,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                         </td>
                         <td className="px-1.5 py-2.5">{item.unit || "PCS"}</td>
                         <td className="px-1.5 py-2.5">
-                          {["Pending", "Unposted"].includes(request.status || "") && canEdit ? (
+                          {["Draft", "Pending", "Unposted"].includes(request.status || "") && canEdit ? (
                             <>
                               <select
                                 aria-label={`Supplier ${item.part_number || index + 1}`}
@@ -887,7 +964,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                               <MessageSquare className="inline h-4 w-4" />
                             </button>
                           ) : null}
-                          {["Pending", "Unposted"].includes(request.status || "") && canDelete && (
+                          {["Draft", "Pending", "Unposted"].includes(request.status || "") && canDelete && (
                             <button
                               type="button"
                               aria-label={`Delete ${item.part_number || "item"}`}

@@ -4,6 +4,12 @@ import type { Contact, CreatePRItemPayload, CreatePRPayload } from '../../purcha
 import type { Product as SearchProduct } from '../../types';
 import { parseSupabaseError } from '../../utils/errorHandler';
 import { validateNumeric, validateRequired } from '../../utils/formValidation';
+import { canBackdatePosting, canPerformAction } from '../../utils/actionPermissions';
+import {
+  canMutateDocumentDateField,
+  localTodayYmd,
+  validateDocumentDateWrite,
+} from '../../utils/backdatedPosting';
 import ProductAutocomplete from '../ProductAutocomplete';
 import ValidationSummary from '../ValidationSummary';
 import { useToast } from '../ToastProvider';
@@ -33,6 +39,15 @@ const money = (value: number) => `₱${value.toLocaleString('en-PH', { minimumFr
 
 const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({ onCancel, onSubmit, suppliers, initialPRNumber }) => {
   const { addToast } = useToast();
+  const canAdd = canPerformAction('can_add');
+  const canEdit = canPerformAction('can_edit');
+  const hasBackdatedPosting = canBackdatePosting();
+  const canMutateDocDate = canMutateDocumentDateField({
+    canEdit: canAdd || canEdit,
+    hasBackdatedPosting,
+    isPosted: false,
+  });
+  const [requestDate, setRequestDate] = useState(localTodayYmd());
   const [notes, setNotes] = useState('');
   const [selectedProductId, setSelectedProductId] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<ProductWithMetadata | null>(null);
@@ -119,9 +134,20 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({ onCancel, onS
     setIsSubmitting(true);
     setSubmitError('');
     try {
+      const resolvedRequestDate = canMutateDocDate ? requestDate : localTodayYmd();
+      const dateCheck = validateDocumentDateWrite({
+        hasBackdatedPosting,
+        proposedYmd: resolvedRequestDate,
+        todayYmd: localTodayYmd(),
+      });
+      if (!dateCheck.ok) {
+        addToast({ type: 'error', title: 'Invalid document date', description: dateCheck.reason, durationMs: 6000 });
+        setIsSubmitting(false);
+        return;
+      }
       await onSubmit({
         pr_number: initialPRNumber,
-        request_date: new Date().toISOString().slice(0, 10),
+        request_date: resolvedRequestDate,
         notes,
         reference_no: '',
         status,
@@ -157,7 +183,19 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({ onCancel, onS
               <div>
                 <div className="mb-1 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-400"><span>Purchasing</span><span>›</span><span>Purchase Request</span><span>›</span><span className="text-slate-700">Create PR</span></div>
                 <div className="flex flex-wrap items-center gap-3"><h1 className="text-2xl font-extrabold uppercase tracking-tight text-[#173c83]">Create Purchase Request</h1><span className="rounded-md bg-blue-50 px-2.5 py-1 text-sm font-extrabold text-[#175fd3]">PR No. {initialPRNumber || 'Pending'}</span></div>
-
+                <div className="mt-2 flex items-center gap-2 text-sm text-slate-600">
+                  <label htmlFor="purchase-request-date" className="font-semibold">Request Date</label>
+                  <input
+                    id="purchase-request-date"
+                    type="date"
+                    value={requestDate}
+                    max={localTodayYmd()}
+                    disabled={!canMutateDocDate}
+                    readOnly={!canMutateDocDate}
+                    onChange={(event) => setRequestDate(event.target.value)}
+                    className="h-9 rounded border border-slate-300 bg-white px-2 text-sm outline-none focus:border-[#175fd3] disabled:bg-slate-100 disabled:text-slate-500"
+                  />
+                </div>
               </div>
             </div>
             <div className="flex flex-wrap gap-2 xl:justify-end">

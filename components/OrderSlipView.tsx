@@ -42,7 +42,13 @@ import {
 import { useToast } from './ToastProvider';
 import { PageHeader, RecordTrustStrip, WorkflowGuidance } from './common/PageScaffold';
 import { exportPrintSheetAsJpeg } from '../utils/exportPrintSheetJpeg';
-import { canPerformAction } from '../utils/actionPermissions';
+import { cascadeSalesDocumentDate } from '../services/salesDocumentDateService';
+import { canBackdatePosting, canPerformAction } from '../utils/actionPermissions';
+import {
+  canMutateDocumentDateField,
+  localTodayYmd,
+  validateDocumentDateWrite,
+} from '../utils/backdatedPosting';
 
 interface OrderSlipViewProps {
   initialSlipId?: string;
@@ -116,6 +122,8 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
   const [unpostLoading, setUnpostLoading] = useState(false);
   const [trackingNoDraft, setTrackingNoDraft] = useState('');
   const [trackingSaveLoading, setTrackingSaveLoading] = useState(false);
+  const [salesDateDraft, setSalesDateDraft] = useState(localTodayYmd());
+  const [savingSalesDate, setSavingSalesDate] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [exportingJpeg, setExportingJpeg] = useState(false);
   const deepLinkAttemptedRef = useRef<string | null>(null);
@@ -357,6 +365,49 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
   const canDelete = canPerformAction('can_delete');
   const canPost = canPerformAction('can_post');
   const canUnpost = canPerformAction('can_unpost');
+  const hasBackdatedPosting = canBackdatePosting();
+  const canMutateSalesDate = canMutateDocumentDateField({
+    canEdit,
+    hasBackdatedPosting,
+    isPosted: !selectedSlip || selectedSlip.status === OrderSlipStatus.FINALIZED || selectedSlip.status === OrderSlipStatus.CANCELLED,
+  });
+
+  useEffect(() => {
+    setSalesDateDraft((selectedSlip?.sales_date || '').slice(0, 10) || localTodayYmd());
+  }, [selectedSlip?.id, selectedSlip?.sales_date]);
+
+  const handleSaveSalesDate = async () => {
+    if (!selectedSlip || !canMutateSalesDate) return;
+    const dateCheck = validateDocumentDateWrite({
+      hasBackdatedPosting,
+      proposedYmd: salesDateDraft,
+      previousYmd: selectedSlip.sales_date,
+      todayYmd: localTodayYmd(),
+    });
+    if (!dateCheck.ok) {
+      addToast({ type: 'error', title: 'Invalid document date', description: dateCheck.reason });
+      return;
+    }
+    setSavingSalesDate(true);
+    try {
+      await cascadeSalesDocumentDate({
+        sales_date: salesDateDraft,
+        order_slip_refno: selectedSlip.id,
+        sales_order_refno: selectedSlip.order_id || undefined,
+      });
+      setSelectedSlip((prev) => (prev ? { ...prev, sales_date: salesDateDraft } : prev));
+      setOrderSlips((prev) => prev.map((row) => (row.id === selectedSlip.id ? { ...row, sales_date: salesDateDraft } : row)));
+      addToast({ type: 'success', title: 'Sales date updated' });
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: 'Unable to update sales date',
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    } finally {
+      setSavingSalesDate(false);
+    }
+  };
 
   useEffect(() => {
     syncDocumentPolicyState(selectedCustomer?.transactionType || null);
@@ -837,7 +888,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
             <div className="space-y-[17px]">
               <div className="grid grid-cols-[7%_38%_10%_18%_9%_18%] items-center">
                 <label className={legacyLabelClass}>Sold to :</label><div><input readOnly value={selectedSlip ? selectedCustomerLabel : ''} placeholder="Select Customer" className={`${legacyInputClass} text-left`} /></div>
-                <label className={legacyLabelClass}>Date :</label><div className="text-center text-[16px] font-semibold text-[#29475f]">{legacyListDate(selectedSlip?.sales_date || legacyToday.toISOString(), true)}</div>
+                <label className={legacyLabelClass}>Date :</label><div className="pl-2 flex items-center justify-center gap-1">{canMutateSalesDate ? (<><input type="date" value={salesDateDraft} max={localTodayYmd()} onChange={(event) => setSalesDateDraft(event.target.value)} className={legacyInputClass} /><button type="button" onClick={() => void handleSaveSalesDate()} disabled={savingSalesDate || salesDateDraft === (selectedSlip?.sales_date || '').slice(0, 10)} className="rounded bg-[#5d82a2] px-2 py-1 text-[11px] text-white disabled:opacity-50">{savingSalesDate ? '...' : 'Save'}</button></>) : (<div className="text-center text-[16px] font-semibold text-[#29475f]">{legacyListDate(selectedSlip?.sales_date || legacyToday.toISOString(), true)}</div>)}</div>
                 <label className={legacyLabelClass}>Terms Strictly:</label><div><input readOnly value={selectedSlip?.terms || ''} className={legacyInputClass} /></div>
               </div>
               <div className="grid grid-cols-[7%_38%_10%_18%_9%_18%] items-center">
@@ -1152,7 +1203,29 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Sold to:</td>
                     <td><input readOnly value={selectedCustomerLabel} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Date:</td>
-                <td><input readOnly value={formatDate(selectedSlip.sales_date)} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
+                <td>
+                  {canMutateSalesDate ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="date"
+                        value={salesDateDraft}
+                        max={localTodayYmd()}
+                        onChange={(event) => setSalesDateDraft(event.target.value)}
+                        className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void handleSaveSalesDate()}
+                        disabled={savingSalesDate || salesDateDraft === (selectedSlip.sales_date || '').slice(0, 10)}
+                        className="shrink-0 rounded bg-[#5d82a2] px-2 py-1.5 text-xs text-white disabled:opacity-50"
+                      >
+                        {savingSalesDate ? '...' : 'Save'}
+                      </button>
+                    </div>
+                  ) : (
+                    <input readOnly value={formatDate(selectedSlip.sales_date)} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" />
+                  )}
+                </td>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Terms Strictly:</td>
                     <td><input readOnly value={selectedSlip.terms || 'N/A'} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
                   </tr>

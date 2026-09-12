@@ -7,7 +7,8 @@ import {
   AdjustmentType,
   LedgerCustomer,
 } from '../services/adjustmentEntryService';
-import { canPerformAction } from '../utils/actionPermissions';
+import { canBackdatePosting, canPerformAction } from '../utils/actionPermissions';
+import { canMutateDocumentDateField, localTodayYmd, validateDocumentDateWrite } from '../utils/backdatedPosting';
 import { formatDate } from '../utils/formatUtils';
 
 const MONTHS = [
@@ -68,6 +69,8 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
   const canEditPermission = canPerformAction('can_edit');
   const canDelete = canPerformAction('can_delete');
   const canPost = canPerformAction('can_post');
+  const hasBackdatedPosting = canBackdatePosting();
+  const dateMax = localTodayYmd();
   const canUnpost = canPerformAction('can_unpost');
 
   const fetchList = async () => {
@@ -170,6 +173,11 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
   }, [customers, form.customerId, selected]);
 
   const canEdit = (isCreating && canAdd) || (selected?.lstatus === 'Pending' && canEditPermission);
+  const canMutateDocDate = canMutateDocumentDateField({
+    canEdit,
+    hasBackdatedPosting,
+    isPosted: selected?.lstatus === 'Posted',
+  });
   const isZeroOut = form.type === 'Zero-Out';
 
   const handleCreateMode = async () => {
@@ -200,6 +208,16 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
       setError('Date is required');
       return;
     }
+    const dateCheck = validateDocumentDateWrite({
+      hasBackdatedPosting,
+      proposedYmd: form.date,
+      previousYmd: null,
+      todayYmd: dateMax,
+    });
+    if (!dateCheck.ok) {
+      setError(dateCheck.reason);
+      return;
+    }
     if (!isZeroOut && !(Number(form.amount) > 0)) {
       setError('Amount must be greater than 0');
       return;
@@ -208,9 +226,10 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
     setSaving(true);
     setError('');
     try {
+      const resolvedDate = canMutateDocDate ? form.date : dateMax;
       const created = await adjustmentEntryService.create({
         customerId: form.customerId,
-        date: form.date,
+        date: resolvedDate,
         type: form.type,
         amount: Number(form.amount || 0),
         remark: form.remark,
@@ -231,6 +250,16 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
     if (!canEditPermission || !selected) return;
     if (!form.customerId || !form.date) {
       setError('Customer and date are required');
+      return;
+    }
+    const dateCheck = validateDocumentDateWrite({
+      hasBackdatedPosting,
+      proposedYmd: form.date,
+      previousYmd: selected.ldate ? toDateInput(selected.ldate) : null,
+      todayYmd: dateMax,
+    });
+    if (!dateCheck.ok) {
+      setError(dateCheck.reason);
       return;
     }
 
@@ -374,7 +403,7 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
                     </select>
                   </div>
                   <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Date :</label>
-                  <input type="date" value={form.date} onChange={(e) => setForm((prev) => ({ ...prev, date: e.target.value }))} disabled={!canEdit} className="h-[34px] rounded-[3px] border border-[#ccc] px-3 disabled:bg-[#eee]" />
+                  <input type="date" value={form.date} onChange={(e) => setForm((prev) => ({ ...prev, date: e.target.value }))} disabled={!canMutateDocDate} max={dateMax} className="h-[34px] rounded-[3px] border border-[#ccc] px-3 disabled:bg-[#eee]" />
 
                   <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Remark :</label>
                   <input value={form.remark} onChange={(e) => setForm((prev) => ({ ...prev, remark: e.target.value }))} disabled={!canEdit} className="h-[34px] rounded-[3px] border border-[#ccc] px-3 disabled:bg-[#eee]" />

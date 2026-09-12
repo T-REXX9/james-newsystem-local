@@ -15,7 +15,12 @@ import {
   type InventoryAuditStockDetail,
   type InventoryAuditStockItem,
 } from '../services/inventoryAuditService';
-import { canPerformAction } from '../utils/actionPermissions';
+import { canBackdatePosting, canPerformAction } from '../utils/actionPermissions';
+import {
+  canMutateDocumentDateField,
+  localTodayYmd,
+  validateDocumentDateWrite,
+} from '../utils/backdatedPosting';
 import { formatDate } from '../utils/formatUtils';
 
 const MONTHS = [
@@ -41,6 +46,7 @@ const InventoryAuditReport: React.FC = () => {
   const canEdit = canPerformAction('can_edit');
   const canDelete = canPerformAction('can_delete');
   const canPost = canPerformAction('can_post');
+  const hasBackdatedPosting = canBackdatePosting();
   const now = new Date();
   const [filterMonth, setFilterMonth] = useState(now.getMonth() + 1);
   const [filterYear, setFilterYear] = useState(now.getFullYear());
@@ -118,6 +124,11 @@ const InventoryAuditReport: React.FC = () => {
   }, [loadDetail]);
 
   const isPending = detail?.header.status.toLowerCase() === 'pending';
+  const canMutateDocDate = canMutateDocumentDateField({
+    canEdit,
+    hasBackdatedPosting,
+    isPosted: !isPending,
+  });
 
   const summary = useMemo(() => {
     return (detail?.items || []).reduce(
@@ -285,7 +296,17 @@ const InventoryAuditReport: React.FC = () => {
   };
 
   const handleSaveDate = async () => {
-    if (!canEdit || !detail || !dateDraft) return;
+    if (!canMutateDocDate || !detail || !dateDraft) return;
+    const dateCheck = validateDocumentDateWrite({
+      hasBackdatedPosting,
+      proposedYmd: dateDraft,
+      previousYmd: detail.header.adjustmentDate,
+      todayYmd: localTodayYmd(),
+    });
+    if (!dateCheck.ok) {
+      addToast({ type: 'error', title: 'Invalid document date', description: dateCheck.reason });
+      return;
+    }
     setIsSaving(true);
     try {
       await updateInventoryAuditDate(detail.header.refno, dateDraft);
@@ -431,7 +452,7 @@ const InventoryAuditReport: React.FC = () => {
             <form onSubmit={handleSearch} className="px-[25px] pt-5">
               <div className="grid grid-cols-[90px_1fr_90px_1fr] items-center gap-x-3 gap-y-3 text-[13px]">
                 <div className="font-semibold">Date:</div>
-                <div className="col-span-3 flex items-center gap-2">{formatLegacyDate(detail.header.adjustmentDate)}{isPending && canEdit && <button type="button" onClick={() => setShowDateEditor(true)} className="text-[#4e7392]" aria-label="Edit date"><Pencil className="h-4 w-4" /></button>}</div>
+                <div className="col-span-3 flex items-center gap-2">{formatLegacyDate(detail.header.adjustmentDate)}{canMutateDocDate && <button type="button" onClick={() => setShowDateEditor(true)} className="text-[#4e7392]" aria-label="Edit date"><Pencil className="h-4 w-4" /></button>}</div>
                 <label className="font-semibold">Part No.</label>
                 <input value={partNoInput} onChange={(event) => setPartNoInput(event.target.value)} className="h-[34px] rounded-[3px] border border-[#ccc] px-3 outline-none" placeholder="Input Part Number" />
                 <label className="font-semibold">Item Code</label>
@@ -481,7 +502,7 @@ const InventoryAuditReport: React.FC = () => {
         </div>
       </div>}
 
-      {(showPostConfirm || showDeleteConfirm || showDateEditor) && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 print:hidden"><div className="w-full max-w-md rounded-[5px] bg-white shadow-xl"><div className="flex items-center justify-between border-b border-[#ddd] px-5 py-4"><h3 className="text-xl font-semibold">{showPostConfirm ? 'Post Adjustment' : showDeleteConfirm ? 'Delete Adjustment' : 'Edit Date'}</h3><button onClick={() => { setShowPostConfirm(false); setShowDeleteConfirm(false); setShowDateEditor(false); }}><X className="h-5 w-5" /></button></div><div className="p-5 text-sm">{showPostConfirm ? <p>Are you sure you want to post this record? This record cannot be edited or deleted once posted.</p> : showDeleteConfirm ? <p>Are you sure you want to delete this record?</p> : <label className="flex items-center gap-4"><span>Date:</span><input type="date" disabled={!canEdit} value={dateDraft} onChange={(event) => setDateDraft(event.target.value)} className="h-9 flex-1 rounded border border-[#ccc] px-3" /></label>}</div><div className="flex justify-end gap-2 border-t border-[#ddd] px-5 py-4"><button onClick={() => { setShowPostConfirm(false); setShowDeleteConfirm(false); setShowDateEditor(false); }} className="rounded border border-[#ccc] px-4 py-2 text-sm">Close</button><button onClick={() => void (showPostConfirm ? handlePost() : showDeleteConfirm ? handleDeleteAdjustment() : handleSaveDate())} disabled={isSaving || (showPostConfirm ? !canPost : showDeleteConfirm ? !canDelete : !canEdit)} className={`rounded px-4 py-2 text-sm text-white disabled:opacity-50 ${showDeleteConfirm ? 'bg-[#d64b47]' : 'bg-[#5d82a2]'}`}>{showPostConfirm ? 'Post' : showDeleteConfirm ? 'Delete' : 'Save'}</button></div></div></div>}
+      {(showPostConfirm || showDeleteConfirm || showDateEditor) && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 print:hidden"><div className="w-full max-w-md rounded-[5px] bg-white shadow-xl"><div className="flex items-center justify-between border-b border-[#ddd] px-5 py-4"><h3 className="text-xl font-semibold">{showPostConfirm ? 'Post Adjustment' : showDeleteConfirm ? 'Delete Adjustment' : 'Edit Date'}</h3><button onClick={() => { setShowPostConfirm(false); setShowDeleteConfirm(false); setShowDateEditor(false); }}><X className="h-5 w-5" /></button></div><div className="p-5 text-sm">{showPostConfirm ? <p>Are you sure you want to post this record? This record cannot be edited or deleted once posted.</p> : showDeleteConfirm ? <p>Are you sure you want to delete this record?</p> : <label className="flex items-center gap-4"><span>Date:</span><input type="date" disabled={!canMutateDocDate} max={localTodayYmd()} value={dateDraft} onChange={(event) => setDateDraft(event.target.value)} className="h-9 flex-1 rounded border border-[#ccc] px-3" /></label>}</div><div className="flex justify-end gap-2 border-t border-[#ddd] px-5 py-4"><button onClick={() => { setShowPostConfirm(false); setShowDeleteConfirm(false); setShowDateEditor(false); }} className="rounded border border-[#ccc] px-4 py-2 text-sm">Close</button><button onClick={() => void (showPostConfirm ? handlePost() : showDeleteConfirm ? handleDeleteAdjustment() : handleSaveDate())} disabled={isSaving || (showPostConfirm ? !canPost : showDeleteConfirm ? !canDelete : !canMutateDocDate)} className={`rounded px-4 py-2 text-sm text-white disabled:opacity-50 ${showDeleteConfirm ? 'bg-[#d64b47]' : 'bg-[#5d82a2]'}`}>{showPostConfirm ? 'Post' : showDeleteConfirm ? 'Delete' : 'Save'}</button></div></div></div>}
 
       {detail && <div className="inventory-audit-print-area">
         <table className="inventory-audit-print-table"><thead><tr><th>PART NO</th><th>ITEM CODE</th><th>DESCRIPTION</th>{detail.warehouses.map((warehouse) => <React.Fragment key={warehouse}><th colSpan={2}>{warehouse.toUpperCase()}</th><th>PCNT</th><th>MSG</th></React.Fragment>)}<th>VAL</th></tr></thead><tbody>{printItems.map((item, index) => { const nextPartNo = printItems[index + 1]?.partNo; const totals = printPartTotals.get(item.partNo) || { missing: 0, missingValue: 0 }; return <React.Fragment key={item.itemSession}><tr><td>{item.partNo}</td><td>{item.itemCode}</td><td>{item.description}</td>{item.warehouses.map((warehouse) => <React.Fragment key={warehouse.warehouse}><td className="text-right">{warehouse.stock}</td><td className="text-right">{warehouse.location}</td><td className="text-right">{warehouse.physicalCount ?? ''}</td><td className="text-right">{warehouse.discrepancy ?? ''}</td></React.Fragment>)}<td className="text-right">{item.inventoryValue}</td></tr>{nextPartNo !== item.partNo && <><tr><td colSpan={detail.warehouses.length * 4 + 3} className="text-right">Total Missing:</td><td>{formatNumber(totals.missing)}</td></tr><tr><td colSpan={detail.warehouses.length * 4 + 3} className="text-right">Total Missing Value:</td><td>{formatNumber(totals.missingValue)}</td></tr><tr><td colSpan={detail.warehouses.length * 4 + 4}>&nbsp;</td></tr></>}</React.Fragment>; })}</tbody></table>

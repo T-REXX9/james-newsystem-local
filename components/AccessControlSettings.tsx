@@ -43,6 +43,7 @@ import CustomLoadingSpinner from './CustomLoadingSpinner';
 import AccessGroupManager from './AccessGroupManager';
 import { useToast } from './ToastProvider';
 import { ACCESS_MODULES, getAccessModuleState, toggleAccessModule, toggleAccessPage, canonicalizeAccessRights } from '../utils/accessModules';
+import { hasBackdatedPostingPermission, setBackdatedPostingPermission } from '../utils/backdatedPosting';
 
 const STAFF_PER_PAGE = 50;
 const STAFF_MEMBER_COLUMN_WIDTH = 288;
@@ -276,6 +277,18 @@ const AccessControlSettings: React.FC = () => {
         action_permissions: {
           ...setPageActionPermission(profile.action_permissions, pageLabel, permission, enabled),
         },
+      };
+    }));
+    setPermissionChanges((prev) => ({ ...prev, [userId]: true }));
+    setActionPermissionChanges((prev) => ({ ...prev, [userId]: true }));
+  };
+
+  const handleBackdatedPostingToggle = (userId: string, enabled: boolean) => {
+    setProfiles((prevProfiles) => prevProfiles.map((profile) => {
+      if (profile.id !== userId) return profile;
+      return {
+        ...profile,
+        action_permissions: setBackdatedPostingPermission(profile.action_permissions, enabled),
       };
     }));
     setPermissionChanges((prev) => ({ ...prev, [userId]: true }));
@@ -732,6 +745,16 @@ const AccessControlSettings: React.FC = () => {
 
                         <td className="border-l border-slate-100 p-4 align-top dark:border-slate-800">
                           <div className="space-y-2">
+                            <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                              <input
+                                type="checkbox"
+                                checked={isOwner || hasBackdatedPostingPermission(user)}
+                                disabled={isOwner}
+                                aria-label={`Backdated posting for ${user.full_name}`}
+                                onChange={(event) => handleBackdatedPostingToggle(user.id, event.target.checked)}
+                              />
+                              Backdated posting
+                            </label>
                             {ACCESS_MODULES.map((module) => {
                               const moduleState = getAccessModuleState(module.id, effectiveCanonicalRights);
                               const isExpanded = (expandedModules[user.id] || []).includes(module.id);

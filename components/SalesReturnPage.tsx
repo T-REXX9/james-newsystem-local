@@ -12,7 +12,8 @@ import { Contact } from '../types';
 import { fetchContacts, fetchPurchasedItems } from '../services/customerDatabaseLocalApiService';
 import CustomerAutocomplete from './CustomerAutocomplete';
 import { useDebounce } from '../hooks/useDebounce';
-import { canPerformAction } from '../utils/actionPermissions';
+import { canBackdatePosting, canPerformAction } from '../utils/actionPermissions';
+import { canMutateDocumentDateField, localTodayYmd, validateDocumentDateWrite } from '../utils/backdatedPosting';
 
 type SourceDocument = SalesReturnSourceDocument;
 
@@ -530,7 +531,23 @@ const CreateModal: React.FC<{
     setBusy(true);
     setError('');
     try {
-      const record = await salesReturnService.create(form as Record<string, unknown>);
+      const canMutateCreateDate = canMutateDocumentDateField({
+        canEdit: true,
+        hasBackdatedPosting: canBackdatePosting(),
+        isPosted: false,
+      });
+      const resolvedDate = canMutateCreateDate ? form.date : localTodayYmd();
+      const dateCheck = validateDocumentDateWrite({
+        hasBackdatedPosting: canBackdatePosting(),
+        proposedYmd: resolvedDate,
+        previousYmd: null,
+        todayYmd: localTodayYmd(),
+      });
+      if (!dateCheck.ok) {
+        setError(dateCheck.reason);
+        return;
+      }
+      const record = await salesReturnService.create({ ...form, date: resolvedDate } as Record<string, unknown>);
       onCreated(record);
     } catch (err: any) {
       setError(err?.message || 'Failed to create credit memo');
@@ -605,8 +622,14 @@ const CreateModal: React.FC<{
               <input
                 type="date"
                 value={form.date}
+                max={localTodayYmd()}
+                disabled={!canMutateDocumentDateField({
+                  canEdit: true,
+                  hasBackdatedPosting: canBackdatePosting(),
+                  isPosted: false,
+                })}
                 onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-                className="w-full mt-1 px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
+                className="w-full mt-1 px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 disabled:bg-slate-100"
               />
             </label>
           </div>
@@ -665,11 +688,14 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
   const canDelete = canPerformAction('can_delete');
   const canPost = canPerformAction('can_post');
   const canUnpost = canPerformAction('can_unpost');
+  const hasBackdatedPosting = canBackdatePosting();
   const today = new Date();
   const [rows, setRows] = useState<SalesReturnRecord[]>([]);
   const [selectedRefno, setSelectedRefno] = useState('');
   const [selected, setSelected] = useState<SalesReturnRecord | null>(null);
   const [items, setItems] = useState<SalesReturnItem[]>([]);
+  const [dateDraft, setDateDraft] = useState(localTodayYmd());
+  const [savingDate, setSavingDate] = useState(false);
 
   const [loadingList, setLoadingList] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -713,6 +739,40 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
 
   const isPending = selected?.lstatus?.toLowerCase() === 'pending' || selected?.lstatus === '';
   const isPosted = selected?.lstatus?.toLowerCase() === 'posted';
+  const canMutateDocDate = canMutateDocumentDateField({
+    canEdit,
+    hasBackdatedPosting,
+    isPosted: Boolean(selected) && !isPending,
+  });
+
+  useEffect(() => {
+    setDateDraft((selected?.ldate || '').slice(0, 10) || localTodayYmd());
+  }, [selected?.lrefno, selected?.ldate]);
+
+  const saveDocumentDate = async () => {
+    if (!selected || !canMutateDocDate) return;
+    const dateCheck = validateDocumentDateWrite({
+      hasBackdatedPosting,
+      proposedYmd: dateDraft,
+      previousYmd: selected.ldate,
+      todayYmd: localTodayYmd(),
+    });
+    if (!dateCheck.ok) {
+      setError(dateCheck.reason);
+      return;
+    }
+    setSavingDate(true);
+    setError('');
+    try {
+      const updated = await salesReturnService.update(selected.lrefno, { date: dateDraft });
+      setSelected(updated);
+      setRows((prev) => prev.map((row) => (row.lrefno === updated.lrefno ? { ...row, ldate: updated.ldate } : row)));
+    } catch (err: any) {
+      setError(err?.message || 'Failed to update date');
+    } finally {
+      setSavingDate(false);
+    }
+  };
 
   const loadList = useCallback(async () => {
     setLoadingList(true);
@@ -1024,7 +1084,27 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
                   <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Type:</label>
                   <span>{selected.ltype === 'OR' ? 'No Reference' : 'With Reference'}</span>
                   <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Date :</label>
-                  <input readOnly value={formatDate(selected.ldate)} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
+                  {canMutateDocDate ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="date"
+                        value={dateDraft}
+                        max={localTodayYmd()}
+                        onChange={(e) => setDateDraft(e.target.value)}
+                        className="h-[34px] rounded-[3px] border border-[#ccc] bg-white px-3"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void saveDocumentDate()}
+                        disabled={savingDate || dateDraft === (selected.ldate || '').slice(0, 10)}
+                        className="rounded-[4px] bg-[#5d82a2] px-2 py-1 text-[11px] text-white disabled:opacity-50"
+                      >
+                        {savingDate ? '...' : 'Save'}
+                      </button>
+                    </div>
+                  ) : (
+                    <input readOnly value={formatDate(selected.ldate)} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
+                  )}
                   <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Sales Person:</label>
                   <input readOnly value={selected.sales_person || ''} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
 

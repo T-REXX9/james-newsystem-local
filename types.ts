@@ -109,6 +109,11 @@ export type PageActionPermissions = {
   global?: Partial<ActionPermissionEntry>;
   /** Page labels map to independent action permissions. */
   pages?: Record<string, Partial<ActionPermissionEntry>>;
+  /**
+   * Account-wide Backdated posting permission (not per-page).
+   * Defaults off; Master User is unrestricted.
+   */
+  can_backdate?: boolean;
   /** Legacy flat values from accounts saved before page-scoped permissions. */
   can_view?: boolean;
   can_approve?: boolean;

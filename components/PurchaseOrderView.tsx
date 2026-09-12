@@ -24,7 +24,12 @@ import {
 import ModuleRecordLink from './ModuleRecordLink';
 import ProcurementDocumentBanner from './ProcurementDocumentBanner';
 import { retraceWorkflowHistory } from '../utils/workflowHistory';
-import { canPerformAction } from '../utils/actionPermissions';
+import { canBackdatePosting, canPerformAction } from '../utils/actionPermissions';
+import {
+  canMutateDocumentDateField,
+  localTodayYmd,
+  validateDocumentDateWrite,
+} from '../utils/backdatedPosting';
 
 // Inline StatusBadge if generic one is not suitable for POs, but I'll use simple spans for now to be safe, or try to use the imported one if generic.
 // I'll stick to my own badge logic or reuse if I knew it works. I'll use my own for safety.
@@ -69,6 +74,12 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   const canDelete = canPerformAction('can_delete');
   const canPost = canPerformAction('can_post');
   const canUnpost = canPerformAction('can_unpost') && (['owner', 'company owner', 'administrator', 'purchasing manager'].includes(String(currentUser?.role || '').trim().toLowerCase()) || String(currentUser?.user_type || '') === '1');
+  const hasBackdatedPosting = canBackdatePosting();
+  const canMutateCreateDate = canMutateDocumentDateField({
+    canEdit: canAdd || canEdit,
+    hasBackdatedPosting,
+    isPosted: false,
+  });
   const today = new Date();
   // List State
   const [orders, setOrders] = useState<PurchaseOrderWithDetails[]>([]);
@@ -87,7 +98,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   const consumedDeepLinkRef = useRef('');
 
   // Form State (New PO)
-  const [createForm, setCreateForm] = useState<Partial<PurchaseOrderInsert>>({ status: 'Pending', order_date: new Date().toISOString().split('T')[0] });
+  const [createForm, setCreateForm] = useState<Partial<PurchaseOrderInsert>>({ status: 'Pending', order_date: localTodayYmd() });
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [submitCount, setSubmitCount] = useState(0);
   const [submitError, setSubmitError] = useState('');
@@ -150,6 +161,12 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   useEffect(() => {
     setEditOrderDate(selectedPO?.order_date?.slice(0, 10) || '');
   }, [selectedPO?.id, selectedPO?.order_date]);
+
+  const canMutateSelectedOrderDate = canMutateDocumentDateField({
+    canEdit,
+    hasBackdatedPosting,
+    isPosted: !selectedPO || !['Pending', 'Unposted', 'Draft'].includes(selectedPO.status),
+  });
 
   const notifyPurchaseOrderEvent = async (
     title: string,
@@ -442,7 +459,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
 
     setNewPONumber(nextNum);
     setCreateForm({
-      order_date: new Date().toISOString().split('T')[0],
+      order_date: localTodayYmd(),
       status: 'Pending',
       remarks: '',
       grand_total: 0
@@ -463,6 +480,16 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
       setSubmitCount((prev) => prev + 1);
       return;
     }
+    const resolvedOrderDate = canMutateCreateDate ? (createForm.order_date || localTodayYmd()) : localTodayYmd();
+    const dateWriteCheck = validateDocumentDateWrite({
+      hasBackdatedPosting,
+      proposedYmd: resolvedOrderDate,
+      todayYmd: localTodayYmd(),
+    });
+    if (!dateWriteCheck.ok) {
+      addToast({ type: 'error', title: 'Invalid document date', description: dateWriteCheck.reason });
+      return;
+    }
     try {
       if (!selectedPRId) {
         setSubmitError('Please select a Purchase Requisition.');
@@ -474,11 +501,14 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
         supplierId: String(createForm.supplier_id || ''),
       });
 
-      await fetchOrders();
+      let fullPO = await purchaseOrderService.getPurchaseOrderById(createdPORefNo) as unknown as PurchaseOrderWithDetails;
+      if (resolvedOrderDate && resolvedOrderDate !== fullPO.order_date?.slice(0, 10)) {
+        fullPO = await purchaseOrderService.updatePurchaseOrder(fullPO.id, { order_date: resolvedOrderDate } as any) as unknown as PurchaseOrderWithDetails;
+        fullPO = await purchaseOrderService.getPurchaseOrderById(fullPO.id || createdPORefNo) as unknown as PurchaseOrderWithDetails;
+      }
 
-      // Fetch and select the new PO
-      const fullPO = await purchaseOrderService.getPurchaseOrderById(createdPORefNo);
-      setSelectedPO(fullPO as unknown as PurchaseOrderWithDetails);
+      await fetchOrders();
+      setSelectedPO(fullPO);
 
       await notifyPurchaseOrderEvent(
         'Purchase Order Created',
@@ -575,7 +605,17 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   };
 
   const saveOrderDate = async () => {
-    if (!selectedPO || !canEdit || !canUnpost || !['Pending', 'Unposted'].includes(selectedPO.status) || !editOrderDate) return;
+    if (!selectedPO || !canMutateSelectedOrderDate || !editOrderDate) return;
+    const dateCheck = validateDocumentDateWrite({
+      hasBackdatedPosting,
+      proposedYmd: editOrderDate,
+      previousYmd: selectedPO.order_date,
+      todayYmd: localTodayYmd(),
+    });
+    if (!dateCheck.ok) {
+      addToast({ type: 'error', title: 'Invalid document date', description: dateCheck.reason });
+      return;
+    }
     try {
       const updated = await purchaseOrderService.updatePurchaseOrder(selectedPO.id, { order_date: editOrderDate } as any);
       const fullPO = await purchaseOrderService.getPurchaseOrderById(updated.id || selectedPO.id);
@@ -928,7 +968,16 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
 
                   <div>
                     <label className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Order Date</label>
-                    <input type="date" value={createForm.order_date} onChange={e => setCreateForm({ ...createForm, order_date: e.target.value })} onBlur={e => handleCreateBlur('order_date', e.target.value)} className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-[#175fd3] focus:ring-1 focus:ring-blue-100" />
+                    <input
+                      type="date"
+                      value={createForm.order_date}
+                      max={localTodayYmd()}
+                      disabled={!canMutateCreateDate}
+                      readOnly={!canMutateCreateDate}
+                      onChange={e => setCreateForm({ ...createForm, order_date: e.target.value })}
+                      onBlur={e => handleCreateBlur('order_date', e.target.value)}
+                      className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-[#175fd3] focus:ring-1 focus:ring-blue-100 disabled:bg-slate-100"
+                    />
                   </div>
                 </div>
 
@@ -1084,12 +1133,13 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                 </div>
                 <div>
                   <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">Created On</p>
-                  {canUnpost && ['Pending', 'Unposted'].includes(selectedPO.status) ? (
+                  {canMutateSelectedOrderDate ? (
                     <div className="flex items-center gap-2">
                       <input
                         aria-label="Edit purchase order date"
                         type="date"
                         value={editOrderDate}
+                        max={localTodayYmd()}
                         onChange={(event) => setEditOrderDate(event.target.value)}
                         className="h-9 min-w-0 rounded border border-slate-300 px-2 text-sm font-semibold text-slate-700"
                       />
