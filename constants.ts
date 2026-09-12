@@ -131,6 +131,7 @@ export const DEFAULT_ACTION_PERMISSIONS = {
   can_unpost: true,
   can_edit_invoice_number: false,
   can_edit_unit_price: false,
+  can_view_all_records: false,
 } as const;
 
 export type ActionPermissionName = keyof typeof DEFAULT_ACTION_PERMISSIONS;

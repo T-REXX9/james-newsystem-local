@@ -72,6 +72,22 @@ describe('access module permissions', () => {
     expect(invoice?.supportedActions).toContain('can_edit_invoice_number');
   });
 
+  it('exposes See all records only on pages that hold per-staff records', () => {
+    const pageById = (id: string) => ACCESS_MODULES.flatMap((module) => module.pages).find((page) => page.id === id);
+
+    expect(pageById('sales-transaction-daily-call-monitoring')?.supportedActions).toContain('can_view_all_records');
+    expect(pageById('maintenance-customer-customer-data')?.supportedActions).toContain('can_view_all_records');
+    expect(pageById('sales-transaction-sales-inquiry')?.supportedActions).not.toContain('can_view_all_records');
+  });
+
+  it('still offers See all records on the read-only Recycle Bin page', () => {
+    const recycleBin = ACCESS_MODULES
+      .flatMap((module) => module.pages)
+      .find((page) => page.id === 'maintenance-profile-recycle-bin');
+
+    expect(recycleBin?.supportedActions).toEqual(['can_view_all_records']);
+  });
+
   it.each(ACCESS_MODULES)('toggles every page in the %s module as one binary permission', (module) => {
     const enabled = toggleAccessModule([], module.id, true);
     expect(enabled).toEqual(module.pageIds);

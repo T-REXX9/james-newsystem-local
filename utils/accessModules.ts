@@ -15,14 +15,30 @@ export interface AccessPage {
 }
 
 const READ_ONLY_ROUTE_PARTS = ['report', 'dashboard', 'audit', 'activity-logs', 'call-records', 'sales-map', 'recycle-bin'];
+
+/**
+ * Pages that hold records belonging to individual staff. Without this toggle a
+ * viewer sees only their own; with it they see everyone's.
+ */
+const SEE_ALL_RECORDS_PAGE_IDS = [
+  'sales-transaction-daily-call-monitoring',
+  'maintenance-customer-customer-data',
+  'maintenance-profile-recycle-bin',
+];
+
 const supportedActionsForPage = (pageId: string): ActionPermissionName[] => {
-  if (READ_ONLY_ROUTE_PARTS.some((part) => pageId.includes(part))) return [];
+  if (READ_ONLY_ROUTE_PARTS.some((part) => pageId.includes(part))) {
+    return SEE_ALL_RECORDS_PAGE_IDS.includes(pageId) ? ['can_view_all_records'] : [];
+  }
   const actions: ActionPermissionName[] = ['can_view', 'can_approve', 'can_add', 'can_edit', 'can_delete', 'can_post', 'can_unpost'];
   if (pageId === 'sales-transaction-invoice') {
     actions.push('can_edit_invoice_number');
   }
   if (pageId === 'sales-transaction-sales-inquiry') {
     actions.push('can_edit_unit_price');
+  }
+  if (SEE_ALL_RECORDS_PAGE_IDS.includes(pageId)) {
+    actions.push('can_view_all_records');
   }
   return actions;
 };
