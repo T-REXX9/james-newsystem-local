@@ -210,6 +210,19 @@ describe('PurchaseOrderView', () => {
     );
   });
 
+  it('lets a cancelled purchase order be reopened or deleted instead of replaced', async () => {
+    service.getPurchaseOrderById.mockResolvedValue({ ...po, status: 'Cancelled' });
+    const { default: PurchaseOrderView } = await import('../PurchaseOrderView');
+    render(<PurchaseOrderView initialPOId="POREF-1" />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /^reopen$/i }));
+    const reopenButtons = screen.getAllByRole('button', { name: /^reopen$/i });
+    fireEvent.click(reopenButtons[reopenButtons.length - 1]);
+
+    await waitFor(() => expect(service.updatePurchaseOrder).toHaveBeenCalledWith('POREF-1', { status: 'Pending' }));
+    expect(screen.getByRole('button', { name: /^delete$/i })).toBeInTheDocument();
+  });
+
   it('retraces the previous workflow from a linked purchase order', async () => {
     window.history.replaceState(createWorkflowHistoryState('#/warehouse-reports-reorder-report'), '', '/#/warehouse-purchasing-purchase-order?poId=POREF-1');
     const backSpy = vi.spyOn(window.history, 'back').mockImplementation(() => {});

@@ -571,22 +571,57 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
     setValidationErrors((prev) => ({ ...prev, [field]: message }));
   };
 
-  const handleStatusChange = (newStatus: string) => {
+  // 'Pending' reopens a cancelled order so it can be corrected and posted
+  // again, rather than forcing a replacement order.
+  const handleStatusChange = (newStatus: 'Posted' | 'Cancelled' | 'Pending') => {
     if (!selectedPO || (newStatus === 'Posted' ? !canPost : !canEdit)) return;
-    const variant = newStatus === 'Cancelled' ? 'danger' : newStatus === 'Posted' ? 'success' : 'warning';
-    const confirmLabel = newStatus === 'Posted' ? 'Post' : newStatus === 'Cancelled' ? 'Cancel PO' : 'Confirm';
+    const wording = {
+      Posted: {
+        verb: 'post',
+        title: 'Post Purchase Order',
+        message: `Post ${selectedPO.po_number} so it can be received?`,
+        confirmLabel: 'Post',
+        variant: 'success' as const,
+        event: 'Purchase Order Posted',
+        eventMessage: `Purchase order ${selectedPO.po_number} has been posted for processing.`,
+        status: 'posted',
+        targetRoles: ['Owner', 'Purchasing Manager', 'Warehouse', 'Warehouse Staff'],
+      },
+      Cancelled: {
+        verb: 'cancel',
+        title: 'Cancel Purchase Order',
+        message: `Cancel ${selectedPO.po_number}? You can reopen or delete it afterwards.`,
+        confirmLabel: 'Cancel PO',
+        variant: 'danger' as const,
+        event: 'Purchase Order Cancelled',
+        eventMessage: `Purchase order ${selectedPO.po_number} has been cancelled.`,
+        status: 'cancelled',
+        targetRoles: ['Owner', 'Purchasing Manager'],
+      },
+      Pending: {
+        verb: 'reopen',
+        title: 'Reopen Purchase Order',
+        message: `Reopen ${selectedPO.po_number}? It returns to Pending so it can be edited and posted again.`,
+        confirmLabel: 'Reopen',
+        variant: 'warning' as const,
+        event: 'Purchase Order Reopened',
+        eventMessage: `Purchase order ${selectedPO.po_number} has been reopened for editing.`,
+        status: 'pending',
+        targetRoles: ['Owner', 'Purchasing Manager'],
+      },
+    }[newStatus];
     openConfirm({
-      title: `${newStatus === 'Cancelled' ? 'Cancel' : 'Post'} Purchase Order`,
-      message: `Are you sure you want to change the status of ${selectedPO.po_number} to "${newStatus}"? This action cannot be undone.`,
-      variant,
-      confirmLabel,
+      title: wording.title,
+      message: wording.message,
+      variant: wording.variant,
+      confirmLabel: wording.confirmLabel,
       onConfirm: async () => {
         try {
           await purchaseOrderService.updatePurchaseOrder(selectedPO.id, { status: newStatus });
         } catch (error: any) {
           addToast({
             type: 'error',
-            title: `Unable to ${newStatus === 'Posted' ? 'post' : 'cancel'} purchase order`,
+            title: `Unable to ${wording.verb} purchase order`,
             description: error.message,
           });
           throw error;
@@ -594,18 +629,12 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
         const updated = await purchaseOrderService.getPurchaseOrderById(selectedPO.id);
         setSelectedPO(updated as unknown as PurchaseOrderWithDetails);
         await notifyPurchaseOrderEvent(
-          newStatus === 'Posted' ? 'Purchase Order Posted' : 'Purchase Order Cancelled',
-          newStatus === 'Posted'
-            ? `Purchase order ${selectedPO.po_number} has been posted for processing.`
-            : `Purchase order ${selectedPO.po_number} has been cancelled.`,
-          newStatus === 'Posted' ? 'post' : 'cancel',
-          newStatus === 'Posted' ? 'posted' : 'cancelled',
+          wording.event,
+          wording.eventMessage,
+          wording.verb,
+          wording.status,
           selectedPO.id,
-          {
-            targetRoles: newStatus === 'Posted'
-              ? ['Owner', 'Purchasing Manager', 'Warehouse', 'Warehouse Staff']
-              : ['Owner', 'Purchasing Manager'],
-          }
+          { targetRoles: wording.targetRoles }
         );
         fetchOrders();
         addToast({ type: 'success', title: `Status updated to ${newStatus}`, durationMs: 4000 });
@@ -658,7 +687,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
   };
 
   const handleDeletePO = (reason: string) => {
-    if (!selectedPO || !canUnpost) return;
+    if (!selectedPO || !canDelete) return;
     openConfirm({
       title: 'Delete Purchase Order',
       message: `Delete ${selectedPO.po_number}? It will be retained as Deleted.`,
@@ -1128,7 +1157,8 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
                 <button onClick={() => setPrintMode(true)} className="ml-2 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Print</button>
                 {['Pending', 'Unposted'].includes(selectedPO.status) && canPost && <button onClick={() => handleStatusChange('Posted')} className="rounded-md bg-emerald-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-emerald-700">Post</button>}
                 {['Posted', 'Completed'].includes(selectedPO.status) && canUnpost && <button onClick={() => setRecoveryAction('unpost')} className="rounded-md bg-amber-500 px-4 py-1.5 text-sm font-bold text-white hover:bg-amber-600">Unpost</button>}
-                {['Pending', 'Unposted'].includes(selectedPO.status) && canDelete && <button onClick={() => setRecoveryAction('delete')} className="rounded-md bg-rose-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-rose-700">Delete</button>}
+                {selectedPO.status === 'Cancelled' && canEdit && <button onClick={() => handleStatusChange('Pending')} className="rounded-md bg-[#175fd3] px-4 py-1.5 text-sm font-bold text-white hover:bg-[#0e4fb7]">Reopen</button>}
+                {['Pending', 'Unposted', 'Cancelled'].includes(selectedPO.status) && canDelete && <button onClick={() => setRecoveryAction('delete')} className="rounded-md bg-rose-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-rose-700">Delete</button>}
                 {['Draft', 'Pending'].includes(selectedPO.status) && canEdit && <button onClick={() => handleStatusChange('Cancelled')} className="rounded-md bg-rose-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-rose-700">Cancel</button>}
               </div>
             </div>

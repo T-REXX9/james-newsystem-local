@@ -547,7 +547,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
                   </button>
                 )}
               {onDelete && canDelete &&
-                ["Draft", "Pending", "Unposted"].includes(
+                ["Draft", "Pending", "Unposted", "Cancelled"].includes(
                   request.status || "",
                 ) && (
                   <button

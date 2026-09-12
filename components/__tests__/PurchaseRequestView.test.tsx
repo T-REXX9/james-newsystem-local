@@ -227,6 +227,26 @@ describe('PurchaseRequestView', () => {
     await waitFor(() => expect(onUpdate).toHaveBeenCalledWith('PRREF-1', { status: 'Pending' }));
   });
 
+  it('lets the user delete a Cancelled request rather than only reopen it', async () => {
+    renderView(
+      <PurchaseRequestView
+        request={{ ...baseRequest, status: 'Cancelled' } as any}
+        onBack={vi.fn()}
+        onUpdate={vi.fn()}
+        onUpdateItem={vi.fn()}
+        onDeleteItem={vi.fn()}
+        onAddItem={vi.fn()}
+        onConvert={vi.fn()}
+        onPrint={vi.fn()}
+        onDelete={vi.fn()}
+        products={[]}
+        suppliers={[]}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: /^delete$/i })).toBeInTheDocument();
+  });
+
   it('lets the user submit a Draft for approval so it can reach the purchase order stage', async () => {
     const user = userEvent.setup();
     const onUpdate = vi.fn().mockResolvedValue(undefined);

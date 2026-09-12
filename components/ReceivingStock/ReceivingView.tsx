@@ -9,7 +9,7 @@ import {
 import { receivingService } from '../../services/receivingService';
 import { parseOptionalNumberInput } from '../../utils/formValidation';
 import { useToast } from '../ToastProvider';
-import { Printer, CheckCircle, Trash2, FileText, Loader2, AlertCircle, Plus } from 'lucide-react';
+import { Printer, CheckCircle, Trash2, FileText, Loader2, AlertCircle, Plus, RotateCcw } from 'lucide-react';
 import CustomLoadingSpinner from '../CustomLoadingSpinner';
 import RecoveryReasonModal from '../RecoveryReasonModal';
 import ModuleRecordLink from '../ModuleRecordLink';
@@ -177,6 +177,19 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
             }
     };
 
+    // Returns a cancelled report to Draft so it can be corrected and posted
+    // again, instead of leaving the user to raise a replacement.
+    const handleReopen = async () => {
+        if (!canEdit || !rr) return;
+        try {
+            await receivingService.updateReceivingReport(rr.id, { status: 'Draft' } as never);
+            addToast({ type: 'success', message: 'Receiving Report reopened.' });
+            await fetchRR();
+        } catch (error: any) {
+            addToast({ type: 'error', message: error.message || 'Failed to reopen Receiving Report' });
+        }
+    };
+
     const canEditItems = canEdit && ['Draft', 'Pending', 'Unposted'].includes(rr?.status || '');
     const canMutateDocDate = canMutateDocumentDateField({
         canEdit,
@@ -278,7 +291,8 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                         <FileText className="h-4 w-4" /> View History
                     </button>
                     {['Posted', 'Delivered'].includes(rr.status) && canUnpost && <button onClick={() => setRecoveryAction('unpost')} className="inline-flex items-center gap-2 rounded-md bg-amber-500 px-4 py-2 text-sm font-bold text-white hover:bg-amber-600 print:hidden"><AlertCircle className="h-4 w-4" /> Unpost</button>}
-                    {['Draft', 'Unposted'].includes(rr.status) && canDelete && <button onClick={() => setRecoveryAction('delete')} className="inline-flex items-center gap-2 rounded-md bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 print:hidden"><Trash2 className="h-4 w-4" /> Delete</button>}
+                    {rr.status === 'Cancelled' && canEdit && <button onClick={handleReopen} className="inline-flex items-center gap-2 rounded-md bg-[#175fd3] px-4 py-2 text-sm font-bold text-white hover:bg-[#0e4fb7] print:hidden"><RotateCcw className="h-4 w-4" /> Reopen</button>}
+                    {['Draft', 'Unposted', 'Cancelled'].includes(rr.status) && canDelete && <button onClick={() => setRecoveryAction('delete')} className="inline-flex items-center gap-2 rounded-md bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 print:hidden"><Trash2 className="h-4 w-4" /> Delete</button>}
                     {['Draft', 'Unposted'].includes(rr.status) && canPost ? (
                         <button onClick={openPostModal} className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 print:hidden">
                             <CheckCircle className="h-4 w-4" /> Post Receiving

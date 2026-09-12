@@ -7,6 +7,7 @@ const service = {
   getReceivingReportById: vi.fn(),
   finalizeReceivingReport: vi.fn(),
   updateReceivingReportItem: vi.fn(),
+  updateReceivingReport: vi.fn(),
 };
 const addToast = vi.fn();
 
@@ -34,6 +35,7 @@ beforeEach(() => {
   service.getReceivingReportById.mockResolvedValue(report);
   service.finalizeReceivingReport.mockResolvedValue(undefined);
   service.updateReceivingReportItem.mockResolvedValue(report.items[0]);
+  service.updateReceivingReport.mockResolvedValue(report);
   Object.defineProperty(window, 'print', { configurable: true, value: vi.fn() });
 });
 
@@ -126,6 +128,17 @@ describe('ReceivingView', () => {
     expect(screen.queryByText('Incomplete Delivery')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /confirm & post/i }));
     await waitFor(() => expect(service.finalizeReceivingReport).toHaveBeenCalledWith('RRREF-1'));
+  });
+
+  it('lets a cancelled receiving report be reopened or deleted instead of replaced', async () => {
+    service.getReceivingReportById.mockResolvedValue({ ...report, status: 'Cancelled' });
+    const { default: ReceivingView } = await import('../ReceivingStock/ReceivingView');
+    render(<ReceivingView rrId="RRREF-1" onBack={vi.fn()} onCreateNew={vi.fn()} />);
+
+    expect(await screen.findByRole('button', { name: /delete/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /reopen/i }));
+
+    await waitFor(() => expect(service.updateReceivingReport).toHaveBeenCalledWith('RRREF-1', { status: 'Draft' }));
   });
 });
 
