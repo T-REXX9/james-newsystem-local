@@ -101,6 +101,7 @@ export type ActionPermissionEntry = {
   can_post: boolean;
   can_unpost: boolean;
   can_edit_invoice_number: boolean;
+  can_edit_unit_price: boolean;
 };
 
 export type PageActionPermissions = {
@@ -117,6 +118,7 @@ export type PageActionPermissions = {
   can_post?: boolean;
   can_unpost?: boolean;
   can_edit_invoice_number?: boolean;
+  can_edit_unit_price?: boolean;
 };
 
 export interface UserProfile {
@@ -663,6 +665,41 @@ export interface CallReportMessage {
   created_at: string;
   is_from_current_user: boolean;
   is_from_master: boolean;
+  attachment_url?: string | null;
+  attachment_mime?: string | null;
+}
+
+export type SalesReportMessageKind =
+  | 'agent_report'
+  | 'reply'
+  | 'management_instruction'
+  | 'staff_comment';
+
+export interface SalesReportConversationMessage {
+  id: string;
+  thread_id?: string;
+  contact_id: string;
+  kind: SalesReportMessageKind;
+  sender_user_id: string;
+  sender_name: string;
+  sender_role: 'agent' | 'master';
+  body: string;
+  attachment_url?: string | null;
+  attachment_mime?: string | null;
+  created_at: string;
+  is_from_current_user: boolean;
+  is_from_master: boolean;
+  outcome?: CallOutcome;
+  call_started_at?: string;
+  call_ended_at?: string;
+  duration_seconds?: number;
+  replyable?: boolean;
+}
+
+export interface SalesReportConversation {
+  contact_id: string;
+  messages: SalesReportConversationMessage[];
+  unread_count: number;
 }
 
 export interface CallReportThread {

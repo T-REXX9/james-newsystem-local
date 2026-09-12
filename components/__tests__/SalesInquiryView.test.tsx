@@ -1143,4 +1143,104 @@ describe('SalesInquiryView', () => {
       expect(screen.getByText('₱42,000.00')).toBeInTheDocument();
     });
   });
+
+  it('keeps catalog unit prices read-only without Edit unit price permission', async () => {
+    // Default action permissions leave can_edit_unit_price false.
+    const inquiry = makeInquiry({
+      id: 'inq-price-locked',
+      inquiry_no: 'INQ26-700',
+      items: [{
+        id: 'item-locked',
+        inquiry_id: 'inq-price-locked',
+        item_id: 'p-1',
+        qty: 1,
+        part_no: 'PN-1',
+        item_code: 'IC-1',
+        location: '',
+        description: 'Widget',
+        unit_price: 100,
+        amount: 100,
+        remark: 'OnStock',
+        approval_status: 'approved',
+      }],
+    });
+    getAllSalesInquiriesMock.mockResolvedValue([inquiry]);
+    getSalesInquiryMock.mockResolvedValue(inquiry);
+
+    render(<SalesInquiryView />);
+    await userEvent.click(await screen.findByText('INQ26-700'));
+    await waitFor(() => expect(getSalesInquiryMock).toHaveBeenCalledWith('inq-price-locked'));
+
+    const priceInput = await screen.findByRole('spinbutton', { name: 'Unit price for PN-1' }) as HTMLInputElement;
+    expect(priceInput.readOnly || priceInput.disabled).toBe(true);
+  });
+
+  it('allows catalog unit price edits when Edit unit price permission is granted', async () => {
+    const { getLocalAuthSession } = await import('../../services/localAuthService');
+    vi.mocked(getLocalAuthSession).mockReturnValue({
+      context: { user: { id: 64 } },
+      userProfile: {
+        id: '64',
+        role: 'Sales Agent',
+        full_name: 'test',
+        user_type: '2',
+        action_permissions: {
+          global: {
+            can_view: true,
+            can_approve: true,
+            can_add: true,
+            can_edit: true,
+            can_delete: true,
+            can_post: true,
+            can_unpost: true,
+            can_edit_invoice_number: false,
+            can_edit_unit_price: false,
+          },
+          pages: {
+            'Sales Inquiry': {
+              can_view: true,
+              can_approve: true,
+              can_add: true,
+              can_edit: true,
+              can_delete: true,
+              can_post: true,
+              can_unpost: true,
+              can_edit_invoice_number: false,
+              can_edit_unit_price: true,
+            },
+          },
+        },
+      },
+      token: 'token',
+    } as any);
+
+    const inquiry = makeInquiry({
+      id: 'inq-price-open',
+      inquiry_no: 'INQ26-701',
+      items: [{
+        id: 'item-open',
+        inquiry_id: 'inq-price-open',
+        item_id: 'p-1',
+        qty: 1,
+        part_no: 'PN-1',
+        item_code: 'IC-1',
+        location: '',
+        description: 'Widget',
+        unit_price: 100,
+        amount: 100,
+        remark: 'OnStock',
+        approval_status: 'approved',
+      }],
+    });
+    getAllSalesInquiriesMock.mockResolvedValue([inquiry]);
+    getSalesInquiryMock.mockResolvedValue(inquiry);
+
+    render(<SalesInquiryView />);
+    await userEvent.click(await screen.findByText('INQ26-701'));
+    await waitFor(() => expect(getSalesInquiryMock).toHaveBeenCalledWith('inq-price-open'));
+
+    const priceInput = await screen.findByRole('spinbutton', { name: 'Unit price for PN-1' }) as HTMLInputElement;
+    expect(priceInput.readOnly).toBe(false);
+    expect(priceInput.disabled).toBe(false);
+  });
 });

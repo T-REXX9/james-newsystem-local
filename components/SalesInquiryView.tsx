@@ -189,6 +189,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   const canEdit = canPerformAction('can_edit');
   const canDelete = canPerformAction('can_delete');
   const canApprove = canPerformAction('can_approve');
+  const canEditUnitPrice = canPerformAction('can_edit_unit_price', 'Sales Inquiry');
   const lastAppliedPrefillRef = React.useRef<string | null>(null);
   const salesInquiryExportRef = React.useRef<HTMLElement | null>(null);
   const customerSelectionDirtyRef = React.useRef(false);
@@ -1568,6 +1569,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     return 'text-slate-900 dark:text-slate-100';
   };
   const isManualItem = (item: InquiryItemRow) => Boolean(item.isManual);
+  const canEditItemUnitPrice = (item: InquiryItemRow) =>
+    !isReadOnly && (isManualItem(item) || canEditUnitPrice);
 
   const legacyInputClass = 'h-[34px] w-full rounded-[4px] border border-[#c9c9c9] bg-white px-3 text-[13px] text-[#333] outline-none focus:border-[#7a9ab5] disabled:bg-[#f2f2f2] disabled:text-[#777]';
   const legacyLabelClass = 'whitespace-nowrap text-right text-[16px] font-semibold text-[#29475f]';
@@ -1727,7 +1730,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                   <td className="px-2 py-2 text-center">{isManualItem(item) ? <input value={item.item_code || ''} onChange={(event) => updateItemRow(item.tempId, 'item_code', event.target.value.toUpperCase())} className="w-full border border-[#ccc] px-1 py-1" /> : item.item_code || ''}</td>
                   <td className="px-2 py-2 text-center">{item.location || ''}</td>
                   <td className="px-2 py-2">{!item.item_id && !isManualItem(item) ? <button type="button" onClick={() => handleOpenProductModal(item.tempId!)} className="text-[#337ab7] underline">Click to search product</button> : isManualItem(item) ? <input value={item.description || ''} onChange={(event) => updateItemRow(item.tempId, 'description', event.target.value.toUpperCase())} className="w-full border border-[#ccc] px-1 py-1" /> : item.description || ''}</td>
-                  <td className="px-2 py-2 text-right"><input type="number" readOnly={!isManualItem(item)} value={item.unit_price} onChange={(event) => updateItemRow(item.tempId, 'unit_price', Number(event.target.value))} className="w-full border border-[#ccc] bg-white px-1 py-1 text-right read-only:bg-[#f5f5f5]" /></td>
+                  <td className="px-2 py-2 text-right"><input type="number" readOnly={!canEditItemUnitPrice(item)} value={item.unit_price} onChange={(event) => updateItemRow(item.tempId, 'unit_price', Number(event.target.value))} className="w-full border border-[#ccc] bg-white px-1 py-1 text-right read-only:bg-[#f5f5f5]" aria-label={`Unit price for ${item.part_no || item.item_code || 'item'}`} /></td>
                   <td className="px-2 py-2 text-right">{Number(item.amount || 0).toFixed(2)}</td>
                   <td className={`px-2 py-2 text-center ${remarkClassName(item.remark)}`}>{item.remark || ''}</td>
                   <td className="px-2 py-2 text-center"><button type="button" onClick={() => removeItemRow(item.tempId)} disabled={isReadOnly} className="text-[#c84848] underline disabled:opacity-40">Remove</button></td>
@@ -2473,7 +2476,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                           <td className="px-3 py-2 border-b border-slate-200 dark:border-slate-800">
                             <input
                               type="number"
-                              disabled={isReadOnly || !isManualItem(item)}
+                              disabled={!canEditItemUnitPrice(item)}
                               value={item.unit_price}
                               onChange={(e) =>
                                 updateItemRow(
@@ -2482,7 +2485,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                                   e.target.value === '' ? '' : parseFloat(e.target.value) || ''
                                 )
                               }
-                              className={`w-28 px-2 py-1.5 border rounded bg-white dark:bg-slate-800 text-sm text-right ${validationErrors[`item-${item.tempId}-unit_price`] ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'} ${(isReadOnly || !isManualItem(item)) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                              aria-label={`Unit price for ${item.part_no || item.item_code || 'item'}`}
+                              className={`w-28 px-2 py-1.5 border rounded bg-white dark:bg-slate-800 text-sm text-right ${validationErrors[`item-${item.tempId}-unit_price`] ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'} ${!canEditItemUnitPrice(item) ? 'opacity-60 cursor-not-allowed' : ''}`}
                             />
                           </td>
                           <td className="px-3 py-2 border-b border-slate-200 dark:border-slate-800 text-right">{formatCurrency(item.amount || 0)}</td>

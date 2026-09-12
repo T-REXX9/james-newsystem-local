@@ -771,6 +771,7 @@ const AccessControlSettings: React.FC = () => {
                                                 ['can_post', 'Post'],
                                                 ['can_unpost', 'Unpost'],
                                                 ['can_edit_invoice_number', 'Edit invoice number'],
+                                                ['can_edit_unit_price', 'Edit unit price'],
                                               ] as const).filter(([permission]) => pageActions.includes(permission)).map(([permission, label]) => (
                                                 <label key={permission} className="flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-300">
                                                   <input type="checkbox" checked={isOwner || pageActionValues[permission]} disabled={isOwner || !isAllowed} aria-label={`${label} action permission for ${pageItem.label} for ${user.full_name}`} onChange={(event) => handleActionPermissionToggle(user.id, pageItem.label, permission, event.target.checked)} />

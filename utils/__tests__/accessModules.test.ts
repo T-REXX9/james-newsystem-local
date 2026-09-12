@@ -59,6 +59,19 @@ describe('access module permissions', () => {
     expect(expandAccessModule('communication')).toContain('sales-transaction-marketing-campaigns');
   });
 
+  it('exposes edit unit price only on Sales Inquiry', () => {
+    const salesInquiry = ACCESS_MODULES
+      .flatMap((module) => module.pages)
+      .find((page) => page.id === 'sales-transaction-sales-inquiry');
+    const invoice = ACCESS_MODULES
+      .flatMap((module) => module.pages)
+      .find((page) => page.id === 'sales-transaction-invoice');
+
+    expect(salesInquiry?.supportedActions).toContain('can_edit_unit_price');
+    expect(invoice?.supportedActions).not.toContain('can_edit_unit_price');
+    expect(invoice?.supportedActions).toContain('can_edit_invoice_number');
+  });
+
   it.each(ACCESS_MODULES)('toggles every page in the %s module as one binary permission', (module) => {
     const enabled = toggleAccessModule([], module.id, true);
     expect(enabled).toEqual(module.pageIds);

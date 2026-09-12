@@ -21,6 +21,9 @@ const supportedActionsForPage = (pageId: string): ActionPermissionName[] => {
   if (pageId === 'sales-transaction-invoice') {
     actions.push('can_edit_invoice_number');
   }
+  if (pageId === 'sales-transaction-sales-inquiry') {
+    actions.push('can_edit_unit_price');
+  }
   return actions;
 };
 

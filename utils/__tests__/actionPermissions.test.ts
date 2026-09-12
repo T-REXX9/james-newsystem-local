@@ -86,4 +86,26 @@ describe('canPerformAction', () => {
       },
     }, 'can_edit_invoice_number', 'Invoice')).toBe(true);
   });
+
+  it('keeps edit unit price off by default and independent of general edit on Sales Inquiry', () => {
+    const user = {
+      role: 'Sales Agent',
+      action_permissions: {
+        global: { can_edit: true },
+        pages: {
+          'Sales Inquiry': { can_edit: true },
+        },
+      },
+    };
+
+    expect(hasActionPermission(user, 'can_edit', 'Sales Inquiry')).toBe(true);
+    expect(hasActionPermission(user, 'can_edit_unit_price', 'Sales Inquiry')).toBe(false);
+    expect(hasActionPermission({
+      ...user,
+      action_permissions: {
+        ...user.action_permissions,
+        pages: { 'Sales Inquiry': { can_edit: true, can_edit_unit_price: true } },
+      },
+    }, 'can_edit_unit_price', 'Sales Inquiry')).toBe(true);
+  });
 });
