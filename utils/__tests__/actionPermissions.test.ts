@@ -64,4 +64,26 @@ describe('canPerformAction', () => {
     expect(hasActionPermission({ ...user, action_permissions: { ...user.action_permissions, pages: { 'Product Database': { can_approve: false } } } }, 'can_approve', 'Product Database')).toBe(false);
     expect(hasActionPermission({ ...user, action_permissions: { ...user.action_permissions, pages: { 'Product Database': { can_view: false } } } }, 'can_view', 'Product Database')).toBe(false);
   });
+
+  it('keeps edit invoice number off by default and independent of general edit', () => {
+    const user = {
+      role: 'Sales Agent',
+      action_permissions: {
+        global: { can_edit: true },
+        pages: {
+          Invoice: { can_edit: true },
+        },
+      },
+    };
+
+    expect(hasActionPermission(user, 'can_edit', 'Invoice')).toBe(true);
+    expect(hasActionPermission(user, 'can_edit_invoice_number', 'Invoice')).toBe(false);
+    expect(hasActionPermission({
+      ...user,
+      action_permissions: {
+        ...user.action_permissions,
+        pages: { Invoice: { can_edit: true, can_edit_invoice_number: true } },
+      },
+    }, 'can_edit_invoice_number', 'Invoice')).toBe(true);
+  });
 });

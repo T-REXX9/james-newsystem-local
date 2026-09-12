@@ -17,7 +17,11 @@ export interface AccessPage {
 const READ_ONLY_ROUTE_PARTS = ['report', 'dashboard', 'audit', 'activity-logs', 'call-records', 'sales-map', 'recycle-bin'];
 const supportedActionsForPage = (pageId: string): ActionPermissionName[] => {
   if (READ_ONLY_ROUTE_PARTS.some((part) => pageId.includes(part))) return [];
-  return ['can_view', 'can_approve', 'can_add', 'can_edit', 'can_delete', 'can_post', 'can_unpost'];
+  const actions: ActionPermissionName[] = ['can_view', 'can_approve', 'can_add', 'can_edit', 'can_delete', 'can_post', 'can_unpost'];
+  if (pageId === 'sales-transaction-invoice') {
+    actions.push('can_edit_invoice_number');
+  }
+  return actions;
 };
 
 const moduleIds = ['home', 'warehouse', 'sales', 'accounting', 'maintenance', 'communication'] as const;

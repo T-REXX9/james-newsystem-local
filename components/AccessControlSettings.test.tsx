@@ -128,6 +128,7 @@ describe('AccessControlSettings - create staff account', () => {
           can_delete: true,
           can_post: true,
           can_unpost: true,
+          can_edit_invoice_number: false,
         },
         pages: {
           'Sales Inquiry': {
@@ -138,6 +139,7 @@ describe('AccessControlSettings - create staff account', () => {
             can_delete: true,
             can_post: true,
             can_unpost: true,
+            can_edit_invoice_number: false,
           },
         },
       },

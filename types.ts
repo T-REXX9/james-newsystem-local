@@ -100,6 +100,7 @@ export type ActionPermissionEntry = {
   can_delete: boolean;
   can_post: boolean;
   can_unpost: boolean;
+  can_edit_invoice_number: boolean;
 };
 
 export type PageActionPermissions = {
@@ -115,6 +116,7 @@ export type PageActionPermissions = {
   can_delete?: boolean;
   can_post?: boolean;
   can_unpost?: boolean;
+  can_edit_invoice_number?: boolean;
 };
 
 export interface UserProfile {

@@ -276,3 +276,34 @@ export const updateInvoiceNumber = async (
   });
   return mapInvoiceDetail(result);
 };
+
+export type InvoiceNumberSequence = {
+  prefix: string;
+  pad_width: number;
+  next_number: number;
+  next_invoice_no: string;
+};
+
+export const getInvoiceNumberSequence = async (): Promise<InvoiceNumberSequence> => {
+  const result = await requestApi(`${API_BASE_URL}/invoices/number-sequence?main_id=${encodeURIComponent(String(API_MAIN_ID))}`);
+  return mapInvoiceNumberSequence(result, 'T-1');
+};
+
+export const setInvoiceNumberSequenceStart = async (startInvoiceNo: string): Promise<InvoiceNumberSequence> => {
+  const result = await requestApi(`${API_BASE_URL}/invoices/number-sequence`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      main_id: API_MAIN_ID,
+      start_invoice_no: startInvoiceNo,
+    }),
+  });
+  return mapInvoiceNumberSequence(result, startInvoiceNo);
+};
+
+const mapInvoiceNumberSequence = (result: any, fallbackNext: string): InvoiceNumberSequence => ({
+  prefix: String(result?.prefix ?? 'T-'),
+  pad_width: Number(result?.pad_width ?? 0),
+  next_number: Number(result?.next_number ?? 1),
+  next_invoice_no: String(result?.next_invoice_no ?? fallbackNext),
+});

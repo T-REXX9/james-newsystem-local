@@ -16,6 +16,8 @@ import {
   cancelInvoice,
   updateInvoiceNumber,
   unpostInvoice,
+  getInvoiceNumberSequence,
+  setInvoiceNumberSequenceStart,
 } from '../services/invoiceLocalApiService';
 import { getLocalAuthSession } from '../services/localAuthService';
 import { fetchContactById, fetchContacts } from '../services/customerDatabaseLocalApiService';
@@ -31,6 +33,7 @@ import {
 import { PageHeader, RecordTrustStrip, WorkflowGuidance } from './common/PageScaffold';
 import { exportPrintSheetAsJpeg, waitForPrintSheet } from '../utils/exportPrintSheetJpeg';
 import { canPerformAction } from '../utils/actionPermissions';
+import { isMasterUserType } from '../constants';
 
 interface InvoiceViewProps {
   initialInvoiceId?: string;
@@ -106,13 +109,13 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
   const [editTrackingNo, setEditTrackingNo] = useState('');
   const [editLoading, setEditLoading] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
+  const [sequenceStartDraft, setSequenceStartDraft] = useState('');
+  const [sequenceNextPreview, setSequenceNextPreview] = useState('');
+  const [sequenceLoading, setSequenceLoading] = useState(false);
   const deepLinkAttemptedRef = useRef<string | null>(null);
 
-  const isAdminOrOwner = useMemo(() => {
-    const session = getLocalAuthSession();
-    const role = (session?.context?.user_type || session?.context?.user?.type || '').toLowerCase();
-    return role === 'owner' || role === 'admin';
-  }, []);
+  const isMasterUser = useMemo(() => isMasterUserType(getLocalAuthSession()?.userProfile), []);
+  const canEditInvoiceNumber = canPerformAction('can_edit_invoice_number', 'Invoice');
 
   const targetMonthYear = useMemo(() => {
     if (!dateRange.from) {
@@ -531,7 +534,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
   };
 
   const handleEditInvoiceNumber = async () => {
-    if (!canEdit || !selectedInvoice || !editInvoiceNo.trim() || !editReason.trim()) return;
+    if (!canEditInvoiceNumber || !selectedInvoice || !editInvoiceNo.trim() || !editReason.trim()) return;
     setEditLoading(true);
     try {
       const updated = await updateInvoiceNumber(selectedInvoice.id, {
@@ -551,11 +554,51 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
       addToast({
         type: 'error',
         title: 'Failed to update invoice number',
-        description: 'The invoice number changes could not be saved.',
+        description: err instanceof Error ? err.message : 'The invoice number changes could not be saved.',
         durationMs: 5000,
       });
     } finally {
       setEditLoading(false);
+    }
+  };
+
+  const loadNumberSequence = useCallback(async () => {
+    if (!isMasterUser) return;
+    try {
+      const sequence = await getInvoiceNumberSequence();
+      setSequenceNextPreview(sequence.next_invoice_no);
+      setSequenceStartDraft(sequence.next_invoice_no);
+    } catch (err) {
+      console.error('Failed loading invoice number sequence:', err);
+    }
+  }, [isMasterUser]);
+
+  useEffect(() => {
+    void loadNumberSequence();
+  }, [loadNumberSequence]);
+
+  const handleSaveNumberSequence = async () => {
+    if (!isMasterUser || !sequenceStartDraft.trim()) return;
+    setSequenceLoading(true);
+    try {
+      const sequence = await setInvoiceNumberSequenceStart(sequenceStartDraft.trim());
+      setSequenceNextPreview(sequence.next_invoice_no);
+      setSequenceStartDraft(sequence.next_invoice_no);
+      addToast({
+        type: 'success',
+        title: 'Invoice number start updated',
+        description: `Next Sales Invoice number will be ${sequence.next_invoice_no}.`,
+        durationMs: 4000,
+      });
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: 'Failed to set invoice number start',
+        description: err instanceof Error ? err.message : 'Could not save the starting invoice number.',
+        durationMs: 5000,
+      });
+    } finally {
+      setSequenceLoading(false);
     }
   };
 
@@ -582,7 +625,6 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
 
   const isCancelled = selectedInvoice?.status === InvoiceStatus.CANCELLED;
   const isPostedOrSent = selectedInvoice?.status === InvoiceStatus.SENT || selectedInvoice?.status === InvoiceStatus.PAID;
-  const canEdit = canPerformAction('can_edit');
   const canDelete = canPerformAction('can_delete');
   const canUnpost = canPerformAction('can_unpost');
   const invoiceGuidance = (() => {
@@ -698,6 +740,29 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
             <div className="flex items-center gap-[5px]"><button type="button" onClick={() => setShowSearchModal(true)} className="rounded-[4px] bg-[#5d82a2] px-[13px] py-[9px] text-[14px] text-white hover:bg-[#50738f]">Search</button><button type="button" onClick={handleRefresh} className="rounded-[4px] bg-[#4caf50] px-[13px] py-[9px] text-[14px] text-white hover:bg-[#43a047]">Refresh</button></div>
             <div className="flex flex-wrap items-center justify-end"><span className="mr-[30px] text-[20px] font-semibold text-[#29475f]">Filter by Month:</span><select value={String(legacyMonth)} onChange={(event) => handleMonthChange(event.target.value)} className="h-[34px] w-[200px] rounded-l-[4px] border border-[#cfcfcf] bg-white px-4 text-[13px] outline-none" aria-label="Filter month">{MONTH_OPTIONS.map((monthName, index) => <option key={monthName} value={String(index + 1)}>{monthName}</option>)}</select><input type="number" value={legacyYear} onChange={(event) => handleYearChange(event.target.value)} className="ml-[16px] h-[34px] w-[87px] border border-[#cfcfcf] bg-white px-3 text-[13px] outline-none" aria-label="Filter year" /><button type="button" onClick={() => void handleFilterApply()} className="h-[34px] rounded-r-[4px] bg-[#4caf50] px-[13px] text-[14px] text-white hover:bg-[#43a047]">Filter</button></div>
           </div>
+          {isMasterUser && (
+            <div className="flex flex-wrap items-center gap-3 border-b border-[#d7d7d7] px-[35px] py-3 text-[13px]">
+              <span className="font-semibold text-[#29475f]">Next invoice # start:</span>
+              <input
+                value={sequenceStartDraft}
+                onChange={(event) => setSequenceStartDraft(event.target.value)}
+                placeholder="TT-01500"
+                aria-label="Starting invoice number"
+                className="h-[34px] min-w-[10rem] rounded-[4px] border border-[#cfcfcf] bg-white px-3 outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => void handleSaveNumberSequence()}
+                disabled={sequenceLoading || !sequenceStartDraft.trim()}
+                className="h-[34px] rounded-[4px] bg-[#5d82a2] px-[13px] text-[13px] text-white disabled:opacity-50"
+              >
+                {sequenceLoading ? 'Saving...' : 'Set start'}
+              </button>
+              {sequenceNextPreview && (
+                <span className="text-[#666]">Next auto number: {sequenceNextPreview}</span>
+              )}
+            </div>
+          )}
 
           <div className="h-[207px] px-[25px] py-[25px]">
             <div className="mb-[10px] text-[13px]"><strong>Filtered By:</strong> {filteredByLabel}</div>
@@ -731,7 +796,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
 
             <div className="mt-[39px] border-t border-[#e5e5e5] pt-[29px] overflow-x-auto"><table className="w-full min-w-[950px] table-fixed border-collapse text-[12px]"><thead><tr className="border-b-2 border-[#d5d5d5] text-center text-[14px] font-semibold"><th className="px-2 pb-2">Item Code</th><th className="px-2 pb-2">Quantity</th><th className="px-2 pb-2">Location.</th><th className="px-2 pb-2">Part No.</th><th className="px-2 pb-2">Brand</th><th className="px-2 pb-2">Description</th><th className="px-2 pb-2">Unit price</th><th className="px-2 pb-2">Remark</th><th className="px-2 pb-2">Amount</th></tr></thead><tbody>{legacyItems.map((item, index) => <tr key={item.id || `${item.item_code}-${index}`} className="border-b border-[#e1e1e1] text-center"><td className="px-2 py-2">{item.item_code || ''}</td><td className="px-2 py-2">{item.qty}</td><td className="px-2 py-2">{item.location || ''}</td><td className="px-2 py-2">{item.part_no || ''}</td><td className="px-2 py-2">{item.brand || ''}</td><td className="px-2 py-2 text-left">{item.description || ''}</td><td className="px-2 py-2 text-right">{Number(item.unit_price || 0).toFixed(2)}</td><td className="px-2 py-2">{item.remark || ''}</td><td className="px-2 py-2 text-right">{Number(item.amount || 0).toFixed(2)}</td></tr>)}</tbody><tfoot><tr><td className="px-2 py-[9px] text-right font-bold">Total Qty:</td><td className="px-2 py-[9px]"><span className="rounded-full bg-[#6f91af] px-2 py-[2px] font-bold text-white">{totalQty}</span></td><td colSpan={5}></td><td className="px-2 py-[9px] text-right font-bold">Grand Total:</td><td className="px-2 py-[9px]"><span className="rounded-full bg-[#ef4b4b] px-2 py-[2px] font-bold text-white">{Number(selectedInvoice?.grand_total || 0).toFixed(2)}</span></td></tr><VipDocumentTotals discount={invoiceVipSummary.discount} formatMoney={(value) => value.toFixed(2)} grandTotalColSpan={8} variant="invoice" amountDue={invoiceVipSummary.totalAmountDue} /></tfoot></table></div>
 
-            {selectedInvoice && <div className="mt-2 flex flex-wrap justify-end gap-[5px] border-t border-[#e3e3e3] pt-3 print:hidden"><button type="button" onClick={() => void handlePrint()} disabled={printing || !canProcessInvoice} className="rounded-[4px] bg-[#5d82a2] px-[15px] py-[9px] text-[13px] text-white disabled:opacity-50">{printing ? 'Printing...' : 'Print INV'}</button>{isPostedOrSent && canUnpost && <button type="button" onClick={() => setUnpostModalOpen(true)} className="rounded-[4px] bg-[#d64b47] px-[15px] py-[9px] text-[13px] text-white">UNPOST</button>}{!isCancelled && <button type="button" onClick={() => setCancelModalOpen(true)} className="rounded-[4px] bg-[#d64b47] px-[15px] py-[9px] text-[13px] text-white">Cancel INV</button>}<button type="button" onClick={() => { setJpegCaptureMode(false); setShowPrintPreview(true); }} className="rounded-[4px] bg-[#5d82a2] px-[15px] py-[9px] text-[13px] text-white">Preview Layout</button>{isAdminOrOwner && <button type="button" onClick={() => { setEditInvoiceNo(selectedInvoice.invoice_no); setEditInvoiceDate(selectedInvoice.sales_date); setEditReason(''); setEditTrackingNo(selectedInvoice.send_by || ''); setEditNumberModalOpen(true); }} className="rounded-[4px] border border-[#ccc] px-[15px] py-[8px] text-[13px]">Edit Number</button>}{selectedInvoice.order_id && <ModuleRecordAction tab="sales-transaction-sales-order" payload={{ orderId: selectedInvoice.order_id }} className="rounded-[4px] border border-[#ccc] px-[15px] py-[8px] text-[13px]" newWindowLabel="Open sales order in new window">View Sales Order</ModuleRecordAction>}</div>}
+            {selectedInvoice && <div className="mt-2 flex flex-wrap justify-end gap-[5px] border-t border-[#e3e3e3] pt-3 print:hidden"><button type="button" onClick={() => void handlePrint()} disabled={printing || !canProcessInvoice} className="rounded-[4px] bg-[#5d82a2] px-[15px] py-[9px] text-[13px] text-white disabled:opacity-50">{printing ? 'Printing...' : 'Print INV'}</button>{isPostedOrSent && canUnpost && <button type="button" onClick={() => setUnpostModalOpen(true)} className="rounded-[4px] bg-[#d64b47] px-[15px] py-[9px] text-[13px] text-white">UNPOST</button>}{!isCancelled && <button type="button" onClick={() => setCancelModalOpen(true)} className="rounded-[4px] bg-[#d64b47] px-[15px] py-[9px] text-[13px] text-white">Cancel INV</button>}<button type="button" onClick={() => { setJpegCaptureMode(false); setShowPrintPreview(true); }} className="rounded-[4px] bg-[#5d82a2] px-[15px] py-[9px] text-[13px] text-white">Preview Layout</button>{canEditInvoiceNumber && <button type="button" onClick={() => { setEditInvoiceNo(selectedInvoice.invoice_no); setEditInvoiceDate(selectedInvoice.sales_date); setEditReason(''); setEditTrackingNo(selectedInvoice.send_by || ''); setEditNumberModalOpen(true); }} className="rounded-[4px] border border-[#ccc] px-[15px] py-[8px] text-[13px]">Edit Number</button>}{selectedInvoice.order_id && <ModuleRecordAction tab="sales-transaction-sales-order" payload={{ orderId: selectedInvoice.order_id }} className="rounded-[4px] border border-[#ccc] px-[15px] py-[8px] text-[13px]" newWindowLabel="Open sales order in new window">View Sales Order</ModuleRecordAction>}</div>}
           </div>
         </section>
       </div>
@@ -1048,7 +1113,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
                         <div className="flex items-center gap-2">
                           <input readOnly value={selectedInvoice.invoice_no} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" />
                           <StatusBadge status={selectedInvoice.status} className="text-[10px] px-2 py-0.5" />
-                          {isAdminOrOwner && canEdit && (
+                          {canEditInvoiceNumber && (
                             <button
                               type="button"
                               onClick={() => {

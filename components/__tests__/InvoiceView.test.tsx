@@ -18,6 +18,13 @@ vi.mock('../../services/invoiceLocalApiService', () => ({
   cancelInvoice: vi.fn(),
   updateInvoiceNumber: vi.fn(),
   unpostInvoice: vi.fn(),
+  getInvoiceNumberSequence: vi.fn(async () => ({
+    prefix: 'T-',
+    pad_width: 0,
+    next_number: 1,
+    next_invoice_no: 'T-1',
+  })),
+  setInvoiceNumberSequenceStart: vi.fn(),
 }));
 
 vi.mock('../../services/customerDatabaseLocalApiService', () => ({
