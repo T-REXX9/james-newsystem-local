@@ -27,6 +27,11 @@ const SEE_ALL_RECORDS_PAGE_IDS = [
 ];
 
 const supportedActionsForPage = (pageId: string): ActionPermissionName[] => {
+  // Daily Call Monitoring is a live prospect/customer workspace. It has no
+  // transaction posting lifecycle; Add is specifically for adding prospects.
+  if (pageId === 'sales-transaction-daily-call-monitoring') {
+    return ['can_view', 'can_add', 'can_edit', 'can_view_all_records'];
+  }
   if (READ_ONLY_ROUTE_PARTS.some((part) => pageId.includes(part))) {
     return SEE_ALL_RECORDS_PAGE_IDS.includes(pageId) ? ['can_view_all_records'] : [];
   }

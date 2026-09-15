@@ -115,13 +115,23 @@ const NotificationCenter: React.FC = () => {
       if (tabId) {
         const metadata = notification.metadata || {};
         const entityType = String(metadata.entity_type || '');
+        const contactId = String(metadata.contact_id || '');
+        const isAgentSalesReportNotification =
+          (
+            entityType === 'call_report' ||
+            entityType === 'call_report_reply' ||
+            entityType === 'prospect_customer_comment'
+          ) && Boolean(contactId);
         const payload = entityType === 'customer_detail_update_request'
           ? {
               contactId: String(metadata.contact_id || ''),
               approvalRequestId: String(metadata.entity_id || ''),
             }
+          : isAgentSalesReportNotification
+            ? { contactId }
           : undefined;
-        window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab: tabId, payload } }));
+        const targetTab = isAgentSalesReportNotification ? 'maintenance-customer-customer-data' : tabId;
+        window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab: targetTab, payload } }));
         setIsOpen(false);
       }
     }

@@ -1,7 +1,7 @@
 import { CustomerStatus } from '../../types';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchDailyCallMasterList } from '../dailyCallMonitoringService';
-import { bulkUpdateContacts, deleteCustomer, fetchContactForDailyCall, mapApiCustomerToContact, mapContactPayloadToApi, mapContactUpdatesToApi, updateContact } from '../customerDatabaseLocalApiService';
+import { fetchDailyCallMasterList, invalidateDailyCallMasterListCache } from '../dailyCallMonitoringService';
+import { bulkUpdateContacts, deleteCustomer, fetchContactForDailyCall, fetchContacts, mapApiCustomerToContact, mapContactPayloadToApi, mapContactUpdatesToApi, updateContact } from '../customerDatabaseLocalApiService';
 
 const reloadStanding = (patch: Record<string, unknown>) =>
   mapApiCustomerToContact({
@@ -14,6 +14,16 @@ const reloadStanding = (patch: Record<string, unknown>) =>
   }).status;
 
 describe('customer database price and discount codes', () => {
+  it('maps the legacy company name for display and local search', () => {
+    const contact = mapApiCustomerToContact({
+      session_id: 'cust-legacy-name',
+      company: 'Current Company Name',
+      old_name: 'Former Company Name',
+    });
+
+    expect(contact.pastName).toBe('Former Company Name');
+  });
+
   it('maps persisted price and discount codes from the customer database', () => {
     const contact = mapApiCustomerToContact({
       session_id: 'cust-1',
@@ -39,6 +49,20 @@ describe('customer database price and discount codes', () => {
     expect(payload.discount_code).toBe('vip platinum');
   });
 
+  it('maps and writes the ordered customer delivery addresses', () => {
+    const contact = mapApiCustomerToContact({
+      session_id: 'cust-delivery-addresses',
+      company: 'Acme Trading',
+      delivery_address: 'Warehouse A',
+      delivery_addresses: ['Warehouse A', 'Branch B'],
+    });
+
+    expect(contact.deliveryAddresses).toEqual(['Warehouse A', 'Branch B']);
+    expect(mapContactUpdatesToApi({ deliveryAddresses: contact.deliveryAddresses })).toEqual({
+      delivery_addresses: ['Warehouse A', 'Branch B'],
+    });
+  });
+
   it('sends partial discount code updates without requiring price changes', () => {
     expect(mapContactUpdatesToApi({ discountCode: 'vip silver' })).toEqual({
       discount_code: 'vip silver',
@@ -49,6 +73,81 @@ describe('customer database price and discount codes', () => {
 describe('customer database saves and daily call cache', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    invalidateDailyCallMasterListCache();
+  });
+
+  it('shows a Daily Call recovery buyer as Inactive in Customer Data', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: {
+            items: [{ session_id: 'adtech-1', company: 'AdTech Engineering', status: 1 }],
+            meta: { total_pages: 1 },
+          },
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: {
+            items: [{
+              id: 'adtech-1',
+              list_category: 'recovery',
+              last_purchase_date_raw: '2025-09-30',
+              priority_transaction_count: 0,
+              ledger_transaction_count: 1,
+            }],
+            meta: { from_date: '2025-10-01', count: 1 },
+          },
+        }),
+      } as Response);
+
+    const contacts = await fetchContacts();
+
+    expect(contacts).toHaveLength(1);
+    expect(contacts[0].status).toBe(CustomerStatus.INACTIVE);
+  });
+
+  it('refreshes the viewer-scoped Daily Call classification before applying it to Customer Data', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      // A prior Daily Call request from another viewer did not include Adtech.
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { items: [], meta: { from_date: '2025-10-01', count: 0 } } }),
+      } as Response)
+      // Customer Data itself includes the customer.
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: {
+            items: [{ session_id: 'adtech-1', company: 'AdTech Engineering', status: 1 }],
+            meta: { total_pages: 1 },
+          },
+        }),
+      } as Response)
+      // The current viewer's Daily Call result correctly identifies Adtech as recovery.
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: {
+            items: [{
+              id: 'adtech-1',
+              list_category: 'recovery',
+              last_purchase_date_raw: '2025-07-08',
+              priority_transaction_count: 0,
+              ledger_transaction_count: 1,
+            }],
+            meta: { from_date: '2025-10-01', count: 1 },
+          },
+        }),
+      } as Response);
+
+    await fetchDailyCallMasterList();
+    const contacts = await fetchContacts();
+
+    expect(contacts[0].status).toBe(CustomerStatus.INACTIVE);
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
   });
 
   it('uses the selected staff account ID for customer-agent reassignment', () => {

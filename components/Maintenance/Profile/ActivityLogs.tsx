@@ -218,19 +218,20 @@ export default function ActivityLogs({ title = 'Activity Logs', initialDateFrom,
                 <th className="px-6 py-3 font-medium">Page</th>
                 <th className="px-6 py-3 font-medium">Action</th>
                 <th className="px-6 py-3 font-medium">Ref No</th>
+                <th className="px-6 py-3 font-medium">Details</th>
                 <th className="px-6 py-3 font-medium">Result</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700/50">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                     Loading logs...
                   </td>
                 </tr>
               ) : logs.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                     No logs found.
                   </td>
                 </tr>
@@ -256,6 +257,9 @@ export default function ActivityLogs({ title = 'Activity Logs', initialDateFrom,
                       </td>
                       <td className="px-6 py-3 text-gray-500 dark:text-gray-400 font-mono text-xs max-w-xs truncate" title={log.lrefno || ''}>
                         {log.lrefno || '-'}
+                      </td>
+                      <td className="px-6 py-3 text-gray-500 dark:text-gray-400 max-w-xs truncate" title={log.lreason || ''}>
+                        {[log.lold_status && `${log.lold_status} → ${log.lnew_status || '-'}`, log.lreason].filter(Boolean).join(' · ') || '-'}
                       </td>
                       <td className="px-6 py-3 text-emerald-700 font-semibold">Recorded</td>
                     </tr>

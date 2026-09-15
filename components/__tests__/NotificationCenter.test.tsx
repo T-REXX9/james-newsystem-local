@@ -225,6 +225,88 @@ describe('NotificationCenter', () => {
     });
   });
 
+  it('opens the exact customer in Customer Data for Agent Sales Report notifications', async () => {
+    fetchNotificationsMock.mockResolvedValue([
+      createNotification({
+        id: 'sales-report-1',
+        category: 'notification',
+        type: 'info',
+        title: 'New Agent Sales Report message',
+        action_url: 'sales-transaction-daily-call-monitoring',
+        metadata: {
+          entity_type: 'call_report_reply',
+          entity_id: 'message-1',
+          contact_id: 'customer-42',
+          category: 'notification',
+        },
+      }),
+    ]);
+    getUnreadCountMock.mockResolvedValue(1);
+    markAsReadMock.mockResolvedValue(true);
+    markNotificationsAsReadByEntityKeyMock.mockResolvedValue({
+      success: true,
+      updatedCount: 1,
+      updatedIds: ['sales-report-1'],
+      readAt: '2026-04-04T01:00:00.000Z',
+    });
+    const navigationHandler = vi.fn();
+    window.addEventListener('workflow:navigate', navigationHandler);
+
+    const user = userEvent.setup();
+    renderNotificationCenter();
+    await user.click(screen.getByTitle('Notifications'));
+    await user.click(screen.getByText('New Agent Sales Report message'));
+
+    expect(navigationHandler).toHaveBeenCalledWith(expect.objectContaining({
+      detail: {
+        tab: 'maintenance-customer-customer-data',
+        payload: { contactId: 'customer-42' },
+      },
+    }));
+    window.removeEventListener('workflow:navigate', navigationHandler);
+  });
+
+  it('opens the exact prospect in Customer Data for its unified conversation comment', async () => {
+    fetchNotificationsMock.mockResolvedValue([
+      createNotification({
+        id: 'prospect-comment-1',
+        category: 'notification',
+        type: 'info',
+        title: 'New prospective customer comment',
+        action_url: 'sales-transaction-daily-call-monitoring',
+        metadata: {
+          entity_type: 'prospect_customer_comment',
+          entity_id: 'prospect-42',
+          contact_id: 'prospect-42',
+          category: 'notification',
+        },
+      }),
+    ]);
+    getUnreadCountMock.mockResolvedValue(1);
+    markAsReadMock.mockResolvedValue(true);
+    markNotificationsAsReadByEntityKeyMock.mockResolvedValue({
+      success: true,
+      updatedCount: 1,
+      updatedIds: ['prospect-comment-1'],
+      readAt: '2026-04-04T01:00:00.000Z',
+    });
+    const navigationHandler = vi.fn();
+    window.addEventListener('workflow:navigate', navigationHandler);
+
+    const user = userEvent.setup();
+    renderNotificationCenter();
+    await user.click(screen.getByTitle('Notifications'));
+    await user.click(screen.getByText('New prospective customer comment'));
+
+    expect(navigationHandler).toHaveBeenCalledWith(expect.objectContaining({
+      detail: {
+        tab: 'maintenance-customer-customer-data',
+        payload: { contactId: 'prospect-42' },
+      },
+    }));
+    window.removeEventListener('workflow:navigate', navigationHandler);
+  });
+
   it('ignores stale refresh results that finish after a notification is marked as read', async () => {
     const unreadNotification = createNotification({
       id: 'notif-race',

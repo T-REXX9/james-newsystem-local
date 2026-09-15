@@ -16,7 +16,7 @@
 
 The TND-OPC Calling Solution connects the web-based James System with a staff phone application. It supports two related but distinct calling workflows.
 
-The first workflow is **Daily Call Monitoring for sales agents**. An agent opens the Daily Call Monitoring page, selects a customer, and presses **Call**. The system first places a temporary claim on that customer so another agent cannot work on the same customer at the same time. It then opens the customer contact window, where the agent can review customer information, communicate, and submit a conversation report. When the report is submitted, the activity is stored and becomes visible in the owner or Master User customer timeline. If the agent closes the contact window without submitting a report, the customer claim is released.
+The first workflow is **Daily Call Monitoring for sales agents**. An agent opens the Daily Call Monitoring page, selects a customer, and presses **Call**. The system first places a temporary claim on that customer so another agent cannot work on the same customer at the same time. It then opens the customer contact window, where the agent can review customer information and record the conversation in the unified Agent Sales Report. When the agent closes the contact window, the customer claim is released.
 
 The second workflow is **website click-to-call queueing**. A user presses a reusable **Call customer** button from supported customer, sales inquiry, sales order, or detail screens. The website asks for confirmation, stores the dial request, and pushes a realtime event to the authenticated staff member’s registered phone. The phone application receives the request, opens the phone’s native dialer automatically, and reports whether the dialer was opened or failed. API polling remains as a fallback if the realtime connection drops. The actual call still begins only when the staff member uses the native dialer. This workflow is implemented by `CallCustomerButton`, `queueCallRequest`, the call-system API, and the Flutter companion app. [1] [2] [3]
 
@@ -46,7 +46,7 @@ flowchart LR
     Web --> Daily[Daily Call Monitoring]
     Web --> Click[Click-to-call button]
     Daily --> Claim[Customer claim endpoint]
-    Daily --> Report[Call report endpoint]
+    Daily --> Report[Unified Agent Sales Report]
     Click --> Queue[Dial-request endpoint]
     Web --> API[Call-system API]
     Phone[TND-OPC Calling Flutter app] -->|login, heartbeat, call sync| API
@@ -65,7 +65,7 @@ The web application contains the customer lists, Daily Call Monitoring screens, 
 
 ### 3.2 Service layer
 
-The web service layer adds the authenticated session token to call-system requests, creates and releases customer claims, queues dial requests, creates application call reports, loads hardware call logs, loads device health, and handles auto-reply settings. The service returns normalized data to React components so the UI does not need to understand every API response variation. [2]
+The web service layer adds the authenticated session token to call-system requests, creates and releases customer claims, queues dial requests, loads Agent Sales Report conversations, loads hardware call logs, loads device health, and handles auto-reply settings. The service returns normalized data to React components so the UI does not need to understand every API response variation. [2]
 
 ### 3.3 Call-system API
 
@@ -81,7 +81,7 @@ The route `sales-transaction-daily-call-monitoring` selects the experience based
 
 | User type | Main responsibilities | Relevant access |
 |---|---|---|
-| **Sales Agent** | Work assigned customer calls, open customer information, submit conversation reports, send SMS activity, request prospect verification, and release unfinished call claims. | Agent Daily Call Monitoring view and own phone activity. |
+| **Sales Agent** | Work assigned customer calls, open customer information, use the unified Agent Sales Report, send SMS activity, request prospect verification, and release call claims. | Agent Daily Call Monitoring view and own phone activity. |
 | **Manager or Owner** | Review customer categories, current and potential sales, human-agent activity, customer timelines, device status, and hardware call metadata. | Owner or management Daily Call Monitoring workspace, customer details, accountability panels, and team-scoped records where permitted. |
 | **Master User** | Manage company-wide calling visibility and missed-call auto-reply configuration. | Team-scoped devices and call logs, global auto-reply settings, and audit records. |
 | **Registered staff phone** | Poll for website-confirmed dial requests, open the native dialer, report dial status, send heartbeat, and upload call metadata. | Only requests and data authorized for the registered staff account and device. |
@@ -100,7 +100,7 @@ The page organizes customers into operational categories. The exact category rul
 
 The agent can select a customer by clicking the customer row or customer name. The detail panel provides customer contact information, location, assigned agent, account status, sales information, customer activity, and available communication actions.
 
-The detail experience includes overview, management instructions, human-agent activity, AI-agent activity, communication timeline, sales, item issues, orders, collections, incident reports, and sales returns. Human-agent call reports are identified separately from general activity by the `[Sales Agent Report]` marker. [8]
+The detail experience includes overview, management instructions, human-agent activity, AI-agent activity, communication timeline, sales, item issues, orders, collections, incident reports, and sales returns. Staff conversation work is handled through the unified Agent Sales Report. [8]
 
 ### 5.3 Press Call
 
@@ -108,33 +108,21 @@ The customer row includes a **Call** action. The current Daily Call Monitoring a
 
 1. It requests a server-side customer claim using the customer ID.
 2. If the server rejects the claim because another agent is already working with the customer, the page shows an error and does not open the call window.
-3. If the claim succeeds, the page opens the contact window, clears the previous report form, and loads the full customer record.
+3. If the claim succeeds, the page opens the contact window and loads the full customer record.
 4. The page starts a five-minute claim heartbeat while the contact window remains open.
-5. The agent can review the customer and enter a conversation report.
+5. The agent can review the customer and record the conversation in the unified Agent Sales Report.
 
 The claim protects the customer workflow from simultaneous agent handling. It is separate from the phone dialer queue described in Section 6. [9]
 
-### 5.4 Submit a conversation report
+### 5.4 Use the unified Agent Sales Report
 
-The agent enters the conversation result and selects an outcome. The current report operation sends an outbound call activity with the following information:
+The contact window embeds the unified Agent Sales Report conversation. Staff use it for the customer’s conversation details, follow-up, and replies. This replaces the former separate Conversation Report form.
 
-| Field | Current behavior |
-|---|---|
-| Customer | The claimed customer ID |
-| Agent | The current agent name, or the authenticated display name fallback |
-| Channel | `call` |
-| Direction | `outbound` |
-| Duration | Currently recorded as `0` by the manual report workflow |
-| Notes | The report text prefixed with `[Sales Agent Report]` |
-| Outcome | The selected report outcome |
-| Timestamp | Current ISO timestamp |
-| Next action | Currently sent as empty/null by this workflow |
+The conversation remains available to the assigned staff member and management through the unified Agent Sales Report workspace. [9]
 
-After a successful submission, the system shows a success message, closes the contact window, clears the report form, and makes the report available to the Master User in the customer activity timeline. [9]
+### 5.5 Close the call window
 
-### 5.5 Close without submitting
-
-If the agent closes the call contact window without submitting a report, the browser releases the customer claim through the release endpoint. This allows another authorized agent to work with the customer. If release fails, the application records the failure for troubleshooting; the user is not blocked from closing the window. [9]
+When the agent closes the call contact window, the browser releases the customer claim through the release endpoint. This allows another authorized agent to work with the customer. If release fails, the application records the failure for troubleshooting; the user is not blocked from closing the window. [9]
 
 ### 5.6 Claim renewal and expiration considerations
 
@@ -148,7 +136,7 @@ There are two call-related actions in the current system:
 
 | Action | What it does | Where it is used |
 |---|---|---|
-| **Daily Call Monitoring → Call** | Claims the customer and opens the agent’s call/report workspace. The manual call report is submitted after the conversation. | Agent Daily Call Monitoring customer list. |
+| **Daily Call Monitoring → Call** | Claims the customer and opens the agent’s unified Agent Sales Report workspace. | Agent Daily Call Monitoring customer list. |
 | **Call customer / click-to-call button** | Confirms and sends a dial request to the staff member’s registered phone. The phone opens the native dialer automatically. | Supported customer, sales inquiry, sales order, and customer-detail screens. |
 
 The reusable click-to-call control is `CallCustomerButton`. It is not the same as the Daily Call Monitoring claim-and-report action. This distinction should be retained in user training and support materials. [1] [9]
@@ -274,7 +262,7 @@ When the phone application uploads a call log or the website queues a dial reque
 
 ## 9. Data and record lifecycle
 
-### 9.1 Manual agent report
+### 9.1 Agent Sales Report conversation
 
 ```text
 Customer row selected
@@ -283,11 +271,7 @@ Server claim acquired
         ↓
 Contact window opened
         ↓
-Agent writes conversation report
-        ↓
-Application call log created
-        ↓
-Report appears in customer activity timeline
+Agent records conversation in Agent Sales Report
         ↓
 Contact window closes and claim is released
 ```
@@ -349,7 +333,7 @@ Hardware call history is shown at the customer level and in accountability views
 
 ### 10.3 Customer activity timeline
 
-The owner customer-detail workspace displays customer activity across communication, orders, and other records. A manual sales-agent call report is labeled **Sales agent call report** when the activity is a call whose notes begin with `[Sales Agent Report]`. The report text is displayed without the internal marker. [8]
+The owner customer-detail workspace displays customer activity across communication, orders, and other records. Staff conversation details are handled through the unified Agent Sales Report workspace. [8]
 
 ### 10.4 Missed-call auto-reply
 
@@ -375,7 +359,7 @@ The solution uses several safeguards:
 
 At the beginning of the work period, the agent signs in to the James System and opens Daily Call Monitoring. The agent reviews the priority and recovery customer groups, checks management instructions, and selects a customer. Before calling, the agent should confirm the visible phone number and customer identity.
 
-The agent presses **Call**, waits for the customer workspace to open, conducts the call using the approved business process, records a clear conversation report, selects the correct outcome, and submits the report. The report should contain the customer’s request, agreed next step, responsible person, and due date where applicable. The agent should close the contact window only after the report has been submitted or the interaction is intentionally abandoned.
+The agent presses **Call**, waits for the customer workspace to open, conducts the call using the approved business process, and records the conversation in the unified Agent Sales Report. The conversation should contain the customer’s request, agreed next step, responsible person, and due date where applicable. The agent may close the contact window when the interaction is complete or intentionally abandoned.
 
 ### 12.2 Click-to-call procedure
 
@@ -397,7 +381,7 @@ The manager or owner reviews the owner Daily Call Monitoring workspace, checks c
 | Dialer does not open | Native dialer launch failed or the phone did not accept the `tel:` intent. | Confirm a default dialer is configured and retry the request. The request should be reported as failed rather than falsely treated as dialed. |
 | Hardware call has no customer match | Phone number formatting differs or the customer number is not in the same company scope. | Review the customer phone number and call-log phone number. Correct the customer record if appropriate. |
 | Daily Call Monitoring says another agent is using the customer | A live claim exists for the customer. | Wait for the other agent to finish, or ask the other agent to close the contact window. |
-| A manual call report is missing from the timeline | The report was not submitted, the API request failed, or the customer timeline has not refreshed. | Confirm the agent received a success message, refresh the customer timeline, and check the API/application logs. |
+| An Agent Sales Report conversation is missing | The message was not saved, the API request failed, or the conversation has not refreshed. | Refresh the Agent Sales Report conversation and check the API/application logs. |
 | Device status is stale | The app was stopped, the foreground service was disabled, or the phone cannot reach the API. | Open the app, confirm the visible monitoring notification, check permissions and network, and review the last signal time. |
 
 ## 14. Operational boundaries and current implementation notes
@@ -406,7 +390,7 @@ The current solution should be understood with the following boundaries:
 
 | Area | Current state |
 |---|---|
-| Manual Daily Call Monitoring reports | Implemented in the web application. These reports record the agent’s report and currently use duration `0` because the workflow is report-based rather than a live timer. |
+| Agent Sales Report conversations | Implemented in the web application as the single staff conversation-reporting workflow in Daily Call Monitoring. |
 | Web click-to-call queueing | Implemented through `CallCustomerButton` and the call-system dial-request API. |
 | Website confirmation before dialer launch | Implemented in the reusable web click-to-call control; the phone does not repeat the confirmation. |
 | Native dialer launch | Implemented using the phone `tel:` intent. |
@@ -426,8 +410,8 @@ The repository contains focused tests for the calling service, click-to-call con
 Before a production release, the recommended verification sequence is:
 
 1. Confirm the web user can sign in and access the correct role-specific Daily Call Monitoring experience.
-2. Confirm an agent can select a customer, claim the customer, open the call window, submit a report, and see the report in the customer timeline.
-3. Confirm closing without submission releases the claim.
+2. Confirm an agent can select a customer, claim the customer, open the call window, use the Agent Sales Report, and close the window.
+3. Confirm closing releases the claim.
 4. Confirm the website click-to-call control asks for confirmation and queues only after confirmation.
 5. Confirm the phone receives the pending request, automatically opens the native dialer, and reports `dialed` or `failed` correctly.
 6. Confirm a hardware call log uploads with valid direction, duration, timestamp, staff, device, and customer match behavior.
@@ -439,7 +423,7 @@ Before a production release, the recommended verification sequence is:
 
 | Term | Meaning |
 |---|---|
-| **Application call report** | A report manually entered by a sales agent after a conversation in Daily Call Monitoring. |
+| **Agent Sales Report** | The unified conversation workspace used by staff after opening a customer from Daily Call Monitoring. |
 | **Call claim** | A temporary server-side lock associated with a customer and agent while the contact window is open. |
 | **Click-to-call** | The web-to-phone workflow that confirms a request on the website and automatically opens the native dialer on the registered phone. |
 | **Dial request** | A server record waiting for a registered staff phone to review and process. |

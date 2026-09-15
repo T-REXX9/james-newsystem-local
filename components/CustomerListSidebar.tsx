@@ -42,10 +42,11 @@ const CustomerListSidebar: React.FC<CustomerListSidebarProps> = ({
         return customers.filter(c => {
             const query = searchQuery.toLowerCase();
             const companyMatch = (c.company || '').toLowerCase().includes(query);
+            const pastNameMatch = (c.pastName || '').toLowerCase().includes(query);
             const nameMatch = (c.name || '').toLowerCase().includes(query);
             const contactMatch = c.contactPersons?.some(p => p.name.toLowerCase().includes(query)) || false;
 
-            const matchSearch = companyMatch || nameMatch || contactMatch;
+            const matchSearch = companyMatch || pastNameMatch || nameMatch || contactMatch;
             const matchStatus = filterStatus === 'All' || c.status === filterStatus;
             const matchVisibility = filterVisibility === 'All' ? true :
                 filterVisibility === 'Hidden' ? !!c.isHidden : !c.isHidden;

@@ -96,8 +96,12 @@ describe('CustomerSalesReportChat', () => {
 
     expect(await screen.findByText('Call this shop before Friday.')).toBeInTheDocument();
     expect(screen.getByText('Customer asked about VIP terms.')).toBeInTheDocument();
+    expect(screen.getByText(/Master User · Master User · Management instruction/i)).toBeInTheDocument();
+    expect(screen.getByText(/Agent Ana · Sales Agent · Sales agent report/i)).toBeInTheDocument();
     expect(screen.getByText(/Management instruction/i)).toBeInTheDocument();
     expect(screen.getByText(/Sales agent report/i)).toBeInTheDocument();
+    expect(screen.getByText(/Sep 10, 2026, 4:00:00 PM PHT/i)).toBeInTheDocument();
+    expect(screen.getByText(/Sep 11, 2026, 5:00:00 PM PHT/i)).toBeInTheDocument();
     await waitFor(() => {
       expect(markSalesReportConversationReadMock).toHaveBeenCalledWith('c1');
     });

@@ -20,6 +20,29 @@ const averageOfMonthlyTotals = (purchases: Purchase[]) => {
   return total / monthTotals.size;
 };
 
+const mostRecentActiveMonthPurchases = (purchases: Purchase[], limit = 12) => {
+  const activeMonths = new Set(
+    purchases.map((purchase) => {
+      const date = new Date(purchase.purchased_at);
+      return `${date.getFullYear()}-${date.getMonth()}`;
+    })
+  );
+  const selectedMonths = new Set(
+    Array.from(activeMonths)
+      .sort((left, right) => {
+        const [leftYear, leftMonth] = left.split('-').map(Number);
+        const [rightYear, rightMonth] = right.split('-').map(Number);
+        return (rightYear * 12 + rightMonth) - (leftYear * 12 + leftMonth);
+      })
+      .slice(0, limit)
+  );
+
+  return purchases.filter((purchase) => {
+    const date = new Date(purchase.purchased_at);
+    return selectedMonths.has(`${date.getFullYear()}-${date.getMonth()}`);
+  });
+};
+
 const paidPurchases = (purchases: Purchase[]) =>
   purchases.filter((purchase) => (
     purchase.status === 'paid'
@@ -30,8 +53,7 @@ const paidPurchases = (purchases: Purchase[]) =>
 /**
  * Client Potential Sales windows:
  * - Priority: average monthly purchase over the last 12 months
- * - Recovery / Blacklisted: average monthly purchase over the last 12 months
- *   ending at the customer's last purchase (active-year window)
+ * - Recovery / Blacklisted: average monthly purchase over the last 12 active months
  */
 export const averageMonthlyPaidSales = (
   purchases: Purchase[],
@@ -51,19 +73,5 @@ export const averageMonthlyPaidSales = (
     );
   }
 
-  let lastPurchaseAt = 0;
-  paid.forEach((purchase) => {
-    const time = new Date(purchase.purchased_at).getTime();
-    if (time > lastPurchaseAt) lastPurchaseAt = time;
-  });
-  if (!lastPurchaseAt) return 0;
-
-  const windowEnd = new Date(lastPurchaseAt);
-  const windowStart = monthsBefore(windowEnd, 12);
-  return averageOfMonthlyTotals(
-    paid.filter((purchase) => {
-      const date = new Date(purchase.purchased_at);
-      return date >= windowStart && date <= windowEnd;
-    })
-  );
+  return averageOfMonthlyTotals(mostRecentActiveMonthPurchases(paid));
 };

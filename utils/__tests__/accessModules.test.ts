@@ -80,6 +80,19 @@ describe('access module permissions', () => {
     expect(pageById('sales-transaction-sales-inquiry')?.supportedActions).not.toContain('can_view_all_records');
   });
 
+  it('limits Daily Call Monitoring to prospect workflow actions', () => {
+    const dailyCall = ACCESS_MODULES
+      .flatMap((module) => module.pages)
+      .find((page) => page.id === 'sales-transaction-daily-call-monitoring');
+
+    expect(dailyCall?.supportedActions).toEqual([
+      'can_view',
+      'can_add',
+      'can_edit',
+      'can_view_all_records',
+    ]);
+  });
+
   it('still offers See all records on the read-only Recycle Bin page', () => {
     const recycleBin = ACCESS_MODULES
       .flatMap((module) => module.pages)

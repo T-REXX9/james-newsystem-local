@@ -57,6 +57,7 @@ import {
   fetchAgentSnapshotForDailyCall,
   fetchContactCustomerLogsForDailyCall,
   fetchSalesReportDirectoryState,
+  releaseCustomerCallForDailyCall,
   subscribeToDailyCallMonitoringUpdates
 } from '../services/dailyCallMonitoringService';
 import { createContact, fetchContactById, fetchContactForDailyCall, updateContact } from '../services/customerDatabaseLocalApiService';
@@ -64,7 +65,6 @@ import { queueCallRequest } from '../services/callingSystemService';
 import { navigateWorkflow } from '../utils/workflowNavigate';
 import {
   CallLogEntry,
-  CallOutcome,
   Contact,
   CustomerLogEntry,
   CustomerLogStatus,
@@ -95,6 +95,7 @@ import {
 import { VERIFIED_PROSPECT_POTENTIAL, averageMonthlyPaidSales } from '../utils/dailyCallPotentialSales';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import { DEFAULT_CUSTOMER_VAT_TYPE } from '../constants/customerVat';
+import { isMasterUserAccount } from '../constants';
 import { canPerformAction } from '../utils/actionPermissions';
 import {
   BUTTON_BASE,
@@ -530,14 +531,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [showSMSModal, setShowSMSModal] = useState(false);
   const [smsRecipient, setSMSRecipient] = useState<Contact | null>(null);
   const [callContact, setCallContact] = useState<Contact | null>(null);
-  const callStartedAtRef = useRef<number | null>(null);
   const [callContactLoading, setCallContactLoading] = useState(false);
   const [callNumberOptions, setCallNumberOptions] = useState<string[] | null>(null);
-  const [callReport, setCallReport] = useState('');
-  const [callReportConcern, setCallReportConcern] = useState('');
-  const [callReportAction, setCallReportAction] = useState('');
-  const [callReportOutcome, setCallReportOutcome] = useState<CallOutcome>('note');
-  const [submittingCallReport, setSubmittingCallReport] = useState(false);
   const [salesReportUnreadByContact, setSalesReportUnreadByContact] = useState<Record<string, number>>({});
   const [salesReportContactIds, setSalesReportContactIds] = useState<Set<string>>(() => new Set());
   const [smsMessage, setSMSMessage] = useState('');
@@ -578,7 +573,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [fullDetailsError, setFullDetailsError] = useState<string | null>(null);
   const [showIncidentReportModal, setShowIncidentReportModal] = useState(false);
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
-  const [addCustomerKind, setAddCustomerKind] = useState<'customer' | 'prospect' | 'verifiedProspect'>('customer');
+  const [addCustomerKind, setAddCustomerKind] = useState<'customer' | 'prospect' | 'verifiedProspect'>('prospect');
   const [isFiltering, setIsFiltering] = useState(false);
   const [masterViewportHeight, setMasterViewportHeight] = useState(420);
   const masterViewportWrapperRef = useRef<HTMLDivElement | null>(null);
@@ -634,6 +629,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     return 'Sales Agent';
   }, [currentUser]);
   const isSalesAgent = Boolean(currentUser?.role && currentUser.role.toLowerCase().includes('agent'));
+  const canCreateCustomer = isMasterUserAccount(currentUser);
   const dataUnavailable = !loading && !hasLoadedData;
 
   const toggleClientList = useCallback((listKey: ClientListKey) => {
@@ -754,10 +750,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       return;
     }
     setCallContact(contact);
-    callStartedAtRef.current = Date.now();
     setCallContactLoading(true);
-    setCallReport('');
-    setCallReportOutcome('note');
 
     void fetchContactById(contact.id)
       .then((fullContact) => {
@@ -806,14 +799,17 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     }
   }, [callContact, addToast]);
 
-  const handleCloseCallContact = useCallback(() => {
-    addToast({
-      type: 'error',
-      title: 'Report required',
-      description: 'Submit the conversation report before closing this customer call.',
-      durationMs: 5000,
-    });
-  }, [addToast]);
+  const handleCloseCallContact = useCallback(async () => {
+    if (!callContact) return;
+
+    const contactId = callContact.id;
+    setCallContact(null);
+    try {
+      await releaseCustomerCallForDailyCall(contactId);
+    } catch (error) {
+      console.error('Error releasing customer call claim:', error);
+    }
+  }, [callContact]);
 
   useEffect(() => {
     if (!callContact) return;
@@ -825,54 +821,6 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     return () => window.clearInterval(heartbeat);
   }, [callContact]);
 
-  const handleSubmitCallReport = async () => {
-    if (!callContact || !callReportConcern.trim() || !callReportAction.trim()) return;
-
-    setSubmittingCallReport(true);
-    try {
-      const callEndedAt = new Date();
-      const durationSeconds = callStartedAtRef.current
-        ? Math.max(0, Math.floor((callEndedAt.getTime() - callStartedAtRef.current) / 1000))
-        : 0;
-
-      const concernText = callReportConcern.trim();
-      const actionText = callReportAction.trim();
-      const combinedReport = `Concern: ${concernText}\nAction: ${actionText}`;
-
-      await createCallLogForDailyCall({
-        contact_id: callContact.id,
-        agent_name: agentDataName || agentDisplayName,
-        channel: 'call',
-        direction: 'outbound',
-        duration_seconds: durationSeconds,
-        notes: `[Sales Agent Report] ${combinedReport}`,
-        outcome: callReportOutcome,
-        occurred_at: callEndedAt.toISOString(),
-        next_action: null,
-        next_action_due: null,
-        concern: concernText,
-        action: actionText,
-      });
-      addToast({
-        type: 'success',
-        title: 'Call report submitted',
-        description: 'The Master User can now view this report in the Call Records page.',
-        durationMs: 4000,
-      });
-      callStartedAtRef.current = null;
-      setCallContact(null);
-      setCallReport('');
-      setCallReportConcern('');
-      setCallReportAction('');
-      setCallReportOutcome('note');
-    } catch (error) {
-      console.error('Error submitting call report:', error);
-      addToast({ type: 'error', message: 'The call report could not be submitted. Please try again.' });
-    } finally {
-      setSubmittingCallReport(false);
-    }
-  };
-
   const handleSMSContact = (contact: Contact) => {
     const phoneNumber = contact.mobile || contact.phone || contact.contactPersons[0]?.mobile || contact.contactPersons[0]?.telephone;
     if (!phoneNumber) {
@@ -883,7 +831,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   };
 
   const handleSubmitNewCustomer = useCallback(async (data: Omit<Contact, 'id'>) => {
-    if (!canAdd) return;
+    if (!canAdd || (!canCreateCustomer && addCustomerKind === 'customer')) return;
     const assignedName = currentUser?.full_name?.trim() || currentUser?.email || agentDisplayName;
     const payload = {
       ...data,
@@ -915,7 +863,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       });
       throw error;
     }
-  }, [addToast, agentDisplayName, canAdd, currentUser?.email, currentUser?.full_name, currentUser?.id, currentUser?.team, loadAgentData]);
+  }, [addCustomerKind, addToast, agentDisplayName, canAdd, canCreateCustomer, currentUser?.email, currentUser?.full_name, currentUser?.id, currentUser?.team, loadAgentData]);
 
   const handleEmailContact = (contact: Contact) => {
     if (isBlockedContact(contact)) {
@@ -1153,6 +1101,22 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     return map;
   }, [purchases]);
 
+  const ledgerCurrentMonthSalesByContact = useMemo(() => {
+    const map = new Map<string, number>();
+    masterListRows.forEach((row) => {
+      map.set(row.id, Number(row.currentMonthSales || 0));
+    });
+    return map;
+  }, [masterListRows]);
+
+  const ledgerAverageMonthlySalesByContact = useMemo(() => {
+    const map = new Map<string, number>();
+    masterListRows.forEach((row) => {
+      map.set(row.id, Number(row.averageMonthlySales || 0));
+    });
+    return map;
+  }, [masterListRows]);
+
   const callLogsByContact = useMemo(() => {
     const map = new Map<string, CallLogEntry[]>();
     callLogs.forEach((log) => {
@@ -1352,9 +1316,13 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           : isRecoveryListPurchase(lastPurchase)
             ? 'recovery'
             : null;
-      const currentMonthSales = sumPaidPurchasesInMonth(contactPurchases, selectedReferenceDate);
+      const currentMonthSales = ledgerCurrentMonthSalesByContact.has(contact.id)
+        ? ledgerCurrentMonthSalesByContact.get(contact.id)!
+        : sumPaidPurchasesInMonth(contactPurchases, selectedReferenceDate);
       const averageMonthlySales = listMode
-        ? averageMonthlyPaidSales(contactPurchases, listMode, selectedReferenceDate)
+        ? ledgerAverageMonthlySalesByContact.has(contact.id)
+          ? ledgerAverageMonthlySalesByContact.get(contact.id)!
+          : averageMonthlyPaidSales(contactPurchases, listMode, selectedReferenceDate)
         : 0;
       const lastContact = lastContactMap.get(contact.id);
       const totalInteractions =
@@ -1373,7 +1341,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       };
     });
     return rows;
-  }, [contacts, purchasesByContact, lastContactMap, callLogsByContact, inquiriesByContact, selectedReferenceDate]);
+  }, [contacts, purchasesByContact, ledgerCurrentMonthSalesByContact, ledgerAverageMonthlySalesByContact, lastContactMap, callLogsByContact, inquiriesByContact, selectedReferenceDate]);
 
   const masterRows = useMemo<MasterRow[]>(() => {
     const filtered = baseMasterRows.filter((row) => {
@@ -1843,7 +1811,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   } as const;
 
   return (
-    <div className="h-full min-h-0 overflow-y-auto bg-white text-[#10244c] dark:bg-slate-950 dark:text-white">
+    <div className="h-full min-h-0 overflow-y-auto bg-gradient-to-b from-slate-50 via-white to-slate-100/70 text-[#10244c] dark:from-slate-950 dark:via-slate-950 dark:to-slate-900 dark:text-white">
       <AddContactModal
         isOpen={showAddCustomerModal}
         onClose={() => setShowAddCustomerModal(false)}
@@ -1855,11 +1823,15 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       />
 
       <div className="flex min-h-full flex-col gap-5 p-4 lg:p-6">
-      <header className="flex-shrink-0 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div>
+      <header className="relative flex-shrink-0 overflow-hidden rounded-2xl border border-blue-100/80 bg-gradient-to-br from-white via-blue-50/60 to-slate-50 px-5 py-5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-blue-950/30 sm:px-6">
+        <div className="pointer-events-none absolute -right-16 -top-24 h-56 w-56 rounded-full bg-blue-400/15 blur-3xl dark:bg-blue-500/10" />
+        <div className="relative flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="motion-safe:animate-[james-fade-up_500ms_cubic-bezier(0.22,1,0.36,1)_both]">
           <p className="text-[12px] font-extrabold uppercase tracking-wide text-slate-500 dark:text-slate-400">Daily Call Monitoring</p>
           <div className="flex items-center gap-2">
-            <ClipboardList className="w-5 h-5 text-brand-blue" />
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand-blue text-white shadow-lg shadow-blue-900/15 ring-4 ring-blue-100/80 dark:ring-blue-950/60">
+              <ClipboardList className="w-5 h-5" />
+            </span>
             <h1 className="text-3xl font-extrabold tracking-tight text-[#0f1f46] dark:text-white">Customer List</h1>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -1869,7 +1841,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             Opened from dashboard date: {new Date(`${initialSelectedDate}T12:00:00`).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase()}
           </p>}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="relative flex items-center gap-2 motion-safe:animate-[james-fade-up_500ms_cubic-bezier(0.22,1,0.36,1)_120ms_both]">
           {canAdd && <button
             onClick={() => {
               setAddCustomerKind('prospect');
@@ -1892,7 +1864,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             <UserCheck className="w-4 h-4" />
             Request Verification
           </button>}
-          {canAdd && <button
+          {canAdd && canCreateCustomer && <button
             onClick={() => {
               setAddCustomerKind('customer');
               setShowAddCustomerModal(true);
@@ -1910,6 +1882,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             <RefreshCw className="w-4 h-4" />
             Refresh
           </button>
+        </div>
         </div>
       </header>
 
@@ -1941,7 +1914,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         {customerListSummaries.map((summary) => {
           const tone = summaryToneClasses[summary.tone];
           return (
-            <article key={summary.id} className={`h-36 overflow-hidden rounded-lg border p-3 shadow-sm ${tone.card}`}>
+            <article key={summary.id} style={{ animationDelay: `${Math.min(summary.rows.length, 5) * 45}ms` }} className={`h-36 overflow-hidden rounded-lg border p-3 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md motion-safe:animate-[james-fade-up_500ms_cubic-bezier(0.22,1,0.36,1)_both] ${tone.card}`}>
               <h2 className={`text-[13px] font-extrabold uppercase leading-tight ${tone.title}`} title={`${summary.label} (${summary.note})`}>
                 <span className="block truncate">{summary.label}</span>
                 <span className="block truncate text-[10px] normal-case">{summary.note}</span>
@@ -1974,13 +1947,13 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         })}
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <section className="rounded-xl border border-slate-200/80 bg-white/90 p-4 shadow-sm backdrop-blur-sm transition-shadow duration-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900/90">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex min-w-[180px] flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-950">
             <Search className="w-5 h-5 text-slate-400" />
             <input
               className="flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-200"
-              placeholder="Search clients"
+              placeholder="Search customer, prospect, or agent"
               value={searchValue}
               onChange={(event) => setSearchValue(event.target.value)}
             />
@@ -2031,7 +2004,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         {customerListSummaries.map((summary) => {
           const tone = summaryToneClasses[summary.tone];
           return (
-            <article key={`${summary.id}-table`} className="flex h-[560px] min-w-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <article key={`${summary.id}-table`} className="flex h-[560px] min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900/95 motion-safe:animate-[james-fade-up_500ms_cubic-bezier(0.22,1,0.36,1)_both]">
               <header className="flex min-h-[58px] items-center justify-between gap-2 border-b border-slate-200 px-3 py-3 dark:border-slate-800">
                 <h2 className={`min-w-0 truncate text-sm font-extrabold uppercase leading-tight ${tone.title}`} title={`${summary.label} (${summary.note})`}>
                   {summary.label} <span className="text-[10px] normal-case">({summary.note})</span>
@@ -2598,7 +2571,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             role="dialog"
             aria-modal="true"
             aria-labelledby="call-contact-title"
-            className="flex max-h-[calc(100dvh-1rem)] w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900 sm:max-h-[calc(100dvh-2rem)] sm:max-w-4xl"
+            className="flex max-h-[calc(100dvh-1rem)] w-full flex-col overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-2xl motion-safe:animate-[james-modal-in_280ms_cubic-bezier(0.22,1,0.36,1)_both] dark:border-slate-800 dark:bg-slate-900 sm:max-h-[calc(100dvh-2rem)] sm:max-w-4xl"
           >
             <div className="flex shrink-0 items-center justify-between border-b border-slate-200 p-3 dark:border-slate-800 sm:p-5">
               <div className="flex items-center gap-3">
@@ -2609,7 +2582,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                   <h3 id="call-contact-title" className="text-lg font-bold text-slate-900 dark:text-white">
                     Contact {callContact.company}
                   </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">A conversation report is required before you can finish this call session.</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Use the unified Agent Sales Report below to record the conversation.</p>
                 </div>
               </div>
               <button
@@ -2680,71 +2653,9 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               </section>
               </div>
 
-              <section className="space-y-3 rounded-xl border border-blue-200 bg-blue-50/50 p-4 dark:border-blue-900 dark:bg-blue-950/20">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h4 className="text-xs font-bold uppercase tracking-wide text-blue-700 dark:text-blue-300">Conversation report</h4>
-                  <span className="rounded-full bg-blue-100 px-2 py-1 text-[10px] font-semibold text-blue-700 dark:bg-blue-900/60 dark:text-blue-200">
-                    Reporting as {agentDisplayName}
-                  </span>
-                </div>
-                <label className="block space-y-1">
-                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Outcome</span>
-                  <select
-                    aria-label="Conversation outcome"
-                    value={callReportOutcome}
-                    onChange={(event) => setCallReportOutcome(event.target.value as CallOutcome)}
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-                  >
-                    <option value="note">Conversation completed</option>
-                    <option value="positive">Positive / interested</option>
-                    <option value="follow_up">Follow-up required</option>
-                    <option value="negative">Not interested</option>
-                    <option value="other">Other outcome</option>
-                  </select>
-                </label>
-                <label className="block space-y-1">
-                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Concern <span className="text-rose-500">*</span></span>
-                  <textarea
-                    aria-label="Customer concern"
-                    value={callReportConcern}
-                    onChange={(event) => setCallReportConcern(event.target.value)}
-                    placeholder="What did the customer ask about or need?"
-                    rows={3}
-                    maxLength={2000}
-                    className="w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-blue/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  />
-                  <span className="block text-right text-[11px] text-slate-400">{callReportConcern.length}/2000</span>
-                </label>
-                <label className="block space-y-1">
-                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Action <span className="text-rose-500">*</span></span>
-                  <textarea
-                    aria-label="Action taken"
-                    value={callReportAction}
-                    onChange={(event) => setCallReportAction(event.target.value)}
-                    placeholder="What did you do in response?"
-                    rows={3}
-                    maxLength={2000}
-                    className="w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-blue/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  />
-                  <span className="block text-right text-[11px] text-slate-400">{callReportAction.length}/2000</span>
-                </label>
-              </section>
-
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Calling does not remove this customer from the list. Only the Master User can remove customers.
+                Closing this window ends the call session. The customer remains on your list, and the Agent Sales Report conversation remains available for follow-up.
               </p>
-
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  disabled={!callReportConcern.trim() || !callReportAction.trim() || callContactLoading || submittingCallReport}
-                  onClick={handleSubmitCallReport}
-                  className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {submittingCallReport ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardList className="h-4 w-4" />}
-                  {submittingCallReport ? 'Submitting...' : 'Submit Report'}
-                </button>
-              </div>
             </div>
           </div>
         </div>

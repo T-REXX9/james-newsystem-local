@@ -63,6 +63,22 @@
         background-color: #f8fafc; /* Slate 50 */
         color: #334155; /* Slate 700 */
       }
+      @keyframes james-fade-up {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes james-modal-in {
+        from { opacity: 0; transform: translateY(10px) scale(.985); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          scroll-behavior: auto !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
       /* Custom scrollbar */
       ::-webkit-scrollbar {
         width: 8px;

@@ -19,7 +19,7 @@ describe('Daily Call Monitoring revision rules', () => {
   it('uses the documented potential formula and requested monitoring filters', () => {
     expect(owner).toContain('+ (verified.length * VERIFIED_PROSPECT_POTENTIAL)');
     expect(owner).not.toContain('[priority, recovery, verified, unverified]');
-    expect(master).toContain('Potential Sales = Priority avg monthly (last 12 months) + Recovery avg monthly (last 12 months of active year) + Blacklisted avg monthly (same as Recovery) + ₱5,000 per verified prospect. Unverified prospects are ₱0.');
+    expect(master).toContain('Potential Sales = Priority avg monthly (last 12 months) + Recovery avg monthly (last 12 active months) + Blacklisted avg monthly (same as Recovery) + ₱5,000 per verified prospect. Unverified prospects are ₱0.');
     expect(master).toContain('Current VIP Status');
     expect(master).toContain('Next VIP Status');
     expect(master).toContain('Last Purchase');

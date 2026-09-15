@@ -809,7 +809,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-xs text-slate-600">
         <p data-testid="potential-sales-formula">
-          Potential Sales = Priority avg monthly (last 12 months) + Recovery avg monthly (last 12 months of active year) + Blacklisted avg monthly (same as Recovery) + ₱5,000 per verified prospect. Unverified prospects are ₱0.
+          Potential Sales = Priority avg monthly (last 12 months) + Recovery avg monthly (last 12 active months) + Blacklisted avg monthly (same as Recovery) + ₱5,000 per verified prospect. Unverified prospects are ₱0.
         </p>
         <p className="font-bold text-blue-900" data-testid="total-potential-sales">
           Total Potential Sales: {compactPeso.format(totalPotentialSales)}
@@ -1043,7 +1043,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                           <p className="text-base font-bold text-blue-950">{peso.format(row.averageMonthlySales)} <span className="text-[12px] font-medium text-slate-500">/ month</span></p>
                           <p className="mt-0.5 text-[11px] text-slate-500">
                             {isBlockedDailyCallMasterRow(row) || resolveDailyCallListCategory(row) === 'recovery'
-                              ? `(Based on ${row.averageMonthlySalesMonthCount} months in last 12 months of active year${row.averageMonthlySalesYear ? ` ${row.averageMonthlySalesYear}` : ''})`
+                              ? `(Based on ${row.averageMonthlySalesMonthCount} of the last 12 active months)`
                               : `(Based on ${row.averageMonthlySalesMonthCount} months in the last 12 months)`}
                           </p>
                             <p className={`mt-0.5 inline-flex items-center gap-1 text-xs font-bold ${trend.className}`}>

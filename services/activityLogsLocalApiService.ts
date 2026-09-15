@@ -10,6 +10,9 @@ export type ActivityLogRecord = {
   lpage: string;
   laction: string;
   lrefno: string;
+  lreason: string;
+  lold_status: string;
+  lnew_status: string;
   ldatetime: string;
   userfname: string;
   userlname: string;
@@ -77,6 +80,9 @@ const mapRecord = (row: any): ActivityLogRecord => ({
   lpage: String(row?.lpage || ''),
   laction: String(row?.laction || ''),
   lrefno: String(row?.lrefno || ''),
+  lreason: String(row?.lreason || ''),
+  lold_status: String(row?.lold_status || ''),
+  lnew_status: String(row?.lnew_status || ''),
   ldatetime: String(row?.ldatetime || ''),
   userfname: String(row?.userfname || ''),
   userlname: String(row?.userlname || ''),

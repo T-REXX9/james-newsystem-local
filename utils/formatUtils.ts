@@ -94,7 +94,7 @@ export const formatComment = (value?: string | null) => {
   return trimmed.length > 90 ? `${trimmed.slice(0, 87)}...` : trimmed;
 };
 
-export const matchesSearch = (contact: { company?: string | null; name?: string | null; province?: string | null; city?: string | null; id?: string | null }, query: string) => {
+export const matchesSearch = (contact: { company?: string | null; name?: string | null; province?: string | null; city?: string | null; salesman?: string | null; id?: string | null }, query: string) => {
   if (!query) return true;
 
   const normalized = query.toLowerCase();
@@ -102,11 +102,12 @@ export const matchesSearch = (contact: { company?: string | null; name?: string 
   // Smart search: detect if query looks like a reference number (contains numbers/dashes)
   const isRefNoLike = /[\d-]/g.test(normalized);
 
-  // Always search company and name
+  // Always search company, customer name, and assigned sales agent.
   const companyMatch = (contact.company || '').toLowerCase().includes(normalized);
   const nameMatch = (contact.name || '').toLowerCase().includes(normalized);
+  const salesAgentMatch = (contact.salesman || '').toLowerCase().includes(normalized);
 
-  if (companyMatch || nameMatch) return true;
+  if (companyMatch || nameMatch || salesAgentMatch) return true;
 
   // For reference number-like searches, also check ID field
   if (isRefNoLike && contact.id) {

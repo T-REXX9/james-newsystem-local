@@ -139,6 +139,9 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     province: contact?.province || '',
     city: contact?.city || '',
     deliveryAddress: contact?.deliveryAddress || '',
+    deliveryAddresses: contact?.deliveryAddresses?.length
+      ? contact.deliveryAddresses
+      : (contact?.deliveryAddress ? [contact.deliveryAddress] : ['']),
     area: contact?.area || '',
     tin: contact?.tin || '',
     priceGroup: normalizeToWritablePriceCode(contact?.priceGroup || contact?.priceCode),
@@ -187,6 +190,8 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
   const [formData, setFormData] = useState<Partial<Contact>>(
     isEditMode ? buildFormDataFromContact(initialData) : buildInitialFormData()
   );
+  const isCreatingProspect = !isEditMode
+    && String(formData.status || '').toLowerCase() === String(CustomerStatus.PROSPECTIVE).toLowerCase();
 
   useEffect(() => {
     if (!isOpen) return;
@@ -258,8 +263,13 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
           enabled: true
       })) as ContactPerson[];
 
-      const resolvedDeliveryAddress =
-        (formData.deliveryAddress || '').trim() || (formData.address || '').trim();
+      const deliveryAddresses = Array.from(new Set(
+        (formData.deliveryAddresses || [formData.deliveryAddress || ''])
+          .map((address) => String(address || '').trim())
+          .filter(Boolean)
+      ));
+      const resolvedDeliveryAddress = deliveryAddresses[0] || (formData.address || '').trim();
+      if (deliveryAddresses.length === 0 && resolvedDeliveryAddress) deliveryAddresses.push(resolvedDeliveryAddress);
 
       // Customer-level phone columns are VARCHAR(15). Contact-person mobiles can be longer
       // legacy values (lc_mobile is VARCHAR(225)). Keep the full value on contactPersons only.
@@ -288,6 +298,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
         city: formData.city || '',
         area: formData.area || '',
         deliveryAddress: resolvedDeliveryAddress,
+        deliveryAddresses,
 
         // Financial / Legal
         tin: formData.tin || '',
@@ -576,8 +587,16 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                            </div>
                        )}
                        <div>
-                           <label className="label">Refer By</label>
-                           <input className="input" value={formData.referBy} onChange={e => setFormData({...formData, referBy: e.target.value})} />
+                           <label className="label">Source{isCreatingProspect ? ' *' : ''}</label>
+                           <input
+                             aria-label="Source"
+                             className="input"
+                             required={isCreatingProspect}
+                             value={formData.referBy}
+                             placeholder={isCreatingProspect ? 'Google Search' : ''}
+                             onChange={e => setFormData({...formData, referBy: e.target.value})}
+                           />
+                           {isCreatingProspect && <p className="mt-1 text-xs text-slate-500">Your staff name is added automatically when saved.</p>}
                        </div>
                   </div>
                   <div className="mt-4 max-w-sm"><RecordImagePicker value={formData.recordImage} position={formData.recordImagePosition} onChange={(recordImage) => setFormData({ ...formData, recordImage })} onPositionChange={(recordImagePosition) => setFormData({ ...formData, recordImagePosition })} label="Customer / Prospect image" /></div>
@@ -604,8 +623,28 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                           <input className="input" value={formData.area} onChange={e => setFormData({...formData, area: e.target.value})} />
                       </div>
                       <div className="md:col-span-3">
-                          <label className="label">Delivery Address</label>
-                          <input className="input" value={formData.deliveryAddress} onChange={e => setFormData({...formData, deliveryAddress: e.target.value})} placeholder="Leave blank if same as above" />
+                          <label className="label">Delivery Addresses</label>
+                          <div className="space-y-2">
+                            {(formData.deliveryAddresses || [formData.deliveryAddress || '']).map((deliveryAddress, index, addresses) => (
+                              <div key={index} className="flex gap-2">
+                                <input
+                                  className="input"
+                                  value={deliveryAddress}
+                                  onChange={e => {
+                                    const next = [...addresses];
+                                    next[index] = e.target.value;
+                                    setFormData({ ...formData, deliveryAddresses: next, deliveryAddress: next[0] || '' });
+                                  }}
+                                  placeholder="Delivery address"
+                                />
+                                {addresses.length > 1 && <button type="button" aria-label="Remove delivery address" onClick={() => {
+                                  const next = addresses.filter((_, itemIndex) => itemIndex !== index);
+                                  setFormData({ ...formData, deliveryAddresses: next, deliveryAddress: next[0] || '' });
+                                }} className="btn-secondary px-3"><Trash2 className="h-4 w-4" /></button>}
+                              </div>
+                            ))}
+                            <button type="button" onClick={() => setFormData({ ...formData, deliveryAddresses: [...(formData.deliveryAddresses || [formData.deliveryAddress || '']), ''] })} className="btn-secondary inline-flex items-center gap-1 px-3 py-2 text-xs"><Plus className="h-4 w-4" />Add address</button>
+                          </div>
                       </div>
                   </div>
               </section>

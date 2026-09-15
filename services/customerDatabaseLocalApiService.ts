@@ -2,7 +2,7 @@ import { DEFAULT_CUSTOMER_VAT_TYPE } from '../constants/customerVat';
 import { normalizePreferredBrand } from '../constants/customerPreferredBrand';
 import { normalizePriceGroup } from '../constants/pricingGroups';
 import { Contact, ContactPerson, ContactTransaction, CustomerStatus, CustomerVatType, DealStage, Product, UserProfile } from '../types';
-import { invalidateDailyCallMasterListCache } from './dailyCallMonitoringService';
+import { fetchDailyCallMasterList, invalidateDailyCallMasterListCache } from './dailyCallMonitoringService';
 import { getLocalAuthSession } from './localAuthService';
 import { fetchAssignableStaff } from './staffLocalApiService';
 import { customerLedgerService, ledgerRowsToContactTransactions } from './customerLedgerService';
@@ -64,6 +64,7 @@ interface ApiCustomerRow {
   city?: string | null;
   area?: string | null;
   delivery_address?: string | null;
+  delivery_addresses?: string[] | null;
   tin?: string | null;
   price_group?: string | null;
   price_code?: string | null;
@@ -316,6 +317,7 @@ export const mapApiCustomerToContact = (row: ApiCustomerRow): LocalContact => {
   return {
     id: String(row?.session_id ?? row?.lsessionid ?? row?.id ?? ''),
     company,
+    pastName: sanitizeLegacyString(row?.old_name || row?.past_name || ''),
     customerSince: sanitizeCustomerDate(row?.since || row?.customer_since || row?.lsince || ''),
     team: sanitizeLegacyString(row?.team || ''),
     salesman: resolvedSalesName,
@@ -326,6 +328,10 @@ export const mapApiCustomerToContact = (row: ApiCustomerRow): LocalContact => {
     city: sanitizeLegacyString(row?.city || ''),
     area: sanitizeLegacyString(row?.area || ''),
     deliveryAddress: sanitizeLegacyString(row?.delivery_address || row?.address || ''),
+    deliveryAddresses: Array.from(new Set([
+      ...(Array.isArray(row?.delivery_addresses) ? row.delivery_addresses : []),
+      sanitizeLegacyString(row?.delivery_address || row?.address || ''),
+    ].map(sanitizeLegacyString).filter(Boolean))),
     tin: sanitizeLegacyString(row?.tin || ''),
     priceGroup: priceCode || normalizePriceGroup(sanitizeLegacyString(row?.price_group || '')),
     priceCode,
@@ -386,6 +392,9 @@ export const mapContactPayloadToApi = (contact: ContactPayloadWithSalesPersonId)
     refer_by: String(contact?.referBy || ''),
     address: String(contact?.address || ''),
     delivery_address: String(contact?.deliveryAddress || contact?.address || ''),
+    delivery_addresses: Array.isArray(contact?.deliveryAddresses)
+      ? contact.deliveryAddresses.map((address) => String(address || '').trim()).filter(Boolean)
+      : [],
     area: String(contact?.area || ''),
     city: String(contact?.city || ''),
     province: String(contact?.province || ''),
@@ -437,6 +446,11 @@ export const mapContactUpdatesToApi = (contact: Partial<ContactPayloadWithSalesP
   if (hasOwn(contact, 'referBy')) payload.refer_by = String(contact.referBy || '');
   if (hasOwn(contact, 'address')) payload.address = String(contact.address || '');
   if (hasOwn(contact, 'deliveryAddress')) payload.delivery_address = String(contact.deliveryAddress || '');
+  if (hasOwn(contact, 'deliveryAddresses')) {
+    payload.delivery_addresses = Array.isArray(contact.deliveryAddresses)
+      ? contact.deliveryAddresses.map((address) => String(address || '').trim()).filter(Boolean)
+      : [];
+  }
   if (hasOwn(contact, 'area')) payload.area = String(contact.area || '');
   if (hasOwn(contact, 'city')) payload.city = String(contact.city || '');
   if (hasOwn(contact, 'province')) payload.province = String(contact.province || '');
@@ -613,7 +627,39 @@ export const fetchContacts = async (): Promise<Contact[]> => {
       dedupedById.set(id, mergeContactRecords(existing, contact));
     });
 
-    return [...dedupedById.values(), ...contactsWithoutId].sort((a, b) =>
+    const contacts = [...dedupedById.values(), ...contactsWithoutId];
+
+    // Daily Call Monitoring is the source of truth for buyer activity. Its
+    // Recovery List is the inactive population in Customer Data: activity
+    // exists, but only before the Priority cutoff. Keep Blacklisted visible as
+    // such; Daily Call places those buyers in its separate blocked bucket.
+    try {
+      // Daily Call results are scoped to the signed-in viewer, whereas this
+      // page displays the full Customer Data list. Never reuse a result cached
+      // under a previous viewer, or their omitted recovery customers retain
+      // the stored Active standing here.
+      const masterList = await fetchDailyCallMasterList({ forceRefresh: true });
+      const recoveryCustomerIds = new Set(
+        masterList.items
+          .filter((customer) => customer.listCategory === 'recovery')
+          .map((customer) => String(customer.id || '').trim())
+          .filter(Boolean),
+      );
+      contacts.forEach((contact) => {
+        if (
+          recoveryCustomerIds.has(String(contact.id || '').trim())
+          && contact.status !== CustomerStatus.BLACKLISTED
+        ) {
+          contact.status = CustomerStatus.INACTIVE;
+        }
+      });
+    } catch (error) {
+      // Customer Data remains usable if the Daily Call master-list endpoint is
+      // temporarily unavailable; the next refresh will reapply its category.
+      console.error('Error fetching Daily Call customer classifications:', error);
+    }
+
+    return contacts.sort((a, b) =>
       (a.company || '').localeCompare(b.company || ''),
     );
   } catch (err) {

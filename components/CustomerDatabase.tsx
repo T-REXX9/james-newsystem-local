@@ -38,6 +38,7 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
     const currentUser = getLocalAuthSession()?.userProfile ?? null;
     const canViewApprovals = isMasterUserAccount(currentUser);
     const canAdd = hasActionPermission(currentUser, 'can_add');
+    const canAddCustomer = canViewApprovals && canAdd;
     const canEdit = hasActionPermission(currentUser, 'can_edit');
     const canDelete = hasActionPermission(currentUser, 'can_delete', 'Customer Database');
 
@@ -359,7 +360,7 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
                 </button>
               </div>
             )}
-            {canAdd && <button
+            {canAddCustomer && <button
               type="button"
               onClick={handleCreateNew}
               className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
@@ -411,7 +412,7 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
         selectedIds={selectedIds}
         onToggleSelection={handleToggleSelection}
         onToggleAll={handleToggleAll}
-        onCreateNew={canAdd ? handleCreateNew : undefined}
+        onCreateNew={canAddCustomer ? handleCreateNew : undefined}
       />
 
       {/* Main Content (Detail Panel) */}

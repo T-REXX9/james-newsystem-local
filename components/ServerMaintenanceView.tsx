@@ -256,7 +256,7 @@ export const ServerMaintenanceView: React.FC<ServerMaintenanceViewProps> = ({ cu
           </div>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
             {status?.corporate_dump_import?.safety ||
-              'Loads a corporate .sql / .sql.gz dump into a temporary staging database, then inserts or updates only shared columns on existing tables. Never drops tables, never truncates, and never deletes rows. Local-only tables and columns stay untouched.'}
+              'Loads a corporate .sql / .sql.gz dump into a temporary staging database, then inserts only new rows using shared columns on existing tables. Never drops, truncates, deletes, or updates live data. Local-only tables and columns stay untouched.'}
           </p>
 
           <div className="mt-5 flex flex-wrap items-center gap-3">

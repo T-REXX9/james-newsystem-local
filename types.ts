@@ -339,6 +339,7 @@ export interface Contact {
   city: string;
   area: string;
   deliveryAddress: string;
+  deliveryAddresses?: string[];
 
   // Financial / Legal
   tin: string;

@@ -9,7 +9,6 @@ import {
 } from '../services/dailyCallMonitoringService';
 import { SalesReportConversationMessage, UserProfile } from '../types';
 import { useToast } from './ToastProvider';
-import { formatDateTime } from '../utils/formatUtils';
 import { optimizeRecordImage, RECORD_IMAGE_ACCEPT, validateRecordImageFile } from '../utils/recordImage';
 
 interface CustomerSalesReportChatProps {
@@ -34,11 +33,34 @@ const kindLabel = (kind: SalesReportConversationMessage['kind']): string => {
   }
 };
 
+const roleLabel = (role: SalesReportConversationMessage['sender_role']): string =>
+  role === 'master' ? 'Master User' : 'Sales Agent';
+
+const senderLabel = (message: SalesReportConversationMessage): string => {
+  const name = message.sender_name.trim();
+  if (name) return name;
+  if (message.sender_user_id.trim()) return `User #${message.sender_user_id.trim()}`;
+  return roleLabel(message.sender_role);
+};
+
 const formatTimestamp = (value?: string) => {
   if (!value) return '—';
-  const date = new Date(value);
+  const normalized = value.includes(' ') && !value.includes('T')
+    ? value.replace(' ', 'T')
+    : value;
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized);
+  const date = new Date(hasTimezone ? normalized : `${normalized}+08:00`);
   if (Number.isNaN(date.getTime())) return value;
-  return formatDateTime(date);
+  return `${new Intl.DateTimeFormat('en-PH', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  }).format(date)} PHT`;
 };
 
 
@@ -213,40 +235,49 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
   }
 
   return (
-    <div className={`flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-50 ${className}`}>
-      <header className="border-b border-slate-200 bg-white px-3 py-2">
-        <p className="text-xs font-bold uppercase tracking-wide text-slate-700">Agent Sales Report</p>
-        <p className="text-[10px] text-slate-500">Chronological chat with the assigned sales agent and management</p>
+    <div className={`flex flex-col overflow-hidden rounded-2xl border border-blue-100/80 bg-gradient-to-b from-slate-50 to-white shadow-sm dark:border-slate-800 dark:from-slate-900 dark:to-slate-950 ${className}`}>
+      <header className="relative overflow-hidden border-b border-blue-100/80 bg-gradient-to-r from-white via-blue-50/70 to-slate-50 px-4 py-3 dark:border-slate-800 dark:from-slate-900 dark:via-blue-950/30 dark:to-slate-900">
+        <div className="pointer-events-none absolute -right-6 -top-10 h-20 w-20 rounded-full bg-blue-400/15 blur-2xl" />
+        <div className="relative flex items-center gap-2">
+          <span className="grid h-7 w-7 place-items-center rounded-lg bg-brand-blue text-white shadow-sm shadow-blue-900/20">
+            <Send className="h-3.5 w-3.5" />
+          </span>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-100">Agent Sales Report</p>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400">Chronological chat with the assigned sales agent and management</p>
+          </div>
+        </div>
       </header>
 
-      <div className={`space-y-3 overflow-y-auto p-3 ${compact ? 'max-h-[18rem]' : 'max-h-[28rem] min-h-[14rem]'}`}>
+      <div className={`space-y-3 overflow-y-auto bg-blue-50/20 p-4 dark:bg-blue-950/10 ${compact ? 'max-h-[18rem]' : 'max-h-[28rem] min-h-[14rem]'}`}>
         {visibleMessages.length === 0 ? (
-          <div className="grid min-h-24 place-items-center rounded-lg border border-dashed border-slate-200 bg-white px-4 text-center text-xs text-slate-500">
+          <div className="grid min-h-24 place-items-center rounded-xl border border-dashed border-slate-200 bg-white/80 px-4 text-center text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-400">
             No Agent Sales Report messages yet for this customer.
           </div>
         ) : (
           visibleMessages.map((message) => {
             const isMine = message.is_from_current_user;
             const showBody = message.body && message.body !== '[Picture]';
+            const sender = senderLabel(message);
             return (
-              <div key={message.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+              <div key={message.id} className={`flex motion-safe:animate-[james-fade-up_300ms_ease-out_both] ${isMine ? 'justify-end' : 'justify-start'}`}>
                 <div
                   className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
                     isMine
                       ? 'bg-brand-blue text-white'
-                      : message.is_from_master || message.kind === 'management_instruction'
-                        ? 'border border-violet-200 bg-violet-50 text-slate-900'
-                        : 'border border-slate-200 bg-white text-slate-900'
+                        : message.is_from_master || message.kind === 'management_instruction'
+                        ? 'border border-violet-200 bg-violet-50 text-slate-900 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-slate-100'
+                        : 'border border-slate-200 bg-white text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100'
                   }`}
                 >
                   <p className={`mb-1 text-[10px] font-semibold ${isMine ? 'text-blue-100' : 'text-slate-500'}`}>
-                    {isMine ? 'You' : message.sender_name} · {kindLabel(message.kind)}
+                    {sender}{isMine ? ' (You)' : ''} · {roleLabel(message.sender_role)} · {kindLabel(message.kind)}
                   </p>
                   {showBody && <p className="whitespace-pre-wrap leading-6">{message.body}</p>}
                   {message.attachment_url && (
                     <AuthenticatedAttachmentImage attachmentUrl={message.attachment_url} />
                   )}
-                  <p className={`mt-2 text-[10px] ${isMine ? 'text-blue-100' : 'text-slate-400'}`}>
+                  <p className={`mt-2 text-[10px] ${isMine ? 'text-blue-100' : 'text-slate-400 dark:text-slate-500'}`}>
                     {formatTimestamp(message.created_at)}
                   </p>
                 </div>
@@ -258,7 +289,7 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
       </div>
 
       {!viewOnly && !compact && (
-        <div className="border-t border-slate-200 bg-white p-3">
+        <div className="border-t border-blue-100/80 bg-white/90 p-4 dark:border-slate-800 dark:bg-slate-900/90">
           {pendingImageDataUrl && (
             <div className="mb-2 flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
               <img src={pendingImageDataUrl} alt="Pending attachment" className="h-16 w-16 rounded object-cover" />
@@ -280,7 +311,7 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
               rows={3}
               maxLength={2000}
               placeholder="Reply in the Agent Sales Report conversation…"
-              className="w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+              className="w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-brand-blue focus:bg-white focus:ring-2 focus:ring-brand-blue/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:bg-slate-900"
             />
           </label>
           <div className="mt-2 flex items-center justify-between gap-2">
@@ -298,7 +329,7 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-brand-blue dark:border-slate-700 dark:text-slate-300 dark:hover:border-blue-900 dark:hover:bg-blue-950/40"
               >
                 <ImagePlus className="h-4 w-4" />
                 Picture

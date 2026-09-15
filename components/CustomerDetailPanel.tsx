@@ -16,11 +16,13 @@ import { toast } from 'sonner';
 import { normalizePriceGroup } from '../constants/pricingGroups';
 import { isMasterUserAccount } from '../constants';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
-import { formatCurrency, formatCustomerSince } from '../utils/formatUtils';
+import { formatCurrency, formatCustomerSince, formatDateTime } from '../utils/formatUtils';
 import CallCustomerButton from './CallCustomerButton';
 import CustomerCallHistoryCard from './CustomerCallHistoryCard';
 import IncidentReportTab from './IncidentReportTab';
 import CustomerYearlySales from './CustomerYearlySales';
+import CustomerSalesReportChat from './CustomerSalesReportChat';
+import { createPersonalComment, fetchPersonalComments } from '../services/localDataService';
 
 interface CustomerDetailPanelProps {
     contactId: string;
@@ -65,7 +67,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     onDeleteCustomer,
     currentUser,
 }) => {
-    const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'calls' | 'inquiries' | 'incidents' | 'returns' | 'financials' | 'profile'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'calls' | 'inquiries' | 'incidents' | 'returns' | 'financials' | 'profile' | 'sales-report'>('overview');
     const [transactions, setTransactions] = useState<any[]>([]);
     const [metrics, setMetrics] = useState<any>(null);
     const [ledgerSalesRows, setLedgerSalesRows] = useState<Parameters<typeof buildYearlySales>[0]>([]);
@@ -78,6 +80,15 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     const [selectedSalesAgent, setSelectedSalesAgent] = useState<string>('');
     const [isSaving, setIsSaving] = useState(false);
     const [recordImageFailed, setRecordImageFailed] = useState(false);
+    const [customerComments, setCustomerComments] = useState<Array<{
+        id: string;
+        text: string;
+        author_name?: string;
+        timestamp?: string;
+    }>>([]);
+    const [customerCommentDraft, setCustomerCommentDraft] = useState('');
+    const [commentsLoading, setCommentsLoading] = useState(false);
+    const [savingCustomerComment, setSavingCustomerComment] = useState(false);
 
     useEffect(() => {
         setRecordImageFailed(false);
@@ -140,6 +151,60 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
 
         loadData();
     }, [contactId, revision]);
+
+    useEffect(() => {
+        if (!contactId) return;
+
+        let cancelled = false;
+        setCommentsLoading(true);
+        void fetchPersonalComments(contactId)
+            .then((comments) => {
+                if (!cancelled) setCustomerComments(comments);
+            })
+            .catch((error) => {
+                if (!cancelled) {
+                    console.error('Failed to load customer comments', error);
+                    setCustomerComments([]);
+                }
+            })
+            .finally(() => {
+                if (!cancelled) setCommentsLoading(false);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [contactId, revision]);
+
+    const handleSaveCustomerComment = async () => {
+        const text = customerCommentDraft.trim();
+        if (!text || !contactId) return;
+
+        const sessionUser = currentUser || getLocalAuthSession()?.userProfile || null;
+        if (!sessionUser) {
+            toast.error('Sign in again before adding a customer comment.');
+            return;
+        }
+
+        setSavingCustomerComment(true);
+        try {
+            await createPersonalComment(
+                contactId,
+                String(sessionUser.id || ''),
+                sessionUser.full_name || sessionUser.email || 'Staff',
+                text
+            );
+            const refreshedComments = await fetchPersonalComments(contactId);
+            setCustomerComments(refreshedComments);
+            setCustomerCommentDraft('');
+            toast.success('Customer comment saved.');
+        } catch (error) {
+            console.error('Failed to save customer comment', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to save customer comment.');
+        } finally {
+            setSavingCustomerComment(false);
+        }
+    };
 
     // Handler for saving sales agent assignment
     const handleSaveSalesAgent = async () => {
@@ -268,11 +333,12 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                 </div>
 
                 {/* Navigation Tabs */}
-                <div className="mt-4 flex min-w-0 items-center gap-4 overflow-x-auto border-b border-transparent pb-0.5 custom-scrollbar">
+                <div className="mt-4 flex min-w-0 items-center gap-1.5 overflow-x-auto rounded-xl border border-slate-200/80 bg-slate-50/80 p-1 pb-1 custom-scrollbar dark:border-slate-800 dark:bg-slate-950/60">
                     {[
                         { id: 'overview', label: 'Overview', icon: Activity },
                         { id: 'history', label: 'Sales History', icon: ShoppingBag },
                         { id: 'calls', label: 'Calls', icon: Phone },
+                        { id: 'sales-report', label: 'Agent Sales Report', icon: MessageSquare },
                         { id: 'inquiries', label: 'Inquiries', icon: MessageSquare },
                         { id: 'incidents', label: 'Incidents', icon: AlertCircle },
                         { id: 'returns', label: 'Returns', icon: RotateCcw },
@@ -283,17 +349,17 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as any)}
                             className={`
-                 relative flex shrink-0 items-center gap-2 px-1 pb-2 text-xs font-bold transition-all
+                 relative flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition-all duration-200
                  ${activeTab === tab.id
-                                    ? 'text-brand-blue'
-                                    : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+                                    ? 'bg-white text-brand-blue shadow-sm ring-1 ring-slate-200/70 dark:bg-slate-800 dark:ring-slate-700'
+                                    : 'text-slate-500 hover:bg-white/70 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800/70 dark:hover:text-slate-200'
                                 }
                `}
                         >
                             <tab.icon className="w-4 h-4" />
                             {tab.label}
                             {activeTab === tab.id && (
-                                <span className="absolute bottom-0 left-0 w-full h-0.5 bg-brand-blue rounded-t-full" />
+                                <span className="absolute bottom-0 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-brand-blue" />
                             )}
                         </button>
                     ))}
@@ -352,6 +418,49 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                         </div>
 
                         <CustomerYearlySales rows={ledgerSalesRows} error={ledgerError} />
+
+                        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                            <h3 className="mb-3 flex items-center gap-2 font-bold text-slate-800 dark:text-slate-100">
+                                <MessageSquare className="h-4 w-4 text-brand-blue" /> Customer comments
+                            </h3>
+                            <div className="space-y-3">
+                                <textarea
+                                    aria-label="Add customer comment"
+                                    value={customerCommentDraft}
+                                    onChange={(event) => setCustomerCommentDraft(event.target.value)}
+                                    placeholder="Add an internal customer comment"
+                                    rows={3}
+                                    maxLength={2000}
+                                    className="w-full resize-y rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                                />
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="text-[11px] text-slate-400">Visible to authorized staff and management.</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleSaveCustomerComment()}
+                                        disabled={savingCustomerComment || !customerCommentDraft.trim()}
+                                        className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-3 py-2 text-xs font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        <Save className="h-3.5 w-3.5" />
+                                        {savingCustomerComment ? 'Saving…' : 'Save comment'}
+                                    </button>
+                                </div>
+                                <div className="max-h-44 space-y-2 overflow-y-auto border-t border-slate-100 pt-3 dark:border-slate-800">
+                                    {commentsLoading ? (
+                                        <p className="text-xs text-slate-400">Loading comments…</p>
+                                    ) : customerComments.length === 0 ? (
+                                        <p className="text-xs italic text-slate-400">No customer comments yet.</p>
+                                    ) : customerComments.map((comment) => (
+                                        <div key={comment.id} className="rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-950">
+                                            <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">{comment.text}</p>
+                                            <p className="mt-1 text-[10px] font-semibold text-slate-400">
+                                                {comment.author_name || 'Staff'}{comment.timestamp ? ` · ${formatDateTime(comment.timestamp)}` : ''}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
 
                         {/* Recent Activity Stream */}
                         <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm col-span-1 md:col-span-2">
@@ -435,6 +544,15 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                     <CustomerCallHistoryCard customerId={contact.id} />
                 )}
 
+                {!loading && activeTab === 'sales-report' && (
+                    <CustomerSalesReportChat
+                        contactId={contact.id}
+                        currentUser={currentUser || null}
+                        viewOnly={!currentUser}
+                        className="min-h-[24rem]"
+                    />
+                )}
+
                 {/* Placeholder for other tabs (Inquiries, Financials, etc.) reuse same table style or specialized components */}
                 {!loading && activeTab === 'inquiries' && <CustomerHistoryTab contactId={contactId} kind="inquiries" />}
 
@@ -483,8 +601,11 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                     <div className="mt-1">{contact.address || '-'}</div>
                                 </div>
                                 <div>
-                                    <label className="text-xs font-bold text-slate-400 uppercase">Delivery Address</label>
-                                    <div className="mt-1">{contact.deliveryAddress || '-'}</div>
+                                    <label className="text-xs font-bold text-slate-400 uppercase">Delivery Addresses</label>
+                                    <div className="mt-1 space-y-1">{(() => {
+                                        const addresses = (contact.deliveryAddresses?.length ? contact.deliveryAddresses : [contact.deliveryAddress]).filter(Boolean);
+                                        return addresses.length ? addresses.map((address) => <div key={address}>{address}</div>) : '-';
+                                    })()}</div>
                                 </div>
                                 <div>
                                     <label className="text-xs font-bold text-slate-400 uppercase">Area</label>

@@ -797,12 +797,17 @@ const AccessControlSettings: React.FC = () => {
                                                 ['can_edit_invoice_number', 'Edit invoice number'],
                                                 ['can_edit_unit_price', 'Edit unit price'],
                                                 ['can_view_all_records', 'See all records'],
-                                              ] as const).filter(([permission]) => pageActions.includes(permission)).map(([permission, label]) => (
+                                              ] as const).filter(([permission]) => pageActions.includes(permission)).map(([permission, label]) => {
+                                                const displayedLabel = pageItem.id === 'sales-transaction-daily-call-monitoring' && permission === 'can_add'
+                                                  ? 'Add Prospect'
+                                                  : label;
+                                                return (
                                                 <label key={permission} className="flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-300">
-                                                  <input type="checkbox" checked={isOwner || pageActionValues[permission]} disabled={isOwner || !isAllowed} aria-label={`${label} action permission for ${pageItem.label} for ${user.full_name}`} onChange={(event) => handleActionPermissionToggle(user.id, pageItem.label, permission, event.target.checked)} />
-                                                  {label}
+                                                  <input type="checkbox" checked={isOwner || pageActionValues[permission]} disabled={isOwner || !isAllowed} aria-label={`${displayedLabel} action permission for ${pageItem.label} for ${user.full_name}`} onChange={(event) => handleActionPermissionToggle(user.id, pageItem.label, permission, event.target.checked)} />
+                                                  {displayedLabel}
                                                 </label>
-                                              ))}
+                                                );
+                                              })}
                                             </div>
                                           )}
                                         </div>

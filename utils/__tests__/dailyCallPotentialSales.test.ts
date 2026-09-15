@@ -28,7 +28,7 @@ describe('dailyCallPotentialSales', () => {
     expect(value).toBe(5_000_000);
   });
 
-  it('uses last 12 months ending at last purchase for recovery/blacklisted average', () => {
+  it('uses the last 12 active months for recovery/blacklisted average', () => {
     const value = averageMonthlyPaidSales(
       [
         purchase('a', 35_000, '2024-01-10T00:00:00.000Z'),
@@ -39,6 +39,21 @@ describe('dailyCallPotentialSales', () => {
       'recovery',
       new Date('2026-09-09T00:00:00')
     );
-    expect(value).toBe(35_000);
+    expect(value).toBe(76_250);
+  });
+
+  it('does not dilute recovery potential with inactive calendar months', () => {
+    const value = averageMonthlyPaidSales(
+      [
+        purchase('recent', 120_000, '2024-12-10T00:00:00.000Z'),
+        purchase('one', 60_000, '2024-05-10T00:00:00.000Z'),
+        purchase('two', 60_000, '2023-10-10T00:00:00.000Z'),
+        purchase('old', 1_000_000, '2022-01-10T00:00:00.000Z'),
+      ],
+      'recovery',
+      new Date('2026-09-09T00:00:00')
+    );
+
+    expect(value).toBe(310_000);
   });
 });

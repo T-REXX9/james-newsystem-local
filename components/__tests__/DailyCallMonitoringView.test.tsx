@@ -471,67 +471,6 @@ describe('DailyCallMonitoringView communication actions', () => {
     });
   });
 
-  it('submits a conversation report and keeps the customer in the list', async () => {
-    createCallLogForDailyCallMock.mockResolvedValue({
-      id: 'log-call-1',
-      contact_id: 'contact-1',
-      agent_name: 'Jane Doe',
-      channel: 'call',
-      direction: 'outbound',
-      duration_seconds: 0,
-      notes: '[Sales Agent Report] Customer requested updated quotation.',
-      outcome: 'follow_up',
-      occurred_at: '2026-04-04T00:00:00.000Z',
-      next_action: null,
-      next_action_due: null,
-    });
-
-    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
-    const user = userEvent.setup();
-
-    render(<DailyCallMonitoringView currentUser={currentUser} />);
-
-    const callButton = await screen.findByRole('button', { name: 'Call Test Shop' });
-    await user.click(callButton);
-
-    expect(claimCustomerCallForDailyCallMock).toHaveBeenCalledWith('contact-1');
-    expect(await screen.findByRole('dialog', { name: 'Contact Test Shop' })).toBeInTheDocument();
-    const responsiveDialog = screen.getByRole('dialog', { name: 'Contact Test Shop' });
-    expect(responsiveDialog).toHaveClass('max-h-[calc(100dvh-1rem)]', 'sm:max-h-[calc(100dvh-2rem)]', 'sm:max-w-4xl');
-    expect(screen.getByTestId('call-contact-scroll-area')).toHaveClass('min-h-0', 'overflow-y-auto');
-    expect(screen.getByText('Juan Dela Cruz')).toBeInTheDocument();
-    expect(screen.getByText('Purchasing Manager')).toBeInTheDocument();
-    expect(screen.getByText('09987654321')).toBeInTheDocument();
-    expect(screen.getByText('juan@example.com')).toBeInTheDocument();
-    expect(screen.getByText('Reporting as Jane Doe')).toBeInTheDocument();
-    expect(createCallLogForDailyCallMock).not.toHaveBeenCalled();
-    expect(openSpy).not.toHaveBeenCalled();
-
-    await user.selectOptions(screen.getByLabelText('Conversation outcome'), 'follow_up');
-    await user.type(screen.getByLabelText('Customer concern'), 'Customer requested updated quotation.');
-    await user.type(screen.getByLabelText('Action taken'), 'Sent revised quotation draft.');
-    await user.click(screen.getByRole('button', { name: 'Submit Report' }));
-
-    await waitFor(() => {
-      expect(createCallLogForDailyCallMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          contact_id: 'contact-1',
-          agent_name: 'Jane Doe',
-          channel: 'call',
-          direction: 'outbound',
-          notes: '[Sales Agent Report] Concern: Customer requested updated quotation.\nAction: Sent revised quotation draft.',
-          outcome: 'follow_up',
-          concern: 'Customer requested updated quotation.',
-          action: 'Sent revised quotation draft.',
-        })
-      );
-    });
-
-    expect(openSpy).not.toHaveBeenCalled();
-    expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
-    expect(callButton).toBeInTheDocument();
-  });
-
   it('shows the unified Agent Sales Report chat when a sales agent opens a customer', async () => {
     fetchSalesReportDirectoryStateMock.mockResolvedValue({
       unreadByContact: { 'contact-1': 2 },
@@ -577,19 +516,16 @@ describe('DailyCallMonitoringView communication actions', () => {
     }));
   });
 
-  it('requires a report before the agent can close the call window', async () => {
+  it('closes the call window without a legacy conversation report and releases the claim', async () => {
     const user = userEvent.setup();
     render(<DailyCallMonitoringView currentUser={currentUser} />);
 
     await user.click(await screen.findByRole('button', { name: 'Call Test Shop' }));
     await user.click(await screen.findByRole('button', { name: 'Close contact window' }));
 
-    await waitFor(() => expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'error',
-      title: 'Report required',
-    })));
-    expect(releaseCustomerCallForDailyCallMock).not.toHaveBeenCalled();
-    expect(screen.getByRole('heading', { name: /Contact Test Shop/i })).toBeInTheDocument();
+    await waitFor(() => expect(releaseCustomerCallForDailyCallMock).toHaveBeenCalledWith('contact-1'));
+    expect(screen.queryByRole('heading', { name: /Contact Test Shop/i })).not.toBeInTheDocument();
+    expect(screen.queryByText('Conversation report')).not.toBeInTheDocument();
   });
 
   it('renders the customer details sheet responsively across screen sizes', async () => {
@@ -830,5 +766,82 @@ describe('DailyCallMonitoringView communication actions', () => {
       .getByTitle('Recovery List (Purchase history before October 2025, with none since)')
       .closest('article')!;
     expect(within(recoveryTable).getByText('Legacy Recovery Customer')).toBeInTheDocument();
+  });
+
+  it('uses the ledger current-month sales from the master list in the category summary', async () => {
+    fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
+      ...baseSnapshot,
+      contacts: [{
+        ...baseSnapshot.contacts[0],
+        id: 'ledger-sales-customer',
+        shopName: 'Ledger Sales Customer',
+        status: 'active',
+        verification: '',
+      }],
+      purchases: [{
+        id: 'stale-purchase-total',
+        contact_id: 'ledger-sales-customer',
+        amount: 100,
+        status: 'paid',
+        purchased_at: new Date().toISOString(),
+      }],
+      masterList: [{
+        id: 'ledger-sales-customer',
+        shopName: 'Ledger Sales Customer',
+        listCategory: 'priority',
+        currentMonthSales: 4_200,
+        totalSales: 4_200,
+        purchaseCount: 1,
+        priorityTransactionCount: 1,
+        ledgerTransactionCount: 1,
+        purchaseAgeGroup: 'recent',
+      }],
+    });
+
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    const summaryHeading = (await screen.findAllByTitle('Priority List (Any ledger activity since October 2025 onwards)'))[0];
+    const summary = summaryHeading.closest('article');
+    expect(summary).not.toBeNull();
+    expect(within(summary as HTMLElement).getByTitle('₱4,200')).toBeInTheDocument();
+  });
+
+  it('uses the ledger average monthly sales for potential sales', async () => {
+    fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
+      ...baseSnapshot,
+      contacts: [{
+        ...baseSnapshot.contacts[0],
+        id: 'ledger-potential-customer',
+        shopName: 'Ledger Potential Customer',
+        status: 'active',
+        verification: '',
+      }],
+      purchases: [{
+        id: 'stale-potential-purchase',
+        contact_id: 'ledger-potential-customer',
+        amount: 100,
+        status: 'paid',
+        purchased_at: '2025-09-01T00:00:00.000Z',
+      }],
+      masterList: [{
+        id: 'ledger-potential-customer',
+        shopName: 'Ledger Potential Customer',
+        listCategory: 'recovery',
+        averageMonthlySales: 18_000,
+        averageMonthlySalesMonthCount: 3,
+        totalSales: 54_000,
+        purchaseCount: 3,
+        ledgerTransactionCount: 3,
+        purchaseAgeGroup: 'over_one_month',
+        lastPurchaseDateRaw: '2025-09-01',
+      }],
+    });
+
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    const summaryHeading = (await screen.findAllByTitle('Recovery List (Purchase history before October 2025, with none since)'))[0];
+    const summary = summaryHeading.closest('article');
+    expect(summary).not.toBeNull();
+    expect(within(summary as HTMLElement).getAllByTitle('₱18,000')).toHaveLength(2);
   });
 });
