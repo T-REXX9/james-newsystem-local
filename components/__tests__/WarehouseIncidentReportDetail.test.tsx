@@ -6,6 +6,11 @@ import WarehouseIncidentReportDetail from '../WarehouseIncidentReportDetail';
 
 const fetchReportMock = vi.fn();
 const reviewReportMock = vi.fn();
+const canPerformActionMock = vi.hoisted(() => vi.fn());
+
+vi.mock('../../utils/actionPermissions', () => ({
+  canPerformAction: (...args: unknown[]) => canPerformActionMock(...args),
+}));
 
 vi.mock('../../services/incidentItemsReportService', async () => {
   const actual = await vi.importActual<typeof import('../../services/incidentItemsReportService')>(
@@ -55,6 +60,7 @@ describe('WarehouseIncidentReportDetail', () => {
   });
 
   it('shows the full Incident Report and lets Master User approve', async () => {
+    canPerformActionMock.mockReturnValue(true);
     fetchReportMock
       .mockResolvedValueOnce(pendingReport)
       .mockResolvedValueOnce({
@@ -91,6 +97,7 @@ describe('WarehouseIncidentReportDetail', () => {
   });
 
   it('hides approve actions for warehouse staff', async () => {
+    canPerformActionMock.mockReturnValue(false);
     fetchReportMock.mockResolvedValueOnce(pendingReport);
 
     render(

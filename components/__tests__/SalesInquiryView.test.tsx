@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, cleanup, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SalesInquiryView, { canGenerateSalesOrderFromInquiry } from '../SalesInquiryView';
 
@@ -1068,8 +1068,7 @@ describe('SalesInquiryView', () => {
     await waitFor(() => expect(fetchContactsMock).toHaveBeenCalled());
     await user.selectOptions(screen.getByLabelText('Customer'), 'c-1');
     const dateInput = container.querySelector('input[type="date"]') as HTMLInputElement;
-    await user.clear(dateInput);
-    await user.type(dateInput, '2026-09-05');
+    fireEvent.change(dateInput, { target: { value: '2026-09-05' } });
     await user.click(screen.getByRole('button', { name: /add item/i }));
     await user.click(screen.getByRole('button', { name: 'Select Product' }));
 

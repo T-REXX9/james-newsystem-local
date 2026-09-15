@@ -79,8 +79,8 @@ describe('InventoryReport description filter', () => {
     expect(locationHeader.nextElementSibling?.nextElementSibling).toHaveTextContent('LAST RR DATE');
     expect(locationHeader.nextElementSibling?.nextElementSibling?.nextElementSibling).toHaveTextContent('LAST RR QTY');
     expect(locationHeader.nextElementSibling?.nextElementSibling?.nextElementSibling?.nextElementSibling).toHaveTextContent('REORDER QUANTITY');
-    expect(screen.getByText('August 27, 2026')).toBeInTheDocument();
-    expect(screen.getByText('August 12, 2026')).toBeInTheDocument();
+    expect(screen.getByText('AUG‑27‑26')).toBeInTheDocument();
+    expect(screen.getByText('AUG‑12‑26')).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: '3' })).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: '15' })).toBeInTheDocument();
 

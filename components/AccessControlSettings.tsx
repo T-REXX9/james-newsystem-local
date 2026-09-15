@@ -779,13 +779,13 @@ const AccessControlSettings: React.FC = () => {
                                       const pageActions = pageItem.supportedActions || [];
                                       const pageActionValues = getPageActionPermissions(user.action_permissions, pageItem.label);
                                       return (
-                                        <div key={pageItem.id} className={`rounded px-2 py-2 ${differsFromGroup ? 'bg-amber-50 dark:bg-amber-900/20' : ''}`}>
-                                          <label className="flex items-center gap-2 text-sm">
+                                        <div key={pageItem.id} className={`overflow-hidden rounded-lg border ${differsFromGroup ? 'border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20' : 'border-slate-200 bg-slate-50/70 dark:border-slate-700 dark:bg-slate-800/40'}`}>
+                                          <label className="flex items-center gap-2 bg-white px-3 py-2.5 text-[15px] font-bold text-slate-800 dark:bg-slate-800 dark:text-white">
                                             <input type="checkbox" checked={isAllowed} aria-label={`${pageItem.label} page access for ${user.full_name}`} disabled={isOwner} onChange={() => handlePagePermissionToggle(user.id, pageItem.id, !isAllowed)} />
-                                            {pageItem.label}
+                                            <span>{pageItem.label}</span>
                                           </label>
                                           {pageActions.length > 0 && (
-                                            <div className="ml-6 mt-1 grid gap-1 sm:grid-cols-2">
+                                            <div className="mx-3 mb-3 mt-2 grid gap-1 border-l-2 border-slate-200 pl-3 sm:grid-cols-2 dark:border-slate-600">
                                               {([
                                                 ['can_view', 'View'],
                                                 ['can_approve', 'Approve'],

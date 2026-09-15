@@ -46,7 +46,7 @@ describe('ReceivingView', () => {
     expect(await screen.findByText('Receiving Report: RR-2601')).toBeInTheDocument();
     expect(screen.getAllByText('PR-2601').length).toBeGreaterThan(0);
     expect(screen.getAllByText('PO-2601').length).toBeGreaterThan(0);
-    expect(screen.getByText(/August 22, 2026|08\/22\/2026/)).toBeInTheDocument();
+    expect(screen.getByText('AUG‑22‑26')).toBeInTheDocument();
     expect(screen.getByText('OPN-1')).toBeInTheDocument();
     expect(screen.queryByText('Unit Cost')).not.toBeInTheDocument();
     expect(screen.queryByText('Amount')).not.toBeInTheDocument();

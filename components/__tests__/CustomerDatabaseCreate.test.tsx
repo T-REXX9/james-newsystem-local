@@ -21,7 +21,12 @@ vi.mock('../../services/customerDatabaseLocalApiService', () => ({
   fetchContacts: vi.fn(),
   bulkUpdateContacts: vi.fn(),
   updateContact: vi.fn(),
+  fetchSalesAgents: vi.fn(async () => []),
   createContact: (...args: any[]) => createContactMock(...args),
+}));
+
+vi.mock('../../services/localAuthService', () => ({
+  getLocalAuthSession: () => ({ userProfile: { id: '1', role: 'Master User' } }),
 }));
 
 // Keep test focused on the create flow.
@@ -65,6 +70,7 @@ describe('CustomerDatabase - create new customer', () => {
 
     const companyInput = screen.getByPlaceholderText('e.g. Acme Corp');
     await user.type(companyInput, 'Acme Corp');
+    await user.type(screen.getByLabelText('Source'), 'Manual entry');
 
     await user.click(screen.getByRole('button', { name: /save customer/i }));
 

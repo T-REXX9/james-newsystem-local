@@ -94,7 +94,7 @@ describe('AddContactModal Customer Since', () => {
       </ToastProvider>
     );
 
-    expect(screen.getByLabelText('Customer Since')).toHaveValue('May 24 2019');
+    expect(screen.getByLabelText('Customer Since')).toHaveValue('MAY‑24‑19');
 
     await user.click(screen.getByRole('button', { name: /update customer/i }));
     await waitFor(() => expect(onSubmit).toHaveBeenCalled());
@@ -121,6 +121,7 @@ describe('AddContactModal Customer Since', () => {
     );
 
     await user.type(screen.getByPlaceholderText('e.g. Acme Corp'), 'Acme Corp');
+    await user.type(screen.getByLabelText('Source'), 'Manual entry');
     await user.click(screen.getByRole('button', { name: /save prospect/i }));
 
     expect(await screen.findByText('This customer is already recorded: Acme Corp.')).toBeInTheDocument();

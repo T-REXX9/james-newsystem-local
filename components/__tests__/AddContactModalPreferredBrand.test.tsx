@@ -22,6 +22,7 @@ describe('AddContactModal preferred brand', () => {
     );
 
     await user.type(screen.getByPlaceholderText('e.g. Acme Corp'), 'Brand Test Co');
+    await user.type(screen.getByLabelText('Source'), 'Manual entry');
 
     const preferredBrand = screen.getByLabelText('Preferred Brand');
     const options = Array.from(preferredBrand.querySelectorAll('option')).map((option) => option.textContent);

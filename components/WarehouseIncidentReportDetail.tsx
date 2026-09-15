@@ -40,7 +40,7 @@ const WarehouseIncidentReportDetail: React.FC<WarehouseIncidentReportDetailProps
   const [disposition, setDisposition] = useState<'return_to_stock' | 'return_to_factory'>('return_to_stock');
   const [decisionNote, setDecisionNote] = useState('');
 
-  const canReview = canPerformAction('can_approve');
+  const canReview = canPerformAction('can_approve', 'Sales Return (Credit)');
 
   const formatReportDateTime = (dateValue?: string, timeValue?: string) => {
     const date = String(dateValue || '').split('T')[0];

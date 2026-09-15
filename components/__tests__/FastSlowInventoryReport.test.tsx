@@ -59,7 +59,7 @@ describe('FastSlowInventoryReport', () => {
     expect(screen.queryByRole('columnheader', { name: 'Listing Code' })).not.toBeInTheDocument();
     expect(screen.getAllByRole('columnheader', { name: 'VIP 1 Price' })).toHaveLength(2);
     expect(screen.getByText('₱150.00')).toBeInTheDocument();
-    expect(screen.getByText('08/22/2026')).toBeInTheDocument();
+    expect(screen.getByText('AUG‑22‑26')).toBeInTheDocument();
     expect(screen.getByText(/sales in all 3 consecutive months/i)).toBeInTheDocument();
     expect(screen.getByText(/Analyzed months: May, June, July/i)).toBeInTheDocument();
   });
