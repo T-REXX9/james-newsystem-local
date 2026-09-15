@@ -222,16 +222,14 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
   });
   const vipTargets = normalizeVipTierConfig(vipConfig);
   const vipProgress = vipDiscount.totalToPay;
-  const vipProgressLabel = vipProgress >= vipTargets.unlimited_discount_threshold
-    ? 'Gold qualified'
-    : vipProgress >= vipTargets.one_time_discount_threshold
-      ? 'Silver qualified'
-      : `${formatPeso(vipTargets.one_time_discount_threshold - vipProgress)} more to Silver next month`;
-  const vipNextTargetLabel = vipProgress >= vipTargets.unlimited_discount_threshold
-    ? null
-    : vipProgress >= vipTargets.one_time_discount_threshold
-      ? `${formatPeso(vipTargets.unlimited_discount_threshold - vipProgress)} more to Gold next month`
-      : null;
+  const silverQualified = vipProgress >= vipTargets.one_time_discount_threshold;
+  const goldQualified = vipProgress >= vipTargets.unlimited_discount_threshold;
+  const silverQualificationLabel = silverQualified
+    ? `QUALIFIED — One-time ${vipTargets.discount_percentage}% OFF next month`
+    : `Purchase ${formatPeso(vipTargets.one_time_discount_threshold - vipProgress)} more this month — One-time ${vipTargets.discount_percentage}% OFF next month`;
+  const goldQualificationLabel = goldQualified
+    ? `QUALIFIED — Unlimited ${vipTargets.discount_percentage}% OFF next month`
+    : `Purchase ${formatPeso(vipTargets.unlimited_discount_threshold - vipProgress)} more this month — Unlimited ${vipTargets.discount_percentage}% OFF next month`;
 
   useEffect(() => {
     if (!captureMode || !onSheetReady) return;
@@ -366,6 +364,12 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
                 <td>{formatDate(inquiry.urgency_date)}</td>
               </tr>
               <tr>
+                <td />
+                <td />
+                <td className="sales-inquiry-label">Warranty:</td>
+                <td>ISHINOMOTO products only — covered against factory defects found upon installation, subject to inspection.</td>
+              </tr>
+              <tr>
                 <td className="sales-inquiry-label">Promise to Pay:</td>
                 <td colSpan={3}>{inquiry.promise_to_pay || '-'}</td>
               </tr>
@@ -385,6 +389,7 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
                 <th style={{ width: '1%' }}></th>
                 <th>Qty</th>
                 <th>Item Code</th>
+                <th>Brand</th>
                 <th>Part No</th>
                 <th>Description</th>
                 <th>Unit Price</th>
@@ -399,6 +404,7 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
                     <td>{index + 1}</td>
                     <td>{item.qty}</td>
                     <td>{item.item_code || '-'}</td>
+                    <td>{item.brand || '-'}</td>
                     <td>{item.part_no || '-'}</td>
                     <td>{item.description || '-'}</td>
                     <td className="price">{formatMoney(Number(item.unit_price || 0))}</td>
@@ -407,7 +413,7 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
                 );
               })}
               <tr>
-                <td colSpan={6} style={{ textAlign: 'right' }}>
+                <td colSpan={7} style={{ textAlign: 'right' }}>
                   <strong>Grand Total</strong>
                 </td>
                 <td className="amount">
@@ -417,17 +423,15 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
               <VipDocumentTotals
                 discount={vipDiscount}
                 formatMoney={formatMoney}
-                grandTotalColSpan={6}
+                grandTotalColSpan={7}
                 amountClassName="amount"
               />
             </tbody>
           </table>
 
           <div className="sales-inquiry-vip-progress">
-            <b>VIP Progress This Month:</b> {formatPeso(vipProgress)}
-            <span aria-hidden="true"> | </span>
-            <b>{vipProgressLabel}</b>
-            {vipNextTargetLabel && <><span aria-hidden="true"> | </span><b>{vipNextTargetLabel}</b></>}
+            <div><b>VIP QUALIFICATION FOR NEXT MONTH</b><span aria-hidden="true"> · </span>Current qualifying purchase: <b>{formatPeso(vipProgress)}</b></div>
+            <div><b>SILVER: {silverQualificationLabel}</b><span aria-hidden="true"> | </span><b>GOLD: {goldQualificationLabel}</b></div>
           </div>
 
           <div className="sales-inquiry-prepared">

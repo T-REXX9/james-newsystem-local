@@ -1049,6 +1049,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       part_no: item.part_no || '',
       item_code: item.item_code || '',
       location: item.location || '',
+      brand: item.brand || '',
       description: item.description || '',
       unit_price: Number(item.unit_price || 0),
       amount: Number(item.amount || 0),
@@ -1169,7 +1170,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         urgency_date: urgency !== 'N/A' ? urgencyDate : undefined,
         status: selectedInquiry && !isCreatingNew ? selectedInquiry.status : SalesInquiryStatus.DRAFT,
         ...toVipSavePayload(vipDiscount),
-        items: items.map(({ tempId, isManual, brand, ...rest }) => ({
+        items: items.map(({ tempId, isManual, ...rest }) => ({
           ...rest,
           qty: rest.qty === '' ? 1 : Number(rest.qty) || 1,
           unit_price: Number(rest.unit_price) || 0,

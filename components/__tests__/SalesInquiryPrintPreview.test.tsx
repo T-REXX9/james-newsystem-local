@@ -41,6 +41,7 @@ const inquiry = {
       qty: 2,
       part_no: 'PN-1',
       item_code: 'IC-1',
+      brand: 'ISHINOMOTO',
       location: '',
       description: 'Widget',
       unit_price: 100,
@@ -74,7 +75,11 @@ describe('SalesInquiryPrintPreview', () => {
     expect(screen.queryByText('REF-STALE-99')).not.toBeInTheDocument();
     expect(screen.getByText('Alice')).toBeInTheDocument();
     expect(screen.getByTestId('vip-standing')).toHaveTextContent('VIP Status: Regular');
-    expect(screen.getByText('VIP Progress This Month:')).toBeInTheDocument();
-    expect(screen.getByText('P9,800.00 more to Silver next month')).toBeInTheDocument();
+    expect(screen.getByText('Brand')).toBeInTheDocument();
+    expect(screen.getByText('ISHINOMOTO')).toBeInTheDocument();
+    expect(screen.getByText('Warranty:')).toBeInTheDocument();
+    expect(screen.getByText(/ISHINOMOTO products only/)).toBeInTheDocument();
+    expect(screen.getByText('VIP QUALIFICATION FOR NEXT MONTH')).toBeInTheDocument();
+    expect(screen.getByText(/Purchase P9,800.00 more this month/)).toBeInTheDocument();
   });
 });
