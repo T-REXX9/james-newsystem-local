@@ -1826,6 +1826,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
           customer={selectedCustomer}
           inquiryNumberLabel={activeInquiryNumberDisplay}
           preparedBy={String(getLocalAuthSession()?.userProfile?.full_name || '').trim()}
+          vipConfig={vipConfig}
           captureMode={jpegCaptureMode}
           onSheetReady={handlePrintSheetReady}
           onClose={() => {
@@ -2696,6 +2697,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
           customer={selectedCustomer}
           inquiryNumberLabel={activeInquiryNumberDisplay}
           preparedBy={String(getLocalAuthSession()?.userProfile?.full_name || '').trim()}
+          vipConfig={vipConfig}
           onClose={() => setShowPrintPreview(false)}
         />
       )}

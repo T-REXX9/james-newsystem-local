@@ -73,5 +73,8 @@ describe('SalesInquiryPrintPreview', () => {
     expect(ourReferenceValue).not.toHaveTextContent('REF-STALE-99');
     expect(screen.queryByText('REF-STALE-99')).not.toBeInTheDocument();
     expect(screen.getByText('Alice')).toBeInTheDocument();
+    expect(screen.getByTestId('vip-standing')).toHaveTextContent('VIP Status: Regular');
+    expect(screen.getByText('VIP Progress This Month:')).toBeInTheDocument();
+    expect(screen.getByText('P9,800.00 more to Silver next month')).toBeInTheDocument();
   });
 });

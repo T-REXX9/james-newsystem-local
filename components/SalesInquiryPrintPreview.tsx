@@ -1,7 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { Printer, XCircle } from 'lucide-react';
-import { Contact, SalesInquiry } from '../types';
+import { Contact, SalesInquiry, VipTierConfig } from '../types';
 import { persistedVipDiscount } from '../utils/vipDocumentDiscount';
+import { DEFAULT_VIP_TIER_CONFIG, normalizeVipTierConfig } from '../utils/vipTierConfig';
 import VipDocumentTotals from './VipDocumentTotals';
 import VipStandingBadge from './VipStandingBadge';
 import { formatDateTime as formatDisplayDateTime } from '../utils/formatUtils';
@@ -11,6 +12,7 @@ interface SalesInquiryPrintPreviewProps {
   customer: Contact | null;
   inquiryNumberLabel: string;
   preparedBy: string;
+  vipConfig?: VipTierConfig;
   onClose: () => void;
   /** When true, hide preview chrome and mount off-screen for JPEG capture. */
   captureMode?: boolean;
@@ -113,6 +115,12 @@ const printStyles = `
     font-size: 13px;
   }
 
+  .sales-inquiry-vip-progress {
+    margin-top: 0.45rem;
+    color: #172554;
+    font-size: 13px;
+  }
+
   .sales-inquiry-print-divider {
     margin: 0.65rem 0;
     border: none;
@@ -167,6 +175,7 @@ const printStyles = `
 `;
 
 const formatMoney = (value: number): string => moneyFormatter.format(Number.isFinite(value) ? value : 0);
+const formatPeso = (value: number): string => `P${formatMoney(value)}`;
 
 const formatDate = (value?: string | null): string => {
   if (!value) return '';
@@ -193,6 +202,7 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
   customer,
   inquiryNumberLabel,
   preparedBy,
+  vipConfig = DEFAULT_VIP_TIER_CONFIG,
   onClose,
   captureMode = false,
   onSheetReady,
@@ -203,6 +213,25 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
     (sum, item) => sum + Number(item.amount || Number(item.qty || 0) * Number(item.unit_price || 0)),
     0
   );
+  const vipDiscount = persistedVipDiscount({
+    grand_total: totalAmount,
+    vip_applied: inquiry.vip_applied,
+    vip_tier: inquiry.vip_tier,
+    vip_percentage: inquiry.vip_percentage,
+    vip_discount_amount: inquiry.vip_discount_amount,
+  });
+  const vipTargets = normalizeVipTierConfig(vipConfig);
+  const vipProgress = vipDiscount.totalToPay;
+  const vipProgressLabel = vipProgress >= vipTargets.unlimited_discount_threshold
+    ? 'Gold qualified'
+    : vipProgress >= vipTargets.one_time_discount_threshold
+      ? 'Silver qualified'
+      : `${formatPeso(vipTargets.one_time_discount_threshold - vipProgress)} more to Silver next month`;
+  const vipNextTargetLabel = vipProgress >= vipTargets.unlimited_discount_threshold
+    ? null
+    : vipProgress >= vipTargets.one_time_discount_threshold
+      ? `${formatPeso(vipTargets.unlimited_discount_threshold - vipProgress)} more to Gold next month`
+      : null;
 
   useEffect(() => {
     if (!captureMode || !onSheetReady) return;
@@ -285,14 +314,18 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
                 </tr>
               </tbody>
             </table>
-            <VipStandingBadge tier={inquiry.vip_tier} print />
           </div>
 
           <table className="sales-inquiry-meta-table" style={{ marginTop: '0.55rem' }}>
             <tbody>
               <tr>
                 <td className="sales-inquiry-label">Sold to:</td>
-                <td style={{ width: '40%' }}><b>{customer?.company || '-'}</b></td>
+                <td style={{ width: '40%' }}>
+                  <span className="inline-flex items-center gap-2">
+                    <b>{customer?.company || '-'}</b>
+                    <VipStandingBadge tier={inquiry.vip_tier} print />
+                  </span>
+                </td>
                 <td className="sales-inquiry-label">Sales Person:</td>
                 <td><b>{inquiry.sales_person || '-'}</b></td>
               </tr>
@@ -382,19 +415,20 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
                 </td>
               </tr>
               <VipDocumentTotals
-                discount={persistedVipDiscount({
-                  grand_total: totalAmount,
-                  vip_applied: inquiry.vip_applied,
-                  vip_tier: inquiry.vip_tier,
-                  vip_percentage: inquiry.vip_percentage,
-                  vip_discount_amount: inquiry.vip_discount_amount,
-                })}
+                discount={vipDiscount}
                 formatMoney={formatMoney}
                 grandTotalColSpan={6}
                 amountClassName="amount"
               />
             </tbody>
           </table>
+
+          <div className="sales-inquiry-vip-progress">
+            <b>VIP Progress This Month:</b> {formatPeso(vipProgress)}
+            <span aria-hidden="true"> | </span>
+            <b>{vipProgressLabel}</b>
+            {vipNextTargetLabel && <><span aria-hidden="true"> | </span><b>{vipNextTargetLabel}</b></>}
+          </div>
 
           <div className="sales-inquiry-prepared">
             <b>Prepared By :</b> {preparedBy || inquiry.sales_person || '-'}{' '}
