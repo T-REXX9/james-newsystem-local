@@ -18,6 +18,7 @@ const createContactMock = vi.fn();
 const updateContactMock = vi.fn();
 const fetchContactByIdMock = vi.fn();
 const fetchContactForDailyCallMock = vi.fn();
+const getSalesReportDataMock = vi.fn();
 
 vi.mock('../ToastProvider', () => ({
   useToast: () => ({
@@ -41,6 +42,10 @@ vi.mock('../../services/customerDatabaseLocalApiService', () => ({
   updateContact: (...args: unknown[]) => updateContactMock(...args),
   fetchContactById: (...args: unknown[]) => fetchContactByIdMock(...args),
   fetchContactForDailyCall: (...args: unknown[]) => fetchContactForDailyCallMock(...args),
+}));
+
+vi.mock('../../services/salesReportService', () => ({
+  getSalesReportData: (...args: unknown[]) => getSalesReportDataMock(...args),
 }));
 
 vi.mock('../CustomLoadingSpinner', () => ({
@@ -141,11 +146,13 @@ describe('DailyCallMonitoringView communication actions', () => {
     updateContactMock.mockReset();
     fetchContactByIdMock.mockReset();
     fetchContactForDailyCallMock.mockReset();
+    getSalesReportDataMock.mockReset();
     updateContactMock.mockResolvedValue(undefined);
 
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue(baseSnapshot);
     fetchContactCustomerLogsForDailyCallMock.mockResolvedValue([]);
     fetchSalesReportDirectoryStateMock.mockResolvedValue({ unreadByContact: {}, reportedContactIds: new Set() });
+    getSalesReportDataMock.mockRejectedValue(new Error('Sales Report is not part of this test setup'));
     fetchContactByIdMock.mockResolvedValue({
       id: 'contact-1',
       company: 'Test Shop',
@@ -768,7 +775,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(within(recoveryTable).getByText('Legacy Recovery Customer')).toBeInTheDocument();
   });
 
-  it('uses the ledger current-month sales from the master list in the category summary', async () => {
+  it('uses the Sales Report current-month total in the category summary', async () => {
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
       ...baseSnapshot,
       contacts: [{
@@ -797,6 +804,7 @@ describe('DailyCallMonitoringView communication actions', () => {
         purchaseAgeGroup: 'recent',
       }],
     });
+    getSalesReportDataMock.mockResolvedValue({ summary: { grandTotal: { total: 4_200 } } });
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
 
@@ -804,6 +812,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     const summary = summaryHeading.closest('article');
     expect(summary).not.toBeNull();
     expect(within(summary as HTMLElement).getByTitle('₱4,200')).toBeInTheDocument();
+    expect(getSalesReportDataMock).toHaveBeenCalledWith(expect.objectContaining({ customerId: 'all' }));
   });
 
   it('uses the ledger average monthly sales for potential sales', async () => {

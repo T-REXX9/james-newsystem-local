@@ -60,6 +60,7 @@ import {
   releaseCustomerCallForDailyCall,
   subscribeToDailyCallMonitoringUpdates
 } from '../services/dailyCallMonitoringService';
+import { getSalesReportData } from '../services/salesReportService';
 import { createContact, fetchContactById, fetchContactForDailyCall, updateContact } from '../services/customerDatabaseLocalApiService';
 import { queueCallRequest } from '../services/callingSystemService';
 import { navigateWorkflow } from '../utils/workflowNavigate';
@@ -517,6 +518,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const canEdit = canPerformAction('can_edit');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [masterListRows, setMasterListRows] = useState<DailyCallMasterCustomerRow[]>([]);
+  const [salesReportCurrentMonthTotal, setSalesReportCurrentMonthTotal] = useState<number | null>(null);
   const [callLogs, setCallLogs] = useState<CallLogEntry[]>([]);
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
@@ -639,6 +641,16 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     }));
   }, []);
 
+  const currentMonthSalesReportRange = useMemo(() => {
+    const start = getStartOfMonth(selectedReferenceDate);
+    const formatDateForApi = (value: Date) => [
+      value.getFullYear(),
+      String(value.getMonth() + 1).padStart(2, '0'),
+      String(value.getDate()).padStart(2, '0'),
+    ].join('-');
+    return { dateFrom: formatDateForApi(start), dateTo: formatDateForApi(selectedReferenceDate) };
+  }, [selectedReferenceDate]);
+
   const loadAgentData = useCallback(async () => {
     if (!agentDataName || !isSalesAgent) {
       return;
@@ -667,6 +679,18 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       setInquiries(snapshot.inquiries);
       setPurchases(snapshot.purchases);
       setTeamMessages(snapshot.teamMessages.filter((message) => message.is_from_owner));
+      void getSalesReportData({
+        ...currentMonthSalesReportRange,
+        customerId: 'all',
+      })
+        .then((salesReport) => {
+          if (!controller.signal.aborted) {
+            setSalesReportCurrentMonthTotal(salesReport.summary.grandTotal.total);
+          }
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setSalesReportCurrentMonthTotal(null);
+        });
       setLoadError(null);
       setHasLoadedData(true);
       const contactIds = teamScopedContacts.map((contact) => contact.id);
@@ -700,7 +724,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       snapshotAbortControllerRef.current = null;
       setLoading(false);
     }
-  }, [agentDataName, currentUser?.id, isSalesAgent]);
+  }, [agentDataName, currentUser?.id, currentMonthSalesReportRange, isSalesAgent]);
 
   useEffect(() => {
     if (!agentDataName || !isSalesAgent) {
@@ -1368,7 +1392,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       const currentMonthSales = rows.reduce((sum, row) => sum + row.currentMonthSales, 0);
       const averageMonthlySales = rows.reduce((sum, row) => sum + row.averageMonthlySales, 0);
       const primaryMetric = id === 'priority'
-        ? currentMonthSales
+        ? (salesReportCurrentMonthTotal ?? currentMonthSales)
         : id === 'verified' || id === 'unverified'
           ? 0
           : averageMonthlySales;
@@ -1430,7 +1454,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       summarize(unverifiedRows, 'unverified', 'Unverified Prospects', 'No purchases yet', 'orange', 'Average Monthly Purchase'),
       summarize(blockedRows, 'blocked', DO_NOT_CONTACT_LABEL, 'View only — no contact or sales inquiry', 'red', 'Average Monthly Sales'),
     ];
-  }, [masterListRows, masterRows]);
+  }, [masterListRows, masterRows, salesReportCurrentMonthTotal]);
 
   useEffect(() => {
     if (!masterRows.length) {
