@@ -86,6 +86,7 @@ const ProductQuickSearchLauncher: React.FC = () => {
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const latestRequestRef = useRef(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const modalRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -127,6 +128,27 @@ const ProductQuickSearchLauncher: React.FC = () => {
     const timer = window.setTimeout(() => inputRef.current?.focus(), 60);
     return () => window.clearTimeout(timer);
   }, [isOpen, isMinimized]);
+
+  useEffect(() => {
+    if (!isOpen || isMinimized || typeof document === 'undefined') return;
+
+    const minimizeWhenOutside = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Node && modalRef.current?.contains(target)) {
+        return;
+      }
+
+      setIsMinimized(true);
+    };
+
+    document.addEventListener('pointerdown', minimizeWhenOutside);
+    document.addEventListener('scroll', minimizeWhenOutside, true);
+
+    return () => {
+      document.removeEventListener('pointerdown', minimizeWhenOutside);
+      document.removeEventListener('scroll', minimizeWhenOutside, true);
+    };
+  }, [isMinimized, isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -227,6 +249,7 @@ const ProductQuickSearchLauncher: React.FC = () => {
   const modal = isOpen && !isMinimized && typeof document !== 'undefined'
     ? createPortal(
         <div
+          ref={modalRef}
           className="fixed bottom-4 right-4 z-[1200] flex h-[min(640px,76vh)] w-[min(1080px,94vw)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/20 max-md:inset-x-2 max-md:bottom-2 max-md:top-20 max-md:h-auto max-md:w-auto max-md:flex-col"
           role="dialog"
           aria-modal="false"
@@ -415,18 +438,18 @@ const ProductQuickSearchLauncher: React.FC = () => {
                     <div className="rounded-2xl border border-brand-blue/15 bg-brand-blue/[0.06] p-4 shadow-sm">
                       <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-blue/70">Product Price</div>
                       <div className="mt-3 grid gap-2">
-                        <div className="grid gap-2 sm:grid-cols-3">
-                          <div className="rounded-2xl bg-white/90 p-3">
+                        <div className="grid grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-2">
+                          <div className="min-w-0 rounded-2xl bg-white/90 p-3">
                             <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">VIP 1</div>
-                            <div className="mt-1.5 text-sm font-semibold text-slate-900">{formatCurrency(selectedProduct.price_vip1 || 0)}</div>
+                            <div className="mt-1.5 whitespace-nowrap text-sm font-semibold text-slate-900">{formatCurrency(selectedProduct.price_vip1 || 0)}</div>
                           </div>
-                          <div className="rounded-2xl bg-white/90 p-3">
+                          <div className="min-w-0 rounded-2xl bg-white/90 p-3">
                             <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">VIP 2</div>
-                            <div className="mt-1.5 text-sm font-semibold text-slate-900">{formatCurrency(selectedProduct.price_vip2 || 0)}</div>
+                            <div className="mt-1.5 whitespace-nowrap text-sm font-semibold text-slate-900">{formatCurrency(selectedProduct.price_vip2 || 0)}</div>
                           </div>
-                          <div className="rounded-2xl bg-white/90 p-3">
+                          <div className="min-w-0 rounded-2xl bg-white/90 p-3">
                             <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">VIP 3</div>
-                            <div className="mt-1.5 text-sm font-semibold text-slate-900">{formatCurrency(selectedProduct.price_vip3 || 0)}</div>
+                            <div className="mt-1.5 whitespace-nowrap text-sm font-semibold text-slate-900">{formatCurrency(selectedProduct.price_vip3 || 0)}</div>
                           </div>
                         </div>
                       </div>
