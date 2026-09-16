@@ -24,7 +24,7 @@ type ListCategoryInput = Pick<
 >;
 
 type MonitorBucketInput = ListCategoryInput &
-  Pick<DailyCallMasterCustomerRow, 'customerStatus' | 'debtType' | 'profileType' | 'verification'>;
+  Pick<DailyCallMasterCustomerRow, 'customerStatus' | 'debtType' | 'profileType' | 'verification' | 'verifiedInSystem'>;
 
 const isProspectProfile = (profileType?: string) =>
   String(profileType || '').trim().toLowerCase().includes('prospect');
@@ -83,6 +83,8 @@ export const resolveDailyCallListCategory = (row: ListCategoryInput): DailyCallL
 /**
  * UI buckets for master + agent Daily Call Monitoring.
  * Verified/Unverified only include true no-purchase prospects.
+ * A Verified label must also have been written by this system's verification
+ * workflow; imported legacy flags are never evidence of a new verification.
  * Existing buyers (any ledger / last purchase) never stay in prospect buckets,
  * even if profile_type/verification were left as Prospective + Verified.
  * Active/Inactive customer statuses also never stay in prospect buckets.
@@ -106,7 +108,8 @@ export const resolveDailyCallMonitorBucket = (row: MonitorBucketInput): DailyCal
   const looksLikeProspect = isProspectProfile(row.profileType) || isProspectiveCustomerStatus(row.customerStatus);
   if (!looksLikeProspect) return null;
 
-  return String(row.verification || '') === 'Verified' ? 'verified' : 'unverified';
+  const isVerifiedByWorkflow = String(row.verification || '') === 'Verified' && row.verifiedInSystem === true;
+  return isVerifiedByWorkflow ? 'verified' : 'unverified';
 };
 
 export const matchesDailyCallMonitorBucket = (

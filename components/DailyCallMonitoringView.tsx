@@ -92,6 +92,7 @@ import { DO_NOT_CONTACT_LABEL, isBlockedContact } from '../utils/dailyCallBlocke
 import {
   DAILY_CALL_PRIORITY_FROM_DATE,
   resolveDailyCallListCategory,
+  resolveDailyCallMonitorBucket,
 } from '../utils/dailyCallListCategory';
 import { VERIFIED_PROSPECT_POTENTIAL, averageMonthlyPaidSales } from '../utils/dailyCallPotentialSales';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
@@ -255,6 +256,7 @@ const mapApiStatusToCustomerStatus = (status: string): CustomerStatus => {
 const toContactModel = (row: any): Contact => ({
   id: String(row?.id || ''),
   company: String(row?.shopName || 'Unnamed Shop'),
+  pastName: String(row?.pastName || ''),
   customerSince: String(row?.clientSince || ''),
   team: '',
   salesman: String(row?.assignedTo || 'Unassigned'),
@@ -418,6 +420,7 @@ const MasterTableRow = React.memo(({
           <p className="truncate text-[12px] font-extrabold uppercase leading-tight text-[#10244c] dark:text-white" title={row.contact.company}>
             {row.contact.company}
           </p>
+          {row.contact.pastName && <p className="mt-0.5 truncate text-[10px] font-medium uppercase leading-tight text-slate-500 dark:text-slate-400">Old: {row.contact.pastName}</p>}
         </div>
         <p className="mt-0.5 truncate text-[11px] font-medium uppercase leading-tight text-slate-500 dark:text-slate-400" title={locationLabel}>
           {locationLabel}
@@ -1429,23 +1432,22 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       if (isRecoveryListPurchase(row.lastPurchase)) return 'recovery' as const;
       return 'no_purchase' as const;
     };
-    const priorityRows = masterRows.filter((row) => !isMasterBlocked(row) && resolveRowListCategory(row) === 'priority');
-    const recoveryRows = masterRows.filter((row) => !isMasterBlocked(row) && resolveRowListCategory(row) === 'recovery');
-    const noPurchaseProspectRows = masterRows.filter((row) => {
-      if (isMasterBlocked(row)) return false;
-      if (resolveRowListCategory(row) !== 'no_purchase') return false;
+    const resolveMonitorBucket = (row: MasterRow) => {
       const classification = classificationById.get(row.contact.id);
-      return classification
-        ? String(classification.profileType || '').toLowerCase().includes('prospect')
-        : isProspectContact(row.contact);
-    });
-    const verifiedRows = noPurchaseProspectRows.filter((row) =>
-      (classificationById.get(row.contact.id)?.verification || row.contact.verification) === 'Verified'
-    );
-    const unverifiedRows = noPurchaseProspectRows.filter((row) =>
-      (classificationById.get(row.contact.id)?.verification || row.contact.verification) !== 'Verified'
-    );
-    const blockedRows = masterRows.filter(isMasterBlocked);
+      if (classification) return resolveDailyCallMonitorBucket(classification);
+
+      // An older API fallback does not supply verification-audit evidence.
+      // Keep its prospects actionable as Unverified, never as Verified.
+      if (isMasterBlocked(row)) return 'blocked' as const;
+      const listCategory = resolveRowListCategory(row);
+      if (listCategory === 'priority' || listCategory === 'recovery') return listCategory;
+      return isProspectContact(row.contact) ? 'unverified' as const : null;
+    };
+    const priorityRows = masterRows.filter((row) => resolveMonitorBucket(row) === 'priority');
+    const recoveryRows = masterRows.filter((row) => resolveMonitorBucket(row) === 'recovery');
+    const verifiedRows = masterRows.filter((row) => resolveMonitorBucket(row) === 'verified');
+    const unverifiedRows = masterRows.filter((row) => resolveMonitorBucket(row) === 'unverified');
+    const blockedRows = masterRows.filter((row) => resolveMonitorBucket(row) === 'blocked');
 
     return [
       summarize(priorityRows, 'priority', 'Priority List', 'Any ledger activity since October 2025 onwards', 'emerald', 'Current Month Sales'),
@@ -2068,6 +2070,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                   <span className="block truncate text-[11px] font-extrabold uppercase leading-tight text-[#10244c] dark:text-white" title={row.contact.company}>
                                     {row.contact.company}
                                   </span>
+                                  {row.contact.pastName && <span className="block truncate text-[9px] font-medium uppercase leading-tight text-slate-500 dark:text-slate-400">Old: {row.contact.pastName}</span>}
                                   {(salesReportUnreadByContact[row.contact.id] || 0) > 0 && (
                                     <span
                                       className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-brand-blue px-1 text-[9px] font-bold text-white"

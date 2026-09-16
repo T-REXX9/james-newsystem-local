@@ -409,7 +409,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(within(unverifiedTable).getByText('Test Client')).toBeInTheDocument();
   });
 
-  it('keeps verified no-purchase prospects in the verified prospects list after refresh', async () => {
+  it('shows only workflow-verified prospects in the verified list after refresh', async () => {
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
       ...baseSnapshot,
       contacts: [
@@ -436,6 +436,46 @@ describe('DailyCallMonitoringView communication actions', () => {
         },
       ],
       purchases: [],
+      masterList: [
+        {
+          id: 'verified-existing',
+          shopName: 'Existing Verified Prospect',
+          profileType: 'Prospect',
+          verification: 'Verified',
+          verifiedInSystem: true,
+          customerStatus: 3,
+          listCategory: 'no_purchase',
+          purchaseCount: 0,
+          priorityTransactionCount: 0,
+          ledgerTransactionCount: 0,
+          lastPurchaseDateRaw: '',
+        },
+        {
+          id: 'unverified-existing',
+          shopName: 'Existing Unverified Prospect',
+          profileType: 'Prospect',
+          verification: 'Unverified',
+          customerStatus: 3,
+          listCategory: 'no_purchase',
+          purchaseCount: 0,
+          priorityTransactionCount: 0,
+          ledgerTransactionCount: 0,
+          lastPurchaseDateRaw: '',
+        },
+        {
+          id: 'old-verified-no-purchase',
+          shopName: 'Old Verified No Purchase',
+          profileType: 'Old',
+          verification: 'Verified',
+          verifiedInSystem: false,
+          customerStatus: 3,
+          listCategory: 'no_purchase',
+          purchaseCount: 0,
+          priorityTransactionCount: 0,
+          ledgerTransactionCount: 0,
+          lastPurchaseDateRaw: '',
+        },
+      ],
     });
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
@@ -451,7 +491,7 @@ describe('DailyCallMonitoringView communication actions', () => {
       .closest('article')!;
 
     expect(within(verifiedSummary).getByText('1')).toBeInTheDocument();
-    expect(within(unverifiedSummary).getByText('1')).toBeInTheDocument();
+    expect(within(unverifiedSummary).getByText('2')).toBeInTheDocument();
   });
 
   it('sales agents request verification instead of directly verifying an existing prospect', async () => {

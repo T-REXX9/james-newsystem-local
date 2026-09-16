@@ -451,6 +451,7 @@ const mapDailyCallCustomerRow = (row: any): DailyCallCustomerRow => ({
   province: cleanNullableText(row?.province, ''),
   city: cleanNullableText(row?.city, ''),
   shopName: cleanNullableText(row?.shopName ?? row?.shop_name, 'Unnamed Shop'),
+  pastName: cleanNullableText(row?.pastName ?? row?.past_name ?? row?.oldName ?? row?.old_name),
   contactNumber: cleanNullableText(row?.contactNumber ?? row?.contact_number, ''),
   contactPersonName: cleanNullableText(row?.contactPersonName ?? row?.contact_person_name),
   codeDate: cleanNullableText(row?.codeDate ?? row?.code_date, '—'),
@@ -489,6 +490,7 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
   return {
     id: String(row?.id || ''),
     shopName: cleanNullableText(row?.shopName ?? row?.shop_name, 'Unnamed Shop'),
+    pastName: cleanNullableText(row?.pastName ?? row?.past_name ?? row?.oldName ?? row?.old_name),
     province: cleanNullableText(row?.province, '—'),
     city: cleanNullableText(row?.city, '—'),
     contactNumber: cleanNullableText(row?.contactNumber ?? row?.contact_number, '—'),
@@ -503,6 +505,7 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
     customerStatus: Number(row?.customerStatus ?? row?.customer_status ?? 1),
     debtType: cleanNullableText(row?.debtType ?? row?.debt_type, 'Good'),
     verifiedBy: cleanNullableText(row?.verifiedBy ?? row?.verified_by),
+    verifiedInSystem: Boolean(row?.verifiedInSystem ?? row?.verified_in_system),
     prospectComment: cleanNullableText(row?.prospectComment ?? row?.prospect_comment),
     createdAt: cleanNullableText(row?.createdAt ?? row?.created_at ?? row?.statusDate ?? row?.status_date),
     priceGroup: cleanNullableText(row?.priceGroup ?? row?.price_group),
@@ -547,6 +550,7 @@ const matchesSearch = (contact: Contact, query: string) => {
 
   const searchable = [
     contact.company,
+    contact.pastName || '',
     contact.name,
     contact.city,
     contact.province,

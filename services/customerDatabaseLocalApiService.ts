@@ -40,6 +40,8 @@ interface ApiCustomerRow {
   id?: string | number | null;
   company?: string | null;
   lcompany?: string | null;
+  old_name?: string | null;
+  past_name?: string | null;
   email?: string | null;
   lemail?: string | null;
   phone?: string | null;

@@ -110,6 +110,26 @@ describe('DailyCallMasterListView', () => {
     expect(within(row as HTMLElement).getByText((_, element) => element?.textContent === '0917 · Maria Santos')).toBeInTheDocument();
   });
 
+  it('finds a renamed customer using its old company name', async () => {
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: '2026-09-10', count: 1 },
+      items: [{
+        id: 'renamed-1', shopName: 'Junvill Automotive', pastName: 'Masbate Calibration',
+        province: 'Masbate', city: 'Masbate City', contactNumber: '0917', assignedTo: 'Joan Jerusalem',
+        lastPurchaseDate: 'Sep 1, 2026', lastPurchaseDateRaw: '2026-09-01', purchaseCount: 1, totalSales: 0,
+        currentMonthSales: 0, averageMonthlySales: 0, averageMonthlySalesMonthCount: 0,
+        recentThreeMonthSales: 0, previousThreeMonthSales: 0, salesTrendPercent: 0,
+        daysSinceLastPurchase: 10, monthsSinceLastPurchase: 0, purchaseAgeGroup: 'recent', listCategory: 'priority',
+      }],
+    });
+
+    render(<DailyCallMasterListView currentUser={masterUser} />);
+
+    await userEvent.setup().type(await screen.findByPlaceholderText(/search customer/i), 'Masbate Calibration');
+    expect(await screen.findByText('Junvill Automotive')).toBeInTheDocument();
+    expect(screen.getByText('Old: Masbate Calibration')).toBeInTheDocument();
+  });
+
   it('lets master user approve a pending verification request into verified prospects', async () => {
     const user = userEvent.setup();
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
@@ -250,6 +270,7 @@ describe('DailyCallMasterListView', () => {
           profileType: 'Prospect',
           verification: 'Verified',
           verifiedBy: 'Apostol Ella',
+          verifiedInSystem: true,
           lastPurchaseDate: '—',
           lastPurchaseDateRaw: '',
           purchaseCount: 0,
@@ -929,6 +950,7 @@ describe('DailyCallMasterListView', () => {
           assignedTo: 'Apostol Ella',
           profileType: 'Prospect',
           verification: 'Verified',
+          verifiedInSystem: true,
           lastPurchaseDate: '—',
           lastPurchaseDateRaw: '',
           purchaseCount: 0,
@@ -1024,6 +1046,7 @@ describe('DailyCallMasterListView', () => {
           assignedTo: 'Apostol Ella',
           profileType: 'Prospect',
           verification: 'Verified',
+          verifiedInSystem: true,
           customerStatus: 3,
           lastPurchaseDate: '—',
           lastPurchaseDateRaw: '',

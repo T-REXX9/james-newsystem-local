@@ -25,7 +25,7 @@ describe('dailyCallMonitoringService', () => {
   });
 
   it('fetchCustomersForDailyCall calls local API with expected query params', async () => {
-    const mockRows = [{ id: '1', shopName: 'Test Shop' }];
+    const mockRows = [{ id: '1', shopName: 'Test Shop', past_name: 'Former Test Shop' }];
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
       json: async () => ({ data: mockRows }),
@@ -34,7 +34,7 @@ describe('dailyCallMonitoringService', () => {
     const result = await fetchCustomersForDailyCall({ status: 'active', search: 'james', viewerUserId: '63' });
 
     expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({ id: '1', shopName: 'Test Shop' });
+    expect(result[0]).toMatchObject({ id: '1', shopName: 'Test Shop', pastName: 'Former Test Shop' });
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const requestUrl = String(fetchSpy.mock.calls[0][0]);
     expect(requestUrl).toContain('/daily-call-monitoring/excel?');

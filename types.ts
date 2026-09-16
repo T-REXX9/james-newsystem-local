@@ -758,6 +758,7 @@ export interface DailyCallCustomerRow {
   province?: string;
   city: string;
   shopName: string;
+  pastName?: string;
   contactNumber: string;
   contactPersonName?: string;
   codeDate: string;
@@ -785,6 +786,7 @@ export interface DailyCallCustomerRow {
 export interface DailyCallMasterCustomerRow {
   id: string;
   shopName: string;
+  pastName?: string;
   province: string;
   city: string;
   contactNumber: string;
@@ -799,6 +801,8 @@ export interface DailyCallMasterCustomerRow {
   customerStatus?: number;
   debtType?: 'Good' | 'Bad' | string;
   verifiedBy?: string;
+  /** True only when a Verify Prospect audit entry was written by this system. */
+  verifiedInSystem?: boolean;
   createdAt?: string;
   prospectComment?: string;
   priceGroup?: string;

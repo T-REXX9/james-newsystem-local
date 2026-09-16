@@ -91,6 +91,7 @@ describe('dailyCallListCategory', () => {
     expect(resolveDailyCallMonitorBucket({
       profileType: 'Prospect',
       verification: 'Verified',
+      verifiedInSystem: true,
       customerStatus: 3,
       purchaseCount: 0,
       priorityTransactionCount: 0,
@@ -98,6 +99,20 @@ describe('dailyCallListCategory', () => {
       lastPurchaseDateRaw: '',
       listCategory: 'no_purchase',
     })).toBe('verified');
+  });
+
+  it('keeps imported Verified flags out of Verified Prospects without a system verification audit', () => {
+    expect(resolveDailyCallMonitorBucket({
+      profileType: 'Old',
+      verification: 'Verified',
+      verifiedInSystem: false,
+      customerStatus: 3,
+      purchaseCount: 0,
+      priorityTransactionCount: 0,
+      ledgerTransactionCount: 0,
+      lastPurchaseDateRaw: '',
+      listCategory: 'no_purchase',
+    })).toBe('unverified');
   });
 
   it('keeps Active customer records out of Verified Prospects even with leftover Verified flags', () => {

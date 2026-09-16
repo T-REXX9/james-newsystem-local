@@ -163,6 +163,7 @@ const matchesDailyCallMasterSearch = (row: DailyCallMasterCustomerRow, query: st
   if (!normalizedQuery) return true;
   const haystack = [
     row.shopName,
+    row.pastName || '',
     row.city,
     row.province,
     row.contactNumber,
@@ -217,6 +218,7 @@ const masterRowFallback = (row: DailyCallMasterCustomerRow): DailyCallCustomerRo
   province: row.province,
   city: row.city,
   shopName: row.shopName,
+  pastName: row.pastName,
   contactNumber: row.contactNumber,
   contactPersonName: row.contactPersonName,
   codeDate: '—',
@@ -1024,6 +1026,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                             {loadingCustomerId === row.id && <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />}
                             {row.shopName}
                           </button>
+                          {row.pastName && <p className="mt-0.5 truncate text-[10px] font-medium text-slate-500">Old: {row.pastName}</p>}
                           <p className={`mt-0.5 truncate text-xs font-semibold ${highlight.muted}`}>
                             {row.contactNumber}
                             {row.contactPersonName && <span className="font-normal"> · {row.contactPersonName}</span>}
