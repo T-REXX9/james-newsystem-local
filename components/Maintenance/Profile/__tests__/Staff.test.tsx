@@ -4,7 +4,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Staff from '../Staff';
 import { ToastProvider } from '../../../ToastProvider';
-import { changeStaffPassword, createStaff, fetchStaff } from '../../../../services/staffLocalApiService';
+import { changeStaffPassword, createStaff, fetchStaff, updateStaff } from '../../../../services/staffLocalApiService';
 import { fetchAccessGroups } from '../../../../services/accessGroupApiService';
 
 vi.mock('../../../../services/staffLocalApiService', () => ({
@@ -88,6 +88,22 @@ describe('Staff Management', () => {
     await waitFor(() => expect(changeStaffPassword).toHaveBeenCalledWith('staff-9', 'NewStrongPass1'));
     expect(await screen.findByText(/sessions and registered phones were signed out/i)).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Change Staff Password' })).not.toBeInTheDocument();
+  });
+
+  it('saves an empty birthday as null when updating a staff profile', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchStaff).mockResolvedValue({
+      items: [{ id: 'staff-64', full_name: 'Jane Doe', email: 'jane@example.com', role: 'Sales Agent', mobile: '', team_id: '', status: 1, birthday: '', created_at: '' }],
+      meta: { page: 1, per_page: 100, total: 1, total_pages: 1 },
+    });
+    vi.mocked(updateStaff).mockResolvedValue({ id: 'staff-64' } as any);
+    render(<ToastProvider><Staff /></ToastProvider>);
+
+    const staffRow = (await screen.findByText('Jane Doe')).closest('tr');
+    await user.click(staffRow!.querySelectorAll('button')[1]);
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+
+    await waitFor(() => expect(updateStaff).toHaveBeenCalledWith('staff-64', expect.objectContaining({ birthday: null })));
   });
 
   it('does not expose the password action to staff users', async () => {

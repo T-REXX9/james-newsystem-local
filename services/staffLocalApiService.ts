@@ -50,7 +50,7 @@ export interface StaffUpdateInput {
     group_id?: string | null;
     mobile?: string;
     team_id?: string;
-    birthday?: string;
+    birthday?: string | null;
     gender?: string;
     contact?: string;
     avatar_url?: string;

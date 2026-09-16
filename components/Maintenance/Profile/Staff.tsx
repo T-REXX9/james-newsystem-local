@@ -81,7 +81,7 @@ const StaffForm: React.FC<StaffFormProps> = ({ initialData, onClose, onSuccess }
         setLoading(true);
         try {
             if (initialData?.id) {
-                await updateStaff(initialData.id, { ...formData, birthday, group_id: formData.group_id || null });
+                await updateStaff(initialData.id, { ...formData, birthday: birthday || null, group_id: formData.group_id || null });
             } else {
                 const createdStaff = await createStaff({
                     full_name: String(formData.full_name || '').trim(),
