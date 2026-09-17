@@ -291,6 +291,12 @@ export const ServerMaintenanceView: React.FC<ServerMaintenanceViewProps> = ({ cu
                         message: `Imported ${report.filename}: ${report.import.tables_merged} tables merged, ${report.import.affected_rows} rows affected.`,
                       });
                     } catch (error) {
+                      console.error('[Server Maintenance] Corporate dump import failed', {
+                        filename: file.name,
+                        bytes: file.size,
+                        error: error instanceof Error ? error.message : String(error),
+                        stack: error instanceof Error ? error.stack : undefined,
+                      });
                       addToast({
                         type: 'error',
                         message: error instanceof Error ? error.message : 'Unable to import corporate dump.',

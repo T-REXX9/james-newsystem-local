@@ -89,6 +89,60 @@ const unwrapData = async <T,>(response: Response): Promise<T> => {
   return payload.data as T;
 };
 
+type CorporateDumpImportStage = 'creating upload session' | 'uploading chunk' | 'starting import';
+
+const logCorporateDumpImportResponse = async (
+  stage: CorporateDumpImportStage,
+  response: Response,
+  context: Record<string, unknown>
+): Promise<void> => {
+  let responseBody: unknown = null;
+  try {
+    const rawBody = await response.clone().text();
+    if (rawBody) {
+      try {
+        responseBody = JSON.parse(rawBody);
+      } catch {
+        responseBody = rawBody;
+      }
+    }
+  } catch (error) {
+    responseBody = error instanceof Error ? error.message : String(error);
+  }
+
+  console.error('[Server Maintenance] Corporate dump import request failed', {
+    stage,
+    url: response.url,
+    status: response.status,
+    statusText: response.statusText,
+    responseBody,
+    ...context,
+  });
+};
+
+const unwrapCorporateDumpImportData = async <T,>(
+  stage: CorporateDumpImportStage,
+  response: Response,
+  context: Record<string, unknown>
+): Promise<T> => {
+  if (!response.ok) {
+    await logCorporateDumpImportResponse(stage, response, context);
+    return unwrapData<T>(response);
+  }
+
+  const payload = await response.json();
+  if (payload.ok === false) {
+    console.error('[Server Maintenance] Corporate dump import returned an error payload', {
+      stage,
+      url: response.url,
+      payload,
+      ...context,
+    });
+    throw new Error(payload.error || payload.message || 'Request failed');
+  }
+  return payload.data as T;
+};
+
 export async function fetchServerMaintenanceStatus(): Promise<ServerMaintenanceStatus> {
   const response = await fetch(`${API_BASE_URL}/server-maintenance/status`, {
     method: 'GET',
@@ -213,6 +267,12 @@ export async function importCorporateDumpFile(
     throw new Error('Only .sql or .sql.gz dumps are supported');
   }
 
+  console.info('[Server Maintenance] Corporate dump import started', {
+    filename: file.name,
+    bytes: totalBytes,
+    apiBaseUrl: API_BASE_URL,
+  });
+
   const createResponse = await fetch(`${API_BASE_URL}/server-maintenance/corporate-dump/uploads`, {
     method: 'POST',
     headers: {
@@ -225,11 +285,17 @@ export async function importCorporateDumpFile(
       bytes: totalBytes,
     }),
   });
-  const session = await unwrapData<{
+  const session = await unwrapCorporateDumpImportData<{
     upload_id: string;
     filename: string;
     bytes_expected: number;
-  }>(createResponse);
+  }>('creating upload session', createResponse, { filename: file.name, bytes: totalBytes });
+
+  console.info('[Server Maintenance] Corporate dump upload session created', {
+    filename: file.name,
+    bytes: totalBytes,
+    uploadId: session.upload_id,
+  });
 
   const chunkSize = Math.max(64 * 1024, Math.min(options?.chunkSize ?? 1024 * 1024, 2 * 1024 * 1024));
   let uploadedBytes = 0;
@@ -250,11 +316,16 @@ export async function importCorporateDumpFile(
         body: buffer,
       }
     );
-    const progress = await unwrapData<{
+    const progress = await unwrapCorporateDumpImportData<{
       bytes_received: number;
       bytes_expected: number;
       complete: boolean;
-    }>(response);
+    }>('uploading chunk', response, {
+      filename: file.name,
+      uploadId: session.upload_id,
+      uploadedBytes,
+      chunkBytes: buffer.byteLength,
+    });
     uploadedBytes = progress.bytes_received;
     options?.onProgress?.({ uploadedBytes, totalBytes, phase: 'upload' });
   }
@@ -272,5 +343,9 @@ export async function importCorporateDumpFile(
       body: JSON.stringify({}),
     }
   );
-  return unwrapData<CorporateDumpImportReport>(importResponse);
+  return unwrapCorporateDumpImportData<CorporateDumpImportReport>('starting import', importResponse, {
+    filename: file.name,
+    bytes: totalBytes,
+    uploadId: session.upload_id,
+  });
 }
