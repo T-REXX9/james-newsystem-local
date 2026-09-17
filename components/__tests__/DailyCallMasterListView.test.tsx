@@ -333,7 +333,10 @@ describe('DailyCallMasterListView', () => {
     expect(screen.getAllByText(/Verified Prospects/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Unverified Prospects/i).length).toBeGreaterThan(0);
     expect(screen.getByText('Verified By')).toBeInTheDocument();
-    const tableHeader = screen.getByTestId('daily-call-table-scroll').querySelector('thead');
+    const tableScroll = screen.getByTestId('daily-call-table-scroll');
+    expect(tableScroll).toHaveClass('overflow-auto');
+    expect(tableScroll.querySelector('table')).toHaveClass('min-w-[1650px]', 'table-fixed');
+    const tableHeader = tableScroll.querySelector('thead');
     expect(tableHeader).toHaveClass('sticky', 'top-0');
     expect(screen.getAllByText('Apostol Ella').length).toBeGreaterThan(0);
     expect(screen.queryByText(/Customer Case Overview/i)).not.toBeInTheDocument();

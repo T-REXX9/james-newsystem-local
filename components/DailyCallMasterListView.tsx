@@ -974,11 +974,11 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
               </div>
             </div>
             <div
-              className="min-h-0 flex-1"
+              className="min-h-0 flex-1 overflow-auto"
               data-testid="daily-call-table-scroll"
               onScroll={handleTableScroll}
             >
-              <table className="w-full table-fixed border-separate border-spacing-0 text-left text-sm">
+              <table className="min-w-[1650px] w-full table-fixed border-separate border-spacing-0 text-left text-sm">
                 <thead className="sticky top-0 z-20 bg-slate-50 text-xs text-slate-600 shadow-sm [&_th]:sticky [&_th]:top-0 [&_th]:z-20 [&_th]:border-b [&_th]:border-slate-200 [&_th]:bg-slate-50">
                   <tr>
                     <th className="w-12 px-3 py-2.5">#</th>
@@ -998,7 +998,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                     </th>
                     <th className="w-[135px] px-2 py-2.5">Last Purchase</th>
                     <th className="w-[135px] px-2 py-2.5">Agent</th>
-                    <th className="min-w-[220px] px-2 py-2.5">Staff comment</th>
+                    <th className="w-[220px] px-2 py-2.5">Staff comment</th>
                     <th className="w-[150px] px-2 py-2.5">Verified By</th>
                     <th className="w-[105px] px-2 py-2.5 text-center">Action</th>
                   </tr>
@@ -1081,7 +1081,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                             <span className="text-slate-400">—</span>
                           )}
                         </td>
-                        <td className="break-words px-2 py-2.5 text-sm font-semibold text-slate-600">
+                        <td className="whitespace-normal break-normal px-2 py-2.5 text-sm font-semibold text-slate-600">
                           {row.verification === 'Verified' ? (row.verifiedBy || 'Verification recorded') : '—'}
                         </td>
                         <td className="px-2 py-2.5">
