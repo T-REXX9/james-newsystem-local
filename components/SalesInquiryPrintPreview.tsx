@@ -116,15 +116,78 @@ const printStyles = `
   }
 
   .sales-inquiry-vip-progress {
-    margin-top: 0.45rem;
+    margin-top: 0.55rem;
     color: #172554;
     font-size: 13px;
+    text-align: center;
   }
 
-  .sales-inquiry-print-divider {
-    margin: 0.65rem 0;
-    border: none;
+  .sales-inquiry-vip-progress h3,
+  .sales-inquiry-vip-progress p {
+    margin: 0;
+  }
+
+  .sales-inquiry-vip-progress h3 {
+    color: #1d4ed8;
+    font-size: 1.05rem;
+  }
+
+  .sales-inquiry-vip-current {
+    margin-top: 0.1rem !important;
+  }
+
+  .sales-inquiry-vip-tiers {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    margin-top: 0.45rem;
+  }
+
+  .sales-inquiry-vip-tier {
+    min-height: 4.3rem;
+    padding: 0.15rem 1rem;
+  }
+
+  .sales-inquiry-vip-tier + .sales-inquiry-vip-tier {
+    border-left: 1px solid #94a3b8;
+  }
+
+  .sales-inquiry-vip-tier-name {
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
+
+  .sales-inquiry-vip-tier-status {
+    margin-top: 0.15rem !important;
+    font-weight: 700;
+  }
+
+  .sales-inquiry-vip-tier-benefit {
+    margin-top: 0.15rem !important;
+  }
+
+  .sales-inquiry-vip-tier--silver .sales-inquiry-vip-tier-name {
+    color: #64748b;
+  }
+
+  .sales-inquiry-vip-tier--gold .sales-inquiry-vip-tier-name,
+  .sales-inquiry-vip-tier--gold .sales-inquiry-vip-tier-status {
+    color: #b45309;
+  }
+
+  .sales-inquiry-delivery-notice {
     border-top: 1px solid #cbd5e1;
+    border-bottom: 1px solid #cbd5e1;
+    padding: 0.28rem 0;
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .sales-inquiry-delivery-notice p {
+    margin: 0;
+  }
+
+  .sales-inquiry-delivery-notice strong {
+    color: #1d4ed8;
   }
 
   @media print {
@@ -225,11 +288,11 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
   const silverQualified = vipProgress >= vipTargets.one_time_discount_threshold;
   const goldQualified = vipProgress >= vipTargets.unlimited_discount_threshold;
   const silverQualificationLabel = silverQualified
-    ? `QUALIFIED — One-time ${vipTargets.discount_percentage}% OFF next month`
-    : `Purchase ${formatPeso(vipTargets.one_time_discount_threshold - vipProgress)} more this month — One-time ${vipTargets.discount_percentage}% OFF next month`;
+    ? 'QUALIFIED'
+    : `${formatPeso(vipTargets.one_time_discount_threshold - vipProgress)} MORE NEEDED THIS MONTH`;
   const goldQualificationLabel = goldQualified
-    ? `QUALIFIED — Unlimited ${vipTargets.discount_percentage}% OFF next month`
-    : `Purchase ${formatPeso(vipTargets.unlimited_discount_threshold - vipProgress)} more this month — Unlimited ${vipTargets.discount_percentage}% OFF next month`;
+    ? 'QUALIFIED'
+    : `${formatPeso(vipTargets.unlimited_discount_threshold - vipProgress)} MORE NEEDED THIS MONTH`;
 
   useEffect(() => {
     if (!captureMode || !onSheetReady) return;
@@ -380,9 +443,12 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
             </tbody>
           </table>
 
-          <hr className="sales-inquiry-print-divider" />
+          <div className="sales-inquiry-delivery-notice">
+            <p><strong>Validity:</strong> Orders not confirmed by 6:00 PM will be considered cancelled. Please contact us to reconfirm stock availability.</p>
+            <p><strong>Order Cut-off for Same-Day Delivery:</strong> 4:00 PM for LBC; 2:00 PM for AP Cargo, JRS, and other couriers.</p>
+          </div>
 
-          <h3 style={{ margin: '0 0 0.45rem', fontSize: '1rem' }}>Item List</h3>
+          <h3 style={{ margin: '0.45rem 0', fontSize: '1rem' }}>Item List</h3>
           <table className="sales-inquiry-item-table">
             <thead>
               <tr>
@@ -430,8 +496,20 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
           </table>
 
           <div className="sales-inquiry-vip-progress">
-            <div><b>VIP QUALIFICATION FOR NEXT MONTH</b><span aria-hidden="true"> · </span>Current qualifying purchase: <b>{formatPeso(vipProgress)}</b></div>
-            <div><b>SILVER: {silverQualificationLabel}</b><span aria-hidden="true"> | </span><b>GOLD: {goldQualificationLabel}</b></div>
+            <h3>VIP QUALIFICATION FOR NEXT MONTH</h3>
+            <p className="sales-inquiry-vip-current">Current qualifying purchase: <b>{formatPeso(vipProgress)}</b></p>
+            <div className="sales-inquiry-vip-tiers">
+              <div className="sales-inquiry-vip-tier sales-inquiry-vip-tier--silver">
+                <p className="sales-inquiry-vip-tier-name">SILVER</p>
+                <p className="sales-inquiry-vip-tier-status">{silverQualificationLabel}</p>
+                <p className="sales-inquiry-vip-tier-benefit">One-time {vipTargets.discount_percentage}% OFF next month</p>
+              </div>
+              <div className="sales-inquiry-vip-tier sales-inquiry-vip-tier--gold">
+                <p className="sales-inquiry-vip-tier-name">GOLD</p>
+                <p className="sales-inquiry-vip-tier-status">{goldQualificationLabel}</p>
+                <p className="sales-inquiry-vip-tier-benefit">Unlimited {vipTargets.discount_percentage}% OFF next month</p>
+              </div>
+            </div>
           </div>
 
           <div className="sales-inquiry-prepared">

@@ -79,7 +79,14 @@ describe('SalesInquiryPrintPreview', () => {
     expect(screen.getByText('ISHINOMOTO')).toBeInTheDocument();
     expect(screen.getByText('Warranty:')).toBeInTheDocument();
     expect(screen.getByText(/ISHINOMOTO products only/)).toBeInTheDocument();
+    expect(screen.getByText('Validity:')).toBeInTheDocument();
+    expect(screen.getByText(/Orders not confirmed by 6:00 PM/)).toBeInTheDocument();
+    expect(screen.getByText('Order Cut-off for Same-Day Delivery:')).toBeInTheDocument();
+    expect(screen.getByText(/4:00 PM for LBC; 2:00 PM for AP Cargo/)).toBeInTheDocument();
     expect(screen.getByText('VIP QUALIFICATION FOR NEXT MONTH')).toBeInTheDocument();
-    expect(screen.getByText(/Purchase P9,800.00 more this month/)).toBeInTheDocument();
+    expect(screen.getByText('SILVER')).toBeInTheDocument();
+    expect(screen.getByText('GOLD')).toBeInTheDocument();
+    expect(screen.getByText('P9,800.00 MORE NEEDED THIS MONTH')).toBeInTheDocument();
+    expect(screen.getByText('P29,800.00 MORE NEEDED THIS MONTH')).toBeInTheDocument();
   });
 });
