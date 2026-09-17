@@ -110,14 +110,15 @@ const logCorporateDumpImportResponse = async (
     responseBody = error instanceof Error ? error.message : String(error);
   }
 
-  console.error('[Server Maintenance] Corporate dump import request failed', {
+  const diagnostic = {
     stage,
     url: response.url,
     status: response.status,
     statusText: response.statusText,
     responseBody,
     ...context,
-  });
+  };
+  console.error(`[Server Maintenance] Corporate dump import request failed: ${JSON.stringify(diagnostic)}`);
 };
 
 const unwrapCorporateDumpImportData = async <T,>(
@@ -132,12 +133,13 @@ const unwrapCorporateDumpImportData = async <T,>(
 
   const payload = await response.json();
   if (payload.ok === false) {
-    console.error('[Server Maintenance] Corporate dump import returned an error payload', {
+    const diagnostic = {
       stage,
       url: response.url,
       payload,
       ...context,
-    });
+    };
+    console.error(`[Server Maintenance] Corporate dump import returned an error payload: ${JSON.stringify(diagnostic)}`);
     throw new Error(payload.error || payload.message || 'Request failed');
   }
   return payload.data as T;
@@ -267,11 +269,11 @@ export async function importCorporateDumpFile(
     throw new Error('Only .sql or .sql.gz dumps are supported');
   }
 
-  console.info('[Server Maintenance] Corporate dump import started', {
+  console.info(`[Server Maintenance] Corporate dump import started: ${JSON.stringify({
     filename: file.name,
     bytes: totalBytes,
     apiBaseUrl: API_BASE_URL,
-  });
+  })}`);
 
   const createResponse = await fetch(`${API_BASE_URL}/server-maintenance/corporate-dump/uploads`, {
     method: 'POST',
@@ -291,11 +293,11 @@ export async function importCorporateDumpFile(
     bytes_expected: number;
   }>('creating upload session', createResponse, { filename: file.name, bytes: totalBytes });
 
-  console.info('[Server Maintenance] Corporate dump upload session created', {
+  console.info(`[Server Maintenance] Corporate dump upload session created: ${JSON.stringify({
     filename: file.name,
     bytes: totalBytes,
     uploadId: session.upload_id,
-  });
+  })}`);
 
   const chunkSize = Math.max(64 * 1024, Math.min(options?.chunkSize ?? 1024 * 1024, 2 * 1024 * 1024));
   let uploadedBytes = 0;
