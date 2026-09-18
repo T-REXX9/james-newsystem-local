@@ -11,6 +11,7 @@ vi.mock('../../services/salesReportService', () => ({
 describe('SalesReportDataView payment terms breakdown', () => {
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
   });
 
   beforeEach(() => {
@@ -124,5 +125,42 @@ describe('SalesReportDataView payment terms breakdown', () => {
     expect(within(breakdown).getByText('UNSPECIFIED TERMS')).toBeInTheDocument();
     expect(within(breakdown).getByText('190.00')).toBeInTheDocument();
     expect(within(breakdown).getAllByText('70.00').length).toBeGreaterThan(0);
+  });
+
+  it('uses distinct React keys when different payment terms have the same display label', async () => {
+    getSalesReportDataMock.mockResolvedValue({
+      transactions: [
+        {
+          id: 'terms-with-slash', date: '2026-09-01', customer: 'Customer A', customerId: 'customer-a',
+          terms: '30 DAYS / TT BPI', refNo: 'REF-1', soNo: 'SO-1', soAmount: 100, drAmount: 90, invoiceAmount: 80,
+          salesperson: 'Alex', category: 'Parts', vatType: null, type: 'invoice',
+        },
+        {
+          id: 'terms-with-space', date: '2026-09-02', customer: 'Customer A', customerId: 'customer-a',
+          terms: '30 DAYS TT BPI', refNo: 'REF-2', soNo: 'SO-2', soAmount: 200, drAmount: 190, invoiceAmount: 180,
+          salesperson: 'Alex', category: 'Parts', vatType: null, type: 'invoice',
+        },
+      ],
+      summary: {
+        categoryTotals: [],
+        salespersonTotals: [],
+        grandTotal: { soAmount: 300, drAmount: 280, invoiceAmount: 260, total: 260 },
+      },
+    });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    render(
+      <SalesReportDataView
+        dateFrom="2026-09-01"
+        dateTo="2026-09-30"
+        customerId="all"
+        reportType="month"
+        onBack={vi.fn()}
+      />,
+    );
+
+    const breakdown = await screen.findByTestId('payment-terms-breakdown');
+    expect(within(breakdown).getAllByText('30 DAYS TT BPI')).toHaveLength(2);
+    expect(consoleError.mock.calls.flat().join(' ')).not.toContain('Encountered two children with the same key');
   });
 });

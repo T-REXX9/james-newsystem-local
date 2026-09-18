@@ -249,7 +249,7 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
                             <td colSpan={5} className="px-2 pt-3 font-semibold">CASH SALES</td>
                           </tr>
                           {cashPaymentTermBuckets.map(bucket => (
-                            <tr key={`cash-${bucket.label}`}>
+                            <tr key={`cash-${bucket.key}`}>
                               <td colSpan={2} className="px-2 py-[5px]">{bucket.label}</td>
                               <td className="px-2 py-[5px] text-right">{money.format(bucket.soAmount)}</td>
                               <td className="px-2 py-[5px] text-right">{money.format(bucket.drAmount)}</td>
@@ -266,7 +266,7 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
                             <td colSpan={5} className="px-2 pt-3 font-semibold">TERMS SALES</td>
                           </tr>
                           {termPaymentTermBuckets.map(bucket => (
-                            <tr key={`terms-${bucket.label}`}>
+                            <tr key={`terms-${bucket.key}`}>
                               <td colSpan={2} className="px-2 py-[5px]">{bucket.label}</td>
                               <td className="px-2 py-[5px] text-right">{money.format(bucket.soAmount)}</td>
                               <td className="px-2 py-[5px] text-right">{money.format(bucket.drAmount)}</td>
