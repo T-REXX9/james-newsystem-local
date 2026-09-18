@@ -20,20 +20,29 @@ const toLocalIsoDate = (date: Date): string => {
 
 export const todayInput = () => toLocalIsoDate(new Date());
 
-/** Start date (inclusive) for a Sales Report period preset, through today. */
+/** Start date (inclusive) matching the legacy Sales Report presets. */
 export const startForPeriod = (type: SalesReportPeriod, today = new Date()): string => {
   if (type === 'all') return '2013-06-01';
   if (type === 'today' || type === 'custom') return toLocalIsoDate(today);
   if (type === 'week') {
     const start = new Date(today);
-    start.setDate(today.getDate() - 6);
+    start.setDate(today.getDate() - 7);
     return toLocalIsoDate(start);
   }
   if (type === 'month') {
     return toLocalIsoDate(new Date(today.getFullYear(), today.getMonth(), 1));
   }
   if (type === 'year') {
-    return toLocalIsoDate(new Date(today.getFullYear(), 0, 1));
+    const start = new Date(today);
+    start.setFullYear(today.getFullYear() - 1);
+    return toLocalIsoDate(start);
+  }
+  return toLocalIsoDate(today);
+};
+
+export const endForPeriod = (type: SalesReportPeriod, today = new Date()): string => {
+  if (type === 'month') {
+    return toLocalIsoDate(new Date(today.getFullYear(), today.getMonth() + 1, 0));
   }
   return toLocalIsoDate(today);
 };
@@ -69,7 +78,7 @@ const SalesReportFilter: React.FC<SalesReportFilterProps> = ({ currentUser, init
     setReportType(type);
     if (type !== 'custom') {
       setDateFrom(startForPeriod(type));
-      setDateTo(todayInput());
+      setDateTo(endForPeriod(type));
     }
   };
 

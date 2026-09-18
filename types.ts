@@ -1863,6 +1863,7 @@ export interface SalesReportFilters {
   dateFrom: string;
   dateTo: string;
   customerId: string | 'all';
+  dateType?: 'all' | 'today' | 'week' | 'month' | 'year' | 'custom';
 }
 
 export interface SalesReportTransaction {

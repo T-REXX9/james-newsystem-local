@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Printer } from 'lucide-react';
+import { ArrowLeft, Printer, Tags } from 'lucide-react';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
 import type { SalesReportData, SalesReportTransaction, UserProfile } from '../types';
 import { getSalesReportData } from '../services/salesReportService';
@@ -19,73 +19,57 @@ const money = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 2,
 });
 
-const formatDate = (value: string): string => {
+const parseReportDate = (value: string): Date => {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
+  return date;
 };
 
-type PaymentTermBucket = {
-  label: string;
-  category: 'cash' | 'terms';
-  key: string;
-  soAmount: number;
-  drAmount: number;
-  invoiceAmount: number;
+const formatRowDate = (value: string): string => {
+  const date = parseReportDate(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
 };
 
-const CASH_TERM_LABELS: Record<string, string> = {
-  'ap/ttpnb': 'AP/TT-PNB',
-  lbccod: 'LBC COD',
-  lbccop: 'LBC COP',
+const formatCenteredDate = (value: string): string => {
+  const date = parseReportDate(value);
+  if (Number.isNaN(date.getTime())) return value.toUpperCase();
+  return date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).replace(/ /g, '-').replace(',', '').toUpperCase();
 };
 
-const normalizePaymentTerm = (value: string): string => value
-  .trim()
-  .toLowerCase()
-  .replace(/[^a-z0-9/]+/g, '');
-
-const getPaymentTermLabel = (value: string): { key: string; label: string; category: PaymentTermBucket['category'] } => {
-  const normalized = normalizePaymentTerm(value);
-  const cashLabel = CASH_TERM_LABELS[normalized];
-  if (cashLabel) return { key: normalized, label: cashLabel, category: 'cash' };
-
-  const dayTerm = normalized.match(/^(\d+)\s*days?$/);
-  if (dayTerm) return { key: `days:${dayTerm[1]}`, label: `${dayTerm[1]} DAYS`, category: 'terms' };
-
-  const displayLabel = value.trim().replace(/[^a-z0-9]+/gi, ' ').replace(/\s+/g, ' ').trim().toUpperCase();
-  return { key: normalized || 'unspecified', label: displayLabel || 'UNSPECIFIED TERMS', category: 'terms' };
-};
-
-const getPaymentTermBuckets = (transactions: SalesReportTransaction[]): PaymentTermBucket[] => {
-  const buckets = new Map<string, PaymentTermBucket>([
-    ['cash:ap/ttpnb', { key: 'ap/ttpnb', label: 'AP/TT-PNB', category: 'cash', soAmount: 0, drAmount: 0, invoiceAmount: 0 }],
-    ['cash:lbccod', { key: 'lbccod', label: 'LBC COD', category: 'cash', soAmount: 0, drAmount: 0, invoiceAmount: 0 }],
-    ['cash:lbccop', { key: 'lbccop', label: 'LBC COP', category: 'cash', soAmount: 0, drAmount: 0, invoiceAmount: 0 }],
-  ]);
-
-  transactions.forEach(transaction => {
-    const { key: termKey, label, category } = getPaymentTermLabel(transaction.terms);
-    const key = `${category}:${termKey}`;
-    const current = buckets.get(key) || { key: termKey, label, category, soAmount: 0, drAmount: 0, invoiceAmount: 0 };
-    current.soAmount += transaction.soAmount || 0;
-    current.drAmount += transaction.drAmount || 0;
-    current.invoiceAmount += transaction.invoiceAmount || 0;
-    buckets.set(key, current);
-  });
-
-  return Array.from(buckets.values());
+const formatCustomDate = (value: string): string => {
+  const date = parseReportDate(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
 };
 
 const displayReportHeading = (reportType: SalesReportPeriod, dateFrom: string, dateTo: string) => {
-  const from = new Date(dateFrom);
-  const fromLong = from.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase().toUpperCase();
-  if (reportType === 'today') {
-    return <><p className="text-[18px] font-semibold">DAILY SALES</p><p className="-mt-1 text-[16px] font-semibold">{fromLong}</p></>;
-  }
-  if (reportType === 'month') {
-    return <><p className="text-[16px] font-semibold">MONTHLY SALES</p><p className="-mt-1 text-[14px]">FOR THE MONTH OF {from.toLocaleDateString('en-US', { month: 'long' }).toUpperCase()}</p></>;
-  }
-  return <><p className="text-[17px] font-semibold">SALES REPORT</p><p className="-mt-1 text-[15px]">DATE COVERED: {formatDate(dateFrom).toUpperCase()} TO {formatDate(dateTo).toUpperCase()}</p></>;
+  const from = parseReportDate(dateFrom);
+  return (
+    <>
+      {reportType === 'custom' && (
+        <div className="text-left">
+          <p className="text-[18px] font-semibold">SALES REPORT</p>
+          <p className="-mt-[10px] text-[16px] font-semibold">DATE COVERED: {formatCustomDate(dateFrom)} to {formatCustomDate(dateTo)}</p>
+        </div>
+      )}
+      {reportType === 'today' && (
+        <div className="text-left">
+          <p className="text-[18px] font-semibold">DAILY SALES</p>
+          <p className="-mt-[15px] text-[16px] font-semibold">{from.toLocaleDateString('en-US', { month: 'long', day: '2-digit', year: 'numeric' }).toUpperCase()}</p>
+        </div>
+      )}
+      {reportType === 'month' && (
+        <div className="text-left">
+          <p className="text-[16px] font-semibold">MONTHLY SALES</p>
+          <p className="-mt-[10px] text-[14px]">FOR THE MONTH OF {from.toLocaleDateString('en-US', { month: 'long' }).toUpperCase()}</p>
+        </div>
+      )}
+      <div className="text-center">
+        <p className="text-[17px] font-semibold">SALES REPORT</p>
+        <p className="-mt-[14px] text-[15px]">DATE COVERED: {formatCenteredDate(dateFrom)} TO {formatCenteredDate(dateTo)}</p>
+      </div>
+    </>
+  );
 };
 
 const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
@@ -102,13 +86,13 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
     const loadReport = async () => {
       setIsLoading(true);
       try {
-        setReportData(await getSalesReportData({ dateFrom, dateTo, customerId }));
+        setReportData(await getSalesReportData({ dateFrom, dateTo, customerId, dateType: reportType }));
       } finally {
         setIsLoading(false);
       }
     };
     void loadReport();
-  }, [dateFrom, dateTo, customerId]);
+  }, [dateFrom, dateTo, customerId, reportType]);
 
   const transactions = useMemo(
     () => [...(reportData?.transactions || [])].sort((left, right) => (
@@ -117,29 +101,10 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
     [reportData],
   );
 
-  const paymentTermBuckets = useMemo(
-    () => getPaymentTermBuckets(transactions),
-    [transactions],
+  const salespersonGrandTotal = (reportData?.summary.salespersonTotals || []).reduce(
+    (total, salesperson) => total + salesperson.total,
+    0,
   );
-
-  const cashPaymentTermBuckets = paymentTermBuckets.filter(bucket => bucket.category === 'cash');
-  const termPaymentTermBuckets = paymentTermBuckets.filter(bucket => bucket.category === 'terms');
-
-  const sumPaymentTermBuckets = (buckets: PaymentTermBucket[]): PaymentTermBucket => buckets.reduce(
-    (total, bucket) => ({
-      label: '',
-      category: total.category,
-      key: '',
-      soAmount: total.soAmount + bucket.soAmount,
-      drAmount: total.drAmount + bucket.drAmount,
-      invoiceAmount: total.invoiceAmount + bucket.invoiceAmount,
-    }),
-    { label: '', category: 'terms', key: '', soAmount: 0, drAmount: 0, invoiceAmount: 0 },
-  );
-
-  const cashTotal = sumPaymentTermBuckets(cashPaymentTermBuckets);
-  const termsTotal = sumPaymentTermBuckets(termPaymentTermBuckets);
-  const paymentTermsTotal = sumPaymentTermBuckets(paymentTermBuckets);
 
   if (isLoading) {
     return (
@@ -151,7 +116,7 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
 
   return (
     <div className="min-h-full overflow-auto bg-[#f4f4f4] px-4 py-10 text-[#333] print:bg-white print:p-0">
-      <div className="mx-auto max-w-[1400px] overflow-hidden rounded-[5px] border border-[#d8d8d8] bg-white shadow-[0_1px_1px_rgba(0,0,0,0.05)] print:max-w-none print:border-0 print:shadow-none">
+      <div className="mx-auto max-w-[1140px] overflow-hidden rounded-[5px] border border-[#d8d8d8] bg-white shadow-[0_1px_1px_rgba(0,0,0,0.05)] print:max-w-none print:border-0 print:shadow-none">
         <header className="flex min-h-[64px] items-center justify-between border-b border-[#e5e5e5] px-5 print:hidden">
           <h1 className="self-stretch border-b border-[#5d82a2] py-5 pr-24 font-['Oswald'] text-[18px] font-semibold uppercase leading-none text-[#315574]">
             Sales Report
@@ -177,121 +142,128 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
         </header>
 
         <main id="print_area" className="p-5">
-          <div className="mb-5 text-center">
+          <div className="mb-5">
             {displayReportHeading(reportType, dateFrom, dateTo)}
           </div>
 
           {transactions.length === 0 ? (
-            <div className="py-20 text-center text-[14px] text-[#777]">No sales found.</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1050px] border-collapse text-[11px]">
-                <thead>
-                  <tr className="border-b border-black">
-                    <th className="w-[10%] px-2 py-2 text-left">DATE</th>
-                    <th className="w-[20%] px-2 py-2 text-left">CUSTOMER</th>
-                    <th className="w-[12%] px-2 py-2 text-left">TERMS</th>
-                    <th className="w-[13%] px-2 py-2 text-left">REF #</th>
-                    <th className="w-[12%] px-2 py-2 text-left">SO#</th>
-                    <th className="w-[11%] px-2 py-2 text-right">Amount</th>
-                    <th className="w-[9%] px-2 py-2 text-right">DR</th>
-                    <th className="w-[9%] px-2 py-2 text-right">INVOICE</th>
-                    <th className="w-[14%] px-2 py-2 text-left">SALESPERSON</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {transactions.map(transaction => (
-                    <tr key={transaction.id}>
-                      <td className="px-2 py-[5px]">{formatDate(transaction.date)}</td>
-                      <td className="px-2 py-[5px]">{transaction.customer}</td>
-                      <td className="px-2 py-[5px]">{transaction.terms}</td>
-                      <td className="px-2 py-[5px]">{transaction.refNo}</td>
-                      <td className="px-2 py-[5px]">{transaction.soNo}</td>
-                      <td className="px-2 py-[5px] text-right">{money.format(transaction.soAmount || 0)}</td>
-                      <td className="px-2 py-[5px] text-right">{money.format(transaction.drAmount || 0)}</td>
-                      <td className="px-2 py-[5px] text-right">{money.format(transaction.invoiceAmount || 0)}</td>
-                      <td className="px-2 py-[5px]">{transaction.salesperson}</td>
-                    </tr>
-                  ))}
-
-                  {(reportData?.summary.categoryTotals || []).map(category => (
-                    <tr key={category.category}>
-                      <td />
-                      <td colSpan={4} className="px-2 py-2 text-right font-semibold">TOTAL {category.category} --&gt;</td>
-                      <td className="border-y border-black px-2 py-2 text-right font-semibold">{money.format(category.soAmount)}</td>
-                      <td className="border-y border-black px-2 py-2 text-right font-semibold">{money.format(category.drAmount)}</td>
-                      <td className="border-y border-black px-2 py-2 text-right font-semibold">{money.format(category.invoiceAmount)}</td>
-                      <td />
-                    </tr>
-                  ))}
-
-                  <tr>
-                    <td colSpan={5} className="px-2 py-3 text-right text-[16px] font-semibold">SUBTOTAL --&gt;</td>
-                    <td className="border-y border-black px-2 py-3 text-right font-semibold">{money.format(reportData?.summary.grandTotal.soAmount || 0)}</td>
-                    <td className="border-y border-black px-2 py-3 text-right font-semibold">{money.format(reportData?.summary.grandTotal.drAmount || 0)}</td>
-                    <td className="border-y border-black px-2 py-3 text-right font-semibold">{money.format(reportData?.summary.grandTotal.invoiceAmount || 0)}</td>
-                    <td />
-                  </tr>
-
-                  <tr data-testid="payment-terms-breakdown">
-                    <td colSpan={9} className="pt-5">
-                      <table className="w-full border-collapse">
-                        <thead>
-                          <tr className="border-b border-black">
-                            <th colSpan={2} className="px-2 py-2 text-left">PAYMENT TERMS BREAKDOWN</th>
-                            <th className="px-2 py-2 text-right">Amount</th>
-                            <th className="px-2 py-2 text-right">DR</th>
-                            <th className="px-2 py-2 text-right">INVOICE</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr>
-                            <td colSpan={5} className="px-2 pt-3 font-semibold">CASH SALES</td>
-                          </tr>
-                          {cashPaymentTermBuckets.map(bucket => (
-                            <tr key={`cash-${bucket.key}`}>
-                              <td colSpan={2} className="px-2 py-[5px]">{bucket.label}</td>
-                              <td className="px-2 py-[5px] text-right">{money.format(bucket.soAmount)}</td>
-                              <td className="px-2 py-[5px] text-right">{money.format(bucket.drAmount)}</td>
-                              <td className="px-2 py-[5px] text-right">{money.format(bucket.invoiceAmount)}</td>
-                            </tr>
-                          ))}
-                          <tr>
-                            <td colSpan={2} className="px-2 py-2 text-right font-semibold">CASH SALES TOTAL</td>
-                            <td className="border-y border-black px-2 py-2 text-right font-semibold">{money.format(cashTotal.soAmount)}</td>
-                            <td className="border-y border-black px-2 py-2 text-right font-semibold">{money.format(cashTotal.drAmount)}</td>
-                            <td className="border-y border-black px-2 py-2 text-right font-semibold">{money.format(cashTotal.invoiceAmount)}</td>
-                          </tr>
-                          <tr>
-                            <td colSpan={5} className="px-2 pt-3 font-semibold">TERMS SALES</td>
-                          </tr>
-                          {termPaymentTermBuckets.map(bucket => (
-                            <tr key={`terms-${bucket.key}`}>
-                              <td colSpan={2} className="px-2 py-[5px]">{bucket.label}</td>
-                              <td className="px-2 py-[5px] text-right">{money.format(bucket.soAmount)}</td>
-                              <td className="px-2 py-[5px] text-right">{money.format(bucket.drAmount)}</td>
-                              <td className="px-2 py-[5px] text-right">{money.format(bucket.invoiceAmount)}</td>
-                            </tr>
-                          ))}
-                          <tr>
-                            <td colSpan={2} className="px-2 py-2 text-right font-semibold">TERMS SALES TOTAL</td>
-                            <td className="border-y border-black px-2 py-2 text-right font-semibold">{money.format(termsTotal.soAmount)}</td>
-                            <td className="border-y border-black px-2 py-2 text-right font-semibold">{money.format(termsTotal.drAmount)}</td>
-                            <td className="border-y border-black px-2 py-2 text-right font-semibold">{money.format(termsTotal.invoiceAmount)}</td>
-                          </tr>
-                          <tr>
-                            <td colSpan={2} className="px-2 py-3 text-right text-[13px] font-semibold">PAYMENT TERMS TOTAL</td>
-                            <td className="border-y border-black px-2 py-3 text-right font-semibold">{money.format(paymentTermsTotal.soAmount)}</td>
-                            <td className="border-y border-black px-2 py-3 text-right font-semibold">{money.format(paymentTermsTotal.drAmount)}</td>
-                            <td className="border-y border-black px-2 py-3 text-right font-semibold">{money.format(paymentTermsTotal.invoiceAmount)}</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+            <div className="py-20 text-center text-[#777]">
+              <Tags className="mx-auto mb-3 h-12 w-12" />
+              <h3 className="text-[20px] font-semibold">Empty!</h3>
             </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1050px] border-collapse text-[11px]">
+                  <thead>
+                    <tr className="border-b border-black">
+                      <th className="w-[10%] px-2 py-2 text-left">DATE</th>
+                      <th className="w-[20%] px-2 py-2 text-left">CUSTOMER</th>
+                      <th className="w-[20%] px-2 py-2 text-left">TERMS</th>
+                      <th className="w-[15%] px-2 py-2 text-left">REF #</th>
+                      <th className="w-[15%] px-2 py-2 text-left">SO#</th>
+                      <th className="w-[15%] px-2 py-2 text-left">Amount</th>
+                      <th className="w-[15%] px-2 py-2 text-left">DR</th>
+                      <th className="w-[15%] px-2 py-2 text-left">INVOICE</th>
+                      <th className="w-[15%] px-2 py-2 text-left">SALESPERSON</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {transactions.map(transaction => (
+                      <tr key={`${transaction.type}-${transaction.id}`} className="border-t border-[#ddd]">
+                        <td className="px-2 py-2">{formatRowDate(transaction.date)}</td>
+                        <td className="px-2 py-2">{transaction.customer}</td>
+                        <td className="px-2 py-2">{transaction.terms}</td>
+                        <td className="px-2 py-2">{transaction.refNo}</td>
+                        <td className="px-2 py-2">{transaction.soNo}</td>
+                        <td className="px-2 py-2">{money.format(transaction.soAmount || 0)}</td>
+                        <td className="px-2 py-2">{money.format(transaction.drAmount || 0)}</td>
+                        <td className="px-2 py-2">{money.format(transaction.invoiceAmount || 0)}</td>
+                        <td className="px-2 py-2">{transaction.salesperson}</td>
+                      </tr>
+                    ))}
+
+                    {reportType !== 'today' && (
+                      <tr>
+                        <td />
+                        <td colSpan={2} className="px-2 py-2 font-semibold">TOTAL </td>
+                        <td colSpan={2} />
+                        <td className="border-y border-black px-2 py-2 font-semibold">{money.format(reportData?.summary.grandTotal.soAmount || 0)}</td>
+                        <td className="border-y border-black px-2 py-2 font-semibold">{money.format(reportData?.summary.grandTotal.drAmount || 0)}</td>
+                        <td className="border-y border-black px-2 py-2 font-semibold">{money.format(reportData?.summary.grandTotal.invoiceAmount || 0)}</td>
+                        <td />
+                      </tr>
+                    )}
+
+                    <tr>
+                      <td colSpan={5} className="px-2 py-3 text-right text-[16px] font-semibold">SUBTOTAL --&gt;</td>
+                      <td className="border-y border-black px-2 py-3 font-semibold">{money.format(reportData?.summary.grandTotal.soAmount || 0)}</td>
+                      <td className="border-y border-black px-2 py-3 font-semibold">{money.format(reportData?.summary.grandTotal.drAmount || 0)}</td>
+                      <td className="border-y border-black px-2 py-3 font-semibold">{money.format(reportData?.summary.grandTotal.invoiceAmount || 0)}</td>
+                      <td />
+                    </tr>
+
+                    {reportType !== 'today' && (
+                      <tr>
+                        <td colSpan={5} className="px-2 py-3 text-right text-[16px] font-semibold">TOTAL  --&gt;</td>
+                        <td />
+                        <td colSpan={2} className="px-2 py-3 text-center font-semibold">{money.format(reportData?.summary.grandTotal.total || 0)}</td>
+                        <td />
+                      </tr>
+                    )}
+                    <tr>
+                      <td colSpan={6} />
+                      <td colSpan={2} className="border-t border-black" />
+                      <td />
+                    </tr>
+                    <tr>
+                      <td colSpan={5} className="px-2 py-3 text-right text-[16px] font-semibold">GRAND TOTAL --&gt;</td>
+                      <td />
+                      <td colSpan={2} className="border-b-4 border-double border-black px-2 py-3 text-center font-semibold">{money.format(reportData?.summary.grandTotal.total || 0)}</td>
+                      <td />
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-3 grid gap-8 md:grid-cols-[minmax(0,1fr)_minmax(280px,0.7fr)]">
+                <div>
+                  {reportType !== 'today' && (
+                    <table className="w-full border-collapse text-[12px]" data-testid="salesperson-category-summary">
+                      <tbody>
+                        {(reportData?.summary.salespersonTotals || []).map(salesperson => (
+                          <React.Fragment key={salesperson.salesperson}>
+                            <tr><td className="px-2 py-2">{salesperson.salesperson}</td><td /><td /></tr>
+                            {salesperson.categories.map(category => (
+                              <tr key={`${salesperson.salesperson}-${category.category}`}>
+                                <td />
+                                <td className="px-2 py-2">{category.category}</td>
+                                <td className="px-2 py-2 text-right">{money.format(category.soAmount + category.drAmount + category.invoiceAmount)}</td>
+                              </tr>
+                            ))}
+                            <tr>
+                              <td colSpan={2} className="border-b border-black" />
+                              <td className="border-y border-black px-2 py-2 text-right">{money.format(salesperson.total)}</td>
+                            </tr>
+                          </React.Fragment>
+                        ))}
+                        <tr><td colSpan={3} className="border-b border-black" /></tr>
+                        <tr>
+                          <td colSpan={2} className="border-b border-black px-2 py-2">TOTAL</td>
+                          <td className="border-b border-black px-2 py-2 text-right">{money.format(salespersonGrandTotal)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+                <div className="text-[12px]">
+                  <p className="font-semibold">Checked and Audited by/ Date: </p>
+                  <p className="mb-4">______________________________________</p>
+                  <p className="font-semibold">Noted by/ Date: </p>
+                  <p>______________________________________</p>
+                </div>
+              </div>
+            </>
           )}
         </main>
       </div>

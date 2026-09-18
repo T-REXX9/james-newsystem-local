@@ -106,7 +106,7 @@ export const getSalesReportData = async (
   try {
     const query = new URLSearchParams({
       main_id: String(getMainId()),
-      date_type: resolveDateType(filters.dateFrom, filters.dateTo),
+      date_type: filters.dateType || resolveDateType(filters.dateFrom, filters.dateTo),
       date_from: filters.dateFrom,
       date_to: filters.dateTo,
       customer_id: filters.customerId,
