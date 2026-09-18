@@ -46,6 +46,7 @@ export interface DailyCallAgentSnapshot {
   inquiries: Inquiry[];
   purchases: Purchase[];
   teamMessages: TeamMessage[];
+  legacyCurrentMonthSales: number;
 }
 
 export interface DailyCallMasterListParams {
@@ -707,6 +708,7 @@ export const fetchAgentSnapshotForDailyCall = async (
       inquiries: Array.isArray(data?.inquiries) ? data.inquiries.map(mapInquiry) : [],
       purchases: Array.isArray(data?.purchases) ? data.purchases.map(mapPurchase) : [],
       teamMessages: Array.isArray(data?.team_messages) ? data.team_messages.map(mapTeamMessage) : [],
+      legacyCurrentMonthSales: Number(data?.legacy_current_month_sales || 0),
     };
   } catch (error) {
     if ((error as Error)?.name === 'AbortError') throw error;
@@ -730,6 +732,7 @@ export const fetchAgentSnapshotForDailyCall = async (
         inquiries: [],
         purchases: [],
         teamMessages: [],
+        legacyCurrentMonthSales: 0,
       };
     } catch {
       throw error;
