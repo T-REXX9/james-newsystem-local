@@ -1007,12 +1007,29 @@ ${listen_directives}
 
     location = /james-newsystem/index.html {
         alias ${PRODUCTION_WEB_DIR}/index.html;
-        add_header Cache-Control "no-store, max-age=0" always;
+        # The HTML shell selects the current hashed Vite assets. Never let a
+        # browser reuse an old shell after a production update.
+        add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0" always;
+        add_header Pragma "no-cache" always;
+        add_header Expires "0" always;
+    }
+
+    # Vite fingerprints every compiled asset. Those URLs are safe to retain
+    # indefinitely, while the HTML shell above remains fresh on each visit.
+    location ^~ /james-newsystem/assets/ {
+        alias ${PRODUCTION_WEB_DIR}/assets/;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
     }
 
     location /james-newsystem/ {
         alias ${PRODUCTION_WEB_DIR}/;
         index index.html;
+        # This covers SPA URLs such as /james-newsystem/dashboard. Without
+        # these headers, an old cached fallback response can keep loading a
+        # previous frontend bundle even after a successful deployment.
+        add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0" always;
+        add_header Pragma "no-cache" always;
+        add_header Expires "0" always;
         try_files \$uri \$uri/ /james-newsystem/index.html;
     }
 
