@@ -447,7 +447,9 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   }, [addToast, currentUser?.id, doNotContactReason, loadRows, pendingDoNotContactRow]);
 
   useEffect(() => {
-    loadRows();
+    // Sales totals must not be rendered from an in-memory list from a
+    // previous visit. Fetch the latest posted documents when this dashboard opens.
+    loadRows(true, true);
   }, [loadRows]);
 
   useEffect(() => {

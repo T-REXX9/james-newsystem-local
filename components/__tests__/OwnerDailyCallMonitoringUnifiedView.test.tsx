@@ -4,13 +4,14 @@ import { cleanup, render, screen } from '@testing-library/react';
 import OwnerDailyCallMonitoringUnifiedView from '../OwnerDailyCallMonitoringUnifiedView';
 
 const getSalesReportDataMock = vi.fn();
+const fetchDailyCallMasterListMock = vi.fn().mockResolvedValue({ items: [] });
 
 vi.mock('../DailyCallMasterListView', () => ({
   default: () => <div data-testid="master-list-view">Master List View</div>,
 }));
 
 vi.mock('../../services/dailyCallMonitoringService', () => ({
-  fetchDailyCallMasterList: vi.fn().mockResolvedValue({ items: [] }),
+  fetchDailyCallMasterList: (...args: unknown[]) => fetchDailyCallMasterListMock(...args),
 }));
 
 vi.mock('../../services/salesReportService', () => ({
@@ -21,6 +22,7 @@ describe('OwnerDailyCallMonitoringUnifiedView', () => {
   afterEach(() => {
     cleanup();
     getSalesReportDataMock.mockReset();
+    fetchDailyCallMasterListMock.mockClear();
   });
 
   it('renders the Daily Call Monitoring master list by default', () => {
@@ -48,5 +50,6 @@ describe('OwnerDailyCallMonitoringUnifiedView', () => {
 
     expect(await screen.findByText('₱45,678')).toBeInTheDocument();
     expect(getSalesReportDataMock).toHaveBeenCalledWith(expect.objectContaining({ customerId: 'all' }));
+    expect(fetchDailyCallMasterListMock).toHaveBeenCalledWith({ fromDate: '2025-10-01', forceRefresh: true });
   });
 });

@@ -87,7 +87,7 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
     let isMounted = true;
     const { from, to } = currentMonthRange();
     Promise.all([
-      fetchDailyCallMasterList({ fromDate }),
+      fetchDailyCallMasterList({ fromDate, forceRefresh: true }),
       // The Sales Report is the authoritative sales calculation. Daily Call must
       // not add ledger and transaction figures on top of it.
       getSalesReportData({ dateFrom: from, dateTo: to, customerId: 'all' }),
