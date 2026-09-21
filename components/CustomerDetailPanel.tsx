@@ -126,7 +126,8 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                 if (detail) {
                     setContact((previous) => ({ ...(previous || {}), ...detail } as Contact));
                     setSelectedSalesAgent(detail.assignedAgentId || '');
-                    onUpdate(detail);
+                    // Don't call onUpdate here - only update parent when user makes explicit changes
+                    // This prevents status flickering due to API data inconsistencies
                 }
                 const ledgerTransactions = ledgerRowsToContactTransactions(ledger.rows);
                 setTransactions(ledgerTransactions);
