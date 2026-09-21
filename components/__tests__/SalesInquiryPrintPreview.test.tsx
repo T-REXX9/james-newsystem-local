@@ -1,8 +1,12 @@
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi, afterEach } from 'vitest';
+import { render, screen, cleanup } from '@testing-library/react';
 import SalesInquiryPrintPreview from '../SalesInquiryPrintPreview';
 import { Contact, SalesInquiryStatus } from '../../types';
+
+afterEach(() => {
+  cleanup();
+});
 
 vi.mock('lucide-react', () => ({
   Printer: () => null,
@@ -88,5 +92,72 @@ describe('SalesInquiryPrintPreview', () => {
     expect(screen.getByText('GOLD')).toBeInTheDocument();
     expect(screen.getByText('P9,800.00 MORE NEEDED THIS MONTH')).toBeInTheDocument();
     expect(screen.getByText('P29,800.00 MORE NEEDED THIS MONTH')).toBeInTheDocument();
+  });
+
+  it('uses currentMonthSales for VIP qualification when provided', () => {
+    render(
+      <SalesInquiryPrintPreview
+        inquiry={inquiry}
+        customer={{
+          id: 'c-1',
+          company: 'Acme Corp',
+          address: '123 Main St',
+        } as Contact}
+        inquiryNumberLabel="INQ26-99"
+        preparedBy="Jane Doe"
+        currentMonthSales={67830}
+        onClose={() => undefined}
+      />
+    );
+
+    expect(screen.getByText('VIP QUALIFICATION FOR NEXT MONTH')).toBeInTheDocument();
+    expect(screen.getByText('Current qualifying purchase:')).toBeInTheDocument();
+    expect(screen.getByText('P67,830.00')).toBeInTheDocument();
+    expect(screen.getByText('SILVER')).toBeInTheDocument();
+    expect(screen.getByText('GOLD')).toBeInTheDocument();
+    expect(screen.getAllByText('QUALIFIED')).toHaveLength(2);
+  });
+
+  it('falls back to inquiry total when currentMonthSales is not provided', () => {
+    render(
+      <SalesInquiryPrintPreview
+        inquiry={inquiry}
+        customer={{
+          id: 'c-1',
+          company: 'Acme Corp',
+          address: '123 Main St',
+        } as Contact}
+        inquiryNumberLabel="INQ26-99"
+        preparedBy="Jane Doe"
+        currentMonthSales={null}
+        onClose={() => undefined}
+      />
+    );
+
+    expect(screen.getByText('VIP QUALIFICATION FOR NEXT MONTH')).toBeInTheDocument();
+    expect(screen.getByText('Current qualifying purchase:')).toBeInTheDocument();
+    expect(screen.getByText('P200.00')).toBeInTheDocument();
+  });
+
+  it('handles zero currentMonthSales correctly', () => {
+    render(
+      <SalesInquiryPrintPreview
+        inquiry={inquiry}
+        customer={{
+          id: 'c-1',
+          company: 'Acme Corp',
+          address: '123 Main St',
+        } as Contact}
+        inquiryNumberLabel="INQ26-99"
+        preparedBy="Jane Doe"
+        currentMonthSales={0}
+        onClose={() => undefined}
+      />
+    );
+
+    expect(screen.getByText('VIP QUALIFICATION FOR NEXT MONTH')).toBeInTheDocument();
+    expect(screen.getByText('Current qualifying purchase:')).toBeInTheDocument();
+    expect(screen.getByText('P0.00')).toBeInTheDocument();
+    expect(screen.getByText('P10,000.00 MORE NEEDED THIS MONTH')).toBeInTheDocument();
   });
 });

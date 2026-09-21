@@ -13,6 +13,7 @@ interface SalesInquiryPrintPreviewProps {
   inquiryNumberLabel: string;
   preparedBy: string;
   vipConfig?: VipTierConfig;
+  currentMonthSales?: number | null;
   onClose: () => void;
   /** When true, hide preview chrome and mount off-screen for JPEG capture. */
   captureMode?: boolean;
@@ -266,6 +267,7 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
   inquiryNumberLabel,
   preparedBy,
   vipConfig = DEFAULT_VIP_TIER_CONFIG,
+  currentMonthSales,
   onClose,
   captureMode = false,
   onSheetReady,
@@ -284,7 +286,7 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
     vip_discount_amount: inquiry.vip_discount_amount,
   });
   const vipTargets = normalizeVipTierConfig(vipConfig);
-  const vipProgress = vipDiscount.totalToPay;
+  const vipProgress = currentMonthSales != null ? currentMonthSales : vipDiscount.totalToPay;
   const silverQualified = vipProgress >= vipTargets.one_time_discount_threshold;
   const goldQualified = vipProgress >= vipTargets.unlimited_discount_threshold;
   const silverQualificationLabel = silverQualified
