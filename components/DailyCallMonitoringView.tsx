@@ -520,7 +520,6 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const canEdit = canPerformAction('can_edit');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [masterListRows, setMasterListRows] = useState<DailyCallMasterCustomerRow[]>([]);
-  const [legacyCurrentMonthSales, setLegacyCurrentMonthSales] = useState<number | null>(null);
   const [callLogs, setCallLogs] = useState<CallLogEntry[]>([]);
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
@@ -671,7 +670,6 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       setInquiries(snapshot.inquiries);
       setPurchases(snapshot.purchases);
       setTeamMessages(snapshot.teamMessages.filter((message) => message.is_from_owner));
-      setLegacyCurrentMonthSales(snapshot.legacyCurrentMonthSales);
       setLoadError(null);
       setHasLoadedData(true);
       const contactIds = teamScopedContacts.map((contact) => contact.id);
@@ -1373,7 +1371,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       const currentMonthSales = rows.reduce((sum, row) => sum + row.currentMonthSales, 0);
       const averageMonthlySales = rows.reduce((sum, row) => sum + row.averageMonthlySales, 0);
       const primaryMetric = id === 'priority'
-        ? (legacyCurrentMonthSales ?? currentMonthSales)
+        ? currentMonthSales
         : id === 'verified' || id === 'unverified'
           ? 0
           : averageMonthlySales;
@@ -1434,7 +1432,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       summarize(unverifiedRows, 'unverified', 'Unverified Prospects', 'No purchases yet', 'orange', 'Average Monthly Purchase'),
       summarize(blockedRows, 'blocked', DO_NOT_CONTACT_LABEL, 'View only — no contact or sales inquiry', 'red', 'Average Monthly Sales'),
     ];
-  }, [masterListRows, masterRows, legacyCurrentMonthSales]);
+  }, [masterListRows, masterRows]);
 
   useEffect(() => {
     if (!masterRows.length) {

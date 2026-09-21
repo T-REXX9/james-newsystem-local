@@ -87,7 +87,7 @@ const currentUser = {
   full_name: 'Jane Doe',
   email: 'jane@example.com',
   role: 'Sales Agent',
-  access_rights: ['sales-transaction-daily-call-monitoring'],
+  access_rights: ['home'],
 } as any;
 
 const baseSnapshot = {
@@ -123,7 +123,6 @@ const baseSnapshot = {
   inquiries: [],
   purchases: [],
   teamMessages: [],
-  legacyCurrentMonthSales: 0,
 };
 
 describe('DailyCallMonitoringView communication actions', () => {
@@ -809,35 +808,56 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(within(recoveryTable).getByText('Legacy Recovery Customer')).toBeInTheDocument();
   });
 
-  it('uses the old Home current-month total in the category summary', async () => {
+  it('sums Priority List row current-month sales in the category summary', async () => {
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
       ...baseSnapshot,
-      contacts: [{
-        ...baseSnapshot.contacts[0],
-        id: 'ledger-sales-customer',
-        shopName: 'Ledger Sales Customer',
-        status: 'active',
-        verification: '',
-      }],
+      contacts: [
+        {
+          ...baseSnapshot.contacts[0],
+          id: 'ledger-sales-customer-a',
+          shopName: 'Ledger Sales Customer A',
+          status: 'active',
+          verification: '',
+        },
+        {
+          ...baseSnapshot.contacts[0],
+          id: 'ledger-sales-customer-b',
+          shopName: 'Ledger Sales Customer B',
+          status: 'active',
+          verification: '',
+        },
+      ],
       purchases: [{
         id: 'stale-purchase-total',
-        contact_id: 'ledger-sales-customer',
+        contact_id: 'ledger-sales-customer-a',
         amount: 100,
         status: 'paid',
         purchased_at: new Date().toISOString(),
       }],
-      masterList: [{
-        id: 'ledger-sales-customer',
-        shopName: 'Ledger Sales Customer',
-        listCategory: 'priority',
-        currentMonthSales: 4_200,
-        totalSales: 4_200,
-        purchaseCount: 1,
-        priorityTransactionCount: 1,
-        ledgerTransactionCount: 1,
-        purchaseAgeGroup: 'recent',
-      }],
-      legacyCurrentMonthSales: 4_200,
+      masterList: [
+        {
+          id: 'ledger-sales-customer-a',
+          shopName: 'Ledger Sales Customer A',
+          listCategory: 'priority',
+          currentMonthSales: 4_200,
+          totalSales: 4_200,
+          purchaseCount: 1,
+          priorityTransactionCount: 1,
+          ledgerTransactionCount: 1,
+          purchaseAgeGroup: 'recent',
+        },
+        {
+          id: 'ledger-sales-customer-b',
+          shopName: 'Ledger Sales Customer B',
+          listCategory: 'priority',
+          currentMonthSales: 800,
+          totalSales: 800,
+          purchaseCount: 1,
+          priorityTransactionCount: 1,
+          ledgerTransactionCount: 1,
+          purchaseAgeGroup: 'recent',
+        },
+      ],
     });
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
@@ -845,7 +865,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     const summaryHeading = (await screen.findAllByTitle('Priority List (Any ledger activity since October 2025 onwards)'))[0];
     const summary = summaryHeading.closest('article');
     expect(summary).not.toBeNull();
-    expect(within(summary as HTMLElement).getByTitle('₱4,200')).toBeInTheDocument();
+    expect(within(summary as HTMLElement).getByTitle('₱5,000')).toBeInTheDocument();
   });
 
   it('uses the ledger average monthly sales for potential sales', async () => {
