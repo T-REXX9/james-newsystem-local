@@ -1,5 +1,5 @@
 import { TOPBAR_MENU_CONFIG } from './topbarMenuConfig';
-import type { ActionPermissionName } from '../constants';
+import { MODULE_ID_ALIASES, type ActionPermissionName } from '../constants';
 
 export interface AccessModule {
   id: string;
@@ -21,15 +21,17 @@ const READ_ONLY_ROUTE_PARTS = ['report', 'dashboard', 'audit', 'activity-logs', 
  * viewer sees only their own; with it they see everyone's.
  */
 const SEE_ALL_RECORDS_PAGE_IDS = [
-  'sales-transaction-daily-call-monitoring',
+  'home',
   'maintenance-customer-customer-data',
   'maintenance-profile-recycle-bin',
 ];
 
+const canonicalizePageId = (pageId: string): string => MODULE_ID_ALIASES[pageId] || pageId;
+
 const supportedActionsForPage = (pageId: string): ActionPermissionName[] => {
-  // Daily Call Monitoring is a live prospect/customer workspace. It has no
+  // Daily Call Monitoring lives under Dashboards as `home`. It has no
   // transaction posting lifecycle; Add is specifically for adding prospects.
-  if (pageId === 'sales-transaction-daily-call-monitoring') {
+  if (pageId === 'home') {
     return ['can_view', 'can_add', 'can_edit', 'can_view_all_records'];
   }
   if (READ_ONLY_ROUTE_PARTS.some((part) => pageId.includes(part))) {
@@ -97,7 +99,11 @@ export const getAccessModuleState = (
   grantedPageIds: Iterable<string>
 ): { checked: boolean; indeterminate: boolean } => {
   const pageIds = expandAccessModule(moduleId);
-  const granted = new Set(grantedPageIds);
+  const granted = new Set(
+    Array.from(grantedPageIds)
+      .filter((id): id is string => typeof id === 'string')
+      .map(canonicalizePageId)
+  );
   if (granted.has('*')) return { checked: true, indeterminate: false };
   const grantedCount = pageIds.filter((pageId) => granted.has(pageId)).length;
   return {
@@ -111,10 +117,15 @@ export const toggleAccessPage = (
   pageId: string,
   enabled: boolean
 ): string[] => {
-  const rights = new Set(grantedPageIds);
+  const rights = new Set(
+    Array.from(grantedPageIds)
+      .filter((id): id is string => typeof id === 'string')
+      .map(canonicalizePageId)
+  );
   rights.delete('*');
-  if (enabled) rights.add(pageId);
-  else rights.delete(pageId);
+  const canonicalPageId = canonicalizePageId(pageId);
+  if (enabled) rights.add(canonicalPageId);
+  else rights.delete(canonicalPageId);
   return Array.from(rights);
 };
 
@@ -123,7 +134,11 @@ export const toggleAccessModule = (
   moduleId: string,
   enabled: boolean
 ): string[] => {
-  const pageIds = new Set(grantedPageIds);
+  const pageIds = new Set(
+    Array.from(grantedPageIds)
+      .filter((id): id is string => typeof id === 'string')
+      .map(canonicalizePageId)
+  );
   if (pageIds.has('*')) {
     if (enabled) return Array.from(pageIds);
     pageIds.delete('*');
@@ -137,7 +152,11 @@ export const toggleAccessModule = (
 };
 
 export const canonicalizeAccessRights = (grantedPageIds: Iterable<string>): string[] => {
-  const granted = new Set(Array.from(grantedPageIds).filter((id): id is string => typeof id === 'string'));
+  const granted = new Set(
+    Array.from(grantedPageIds)
+      .filter((id): id is string => typeof id === 'string')
+      .map(canonicalizePageId)
+  );
   if (granted.has('*')) return ['*'];
   return Array.from(granted);
 };
@@ -149,11 +168,16 @@ export const hasPageAccess = (
   grantedPageIds: Iterable<string>,
   pageId: string
 ): boolean => {
-  const granted = new Set(Array.from(grantedPageIds).filter((id): id is string => typeof id === 'string'));
+  const granted = new Set(
+    Array.from(grantedPageIds)
+      .filter((id): id is string => typeof id === 'string')
+      .map(canonicalizePageId)
+  );
   if (granted.has('*')) return true;
-  const containingModule = ACCESS_MODULES.find((module) => module.pageIds.includes(pageId));
+  const canonicalPageId = canonicalizePageId(pageId);
+  const containingModule = ACCESS_MODULES.find((module) => module.pageIds.includes(canonicalPageId));
   if (containingModule && granted.has(containingModule.id)) return true;
-  return granted.has(pageId);
+  return granted.has(canonicalPageId);
 };
 
 /** @deprecated Use hasPageAccess for page-level grants. */

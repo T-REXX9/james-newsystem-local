@@ -23,7 +23,6 @@ const staffWithPartialLegacyRights = {
     'sales-transaction-sales-inquiry',
     'sales-transaction-sales-order',
     'sales-transaction-order-slip',
-    'sales-transaction-daily-call-monitoring',
     'operations-management-dashboard',
     'sales-performance-management-dashboard',
     'call-records-dashboard',

@@ -408,15 +408,22 @@ const App: React.FC = () => {
     switch (canonicalTab) {
       // Role-based home/dashboard routing
       case 'home':
-      case 'dashboard': {
+      case 'dashboard':
+      case 'sales-transaction-daily-call-monitoring':
+      case 'calls':
+      case 'communication-productivity-daily-call-monitoring': {
         const isSalesAgent = userProfile?.role === ROLE_NAMES.SALES_AGENT || userProfile?.role === 'sales_agent';
+        const context =
+          moduleContext['sales-transaction-daily-call-monitoring'] ||
+          moduleContext.home ||
+          {};
 
         return isSalesAgent ? (
           <div className="p-4 h-full overflow-y-auto bg-slate-100 dark:bg-slate-950">
-            <DailyCallMonitoringView currentUser={userProfile} />
+            <DailyCallMonitoringView currentUser={userProfile} initialSelectedDate={context.dashboardDate} />
           </div>
         ) : (
-          <OwnerDailyCallMonitoringUnifiedView currentUser={userProfile} />
+          <OwnerDailyCallMonitoringUnifiedView currentUser={userProfile} initialSelectedDate={context.dashboardDate} />
         );
       }
       case 'staff':
@@ -826,15 +833,6 @@ const App: React.FC = () => {
           </div>
         );
 
-      case 'sales-transaction-daily-call-monitoring': {
-        const isSalesAgent = userProfile?.role === ROLE_NAMES.SALES_AGENT || userProfile?.role === 'sales_agent';
-        const context = moduleContext['sales-transaction-daily-call-monitoring'] || {};
-        return isSalesAgent ? (
-          <DailyCallMonitoringView currentUser={userProfile} initialSelectedDate={context.dashboardDate} />
-        ) : (
-          <OwnerDailyCallMonitoringUnifiedView currentUser={userProfile} initialSelectedDate={context.dashboardDate} />
-        );
-      }
       case 'accounting-transactions-freight-charges-debit':
         return (
           <div className="h-full overflow-y-auto">
@@ -947,15 +945,6 @@ const App: React.FC = () => {
         return <SmsTemplatesView currentUser={userProfile} />;
       case 'communication-call-auto-replies':
         return <CallAutoReplySettingsView currentUser={userProfile} />;
-      case 'calls':
-      case 'communication-productivity-daily-call-monitoring': {
-        const isSalesAgent = userProfile?.role === ROLE_NAMES.SALES_AGENT || userProfile?.role === 'sales_agent';
-        return isSalesAgent ? (
-          <DailyCallMonitoringView currentUser={userProfile} />
-        ) : (
-          <OwnerDailyCallMonitoringUnifiedView currentUser={userProfile} />
-        );
-      }
 
       default:
         return <div className="p-8"><h1 className="text-xl font-bold">Page not found</h1><p>This page is no longer available.</p><button onClick={() => handleSetActiveTab('home')} className="mt-4 text-blue-600">Go to Dashboard</button></div>;

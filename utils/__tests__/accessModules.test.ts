@@ -27,7 +27,6 @@ describe('access module permissions', () => {
       'sales-transaction-sales-order',
       'sales-transaction-order-slip',
       'sales-transaction-invoice',
-      'sales-transaction-daily-call-monitoring',
       'sales-reports-inquiry-report',
       'sales-reports-sales-report',
       'sales-reports-sales-development-report',
@@ -75,7 +74,7 @@ describe('access module permissions', () => {
   it('exposes See all records only on pages that hold per-staff records', () => {
     const pageById = (id: string) => ACCESS_MODULES.flatMap((module) => module.pages).find((page) => page.id === id);
 
-    expect(pageById('sales-transaction-daily-call-monitoring')?.supportedActions).toContain('can_view_all_records');
+    expect(pageById('home')?.supportedActions).toContain('can_view_all_records');
     expect(pageById('maintenance-customer-customer-data')?.supportedActions).toContain('can_view_all_records');
     expect(pageById('sales-transaction-sales-inquiry')?.supportedActions).not.toContain('can_view_all_records');
   });
@@ -83,7 +82,7 @@ describe('access module permissions', () => {
   it('limits Daily Call Monitoring to prospect workflow actions', () => {
     const dailyCall = ACCESS_MODULES
       .flatMap((module) => module.pages)
-      .find((page) => page.id === 'sales-transaction-daily-call-monitoring');
+      .find((page) => page.id === 'home');
 
     expect(dailyCall?.supportedActions).toEqual([
       'can_view',
@@ -91,6 +90,11 @@ describe('access module permissions', () => {
       'can_edit',
       'can_view_all_records',
     ]);
+  });
+
+  it('treats the legacy Sales Daily Call route as the Dashboards page', () => {
+    expect(hasPageAccess(['sales-transaction-daily-call-monitoring'], 'home')).toBe(true);
+    expect(canonicalizeBinaryModuleAccessRights(['home', 'sales-transaction-daily-call-monitoring'])).toEqual(['home']);
   });
 
   it('still offers See all records on the read-only Recycle Bin page', () => {

@@ -44,7 +44,6 @@ export const DEFAULT_STAFF_ACCESS_RIGHTS = [
   'accounting-reports-inactive-active-customers',
   'accounting-reports-old-new-customers',
   'accounting-reports-old-new-customers',
-  'sales-transaction-daily-call-monitoring',
   'communication-sms-blasting',
   'maintenance-customer-customer-data',
 
@@ -136,6 +135,12 @@ export const DEFAULT_ACTION_PERMISSIONS = {
 
 export type ActionPermissionName = keyof typeof DEFAULT_ACTION_PERMISSIONS;
 
+/** Current System Access label for the single Daily Call page. */
+export const DAILY_CALL_PAGE_LABEL = 'Daily Call Monitoring Dashboard';
+
+/** Pre-consolidation label; still honored when reading stored grants. */
+export const DAILY_CALL_LEGACY_PAGE_LABEL = 'Daily Call Monitoring';
+
 const normalizeActionPermissions = (permissions?: PageActionPermissions | null): Partial<ActionPermissionEntry> => {
   if (!permissions) return {};
   if (permissions.global) return permissions.global;
@@ -147,10 +152,18 @@ export const getPageActionPermissions = (
   pageLabel?: string | null
 ): ActionPermissionEntry => {
   const legacy = normalizeActionPermissions(permissions);
-  const page = pageLabel && permissions?.pages ? permissions.pages[pageLabel] : undefined;
+  const pages = permissions?.pages;
+  const page = pageLabel && pages ? pages[pageLabel] : undefined;
+  // Dashboard is the only Daily Call page now; keep reading the old page key
+  // so See all records (and other) grants made before the rename still apply.
+  const legacyDailyCall =
+    pageLabel === DAILY_CALL_PAGE_LABEL && pages
+      ? pages[DAILY_CALL_LEGACY_PAGE_LABEL]
+      : undefined;
   return {
     ...DEFAULT_ACTION_PERMISSIONS,
     ...legacy,
+    ...(legacyDailyCall || {}),
     ...(page || {}),
   };
 };
@@ -165,6 +178,9 @@ export const setPageActionPermission = (
   const legacy = normalizeActionPermissions(permissions);
   const pages = { ...(permissions?.pages || {}) };
   pages[pageLabel] = { ...current, [action]: enabled };
+  if (pageLabel === DAILY_CALL_PAGE_LABEL) {
+    delete pages[DAILY_CALL_LEGACY_PAGE_LABEL];
+  }
   return { global: { ...DEFAULT_ACTION_PERMISSIONS, ...legacy }, pages };
 };
 
@@ -201,7 +217,6 @@ export const ROLE_DEFAULT_ACCESS_RIGHTS: Record<string, string[]> = {
     'sales-transaction-sales-order',
     'sales-transaction-order-slip',
     'sales-transaction-invoice',
-    'sales-transaction-daily-call-monitoring',
     'sales-transaction-product-promotions',
     'sales-reports-inquiry-report',
     'sales-reports-sales-report',
@@ -262,7 +277,7 @@ export const generateAvatarUrl = (fullName?: string, email?: string) => {
 
 // Canonical list of application modules, keyed by hierarchical IDs used in navigation
 export const AVAILABLE_APP_MODULES = [
-  { id: 'home', label: 'Home Dashboard' },
+  { id: 'home', label: 'Daily Call Monitoring Dashboard' },
   { id: 'warehouse-inventory-product-database', label: 'Product Database' },
   { id: 'warehouse-inventory-stock-movement', label: 'Stock Movement' },
   { id: 'warehouse-inventory-stock-adjustment', label: 'Stock Adjustment' },
@@ -305,7 +320,6 @@ export const AVAILABLE_APP_MODULES = [
   { id: 'accounting-reports-purchase-history', label: 'Purchase History' },
   { id: 'accounting-reports-inactive-active-customers', label: 'Inactive/Active Customers' },
   { id: 'accounting-reports-old-new-customers', label: 'Old/New Customers' },
-  { id: 'sales-transaction-daily-call-monitoring', label: 'Daily Call Monitoring' },
   { id: 'maintenance-customer-customer-data', label: 'Customer Data' },
 
   { id: 'maintenance-customer-customer-group', label: 'Customer Group' },
@@ -343,7 +357,7 @@ export const MODULE_ID_ALIASES: Record<string, string> = {
   management: 'sales-performance-management-dashboard',
   mail: 'communication-messaging-inbox',
   calendar: 'communication-productivity-calendar',
-  calls: 'sales-transaction-daily-call-monitoring',
+  calls: 'home',
   recyclebin: 'maintenance-profile-recycle-bin',
   settings: 'maintenance-profile-system-access',
   'warehouse-inventory-reorder-report': 'warehouse-reports-reorder-report',
@@ -357,8 +371,11 @@ export const MODULE_ID_ALIASES: Record<string, string> = {
   'maintenance-customer-vip-thresholds': 'maintenance-customer-vip-thresholds',
   'accounting-reports-overview': 'accounting-reports-accounting-overview',
 
-  'accounting-reports-daily-calls-monitoring': 'sales-transaction-daily-call-monitoring',
-  'maintenance-customer-daily-call-monitoring': 'sales-transaction-daily-call-monitoring',
+  // Legacy Sales / Communications Daily Call routes → single Dashboards page
+  'sales-transaction-daily-call-monitoring': 'home',
+  'communication-productivity-daily-call-monitoring': 'home',
+  'accounting-reports-daily-calls-monitoring': 'home',
+  'maintenance-customer-daily-call-monitoring': 'home',
 };
 
 // Sidebar keyboard shortcuts

@@ -108,4 +108,18 @@ describe('canPerformAction', () => {
       },
     }, 'can_edit_unit_price', 'Sales Inquiry')).toBe(true);
   });
+
+  it('honors legacy Daily Call Monitoring See all records under the Dashboard page label', () => {
+    const user = {
+      role: 'Sales Agent',
+      action_permissions: {
+        pages: {
+          'Daily Call Monitoring': { can_view_all_records: true },
+        },
+      },
+    };
+
+    expect(hasActionPermission(user, 'can_view_all_records', 'Daily Call Monitoring Dashboard')).toBe(true);
+    expect(hasActionPermission(user, 'can_view_all_records', 'Customer Data')).toBe(false);
+  });
 });

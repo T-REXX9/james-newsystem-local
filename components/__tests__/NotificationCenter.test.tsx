@@ -232,7 +232,7 @@ describe('NotificationCenter', () => {
         category: 'notification',
         type: 'info',
         title: 'New Agent Sales Report message',
-        action_url: 'sales-transaction-daily-call-monitoring',
+        action_url: 'home',
         metadata: {
           entity_type: 'call_report_reply',
           entity_id: 'message-1',
@@ -273,7 +273,7 @@ describe('NotificationCenter', () => {
         category: 'notification',
         type: 'info',
         title: 'New prospective customer comment',
-        action_url: 'sales-transaction-daily-call-monitoring',
+        action_url: 'home',
         metadata: {
           entity_type: 'prospect_customer_comment',
           entity_id: 'prospect-42',

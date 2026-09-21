@@ -798,7 +798,7 @@ const AccessControlSettings: React.FC = () => {
                                                 ['can_edit_unit_price', 'Edit unit price'],
                                                 ['can_view_all_records', 'See all records'],
                                               ] as const).filter(([permission]) => pageActions.includes(permission)).map(([permission, label]) => {
-                                                const displayedLabel = pageItem.id === 'sales-transaction-daily-call-monitoring' && permission === 'can_add'
+                                                const displayedLabel = pageItem.id === 'home' && permission === 'can_add'
                                                   ? 'Add Prospect'
                                                   : label;
                                                 return (

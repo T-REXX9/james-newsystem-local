@@ -210,12 +210,6 @@ export const TOPBAR_MENU_CONFIG: TopbarMainMenu[] = [
             route: 'sales-transaction-invoice',
             icon: FileText,
           },
-          {
-            id: 'sales-transaction-daily-call-monitoring',
-            label: 'Daily Call Monitoring',
-            route: 'sales-transaction-daily-call-monitoring',
-            icon: Users,
-          },
 
         ],
       },

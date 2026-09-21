@@ -96,7 +96,7 @@ export const resolveOperationsActivityLink = (log: ActivityLogRecord): Pick<Oper
   if (text.includes('sales order') || /(^|\W)so[-_]/i.test(reference)) return { route: 'sales-transaction-sales-order', payload: reference ? { orderId: reference } : undefined };
   if (text.includes('sales return') || text.includes('credit memo') || /(^|\W)(cm|ret)[-_]/i.test(reference)) return { route: 'accounting-transactions-sales-return-credit' };
   if (text.includes('collection')) return { route: 'accounting-accounting-collection-summary' };
-  if (text.includes('call')) return { route: 'sales-transaction-daily-call-monitoring' };
+  if (text.includes('call')) return { route: 'home' };
   if (text.includes('receivable') || text.includes('ledger')) return { route: 'accounting-reports-accounts-receivable-report' };
   return {};
 };
