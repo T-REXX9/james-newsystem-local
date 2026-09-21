@@ -27,6 +27,7 @@ import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
 import { resolveVipDiscountLevel } from '../utils/vipStanding';
 import { DO_NOT_CONTACT_LABEL, isBlockedDailyCallMasterRow } from '../utils/dailyCallBlockedCustomer';
 import { matchesDailyCallMonitorBucket, resolveDailyCallListCategory } from '../utils/dailyCallListCategory';
+import { resolveDailyCallPurchaseHighlightColor } from '../utils/dailyCallPurchaseHighlight';
 import { hasActionPermission, isMasterUserAccount } from '../constants';
 import { VERIFIED_PROSPECT_POTENTIAL } from '../utils/dailyCallPotentialSales';
 import AddContactModal from './AddContactModal';
@@ -182,31 +183,34 @@ const ageLabel = (row: DailyCallMasterCustomerRow) => {
 };
 
 const purchaseHighlight = (row: DailyCallMasterCustomerRow) => {
-  if (isBlockedDailyCallMasterRow(row)) {
+  const color = resolveDailyCallPurchaseHighlightColor({
+    isBlocked: isBlockedDailyCallMasterRow(row),
+    lastPurchaseDateRaw: row.lastPurchaseDateRaw,
+    monthsSinceLastPurchase: row.monthsSinceLastPurchase,
+    currentMonthSales: row.currentMonthSales,
+    purchaseAgeGroup: row.purchaseAgeGroup,
+    purchaseCount: row.purchaseCount,
+    ledgerTransactionCount: row.ledgerTransactionCount,
+  });
+
+  if (color === 'red') {
     return {
-      color: 'red',
+      color,
       row: 'bg-[#f94449]/20 text-red-950 backdrop-blur-sm hover:bg-[#f94449]/30',
       muted: 'text-red-800',
       label: DO_NOT_CONTACT_LABEL,
     };
   }
-
-  const rawDate = String(row.lastPurchaseDateRaw || '').trim();
-  const lastPurchase = rawDate ? new Date(`${rawDate.slice(0, 10)}T00:00:00`) : null;
-  const monthsSincePurchase = lastPurchase && !Number.isNaN(lastPurchase.getTime())
-    ? ((new Date().getFullYear() - lastPurchase.getFullYear()) * 12) + (new Date().getMonth() - lastPurchase.getMonth())
-    : row.monthsSinceLastPurchase;
-
-  if (row.currentMonthSales > 0 || monthsSincePurchase <= 0) {
-    return { color: 'green', row: 'bg-green-100 hover:bg-green-200', muted: 'text-green-800', label: 'Bought this month' };
+  if (color === 'green') {
+    return { color, row: 'bg-green-100 hover:bg-green-200', muted: 'text-green-800', label: 'Bought this month' };
   }
-  if (!rawDate || row.purchaseAgeGroup === 'no_purchase' || monthsSincePurchase >= 3) {
-    return { color: 'white', row: 'bg-white hover:bg-slate-50', muted: 'text-slate-500', label: 'No purchase for 3+ months' };
+  if (color === 'purple') {
+    return { color, row: 'bg-purple-100 hover:bg-purple-200', muted: 'text-purple-800', label: 'No purchase for 2 months' };
   }
-  if (monthsSincePurchase === 2) {
-    return { color: 'purple', row: 'bg-purple-100 hover:bg-purple-200', muted: 'text-purple-800', label: 'No purchase for 2 months' };
+  if (color === 'yellow') {
+    return { color, row: 'bg-yellow-100 hover:bg-yellow-200', muted: 'text-yellow-800', label: 'No purchase for 1 month' };
   }
-  return { color: 'yellow', row: 'bg-yellow-100 hover:bg-yellow-200', muted: 'text-yellow-800', label: 'No purchase for 1 month' };
+  return { color: 'white' as const, row: 'bg-white hover:bg-slate-50', muted: 'text-slate-500', label: 'No purchase for 3+ months' };
 };
 
 const masterRowFallback = (row: DailyCallMasterCustomerRow): DailyCallCustomerRow => ({

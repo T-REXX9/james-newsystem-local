@@ -34,4 +34,10 @@ describe('Daily Call Monitoring revision rules', () => {
     expect(master).toContain(">Monthly Potential Sales</p>");
     expect(master).toContain("matchesDailyCallMonitorBucket(row, 'priority')");
   });
+
+  it('routes purchase-age row colours through the shared highlight helper', () => {
+    expect(master).toContain("from '../utils/dailyCallPurchaseHighlight'");
+    expect(master).toContain('resolveDailyCallPurchaseHighlightColor');
+    expect(master).not.toMatch(/monthsSincePurchase <= 0[\s\S]{0,80}Bought this month/);
+  });
 });

@@ -93,6 +93,10 @@ import {
   resolveDailyCallListCategory,
   resolveDailyCallMonitorBucket,
 } from '../utils/dailyCallListCategory';
+import {
+  DailyCallPurchaseHighlightColor,
+  resolveDailyCallPurchaseHighlightColor,
+} from '../utils/dailyCallPurchaseHighlight';
 import { VERIFIED_PROSPECT_POTENTIAL, averageMonthlyPaidSales } from '../utils/dailyCallPotentialSales';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import { DEFAULT_CUSTOMER_VAT_TYPE } from '../constants/customerVat';
@@ -144,7 +148,7 @@ interface MasterRow {
 }
 
 type ClientListKey = 'active' | 'inactivePositive' | 'prospectivePositive';
-type PurchaseHighlightColor = 'green' | 'yellow' | 'purple' | 'white' | 'red';
+type PurchaseHighlightColor = DailyCallPurchaseHighlightColor;
 
 const PIE_COLORS = ['#2563eb', '#0ea5e9', '#059669', '#f97316'];
 const CUSTOMER_LOG_TOPICS: CustomerLogTopic[] = ['Sales', 'Payment'];
@@ -207,32 +211,36 @@ const isProspectContact = (contact: Contact) =>
   contact.status === CustomerStatus.PROSPECTIVE || contact.status === CustomerStatus.VERIFIED_PROSPECT;
 
 const getStaffPurchaseHighlight = (row: MasterRow, referenceDate: Date) => {
-  if (row.contact.status === CustomerStatus.BLACKLISTED) {
+  const color = resolveDailyCallPurchaseHighlightColor({
+    isBlocked: row.contact.status === CustomerStatus.BLACKLISTED,
+    lastPurchaseDateRaw: row.lastPurchase,
+    currentMonthSales: row.currentMonthSales,
+    referenceDate,
+  });
+
+  if (color === 'red') {
     return {
-      color: 'red' as PurchaseHighlightColor,
+      color,
       className: 'border-[#f94449]/35 bg-[#f94449]/20 text-red-950 hover:bg-[#f94449]/30',
       mutedClassName: 'text-red-800',
       label: DO_NOT_CONTACT_LABEL,
     };
   }
-
-  const lastPurchase = row.lastPurchase ? new Date(row.lastPurchase) : null;
-  if (!lastPurchase || Number.isNaN(lastPurchase.getTime())) {
-    return { color: 'white' as PurchaseHighlightColor, className: 'border-slate-200 bg-white hover:bg-slate-50', mutedClassName: 'text-slate-500', label: 'No purchase yet' };
+  if (color === 'green') {
+    return { color, className: 'border-green-200 bg-green-100 hover:bg-green-200', mutedClassName: 'text-green-800', label: 'Bought this month' };
   }
-
-  const monthsSincePurchase = ((referenceDate.getFullYear() - lastPurchase.getFullYear()) * 12)
-    + (referenceDate.getMonth() - lastPurchase.getMonth());
-  if (monthsSincePurchase <= 0) {
-    return { color: 'green' as PurchaseHighlightColor, className: 'border-green-200 bg-green-100 hover:bg-green-200', mutedClassName: 'text-green-800', label: 'Bought this month' };
+  if (color === 'yellow') {
+    return { color, className: 'border-yellow-200 bg-yellow-100 hover:bg-yellow-200', mutedClassName: 'text-yellow-800', label: 'No purchase for 1 month' };
   }
-  if (monthsSincePurchase === 1) {
-    return { color: 'yellow' as PurchaseHighlightColor, className: 'border-yellow-200 bg-yellow-100 hover:bg-yellow-200', mutedClassName: 'text-yellow-800', label: 'No purchase for 1 month' };
+  if (color === 'purple') {
+    return { color, className: 'border-purple-200 bg-purple-100 hover:bg-purple-200', mutedClassName: 'text-purple-800', label: 'No purchase for 2 months' };
   }
-  if (monthsSincePurchase === 2) {
-    return { color: 'purple' as PurchaseHighlightColor, className: 'border-purple-200 bg-purple-100 hover:bg-purple-200', mutedClassName: 'text-purple-800', label: 'No purchase for 2 months' };
-  }
-  return { color: 'white' as PurchaseHighlightColor, className: 'border-slate-200 bg-white hover:bg-slate-50', mutedClassName: 'text-slate-500', label: 'No purchase for 3+ months' };
+  return {
+    color: 'white' as PurchaseHighlightColor,
+    className: 'border-slate-200 bg-white hover:bg-slate-50',
+    mutedClassName: 'text-slate-500',
+    label: row.lastPurchase ? 'No purchase for 3+ months' : 'No purchase yet',
+  };
 };
 
 const formatCompactCurrency = (value: number) =>

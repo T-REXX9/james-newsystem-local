@@ -352,6 +352,87 @@ describe('DailyCallMasterListView', () => {
     expect(screen.getAllByText(/Any ledger activity since October 2025 onwards/i).length).toBeGreaterThanOrEqual(1);
   });
 
+  it('colours no-purchase prospects white and current-month buyers green', async () => {
+    const user = userEvent.setup();
+    const thisMonth = new Date();
+    const thisMonthRaw = `${thisMonth.getFullYear()}-${String(thisMonth.getMonth() + 1).padStart(2, '0')}-10`;
+
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: thisMonthRaw, count: 3 },
+      items: [
+        {
+          id: 'buyer-green',
+          shopName: 'Bought This Month Shop',
+          province: 'Manila',
+          city: 'Manila',
+          contactNumber: '0911',
+          assignedTo: 'Joan Jerusalem',
+          lastPurchaseDate: thisMonthRaw,
+          lastPurchaseDateRaw: thisMonthRaw,
+          purchaseCount: 1,
+          listCategory: 'priority',
+          totalSales: 5000,
+          currentMonthSales: 5000,
+          daysSinceLastPurchase: 2,
+          monthsSinceLastPurchase: 0,
+          purchaseAgeGroup: 'recent',
+        },
+        {
+          id: 'verified-white',
+          shopName: 'Verified No Buy Shop',
+          province: 'Laguna',
+          city: 'Calamba',
+          contactNumber: '0912',
+          assignedTo: 'Apostol Ella',
+          profileType: 'Prospect',
+          verification: 'Verified',
+          verifiedBy: 'Apostol Ella',
+          verifiedInSystem: true,
+          lastPurchaseDate: '—',
+          lastPurchaseDateRaw: '',
+          purchaseCount: 0,
+          listCategory: 'no_purchase',
+          totalSales: 0,
+          currentMonthSales: 0,
+          daysSinceLastPurchase: 0,
+          monthsSinceLastPurchase: 0,
+          purchaseAgeGroup: 'no_purchase',
+        },
+        {
+          id: 'unverified-white',
+          shopName: 'Unverified No Buy Shop',
+          province: 'Batangas',
+          city: 'Lipa',
+          contactNumber: '0913',
+          assignedTo: 'Joan Jerusalem',
+          profileType: 'Prospect',
+          verification: '',
+          lastPurchaseDate: '—',
+          lastPurchaseDateRaw: '',
+          purchaseCount: 0,
+          listCategory: 'no_purchase',
+          totalSales: 0,
+          currentMonthSales: 0,
+          daysSinceLastPurchase: 0,
+          monthsSinceLastPurchase: 0,
+          purchaseAgeGroup: 'no_purchase',
+        },
+      ],
+    });
+
+    render(<DailyCallMasterListView />);
+
+    expect((await screen.findByText('Bought This Month Shop')).closest('tr')).toHaveClass('bg-green-100');
+
+    await user.click(await screen.findByRole('button', { name: 'Verified Prospects (1)' }));
+    expect(screen.getByText('Verified No Buy Shop').closest('tr')).toHaveClass('bg-white');
+    expect(screen.getByText('Verified No Buy Shop').closest('tr')).not.toHaveClass('bg-green-100');
+
+    await user.click(screen.getByRole('button', { name: 'Unverified Prospects (1)' }));
+    expect(screen.getByText('Unverified No Buy Shop').closest('tr')).toHaveClass('bg-white');
+    expect(screen.getByText('Unverified No Buy Shop').closest('tr')).not.toHaveClass('bg-green-100');
+  });
+
   it('renders additional rows on table scroll and applies every purchase-age colour', async () => {
     const user = userEvent.setup();
     const currentDate = new Date();
