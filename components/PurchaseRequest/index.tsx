@@ -15,17 +15,28 @@ interface PurchaseRequestModuleProps {
 
 type ViewMode = 'list' | 'create' | 'detail' | 'print';
 
-const describeUnpostCascade = ({ purchaseOrders, receivingReports }: UnpostCascadeSummary): string => {
+const describeUnpostCascade = ({ purchaseOrders, cancelledPurchaseOrders, receivingReports }: UnpostCascadeSummary): string => {
   const parts: string[] = [];
   if (purchaseOrders.length > 0) {
     parts.push(`${purchaseOrders.length === 1 ? 'purchase order' : 'purchase orders'} ${purchaseOrders.join(', ')}`);
+  }
+  if (cancelledPurchaseOrders.length > 0) {
+    parts.push(`${cancelledPurchaseOrders.length === 1 ? 'pending purchase order' : 'pending purchase orders'} ${cancelledPurchaseOrders.join(', ')}`);
   }
   if (receivingReports.length > 0) {
     parts.push(`${receivingReports.length === 1 ? 'receiving report' : 'receiving reports'} ${receivingReports.join(', ')}`);
   }
   if (parts.length === 0) return 'No other documents depended on it.';
-  const total = purchaseOrders.length + receivingReports.length;
-  const sentence = `${parts.join(' and ')} ${total === 1 ? 'was' : 'were'} unposted with it.`;
+  
+  let action = 'unposted';
+  if (cancelledPurchaseOrders.length > 0 && purchaseOrders.length === 0 && receivingReports.length === 0) {
+    action = 'cancelled';
+  } else if (cancelledPurchaseOrders.length > 0) {
+    action = 'unposted or cancelled';
+  }
+  
+  const total = purchaseOrders.length + cancelledPurchaseOrders.length + receivingReports.length;
+  const sentence = `${parts.join(' and ')} ${total === 1 ? 'was' : 'were'} ${action} with it.`;
   return sentence.charAt(0).toUpperCase() + sentence.slice(1);
 };
 

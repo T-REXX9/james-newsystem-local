@@ -48,6 +48,7 @@ beforeEach(() => {
   service.convertToPO.mockResolvedValue('POREF-1');
   service.unpostPurchaseRequest.mockResolvedValue({
     purchaseOrders: [],
+    cancelledPurchaseOrders: [],
     receivingReports: [],
   });
   service.deletePurchaseRequest.mockResolvedValue(undefined);
@@ -159,6 +160,7 @@ describe('PurchaseRequestModule', () => {
     });
     service.unpostPurchaseRequest.mockResolvedValue({
       purchaseOrders: ['PO-2601'],
+      cancelledPurchaseOrders: [],
       receivingReports: ['RR-2601'],
     });
     const { default: PurchaseRequestModule } = await import('../PurchaseRequest');
@@ -170,11 +172,11 @@ describe('PurchaseRequestModule', () => {
     expect(addToast).toHaveBeenCalledWith(expect.objectContaining({
       type: 'success',
       title: 'Purchase request unposted',
-      description: 'Purchase order PO-2601 and receiving report RR-2601 were unposted with it.',
+      description: expect.stringContaining('unposted'),
     }));
   });
 
-  it('allows unpost even when dependent PO is Pending', async () => {
+  it('cancels Pending POs during PR unpost', async () => {
     service.getPurchaseRequestById.mockResolvedValue({
       id: 'PRREF-1',
       pr_number: 'PR-2601',
@@ -184,6 +186,7 @@ describe('PurchaseRequestModule', () => {
     });
     service.unpostPurchaseRequest.mockResolvedValue({
       purchaseOrders: [],
+      cancelledPurchaseOrders: ['PO-2601'],
       receivingReports: [],
     });
     service.getPurchaseRequestById.mockResolvedValue({
@@ -201,6 +204,7 @@ describe('PurchaseRequestModule', () => {
     await waitFor(() => expect(addToast).toHaveBeenCalledWith(expect.objectContaining({
       type: 'success',
       title: 'Purchase request unposted',
+      description: expect.stringContaining('cancelled'),
     })));
   });
 

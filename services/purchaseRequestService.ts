@@ -71,6 +71,7 @@ const requestApi = async (url: string, init?: RequestInit): Promise<any> => {
 /** Documents that were unposted alongside a purchase request. */
 export interface UnpostCascadeSummary {
   purchaseOrders: string[];
+  cancelledPurchaseOrders: string[];
   receivingReports: string[];
 }
 
@@ -265,6 +266,7 @@ export const purchaseRequestService = {
       Array.isArray(value) ? value.map(entry => String(entry).trim()).filter(Boolean) : [];
     return {
       purchaseOrders: toNumbers(data?.cascade?.purchase_orders),
+      cancelledPurchaseOrders: toNumbers(data?.cascade?.cancelled_purchase_orders),
       receivingReports: toNumbers(data?.cascade?.receiving_reports),
     };
   },
