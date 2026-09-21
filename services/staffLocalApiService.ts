@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { UserProfile } from '../types';
-import { getLocalAuthSession } from './localAuthService';
+import { getLocalAuthToken } from './localAuthService';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
@@ -84,8 +84,11 @@ const parseApiErrorMessage = async (response: Response): Promise<string> => {
 
 const requestJson = async (url: string, init?: RequestInit): Promise<any> => {
     const headers = new Headers(init?.headers);
-    const token = getLocalAuthSession()?.token;
-    if (token) headers.set('Authorization', `Bearer ${token}`);
+    const token = getLocalAuthToken();
+    if (!token) {
+        throw new Error('Bearer token is required');
+    }
+    headers.set('Authorization', `Bearer ${token}`);
     const response = await fetch(url, { ...init, headers });
     if (!response.ok) {
         throw new Error(await parseApiErrorMessage(response));

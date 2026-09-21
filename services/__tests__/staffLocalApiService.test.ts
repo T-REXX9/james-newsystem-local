@@ -27,6 +27,11 @@ describe('staffLocalApiService authentication', () => {
     expect(headers.get('Authorization')).toBe('Bearer test-bearer-token');
   });
 
+  it('rejects staff listing when no bearer token is available', async () => {
+    window.localStorage.clear();
+    await expect(fetchStaff('', 1, 100)).rejects.toThrow('Bearer token is required');
+  });
+
   it('sends the bearer token for the system access staff listing', async () => {
     window.localStorage.setItem('local_api_auth_session', JSON.stringify({
       token: 'access-page-token',
