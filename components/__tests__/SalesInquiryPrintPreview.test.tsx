@@ -94,6 +94,33 @@ describe('SalesInquiryPrintPreview', () => {
     expect(screen.getByText('P29,800.00 MORE NEEDED THIS MONTH')).toBeInTheDocument();
   });
 
+  it('maps non-Ishinomoto product brands to OTHERS in the Brand column', () => {
+    render(
+      <SalesInquiryPrintPreview
+        inquiry={{
+          ...inquiry,
+          items: [
+            {
+              ...inquiry.items[0],
+              brand: 'ITALY A',
+            },
+          ],
+        }}
+        customer={{
+          id: 'c-1',
+          company: 'Acme Corp',
+          address: '123 Main St',
+        } as Contact}
+        inquiryNumberLabel="INQ26-99"
+        preparedBy="Jane Doe"
+        onClose={() => undefined}
+      />
+    );
+
+    expect(screen.getByText('OTHERS')).toBeInTheDocument();
+    expect(screen.queryByText('ITALY A')).not.toBeInTheDocument();
+  });
+
   it('uses currentMonthSales for VIP qualification when provided', () => {
     render(
       <SalesInquiryPrintPreview

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Printer, XCircle } from 'lucide-react';
+import { formatSalesInquiryBrand } from '../constants/salesInquiryBrand';
 import { Contact, SalesInquiry, VipTierConfig } from '../types';
 import { persistedVipDiscount } from '../utils/vipDocumentDiscount';
 import { DEFAULT_VIP_TIER_CONFIG, normalizeVipTierConfig } from '../utils/vipTierConfig';
@@ -472,7 +473,7 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
                     <td>{index + 1}</td>
                     <td>{item.qty}</td>
                     <td>{item.item_code || '-'}</td>
-                    <td>{item.brand || '-'}</td>
+                    <td>{formatSalesInquiryBrand(item.brand) || '-'}</td>
                     <td>{item.part_no || '-'}</td>
                     <td>{item.description || '-'}</td>
                     <td className="price">{formatMoney(Number(item.unit_price || 0))}</td>
