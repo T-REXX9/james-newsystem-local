@@ -743,7 +743,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
 
   return (
     <div
-      className="h-full min-h-0 overflow-y-auto overflow-x-hidden"
+      className="h-full min-h-0 overflow-auto"
       data-testid="master-list-scroll-region"
       onScroll={handleMasterListScroll}
     >
@@ -984,7 +984,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
               </div>
             </div>
             <div
-              className="min-h-0 flex-1 overflow-auto"
+              className="min-h-0 flex-1"
               data-testid="daily-call-table-scroll"
               onScroll={handleTableScroll}
             >

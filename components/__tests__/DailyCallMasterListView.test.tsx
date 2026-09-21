@@ -68,6 +68,27 @@ describe('DailyCallMasterListView', () => {
     });
   });
 
+  it('keeps the column header in the master list scroll region', async () => {
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: '2026-09-10', count: 1 },
+      items: [{
+        id: 'sticky-header-1', shopName: 'Sticky Header Shop', province: 'Manila', city: 'Manila',
+        contactNumber: '0917', assignedTo: 'Joan Jerusalem', lastPurchaseDate: 'Sep 1, 2026',
+        lastPurchaseDateRaw: '2026-09-01', purchaseCount: 1, totalSales: 0, currentMonthSales: 0,
+        averageMonthlySales: 0, averageMonthlySalesMonthCount: 0, recentThreeMonthSales: 0,
+        previousThreeMonthSales: 0, salesTrendPercent: 0, daysSinceLastPurchase: 10,
+        monthsSinceLastPurchase: 0, purchaseAgeGroup: 'recent', listCategory: 'priority',
+      }],
+    });
+
+    render(<DailyCallMasterListView currentUser={masterUser} />);
+
+    const scrollRegion = await screen.findByTestId('master-list-scroll-region');
+    expect(scrollRegion).toHaveClass('overflow-auto');
+    expect(screen.getByText('Customer / Mobile').closest('thead')).toHaveClass('sticky', 'top-0');
+    expect(screen.getByTestId('daily-call-table-scroll')).not.toHaveClass('overflow-auto');
+  });
+
   it('shows a prospect comment in the unverified prospects list', async () => {
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
       meta: { fromDate: '2025-10-01', toDate: '2026-09-10', count: 1 },
@@ -334,7 +355,8 @@ describe('DailyCallMasterListView', () => {
     expect(screen.getAllByText(/Unverified Prospects/i).length).toBeGreaterThan(0);
     expect(screen.getByText('Verified By')).toBeInTheDocument();
     const tableScroll = screen.getByTestId('daily-call-table-scroll');
-    expect(tableScroll).toHaveClass('overflow-auto');
+    expect(screen.getByTestId('master-list-scroll-region')).toHaveClass('overflow-auto');
+    expect(tableScroll).not.toHaveClass('overflow-auto');
     expect(tableScroll.querySelector('table')).toHaveClass('min-w-[1650px]', 'table-fixed');
     const tableHeader = tableScroll.querySelector('thead');
     expect(tableHeader).toHaveClass('sticky', 'top-0');
