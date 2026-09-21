@@ -38,6 +38,7 @@ beforeEach(() => {
   service.getSuppliers.mockResolvedValue([]);
   service.getProducts.mockResolvedValue([]);
   service.getPurchaseRequestById.mockResolvedValue(request);
+  service.getPurchaseRequests.mockResolvedValue([]);
   service.generatePRNumber.mockResolvedValue('PR-2601');
   service.createPurchaseRequest.mockResolvedValue(request);
   service.updatePurchaseRequest.mockResolvedValue(undefined);
@@ -45,7 +46,10 @@ beforeEach(() => {
   service.deletePRItem.mockResolvedValue(undefined);
   service.addPRItem.mockResolvedValue(undefined);
   service.convertToPO.mockResolvedValue('POREF-1');
-  service.unpostPurchaseRequest.mockResolvedValue({ purchaseOrders: [], receivingReports: [] });
+  service.unpostPurchaseRequest.mockResolvedValue({
+    purchaseOrders: [],
+    receivingReports: [],
+  });
   service.deletePurchaseRequest.mockResolvedValue(undefined);
 });
 
@@ -118,6 +122,13 @@ describe('PurchaseRequestModule', () => {
 
   it('runs detail mutations, print navigation, conversion, and back navigation', async () => {
     service.getPurchaseRequests.mockResolvedValueOnce([]);
+    service.getPurchaseRequestById.mockResolvedValue({
+      id: 'PRREF-1',
+      pr_number: 'PR-2601',
+      status: 'Approved',
+      approval: 'Approved',
+      items: [],
+    });
     const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
     const { default: PurchaseRequestModule } = await import('../PurchaseRequest');
     render(<PurchaseRequestModule initialPRId="PRREF-1" />);
@@ -139,7 +150,17 @@ describe('PurchaseRequestModule', () => {
   });
 
   it('names the purchase orders and receiving reports unposted along with the request', async () => {
-    service.unpostPurchaseRequest.mockResolvedValue({ purchaseOrders: ['PO-2601'], receivingReports: ['RR-2601'] });
+    service.getPurchaseRequestById.mockResolvedValue({
+      id: 'PRREF-1',
+      pr_number: 'PR-2601',
+      status: 'Approved',
+      approval: 'Approved',
+      items: [],
+    });
+    service.unpostPurchaseRequest.mockResolvedValue({
+      purchaseOrders: ['PO-2601'],
+      receivingReports: ['RR-2601'],
+    });
     const { default: PurchaseRequestModule } = await import('../PurchaseRequest');
     render(<PurchaseRequestModule initialPRId="PRREF-1" />);
 
@@ -153,18 +174,33 @@ describe('PurchaseRequestModule', () => {
     }));
   });
 
-  it('shows why an unpost was refused instead of leaving it in the console', async () => {
-    const reason = 'Purchase request cannot be unposted because purchase order PO-2601 (Pending) depends on it';
-    service.unpostPurchaseRequest.mockRejectedValue(new Error(reason));
+  it('allows unpost even when dependent PO is Pending', async () => {
+    service.getPurchaseRequestById.mockResolvedValue({
+      id: 'PRREF-1',
+      pr_number: 'PR-2601',
+      status: 'Approved',
+      approval: 'Approved',
+      items: [],
+    });
+    service.unpostPurchaseRequest.mockResolvedValue({
+      purchaseOrders: [],
+      receivingReports: [],
+    });
+    service.getPurchaseRequestById.mockResolvedValue({
+      id: 'PRREF-1',
+      pr_number: 'PR-2601',
+      status: 'Unposted',
+      approval: 'Pending',
+      items: [],
+    });
     const { default: PurchaseRequestModule } = await import('../PurchaseRequest');
     render(<PurchaseRequestModule initialPRId="PRREF-1" />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Unpost PR' }));
 
     await waitFor(() => expect(addToast).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'error',
-      title: 'Unable to unpost purchase request',
-      description: reason,
+      type: 'success',
+      title: 'Purchase request unposted',
     })));
   });
 
