@@ -588,6 +588,43 @@ export const fetchSimilarCustomerNames = async (
   return Array.isArray(payload?.data?.items) ? payload.data.items : [];
 };
 
+/**
+ * Daily Call Monitoring is the source of truth for buyer activity. Its Recovery
+ * List is the inactive population in Customer Data: activity exists, but only
+ * before the Priority cutoff. Keep Blacklisted visible as such; Daily Call
+ * places those buyers in its separate blocked bucket.
+ */
+const applyDailyCallRecoveryStatusToContacts = async (
+  contacts: Contact[],
+  options?: { forceRefresh?: boolean },
+): Promise<void> => {
+  if (!contacts.length) return;
+
+  try {
+    const masterList = await fetchDailyCallMasterList({
+      forceRefresh: Boolean(options?.forceRefresh),
+    });
+    const recoveryCustomerIds = new Set(
+      masterList.items
+        .filter((customer) => customer.listCategory === 'recovery')
+        .map((customer) => String(customer.id || '').trim())
+        .filter(Boolean),
+    );
+    contacts.forEach((contact) => {
+      if (
+        recoveryCustomerIds.has(String(contact.id || '').trim())
+        && contact.status !== CustomerStatus.BLACKLISTED
+      ) {
+        contact.status = CustomerStatus.INACTIVE;
+      }
+    });
+  } catch (error) {
+    // Callers remain usable if the Daily Call master-list endpoint is
+    // temporarily unavailable; the next refresh will reapply its category.
+    console.error('Error fetching Daily Call customer classifications:', error);
+  }
+};
+
 export const fetchContacts = async (): Promise<Contact[]> => {
   try {
     const perPage = 500;
@@ -631,35 +668,9 @@ export const fetchContacts = async (): Promise<Contact[]> => {
 
     const contacts = [...dedupedById.values(), ...contactsWithoutId];
 
-    // Daily Call Monitoring is the source of truth for buyer activity. Its
-    // Recovery List is the inactive population in Customer Data: activity
-    // exists, but only before the Priority cutoff. Keep Blacklisted visible as
-    // such; Daily Call places those buyers in its separate blocked bucket.
-    try {
-      // Daily Call results are scoped to the signed-in viewer, whereas this
-      // page displays the full Customer Data list. Never reuse a result cached
-      // under a previous viewer, or their omitted recovery customers retain
-      // the stored Active standing here.
-      const masterList = await fetchDailyCallMasterList({ forceRefresh: true });
-      const recoveryCustomerIds = new Set(
-        masterList.items
-          .filter((customer) => customer.listCategory === 'recovery')
-          .map((customer) => String(customer.id || '').trim())
-          .filter(Boolean),
-      );
-      contacts.forEach((contact) => {
-        if (
-          recoveryCustomerIds.has(String(contact.id || '').trim())
-          && contact.status !== CustomerStatus.BLACKLISTED
-        ) {
-          contact.status = CustomerStatus.INACTIVE;
-        }
-      });
-    } catch (error) {
-      // Customer Data remains usable if the Daily Call master-list endpoint is
-      // temporarily unavailable; the next refresh will reapply its category.
-      console.error('Error fetching Daily Call customer classifications:', error);
-    }
+    // Force-refresh so a prior viewer’s cached master list cannot leave recovery
+    // buyers incorrectly standing as Active on this page.
+    await applyDailyCallRecoveryStatusToContacts(contacts, { forceRefresh: true });
 
     return contacts.sort((a, b) =>
       (a.company || '').localeCompare(b.company || ''),
@@ -791,7 +802,11 @@ export const fetchContactById = async (id: string): Promise<Contact | null> => {
       `${API_BASE_URL}/customer-database/${encodeURIComponent(String(id))}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`
     );
     if (!payload?.data) return null;
-    return mapApiCustomerToContact(payload.data);
+    const contact = mapApiCustomerToContact(payload.data);
+    // Match list status: recovery buyers must stay Inactive in detail views too,
+    // or the Customer Data panel badge (and any onUpdate sync) flickers Active.
+    await applyDailyCallRecoveryStatusToContacts([contact]);
+    return contact;
   } catch (err) {
     console.error('Error fetching customer detail via local API:', err);
     return null;

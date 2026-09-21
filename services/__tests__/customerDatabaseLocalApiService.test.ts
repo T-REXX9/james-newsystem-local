@@ -1,7 +1,7 @@
 import { CustomerStatus } from '../../types';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchDailyCallMasterList, invalidateDailyCallMasterListCache } from '../dailyCallMonitoringService';
-import { bulkUpdateContacts, deleteCustomer, fetchContactForDailyCall, fetchContacts, mapApiCustomerToContact, mapContactPayloadToApi, mapContactUpdatesToApi, updateContact } from '../customerDatabaseLocalApiService';
+import { bulkUpdateContacts, deleteCustomer, fetchContactById, fetchContactForDailyCall, fetchContacts, mapApiCustomerToContact, mapContactPayloadToApi, mapContactUpdatesToApi, updateContact } from '../customerDatabaseLocalApiService';
 
 const reloadStanding = (patch: Record<string, unknown>) =>
   mapApiCustomerToContact({
@@ -107,6 +107,35 @@ describe('customer database saves and daily call cache', () => {
 
     expect(contacts).toHaveLength(1);
     expect(contacts[0].status).toBe(CustomerStatus.INACTIVE);
+  });
+
+  it('marks a Daily Call recovery buyer Inactive when loading customer detail', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: { session_id: 'adtech-1', company: 'AdTech Engineering', status: 1 },
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: {
+            items: [{
+              id: 'adtech-1',
+              list_category: 'recovery',
+              last_purchase_date_raw: '2025-09-30',
+              priority_transaction_count: 0,
+              ledger_transaction_count: 1,
+            }],
+            meta: { from_date: '2025-10-01', count: 1 },
+          },
+        }),
+      } as Response);
+
+    const contact = await fetchContactById('adtech-1');
+
+    expect(contact?.status).toBe(CustomerStatus.INACTIVE);
   });
 
   it('refreshes the viewer-scoped Daily Call classification before applying it to Customer Data', async () => {

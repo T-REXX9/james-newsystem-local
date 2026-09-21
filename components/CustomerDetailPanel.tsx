@@ -124,7 +124,19 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                     fetchSalesAgents()
                 ]);
                 if (detail) {
-                    setContact((previous) => ({ ...(previous || {}), ...detail } as Contact));
+                    setContact((previous) => {
+                        const merged = { ...(previous || {}), ...detail } as Contact;
+                        // List marks Daily Call recovery buyers Inactive. Detail can
+                        // briefly return raw Active if classification is unavailable;
+                        // never flash Active over a list Inactive standing.
+                        if (
+                            previous?.status === CustomerStatus.INACTIVE
+                            && merged.status === CustomerStatus.ACTIVE
+                        ) {
+                            merged.status = CustomerStatus.INACTIVE;
+                        }
+                        return merged;
+                    });
                     setSelectedSalesAgent(detail.assignedAgentId || '');
                     // Don't call onUpdate here - only update parent when user makes explicit changes
                     // This prevents status flickering due to API data inconsistencies
