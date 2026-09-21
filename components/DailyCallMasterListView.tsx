@@ -849,13 +849,17 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 <p className="text-xs">Customers</p>
               </div>
               <div className="space-y-2 text-right text-xs">
+                <div>
+                  <p>Current Month Sales</p>
+                  <p className={`text-base font-bold ${category.accent}`}>{compactPeso.format(category.currentSales)}</p>
+                </div>
                 {category.id === 'priority' && (
                   <div>
-                    <p>Current Month Sales</p>
-                    <p className={`text-base font-bold ${category.accent}`}>{compactPeso.format(category.currentSales)}</p>
+                    <p>Monthly Sales Potential</p>
+                    <p className={`text-base font-bold ${category.accent}`}>{compactPeso.format(category.potentialSales)}</p>
                   </div>
                 )}
-                {(category.id === 'priority' || category.id === 'recovery') && (
+                {category.id === 'recovery' && (
                   <div>
                     <p>Monthly Sales Potential</p>
                     <p className={`text-base font-bold ${category.accent}`}>{compactPeso.format(category.potentialSales)}</p>

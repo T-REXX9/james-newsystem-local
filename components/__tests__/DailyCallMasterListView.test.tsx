@@ -1000,16 +1000,16 @@ describe('DailyCallMasterListView', () => {
     expect(within(priorityCard).getByText('Monthly Sales Potential')).toBeInTheDocument();
 
     const recoveryCard = within(summaries).getByRole('heading', { name: /Recovery List/i }).closest('article') as HTMLElement;
-    expect(within(recoveryCard).queryByText('Current Month Sales')).not.toBeInTheDocument();
+    expect(within(recoveryCard).getByText('Current Month Sales')).toBeInTheDocument();
     expect(within(recoveryCard).getByText('Monthly Sales Potential')).toBeInTheDocument();
 
     const verifiedCard = within(summaries).getByRole('heading', { name: /^Verified Prospects/i }).closest('article') as HTMLElement;
     expect(within(verifiedCard).getByText('Monthly Potential Sales')).toBeInTheDocument();
-    expect(within(verifiedCard).queryByText('Current Month Sales')).not.toBeInTheDocument();
+    expect(within(verifiedCard).getByText('Current Month Sales')).toBeInTheDocument();
 
     const blockedCard = within(summaries).getByRole('heading', { name: /blacklisted\/rejected -do not contact/i }).closest('article') as HTMLElement;
     expect(within(blockedCard).getByText('Monthly Potential Sales')).toBeInTheDocument();
-    expect(within(blockedCard).queryByText('Current Month Sales')).not.toBeInTheDocument();
+    expect(within(blockedCard).getByText('Current Month Sales')).toBeInTheDocument();
   });
 
   it('moves Verified Prospects with purchase history out of the verified list into Recovery or Priority', async () => {
