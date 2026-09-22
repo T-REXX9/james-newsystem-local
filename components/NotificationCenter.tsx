@@ -63,6 +63,15 @@ const NotificationCenter: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NotificationCategory>('notification');
   const dropdownRef = useRef<HTMLDivElement>(null);
   const lastNotificationClick = useRef<{ id: string; at: number } | null>(null);
+  const lastOpenedNotification = useRef<{ id: string; at: number } | null>(null);
+  const pendingReadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearPendingRead = () => {
+    if (pendingReadTimer.current) {
+      clearTimeout(pendingReadTimer.current);
+      pendingReadTimer.current = null;
+    }
+  };
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -77,6 +86,8 @@ const NotificationCenter: React.FC = () => {
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [isOpen]);
+
+  useEffect(() => () => clearPendingRead(), []);
 
   const getTypeIcon = (type: Notification['type']) => {
     switch (type) {
@@ -126,22 +137,34 @@ const NotificationCenter: React.FC = () => {
   const handleNotificationPointerClick = (notification: Notification) => {
     const now = Date.now();
     const last = lastNotificationClick.current;
-    if (last?.id === notification.id && now - last.at < 500) {
+    if (last?.id === notification.id && now - last.at < 650) {
+      clearPendingRead();
       lastNotificationClick.current = null;
       handleNotificationOpen(notification);
       return;
     }
+
+    clearPendingRead();
     lastNotificationClick.current = { id: notification.id, at: now };
-    void handleNotificationRead(notification);
+    pendingReadTimer.current = setTimeout(() => {
+      pendingReadTimer.current = null;
+      lastNotificationClick.current = null;
+      void handleNotificationRead(notification);
+    }, 650);
   };
 
   const handleNotificationOpen = (notification: Notification) => {
+    const now = Date.now();
+    const lastOpened = lastOpenedNotification.current;
+    if (lastOpened?.id === notification.id && now - lastOpened.at < 250) return;
+    lastOpenedNotification.current = { id: notification.id, at: now };
+    clearPendingRead();
     const metadata = notification.metadata || {};
     const entityType = String(metadata.entity_type || '');
     const contactId = String(metadata.contact_id || '');
     const tabId = String(notification.action_url || metadata.action_url || '').replace(/^\/+/, '').split(/[?#]/)[0].trim();
     const isConversation = ['call_report', 'call_report_reply', 'prospect_customer_comment', 'prospect'].includes(entityType) && Boolean(contactId || metadata.entity_id);
-    const targetTab = isConversation ? 'maintenance-customer-customer-data' : tabId;
+    const targetTab = isConversation ? 'sales-database-customer-database' : tabId;
     if (!targetTab) return;
 
     const recordId = String(metadata.entity_id || '');

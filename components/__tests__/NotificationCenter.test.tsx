@@ -210,7 +210,9 @@ describe('NotificationCenter', () => {
     await user.click(screen.getByTitle('Notifications'));
     await user.click(screen.getByText('Direct notification'));
 
-    expect(markAsReadMock).toHaveBeenCalledWith('notif-direct');
+    await waitFor(() => {
+      expect(markAsReadMock).toHaveBeenCalledWith('notif-direct');
+    });
     expect(markNotificationsAsReadByEntityKeyMock).not.toHaveBeenCalled();
 
     const bellButton = screen.getByTitle('Notifications');
@@ -255,12 +257,11 @@ describe('NotificationCenter', () => {
     const user = userEvent.setup();
     renderNotificationCenter();
     await user.click(screen.getByTitle('Notifications'));
-    await user.click(screen.getByText('New Agent Sales Report message'));
     await user.dblClick(screen.getByText('New Agent Sales Report message'));
 
     expect(navigationHandler).toHaveBeenCalledWith(expect.objectContaining({
       detail: {
-        tab: 'maintenance-customer-customer-data',
+        tab: 'sales-database-customer-database',
         payload: { contactId: 'customer-42', conversationType: 'agent_sales_report', activityRef: 'message-1' },
       },
     }));
@@ -297,12 +298,11 @@ describe('NotificationCenter', () => {
     const user = userEvent.setup();
     renderNotificationCenter();
     await user.click(screen.getByTitle('Notifications'));
-    await user.click(screen.getByText('New prospective customer comment'));
     await user.dblClick(screen.getByText('New prospective customer comment'));
 
     expect(navigationHandler).toHaveBeenCalledWith(expect.objectContaining({
       detail: {
-        tab: 'maintenance-customer-customer-data',
+        tab: 'sales-database-customer-database',
         payload: { contactId: 'prospect-42', conversationType: 'agent_sales_report', activityRef: 'prospect-42' },
       },
     }));

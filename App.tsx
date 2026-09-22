@@ -624,6 +624,8 @@ const App: React.FC = () => {
                 context.customerId
               }
               initialApprovalRequestId={context.approvalRequestId}
+              initialConversationType={context.conversationType}
+              initialActivityRef={context.activityRef}
             />
           </div>
         );
