@@ -27,9 +27,10 @@ describe('staffLocalApiService authentication', () => {
     expect(headers.get('Authorization')).toBe('Bearer test-bearer-token');
   });
 
-  it('rejects staff listing when no bearer token is available', async () => {
+  it('clears the session silently when no bearer token is available', async () => {
     window.localStorage.clear();
-    await expect(fetchStaff('', 1, 100)).rejects.toThrow('Bearer token is required');
+    const { AuthSessionEndedError } = await import('../localApiAuth');
+    await expect(fetchStaff('', 1, 100)).rejects.toBeInstanceOf(AuthSessionEndedError);
   });
 
   it('sends the bearer token for the system access staff listing', async () => {

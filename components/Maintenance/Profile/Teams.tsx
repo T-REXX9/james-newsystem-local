@@ -11,6 +11,7 @@ import {
 } from '../../../services/teamLocalApiService';
 import { canPerformAction } from '../../../utils/actionPermissions';
 
+import { shouldSuppressAuthError } from '../../../services/localApiAuth';
 const TeamForm: React.FC<{
     initialData?: TeamRecord | null;
     onClose: () => void;
@@ -44,6 +45,7 @@ const TeamForm: React.FC<{
             });
             onSuccess();
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error saving team:', error);
             addToast({
                 type: 'error',
@@ -106,6 +108,7 @@ export default function Teams() {
             const result = await fetchTeams(debouncedSearch);
             setData(result.items || []);
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error fetching teams:', error);
             addToast({
                 type: 'error',
@@ -136,6 +139,7 @@ export default function Teams() {
             });
             loadData();
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error deleting team:', error);
             addToast({
                 type: 'error',

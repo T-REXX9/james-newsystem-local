@@ -11,6 +11,7 @@ import {
 } from '../../../services/categoryLocalApiService';
 import { canPerformAction } from '../../../utils/actionPermissions';
 
+import { shouldSuppressAuthError } from '../../../services/localApiAuth';
 const CategoryForm: React.FC<{
     initialData?: CategoryRecord | null;
     onClose: () => void;
@@ -46,6 +47,7 @@ const CategoryForm: React.FC<{
             });
             onSuccess();
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error saving category:', error);
             addToast({
                 type: 'error',
@@ -109,6 +111,7 @@ export default function Categories() {
             const result = await fetchCategories(debouncedSearch);
             setData(result.items || []);
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error fetching categories:', error);
             addToast({
                 type: 'error',
@@ -139,6 +142,7 @@ export default function Categories() {
             });
             loadData();
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error deleting category:', error);
             addToast({
                 type: 'error',

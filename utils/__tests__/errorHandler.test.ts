@@ -15,7 +15,13 @@ describe('errorHandler', () => {
 
   it('builds error toast payload', () => {
     const toast = buildErrorToast({ message: 'oops' }, 'contact');
-    expect(toast.type).toBe('error');
-    expect(toast.description).toContain('oops');
+    expect(toast).not.toBeNull();
+    expect(toast!.type).toBe('error');
+    expect(toast!.description).toContain('oops');
+  });
+
+  it('skips toast payload for auth session ended errors', () => {
+    const toast = buildErrorToast({ name: 'AuthSessionEndedError', message: 'Token expired', isAuthSessionEnded: true }, 'contact');
+    expect(toast).toBeNull();
   });
 });

@@ -9,6 +9,7 @@ import PurchaseRequestPrint from './PurchaseRequestPrint';
 import { useToast } from '../ToastProvider';
 import { retraceWorkflowHistory } from '../../utils/workflowHistory';
 
+import { shouldSuppressAuthError } from '../../services/localApiAuth';
 interface PurchaseRequestModuleProps {
   initialPRId?: string;
 }
@@ -126,6 +127,7 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
       setNextPRNumber(prNum);
       setViewMode('create');
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       const message = error instanceof Error ? error.message : 'Unable to generate a Purchase Request number.';
       addToast({ type: 'error', title: 'Unable to generate PR number', description: message });
     }
@@ -148,6 +150,7 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
       setSelectedRequest(fullPR);
       setViewMode('detail');
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       console.error('Failed to load purchase request detail', error);
       setSelectedRequest(request);
       setViewMode('detail');
@@ -163,6 +166,7 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
       setSelectedRequest(updated);
       await fetchRequests();
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       const message = error instanceof Error ? error.message : 'Unknown error';
       addToast({ type: 'error', title: 'Unable to update purchase request', description: message });
       throw error;
@@ -174,6 +178,7 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
       await purchaseRequestService.updatePRItem(itemId, updates);
       if (selectedRequest) setSelectedRequest(await purchaseRequestService.getPurchaseRequestById(selectedRequest.id));
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       const message = error instanceof Error ? error.message : 'Unknown error';
       addToast({ type: 'error', title: 'Unable to update purchase request item', description: message });
       throw error;
@@ -185,6 +190,7 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
       await purchaseRequestService.deletePRItem(itemId);
       if (selectedRequest) setSelectedRequest(await purchaseRequestService.getPurchaseRequestById(selectedRequest.id));
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       const message = error instanceof Error ? error.message : 'Unknown error';
       addToast({ type: 'error', title: 'Unable to delete purchase request item', description: message });
       throw error;
@@ -203,6 +209,7 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
         description: describeUnpostCascade(cascade),
       });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       const message = error instanceof Error ? error.message : 'Unknown error';
       addToast({ type: 'error', title: 'Unable to unpost purchase request', description: message });
       throw error;
@@ -218,6 +225,7 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
       await fetchRequests();
       addToast({ type: 'success', title: 'Purchase request deleted' });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       const message = error instanceof Error ? error.message : 'Unknown error';
       addToast({ type: 'error', title: 'Unable to delete purchase request', description: message });
       throw error;
@@ -230,6 +238,7 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
       await purchaseRequestService.addPRItem(selectedRequest.id, item);
       setSelectedRequest(await purchaseRequestService.getPurchaseRequestById(selectedRequest.id));
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       const message = error instanceof Error ? error.message : 'Unknown error';
       addToast({ type: 'error', title: 'Unable to add purchase request item', description: message });
       throw error;
@@ -243,6 +252,7 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
       const poId = await purchaseRequestService.convertToPO([selectedRequest.id], '', { itemIds: selectedItemIds });
       window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab: 'warehouse-purchasing-purchase-order', payload: { poId } } }));
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       const message = error instanceof Error ? error.message : 'Unknown error';
       addToast({ type: 'error', title: 'Unable to generate purchase order', description: message });
       throw error;

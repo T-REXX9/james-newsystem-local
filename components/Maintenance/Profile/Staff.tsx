@@ -18,6 +18,7 @@ import { fetchAccessGroups } from '../../../services/accessGroupApiService';
 import HighLevelDeleteModal from '../../HighLevelDeleteModal';
 import { getLocalAuthSession } from '../../../services/localAuthService';
 
+import { shouldSuppressAuthError } from '../../../services/localApiAuth';
 interface StaffFormProps {
     initialData?: StaffRecord | null;
     onClose: () => void;
@@ -108,6 +109,7 @@ const StaffForm: React.FC<StaffFormProps> = ({ initialData, onClose, onSuccess }
             });
             onSuccess();
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error saving profile:', error);
             addToast({
                 type: 'error',
@@ -250,6 +252,7 @@ export default function Staff() {
             const result = await fetchStaff(debouncedSearch);
             setData(result.items || []);
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error fetching staff:', error);
             addToast({
                 type: 'error',
@@ -279,6 +282,7 @@ export default function Staff() {
             setDeactivateTarget(null);
             loadData();
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error deactivating staff:', error);
             addToast({
                 type: 'error',
@@ -313,6 +317,7 @@ export default function Staff() {
             addToast({ type: 'success', title: 'Password changed', description: `${passwordTarget.full_name}'s sessions and registered phones were signed out.`, durationMs: 5000 });
             closePasswordModal();
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             addToast({ type: 'error', title: 'Unable to change password', description: error instanceof Error ? error.message : 'An unexpected error occurred.', durationMs: 6000 });
         } finally {
             setPasswordLoading(false);

@@ -24,6 +24,7 @@ import { buildModuleRecordUrl } from '../utils/workflowNavigate';
 import { canPerformAction } from '../utils/actionPermissions';
 import { formatDate } from '../utils/formatUtils';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 const isMasterUser = (user?: UserProfile | null) => {
   const role = String(user?.role || '').trim().toLowerCase();
   return String(user?.user_type || '') === '1' || ['owner', 'company owner', 'master user', 'main'].includes(role);
@@ -131,6 +132,7 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, supplierChoiceById, 
       if (openAfterSave && targetPrId) navigateToPR(targetPrId);
       onSaved({ id: targetPrId, number: targetPrNumber });
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       addToast({
         type: 'error',
         title: 'Failed to add items',
@@ -431,6 +433,7 @@ const ReorderReport: React.FC<ReorderReportProps> = ({ currentUser = null }) => 
       if (!append) setGeneratedAt(new Date());
       if (!append && !options.preserveSelection) setSelectedIds(new Set());
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       addToast({
         type: 'error',
         title: 'Unable to load reorder report',
@@ -490,6 +493,7 @@ const ReorderReport: React.FC<ReorderReportProps> = ({ currentUser = null }) => 
       setGeneratedAt(new Date());
       setLoadMoreFailed(false);
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       if (!options.background) {
         addToast({
           type: 'error',
@@ -595,6 +599,7 @@ const ReorderReport: React.FC<ReorderReportProps> = ({ currentUser = null }) => 
       setPrintRows(Array.from(unique.values()));
       window.setTimeout(() => window.print(), 100);
     } catch (error: any) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({
         type: 'error',
         title: 'Unable to prepare report for printing',
@@ -660,6 +665,7 @@ const ReorderReport: React.FC<ReorderReportProps> = ({ currentUser = null }) => 
       setPage(first.meta.total_pages);
       setMeta({ ...first.meta, page: first.meta.total_pages });
     } catch (error: any) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({
         type: 'error',
         title: 'Unable to select all items',
@@ -698,6 +704,7 @@ const ReorderReport: React.FC<ReorderReportProps> = ({ currentUser = null }) => 
       });
       await loadReport(1, appliedSearch);
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       addToast({
         type: 'error',
         title: 'Failed to hide items',

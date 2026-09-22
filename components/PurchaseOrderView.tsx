@@ -31,6 +31,7 @@ import {
   validateDocumentDateWrite,
 } from '../utils/backdatedPosting';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 // Inline StatusBadge if generic one is not suitable for POs, but I'll use simple spans for now to be safe, or try to use the imported one if generic.
 // I'll stick to my own badge logic or reuse if I knew it works. I'll use my own for safety.
 
@@ -232,6 +233,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
         setSelectedPO(null);
       }
     } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
       console.error('Failed to load purchase orders', err);
       setOrders([]);
       if (!initialPOId && !initialPORefNo) setSelectedPO(null);
@@ -251,6 +253,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
       const data = await purchaseOrderService.getSuppliers();
       setSuppliers(data || []);
     } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
       console.error('Failed to load suppliers', err);
       addToast({
         type: 'error',
@@ -433,6 +436,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
         return next;
       });
     } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
       console.error('Failed to load PR details', err);
       addToast({
         type: 'error',
@@ -619,6 +623,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
         try {
           await purchaseOrderService.updatePurchaseOrder(selectedPO.id, { status: newStatus });
         } catch (error: any) {
+      if (shouldSuppressAuthError(error)) return;
           addToast({
             type: 'error',
             title: `Unable to ${wording.verb} purchase order`,
@@ -661,6 +666,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
       await fetchOrders();
       addToast({ type: 'success', title: 'Purchase order date updated', description: `${selectedPO.po_number} is now dated ${editOrderDate}.` });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({ type: 'error', title: 'Unable to update purchase order date', description: error instanceof Error ? error.message : 'Please try again.' });
     }
   };
@@ -679,6 +685,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
           await fetchOrders();
           addToast({ type: 'success', title: 'Purchase order unposted', description: `${selectedPO.po_number} is pending again.` });
         } catch (error: any) {
+      if (shouldSuppressAuthError(error)) return;
           addToast({ type: 'error', title: 'Unable to unpost purchase order', description: error.message });
           throw error;
         }
@@ -697,6 +704,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
         try {
           await purchaseOrderService.deletePurchaseOrder(selectedPO.id, reason);
         } catch (error: any) {
+      if (shouldSuppressAuthError(error)) return;
           addToast({ type: 'error', title: 'Unable to delete purchase order', description: error.message });
           throw error;
         }
@@ -727,6 +735,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
       setNewItemQty(1);
       setNewItemEta('');
     } catch (error: any) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({ type: 'error', title: 'Unable to add item', description: error.message });
     }
   };
@@ -742,6 +751,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
         try {
           await purchaseOrderService.deletePurchaseOrderItem(itemId);
         } catch (error: any) {
+      if (shouldSuppressAuthError(error)) return;
           addToast({ type: 'error', title: 'Unable to remove item', description: error.message });
           throw error;
         }
@@ -788,6 +798,7 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
       cancelEditItem();
       addToast({ type: 'success', title: 'Purchase-order item updated', durationMs: 3000 });
     } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
       addToast({
         type: 'error',
         title: 'Unable to update purchase-order item',

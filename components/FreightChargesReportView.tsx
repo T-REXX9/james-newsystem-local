@@ -8,6 +8,7 @@ import {
 import { BUTTON_BASE, BUTTON_PRIMARY } from '../utils/uiConstants';
 import { formatDate as formatPhilippineDate } from '../utils/formatUtils';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
 const dateTypeOptions: Array<{ value: FreightChargesReportDateType; label: string }> = [
@@ -57,6 +58,7 @@ const FreightChargesReportView: React.FC = () => {
       });
       setReport(payload);
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setReport(null);
       setError(err?.message || 'Failed to load freight charges report');
     } finally {

@@ -41,9 +41,8 @@ const verifyToken = (token) => {
   }
 
   const exp = Number(payload.exp || 0);
-  if (exp <= 0 || exp < Math.floor(Date.now() / 1000)) {
-    throw new Error('Token expired');
-  }
+  // Sessions do not auto-expire. Logout is explicit only.
+  void exp;
 
   return payload;
 };

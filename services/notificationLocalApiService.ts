@@ -7,6 +7,7 @@ import {
 } from '../types';
 import { getLocalAuthSession } from './localAuthService';
 
+import { isAuthSessionEndedError, parseApiErrorMessage } from './localApiAuth';
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const PROFILES_CACHE_TTL_MS = 60 * 1000;
 const DEFAULT_NOTIFICATION_MAX_AGE_DAYS = 10;
@@ -57,18 +58,6 @@ export interface NotificationApiAvailability {
   retryAt: number | null;
   lastFailureAt: number | null;
 }
-
-const parseApiErrorMessage = async (response: Response): Promise<string> => {
-  try {
-    const payload = await response.json();
-    if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error.trim();
-    if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message.trim();
-  } catch {
-    // ignore parse errors
-  }
-
-  return `API request failed (${response.status}${response.statusText ? `: ${response.statusText}` : ''})`;
-};
 
 const getUserContext = () => {
   const session = getLocalAuthSession();
@@ -190,7 +179,9 @@ export async function fetchNotifications(
       return [];
     }
     markNotificationApiTransportFailure(error);
-    console.error('Error fetching notifications:', error);
+    if (!isAuthSessionEndedError(error)) {
+      console.error('Error fetching notifications:', error);
+    }
     return [];
   }
 }
@@ -214,7 +205,9 @@ export async function createNotification(input: CreateNotificationInput): Promis
     const result = await response.json();
     return (result.data || result) as Notification;
   } catch (error) {
-    console.error('Error creating notification:', error);
+    if (!isAuthSessionEndedError(error)) {
+      console.error('Error creating notification:', error);
+    }
     return null;
   }
 }
@@ -248,7 +241,9 @@ export async function getUnreadCount(
       return 0;
     }
     markNotificationApiTransportFailure(error);
-    console.error('Error fetching unread notification count:', error);
+    if (!isAuthSessionEndedError(error)) {
+      console.error('Error fetching unread notification count:', error);
+    }
     return 0;
   }
 }
@@ -266,7 +261,9 @@ export async function markAsRead(notificationId: string): Promise<boolean> {
 
     return true;
   } catch (error) {
-    console.error('Error marking notification as read:', error);
+    if (!isAuthSessionEndedError(error)) {
+      console.error('Error marking notification as read:', error);
+    }
     return false;
   }
 }
@@ -295,7 +292,9 @@ export async function markNotificationsAsReadByEntityKey(
     const result = await response.json();
     return (result.data || result) as NotificationBatchReadResult;
   } catch (error) {
-    console.error('Error marking notifications as read by entity key:', error);
+    if (!isAuthSessionEndedError(error)) {
+      console.error('Error marking notifications as read by entity key:', error);
+    }
     return {
       success: false,
       updatedCount: 0,
@@ -321,7 +320,9 @@ export async function markAllAsRead(userId?: string): Promise<boolean> {
 
     return true;
   } catch (error) {
-    console.error('Error marking all notifications as read:', error);
+    if (!isAuthSessionEndedError(error)) {
+      console.error('Error marking all notifications as read:', error);
+    }
     return false;
   }
 }
@@ -339,7 +340,9 @@ export async function deleteNotification(notificationId: string): Promise<boolea
 
     return true;
   } catch (error) {
-    console.error('Error deleting notification:', error);
+    if (!isAuthSessionEndedError(error)) {
+      console.error('Error deleting notification:', error);
+    }
     return false;
   }
 }
@@ -373,7 +376,9 @@ export async function dispatchWorkflowNotification(input: NotifyWorkflowEventInp
     const result = await response.json();
     return (result.data || result || []) as Notification[];
   } catch (error) {
-    console.error('Error dispatching workflow notification:', error);
+    if (!isAuthSessionEndedError(error)) {
+      console.error('Error dispatching workflow notification:', error);
+    }
     return [];
   }
 }
@@ -403,7 +408,9 @@ export async function fetchNotificationProfiles(force = false): Promise<UserProf
     profilesCachedAt = Date.now();
     return profiles;
   } catch (error) {
-    console.error('Error fetching notification profiles:', error);
+    if (!isAuthSessionEndedError(error)) {
+      console.error('Error fetching notification profiles:', error);
+    }
     return [];
   }
 }
@@ -463,7 +470,9 @@ export async function triggerInventoryAlertScan(): Promise<Notification[]> {
     return (result.data || result || []) as Notification[];
   } catch (error) {
     markNotificationApiTransportFailure(error);
-    console.error('Error scanning inventory alerts:', error);
+    if (!isAuthSessionEndedError(error)) {
+      console.error('Error scanning inventory alerts:', error);
+    }
     return [];
   }
 }

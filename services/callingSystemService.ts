@@ -1,4 +1,5 @@
 import { getLocalAuthSession } from './localAuthService';
+import { endAuthSessionSilently, throwLocalApiError } from './localApiAuth';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 
@@ -20,7 +21,7 @@ export interface QueueCallResult {
 const getAuthHeaders = (): HeadersInit => {
   const session = getLocalAuthSession();
   if (!session?.token) {
-    throw new Error('Please sign in before requesting a phone call.');
+    endAuthSessionSilently();
   }
   return {
     Accept: 'application/json',
@@ -103,7 +104,10 @@ const authenticatedGet = async <T>(path: string): Promise<T> => {
   if (!response.ok || payload?.ok !== true) {
     const error = payload?.error;
     const message = typeof error === 'string' ? error : error?.message;
-    throw new Error(message || `Unable to load call information (${response.status}).`);
+    throwLocalApiError(
+      response.status,
+      String(message || `Unable to load call information (${response.status}).`)
+    );
   }
   return payload?.data as T;
 };
@@ -136,7 +140,10 @@ export const saveAutoReplySettings = async (settings: {
   if (!response.ok || payload?.ok !== true) {
     const error = payload?.error;
     const message = typeof error === 'string' ? error : error?.message;
-    throw new Error(message || `Unable to save missed-call reply settings (${response.status}).`);
+    throwLocalApiError(
+      response.status,
+      String(message || `Unable to save missed-call reply settings (${response.status}).`)
+    );
   }
   return payload?.data?.settings as AutoReplySettings;
 };
@@ -195,7 +202,10 @@ export const queueCallRequest = async (phoneNumber: string, customerId?: string 
   if (!response.ok || payload?.ok !== true) {
     const error = payload?.error;
     const message = typeof error === 'string' ? error : error?.message;
-    throw new Error(message || `Unable to queue call request (${response.status}).`);
+    throwLocalApiError(
+      response.status,
+      String(message || `Unable to queue call request (${response.status}).`)
+    );
   }
 
   const data = payload?.data || {};

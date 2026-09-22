@@ -12,6 +12,7 @@ import {
 import { useToast } from './ToastProvider';
 import { formatDateTime } from '../utils/formatUtils';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface CallAutoReplySettingsViewProps {
   currentUser: UserProfile | null;
 }
@@ -55,6 +56,7 @@ export const CallAutoReplySettingsView: React.FC<CallAutoReplySettingsViewProps>
       setTemplateId(nextSettings?.ltemplate_id ? String(nextSettings.ltemplate_id) : activeTemplates[0]?.id || '');
       setCooldownMinutes(String(nextSettings?.lcooldown_minutes || 60));
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({ type: 'error', message: error instanceof Error ? error.message : 'Unable to load missed-call reply settings.' });
     } finally {
       setLoading(false);
@@ -95,6 +97,7 @@ export const CallAutoReplySettingsView: React.FC<CallAutoReplySettingsViewProps>
       addToast({ type: 'success', message: isActive ? 'Missed-call automatic replies enabled.' : 'Missed-call automatic replies disabled.' });
       await load();
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({ type: 'error', message: error instanceof Error ? error.message : 'Unable to save missed-call reply settings.' });
     } finally {
       setSaving(false);

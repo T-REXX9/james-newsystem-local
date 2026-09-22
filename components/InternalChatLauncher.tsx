@@ -55,6 +55,7 @@ import {
 } from '../utils/internalChatMentionUtils';
 import { useToast } from './ToastProvider';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface InternalChatLauncherProps {
   user: UserProfile | null;
 }
@@ -572,6 +573,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
       const nextCount = await fetchInternalChatUnreadCount();
       setUnreadCount(nextCount);
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       if (!silent) {
         addToast({
           type: 'error',
@@ -637,6 +639,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
         setSelectedConversationKey(nextSelection);
       }
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       if ((error as Error)?.name === 'AbortError') {
         return;
       }
@@ -684,6 +687,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
         setConversations(nextConversations);
       }
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       if ((error as Error)?.name === 'AbortError') {
         return;
       }
@@ -1352,6 +1356,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
       setShowCreateGroupModal(false);
       resetGroupComposerState();
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({
         type: 'error',
         title: 'Unable to create group',
@@ -1373,6 +1378,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
       });
       setShowManageGroupModal(true);
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({
         type: 'error',
         title: 'Unable to load group details',
@@ -1390,6 +1396,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
       upsertGroupDetail(detail);
       await loadShellData({ background: true });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({
         type: 'error',
         title: 'Unable to rename group',
@@ -1413,6 +1420,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
       }));
       await loadShellData({ background: true });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({
         type: 'error',
         title: 'Unable to add members',
@@ -1432,6 +1440,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
       upsertGroupDetail(detail);
       await loadShellData({ background: true });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({
         type: 'error',
         title: 'Unable to remove member',
@@ -1636,6 +1645,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
         setSelectedConversationKey(created[0].conversation_key);
       }
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       setMessagesByConversation((prev) => removeConversationMessages(prev, pendingMessages.map((message) => message.id)));
       setDraft(previousDraft);
       setEntityMentionSelections(previousEntityMentionSelections);
@@ -1684,6 +1694,7 @@ const InternalChatLauncher: React.FC<InternalChatLauncherProps> = ({ user }) => 
         }))
       );
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       setMessagesByConversation((prev) =>
         updateConversationMessage(prev, message.conversation_key, message.id, (current) => ({
           ...current,

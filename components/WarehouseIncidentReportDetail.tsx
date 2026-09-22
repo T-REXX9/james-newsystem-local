@@ -23,6 +23,7 @@ import { UserProfile } from '../types';
 import { canPerformAction } from '../utils/actionPermissions';
 import { formatDate } from '../utils/formatUtils';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface WarehouseIncidentReportDetailProps {
   reportId: string;
   currentUser?: UserProfile | null;
@@ -60,6 +61,7 @@ const WarehouseIncidentReportDetail: React.FC<WarehouseIncidentReportDetailProps
       const data = await fetchWarehouseIncidentReport(reportId);
       setReport(data);
     } catch (err: unknown) {
+      if (shouldSuppressAuthError(err)) return;
       setReport(null);
       setError(err instanceof Error ? err.message : 'Unable to load Incident Report.');
     } finally {
@@ -84,6 +86,7 @@ const WarehouseIncidentReportDetail: React.FC<WarehouseIncidentReportDetailProps
       });
       await loadReport();
     } catch (err: unknown) {
+      if (shouldSuppressAuthError(err)) return;
       setReviewError(err instanceof Error ? err.message : 'The incident decision could not be saved.');
     } finally {
       setReviewing(false);

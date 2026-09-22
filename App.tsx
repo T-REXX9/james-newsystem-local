@@ -889,7 +889,11 @@ const App: React.FC = () => {
       case 'maintenance-customer-customer-data':
         return (
           <div className="h-full overflow-y-auto">
-            <CustomerData initialContactId={moduleContext['maintenance-customer-customer-data']?.contactId} />
+            <CustomerData
+              initialContactId={moduleContext['maintenance-customer-customer-data']?.contactId}
+              initialConversationType={moduleContext['maintenance-customer-customer-data']?.conversationType}
+              initialActivityRef={moduleContext['maintenance-customer-customer-data']?.activityRef}
+            />
           </div>
         );
 

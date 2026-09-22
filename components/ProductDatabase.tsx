@@ -23,6 +23,7 @@ import { getCentralStock } from '../utils/productStock';
 import { canPerformAction } from '../utils/actionPermissions';
 import RecordImagePicker from './RecordImagePicker';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface ProductDatabaseProps {
   currentUser: UserProfile | null;
   initialProductId?: string;
@@ -269,6 +270,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
       setHasLoadedOnce(true);
     } catch (error) {
       if (requestId !== requestSequenceRef.current) return;
+      if (shouldSuppressAuthError(error)) return;
       addToast({
         type: 'error',
         title: 'Unable to load products',
@@ -455,6 +457,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
         }
       }
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       const message = parseSupabaseError(error, 'product');
       setSubmitError(message);
       addToast({ type: 'error', title: mode === 'add' ? 'Unable to add product' : 'Unable to save product', description: message, durationMs: 6000 });
@@ -501,6 +504,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
           clearEditor();
           await loadProducts(1, false);
         } catch (error) {
+          if (shouldSuppressAuthError(error)) return;
           addToast({ type: 'error', title: 'Unable to delete product', description: parseSupabaseError(error, 'product'), durationMs: 6000 });
         }
       },

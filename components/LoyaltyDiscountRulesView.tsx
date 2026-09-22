@@ -10,6 +10,7 @@ import { fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { useToast } from './ToastProvider';
 import { hasActionPermission } from '../constants';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface LoyaltyDiscountRulesViewProps {
     currentUser: UserProfile | null;
 }
@@ -72,6 +73,7 @@ const LoyaltyDiscountRulesView: React.FC<LoyaltyDiscountRulesViewProps> = ({ cur
             setRules(rulesData);
             setStats(statsData);
         } catch (error: any) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error loading loyalty discount rules:', error);
             addToast(error?.message || 'Failed to load discount rules', 'error');
         } finally {
@@ -236,6 +238,7 @@ const LoyaltyDiscountRulesView: React.FC<LoyaltyDiscountRulesViewProps> = ({ cur
             closeModal();
             loadData();
         } catch (error: any) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error saving discount rule:', error);
             addToast(error?.message || 'Failed to save discount rule', 'error');
         } finally {
@@ -253,6 +256,7 @@ const LoyaltyDiscountRulesView: React.FC<LoyaltyDiscountRulesViewProps> = ({ cur
             addToast('Discount rule deleted', 'success');
             loadData();
         } catch (error: any) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error deleting discount rule:', error);
             addToast(error?.message || 'Failed to delete discount rule', 'error');
         } finally {
@@ -272,6 +276,7 @@ const LoyaltyDiscountRulesView: React.FC<LoyaltyDiscountRulesViewProps> = ({ cur
             addToast(`Rule ${rule.is_active ? 'disabled' : 'enabled'}`, 'success');
             loadData();
         } catch (error: any) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error toggling rule status:', error);
             addToast(error?.message || 'Failed to update status', 'error');
         } finally {

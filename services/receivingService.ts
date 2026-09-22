@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { parseApiErrorMessage } from './localApiAuth';
 import {
     ReceivingReport,
     ReceivingReportInsert,
@@ -37,17 +38,6 @@ const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
 const toNumber = (value: unknown): number => {
     const n = Number(value ?? 0);
     return Number.isFinite(n) ? n : 0;
-};
-
-const parseApiErrorMessage = async (response: Response): Promise<string> => {
-    try {
-        const payload = await response.json();
-        if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error.trim();
-        if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message.trim();
-    } catch {
-        // ignore parse errors
-    }
-    return `API request failed (${response.status})`;
 };
 
 const getUserContext = () => {

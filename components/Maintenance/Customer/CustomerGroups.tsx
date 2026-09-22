@@ -11,6 +11,7 @@ import {
 } from '../../../services/customerGroupLocalApiService';
 import { canPerformAction } from '../../../utils/actionPermissions';
 
+import { shouldSuppressAuthError } from '../../../services/localApiAuth';
 const CustomerGroupForm: React.FC<{
     initialData?: CustomerGroupRecord | null;
     onClose: () => void;
@@ -46,6 +47,7 @@ const CustomerGroupForm: React.FC<{
             });
             onSuccess();
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error saving customer group:', error);
             addToast({
                 type: 'error',
@@ -109,6 +111,7 @@ export default function CustomerGroups() {
             const result = await fetchCustomerGroups(debouncedSearch);
             setData(result.items || []);
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error fetching customer groups:', error);
             addToast({
                 type: 'error',
@@ -139,6 +142,7 @@ export default function CustomerGroups() {
             });
             loadData();
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error deleting customer group:', error);
             addToast({
                 type: 'error',

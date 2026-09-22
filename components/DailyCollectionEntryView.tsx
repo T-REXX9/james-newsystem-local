@@ -23,6 +23,7 @@ import { useDialogAccessibility } from '../hooks/useDialogAccessibility';
 import { canBackdatePosting, canPerformAction } from '../utils/actionPermissions';
 import { canMutateDocumentDateField, localTodayYmd, validateDocumentDateWrite } from '../utils/backdatedPosting';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 const COLLECTION_TAB_ID = 'accounting-transactions-daily-collection-entry';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
@@ -264,6 +265,7 @@ const DailyCollectionEntryView: React.FC = () => {
         setSelectedRefno(rows[0]?.lrefno || '');
       }
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to load collections');
     } finally {
       setListLoading(false);
@@ -286,6 +288,7 @@ const DailyCollectionEntryView: React.FC = () => {
       setItems(collectionItems);
       setApproverLogs(logs);
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to load collection detail');
     } finally {
       setDetailLoading(false);
@@ -424,6 +427,7 @@ const DailyCollectionEntryView: React.FC = () => {
       await fetchList();
       setSelectedRefno(created.lrefno);
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to create DCR');
     } finally {
       setWorkingAction('');
@@ -511,6 +515,7 @@ const DailyCollectionEntryView: React.FC = () => {
         }
       }
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || `Failed to run ${action}`);
     } finally {
       setWorkingAction('');
@@ -529,6 +534,7 @@ const DailyCollectionEntryView: React.FC = () => {
       setApproverLogs([]);
       await fetchList();
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to delete collection report');
       throw err;
     } finally {
@@ -544,6 +550,7 @@ const DailyCollectionEntryView: React.FC = () => {
       await dailyCollectionService.postItems(selectedRefno, selectedItemIds);
       await fetchDetail(selectedRefno);
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to post selected lines');
     } finally {
       setWorkingAction('');
@@ -558,6 +565,7 @@ const DailyCollectionEntryView: React.FC = () => {
       await dailyCollectionService.deleteItem(itemId);
       await fetchDetail(selectedRefno);
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to delete payment line');
     } finally {
       setWorkingAction('');
@@ -579,6 +587,7 @@ const DailyCollectionEntryView: React.FC = () => {
       }
       await fetchDetail(selectedRefno);
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to delete selected lines');
     } finally {
       setWorkingAction('');
@@ -622,6 +631,7 @@ const DailyCollectionEntryView: React.FC = () => {
       await dailyCollectionService.updateItemStatus(item, nextStatus);
       await fetchDetail(selectedRefno);
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to update payment status');
     } finally {
       setSavingItemStatusId(null);
@@ -704,6 +714,7 @@ const DailyCollectionEntryView: React.FC = () => {
       setSelectedTransactions({});
       await Promise.all([fetchDetail(selectedRefno), fetchList()]);
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to add payment line');
     } finally {
       setSavingPayment(false);

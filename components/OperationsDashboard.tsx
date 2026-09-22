@@ -4,6 +4,7 @@ import { fetchOperationsDashboardSnapshot, OperationsDashboardSnapshot, toLocalD
 import OperationsCallBreakdownModal, { OperationsCallBreakdownKind } from './OperationsCallBreakdownModal';
 import { formatDate as formatDisplayDate } from '../utils/formatUtils';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface OperationsDashboardProps {
   onNavigate: (route: string, payload?: Record<string, string>) => void;
 }
@@ -55,7 +56,8 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({ onNavigate })
   const load = useCallback(async () => {
     setLoading(true); setError('');
     try { setSnapshot(await fetchOperationsDashboardSnapshot(new Date(`${selectedDate}T12:00:00`))); }
-    catch (err: any) { setError(err?.message || 'Unable to load operations dashboard.'); }
+    catch (err: any) {
+      if (shouldSuppressAuthError(err)) return; setError(err?.message || 'Unable to load operations dashboard.'); }
     finally { setLoading(false); }
   }, [selectedDate]);
   useEffect(() => { void load(); }, [load]);

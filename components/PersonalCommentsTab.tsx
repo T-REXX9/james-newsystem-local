@@ -8,6 +8,7 @@ import { fetchPersonalComments, createPersonalComment } from '../services/localD
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface PersonalCommentsTabProps {
   contactId: string;
   currentUserId?: string;
@@ -46,6 +47,7 @@ const PersonalCommentsTab: React.FC<PersonalCommentsTabProps> = ({
           : await fetchPersonalComments(contactId);
         setComments(data || []);
       } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
         setLoadError(err instanceof Error ? err.message : 'Unable to load data');
         console.error('Error loading comments:', err);
       } finally {

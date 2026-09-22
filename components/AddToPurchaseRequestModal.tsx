@@ -19,6 +19,7 @@ import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
 import { canPerformAction } from '../utils/actionPermissions';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface AddToPurchaseRequestModalProps {
   item: SuggestedStockItem;
   onClose: () => void;
@@ -137,6 +138,7 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
         throw new Error('Failed to add item to purchase order');
       }
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err.message || 'An error occurred');
       addToast({ 
         type: 'error', 

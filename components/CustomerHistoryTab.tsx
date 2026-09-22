@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { CustomerHistoryRecord, fetchCustomerInquiries, fetchCustomerReturns } from '../services/customerWorkflowLocalApiService';
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 import { formatDate } from '../utils/formatUtils';
 
 export default function CustomerHistoryTab({ contactId, kind }: { contactId: string; kind: 'inquiries' | 'returns' }) {
@@ -12,7 +13,11 @@ export default function CustomerHistoryTab({ contactId, kind }: { contactId: str
     setLoading(true); setError(''); setRows([]);
     const load = kind === 'returns' ? fetchCustomerReturns : fetchCustomerInquiries;
     load(contactId).then(data => { if (active) setRows(data); })
-      .catch(err => { if (active) setError(err instanceof Error ? err.message : 'Unable to load customer history'); })
+      .catch(err => {
+        if (!active) return;
+        if (shouldSuppressAuthError(err)) return;
+        setError(err instanceof Error ? err.message : 'Unable to load customer history');
+      })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [contactId, kind, refresh]);

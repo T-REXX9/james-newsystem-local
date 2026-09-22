@@ -16,6 +16,7 @@ import {
 } from '../services/serverMaintenanceService';
 import { useToast } from './ToastProvider';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface ServerMaintenanceViewProps {
   currentUser: UserProfile | null;
 }
@@ -83,6 +84,7 @@ export const ServerMaintenanceView: React.FC<ServerMaintenanceViewProps> = ({ cu
       setDestinations(nextDestinations);
       setDraft({ ...defaultDraft(), ...(nextStatus.automatic_backup || {}) });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       setLoadError(error instanceof Error ? error.message : 'Unable to load server maintenance status.');
     } finally {
       setLoading(false);
@@ -118,6 +120,7 @@ export const ServerMaintenanceView: React.FC<ServerMaintenanceViewProps> = ({ cu
         message: `Downloaded ${result.filename} (${formatBytes(result.bytes)}).`,
       });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({
         type: 'error',
         message: error instanceof Error ? error.message : 'Unable to download database backup.',
@@ -158,6 +161,7 @@ export const ServerMaintenanceView: React.FC<ServerMaintenanceViewProps> = ({ cu
       setDraft({ ...defaultDraft(), ...saved });
       addToast({ type: 'success', message: 'Automatic Backup settings saved.' });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({
         type: 'error',
         message: error instanceof Error ? error.message : 'Unable to save Automatic Backup settings.',
@@ -291,6 +295,7 @@ export const ServerMaintenanceView: React.FC<ServerMaintenanceViewProps> = ({ cu
                         message: `Imported ${report.filename}: ${report.import.tables_merged} tables merged, ${report.import.affected_rows} rows affected.`,
                       });
                     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
                       const diagnostic = {
                         filename: file.name,
                         bytes: file.size,

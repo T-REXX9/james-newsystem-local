@@ -78,6 +78,7 @@ import { PageHeader, RecordTrustStrip, WorkflowGuidance } from './common/PageSca
 import { canBackdatePosting, canPerformAction } from '../utils/actionPermissions';
 import { canMutateDocumentDateField, localTodayYmd, validateDocumentDateWrite } from '../utils/backdatedPosting';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface InquiryItemRow extends Omit<SalesInquiryItem, 'id' | 'inquiry_id' | 'qty' | 'unit_price'> {
   qty: number | '';
   unit_price: number | '';
@@ -1478,6 +1479,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       });
       addToast({ type: 'success', message: 'Sales inquiry JPEG exported.' });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       console.error('Error exporting sales inquiry JPEG:', error);
       addToast({
         type: 'error',

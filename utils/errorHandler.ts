@@ -1,3 +1,5 @@
+import { isAuthFailureMessage, isAuthSessionEndedError } from '../services/localApiAuth';
+
 export type ErrorToast = {
   type: 'error' | 'warning' | 'info';
   title: string;
@@ -42,6 +44,9 @@ export const getFieldErrorMessage = (fieldName: string, errorType: string): stri
 
 export const parseSupabaseError = (error: unknown, entityName?: string): string => {
   if (!error) return `Unable to process the ${entityName || 'request'}. Please try again.`;
+  if (isAuthSessionEndedError(error) || isAuthFailureMessage((error as Error)?.message)) {
+    return '';
+  }
 
   const supabaseError = error as { code?: string; message?: string; details?: string; hint?: string };
   const errorCode = supabaseError.code ? SUPABASE_CODE_MAP[supabaseError.code] : undefined;
@@ -70,8 +75,12 @@ export const parseValidationErrors = (errors: Record<string, string>): string =>
   return messages.join('\n');
 };
 
-export const buildErrorToast = (error: unknown, context?: string): ErrorToast => {
+export const buildErrorToast = (error: unknown, context?: string): ErrorToast | null => {
+  if (isAuthSessionEndedError(error) || isAuthFailureMessage((error as Error)?.message)) {
+    return null;
+  }
   const description = parseSupabaseError(error, context);
+  if (!description.trim()) return null;
   return {
     type: 'error',
     title: context ? `Unable to save ${context}` : 'Unable to complete action',

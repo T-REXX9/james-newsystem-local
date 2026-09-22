@@ -50,6 +50,7 @@ import {
   validateDocumentDateWrite,
 } from '../utils/backdatedPosting';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface OrderSlipViewProps {
   initialSlipId?: string;
   initialSlipRefNo?: string;
@@ -403,6 +404,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
       }
       addToast({ type: 'success', title: 'Sales date updated' });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({
         type: 'error',
         title: 'Unable to update sales date',
@@ -544,6 +546,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
         description: `${selectedSlip.slip_no} is ready for warehouse handling.`,
       });
     } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
       console.error('Error finalizing order slip:', err);
       await notifyOrderSlipEvent(
         'Order Slip Finalization Failed',
@@ -600,6 +603,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
       });
       window.setTimeout(() => window.print(), 150);
     } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
       console.error('Error printing order slip:', err);
       await notifyOrderSlipEvent(
         'Order Slip Print Failed',
@@ -652,6 +656,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
       });
       await loadOrderSlips();
     } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
       console.error('Failed to cancel order slip:', err);
       await notifyOrderSlipEvent(
         'Order Slip Cancel Failed',
@@ -706,6 +711,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
       await loadOrderSlips();
       navigateToModule('salesorder', { orderId: salesOrderId });
     } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
       console.error('Failed to unpost order slip:', err);
       await notifyOrderSlipEvent(
         'Order Slip Unpost Failed',
@@ -744,6 +750,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
       });
       await loadOrderSlips();
     } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
       console.error('Failed to update order slip tracking number:', err);
       addToast({
         type: 'error',
@@ -805,6 +812,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
       });
       addToast({ type: 'success', message: 'Order slip JPEG exported.' });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       console.error('Error exporting order slip JPEG:', error);
       addToast({
         type: 'error',

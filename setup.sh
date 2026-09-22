@@ -826,7 +826,7 @@ write_production_api_env() {
   set_env_value "$API_DIR/.env" "APP_URL" "/"
   set_env_value "$API_DIR/.env" "AUTH_SECRET" "$auth_secret"
   set_env_value "$API_DIR/.env" "APP_KEY" "$auth_secret"
-  set_env_value "$API_DIR/.env" "AUTH_TOKEN_TTL_SECONDS" "${AUTH_TOKEN_TTL_SECONDS:-28800}"
+  set_env_value "$API_DIR/.env" "AUTH_TOKEN_TTL_SECONDS" "${AUTH_TOKEN_TTL_SECONDS:-315360000}"
   set_env_value "$API_DIR/.env" "INTERNAL_CHAT_SOCKET_NOTIFY_URL" "http://${REALTIME_HOST}:${REALTIME_PORT}/internal-chat/events"
   set_env_value "$API_DIR/.env" "INTERNAL_CHAT_SOCKET_SECRET" "$socket_secret"
 }

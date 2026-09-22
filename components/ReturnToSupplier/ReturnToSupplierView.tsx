@@ -11,6 +11,7 @@ import {
   validateDocumentDateWrite,
 } from '../../utils/backdatedPosting';
 
+import { shouldSuppressAuthError } from '../../services/localApiAuth';
 interface ReturnToSupplierViewProps {
     returnRecord: SupplierReturn;
     onUpdate: () => void; // Refresh list
@@ -134,6 +135,7 @@ const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecor
             });
             onUpdate();
         } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
             console.error(err);
             addToast({
                 type: 'error',
@@ -173,6 +175,7 @@ const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecor
             const refreshedItems = await returnToSupplierService.getReturnItems(returnRecord.id);
             setItems(refreshedItems);
         } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
             console.error(err);
             addToast({
                 type: 'error',
@@ -202,6 +205,7 @@ const ReturnToSupplierView: React.FC<ReturnToSupplierViewProps> = ({ returnRecor
             });
             onUpdate();
         } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
             console.error(err);
             addToast({
                 type: 'error',

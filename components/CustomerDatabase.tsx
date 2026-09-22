@@ -18,7 +18,8 @@ import { isMasterUserAccount, hasActionPermission } from '../constants';
 import HighLevelDeleteModal from './HighLevelDeleteModal';
 import { requestCustomerUpdate } from '../services/customerWorkflowLocalApiService';
 
-const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: string; initialApprovalRequestId?: string }> = ({ initialStatus = 'All', initialContactId, initialApprovalRequestId }) => {
+import { shouldSuppressAuthError } from '../services/localApiAuth';
+const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: string; initialApprovalRequestId?: string; initialConversationType?: string; initialActivityRef?: string }> = ({ initialStatus = 'All', initialContactId, initialApprovalRequestId, initialConversationType, initialActivityRef }) => {
     const { addToast } = useToast();
     // Data Fetching
     const { data: customers, setData: setCustomers, refetch: reload, isLoading: isContactsLoading } = useRealtimeList<Contact>({
@@ -126,6 +127,7 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
       reload();
       setSelectedIds(new Set());
     } catch (e) {
+      if (shouldSuppressAuthError(e)) return;
       addToast({
         type: 'error',
         title: 'Unable to update visibility',
@@ -151,6 +153,7 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
       reload();
       setSelectedIds(new Set());
     } catch (e) {
+      if (shouldSuppressAuthError(e)) return;
       console.error('Bulk assign agent error:', e);
       const errorMessage = e instanceof Error ? e.message : 'Unknown error';
       addToast({
@@ -178,6 +181,7 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
       setShowSetPriceGroupModal(false);
       setSelectedIds(new Set());
     } catch (e) {
+      if (shouldSuppressAuthError(e)) return;
       addToast({
         type: 'error',
         title: 'Unable to set price group',
@@ -216,6 +220,7 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
       });
       await reload();
     } catch (e) {
+      if (shouldSuppressAuthError(e)) return;
       addToast({
         type: 'error',
         title: 'Unable to delete customer',
@@ -430,6 +435,8 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
           <CustomerDetailPanel
             contactId={selectedCustomerId}
             initialData={customers.find(c => c.id === selectedCustomerId)}
+            initialConversationType={initialConversationType}
+            initialActivityRef={initialActivityRef}
             onClose={() => setSelectedCustomerId(null)}
             onUpdate={handleUpdateContact}
             onEditContact={canEdit ? handleEditCustomer : undefined}

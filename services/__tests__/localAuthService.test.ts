@@ -42,14 +42,27 @@ describe('localAuthService session restoration', () => {
     vi.unstubAllGlobals();
   });
 
-  it('clears an expired cached token without sending an unauthorized request', async () => {
-    const expiredToken = tokenWithExpiry(Math.floor(Date.now() / 1000) - 60);
-    window.localStorage.setItem(storageKey, JSON.stringify(storedSession(expiredToken)));
+  it('keeps a previously issued token and validates it with /auth/me (no client-side expiry logout)', async () => {
+    const oldToken = tokenWithExpiry(Math.floor(Date.now() / 1000) - 60);
+    window.localStorage.setItem(storageKey, JSON.stringify(storedSession(oldToken)));
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({
+      ok: true,
+      data: {
+        token: oldToken,
+        user: { id: 1, main_userid: 1, email: 'owner@example.com' },
+        main_userid: 1,
+        user_type: '1',
+        session_branch: 'mainbranch',
+        logintype: '1',
+        industry: 'Shop',
+      },
+    }), { status: 200 }));
 
-    await expect(restoreLocalAuthSession()).resolves.toBeNull();
+    const restored = await restoreLocalAuthSession();
 
-    expect(global.fetch).not.toHaveBeenCalled();
-    expect(window.localStorage.getItem(storageKey)).toBeNull();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(restored?.token).toBe(oldToken);
+    expect(window.localStorage.getItem(storageKey)).not.toBeNull();
   });
 
   it('clears an invalid cached session immediately', () => {

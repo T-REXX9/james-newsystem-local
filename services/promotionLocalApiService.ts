@@ -12,6 +12,7 @@ import {
 } from '../types';
 import { getLocalAuthSession } from './localAuthService';
 
+import { parseApiErrorMessage } from './localApiAuth';
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 
 const authorizedFetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -19,18 +20,6 @@ const authorizedFetch = (input: RequestInfo | URL, init?: RequestInit): Promise<
     const token = getLocalAuthSession()?.token;
     if (token) headers.set('Authorization', `Bearer ${token}`);
     return fetch(input, { ...init, headers });
-};
-
-const parseApiErrorMessage = async (response: Response): Promise<string> => {
-    try {
-        const payload = await response.json();
-        if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error.trim();
-        if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message.trim();
-    } catch {
-        // Ignore JSON parse issues and fall back to status text.
-    }
-
-    return `API request failed (${response.status}${response.statusText ? `: ${response.statusText}` : ''})`;
 };
 
 // ============================================================================

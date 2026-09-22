@@ -1,4 +1,5 @@
 import { getLocalAuthToken } from './localAuthService';
+import { parseApiErrorMessage } from './localApiAuth';
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
 
@@ -16,18 +17,6 @@ export interface CategoryListResponse {
         total_pages: number;
     };
 }
-
-const parseApiErrorMessage = async (response: Response): Promise<string> => {
-    try {
-        const payload = await response.json();
-        if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error.trim();
-        if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message.trim();
-    } catch {
-        // ignore parse errors
-    }
-
-    return `API request failed (${response.status})`;
-};
 
 const requestJson = async (url: string, init?: RequestInit): Promise<any> => {
     const headers = new Headers(init?.headers);

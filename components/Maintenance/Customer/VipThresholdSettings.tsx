@@ -6,6 +6,7 @@ import { DEFAULT_VIP_TIER_CONFIG, normalizeVipTierConfig } from '../../../utils/
 import { getVipTierConfig, setVipTierConfig } from '../../../services/vipTierSettingsService';
 import { getLocalAuthSession } from '../../../services/localAuthService';
 
+import { shouldSuppressAuthError } from '../../../services/localApiAuth';
 interface VipThresholdSettingsProps {
   currentUser: UserProfile | null;
 }
@@ -36,6 +37,7 @@ const VipThresholdSettings: React.FC<VipThresholdSettingsProps> = ({ currentUser
       setConfig(normalizeVipTierConfig(configData));
       setHasChanges(false);
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       console.error('Error loading VIP thresholds:', error);
       addToast({
         type: 'error',
@@ -86,6 +88,7 @@ const VipThresholdSettings: React.FC<VipThresholdSettingsProps> = ({ currentUser
         description: 'The VIP discount settings have been saved successfully.',
       });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       console.error('Error saving VIP thresholds:', error);
       addToast({
         type: 'error',

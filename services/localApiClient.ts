@@ -1,4 +1,5 @@
-import { clearInvalidLocalAuthSession, getLocalAuthSession } from './localAuthService';
+import { getLocalAuthSession } from './localAuthService';
+import { throwLocalApiError } from './localApiAuth';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
@@ -18,11 +19,10 @@ export async function requestLocalApi<T>(path: string, method = 'GET', body?: un
   });
   const payload = await response.json();
   if (!response.ok || payload.ok === false) {
-    if (response.status === 401 && /invalid token (signature|format|payload)|token expired/i.test(String(payload.error || payload.message || ''))) {
-      clearInvalidLocalAuthSession();
-      throw new Error('The server could not validate this request session. Please refresh and sign in again if the issue continues.');
-    }
-    throw new Error(payload.error || payload.message || `API request failed (${response.status})`);
+    throwLocalApiError(
+      response.status,
+      String(payload.error || payload.message || `API request failed (${response.status})`)
+    );
   }
   return payload.data as T;
 }

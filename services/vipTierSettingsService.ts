@@ -2,20 +2,9 @@ import { VipTierConfig } from '../types';
 import { getLocalAuthSession } from './localAuthService';
 import { DEFAULT_VIP_TIER_CONFIG, normalizeVipTierConfig } from '../utils/vipTierConfig';
 
+import { parseApiErrorMessage } from './localApiAuth';
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
-
-const parseApiErrorMessage = async (response: Response): Promise<string> => {
-  try {
-    const payload = await response.json();
-    if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error.trim();
-    if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message.trim();
-  } catch {
-    // Ignore parse errors and fall through to a generic message.
-  }
-
-  return `API request failed (${response.status})`;
-};
 
 const requestApi = async (url: string, init?: RequestInit): Promise<any> => {
   const response = await fetch(url, init);

@@ -1,4 +1,5 @@
 import { getLocalAuthSession } from './localAuthService';
+import { parseApiErrorMessage } from './localApiAuth';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 
@@ -198,7 +199,7 @@ export const fetchManagementDashboardData = async (
   const response = await fetch(`${API_BASE_URL}/daily-call-monitoring/sales-performance-dashboard?${query.toString()}`, {
     headers: session?.token ? { Authorization: `Bearer ${session.token}` } : undefined,
   });
-  if (!response.ok) throw new Error(`Sales performance dashboard request failed (${response.status})`);
+  if (!response.ok) throw new Error(await parseApiErrorMessage(response));
   const payload = await response.json();
   return normalizeDashboardData(payload?.data || {}, year);
 };

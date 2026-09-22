@@ -14,6 +14,7 @@ import { canMutateDocumentDateField, localTodayYmd, validateDocumentDateWrite } 
 import CustomerAutocomplete from './CustomerAutocomplete';
 import { formatDate } from '../utils/formatUtils';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
 const toDateInput = (value?: string): string => {
@@ -254,6 +255,7 @@ const FreightChargesDebitView: React.FC = () => {
         setSelectedRefno(data.items[0]?.lrefno || '');
       }
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to load freight charges');
       setRows([]);
     } finally {
@@ -281,6 +283,7 @@ const FreightChargesDebitView: React.FC = () => {
         invoiceNo: item.linvoice_no || '',
       });
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to load record');
     } finally {
       setLoadingDetail(false);
@@ -466,6 +469,7 @@ const FreightChargesDebitView: React.FC = () => {
       setSelectedRefno(created.lrefno);
       await fetchDetail(created.lrefno);
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to create freight charge');
     } finally {
       setSaving(false);
@@ -513,6 +517,7 @@ const FreightChargesDebitView: React.FC = () => {
       setSelected(updated);
       await fetchList();
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to update freight charge');
     } finally {
       setSaving(false);
@@ -532,6 +537,7 @@ const FreightChargesDebitView: React.FC = () => {
       await freightChargesService.action(selected.lrefno, action);
       await Promise.all([fetchList(), fetchDetail(selected.lrefno)]);
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || `Failed to ${action} record`);
     } finally {
       setSaving(false);
@@ -551,6 +557,7 @@ const FreightChargesDebitView: React.FC = () => {
       setPage(1);
       await fetchList();
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to delete record');
     } finally {
       setSaving(false);

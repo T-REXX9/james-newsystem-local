@@ -8,6 +8,7 @@ import {
 import { BUTTON_BASE, BUTTON_PRIMARY } from '../utils/uiConstants';
 import { formatDate as formatDisplayDate } from '../utils/formatUtils';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
 const dateTypeOptions: Array<{ value: CollectionSummaryDateType; label: string }> = [
@@ -77,6 +78,7 @@ const CollectionSummaryView: React.FC<CollectionSummaryViewProps> = ({ initialDa
       setReport(payload);
       setGeneratedAt(new Date());
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setReport(null);
       setError(err?.message || 'Failed to load collection summary');
     } finally {

@@ -8,6 +8,7 @@ import {
 } from '../maintenance.types';
 import { getLocalAuthToken } from './localAuthService';
 
+import { parseApiErrorMessage } from './localApiAuth';
 const DEFAULT_API_BASE_URL = '/api/v1';
 
 const isLoopbackHost = (hostname: string): boolean => {
@@ -51,18 +52,6 @@ export interface PaginatedResult<T> {
 }
 
 type JsonObject = Record<string, unknown>;
-
-const parseApiErrorMessage = async (response: Response): Promise<string> => {
-  try {
-    const payload = (await response.json()) as JsonObject;
-    if (typeof payload.error === 'string' && payload.error.trim()) return payload.error.trim();
-    if (typeof payload.message === 'string' && payload.message.trim()) return payload.message.trim();
-  } catch {
-    // ignore parse errors
-  }
-
-  return `API request failed (${response.status})`;
-};
 
 const defaultMeta = (): PaginationMeta => ({
   page: 1,

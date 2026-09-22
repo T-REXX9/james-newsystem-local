@@ -28,6 +28,7 @@ import { useToast } from './ToastProvider';
 import { navigateWorkflow } from '../utils/workflowNavigate';
 import { canPerformAction } from '../utils/actionPermissions';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface SuggestedStockReportProps {
   currentUser?: UserProfile | null;
 }
@@ -166,6 +167,7 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
       }
       await loadReport();
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({ type: 'error', title: 'Unable to add items to PR', description: error instanceof Error ? error.message : 'Please try again.' });
     } finally {
       isAddingToPrRef.current = false;
@@ -198,6 +200,7 @@ const SuggestedStockReport: React.FC<SuggestedStockReportProps> = ({ currentUser
       removeSummaryKeys(movedKeys);
       await loadReport();
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({
         type: 'error',
         title: kivFolder ? 'Unable to restore items' : 'Unable to move items to KIV',

@@ -10,6 +10,7 @@ import { hasActionPermission, isMasterUserAccount } from '../constants';
 import { toast } from 'sonner';
 import { formatDateTime } from '../utils/formatUtils';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 type RequestCategory = 'terms' | 'contact_details' | 'customer_standing' | 'discount' | 'others';
 
 const CATEGORY_LABELS: Record<RequestCategory, string> = {
@@ -104,6 +105,7 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
             setRefresh(n => n + 1);
             toast.success(`Request ${decision === 'approved' ? 'approved' : 'rejected'}`);
         } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
             const msg = err instanceof Error ? err.message : 'Review failed';
             setError(msg);
             toast.error(msg);
@@ -157,6 +159,7 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
             setRefresh(n => n + 1);
             toast.success('Request submitted for approval');
         } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
             const msg = err instanceof Error ? err.message : 'Submission failed';
             setError(msg);
             toast.error(msg);

@@ -118,6 +118,7 @@ import {
   FILTER_TAB_INACTIVE
 } from '../utils/uiConstants';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface DailyCallMonitoringViewProps {
   currentUser: UserProfile | null;
   initialSelectedDate?: string;
@@ -757,6 +758,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     try {
       await claimCustomerCallForDailyCall(contact.id);
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({ type: 'error', message: error instanceof Error ? error.message : 'This customer is unavailable for calling.' });
       return;
     }
@@ -792,6 +794,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         addToast({ type: 'success', message: 'Call queued. Check your Android phone.' });
       }
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({ type: 'error', message: error instanceof Error ? error.message : 'Failed to queue call.' });
     }
   }, [callContact, addToast]);
@@ -806,6 +809,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         addToast({ type: 'success', message: 'Call queued. Check your Android phone.' });
       }
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({ type: 'error', message: error instanceof Error ? error.message : 'Failed to queue call.' });
     }
   }, [callContact, addToast]);
@@ -866,6 +870,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       });
       return created;
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({
         type: 'error',
         title: 'Unable to create customer',
@@ -944,94 +949,22 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     }
 
     let cancelled = false;
-    setCustomerLogsLoading(true);
-
     fetchContactCustomerLogsForDailyCall(selectedClientId)
       .then((rows) => {
         if (!cancelled) {
           setCustomerLogs(rows);
         }
       })
-      .catch((error) => {
-        console.error('Error loading customer logs:', error);
+      .catch(() => {
         if (!cancelled) {
           setCustomerLogs([]);
-          addToast({ type: 'error', message: 'Customer log history could not be loaded.' });
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setCustomerLogsLoading(false);
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [addToast, detailsPanelOpen, selectedClientId]);
-
-  const handleSaveCustomerLog = useCallback(async () => {
-    if (!canEdit || !selectedClientId) return;
-    if (!customerLogNote.trim() && !customerLogPromiseToPay.trim() && !customerLogComments.trim()) {
-      addToast({ type: 'error', message: 'Add a note, promise to pay, or comment first.' });
-      return;
-    }
-
-    setSavingCustomerLog(true);
-    try {
-      const createdLog = await createCustomerLogForDailyCall({
-        contact_id: selectedClientId,
-        entry_type: 'Note',
-        topic: customerLogTopic,
-        status: customerLogStatus,
-        note: customerLogNote.trim(),
-        promise_to_pay: customerLogPromiseToPay.trim(),
-        comments: customerLogComments.trim(),
-      });
-
-      setCustomerLogs((previous) => [createdLog, ...previous]);
-      setCustomerLogNote('');
-      setCustomerLogPromiseToPay('');
-      setCustomerLogComments('');
-      addToast({ type: 'success', message: 'Customer note saved.' });
-    } catch (error) {
-      console.error('Error saving customer log:', error);
-      addToast({ type: 'error', message: 'Customer note could not be saved.' });
-    } finally {
-      setSavingCustomerLog(false);
-    }
-  }, [
-    addToast,
-    customerLogComments,
-    customerLogNote,
-    customerLogPromiseToPay,
-    customerLogStatus,
-    customerLogTopic,
-    canEdit,
-    selectedClientId
-  ]);
-
-  const handleSaveCustomerStatus = useCallback(async () => {
-    if (!canEdit || !selectedClientId) return;
-
-    setSavingStatusLog(true);
-    try {
-      const createdLog = await createCustomerLogForDailyCall({
-        contact_id: selectedClientId,
-        entry_type: 'Status',
-        topic: 'Status',
-        status: customerLogStatus,
-      });
-
-      setCustomerLogs((previous) => [createdLog, ...previous]);
-      addToast({ type: 'success', message: 'Customer status updated.' });
-    } catch (error) {
-      console.error('Error saving customer status:', error);
-      addToast({ type: 'error', message: 'Customer status could not be updated.' });
-    } finally {
-      setSavingStatusLog(false);
-    }
-  }, [addToast, canEdit, customerLogStatus, selectedClientId]);
+  }, [detailsPanelOpen, selectedClientId]);
 
   const handleEnableCallForwarding = (forwardingNumber: string) => {
     if (!forwardingNumber) return;
@@ -1055,6 +988,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       window.location.href = 'tel:#21#';
       setCallForwardingEnabled(false);
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       console.error('Error disabling call forwarding:', error);
       addToast({ type: 'error', message: 'Failed to disable call forwarding. Please try again.' });
     }
@@ -1081,6 +1015,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     try {
       setFullDetailsContact(await fetchContactForDailyCall(contact.id));
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       console.error('Error loading full customer details:', error);
       setFullDetailsError(error instanceof Error ? error.message : 'Customer details could not be loaded.');
     } finally {
@@ -1526,11 +1461,6 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     });
   }, [selectedTimeline, historyTab]);
 
-  const filteredCustomerLogs = useMemo(
-    () => customerLogs.filter((entry) => entry.entry_type === 'Note' && entry.topic === customerLogTopic),
-    [customerLogs, customerLogTopic]
-  );
-
   const statusUpdateLogs = useMemo(
     () => customerLogs.filter((entry) => entry.entry_type === 'Status'),
     [customerLogs]
@@ -1683,6 +1613,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         durationMs: 4000,
       });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({
         type: 'error',
         title: 'Unable to request verification',
@@ -2252,7 +2183,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               </button>}
             </div>
             )}
-            {!selectedClientBlocked && (
+            {false && !selectedClientBlocked && (
             <div className="space-y-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/40 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>

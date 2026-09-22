@@ -28,6 +28,7 @@ import { Download, Printer, RefreshCw, RotateCcw, Search } from 'lucide-react';
 import { fetchOldNewCustomersReport, OldNewCustomerRow } from '../services/oldNewCustomersReportService';
 import { formatCustomerSince } from '../utils/formatUtils';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 const formatDate = (dateValue: string): string => {
   if (!dateValue) return 'N/A';
   const dt = new Date(dateValue);
@@ -84,6 +85,7 @@ const OldNewCustomersReport: React.FC = () => {
         setError(`No customers matched "${filters.search}".`);
       }
     } catch (loadError) {
+      if (shouldSuppressAuthError(loadError)) return;
       setRows([]);
       setError(loadError instanceof Error ? loadError.message : 'Unable to load report');
     } finally {

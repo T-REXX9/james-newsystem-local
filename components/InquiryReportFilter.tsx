@@ -8,6 +8,7 @@ import {
 } from '../services/inquiryReportLocalApiService';
 import { closeSalesReportResults, isSalesReportResultsView, openSalesReportResults, type SalesReportRouteView } from '../utils/workflowNavigate';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 const todayInput = () => new Date().toISOString().slice(0, 10);
 
 const startForPeriod = (type: InquiryReportFilters['reportType']): string => {
@@ -41,6 +42,7 @@ const InquiryReportFilter: React.FC<{ initialView?: SalesReportRouteView }> = ({
       try {
         setCustomers(await inquiryReportLocalApiService.getCustomers());
       } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
         setLoadError(error instanceof Error ? error.message : 'Unable to load customer filters');
       } finally {
         setIsLoading(false);

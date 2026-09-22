@@ -804,7 +804,7 @@ export interface DailyCallMasterCustomerRow {
   /** True only when a Verify Prospect audit entry was written by this system. */
   verifiedInSystem?: boolean;
   createdAt?: string;
-  prospectComment?: string;
+  latestSalesReportMessage?: string;
   priceGroup?: string;
   firstPurchaseDate?: string;
   firstPurchaseDateRaw?: string;

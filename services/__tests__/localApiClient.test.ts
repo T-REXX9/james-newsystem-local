@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AuthSessionEndedError } from '../localApiAuth';
 import { requestLocalApi } from '../localApiClient';
 
 const storageKey = 'local_api_auth_session';
@@ -34,16 +35,16 @@ describe('localApiClient', () => {
     vi.unstubAllGlobals();
   });
 
-  it('clears a cached session when the deployed API rejects the token signature', async () => {
+  it('clears a cached session silently when the API rejects the token', async () => {
     const authChanged = vi.fn();
     window.localStorage.setItem(storageKey, JSON.stringify(storedSession));
     window.addEventListener('local-auth-changed', authChanged);
     vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({
       ok: false,
-      error: 'Invalid token signature',
+      error: 'Token expired',
     }), { status: 401 }));
 
-    await expect(requestLocalApi('/customer-workflows/requests')).rejects.toThrow('could not validate');
+    await expect(requestLocalApi('/customer-workflows/requests')).rejects.toBeInstanceOf(AuthSessionEndedError);
 
     expect(window.localStorage.getItem(storageKey)).toBeNull();
     expect(authChanged).toHaveBeenCalledTimes(1);

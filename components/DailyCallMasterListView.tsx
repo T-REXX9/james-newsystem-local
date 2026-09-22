@@ -1,5 +1,6 @@
 import { CUSTOMER_UPDATED_EVENT } from '../utils/customerWorkflowEvents';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   ArrowDown,
@@ -32,6 +33,7 @@ import { hasActionPermission, isMasterUserAccount } from '../constants';
 import { VERIFIED_PROSPECT_POTENTIAL } from '../utils/dailyCallPotentialSales';
 import AddContactModal from './AddContactModal';
 import DailyCallCustomerDetailModal from './DailyCallCustomerDetailModal';
+import CustomerSalesReportChat from './CustomerSalesReportChat';
 import DailyCallInlineAgentSelect, { formatAssignmentDateLabel } from './DailyCallInlineAgentSelect';
 import { useToast } from './ToastProvider';
 import type { DetailTabId } from './DailyCallCustomerDetailExpansion';
@@ -317,6 +319,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const [loadingSalesAgents, setLoadingSalesAgents] = useState(true);
   const [loadingTeams, setLoadingTeams] = useState(true);
   const [assigningCustomerId, setAssigningCustomerId] = useState<string | null>(null);
+  const [replyModalRow, setReplyModalRow] = useState<DailyCallMasterCustomerRow | null>(null);
 
   const handleSelectCategory = useCallback((categoryId: CategoryId) => {
     setActiveCategoryId(categoryId);
@@ -1008,7 +1011,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                     </th>
                     <th className="w-[135px] px-2 py-2.5">Last Purchase</th>
                     <th className="w-[135px] px-2 py-2.5">Agent</th>
-                    <th className="w-[220px] px-2 py-2.5">Staff comment</th>
+                    <th className="w-[220px] px-2 py-2.5">Latest Agent Sales Report</th>
                     <th className="w-[150px] px-2 py-2.5">Verified By</th>
                     <th className="w-[105px] px-2 py-2.5 text-center">Action</th>
                   </tr>
@@ -1085,8 +1088,18 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                           {row.assignedTeam && <p className="mt-1 text-[10px] font-bold text-indigo-700">Team: {row.assignedTeam}</p>}
                         </td>
                         <td className="max-w-[280px] break-words px-2 py-2.5 text-sm">
-                          {row.prospectComment ? (
-                            <span className="block whitespace-pre-wrap text-slate-700" title={row.prospectComment}>{row.prospectComment}</span>
+                          {row.latestSalesReportMessage ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setReplyModalRow(row)}
+                                aria-label={`Reply to latest Agent Sales Report for ${row.shopName}`}
+                                className="block w-full whitespace-pre-wrap text-left text-slate-700 underline-offset-2 transition hover:text-blue-700 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                                title="Reply in Agent Sales Report"
+                              >
+                                {row.latestSalesReportMessage}
+                              </button>
+                            </>
                           ) : (
                             <span className="text-slate-400">—</span>
                           )}
@@ -1245,6 +1258,46 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
           setDetailViewOnly(false);
         }}
       />
+      {replyModalRow && createPortal(
+        <div
+          className="fixed inset-0 z-[2100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setReplyModalRow(null);
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="agent-sales-report-reply-title"
+            className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+          >
+            <header className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+              <h2 id="agent-sales-report-reply-title" className="truncate text-base font-bold text-slate-900">
+                Agent Sales Report · {replyModalRow.shopName}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setReplyModalRow(null)}
+                aria-label="Close Agent Sales Report reply"
+                className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              >
+                <XCircle className="h-5 w-5" />
+              </button>
+            </header>
+            <div className="min-h-0 overflow-y-auto p-4">
+              <CustomerSalesReportChat
+                contactId={replyModalRow.id}
+                currentUser={currentUser || null}
+                viewOnly={isBlockedDailyCallMasterRow(replyModalRow)}
+                onConversationRead={() => void loadRows(false, true)}
+                autoScroll={false}
+                animateMessages={false}
+              />
+            </div>
+          </section>
+        </div>,
+        document.body
+      )}
     </div>
     </div>
   );

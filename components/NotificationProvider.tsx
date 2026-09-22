@@ -216,6 +216,9 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
       if ((err as Error)?.name === 'AbortError') {
         return;
       }
+      if ((err as { isAuthSessionEnded?: boolean })?.isAuthSessionEnded || (err as Error)?.name === 'AuthSessionEndedError') {
+        return;
+      }
       console.error('Error refreshing notifications:', err);
     } finally {
       if (requestId === refreshRequestIdRef.current) {

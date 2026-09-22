@@ -8,6 +8,7 @@ import {
 } from '../services/statementOfAccountService';
 import { formatDate as formatPhilippineDate } from '../utils/formatUtils';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
 const dateTypeOptions: Array<{ value: SoaDateType; label: string }> = [
@@ -94,6 +95,7 @@ const StatementOfAccountView: React.FC = () => {
       });
       setReport(payload);
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setReport(null);
       setError(err?.message || 'Failed to load statement of account');
     } finally {

@@ -16,13 +16,12 @@ import { toast } from 'sonner';
 import { normalizePriceGroup } from '../constants/pricingGroups';
 import { isMasterUserAccount } from '../constants';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
-import { formatCurrency, formatCustomerSince, formatDateTime } from '../utils/formatUtils';
+import { formatCurrency, formatCustomerSince } from '../utils/formatUtils';
 import CallCustomerButton from './CallCustomerButton';
 import CustomerCallHistoryCard from './CustomerCallHistoryCard';
 import IncidentReportTab from './IncidentReportTab';
 import CustomerYearlySales from './CustomerYearlySales';
 import CustomerSalesReportChat from './CustomerSalesReportChat';
-import { createPersonalComment, fetchPersonalComments } from '../services/localDataService';
 
 interface CustomerDetailPanelProps {
     contactId: string;
@@ -32,6 +31,8 @@ interface CustomerDetailPanelProps {
     onEditContact?: (contact: Contact) => void;
     onDeleteCustomer?: () => void;
     currentUser?: UserProfile | null;
+    initialConversationType?: string;
+    initialActivityRef?: string;
 }
 
 interface CustomerTermsRow {
@@ -66,6 +67,8 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     onEditContact,
     onDeleteCustomer,
     currentUser,
+    initialConversationType,
+    initialActivityRef,
 }) => {
     const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'calls' | 'inquiries' | 'incidents' | 'returns' | 'financials' | 'profile' | 'sales-report'>('overview');
     const [transactions, setTransactions] = useState<any[]>([]);
@@ -80,15 +83,10 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     const [selectedSalesAgent, setSelectedSalesAgent] = useState<string>('');
     const [isSaving, setIsSaving] = useState(false);
     const [recordImageFailed, setRecordImageFailed] = useState(false);
-    const [customerComments, setCustomerComments] = useState<Array<{
-        id: string;
-        text: string;
-        author_name?: string;
-        timestamp?: string;
-    }>>([]);
-    const [customerCommentDraft, setCustomerCommentDraft] = useState('');
-    const [commentsLoading, setCommentsLoading] = useState(false);
-    const [savingCustomerComment, setSavingCustomerComment] = useState(false);
+
+    useEffect(() => {
+        if (initialConversationType === 'agent_sales_report') setActiveTab('sales-report');
+    }, [initialConversationType, contactId]);
 
     useEffect(() => {
         setRecordImageFailed(false);
@@ -164,60 +162,6 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
 
         loadData();
     }, [contactId, revision]);
-
-    useEffect(() => {
-        if (!contactId) return;
-
-        let cancelled = false;
-        setCommentsLoading(true);
-        void fetchPersonalComments(contactId)
-            .then((comments) => {
-                if (!cancelled) setCustomerComments(comments);
-            })
-            .catch((error) => {
-                if (!cancelled) {
-                    console.error('Failed to load customer comments', error);
-                    setCustomerComments([]);
-                }
-            })
-            .finally(() => {
-                if (!cancelled) setCommentsLoading(false);
-            });
-
-        return () => {
-            cancelled = true;
-        };
-    }, [contactId, revision]);
-
-    const handleSaveCustomerComment = async () => {
-        const text = customerCommentDraft.trim();
-        if (!text || !contactId) return;
-
-        const sessionUser = currentUser || getLocalAuthSession()?.userProfile || null;
-        if (!sessionUser) {
-            toast.error('Sign in again before adding a customer comment.');
-            return;
-        }
-
-        setSavingCustomerComment(true);
-        try {
-            await createPersonalComment(
-                contactId,
-                String(sessionUser.id || ''),
-                sessionUser.full_name || sessionUser.email || 'Staff',
-                text
-            );
-            const refreshedComments = await fetchPersonalComments(contactId);
-            setCustomerComments(refreshedComments);
-            setCustomerCommentDraft('');
-            toast.success('Customer comment saved.');
-        } catch (error) {
-            console.error('Failed to save customer comment', error);
-            toast.error(error instanceof Error ? error.message : 'Failed to save customer comment.');
-        } finally {
-            setSavingCustomerComment(false);
-        }
-    };
 
     // Handler for saving sales agent assignment
     const handleSaveSalesAgent = async () => {
@@ -432,49 +376,6 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
 
                         <CustomerYearlySales rows={ledgerSalesRows} error={ledgerError} />
 
-                        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                            <h3 className="mb-3 flex items-center gap-2 font-bold text-slate-800 dark:text-slate-100">
-                                <MessageSquare className="h-4 w-4 text-brand-blue" /> Customer comments
-                            </h3>
-                            <div className="space-y-3">
-                                <textarea
-                                    aria-label="Add customer comment"
-                                    value={customerCommentDraft}
-                                    onChange={(event) => setCustomerCommentDraft(event.target.value)}
-                                    placeholder="Add an internal customer comment"
-                                    rows={3}
-                                    maxLength={2000}
-                                    className="w-full resize-y rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                                />
-                                <div className="flex items-center justify-between gap-3">
-                                    <span className="text-[11px] text-slate-400">Visible to authorized staff and management.</span>
-                                    <button
-                                        type="button"
-                                        onClick={() => void handleSaveCustomerComment()}
-                                        disabled={savingCustomerComment || !customerCommentDraft.trim()}
-                                        className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-3 py-2 text-xs font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                                    >
-                                        <Save className="h-3.5 w-3.5" />
-                                        {savingCustomerComment ? 'Saving…' : 'Save comment'}
-                                    </button>
-                                </div>
-                                <div className="max-h-44 space-y-2 overflow-y-auto border-t border-slate-100 pt-3 dark:border-slate-800">
-                                    {commentsLoading ? (
-                                        <p className="text-xs text-slate-400">Loading comments…</p>
-                                    ) : customerComments.length === 0 ? (
-                                        <p className="text-xs italic text-slate-400">No customer comments yet.</p>
-                                    ) : customerComments.map((comment) => (
-                                        <div key={comment.id} className="rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-950">
-                                            <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">{comment.text}</p>
-                                            <p className="mt-1 text-[10px] font-semibold text-slate-400">
-                                                {comment.author_name || 'Staff'}{comment.timestamp ? ` · ${formatDateTime(comment.timestamp)}` : ''}
-                                            </p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-
                         {/* Recent Activity Stream */}
                         <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm col-span-1 md:col-span-2">
                             <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
@@ -563,6 +464,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                         currentUser={currentUser || null}
                         viewOnly={!currentUser}
                         className="min-h-[24rem]"
+                        initialActivityRef={initialActivityRef}
                     />
                 )}
 

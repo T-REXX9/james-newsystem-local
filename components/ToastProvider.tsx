@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
+import { isAuthFailureMessage } from '../services/localApiAuth';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -41,10 +42,21 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const { type, message, title, description, durationMs, action } = typeof input === 'string'
       ? { type: legacyType, message: input }
       : input;
+    const resolvedDescription = description || message || '';
+    if (
+      durationMs === 0 ||
+      isAuthFailureMessage(resolvedDescription) ||
+      isAuthFailureMessage(title) ||
+      isAuthFailureMessage(message)
+    ) {
+      return;
+    }
+    if (!String(title || '').trim() && !String(resolvedDescription).trim()) {
+      return;
+    }
     const id = `${Date.now()}_${Math.random()}`;
     const resolvedDuration = durationMs ?? (type === 'error' ? 6000 : 4000);
     const resolvedTitle = title || (type === 'success' ? 'Success' : type === 'warning' ? 'Warning' : type === 'info' ? 'Info' : 'Error');
-    const resolvedDescription = description || message || '';
     setToasts((prev) => [...prev, { id, type, title: resolvedTitle, description: resolvedDescription, action }]);
     setTimeout(() => removeToast(id), resolvedDuration);
   }, [removeToast]);

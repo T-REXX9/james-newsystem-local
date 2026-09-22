@@ -4,6 +4,7 @@ import { Promotion } from '../types';
 import * as promotionService from '../services/promotionLocalApiService';
 import { useToast } from './ToastProvider';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface Props {
     promotion: Promotion;
     onClose: () => void;
@@ -43,6 +44,7 @@ const ExtendPromotionModal: React.FC<Props> = ({ promotion, onClose, onExtended 
             });
             onExtended();
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error extending promotion:', error);
             addToast({
                 type: 'error',

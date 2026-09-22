@@ -11,6 +11,7 @@ import { SalesReportConversationMessage, UserProfile } from '../types';
 import { useToast } from './ToastProvider';
 import { optimizeRecordImage, RECORD_IMAGE_ACCEPT, validateRecordImageFile } from '../utils/recordImage';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface CustomerSalesReportChatProps {
   contactId: string;
   currentUser: UserProfile | null;
@@ -18,6 +19,9 @@ interface CustomerSalesReportChatProps {
   compact?: boolean;
   className?: string;
   onConversationRead?: (contactId: string) => void;
+  initialActivityRef?: string;
+  autoScroll?: boolean;
+  animateMessages?: boolean;
 }
 
 const kindLabel = (kind: SalesReportConversationMessage['kind']): string => {
@@ -121,10 +125,14 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
   compact = false,
   className = '',
   onConversationRead,
+  initialActivityRef,
+  autoScroll = true,
+  animateMessages = true,
 }) => {
   const { addToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const activityRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [messages, setMessages] = useState<SalesReportConversationMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState('');
@@ -141,6 +149,7 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
         onConversationRead?.(contactId);
       }
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       console.error('Error loading Agent Sales Report conversation:', error);
       addToast({
         type: 'error',
@@ -157,10 +166,15 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
   }, [loadConversation]);
 
   useEffect(() => {
-    if (!compact && typeof bottomRef.current?.scrollIntoView === 'function') {
+    if (autoScroll && !compact && typeof bottomRef.current?.scrollIntoView === 'function') {
       bottomRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
-  }, [compact, messages.length]);
+  }, [autoScroll, compact, messages.length]);
+
+  useEffect(() => {
+    if (!initialActivityRef || compact) return;
+    activityRefs.current[initialActivityRef]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [compact, initialActivityRef, messages]);
 
   const handlePickImage = async (file: File | null) => {
     if (!file) return;
@@ -173,6 +187,7 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
       const optimized = await optimizeRecordImage(file);
       setPendingImageDataUrl(optimized);
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({
         type: 'error',
         message: error instanceof Error ? error.message : 'Unable to process that picture.',
@@ -213,6 +228,7 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
       setPendingImageDataUrl(null);
       addToast({ type: 'success', message: 'Message sent.' });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({
         type: 'error',
         message: error instanceof Error ? error.message : 'Unable to send message.',
@@ -260,7 +276,7 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
             const showBody = message.body && message.body !== '[Picture]';
             const sender = senderLabel(message);
             return (
-              <div key={message.id} className={`flex motion-safe:animate-[james-fade-up_300ms_ease-out_both] ${isMine ? 'justify-end' : 'justify-start'}`}>
+              <div key={message.id} ref={(node) => { activityRefs.current[message.id] = node; }} className={`flex ${animateMessages ? 'motion-safe:animate-[james-fade-up_300ms_ease-out_both]' : ''} ${isMine ? 'justify-end' : 'justify-start'}`}>
                 <div
                   className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
                     isMine

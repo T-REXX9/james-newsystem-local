@@ -45,6 +45,7 @@ import { useToast } from './ToastProvider';
 import { ACCESS_MODULES, getAccessModuleState, toggleAccessModule, toggleAccessPage, canonicalizeAccessRights } from '../utils/accessModules';
 import { hasBackdatedPostingPermission, setBackdatedPostingPermission } from '../utils/backdatedPosting';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 const STAFF_PER_PAGE = 50;
 const STAFF_MEMBER_COLUMN_WIDTH = 288;
 const GROUP_COLUMN_WIDTH = 220;
@@ -513,6 +514,7 @@ const AccessControlSettings: React.FC = () => {
         durationMs: 4000,
       });
     } catch (error: any) {
+      if (shouldSuppressAuthError(error)) return;
       console.error('Unexpected error creating staff account:', error);
       setFormMessage({ type: 'error', text: error?.message || 'Something went wrong while creating the account.' });
       addToast({

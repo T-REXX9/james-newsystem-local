@@ -1,5 +1,6 @@
 import { getLocalAuthSession } from './localAuthService';
 
+import { parseApiError } from './localApiAuth';
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
 
@@ -50,17 +51,6 @@ export type PurchaseHistoryReport = {
     per_page: number;
     has_more: boolean;
   };
-};
-
-const parseApiError = async (response: Response): Promise<string> => {
-  try {
-    const payload = await response.json();
-    if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error.trim();
-    if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message.trim();
-  } catch {
-    // ignore
-  }
-  return `API request failed (${response.status})`;
 };
 
 const requestApi = async (url: string, init?: RequestInit): Promise<any> => {

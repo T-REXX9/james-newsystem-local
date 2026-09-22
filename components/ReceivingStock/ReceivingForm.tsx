@@ -16,6 +16,7 @@ import {
   validateDocumentDateWrite,
 } from '../../utils/backdatedPosting';
 
+import { shouldSuppressAuthError } from '../../services/localApiAuth';
 interface ReceivingFormProps {
     onClose: () => void;
     onSuccess: (report: ReceivingReport) => void;
@@ -113,6 +114,7 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                 } as LineItem];
             }));
         } catch (error: any) {
+      if (shouldSuppressAuthError(error)) return;
             addToast({ type: 'error', title: 'Unable to load purchase order', description: error.message });
         }
     };
@@ -214,6 +216,7 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
             onSuccess(created);
 
         } catch (error: any) {
+      if (shouldSuppressAuthError(error)) return;
             console.error("Error saving RR:", error);
             addToast({ type: 'error', title: 'Unable to save report', description: error.message || 'Failed to save Receiving Report' });
         } finally {

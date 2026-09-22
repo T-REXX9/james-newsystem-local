@@ -25,6 +25,7 @@ import {
 } from '../services/salesOrderLocalApiService';
 import { fetchContactById, fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { getLocalAuthSession } from '../services/localAuthService';
+import { parseApiErrorMessage, shouldSuppressAuthError } from '../services/localApiAuth';
 import {
   dispatchWorkflowNotification,
   markNotificationsAsReadByEntityKey,
@@ -520,6 +521,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
       }
       setConversionModalOpen(false);
     } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
       console.error('Error converting sales order:', err);
       const submitterProfileId = await resolveSubmitterProfileId(selectedOrder);
       await notifySalesOrderEvent(
@@ -601,7 +603,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
       );
 
       if (!response.ok) {
-        throw new Error(`Cancel failed (${response.status})`);
+        throw new Error(await parseApiErrorMessage(response));
       }
 
       const refreshed = await getSalesOrder(orderToCancel.id);
@@ -630,6 +632,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
       });
       await loadOrders();
     } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
       console.error('Failed to cancel sales order:', err);
       addToast({
         type: 'error',
@@ -674,6 +677,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
       });
       await loadOrders();
     } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
       console.error('Failed to unpost sales order:', err);
       addToast({
         type: 'error',
@@ -740,6 +744,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
       }
       addToast({ type: 'success', title: 'Sales date updated' });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({
         type: 'error',
         title: 'Unable to update sales date',
@@ -923,6 +928,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
       });
       addToast({ type: 'success', message: 'Sales order JPEG exported.' });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       console.error('Error exporting sales order JPEG:', error);
       addToast({
         type: 'error',

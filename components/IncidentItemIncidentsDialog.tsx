@@ -10,6 +10,7 @@ import {
 } from '../services/incidentItemsReportService';
 import { buildModuleRecordUrl } from '../utils/workflowNavigate';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface IncidentItemIncidentsDialogProps {
   isOpen: boolean;
   row: IncidentItemsReportRow | null;
@@ -66,6 +67,7 @@ const IncidentItemIncidentsDialog: React.FC<IncidentItemIncidentsDialogProps> = 
         });
         if (!cancelled) setIncidents(data);
       } catch (err: unknown) {
+      if (shouldSuppressAuthError(err)) return;
         if (!cancelled) {
           setIncidents([]);
           setError(err instanceof Error ? err.message : 'Unable to load Incident Reports for this item.');

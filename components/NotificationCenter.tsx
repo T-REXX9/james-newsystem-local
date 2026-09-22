@@ -47,11 +47,22 @@ const resolveNotificationCategory = (notification: Notification): NotificationCa
   return notification.metadata?.alert_type ? 'alert' : 'notification';
 };
 
+const notificationPayload = (entityType: string, recordId: string): Record<string, string> | undefined => {
+  if (!recordId) return undefined;
+  const key = ({
+    sales_inquiry: 'inquiryId', sales_order: 'orderId', order_slip: 'orderSlipId', invoice: 'invoiceId',
+    purchase_request: 'prId', purchase_order: 'poId', receiving_report: 'rrId',
+    daily_collection: 'collectionId', stock_adjustment: 'adjustmentId', transfer_stock: 'transferId',
+  } as Record<string, string>)[entityType];
+  return key ? { [key]: recordId } : { recordId };
+};
+
 const NotificationCenter: React.FC = () => {
   const { notifications, unreadCount, markAsRead, markManyAsRead, deleteNotification } = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<NotificationCategory>('notification');
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const lastNotificationClick = useRef<{ id: string; at: number } | null>(null);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -108,33 +119,43 @@ const NotificationCenter: React.FC = () => {
     return date.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
   };
 
-  const handleNotificationClick = async (notification: Notification) => {
+  const handleNotificationRead = async (notification: Notification) => {
     await markAsRead(notification);
-    if (notification.action_url) {
-      const tabId = notification.action_url.replace(/^\/+/, '').split(/[?#]/)[0].trim();
-      if (tabId) {
-        const metadata = notification.metadata || {};
-        const entityType = String(metadata.entity_type || '');
-        const contactId = String(metadata.contact_id || '');
-        const isAgentSalesReportNotification =
-          (
-            entityType === 'call_report' ||
-            entityType === 'call_report_reply' ||
-            entityType === 'prospect_customer_comment'
-          ) && Boolean(contactId);
-        const payload = entityType === 'customer_detail_update_request'
-          ? {
-              contactId: String(metadata.contact_id || ''),
-              approvalRequestId: String(metadata.entity_id || ''),
-            }
-          : isAgentSalesReportNotification
-            ? { contactId }
-          : undefined;
-        const targetTab = isAgentSalesReportNotification ? 'maintenance-customer-customer-data' : tabId;
-        window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab: targetTab, payload } }));
-        setIsOpen(false);
-      }
+  };
+
+  const handleNotificationPointerClick = (notification: Notification) => {
+    const now = Date.now();
+    const last = lastNotificationClick.current;
+    if (last?.id === notification.id && now - last.at < 500) {
+      lastNotificationClick.current = null;
+      handleNotificationOpen(notification);
+      return;
     }
+    lastNotificationClick.current = { id: notification.id, at: now };
+    void handleNotificationRead(notification);
+  };
+
+  const handleNotificationOpen = (notification: Notification) => {
+    const metadata = notification.metadata || {};
+    const entityType = String(metadata.entity_type || '');
+    const contactId = String(metadata.contact_id || '');
+    const tabId = String(notification.action_url || metadata.action_url || '').replace(/^\/+/, '').split(/[?#]/)[0].trim();
+    const isConversation = ['call_report', 'call_report_reply', 'prospect_customer_comment', 'prospect'].includes(entityType) && Boolean(contactId || metadata.entity_id);
+    const targetTab = isConversation ? 'maintenance-customer-customer-data' : tabId;
+    if (!targetTab) return;
+
+    const recordId = String(metadata.entity_id || '');
+    const payload = entityType === 'customer_detail_update_request'
+      ? { contactId, approvalRequestId: recordId }
+      : isConversation
+        ? {
+            contactId: contactId || recordId,
+            conversationType: String(metadata.conversation_type || 'agent_sales_report'),
+            activityRef: String(metadata.target_ref || recordId),
+          }
+        : notificationPayload(entityType, recordId);
+    window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab: targetTab, payload } }));
+    setIsOpen(false);
   };
 
   const notificationsByTab = NOTIFICATION_TABS.reduce<Record<NotificationCategory, Notification[]>>(
@@ -253,7 +274,16 @@ const NotificationCenter: React.FC = () => {
                       <div
                         key={notification.id}
                         className={`p-4 ${getTypeColor(notification.type)} cursor-pointer hover:opacity-80 transition-opacity border`}
-                        onClick={() => handleNotificationClick(notification)}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => handleNotificationPointerClick(notification)}
+                        onDoubleClick={() => handleNotificationOpen(notification)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            handleNotificationOpen(notification);
+                          }
+                        }}
                       >
                         <div className="flex items-start gap-3">
                           <div className="flex-shrink-0 mt-0.5">
@@ -299,7 +329,16 @@ const NotificationCenter: React.FC = () => {
                       <div
                         key={notification.id}
                         className="p-4 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors border border-slate-100 dark:border-slate-800"
-                        onClick={() => handleNotificationClick(notification)}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => handleNotificationPointerClick(notification)}
+                        onDoubleClick={() => handleNotificationOpen(notification)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            handleNotificationOpen(notification);
+                          }
+                        }}
                       >
                         <div className="flex items-start gap-3 opacity-60">
                           <div className="flex-shrink-0 mt-0.5">

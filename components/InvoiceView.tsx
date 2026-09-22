@@ -42,6 +42,7 @@ import {
 } from '../utils/backdatedPosting';
 import { isMasterUserType } from '../constants';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface InvoiceViewProps {
   initialInvoiceId?: string;
   initialInvoiceRefNo?: string;
@@ -469,6 +470,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
       await loadInvoices();
       navigateWorkflow('sales-transaction-sales-order', { orderId: salesOrderId });
     } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
       console.error('Failed to unpost invoice:', err);
       await notifyInvoiceEvent(
         'Invoice Unpost Failed',
@@ -557,6 +559,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
       setEditNumberModalOpen(false);
       await loadInvoices();
     } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
       console.error('Failed to update invoice number:', err);
       addToast({
         type: 'error',
@@ -576,6 +579,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
       setSequenceNextPreview(sequence.next_invoice_no);
       setSequenceStartDraft(sequence.next_invoice_no);
     } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
       console.error('Failed loading invoice number sequence:', err);
     }
   }, [isMasterUser]);
@@ -598,6 +602,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
         durationMs: 4000,
       });
     } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
       addToast({
         type: 'error',
         title: 'Failed to set invoice number start',
@@ -671,6 +676,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
       }
       addToast({ type: 'success', title: 'Sales date updated' });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({
         type: 'error',
         title: 'Unable to update sales date',
@@ -772,6 +778,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId, initialInvo
       });
       addToast({ type: 'success', message: 'Invoice JPEG exported.' });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       console.error('Error exporting invoice JPEG:', error);
       addToast({
         type: 'error',

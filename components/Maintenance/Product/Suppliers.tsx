@@ -5,6 +5,7 @@ import { useToast } from '../../ToastProvider';
 import { Edit2, Plus, Search, Trash2, X } from 'lucide-react';
 import { canPerformAction } from '../../../utils/actionPermissions';
 
+import { shouldSuppressAuthError } from '../../../services/localApiAuth';
 const SupplierForm: React.FC<{
     initialData?: Supplier | null;
     onClose: () => void;
@@ -46,6 +47,7 @@ const SupplierForm: React.FC<{
             });
             onSuccess();
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error saving supplier:', error);
             addToast({
                 type: 'error',
@@ -156,6 +158,7 @@ export default function Suppliers() {
             const items = await fetchSuppliers(search);
             setData(items);
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error fetching suppliers:', error);
             addToast({
                 type: 'error',
@@ -186,6 +189,7 @@ export default function Suppliers() {
             setDeleteTargetId(null);
             await loadSuppliers(searchTerm);
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error deleting supplier:', error);
             addToast({
                 type: 'error',

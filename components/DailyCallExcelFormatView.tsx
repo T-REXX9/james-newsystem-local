@@ -17,6 +17,7 @@ import { VipTierConfig } from '../types';
 import AddContactModal from './AddContactModal';
 import { canPerformAction } from '../utils/actionPermissions';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface DailyCallExcelFormatViewProps {
   currentUser: UserProfile | null;
 }
@@ -189,6 +190,7 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
       });
       return created;
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({
         type: 'error',
         title: 'Unable to create customer',

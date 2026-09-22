@@ -5,6 +5,7 @@ import CreateIncidentReportModal from './CreateIncidentReportModal';
 import { IncidentReport, UserProfile } from '../types';
 import { isMasterUserAccount } from '../constants';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface IncidentReportTabProps {
   contactId: string;
   currentUser?: UserProfile | null;
@@ -38,6 +39,7 @@ const IncidentReportTab: React.FC<IncidentReportTabProps> = ({ contactId, curren
       const data = await fetchDailyCallIncidentReports(contactId);
       setReports(data || []);
     } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
       console.error('Error loading incident reports:', err);
       setReports([]);
       setLoadError(err instanceof Error ? err.message : 'Incident reports are unavailable.');
@@ -62,6 +64,7 @@ const IncidentReportTab: React.FC<IncidentReportTabProps> = ({ contactId, curren
       });
       await loadReports();
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       setReviewError(error instanceof Error ? error.message : 'The incident decision could not be saved.');
     } finally {
       setReviewingId(null);

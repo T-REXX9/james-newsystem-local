@@ -7,6 +7,7 @@ import {
 } from '../../../services/activityLogsLocalApiService';
 import { formatDateTime } from '../../../utils/formatUtils';
 
+import { shouldSuppressAuthError } from '../../../services/localApiAuth';
 const formatDate = (value?: string): string => {
   if (!value) return '-';
   const d = new Date(value);
@@ -87,6 +88,7 @@ export default function ActivityLogs({ title = 'Activity Logs', initialDateFrom,
       setHasMore(Boolean(data.meta.has_more));
       setTotalRows(data.meta.total);
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setLogs([]);
       setError(err?.message || 'Failed to load activity logs');
     } finally {

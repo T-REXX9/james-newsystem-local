@@ -13,6 +13,7 @@ import FieldHelp from './FieldHelp';
 import { validateMinLength, validateRequired } from '../utils/formValidation';
 import { canPerformAction } from '../utils/actionPermissions';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface CreateIncidentReportModalProps {
   contactId: string;
   isOpen: boolean;
@@ -266,6 +267,7 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
       onSuccess();
       handleClose();
     } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
       console.error('Error creating incident report:', err);
       const friendlyMessage = savedIncidentReportIdRef.current
         ? 'The customer incident was saved, but the warehouse report sync failed. Please click Retry Warehouse Sync.'

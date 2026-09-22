@@ -4,6 +4,7 @@ import { RecoveryItem, getAllRecycleBinItems, restoreRecycleBinItem } from '../s
 import { canPerformAction } from '../utils/actionPermissions';
 import { formatDateTime } from '../utils/formatUtils';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 const TYPE_LABELS: Record<string, string> = {
   contact: 'Customer',
   product: 'Product',
@@ -59,6 +60,7 @@ export default function RecycleBinView() {
       await restoreRecycleBinItem(item);
       setRevision(n => n + 1);
     } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err instanceof Error ? err.message : 'Unable to restore deleted record');
     } finally {
       setRestoringId('');

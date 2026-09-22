@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NotificationProvider } from '../NotificationProvider';
 import NotificationCenter from '../NotificationCenter';
@@ -256,11 +256,12 @@ describe('NotificationCenter', () => {
     renderNotificationCenter();
     await user.click(screen.getByTitle('Notifications'));
     await user.click(screen.getByText('New Agent Sales Report message'));
+    await user.dblClick(screen.getByText('New Agent Sales Report message'));
 
     expect(navigationHandler).toHaveBeenCalledWith(expect.objectContaining({
       detail: {
         tab: 'maintenance-customer-customer-data',
-        payload: { contactId: 'customer-42' },
+        payload: { contactId: 'customer-42', conversationType: 'agent_sales_report', activityRef: 'message-1' },
       },
     }));
     window.removeEventListener('workflow:navigate', navigationHandler);
@@ -297,12 +298,42 @@ describe('NotificationCenter', () => {
     renderNotificationCenter();
     await user.click(screen.getByTitle('Notifications'));
     await user.click(screen.getByText('New prospective customer comment'));
+    await user.dblClick(screen.getByText('New prospective customer comment'));
 
     expect(navigationHandler).toHaveBeenCalledWith(expect.objectContaining({
       detail: {
         tab: 'maintenance-customer-customer-data',
-        payload: { contactId: 'prospect-42' },
+        payload: { contactId: 'prospect-42', conversationType: 'agent_sales_report', activityRef: 'prospect-42' },
       },
+    }));
+    window.removeEventListener('workflow:navigate', navigationHandler);
+  });
+
+  it.each([
+    ['sales_inquiry', 'inquiryId', 'sales-transaction-sales-inquiry'],
+    ['sales_order', 'orderId', 'sales-transaction-sales-order'],
+    ['order_slip', 'orderSlipId', 'sales-transaction-order-slip'],
+    ['invoice', 'invoiceId', 'sales-transaction-invoice'],
+    ['purchase_request', 'prId', 'warehouse-purchasing-purchase-request'],
+    ['purchase_order', 'poId', 'warehouse-purchasing-purchase-order'],
+    ['receiving_report', 'rrId', 'warehouse-purchasing-receiving-stock'],
+  ])('opens the selected %s record', async (entityType, payloadKey, tab) => {
+    fetchNotificationsMock.mockResolvedValue([createNotification({
+      id: `route-${entityType}`,
+      title: `Route ${entityType}`,
+      category: 'notification',
+      action_url: tab,
+      metadata: { entity_type: entityType, entity_id: 'record-42', category: 'notification' },
+    })]);
+    getUnreadCountMock.mockResolvedValue(1);
+    const navigationHandler = vi.fn();
+    window.addEventListener('workflow:navigate', navigationHandler);
+    const user = userEvent.setup();
+    renderNotificationCenter();
+    await user.click(screen.getByTitle('Notifications'));
+    fireEvent.doubleClick(screen.getByText(`Route ${entityType}`));
+    expect(navigationHandler).toHaveBeenCalledWith(expect.objectContaining({
+      detail: { tab, payload: { [payloadKey]: 'record-42' } },
     }));
     window.removeEventListener('workflow:navigate', navigationHandler);
   });

@@ -23,6 +23,7 @@ import {
 } from '../utils/backdatedPosting';
 import { formatDate } from '../utils/formatUtils';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
@@ -82,6 +83,7 @@ const InventoryAuditReport: React.FC = () => {
         return rows[0]?.refno || '';
       });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       console.error('Unable to load stock adjustments:', error);
       setHeaders([]);
       setSelectedRefno('');
@@ -107,6 +109,7 @@ const InventoryAuditReport: React.FC = () => {
       setDetail(data);
       setDateDraft(data.header.adjustmentDate);
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       console.error('Unable to load stock adjustment detail:', error);
       setDetail(null);
       addToast({ type: 'error', title: 'Unable to load adjustment', description: error instanceof Error ? error.message : 'Please try again.' });
@@ -158,6 +161,7 @@ const InventoryAuditReport: React.FC = () => {
       setPage(1);
       addToast({ type: 'success', title: 'Stock adjustment created', description: `${created.adjustmentNo} is ready for physical counts.` });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({ type: 'error', title: 'Unable to create adjustment', description: error instanceof Error ? error.message : 'Please try again.' });
     } finally {
       setIsSaving(false);
@@ -196,6 +200,7 @@ const InventoryAuditReport: React.FC = () => {
       setModalItems(rows);
       setCountDrafts(drafts);
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({ type: 'error', title: 'Unable to open physical counts', description: error instanceof Error ? error.message : 'Please try again.' });
       setEditingPartNo('');
     } finally {
@@ -242,6 +247,7 @@ const InventoryAuditReport: React.FC = () => {
       await Promise.all([loadDetail(), loadHeaders(detail.header.refno)]);
       addToast({ type: 'success', title: 'Physical counts saved', description: 'Inventory balances and discrepancies were updated.' });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({ type: 'error', title: 'Unable to save counts', description: error instanceof Error ? error.message : 'Please try again.' });
     } finally {
       setIsSaving(false);
@@ -257,6 +263,7 @@ const InventoryAuditReport: React.FC = () => {
       await Promise.all([loadDetail(), loadHeaders(detail.header.refno)]);
       addToast({ type: 'success', title: 'Item adjustment deleted', description: 'The stock change was reversed.' });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({ type: 'error', title: 'Unable to delete item adjustment', description: error instanceof Error ? error.message : 'Please try again.' });
     } finally {
       setIsSaving(false);
@@ -272,6 +279,7 @@ const InventoryAuditReport: React.FC = () => {
       await Promise.all([loadDetail(), loadHeaders(detail.header.refno)]);
       addToast({ type: 'success', title: 'Adjustment posted', description: 'This SA is now locked from editing and deletion.' });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({ type: 'error', title: 'Unable to post adjustment', description: error instanceof Error ? error.message : 'Please try again.' });
     } finally {
       setIsSaving(false);
@@ -289,6 +297,7 @@ const InventoryAuditReport: React.FC = () => {
       await loadHeaders();
       addToast({ type: 'success', title: 'Stock adjustment deleted', description: 'The SA and its inventory changes were removed.' });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({ type: 'error', title: 'Unable to delete adjustment', description: error instanceof Error ? error.message : 'Please try again.' });
     } finally {
       setIsSaving(false);
@@ -314,6 +323,7 @@ const InventoryAuditReport: React.FC = () => {
       await Promise.all([loadDetail(), loadHeaders(detail.header.refno)]);
       addToast({ type: 'success', title: 'Adjustment date updated', description: 'The SA and inventory log dates now match.' });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({ type: 'error', title: 'Unable to update date', description: error instanceof Error ? error.message : 'Please try again.' });
     } finally {
       setIsSaving(false);
@@ -358,6 +368,7 @@ const InventoryAuditReport: React.FC = () => {
       link.click();
       URL.revokeObjectURL(link.href);
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({ type: 'error', title: 'Unable to export SA', description: error instanceof Error ? error.message : 'Please try again.' });
     } finally {
       setIsSaving(false);
@@ -372,6 +383,7 @@ const InventoryAuditReport: React.FC = () => {
       setPrintItems(items);
       window.setTimeout(() => window.print(), 150);
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({ type: 'error', title: 'Unable to prepare print view', description: error instanceof Error ? error.message : 'Please try again.' });
     } finally {
       setIsSaving(false);

@@ -11,6 +11,7 @@ import {
 } from '../../../services/remarkTemplateLocalApiService';
 import { canPerformAction } from '../../../utils/actionPermissions';
 
+import { shouldSuppressAuthError } from '../../../services/localApiAuth';
 const RemarkTemplateForm: React.FC<{
     initialData?: RemarkTemplateRecord | null;
     onClose: () => void;
@@ -46,6 +47,7 @@ const RemarkTemplateForm: React.FC<{
             });
             onSuccess();
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error saving remark template:', error);
             addToast({
                 type: 'error',
@@ -109,6 +111,7 @@ export default function RemarkTemplates() {
             const result = await fetchRemarkTemplates(debouncedSearch);
             setData(result.items || []);
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error fetching remark templates:', error);
             addToast({
                 type: 'error',
@@ -139,6 +142,7 @@ export default function RemarkTemplates() {
             });
             loadData();
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error deleting remark template:', error);
             addToast({
                 type: 'error',

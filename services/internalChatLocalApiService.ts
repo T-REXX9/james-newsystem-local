@@ -1,5 +1,6 @@
 import { getLocalAuthSession } from './localAuthService';
 
+import { parseApiErrorMessage } from './localApiAuth';
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 
 export interface InternalChatParticipant {
@@ -103,18 +104,6 @@ export interface InternalChatTypingState {
   conversation_key: string;
   typing_user_ids: string[];
 }
-
-const parseApiErrorMessage = async (response: Response): Promise<string> => {
-  try {
-    const payload = await response.json();
-    if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error.trim();
-    if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message.trim();
-  } catch {
-    // ignore parse errors
-  }
-
-  return `API request failed (${response.status}${response.statusText ? `: ${response.statusText}` : ''})`;
-};
 
 const getAuthHeaders = (): HeadersInit => {
   const session = getLocalAuthSession();

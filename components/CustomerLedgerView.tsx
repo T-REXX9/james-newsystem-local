@@ -18,6 +18,7 @@ import {
 import ModuleRecordLink from './ModuleRecordLink';
 import { formatCustomerSince, formatDate as formatDisplayDate, formatDateTime } from '../utils/formatUtils';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
 const formatDate = (value: string | null | undefined): string => {
@@ -689,6 +690,7 @@ const CustomerLedgerView: React.FC = () => {
       })
       .catch((err: any) => {
         if (!active) return;
+        if (shouldSuppressAuthError(err)) return;
         setLedgerData(null);
         setError(err?.message || 'Failed to load customer ledger');
       })

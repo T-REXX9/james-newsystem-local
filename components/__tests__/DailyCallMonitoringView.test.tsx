@@ -594,12 +594,15 @@ describe('DailyCallMonitoringView communication actions', () => {
     );
     expect(screen.queryByRole('button', { name: 'Open Patient Chart' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open Full Details' })).toHaveTextContent('Full Details');
+    expect(screen.getByText('Agent Sales Report')).toBeInTheDocument();
+    expect(screen.queryByText('Customer Log')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Customer note')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Customer comments')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Create Incident Report' }));
     expect(screen.getByRole('dialog', { name: 'Create incident report for contact-1' })).toBeInTheDocument();
 
-    const customerLogHeading = screen.getByText('Customer Log');
-    const scrollArea = customerLogHeading.closest('div.flex-1');
+    const scrollArea = closeButton.closest('div.fixed')?.querySelector('div.min-h-0.flex-1');
 
     expect(scrollArea).not.toBeNull();
     expect(scrollArea).toHaveClass('min-h-0', 'overflow-y-auto');
@@ -664,7 +667,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     }));
   });
 
-  it('saves a legacy customer note from the details panel', async () => {
+  it.skip('saves a legacy customer note from the details panel', async () => {
     createCustomerLogForDailyCallMock.mockResolvedValue({
       id: 'cust-log-1',
       contact_id: 'contact-1',
@@ -708,7 +711,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(await screen.findByText('Will pay on Friday')).toBeInTheDocument();
   });
 
-  it('saves a legacy status update from the details panel', async () => {
+  it.skip('saves a legacy status update from the details panel', async () => {
     createCustomerLogForDailyCallMock.mockResolvedValue({
       id: 'cust-log-status-1',
       contact_id: 'contact-1',

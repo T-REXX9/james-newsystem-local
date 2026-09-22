@@ -8,7 +8,6 @@ import IncidentReportTab from './IncidentReportTab';
 import SalesReturnTab from './SalesReturnTab';
 import PurchaseHistoryTab from './PurchaseHistoryTab';
 import InquiryHistoryTab from './InquiryHistoryTab';
-import PersonalCommentsTab from './PersonalCommentsTab';
 import DiscountRequestModal from './DiscountRequestModal';
 import AddContactModal from './AddContactModal';
 import { 
@@ -160,8 +159,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
     { id: 'InquiryHistory', label: 'Inquiries', icon: AlertCircle },
     { id: 'IncidentReports', label: 'Incidents', icon: AlertTriangle },
     { id: 'Requests', label: 'Requests', icon: CheckSquare },
-    { id: 'SalesReturns', label: 'Returns', icon: ShoppingBag },
-    { id: 'PersonalComments', label: 'Comments', icon: MessageSquare }
+    { id: 'SalesReturns', label: 'Returns', icon: ShoppingBag }
   ];
 
   return (

@@ -23,6 +23,7 @@ import {
 import IncidentItemIncidentsDialog from './IncidentItemIncidentsDialog';
 import { formatLocalDateInput, localDateDaysAgo } from '../utils/localDateInput';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 const matchSourceOptions: Array<{ value: IncidentMatchSource; label: string }> = [
   { value: 'all', label: 'All sources' },
   { value: 'manual', label: 'Manual' },
@@ -88,6 +89,7 @@ const IncidentItemsReport: React.FC<IncidentItemsReportProps> = ({
       setReportData(data);
       setSelectedRow(data.items[0] ?? null);
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(String(err?.message || 'Unable to load incident items report.'));
     } finally {
       setLoading(false);

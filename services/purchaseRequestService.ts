@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { parseApiErrorMessage } from './localApiAuth';
 import {
   PurchaseRequest,
   PurchaseRequestWithItems,
@@ -22,17 +23,6 @@ const getUserContext = () => {
     mainId: Number.isFinite(sessionMainId) && sessionMainId > 0 ? sessionMainId : API_MAIN_ID,
     userId: Number.isFinite(userId) && userId > 0 ? userId : 1,
   };
-};
-
-const parseApiErrorMessage = async (response: Response): Promise<string> => {
-  try {
-    const payload = await response.json();
-    if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error.trim();
-    if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message.trim();
-  } catch {
-    // no-op
-  }
-  return `API request failed (${response.status})`;
 };
 
 const requestApi = async (url: string, init?: RequestInit): Promise<any> => {

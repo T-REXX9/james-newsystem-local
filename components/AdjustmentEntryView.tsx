@@ -11,6 +11,7 @@ import { canBackdatePosting, canPerformAction } from '../utils/actionPermissions
 import { canMutateDocumentDateField, localTodayYmd, validateDocumentDateWrite } from '../utils/backdatedPosting';
 import { formatDate } from '../utils/formatUtils';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
@@ -104,6 +105,7 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
         setSelectedRefno(data.items[0]?.lrefno || '');
       }
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to load adjustment entries');
       setRows([]);
     } finally {
@@ -126,6 +128,7 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
         remark: item.lremark || '',
       });
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to load record');
     } finally {
       setLoadingDetail(false);
@@ -240,6 +243,7 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
       setSelectedRefno(created.lrefno);
       await fetchDetail(created.lrefno);
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to create record');
     } finally {
       setSaving(false);
@@ -281,6 +285,7 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
       setSelected(updated);
       await fetchList();
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to update record');
     } finally {
       setSaving(false);
@@ -300,6 +305,7 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
       await adjustmentEntryService.action(selected.lrefno, action);
       await Promise.all([fetchList(), fetchDetail(selected.lrefno)]);
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || `Failed to ${action} record`);
     } finally {
       setSaving(false);
@@ -318,6 +324,7 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
       setSelectedRefno('');
       await fetchList();
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to delete record');
     } finally {
       setSaving(false);

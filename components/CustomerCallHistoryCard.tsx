@@ -3,6 +3,7 @@ import { ArrowDownLeft, ArrowUpRight, Phone, RefreshCw } from 'lucide-react';
 import { fetchHardwareCallLogs, HardwareCallLog } from '../services/callingSystemService';
 import { formatDateTime } from '../utils/formatUtils';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface CustomerCallHistoryCardProps {
   customerId: string | number;
 }
@@ -36,6 +37,7 @@ const CustomerCallHistoryCard: React.FC<CustomerCallHistoryCardProps> = ({ custo
     try {
       setLogs(await fetchHardwareCallLogs({ customerId }));
     } catch (loadError) {
+      if (shouldSuppressAuthError(loadError)) return;
       setError(loadError instanceof Error ? loadError.message : 'Unable to load this customer’s call history.');
     } finally {
       setLoading(false);

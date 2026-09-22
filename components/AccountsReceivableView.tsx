@@ -11,6 +11,7 @@ import { LedgerCustomer, customerLedgerService } from '../services/customerLedge
 import { BUTTON_BASE, BUTTON_PRIMARY } from '../utils/uiConstants';
 import { formatDate as formatPhilippineDate } from '../utils/formatUtils';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
 const dateTypeOptions: Array<{ value: ArDateType; label: string }> = [
@@ -139,6 +140,7 @@ const AccountsReceivableView: React.FC<AccountsReceivableViewProps> = ({ initial
       });
       setReport(payload);
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setReport(null);
       setError(err?.message || 'Failed to load accounts receivable');
     } finally {

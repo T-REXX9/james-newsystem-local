@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { parseApiErrorMessage } from './localApiAuth';
 import {
   PurchaseOrder,
   PurchaseOrderInsert,
@@ -52,17 +53,6 @@ const parseIncompleteDeliveryReason = (raw: unknown): string => {
   const match = text.match(/(?:Incomplete delivery reason|Short receipt reason):\s*(.*?)(?:\s*\|\s*|$)/i);
   if (match?.[1]) return match[1].trim();
   return text.replace(/^(?:Incomplete delivery reason|Short receipt reason):\s*/i, '').trim();
-};
-
-const parseApiErrorMessage = async (response: Response): Promise<string> => {
-  try {
-    const payload = await response.json();
-    if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error.trim();
-    if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message.trim();
-  } catch {
-    // ignore parse errors
-  }
-  return `API request failed (${response.status})`;
 };
 
 const getAuthHeaders = (extra?: Record<string, string>): Record<string, string> => {

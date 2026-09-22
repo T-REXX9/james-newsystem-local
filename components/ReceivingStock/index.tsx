@@ -9,6 +9,7 @@ import ReceivingView from './ReceivingView';
 import { retraceWorkflowHistory } from '../../utils/workflowHistory';
 import { useToast } from '../ToastProvider';
 
+import { shouldSuppressAuthError } from '../../services/localApiAuth';
 interface ReceivingStockProps {
     initialRRId?: string;
     initialRRRefNo?: string;
@@ -41,6 +42,7 @@ const ReceivingStock: React.FC<ReceivingStockProps> = ({ initialRRId, initialRRR
             });
             setRrs(data);
         } catch (error: any) {
+      if (shouldSuppressAuthError(error)) return;
             addToast({
                 type: 'error',
                 title: 'Unable to load receiving reports',

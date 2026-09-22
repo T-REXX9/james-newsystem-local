@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ShoppingCart } from 'lucide-react';
 import { fetchDailyCallPurchaseHistory } from '../services/dailyCallCustomerDetailService';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface PurchaseHistoryTabProps {
   contactId: string;
 }
@@ -24,6 +25,7 @@ const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ contactId }) =>
         const total = data?.reduce((sum: number, p: any) => sum + (p.total_amount || 0), 0) || 0;
         setTotalValue(total);
       } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
         console.error('Error loading purchase history:', err);
         setPurchases([]);
         setTotalValue(0);

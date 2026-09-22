@@ -14,6 +14,7 @@ import {
     ApproverUpdateInput,
 } from '../../../services/approverLocalApiService';
 
+import { shouldSuppressAuthError } from '../../../services/localApiAuth';
 interface ApproverFormProps {
     initialData?: ApproverRecord | null;
     onClose: () => void;
@@ -71,6 +72,7 @@ const ApproverForm: React.FC<ApproverFormProps> = ({ initialData, onClose, onSuc
             });
             onSuccess();
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error saving approver:', error);
             addToast({
                 type: 'error',
@@ -163,6 +165,7 @@ export default function Approvers() {
             const result = await fetchApprovers(debouncedSearch);
             setData(result.items || []);
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error fetching approvers:', error);
             addToast({
                 type: 'error',
@@ -192,6 +195,7 @@ export default function Approvers() {
             });
             loadData();
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error deleting approver:', error);
             addToast({
                 type: 'error',

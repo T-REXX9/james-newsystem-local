@@ -22,6 +22,7 @@ import {
 } from '../../utils/backdatedPosting';
 import { formatDate, formatDateTime } from '../../utils/formatUtils';
 
+import { shouldSuppressAuthError } from '../../services/localApiAuth';
 interface ReceivingViewProps {
     rrId: string;
     onBack: () => void;
@@ -157,6 +158,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
             setShowFinalizeConfirm(false);
             setIncompleteDeliveryReason('');
         } catch (error: any) {
+      if (shouldSuppressAuthError(error)) return;
             console.error("Error finalizing RR:", error);
             addToast({ type: 'error', message: error.message || "Failed to finalize Receiving Report" });
         } finally {
@@ -172,6 +174,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                 addToast({ type: 'success', message: `${kind === 'unpost' ? 'Receiving Report unposted' : 'Receiving Report deleted'}.` });
                 if (kind === 'delete') onBack(); else await fetchRR();
             } catch (error: any) {
+      if (shouldSuppressAuthError(error)) return;
                 addToast({ type: 'error', message: error.message || `Failed to ${kind} Receiving Report` });
                 throw error;
             }
@@ -186,6 +189,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
             addToast({ type: 'success', message: 'Receiving Report reopened.' });
             await fetchRR();
         } catch (error: any) {
+      if (shouldSuppressAuthError(error)) return;
             addToast({ type: 'error', message: error.message || 'Failed to reopen Receiving Report' });
         }
     };
@@ -215,6 +219,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
             addToast({ type: 'success', title: 'Receive date updated' });
             await fetchRR();
         } catch (error: any) {
+      if (shouldSuppressAuthError(error)) return;
             addToast({ type: 'error', title: 'Unable to update date', description: error?.message || 'Please try again.' });
         } finally {
             setSavingReceiveDate(false);

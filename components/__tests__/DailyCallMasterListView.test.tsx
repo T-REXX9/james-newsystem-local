@@ -45,6 +45,20 @@ vi.mock('../DailyCallCustomerDetailModal', () => ({
     : null,
 }));
 
+vi.mock('../CustomerSalesReportChat', () => ({
+  default: ({ contactId, viewOnly, autoScroll, animateMessages }: any) => (
+    <div
+      role="region"
+      aria-label={`Inline Agent Sales Report for ${contactId}`}
+      data-view-only={String(Boolean(viewOnly))}
+      data-auto-scroll={String(autoScroll)}
+      data-animate-messages={String(animateMessages)}
+    >
+      Inline Agent Sales Report chat
+    </div>
+  ),
+}));
+
 vi.mock('../ToastProvider', () => ({
   useToast: () => ({
     addToast: vi.fn(),
@@ -89,13 +103,13 @@ describe('DailyCallMasterListView', () => {
     expect(screen.getByTestId('daily-call-table-scroll')).not.toHaveClass('overflow-auto');
   });
 
-  it('shows a prospect comment in the unverified prospects list', async () => {
+  it('shows the latest unified agent sales report message in the unverified prospects list', async () => {
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
       meta: { fromDate: '2025-10-01', toDate: '2026-09-10', count: 1 },
       items: [{
         id: 'prospect-1', shopName: 'New Prospect Shop', province: 'Manila', city: 'Manila',
         contactNumber: '0917', assignedTo: 'Joan Jerusalem', profileType: 'Prospect',
-        verification: 'Unverified', prospectComment: 'Interested in fleet pricing after the call.',
+        verification: 'Unverified', latestSalesReportMessage: 'Interested in fleet pricing after the call.',
         lastPurchaseDate: '—', lastPurchaseDateRaw: '', purchaseCount: 0,
         totalSales: 0, currentMonthSales: 0, averageMonthlySales: 0,
         averageMonthlySalesMonthCount: 0, recentThreeMonthSales: 0,
@@ -108,6 +122,29 @@ describe('DailyCallMasterListView', () => {
 
     await userEvent.setup().click(await screen.findByRole('button', { name: 'Unverified Prospects (1)' }));
     expect(await screen.findByText('Interested in fleet pricing after the call.')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Latest Agent Sales Report' })).toBeInTheDocument();
+  });
+
+  it('opens an Agent Sales Report reply modal when a latest message is clicked', async () => {
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: '2026-09-10', count: 1 },
+      items: [{
+        id: 'inline-reply-1', shopName: 'Inline Reply Shop', province: 'Manila', city: 'Manila',
+        contactNumber: '0917', assignedTo: 'Joan Jerusalem', latestSalesReportMessage: 'Please call again tomorrow.',
+        lastPurchaseDate: 'Sep 1, 2026', lastPurchaseDateRaw: '2026-09-01', purchaseCount: 1,
+        totalSales: 0, currentMonthSales: 0, averageMonthlySales: 0, averageMonthlySalesMonthCount: 0,
+        recentThreeMonthSales: 0, previousThreeMonthSales: 0, salesTrendPercent: 0, daysSinceLastPurchase: 10,
+        monthsSinceLastPurchase: 0, purchaseAgeGroup: 'recent', listCategory: 'priority',
+      }],
+    });
+
+    render(<DailyCallMasterListView currentUser={masterUser} />);
+
+    const replyButton = await screen.findByRole('button', { name: 'Reply to latest Agent Sales Report for Inline Reply Shop' });
+    await userEvent.setup().click(replyButton);
+    expect(screen.getByRole('dialog', { name: 'Agent Sales Report · Inline Reply Shop' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Inline Agent Sales Report for inline-reply-1' })).toHaveAttribute('data-auto-scroll', 'false');
+    expect(screen.getByRole('region', { name: 'Inline Agent Sales Report for inline-reply-1' })).toHaveAttribute('data-animate-messages', 'false');
   });
 
   it('shows the contact person name beside the contact number', async () => {

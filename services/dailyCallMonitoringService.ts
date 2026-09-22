@@ -20,6 +20,7 @@ import {
 import { formatDateFull } from '../utils/formatUtils';
 import { resolveDailyCallListCategory } from '../utils/dailyCallListCategory';
 import { getLocalAuthSession } from './localAuthService';
+import { parseApiErrorMessage } from './localApiAuth';
 
 export interface DailyCallFilterParams {
   status?: DailyCallCustomerFilterStatus;
@@ -166,14 +167,7 @@ const requestJson = async (url: string, init?: RequestInit): Promise<any> => {
       if (session?.token) headers.set('Authorization', `Bearer ${session.token}`);
       const response = await fetch(url, { ...init, headers });
       if (!response.ok) {
-        let message = `API request failed (${response.status})`;
-        try {
-          const payload = await response.json();
-          message = String(payload?.error || payload?.message || message);
-        } catch {
-          // Keep the status-based fallback.
-        }
-        throw new Error(message);
+        throw new Error(await parseApiErrorMessage(response));
       }
       return response.json();
     } catch (error) {
@@ -506,7 +500,7 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
     debtType: cleanNullableText(row?.debtType ?? row?.debt_type, 'Good'),
     verifiedBy: cleanNullableText(row?.verifiedBy ?? row?.verified_by),
     verifiedInSystem: Boolean(row?.verifiedInSystem ?? row?.verified_in_system),
-    prospectComment: cleanNullableText(row?.prospectComment ?? row?.prospect_comment),
+    latestSalesReportMessage: cleanNullableText(row?.latestSalesReportMessage ?? row?.latest_sales_report_message),
     createdAt: cleanNullableText(row?.createdAt ?? row?.created_at ?? row?.statusDate ?? row?.status_date),
     priceGroup: cleanNullableText(row?.priceGroup ?? row?.price_group),
     firstPurchaseDate: cleanNullableText(row?.firstPurchaseDate ?? row?.first_purchase_date, '—'),
@@ -630,7 +624,7 @@ export const fetchCustomersForDailyCall = async (
     const response = await fetch(`${API_BASE_URL}/daily-call-monitoring/excel?${params.toString()}`, {
       headers: getAuthHeaders(),
     });
-    if (!response.ok) throw new Error(`API request failed (${response.status})`);
+    if (!response.ok) throw new Error(await parseApiErrorMessage(response));
     const payload = await response.json();
     const data = payload?.data;
     if (!Array.isArray(data)) return [];

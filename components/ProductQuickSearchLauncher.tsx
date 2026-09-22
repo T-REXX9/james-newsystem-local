@@ -13,6 +13,7 @@ import { fetchProductsPage } from '../services/productLocalApiService';
 import { useToast } from './ToastProvider';
 import { getCentralStock } from '../utils/productStock';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 const PRODUCT_RESULT_LIMIT = 80;
 
 const normalizeText = (value: string) => value.trim().toLowerCase();
@@ -184,6 +185,7 @@ const ProductQuickSearchLauncher: React.FC = () => {
           return ranked[0]?.id || null;
         });
       } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
         if (requestId !== latestRequestRef.current) {
           return;
         }

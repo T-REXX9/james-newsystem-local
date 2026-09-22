@@ -35,6 +35,7 @@ import {
 } from '../../../services/specialPriceService';
 import { canPerformAction } from '../../../utils/actionPermissions';
 
+import { shouldSuppressAuthError } from '../../../services/localApiAuth';
 interface ConfirmState {
     open: boolean;
     refno: string | null;
@@ -392,6 +393,7 @@ const SearchablePickerModal = <T,>({
                     setItems(result.items);
                 }
             } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
                 if (active) {
                     addToast({
                         type: 'error',
@@ -428,6 +430,7 @@ const SearchablePickerModal = <T,>({
             onClose();
             await onAdded();
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             addToast({
                 type: 'error',
                 title: errorTitle,
@@ -607,6 +610,7 @@ export default function SpecialPrice() {
             setRecords(result.items);
             setMeta(result.meta);
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             addToast({
                 type: 'error',
                 title: 'Unable to load special prices',
@@ -625,6 +629,7 @@ export default function SpecialPrice() {
             setProducts(result.items);
             setProductMeta(result.meta);
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             addToast({
                 type: 'error',
                 title: 'Unable to load products',
@@ -645,6 +650,7 @@ export default function SpecialPrice() {
                 setEditType(result.type || 'Fixed Amount Deduction');
                 setEditAmount(String(result.amount ?? ''));
             } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
                 addToast({
                     type: 'error',
                     title: 'Unable to load special price details',
@@ -709,6 +715,7 @@ export default function SpecialPrice() {
             setEditType(created.type || 'Fixed Amount Deduction');
             setEditAmount(String(created.amount ?? ''));
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             addToast({
                 type: 'error',
                 title: 'Unable to create special price',
@@ -739,6 +746,7 @@ export default function SpecialPrice() {
                 durationMs: 4000,
             });
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             addToast({
                 type: 'error',
                 title: 'Unable to update special price',
@@ -1214,6 +1222,7 @@ export default function SpecialPrice() {
                         setDetail(null);
                         await loadRecords();
                     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
                         addToast({
                             type: 'error',
                             title: 'Unable to delete special price',
@@ -1251,6 +1260,7 @@ export default function SpecialPrice() {
                         });
                         await refreshDetail();
                     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
                         addToast({
                             type: 'error',
                             title: 'Unable to remove customer',
@@ -1288,6 +1298,7 @@ export default function SpecialPrice() {
                         });
                         await refreshDetail();
                     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
                         addToast({
                             type: 'error',
                             title: 'Unable to remove area',
@@ -1325,6 +1336,7 @@ export default function SpecialPrice() {
                         });
                         await refreshDetail();
                     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
                         addToast({
                             type: 'error',
                             title: 'Unable to remove category',

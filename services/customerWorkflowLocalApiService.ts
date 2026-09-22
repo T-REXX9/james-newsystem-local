@@ -1,6 +1,7 @@
 import { CUSTOMER_UPDATED_EVENT } from '../utils/customerWorkflowEvents';
 import type { Contact } from '../types';
 import { getLocalAuthSession } from './localAuthService';
+import { endAuthSessionSilently } from './localApiAuth';
 import { requestLocalApi } from './localApiClient';
 import { mapContactUpdatesToApi, mapContactPersonPayloadToApi } from './customerDatabaseLocalApiService';
 
@@ -25,7 +26,7 @@ export interface CustomerRequest {
 }
 const pathFor = (id: string) => `/customer-workflows/${encodeURIComponent(id)}`;
 const requireSession = () => {
-  if (!getLocalAuthSession()?.token) throw new Error('Please sign in again to access customer records.');
+  if (!getLocalAuthSession()?.token) endAuthSessionSilently();
 };
 async function history(id: string, kind: 'inquiries' | 'returns'): Promise<CustomerHistoryRecord[]> {
   requireSession();

@@ -1,5 +1,6 @@
 import { getLocalAuthSession } from './localAuthService';
 
+import { parseApiError } from './localApiAuth';
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
 
@@ -31,17 +32,6 @@ const getMainId = (): number => {
   const session = getLocalAuthSession();
   const mainId = Number(session?.context?.user?.main_id || API_MAIN_ID || 1);
   return Number.isFinite(mainId) && mainId > 0 ? mainId : 1;
-};
-
-const parseApiError = async (response: Response): Promise<string> => {
-  try {
-    const payload = await response.json();
-    if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error.trim();
-    if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message.trim();
-  } catch {
-    // ignore
-  }
-  return `API request failed (${response.status})`;
 };
 
 const requestApi = async (url: string): Promise<any> => {

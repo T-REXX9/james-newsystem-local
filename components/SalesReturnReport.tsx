@@ -7,6 +7,7 @@ import {
   SalesReturnReportRow,
 } from '../services/salesReturnReportService';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
 interface SalesReturnReportProps {
@@ -75,6 +76,7 @@ const SalesReturnReport: React.FC<SalesReturnReportProps> = ({
       setSummary(data.summary);
       setMeta(data.meta);
     } catch (loadError) {
+      if (shouldSuppressAuthError(loadError)) return;
       setError(loadError instanceof Error ? loadError.message : 'Unable to load the sales return report.');
     } finally {
       setLoading(false);

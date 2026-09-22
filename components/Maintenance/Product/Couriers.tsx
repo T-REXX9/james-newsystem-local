@@ -11,6 +11,7 @@ import {
 } from '../../../services/courierLocalApiService';
 import { canPerformAction } from '../../../utils/actionPermissions';
 
+import { shouldSuppressAuthError } from '../../../services/localApiAuth';
 const CourierForm: React.FC<{
     initialData?: CourierRecord | null;
     onClose: () => void;
@@ -46,6 +47,7 @@ const CourierForm: React.FC<{
             });
             onSuccess();
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error saving courier:', error);
             addToast({
                 type: 'error',
@@ -109,6 +111,7 @@ export default function Couriers() {
             const result = await fetchCouriers(debouncedSearch);
             setData(result.items || []);
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error fetching couriers:', error);
             addToast({
                 type: 'error',
@@ -139,6 +142,7 @@ export default function Couriers() {
             });
             loadData();
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error deleting courier:', error);
             addToast({
                 type: 'error',

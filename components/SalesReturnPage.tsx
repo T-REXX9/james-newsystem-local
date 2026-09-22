@@ -16,6 +16,7 @@ import { canBackdatePosting, canPerformAction } from '../utils/actionPermissions
 import { canMutateDocumentDateField, localTodayYmd, validateDocumentDateWrite } from '../utils/backdatedPosting';
 import { formatDate as formatPhilippineDate } from '../utils/formatUtils';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 type SourceDocument = SalesReturnSourceDocument;
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
@@ -549,6 +550,7 @@ const CreateModal: React.FC<{
       const record = await salesReturnService.create({ ...form, date: resolvedDate } as Record<string, unknown>);
       onCreated(record);
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to create credit memo');
     } finally {
       setBusy(false);
@@ -767,6 +769,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
       setSelected(updated);
       setRows((prev) => prev.map((row) => (row.lrefno === updated.lrefno ? { ...row, ldate: updated.ldate } : row)));
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to update date');
     } finally {
       setSavingDate(false);
@@ -786,6 +789,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
         setSelectedRefno(data.items[0]?.lrefno || '');
       }
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to load sales return records');
       setRows([]);
       setSelectedRefno('');
@@ -813,6 +817,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
         setSelected(header);
         setItems(detailItems);
       } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
         setError(err?.message || 'Failed to load sales return detail');
         setSelected(null);
         setItems([]);
@@ -859,6 +864,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
         setSourceItems(sourceRows);
       }
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to load source items');
       setSourceItems([]);
     } finally {
@@ -929,6 +935,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
       // Also refresh the list to update totals
       loadList();
     } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to add item');
     } finally {
       setActionLoading(false);
@@ -950,6 +957,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
           setItems(updatedItems);
           loadList();
         } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
           setError(err?.message || 'Failed to delete item');
         } finally {
           setActionLoading(false);
@@ -973,6 +981,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
           setSelected(updated);
           loadList();
         } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
           setError(err?.message || 'Failed to post credit memo');
         } finally {
           setActionLoading(false);
@@ -996,6 +1005,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
           setSelected(updated);
           loadList();
         } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
           setError(err?.message || 'Failed to unpost credit memo');
         } finally {
           setActionLoading(false);

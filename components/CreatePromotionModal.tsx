@@ -9,6 +9,7 @@ import ProductAutocomplete from './ProductAutocomplete';
 
 import { useToast } from './ToastProvider';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface Props {
     currentUser: UserProfile | null;
     onClose: () => void;
@@ -216,6 +217,7 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
             });
             onCreated();
         } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
             console.error('Error creating promotion:', error);
             addToast({
                 type: 'error',

@@ -4,6 +4,7 @@ import type { CustomerLedgerResponse } from './customerLedgerService';
 import { ledgerRowsToContactTransactions } from './customerLedgerService';
 import type { LocalCustomerMetrics } from './customerDatabaseLocalApiService';
 
+import { parseApiErrorMessage } from './localApiAuth';
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
 
@@ -29,7 +30,7 @@ const buildUrl = (path: string) => {
 const fetchList = async <T>(path: string): Promise<T[]> => {
   try {
     const response = await fetch(buildUrl(path), { headers: getAuthHeaders() });
-    if (!response.ok) throw new Error(`API request failed (${response.status})`);
+    if (!response.ok) throw new Error(await parseApiErrorMessage(response));
     const payload = await response.json();
     const data = payload?.data;
     return Array.isArray(data) ? (data as T[]) : [];
@@ -71,17 +72,6 @@ export const fetchDailyCallSalesReports = async (contactId: string) =>
 
 export const fetchDailyCallIncidentReports = async (contactId: string) =>
   fetchList<any>(`/daily-call-monitoring/customers/${encodeURIComponent(contactId)}/incident-reports`);
-
-const parseApiErrorMessage = async (response: Response): Promise<string> => {
-  try {
-    const payload = await response.json();
-    if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error.trim();
-    if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message.trim();
-  } catch {
-    // Fall through to the status-based message.
-  }
-  return `API request failed (${response.status})`;
-};
 
 export const createDailyCallIncidentReport = async (input: CreateIncidentReportInput): Promise<IncidentReport> => {
   const session = getLocalAuthSession();

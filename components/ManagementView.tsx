@@ -27,6 +27,7 @@ import {
 import { fetchManagementDashboardData, ManagementDashboardData } from '../services/managementDashboardLocalApiService';
 import CallAccountabilityPanel from './CallAccountabilityPanel';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface ManagementViewProps {
   currentUser?: any;
 }
@@ -97,6 +98,7 @@ export const ManagementView: React.FC<ManagementViewProps> = ({ currentUser }) =
       const data = await fetchManagementDashboardData(mainId, selectedYear, currentMonth);
       setDashboard(data);
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       setLoadError(error instanceof Error ? error.message : 'Unable to load the Sales Performance Dashboard.');
     } finally {
       setLoading(false);

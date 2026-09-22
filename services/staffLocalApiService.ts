@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { endAuthSessionSilently, parseApiErrorMessage } from './localApiAuth';
 import { UserProfile } from '../types';
 import { getLocalAuthToken } from './localAuthService';
 
@@ -71,22 +72,11 @@ export interface StaffCreateInput {
     access_rights?: string[];
 }
 
-const parseApiErrorMessage = async (response: Response): Promise<string> => {
-    try {
-        const payload = await response.json();
-        if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error.trim();
-        if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message.trim();
-    } catch {
-        // ignore parse errors
-    }
-    return `API request failed (${response.status})`;
-};
-
 const requestJson = async (url: string, init?: RequestInit): Promise<any> => {
     const headers = new Headers(init?.headers);
     const token = getLocalAuthToken();
     if (!token) {
-        throw new Error('Bearer token is required');
+        endAuthSessionSilently();
     }
     headers.set('Authorization', `Bearer ${token}`);
     const response = await fetch(url, { ...init, headers });

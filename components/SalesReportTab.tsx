@@ -9,6 +9,7 @@ import {
   openDailyCallSalesInquiry,
 } from './dailyCallSalesReportUtils';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface SalesReportTabProps {
   contactId: string;
   currentUserId?: string;
@@ -35,6 +36,7 @@ const SalesReportTab: React.FC<SalesReportTabProps> = ({ contactId, currentUserI
         const data = await fetchDailyCallSalesReports(contactId);
         setReports(normalizeSalesReportRecords(data));
       } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
         console.error('Error loading sales inquiry reports:', err);
         setReports([]);
         setLoadError(err instanceof Error ? err.message : 'Sales reports are unavailable.');

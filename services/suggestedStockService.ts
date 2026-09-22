@@ -2,6 +2,7 @@ import { getLocalAuthSession } from './localAuthService';
 import { purchaseRequestService } from './purchaseRequestService';
 import type { PurchaseRequestWithItems } from '../purchaseRequest.types';
 
+import { parseApiError } from './localApiAuth';
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
 
@@ -88,17 +89,6 @@ const getUserId = (): number => {
   const session = getLocalAuthSession();
   const userId = Number(session?.context?.user?.id || 0);
   return Number.isFinite(userId) && userId > 0 ? userId : 0;
-};
-
-const parseApiError = async (response: Response): Promise<string> => {
-  try {
-    const payload = await response.json();
-    if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error.trim();
-    if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message.trim();
-  } catch {
-    // ignore parse errors
-  }
-  return `API request failed (${response.status})`;
 };
 
 const requestApi = async (url: string, init?: RequestInit): Promise<any> => {

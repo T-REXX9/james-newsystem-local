@@ -12,6 +12,7 @@ import { fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { toast } from 'sonner';
 import { formatDateTime } from '../utils/formatUtils';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected';
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; border: string; icon: React.ComponentType<{ className?: string }>; label: string }> = {
@@ -118,6 +119,7 @@ export default function ApprovalRequestsView({
             (contactsRes || []).forEach((c) => { if (c?.id) map.set(String(c.id), c); });
             setContacts(map);
         } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
             const msg = err instanceof Error ? err.message : 'Failed to refresh';
             toast.error(msg);
         } finally {
@@ -164,6 +166,7 @@ export default function ApprovalRequestsView({
             toast.success(`Request ${decision === 'approved' ? 'approved' : 'rejected'}`);
             setRefreshTick((n) => n + 1);
         } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
             const msg = err instanceof Error ? err.message : 'Review failed';
             toast.error(msg);
         } finally {

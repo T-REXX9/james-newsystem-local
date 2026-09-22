@@ -38,6 +38,7 @@ import {
 import { formatDate } from "../../utils/formatUtils";
 import { useToast } from "../ToastProvider";
 
+import { shouldSuppressAuthError } from '../../services/localApiAuth';
 interface PurchaseRequestViewProps {
   request: PurchaseRequestWithItems;
   onBack: () => void;
@@ -205,6 +206,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
       await onUpdate(request.id, { request_date: requestDateDraft });
       addToast({ type: "success", title: "Request date updated" });
     } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
       addToast({
         type: "error",
         title: "Unable to update request date",

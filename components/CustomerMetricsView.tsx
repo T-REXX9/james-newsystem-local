@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { BarChart3, TrendingUp, Calendar, DollarSign } from 'lucide-react';
 import { fetchDailyCallCustomerMetrics } from '../services/dailyCallCustomerDetailService';
 
+import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface CustomerMetricsViewProps {
   contactId: string;
 }
@@ -19,6 +20,7 @@ const CustomerMetricsView: React.FC<CustomerMetricsViewProps> = ({ contactId }) 
         const data = await fetchDailyCallCustomerMetrics(contactId);
         setMetrics(data);
       } catch (err) {
+      if (shouldSuppressAuthError(err)) return;
         console.error('Error loading metrics:', err);
         setMetrics(null);
         setLoadError(err instanceof Error ? err.message : 'Customer metrics are unavailable.');
