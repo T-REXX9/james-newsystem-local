@@ -227,18 +227,19 @@ describe('NotificationCenter', () => {
     });
   });
 
-  it('opens the exact customer in Customer Data for Agent Sales Report notifications', async () => {
+  it('opens the Daily Call Monitoring for Agent Sales Report notifications', async () => {
     fetchNotificationsMock.mockResolvedValue([
       createNotification({
         id: 'sales-report-1',
         category: 'notification',
         type: 'info',
-        title: 'New Agent Sales Report message',
+        title: 'Agent Sales Report - Acme Corp',
         action_url: 'home',
         metadata: {
           entity_type: 'call_report_reply',
           entity_id: 'message-1',
           contact_id: 'customer-42',
+          conversation_type: 'agent_sales_report',
           category: 'notification',
         },
       }),
@@ -257,11 +258,11 @@ describe('NotificationCenter', () => {
     const user = userEvent.setup();
     renderNotificationCenter();
     await user.click(screen.getByTitle('Notifications'));
-    await user.dblClick(screen.getByText('New Agent Sales Report message'));
+    await user.dblClick(screen.getByText('Agent Sales Report - Acme Corp'));
 
     expect(navigationHandler).toHaveBeenCalledWith(expect.objectContaining({
       detail: {
-        tab: 'sales-database-customer-database',
+        tab: 'sales-transaction-daily-call-monitoring',
         payload: { contactId: 'customer-42', conversationType: 'agent_sales_report', activityRef: 'message-1' },
       },
     }));

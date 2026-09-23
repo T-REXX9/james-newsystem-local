@@ -122,6 +122,9 @@ import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface DailyCallMonitoringViewProps {
   currentUser: UserProfile | null;
   initialSelectedDate?: string;
+  initialContactId?: string;
+  initialConversationType?: string;
+  initialActivityRef?: string;
 }
 
 interface ActivityItem {
@@ -518,7 +521,7 @@ const MasterTableRow = React.memo(({
   );
 });
 
-const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ currentUser, initialSelectedDate }) => {
+const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ currentUser, initialSelectedDate, initialContactId, initialConversationType, initialActivityRef }) => {
   const selectedReferenceDate = useMemo(() => {
     if (!initialSelectedDate) return new Date();
     const parsed = new Date(`${initialSelectedDate}T12:00:00`);
@@ -579,6 +582,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [density, setDensity] = useState<'comfortable' | 'compact' | 'ultra-compact'>('compact');
   const [activeTab, setActiveTab] = useState<'master' | 'today' | 'activity'>('master');
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(false);
+  const [pendingInitialActivityRef, setPendingInitialActivityRef] = useState<string | undefined>(undefined);
   const [showContactDetails, setShowContactDetails] = useState(false);
   const [fullDetailsContact, setFullDetailsContact] = useState<Contact | null>(null);
   const [fullDetailsLoading, setFullDetailsLoading] = useState(false);
@@ -713,6 +717,19 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       setLoading(false);
     }
   }, [agentDataName, currentUser?.id, isSalesAgent]);
+
+  // Handle initialContactId from navigation (e.g., notification click)
+  useEffect(() => {
+    if (!initialContactId || contacts.length === 0) return;
+    const contactExists = contacts.some((c) => c.id === initialContactId);
+    if (contactExists) {
+      setSelectedClientId(initialContactId);
+      setDetailsPanelOpen(true);
+      if (initialActivityRef) {
+        setPendingInitialActivityRef(initialActivityRef);
+      }
+    }
+  }, [initialContactId, contacts, initialActivityRef]);
 
   useEffect(() => {
     if (!agentDataName || !isSalesAgent) {
@@ -2123,6 +2140,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               currentUser={currentUser}
               viewOnly={selectedClientBlocked}
               onConversationRead={handleSalesReportConversationRead}
+              initialActivityRef={pendingInitialActivityRef}
             />
             {selectedClientBlocked && (
               <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">

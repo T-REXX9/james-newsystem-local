@@ -493,6 +493,7 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
     assignedAgentId: cleanNullableText(row?.assignedAgentId ?? row?.assigned_agent_id),
     assignedTeamId: cleanNullableText(row?.assignedTeamId ?? row?.assigned_team_id),
     assignedTeam: cleanNullableText(row?.assignedTeam ?? row?.assigned_team),
+    assignedAgentTeam: cleanNullableText(row?.assignedAgentTeam ?? row?.assigned_agent_team),
     assignedDate: cleanNullableText(row?.assignedDate ?? row?.assigned_date),
     profileType: cleanNullableText(row?.profileType ?? row?.profile_type),
     verification: cleanNullableText(row?.verification),

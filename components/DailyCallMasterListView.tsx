@@ -31,6 +31,7 @@ import { matchesDailyCallMonitorBucket, resolveDailyCallListCategory } from '../
 import { resolveDailyCallPurchaseHighlightColor } from '../utils/dailyCallPurchaseHighlight';
 import { hasActionPermission, isMasterUserAccount } from '../constants';
 import { VERIFIED_PROSPECT_POTENTIAL } from '../utils/dailyCallPotentialSales';
+import { getUserFacingErrorMessage } from '../services/localApiAuth';
 import AddContactModal from './AddContactModal';
 import DailyCallCustomerDetailModal from './DailyCallCustomerDetailModal';
 import CustomerSalesReportChat from './CustomerSalesReportChat';
@@ -555,12 +556,12 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
           ? `${assignedTo} is now assigned to this customer.`
           : 'This customer is now unassigned.',
       });
-    } catch {
+    } catch (error) {
       setRows(previousRows);
       addToast({
         type: 'error',
         title: 'Unable to update agent',
-        description: 'Please try again or assign from Customer Database.',
+        description: getUserFacingErrorMessage(error, 'Please try again.') || 'Please try again.',
       });
     } finally {
       setAssigningCustomerId(null);
@@ -1086,6 +1087,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                             onAssign={handleAssignAgent}
                           />
                           {row.assignedTeam && <p className="mt-1 text-[10px] font-bold text-indigo-700">Team: {row.assignedTeam}</p>}
+                          {row.assignedAgentTeam && <p className="mt-1 text-[10px] font-bold text-indigo-700">Agent team: {row.assignedAgentTeam}</p>}
                         </td>
                         <td className="max-w-[280px] break-words px-2 py-2.5 text-sm">
                           {row.latestSalesReportMessage ? (

@@ -420,7 +420,13 @@ const App: React.FC = () => {
 
         return isSalesAgent ? (
           <div className="p-4 h-full overflow-y-auto bg-slate-100 dark:bg-slate-950">
-            <DailyCallMonitoringView currentUser={userProfile} initialSelectedDate={context.dashboardDate} />
+            <DailyCallMonitoringView
+              currentUser={userProfile}
+              initialSelectedDate={context.dashboardDate}
+              initialContactId={context.contactId}
+              initialConversationType={context.conversationType}
+              initialActivityRef={context.activityRef}
+            />
           </div>
         ) : (
           <OwnerDailyCallMonitoringUnifiedView currentUser={userProfile} initialSelectedDate={context.dashboardDate} />

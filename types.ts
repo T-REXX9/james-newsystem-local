@@ -795,6 +795,7 @@ export interface DailyCallMasterCustomerRow {
   assignedAgentId?: string;
   assignedTeamId?: string;
   assignedTeam?: string;
+  assignedAgentTeam?: string;
   assignedDate?: string;
   profileType?: string;
   verification?: string;
