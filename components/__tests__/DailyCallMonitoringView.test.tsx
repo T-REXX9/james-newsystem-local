@@ -811,6 +811,48 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(within(recoveryTable).getByText('Legacy Recovery Customer')).toBeInTheDocument();
   });
 
+  it('finds an assigned customer by its contact person name', async () => {
+    const contacts = [
+      {
+        ...baseSnapshot.contacts[0],
+        id: 'contact-ejurango',
+        shopName: 'ARL KENT DIESEL CALIBRATION AND PARTS SALES',
+        contactPersonName: 'Arsolin T Ejurango',
+        status: 'active',
+        verification: '',
+      },
+      {
+        ...baseSnapshot.contacts[0],
+        id: 'contact-other',
+        shopName: 'Another Assigned Customer',
+        status: 'active',
+        verification: '',
+      },
+    ];
+    fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
+      ...baseSnapshot,
+      contacts,
+      masterList: contacts.map((contact) => ({
+        id: contact.id,
+        shopName: contact.shopName,
+        listCategory: 'recovery',
+        purchaseCount: 1,
+        ledgerTransactionCount: 1,
+        purchaseAgeGroup: 'over_one_month',
+      })),
+    });
+
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    await screen.findByText('ARL KENT DIESEL CALIBRATION AND PARTS SALES');
+    await userEvent.setup().type(screen.getByPlaceholderText('Search customer, prospect, or agent'), 'Ejurango');
+
+    await waitFor(() => {
+      expect(screen.getByText('ARL KENT DIESEL CALIBRATION AND PARTS SALES')).toBeInTheDocument();
+      expect(screen.queryByText('Another Assigned Customer')).not.toBeInTheDocument();
+    });
+  });
+
   it('sums Priority List row current-month sales in the category summary', async () => {
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
       ...baseSnapshot,

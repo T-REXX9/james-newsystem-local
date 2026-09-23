@@ -264,8 +264,13 @@ const mapApiStatusToCustomerStatus = (status: string): CustomerStatus => {
   return CustomerStatus.ACTIVE;
 };
 
-const toContactModel = (row: any): Contact => ({
-  id: String(row?.id || ''),
+const toContactModel = (row: any): Contact => {
+  const id = String(row?.id || '');
+  const contactPersonName = String(row?.contactPersonName || '').trim();
+  const contactNumber = String(row?.contactNumber || '');
+
+  return {
+  id,
   company: String(row?.shopName || 'Unnamed Shop'),
   pastName: String(row?.pastName || ''),
   customerSince: String(row?.clientSince || ''),
@@ -299,12 +304,21 @@ const toContactModel = (row: any): Contact => ({
   isHidden: false,
   debtType: Number(row?.outstandingBalance || 0) > 0 ? 'Bad' : 'Good',
   comment: '',
-  contactPersons: [],
-  name: String(row?.shopName || 'Unnamed Shop'),
+  contactPersons: contactPersonName ? [{
+    id: `${id}-primary-contact`,
+    enabled: true,
+    name: contactPersonName,
+    position: '',
+    birthday: '',
+    telephone: contactNumber,
+    mobile: contactNumber,
+    email: '',
+  }] : [],
+  name: contactPersonName || String(row?.shopName || 'Unnamed Shop'),
   title: '',
   email: '',
-  phone: String(row?.contactNumber || ''),
-  mobile: String(row?.contactNumber || ''),
+  phone: contactNumber,
+  mobile: contactNumber,
   avatar: '',
   dealValue: Number(row?.monthlyOrder || 0),
   stage: DealStage.NEW,
@@ -316,7 +330,8 @@ const toContactModel = (row: any): Contact => ({
   assignedAgent: String(row?.assignedTo || 'Unassigned'),
   totalSales: Number(row?.monthlyOrder || 0),
   balance: Number(row?.outstandingBalance || 0),
-});
+  };
+};
 
 type DensityMode = 'comfortable' | 'compact' | 'ultra-compact';
 
