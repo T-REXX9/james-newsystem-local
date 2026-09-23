@@ -5,8 +5,8 @@ export const isBlockedDailyCallMasterRow = (
 ): boolean =>
   Number(row.customerStatus) === 4 || String(row.debtType || '').trim().toLowerCase() === 'bad';
 
-export const isBlockedDailyCallCustomerRow = (row: Pick<DailyCallCustomerRow, 'status'>): boolean =>
-  row.status === CustomerStatus.BLACKLISTED;
+export const isBlockedDailyCallCustomerRow = (row: Pick<DailyCallCustomerRow, 'status' | 'debtType'>): boolean =>
+  row.status === CustomerStatus.BLACKLISTED || String(row.debtType || '').trim().toLowerCase() === 'bad';
 
 export const isBlockedContact = (contact: Pick<Contact, 'status' | 'debtType'>): boolean =>
   contact.status === CustomerStatus.BLACKLISTED || String(contact.debtType || '').trim().toLowerCase() === 'bad';
