@@ -37,6 +37,7 @@ type ApiAuthUser = {
   access_rights?: string[] | null;
   group_id?: string | null;
   action_permissions?: ActionPermissions;
+  team?: string;
 };
 
 type ApiAuthPayload = {
@@ -131,6 +132,7 @@ const mapUserProfile = (context: ApiAuthPayload): UserProfile => {
     user_type: String(context.user_type || user.type || ''),
     access_rights: mapAccessRights(context.user_type || user.type, user.access_rights, role),
     group_id: user.group_id || null,
+    team: String(user.team || '').trim() || undefined,
     monthly_quota: Number.isFinite(quota) ? quota : 0,
     action_permissions: user.action_permissions || undefined,
   };

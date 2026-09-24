@@ -56,15 +56,15 @@ const TopNav: React.FC<TopNavProps> = ({ activeTab = 'home', onNavigate, user, o
          <NotificationCenter />
          
          {user ? (
-           <div className="flex items-center gap-1 sm:gap-2 2xl:gap-3 pl-1 sm:pl-3 2xl:pl-5 border-l border-white/10">
+           <div className="flex min-w-0 items-center gap-1 border-l border-white/10 pl-1 sm:gap-2 sm:pl-3 2xl:gap-3 2xl:pl-5">
                <img 
                  src={user.avatar_url || "https://i.pravatar.cc/150?u=default"} 
                  alt="Profile" 
                  className="hidden sm:block w-8 h-8 rounded-full border border-white/10 shadow-sm bg-white/20"
                />
-               <div className="flex flex-col items-start">
-                 <span className="text-sm font-medium text-white/90 hidden 2xl:block leading-tight">{user.full_name || user.email}</span>
-                 <span className="text-[10px] text-white/50 hidden 2xl:block uppercase">{user.role || 'Sales Agent'}</span>
+               <div className="flex min-w-0 flex-col items-start">
+                 <span className="max-w-[7.5rem] truncate text-xs font-medium leading-tight text-white/90 sm:max-w-[11rem] sm:text-sm">{user.full_name || user.email}</span>
+                 <span className="max-w-[7.5rem] truncate text-[10px] uppercase text-white/50 sm:max-w-[11rem]">{[user.role || 'Sales Agent', user.team].filter(Boolean).join(' · ')}</span>
                </div>
                <button onClick={onSignOut} className="p-2 text-white/60 hover:text-white transition-colors" title="Sign Out">
                  <LogOut className="w-4 h-4" />

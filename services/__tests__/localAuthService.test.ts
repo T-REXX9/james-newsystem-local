@@ -15,7 +15,7 @@ const storedSession = (token: string) => ({
   token,
   context: {
     token,
-    user: { id: 1, main_userid: 1, email: 'owner@example.com' },
+    user: { id: 1, main_userid: 1, email: 'owner@example.com', team: 'North Team' },
     main_userid: 1,
     user_type: '1',
     session_branch: 'mainbranch',
@@ -49,7 +49,7 @@ describe('localAuthService session restoration', () => {
       ok: true,
       data: {
         token: oldToken,
-        user: { id: 1, main_userid: 1, email: 'owner@example.com' },
+        user: { id: 1, main_userid: 1, email: 'owner@example.com', team: 'North Team' },
         main_userid: 1,
         user_type: '1',
         session_branch: 'mainbranch',
@@ -62,6 +62,7 @@ describe('localAuthService session restoration', () => {
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(restored?.token).toBe(oldToken);
+    expect(restored?.userProfile.team).toBe('North Team');
     expect(window.localStorage.getItem(storageKey)).not.toBeNull();
   });
 
