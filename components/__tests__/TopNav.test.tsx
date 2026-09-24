@@ -16,7 +16,7 @@ describe('TopNav responsive shell', () => {
   it('compresses branding, spacing, and account details on narrow screens', () => {
     render(
       <TopNav
-        user={{ id: 'owner-1', email: 'owner@example.com', full_name: 'Master User', role: 'Owner' }}
+        user={{ id: 'owner-1', email: 'owner@example.com', full_name: 'Master User', role: 'Owner', team: 'North Team' }}
         onNavigate={vi.fn()}
         onSignOut={vi.fn()}
       />
@@ -24,7 +24,8 @@ describe('TopNav responsive shell', () => {
 
     expect(screen.getByRole('banner')).toHaveClass('px-3', 'sm:px-4', '2xl:px-6');
     expect(screen.getByText('TND-OPC')).toHaveClass('hidden', 'sm:inline');
-    expect(screen.getByText('Master User')).toHaveClass('hidden', '2xl:block');
+    expect(screen.getByText('Master User')).toHaveClass('truncate', 'sm:max-w-[11rem]');
+    expect(screen.getByText('Owner · North Team')).toBeVisible();
   });
 
   it('provides the same guarded Back control on every page', () => {
