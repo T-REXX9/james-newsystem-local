@@ -434,6 +434,40 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(within(unverifiedTable).getByText('Test Client')).toBeInTheDocument();
   });
 
+  it('shows Current Month Sales in full peso format on category cards', async () => {
+    const currentMonthPurchaseDate = new Date().toISOString();
+    fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
+      ...baseSnapshot,
+      contacts: [{
+        ...baseSnapshot.contacts[0],
+        id: 'current-month-buyer',
+        shopName: 'Current Month Buyer',
+        status: 'active',
+        verification: 'Verified',
+      }],
+      purchases: [{
+        id: 'current-month-sale',
+        contact_id: 'current-month-buyer',
+        amount: 1_000_000,
+        status: 'paid',
+        purchased_at: currentMonthPurchaseDate,
+      }],
+    });
+
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    expect(await screen.findByRole('heading', { name: 'Customer List' })).toBeInTheDocument();
+
+    const categorySummaries = screen.getByLabelText('Customer category summaries');
+    const prioritySummary = within(categorySummaries)
+      .getByTitle('Priority List (Any ledger activity since October 2025 onwards)')
+      .closest('article')!;
+    const currentMonthSales = within(prioritySummary).getByText('Current Month Sales').parentElement!;
+
+    expect(within(currentMonthSales).getByText('₱1,000,000')).toBeInTheDocument();
+    expect(within(currentMonthSales).queryByText('₱1M')).not.toBeInTheDocument();
+  });
+
   it('shows only workflow-verified prospects in the verified list after refresh', async () => {
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
       ...baseSnapshot,
