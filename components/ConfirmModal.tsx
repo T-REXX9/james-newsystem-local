@@ -14,6 +14,10 @@ interface ConfirmModalProps {
     variant?: ConfirmVariant;
     requiredConfirmationText?: string;
     confirmationInstruction?: string;
+    reason?: string;
+    onReasonChange?: (reason: string) => void;
+    reasonLabel?: string;
+    reasonRequired?: boolean;
 }
 
 const variantStyles: Record<ConfirmVariant, { bg: string; icon: React.ElementType; iconColor: string; buttonBg: string }> = {
@@ -54,12 +58,17 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
     variant = 'danger',
     requiredConfirmationText,
     confirmationInstruction,
+    reason,
+    onReasonChange,
+    reasonLabel = 'Reason',
+    reasonRequired = false,
 }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [confirmationValue, setConfirmationValue] = useState('');
     const styles = variantStyles[variant];
     const IconComponent = styles.icon;
-    const isConfirmationValid = !requiredConfirmationText || confirmationValue === requiredConfirmationText;
+    const isConfirmationValid = (!requiredConfirmationText || confirmationValue === requiredConfirmationText)
+        && (!reasonRequired || Boolean(reason?.trim()));
 
     useEffect(() => {
         setConfirmationValue('');
@@ -115,6 +124,22 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
                                 disabled={isLoading}
                                 autoComplete="off"
                                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold tracking-wide text-slate-900 outline-none transition focus:border-rose-500 focus:ring-2 focus:ring-rose-200 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-rose-400 dark:focus:ring-rose-900/50"
+                            />
+                        </div>
+                    )}
+                    {onReasonChange && (
+                        <div>
+                            <label htmlFor="confirm-modal-reason" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                {reasonLabel}{reasonRequired ? ' *' : ''}
+                            </label>
+                            <textarea
+                                id="confirm-modal-reason"
+                                value={reason || ''}
+                                onChange={(event) => onReasonChange(event.target.value)}
+                                disabled={isLoading}
+                                maxLength={2000}
+                                rows={3}
+                                className="w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-rose-500 focus:ring-2 focus:ring-rose-200 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-rose-400 dark:focus:ring-rose-900/50"
                             />
                         </div>
                     )}

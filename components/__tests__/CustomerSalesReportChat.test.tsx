@@ -5,6 +5,7 @@ import CustomerSalesReportChat from '../CustomerSalesReportChat';
 
 const fetchSalesReportConversationMock = vi.fn();
 const sendSalesReportMessageMock = vi.fn();
+const deleteSalesReportMessageMock = vi.fn();
 const markSalesReportConversationReadMock = vi.fn();
 const uploadSalesReportAttachmentMock = vi.fn();
 
@@ -14,6 +15,7 @@ const addToastMock = vi.fn();
 vi.mock('../../services/dailyCallMonitoringService', () => ({
   fetchSalesReportConversation: (...args: unknown[]) => fetchSalesReportConversationMock(...args),
   sendSalesReportMessage: (...args: unknown[]) => sendSalesReportMessageMock(...args),
+  deleteSalesReportMessage: (...args: unknown[]) => deleteSalesReportMessageMock(...args),
   markSalesReportConversationRead: (...args: unknown[]) => markSalesReportConversationReadMock(...args),
   uploadSalesReportAttachment: (...args: unknown[]) => uploadSalesReportAttachmentMock(...args),
   resolveSalesReportAttachmentDisplayUrl: (...args: unknown[]) => resolveSalesReportAttachmentDisplayUrlMock(...args as [string]),
@@ -145,6 +147,38 @@ describe('CustomerSalesReportChat', () => {
 
     expect(await screen.findByText('Call this shop before Friday.')).toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/Reply in the Agent Sales Report conversation/i)).not.toBeInTheDocument();
+  });
+
+  it('allows only a Master User to delete a persisted report with a reason', async () => {
+    const user = userEvent.setup();
+    render(
+      <CustomerSalesReportChat
+        contactId="c1"
+        currentUser={{ id: 'm1', role: 'Master User', full_name: 'Master User', user_type: '1' } as any}
+      />
+    );
+
+    await screen.findByText('Customer asked about VIP terms.');
+    await user.click(screen.getByRole('button', { name: /^Delete$/i }));
+    await user.type(screen.getByLabelText(/^Reason/i), 'Sent for the wrong customer');
+    await user.click(screen.getAllByRole('button', { name: /^Delete$/i }).at(-1)!);
+
+    await waitFor(() => {
+      expect(deleteSalesReportMessageMock).toHaveBeenCalledWith('c1', 'report:2', 'Sent for the wrong customer');
+    });
+    expect(screen.queryByText('Customer asked about VIP terms.')).not.toBeInTheDocument();
+  });
+
+  it('does not expose message deletion to a sales agent', async () => {
+    render(
+      <CustomerSalesReportChat
+        contactId="c1"
+        currentUser={{ id: 'a1', role: 'Sales Agent', full_name: 'Agent Ana', user_type: '2' } as any}
+      />
+    );
+
+    await screen.findByText('Customer asked about VIP terms.');
+    expect(screen.queryByRole('button', { name: /^Delete$/i })).not.toBeInTheDocument();
   });
 
   it('rejects non-image files before upload', async () => {

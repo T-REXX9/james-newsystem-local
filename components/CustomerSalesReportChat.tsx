@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Ban, ImagePlus, Loader2, Send, X } from 'lucide-react';
+import { Ban, ImagePlus, Loader2, Send, Trash2, X } from 'lucide-react';
 import {
+  deleteSalesReportMessage,
   fetchSalesReportConversation,
   markSalesReportConversationRead,
   resolveSalesReportAttachmentDisplayUrl,
   sendSalesReportMessage,
   uploadSalesReportAttachment,
 } from '../services/dailyCallMonitoringService';
+import ConfirmModal from './ConfirmModal';
 import { CustomerStatus, SalesReportConversationMessage, UserProfile } from '../types';
 import { useToast } from './ToastProvider';
 import { optimizeRecordImage, RECORD_IMAGE_ACCEPT, validateRecordImageFile } from '../utils/recordImage';
@@ -141,6 +143,10 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [showBlacklistRequest, setShowBlacklistRequest] = useState(false);
   const [blacklistReason, setBlacklistReason] = useState('');
+  const [messageToDelete, setMessageToDelete] = useState<SalesReportConversationMessage | null>(null);
+  const [deleteReason, setDeleteReason] = useState('');
+
+  const isMasterUser = String(currentUser?.user_type || '') === '1' || currentUser?.role === 'Master User';
 
   const loadConversation = useCallback(async () => {
     setLoading(true);
@@ -259,6 +265,23 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
     } finally { setSubmitting(false); }
   };
 
+  const handleDeleteMessage = async () => {
+    if (!messageToDelete) return;
+    const reason = deleteReason.trim();
+    if (!reason) return;
+    try {
+      await deleteSalesReportMessage(contactId, messageToDelete.id, reason);
+      setMessages((previous) => previous.filter((message) => message.id !== messageToDelete.id));
+      setMessageToDelete(null);
+      setDeleteReason('');
+      addToast({ type: 'success', message: 'Message deleted and recorded.' });
+    } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
+      addToast({ type: 'error', message: error instanceof Error ? error.message : 'Unable to delete message.' });
+      throw error;
+    }
+  };
+
   const visibleMessages = compact ? messages.slice(-8) : messages;
 
   if (loading) {
@@ -317,6 +340,15 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
                   <p className={`mt-2 text-[10px] ${isMine ? 'text-blue-100' : 'text-slate-400 dark:text-slate-500'}`}>
                     {formatTimestamp(message.created_at)}
                   </p>
+                  {isMasterUser && (message.id.startsWith('report:') || /^\d+$/.test(message.id)) && (
+                    <button
+                      type="button"
+                      onClick={() => { setMessageToDelete(message); setDeleteReason(''); }}
+                      className={`mt-2 inline-flex items-center gap-1 text-[10px] font-semibold ${isMine ? 'text-blue-100 hover:text-white' : 'text-rose-600 hover:text-rose-700 dark:text-rose-300'}`}
+                    >
+                      <Trash2 className="h-3 w-3" /> Delete
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -403,6 +435,18 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
           </div>
         </div>
       )}
+      <ConfirmModal
+        isOpen={messageToDelete !== null}
+        onClose={() => { setMessageToDelete(null); setDeleteReason(''); }}
+        onConfirm={handleDeleteMessage}
+        title="Delete message"
+        message="The message will be removed from this chat. Its original content and deletion details will remain in the audit history."
+        confirmLabel="Delete"
+        reason={deleteReason}
+        onReasonChange={setDeleteReason}
+        reasonLabel="Reason"
+        reasonRequired
+      />
     </div>
   );
 };
