@@ -340,7 +340,7 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
                   <p className={`mt-2 text-[10px] ${isMine ? 'text-blue-100' : 'text-slate-400 dark:text-slate-500'}`}>
                     {formatTimestamp(message.created_at)}
                   </p>
-                  {isMasterUser && (message.id.startsWith('report:') || /^\d+$/.test(message.id)) && (
+                  {!viewOnly && isMasterUser && (message.id.startsWith('report:') || /^\d+$/.test(message.id)) && (
                     <button
                       type="button"
                       onClick={() => { setMessageToDelete(message); setDeleteReason(''); }}

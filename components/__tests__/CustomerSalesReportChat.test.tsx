@@ -147,6 +147,7 @@ describe('CustomerSalesReportChat', () => {
 
     expect(await screen.findByText('Call this shop before Friday.')).toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/Reply in the Agent Sales Report conversation/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Delete$/i })).not.toBeInTheDocument();
   });
 
   it('allows only a Master User to delete a persisted report with a reason', async () => {
