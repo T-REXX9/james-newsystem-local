@@ -8,6 +8,7 @@ const sendSalesReportMessageMock = vi.fn();
 const deleteSalesReportMessageMock = vi.fn();
 const markSalesReportConversationReadMock = vi.fn();
 const uploadSalesReportAttachmentMock = vi.fn();
+const requestCustomerUpdateMock = vi.fn();
 
 const resolveSalesReportAttachmentDisplayUrlMock = vi.fn(async (url: string) => url);
 const addToastMock = vi.fn();
@@ -34,6 +35,10 @@ vi.mock('../../utils/recordImage', () => ({
 
 vi.mock('../ToastProvider', () => ({
   useToast: () => ({ addToast: addToastMock }),
+}));
+
+vi.mock('../../services/customerWorkflowLocalApiService', () => ({
+  requestCustomerUpdate: (...args: unknown[]) => requestCustomerUpdateMock(...args),
 }));
 
 describe('CustomerSalesReportChat', () => {
@@ -86,6 +91,8 @@ describe('CustomerSalesReportChat', () => {
       is_from_current_user: true,
       is_from_master: true,
     });
+    requestCustomerUpdateMock.mockResolvedValue({ id: 'request-1' });
+    deleteSalesReportMessageMock.mockResolvedValue(undefined);
   });
 
   it('renders a unified chronological conversation including legacy management instructions', async () => {
@@ -170,6 +177,34 @@ describe('CustomerSalesReportChat', () => {
     expect(screen.queryByText('Customer asked about VIP terms.')).not.toBeInTheDocument();
   });
 
+  it('keeps the delete reason stable when the parent refreshes its read callback', async () => {
+    const user = userEvent.setup();
+    const masterUser = { id: 'm1', role: 'Master User', full_name: 'Master User', user_type: '1' } as any;
+    const onConversationRead = vi.fn();
+    const { rerender } = render(
+      <CustomerSalesReportChat
+        contactId="c1"
+        currentUser={masterUser}
+        onConversationRead={onConversationRead}
+      />
+    );
+
+    await screen.findByText('Customer asked about VIP terms.');
+    await user.click(screen.getByRole('button', { name: /^Delete$/i }));
+    await user.type(screen.getByLabelText(/^Reason/i), 'Wrong customer');
+
+    rerender(
+      <CustomerSalesReportChat
+        contactId="c1"
+        currentUser={masterUser}
+        onConversationRead={vi.fn()}
+      />
+    );
+
+    expect(screen.getByLabelText(/^Reason/i)).toHaveValue('Wrong customer');
+    await waitFor(() => expect(fetchSalesReportConversationMock).toHaveBeenCalledTimes(1));
+  });
+
   it('does not expose message deletion to a sales agent', async () => {
     render(
       <CustomerSalesReportChat
@@ -204,5 +239,73 @@ describe('CustomerSalesReportChat', () => {
       );
     });
     expect(uploadSalesReportAttachmentMock).not.toHaveBeenCalled();
+  });
+
+  it('creates the blacklist approval request before publishing its chat message', async () => {
+    const user = userEvent.setup();
+    render(
+      <CustomerSalesReportChat
+        contactId="c1"
+        currentUser={{ id: 'm1', role: 'Master User', full_name: 'Master User', user_type: '1' } as any}
+      />
+    );
+
+    await screen.findByText('Customer asked about VIP terms.');
+    await user.click(screen.getByRole('button', { name: /reject \/ blacklist/i }));
+    await user.type(screen.getByLabelText(/^Reason/i), 'Repeated payment defaults');
+    await user.click(screen.getByRole('button', { name: /submit request/i }));
+
+    await waitFor(() => {
+      expect(requestCustomerUpdateMock).toHaveBeenCalledWith('c1', {
+        status: 'Blacklisted', debtType: 'Bad', comment: 'Repeated payment defaults',
+      });
+      expect(sendSalesReportMessageMock).toHaveBeenCalledWith(expect.objectContaining({
+        contactId: 'c1',
+        body: 'Reject / blacklist request\nReason: Repeated payment defaults',
+      }));
+    });
+    expect(requestCustomerUpdateMock.mock.invocationCallOrder[0]).toBeLessThan(sendSalesReportMessageMock.mock.invocationCallOrder[0]);
+  });
+
+  it('does not publish a chat message when blacklist approval creation fails', async () => {
+    requestCustomerUpdateMock.mockRejectedValue(new Error('Verified prospects cannot be blacklisted.'));
+    const user = userEvent.setup();
+    render(
+      <CustomerSalesReportChat
+        contactId="c1"
+        currentUser={{ id: 'm1', role: 'Master User', full_name: 'Master User', user_type: '1' } as any}
+      />
+    );
+
+    await screen.findByText('Customer asked about VIP terms.');
+    await user.click(screen.getByRole('button', { name: /reject \/ blacklist/i }));
+    await user.type(screen.getByLabelText(/^Reason/i), 'Repeated payment defaults');
+    await user.click(screen.getByRole('button', { name: /submit request/i }));
+
+    await waitFor(() => expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    expect(sendSalesReportMessageMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps a submitted blacklist request successful when its chat message fails', async () => {
+    sendSalesReportMessageMock.mockRejectedValue(new Error('Chat service unavailable.'));
+    const user = userEvent.setup();
+    render(
+      <CustomerSalesReportChat
+        contactId="c1"
+        currentUser={{ id: 'm1', role: 'Master User', full_name: 'Master User', user_type: '1' } as any}
+      />
+    );
+
+    await screen.findByText('Customer asked about VIP terms.');
+    await user.click(screen.getByRole('button', { name: /reject \/ blacklist/i }));
+    await user.type(screen.getByLabelText(/^Reason/i), 'Repeated payment defaults');
+    await user.click(screen.getByRole('button', { name: /submit request/i }));
+
+    await waitFor(() => expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'warning',
+      message: expect.stringMatching(/request sent.*chat message/i),
+    })));
+    expect(requestCustomerUpdateMock).toHaveBeenCalledTimes(1);
+    expect(screen.queryByLabelText(/^Reason/i)).not.toBeInTheDocument();
   });
 });

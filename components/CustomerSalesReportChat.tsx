@@ -145,6 +145,11 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
   const [blacklistReason, setBlacklistReason] = useState('');
   const [messageToDelete, setMessageToDelete] = useState<SalesReportConversationMessage | null>(null);
   const [deleteReason, setDeleteReason] = useState('');
+  const onConversationReadRef = useRef(onConversationRead);
+
+  useEffect(() => {
+    onConversationReadRef.current = onConversationRead;
+  }, [onConversationRead]);
 
   const isMasterUser = String(currentUser?.user_type || '') === '1' || currentUser?.role === 'Master User';
 
@@ -155,7 +160,7 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
       setMessages(conversation.messages);
       if (conversation.unread_count > 0) {
         await markSalesReportConversationRead(contactId).catch(() => undefined);
-        onConversationRead?.(contactId);
+        onConversationReadRef.current?.(contactId);
       }
     } catch (error) {
       if (shouldSuppressAuthError(error)) return;
@@ -168,7 +173,7 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [addToast, contactId, onConversationRead]);
+  }, [addToast, contactId]);
 
   useEffect(() => {
     void loadConversation();
@@ -253,12 +258,16 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
     if (!currentUser) return;
     setSubmitting(true);
     try {
-      const message = await sendSalesReportMessage({ contactId, body: `Reject / blacklist request\nReason: ${reason}`, senderName: currentUser.full_name || currentUser.email || 'Staff' });
-      setMessages((prev) => [...prev, message]);
       await requestCustomerUpdate(contactId, { status: CustomerStatus.BLACKLISTED, debtType: 'Bad', comment: reason });
       setBlacklistReason('');
       setShowBlacklistRequest(false);
-      addToast({ type: 'success', message: 'Request sent for management approval.' });
+      try {
+        const message = await sendSalesReportMessage({ contactId, body: `Reject / blacklist request\nReason: ${reason}`, senderName: currentUser.full_name || currentUser.email || 'Staff' });
+        setMessages((prev) => [...prev, message]);
+        addToast({ type: 'success', message: 'Request sent for management approval.' });
+      } catch {
+        addToast({ type: 'warning', message: 'Request sent for management approval, but the chat message could not be posted.' });
+      }
     } catch (error) {
       if (shouldSuppressAuthError(error)) return;
       addToast({ type: 'error', message: error instanceof Error ? error.message : 'Unable to submit request.' });

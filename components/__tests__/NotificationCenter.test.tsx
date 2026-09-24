@@ -269,6 +269,40 @@ describe('NotificationCenter', () => {
     window.removeEventListener('workflow:navigate', navigationHandler);
   });
 
+  it('opens Daily Call Monitoring for an approval decision without conversation metadata', async () => {
+    fetchNotificationsMock.mockResolvedValue([
+      createNotification({
+        id: 'customer-request-decision-1',
+        category: 'notification',
+        title: 'Customer update approved',
+        action_url: 'sales-transaction-daily-call-monitoring',
+        metadata: {
+          entity_type: 'customer_request_decision',
+          entity_id: 'request-1',
+          contact_id: 'customer-42',
+          category: 'notification',
+        },
+      }),
+    ]);
+    getUnreadCountMock.mockResolvedValue(1);
+    markAsReadMock.mockResolvedValue(true);
+    const navigationHandler = vi.fn();
+    window.addEventListener('workflow:navigate', navigationHandler);
+
+    const user = userEvent.setup();
+    renderNotificationCenter();
+    await user.click(screen.getByTitle('Notifications'));
+    await user.dblClick(screen.getByText('Customer update approved'));
+
+    expect(navigationHandler).toHaveBeenCalledWith(expect.objectContaining({
+      detail: {
+        tab: 'sales-transaction-daily-call-monitoring',
+        payload: { contactId: 'customer-42', conversationType: 'agent_sales_report', activityRef: 'request-1' },
+      },
+    }));
+    window.removeEventListener('workflow:navigate', navigationHandler);
+  });
+
   it('opens the exact prospect in Customer Data for its unified conversation comment', async () => {
     fetchNotificationsMock.mockResolvedValue([
       createNotification({

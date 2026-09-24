@@ -182,6 +182,38 @@ describe('DailyCallMonitoringView communication actions', () => {
     }
   });
 
+  it('uses API debt and customer status rather than outstanding balance for do-not-contact classification', async () => {
+    fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
+      ...baseSnapshot,
+      contacts: [
+        {
+          ...baseSnapshot.contacts[0],
+          id: 'good-debt-with-balance',
+          shopName: 'Good Debt With Balance',
+          status: 'active',
+          customerStatus: 1,
+          debtType: 'Good',
+          outstandingBalance: 5000,
+        },
+        {
+          ...baseSnapshot.contacts[0],
+          id: 'blacklisted-by-status',
+          shopName: 'Blacklisted By Status',
+          status: 'active',
+          customerStatus: 4,
+          debtType: 'Good',
+          outstandingBalance: 0,
+        },
+      ],
+    });
+
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    const blockedList = (await screen.findByText('Blacklisted By Status')).closest('article')!;
+    expect(within(blockedList).getByText('Blacklisted By Status')).toBeInTheDocument();
+    expect(within(blockedList).queryByText('Good Debt With Balance')).not.toBeInTheDocument();
+  });
+
   afterEach(() => {
     cleanup();
   });

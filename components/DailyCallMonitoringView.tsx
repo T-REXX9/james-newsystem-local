@@ -268,6 +268,13 @@ const toContactModel = (row: any): Contact => {
   const id = String(row?.id || '');
   const contactPersonName = String(row?.contactPersonName || '').trim();
   const contactNumber = String(row?.contactNumber || '');
+  const customerStatus = Number(row?.customerStatus ?? row?.customer_status ?? 1);
+  const debtType = String(row?.debtType ?? row?.debt_type ?? 'Good').trim().toLowerCase() === 'bad'
+    ? 'Bad'
+    : 'Good';
+  const status = customerStatus === 4 || debtType === 'Bad'
+    ? CustomerStatus.BLACKLISTED
+    : mapApiStatusToCustomerStatus(String(row?.status || 'active'));
 
   return {
   id,
@@ -299,10 +306,11 @@ const toContactModel = (row: any): Contact => {
   ishinomotoSignageSince: String(row?.ishinomotoSignageSince || ''),
   codeText: String(row?.dealerPriceGroup || ''),
   codeDate: String(row?.dealerPriceDate || ''),
-  status: mapApiStatusToCustomerStatus(String(row?.status || 'active')),
+  status,
   verification: String(row?.verification || ''),
   isHidden: false,
-  debtType: Number(row?.outstandingBalance || 0) > 0 ? 'Bad' : 'Good',
+  customerStatus,
+  debtType,
   comment: '',
   contactPersons: contactPersonName ? [{
     id: `${id}-primary-contact`,
