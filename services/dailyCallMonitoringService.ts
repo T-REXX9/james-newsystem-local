@@ -991,6 +991,17 @@ export const sendSalesReportMessage = async (input: {
   return mapSalesReportConversationMessage(payload?.data || {});
 };
 
+export const deleteSalesReportMessage = async (contactId: string, messageId: string, reason: string): Promise<void> => {
+  await requestJson(
+    `${API_BASE_URL}/daily-call-monitoring/customers/${encodeURIComponent(contactId)}/sales-report-messages/${encodeURIComponent(messageId)}`,
+    {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ main_id: resolveMainId(), reason }),
+    }
+  );
+};
+
 export const uploadSalesReportAttachment = async (
   contactId: string,
   imageData: string
