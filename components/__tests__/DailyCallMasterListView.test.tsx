@@ -1058,7 +1058,7 @@ describe('DailyCallMasterListView', () => {
           purchaseCount: 2,
           listCategory: 'priority',
           totalSales: 20000,
-          currentMonthSales: 8000,
+          currentMonthSales: 1_140_000,
           averageMonthlySales: 10000,
           averageMonthlySalesMonthCount: 2,
           daysSinceLastPurchase: 8,
@@ -1137,6 +1137,8 @@ describe('DailyCallMasterListView', () => {
 
     const priorityCard = within(summaries).getByRole('heading', { name: /Priority List/i }).closest('article') as HTMLElement;
     expect(within(priorityCard).getByText('Current Month Sales')).toBeInTheDocument();
+    expect(within(priorityCard).getByText('₱1,140,000')).toBeInTheDocument();
+    expect(within(priorityCard).queryByText('₱1.14M')).not.toBeInTheDocument();
     expect(within(priorityCard).getByText('Monthly Sales Potential')).toBeInTheDocument();
 
     const recoveryCard = within(summaries).getByRole('heading', { name: /Recovery List/i }).closest('article') as HTMLElement;
