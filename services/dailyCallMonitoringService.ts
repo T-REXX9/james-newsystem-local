@@ -501,6 +501,8 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
     verification: cleanNullableText(row?.verification),
     customerStatus: Number(row?.customerStatus ?? row?.customer_status ?? 1),
     debtType: cleanNullableText(row?.debtType ?? row?.debt_type, 'Good'),
+    dataIntegrityException: Boolean(row?.dataIntegrityException ?? row?.data_integrity_exception),
+    dataIntegrityMessage: cleanNullableText(row?.dataIntegrityMessage ?? row?.data_integrity_message),
     verifiedBy: cleanNullableText(row?.verifiedBy ?? row?.verified_by),
     verifiedInSystem: Boolean(row?.verifiedInSystem ?? row?.verified_in_system),
     latestSalesReportMessage: cleanNullableText(row?.latestSalesReportMessage ?? row?.latest_sales_report_message),

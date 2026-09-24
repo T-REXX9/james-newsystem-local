@@ -40,8 +40,8 @@ vi.mock('../../services/vipTierSettingsService', () => ({
 }));
 
 vi.mock('../DailyCallCustomerDetailModal', () => ({
-  default: ({ isOpen, customer, currentUser }: any) => isOpen && customer
-    ? <div role="dialog" data-current-user={currentUser?.id || ''}>Customer detail popup for {customer.shopName}</div>
+  default: ({ isOpen, customer, currentUser, viewOnlyDoNotContact }: any) => isOpen && customer
+    ? <div role="dialog" data-current-user={currentUser?.id || ''} data-view-only={String(Boolean(viewOnlyDoNotContact))}>Customer detail popup for {customer.shopName}</div>
     : null,
 }));
 
@@ -695,6 +695,7 @@ describe('DailyCallMasterListView', () => {
         {
           id: 'priority-2', shopName: 'Second Priority Shop', province: 'Cebu', city: 'Cebu City',
           contactNumber: '0940', assignedTo: 'Apostol Ella', listCategory: 'priority',
+          dataIntegrityException: true, dataIntegrityMessage: 'Missing active customer record',
           lastPurchaseDate: 'May 20, 2026', lastPurchaseDateRaw: '2026-05-20', purchaseCount: 1,
           totalSales: 6000, currentMonthSales: 0, daysSinceLastPurchase: 26,
           monthsSinceLastPurchase: 0, purchaseAgeGroup: 'two_weeks_to_one_month' as const,
@@ -712,7 +713,7 @@ describe('DailyCallMasterListView', () => {
 
     await waitFor(() => {
       expect(bulkUpdateContacts).toHaveBeenCalledWith(
-        ['priority-1', 'priority-2'],
+        ['priority-1'],
         expect.objectContaining({
           __salesPersonId: 'agent-1',
           salesman: 'Joan Jerusalem',
@@ -725,6 +726,34 @@ describe('DailyCallMasterListView', () => {
       search: '',
       forceRefresh: true,
     });
+    expect(screen.getByText('Data repair needed')).toHaveAttribute('title', 'Missing active customer record');
+    expect(screen.getByRole('button', { name: 'View Second Priority Shop' })).toBeInTheDocument();
+  });
+
+  it('keeps a posted-sales data-repair exception view-only in details and agent sales reports', async () => {
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: '2026-09-10', count: 1 },
+      items: [{
+        id: 'orphan-crisjeff', shopName: 'CRISJEFF CALIBRATION SERVICES', province: '—', city: '—',
+        contactNumber: '—', assignedTo: 'Unassigned', listCategory: 'priority',
+        dataIntegrityException: true, dataIntegrityMessage: 'Missing active customer record',
+        latestSalesReportMessage: 'Posted delivery receipt requires customer repair.',
+        lastPurchaseDate: 'Sep 12, 2026', lastPurchaseDateRaw: '2026-09-12', purchaseCount: 1,
+        totalSales: 10200, currentMonthSales: 10200, averageMonthlySales: 10200,
+        averageMonthlySalesMonthCount: 1, recentThreeMonthSales: 10200, previousThreeMonthSales: 0,
+        salesTrendPercent: 100, daysSinceLastPurchase: 0, monthsSinceLastPurchase: 0,
+        purchaseAgeGroup: 'recent' as const,
+      }],
+    });
+    vi.mocked(fetchCustomersForDailyCall).mockResolvedValue([]);
+
+    render(<DailyCallMasterListView currentUser={masterUser} />);
+
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'View details for CRISJEFF CALIBRATION SERVICES' }));
+    expect((await screen.findByText('Customer detail popup for CRISJEFF CALIBRATION SERVICES')).closest('[role="dialog"]')).toHaveAttribute('data-view-only', 'true');
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Reply to latest Agent Sales Report for CRISJEFF CALIBRATION SERVICES' }));
+    expect(await screen.findByRole('region', { name: 'Inline Agent Sales Report for orphan-crisjeff' })).toHaveAttribute('data-view-only', 'true');
   });
 
   it('does not change a customer when do-not-contact confirmation is canceled', async () => {
