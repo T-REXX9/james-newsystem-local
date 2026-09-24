@@ -330,7 +330,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const openCustomerDetails = useCallback(async (row: DailyCallMasterCustomerRow, initialTab: DetailTabId = 'overview') => {
     setLoadingCustomerId(row.id);
     setDetailInitialTab(initialTab);
-    setDetailViewOnly(isBlockedDailyCallMasterRow(row));
+    setDetailViewOnly(isBlockedDailyCallMasterRow(row) || Boolean(row.dataIntegrityException));
     try {
       if (!fullCustomerRowsRef.current) {
         fullCustomerRowsRef.current = await fetchCustomersForDailyCall({});
@@ -1296,7 +1296,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
               <CustomerSalesReportChat
                 contactId={replyModalRow.id}
                 currentUser={currentUser || null}
-                viewOnly={isBlockedDailyCallMasterRow(replyModalRow)}
+                viewOnly={isBlockedDailyCallMasterRow(replyModalRow) || Boolean(replyModalRow.dataIntegrityException)}
                 onConversationRead={() => void loadRows(false, true)}
                 autoScroll={false}
                 animateMessages={false}
