@@ -625,6 +625,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   };
 
   const activeCategory = categoryData.find((category) => category.id === activeCategoryId) || categoryData[0];
+  const actionableCategoryRows = activeCategory.rows.filter((row) => !row.dataIntegrityException);
   const visibleRows = activeCategory.rows.slice(0, visibleLimit);
   const hasMoreRows = visibleRows.length < activeCategory.rows.length;
   const showMasterActions = canUseMasterDailyCallActions(currentUser);
@@ -635,10 +636,10 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     && hasActionPermission(currentUser, 'can_edit', 'Customer Database');
 
   const handleAssignTeamToCategory = useCallback(async () => {
-    if (!selectedAssignmentTeamId || activeCategory.rows.length === 0) return;
+    if (!selectedAssignmentTeamId || actionableCategoryRows.length === 0) return;
     const team = teams.find((item) => String(item.id) === selectedAssignmentTeamId);
     if (!team) return;
-    const ids = activeCategory.rows.map((row) => row.id);
+    const ids = actionableCategoryRows.map((row) => row.id);
     const previousRows = rowsRef.current;
     setRows((prev) => prev.map((row) => ids.includes(row.id)
       ? { ...row, assignedTeamId: selectedAssignmentTeamId, assignedTeam: team.name }
@@ -660,17 +661,17 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     } finally {
       setAssigningCustomerId(null);
     }
-  }, [activeCategory, addToast, loadRows, selectedAssignmentTeamId, teams]);
+  }, [actionableCategoryRows, activeCategory, addToast, loadRows, selectedAssignmentTeamId, teams]);
 
   const handleAssignAgentToCategory = useCallback(async () => {
-    if (!selectedAssignmentAgentId || activeCategory.rows.length === 0) return;
+    if (!selectedAssignmentAgentId || actionableCategoryRows.length === 0) return;
     const shouldClearAssignment = selectedAssignmentAgentId === '__unassigned__';
     const agent = shouldClearAssignment
       ? null
       : salesAgents.find((item) => String(item.id) === selectedAssignmentAgentId);
     if (!agent && !shouldClearAssignment) return;
 
-    const ids = activeCategory.rows.map((row) => row.id);
+    const ids = actionableCategoryRows.map((row) => row.id);
     const previousRows = rowsRef.current;
     const assignedTo = agent?.full_name?.trim() || 'Unassigned';
     const assignedAgentId = agent?.id || '';
@@ -706,7 +707,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     } finally {
       setAssigningCustomerId(null);
     }
-  }, [activeCategory, addToast, loadRows, salesAgents, selectedAssignmentAgentId]);
+  }, [actionableCategoryRows, activeCategory, addToast, loadRows, salesAgents, selectedAssignmentAgentId]);
 
   useEffect(() => {
     setVisibleLimit(INITIAL_VISIBLE_ROWS);
@@ -957,7 +958,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                     <button
                       type="button"
                       onClick={() => void handleAssignAgentToCategory()}
-                      disabled={!selectedAssignmentAgentId || activeCategory.rows.length === 0 || assigningCustomerId === '__agent__' || assigningCustomerId === '__team__'}
+                      disabled={!selectedAssignmentAgentId || actionableCategoryRows.length === 0 || assigningCustomerId === '__agent__' || assigningCustomerId === '__team__'}
                       className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Assign agent
@@ -975,7 +976,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                     <button
                       type="button"
                       onClick={() => void handleAssignTeamToCategory()}
-                      disabled={!selectedAssignmentTeamId || activeCategory.rows.length === 0 || assigningCustomerId === '__agent__' || assigningCustomerId === '__team__'}
+                      disabled={!selectedAssignmentTeamId || actionableCategoryRows.length === 0 || assigningCustomerId === '__agent__' || assigningCustomerId === '__team__'}
                       className="rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Assign {activeCategory.label}
@@ -1020,7 +1021,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 <tbody>
                   {visibleRows.map((row, index) => {
                     const rowBlocked = isBlockedDailyCallMasterRow(row);
-                    const viewOnlyRow = activeCategory.id === 'blocked' || rowBlocked;
+                    const viewOnlyRow = activeCategory.id === 'blocked' || rowBlocked || Boolean(row.dataIntegrityException);
                     const highlight = purchaseHighlight(row);
                     const vip = vipDetails(row, vipConfig);
                     const trend = trendDetails(row);
@@ -1040,6 +1041,11 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                             {loadingCustomerId === row.id && <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />}
                             {row.shopName}
                           </button>
+                          {row.dataIntegrityException && (
+                            <p className="mt-1 inline-flex rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800" title={row.dataIntegrityMessage || 'Missing active customer record'}>
+                              Data repair needed
+                            </p>
+                          )}
                           {row.pastName && <p className="mt-0.5 truncate text-[10px] font-medium text-slate-500">Old: {row.pastName}</p>}
                           <p className={`mt-0.5 truncate text-xs font-semibold ${highlight.muted}`}>
                             {row.contactNumber}

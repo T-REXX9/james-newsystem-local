@@ -695,6 +695,7 @@ describe('DailyCallMasterListView', () => {
         {
           id: 'priority-2', shopName: 'Second Priority Shop', province: 'Cebu', city: 'Cebu City',
           contactNumber: '0940', assignedTo: 'Apostol Ella', listCategory: 'priority',
+          dataIntegrityException: true, dataIntegrityMessage: 'Missing active customer record',
           lastPurchaseDate: 'May 20, 2026', lastPurchaseDateRaw: '2026-05-20', purchaseCount: 1,
           totalSales: 6000, currentMonthSales: 0, daysSinceLastPurchase: 26,
           monthsSinceLastPurchase: 0, purchaseAgeGroup: 'two_weeks_to_one_month' as const,
@@ -712,7 +713,7 @@ describe('DailyCallMasterListView', () => {
 
     await waitFor(() => {
       expect(bulkUpdateContacts).toHaveBeenCalledWith(
-        ['priority-1', 'priority-2'],
+        ['priority-1'],
         expect.objectContaining({
           __salesPersonId: 'agent-1',
           salesman: 'Joan Jerusalem',
@@ -725,6 +726,8 @@ describe('DailyCallMasterListView', () => {
       search: '',
       forceRefresh: true,
     });
+    expect(screen.getByText('Data repair needed')).toHaveAttribute('title', 'Missing active customer record');
+    expect(screen.getByRole('button', { name: 'View Second Priority Shop' })).toBeInTheDocument();
   });
 
   it('does not change a customer when do-not-contact confirmation is canceled', async () => {

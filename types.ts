@@ -801,6 +801,9 @@ export interface DailyCallMasterCustomerRow {
   verification?: string;
   customerStatus?: number;
   debtType?: 'Good' | 'Bad' | string;
+  /** Posted sales exist but the active customer-master record is missing. */
+  dataIntegrityException?: boolean;
+  dataIntegrityMessage?: string;
   verifiedBy?: string;
   /** True only when a Verify Prospect audit entry was written by this system. */
   verifiedInSystem?: boolean;
