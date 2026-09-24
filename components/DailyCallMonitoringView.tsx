@@ -1912,7 +1912,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                   <div>
                     <p className="truncate text-[10px] font-semibold leading-tight text-[#10244c] dark:text-slate-300" title={summary.metricLabel}>{summary.metricLabel}</p>
                     <p className={`truncate text-base font-extrabold leading-tight ${tone.value}`} title={formatCurrency(summary.primaryMetric)}>
-                      {formatCompactCurrency(summary.primaryMetric)}
+                      {formatCurrency(summary.primaryMetric)}
                     </p>
                   </div>
                   <div>
