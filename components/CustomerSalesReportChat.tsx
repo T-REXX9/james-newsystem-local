@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ImagePlus, Loader2, Send, X } from 'lucide-react';
+import { Ban, ImagePlus, Loader2, Send, X } from 'lucide-react';
 import {
   fetchSalesReportConversation,
   markSalesReportConversationRead,
@@ -7,11 +7,12 @@ import {
   sendSalesReportMessage,
   uploadSalesReportAttachment,
 } from '../services/dailyCallMonitoringService';
-import { SalesReportConversationMessage, UserProfile } from '../types';
+import { CustomerStatus, SalesReportConversationMessage, UserProfile } from '../types';
 import { useToast } from './ToastProvider';
 import { optimizeRecordImage, RECORD_IMAGE_ACCEPT, validateRecordImageFile } from '../utils/recordImage';
 
 import { shouldSuppressAuthError } from '../services/localApiAuth';
+import { requestCustomerUpdate } from '../services/customerWorkflowLocalApiService';
 interface CustomerSalesReportChatProps {
   contactId: string;
   currentUser: UserProfile | null;
@@ -138,6 +139,8 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
   const [draft, setDraft] = useState('');
   const [pendingImageDataUrl, setPendingImageDataUrl] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [showBlacklistRequest, setShowBlacklistRequest] = useState(false);
+  const [blacklistReason, setBlacklistReason] = useState('');
 
   const loadConversation = useCallback(async () => {
     setLoading(true);
@@ -238,6 +241,24 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
     }
   };
 
+  const handleBlacklistRequest = async () => {
+    const reason = blacklistReason.trim();
+    if (!reason) { addToast({ type: 'error', message: 'Enter a reason.' }); return; }
+    if (!currentUser) return;
+    setSubmitting(true);
+    try {
+      const message = await sendSalesReportMessage({ contactId, body: `Reject / blacklist request\nReason: ${reason}`, senderName: currentUser.full_name || currentUser.email || 'Staff' });
+      setMessages((prev) => [...prev, message]);
+      await requestCustomerUpdate(contactId, { status: CustomerStatus.BLACKLISTED, debtType: 'Bad', comment: reason });
+      setBlacklistReason('');
+      setShowBlacklistRequest(false);
+      addToast({ type: 'success', message: 'Request sent for management approval.' });
+    } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
+      addToast({ type: 'error', message: error instanceof Error ? error.message : 'Unable to submit request.' });
+    } finally { setSubmitting(false); }
+  };
+
   const visibleMessages = compact ? messages.slice(-8) : messages;
 
   if (loading) {
@@ -306,6 +327,16 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
 
       {!viewOnly && !compact && (
         <div className="border-t border-blue-100/80 bg-white/90 p-4 dark:border-slate-800 dark:bg-slate-900/90">
+          {showBlacklistRequest && (
+            <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 p-3 dark:border-rose-900/60 dark:bg-rose-950/20">
+              <label htmlFor="sales-report-blacklist-reason" className="block text-xs font-semibold text-slate-700 dark:text-slate-200">Reason <span className="text-rose-600">*</span></label>
+              <textarea id="sales-report-blacklist-reason" value={blacklistReason} onChange={(event) => setBlacklistReason(event.target.value)} maxLength={2000} rows={3} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-rose-500 focus:outline-none focus:ring-1 focus:ring-rose-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
+              <div className="mt-2 flex justify-end gap-2">
+                <button type="button" onClick={() => { setShowBlacklistRequest(false); setBlacklistReason(''); }} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">Cancel</button>
+                <button type="button" disabled={submitting || !blacklistReason.trim()} onClick={() => void handleBlacklistRequest()} className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">Submit Request</button>
+              </div>
+            </div>
+          )}
           {pendingImageDataUrl && (
             <div className="mb-2 flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
               <img src={pendingImageDataUrl} alt="Pending attachment" className="h-16 w-16 rounded object-cover" />
@@ -331,7 +362,7 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
             />
           </label>
           <div className="mt-2 flex items-center justify-between gap-2">
-            <div>
+            <div className="flex items-center gap-2">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -349,6 +380,15 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
               >
                 <ImagePlus className="h-4 w-4" />
                 Picture
+              </button>
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => setShowBlacklistRequest((visible) => !visible)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 transition-colors hover:bg-rose-50 disabled:opacity-50 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950/30"
+              >
+                <Ban className="h-4 w-4" />
+                Reject / Blacklist
               </button>
             </div>
             <button

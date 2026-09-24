@@ -164,7 +164,7 @@ const NotificationCenter: React.FC = () => {
     const contactId = String(metadata.contact_id || '');
     const tabId = String(notification.action_url || metadata.action_url || '').replace(/^\/+/, '').split(/[?#]/)[0].trim();
     const conversationType = String(metadata.conversation_type || '');
-    const isConversation = ['call_report', 'call_report_reply', 'prospect_customer_comment', 'prospect'].includes(entityType) && Boolean(contactId || metadata.entity_id);
+    const isConversation = ['call_report', 'call_report_reply', 'prospect_customer_comment', 'prospect', 'customer_request_decision'].includes(entityType) && Boolean(contactId || metadata.entity_id);
     const isAgentSalesReport = conversationType === 'agent_sales_report' && isConversation;
     const targetTab = isAgentSalesReport ? 'sales-transaction-daily-call-monitoring' : isConversation ? 'sales-database-customer-database' : tabId;
     if (!targetTab) return;
@@ -175,7 +175,7 @@ const NotificationCenter: React.FC = () => {
       : isConversation
         ? {
             contactId: contactId || recordId,
-            conversationType,
+            conversationType: entityType === 'customer_request_decision' ? 'agent_sales_report' : conversationType,
             activityRef: String(metadata.target_ref || recordId),
           }
         : notificationPayload(entityType, recordId);
