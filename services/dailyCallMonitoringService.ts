@@ -460,6 +460,8 @@ const mapDailyCallCustomerRow = (row: any): DailyCallCustomerRow => ({
   courier: cleanNullableText(row?.courier, '—'),
   status: mapApiStatusToCustomerStatus(String(row?.status || row?.statusLabel || row?.status_label || 'active')),
   verification: cleanNullableText(row?.verification),
+  debtType: cleanNullableText(row?.debtType ?? row?.debt_type, 'Good'),
+  customerStatus: Number(row?.customerStatus ?? row?.customer_status ?? 1),
   statusDate: cleanNullableText(row?.statusDate ?? row?.status_date),
   lastPurchaseDate: cleanNullableText(row?.lastPurchaseDate ?? row?.last_purchase_date),
   outstandingBalance: Number(row?.outstandingBalance ?? row?.outstanding_balance ?? 0),
