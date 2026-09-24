@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search, RefreshCw, User, Activity, Calendar } from 'lucide-react';
+import { Search, RefreshCw, User, Activity, Calendar, Eye, X } from 'lucide-react';
 import {
   activityLogsLocalApiService,
   ActivityLogRecord,
@@ -26,6 +26,44 @@ const normalizeActionTone = (action: string): string => {
   return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200';
 };
 
+const parseDeletionOriginal = (log: ActivityLogRecord): Record<string, unknown> => {
+  try {
+    const payload = JSON.parse(log.deletion_original_payload || '{}');
+    return payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+};
+
+const deletionMessageBody = (log: ActivityLogRecord): string => {
+  const original = parseDeletionOriginal(log);
+  const record = original.original;
+  if (!record || typeof record !== 'object') return '';
+  const source = record as Record<string, unknown>;
+  return String(source.report_body || source.body || '');
+};
+
+const deletionSender = (log: ActivityLogRecord): string => {
+  const original = parseDeletionOriginal(log);
+  const record = original.original;
+  if (!record || typeof record !== 'object') return 'Unknown';
+  const source = record as Record<string, unknown>;
+  const name = String(source.agent_name || source.sender_name || '').trim();
+  const userId = String(source.agent_user_id || source.sender_user_id || '').trim();
+  return name ? `${name}${userId ? ` (User #${userId})` : ''}` : (userId ? `User #${userId}` : 'Unknown');
+};
+
+const deletionCustomerName = (log: ActivityLogRecord): string => {
+  if (log.deletion_customer_name.trim()) return log.deletion_customer_name.trim();
+  const snapshotName = String(parseDeletionOriginal(log).customer_name || '').trim();
+  return snapshotName || 'Unknown customer';
+};
+
+const deletionAuditId = (log: ActivityLogRecord): number | null => {
+  const match = /^call-report-deletion-audit:(\d+)$/.exec(log.lrefno || '');
+  return match ? Number(match[1]) : null;
+};
+
 interface ActivityLogsProps {
   title?: string;
   initialDateFrom?: string;
@@ -49,6 +87,8 @@ export default function ActivityLogs({ title = 'Activity Logs', initialDateFrom,
   const [perPage] = useState(100);
   const [hasMore, setHasMore] = useState(false);
   const [totalRows, setTotalRows] = useState<number | null>(null);
+  const [selectedDeletionLog, setSelectedDeletionLog] = useState<ActivityLogRecord | null>(null);
+  const [loadingDeletionAuditId, setLoadingDeletionAuditId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!initialDateFrom && !initialDateTo) return;
@@ -93,6 +133,17 @@ export default function ActivityLogs({ title = 'Activity Logs', initialDateFrom,
       setError(err?.message || 'Failed to load activity logs');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openDeletionDetails = async (auditId: number) => {
+    setLoadingDeletionAuditId(auditId);
+    try {
+      setSelectedDeletionLog(await activityLogsLocalApiService.deletionDetail(auditId));
+    } catch (err: any) {
+      if (!shouldSuppressAuthError(err)) setError(err?.message || 'Failed to load deletion details');
+    } finally {
+      setLoadingDeletionAuditId(null);
     }
   };
 
@@ -240,6 +291,7 @@ export default function ActivityLogs({ title = 'Activity Logs', initialDateFrom,
               ) : (
                 logs.map((log) => {
                   const resolvedUser = `${log.userfname || ''} ${log.userlname || ''}`.trim() || userNameMap.get(log.luser_id) || 'Unknown';
+                  const auditId = deletionAuditId(log);
                   return (
                     <tr key={`${log.lid}-${log.ldatetime}`} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors text-sm">
                       <td className="px-6 py-3 text-gray-500 whitespace-nowrap">{formatDate(log.ldatetime)}</td>
@@ -260,8 +312,22 @@ export default function ActivityLogs({ title = 'Activity Logs', initialDateFrom,
                       <td className="px-6 py-3 text-gray-500 dark:text-gray-400 font-mono text-xs max-w-xs truncate" title={log.lrefno || ''}>
                         {log.lrefno || '-'}
                       </td>
-                      <td className="px-6 py-3 text-gray-500 dark:text-gray-400 max-w-xs truncate" title={log.lreason || ''}>
-                        {[log.lold_status && `${log.lold_status} → ${log.lnew_status || '-'}`, log.lreason].filter(Boolean).join(' · ') || '-'}
+                      <td className="px-6 py-3 text-gray-500 dark:text-gray-400 max-w-xs">
+                        {auditId !== null ? (
+                          <button
+                            type="button"
+                            onClick={() => void openDeletionDetails(auditId)}
+                            disabled={loadingDeletionAuditId === auditId}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            {loadingDeletionAuditId === auditId ? 'Loading…' : 'View details'}
+                          </button>
+                        ) : (
+                          <span className="block truncate" title={log.lreason || ''}>
+                            {[log.lold_status && `${log.lold_status} → ${log.lnew_status || '-'}`, log.lreason].filter(Boolean).join(' · ') || '-'}
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-3 text-emerald-700 font-semibold">Recorded</td>
                     </tr>
@@ -292,6 +358,35 @@ export default function ActivityLogs({ title = 'Activity Logs', initialDateFrom,
           </button>
         </div>
       </div>
+      {selectedDeletionLog && (
+        <div className="fixed inset-0 z-[2200] flex items-center justify-center bg-slate-900/60 p-4" role="presentation">
+          <section role="dialog" aria-modal="true" aria-labelledby="deleted-sales-report-details-title" className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
+            <header className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-700">
+              <div>
+                <h2 id="deleted-sales-report-details-title" className="text-lg font-bold text-slate-900 dark:text-white">Deleted Agent Sales Report</h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Audit #{selectedDeletionLog.deletion_audit_id}</p>
+              </div>
+              <button type="button" onClick={() => setSelectedDeletionLog(null)} aria-label="Close deletion details" className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">
+                <X className="h-5 w-5" />
+              </button>
+            </header>
+            <div className="overflow-y-auto p-5 text-sm">
+              <dl className="grid gap-4 sm:grid-cols-2">
+                <div><dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Customer</dt><dd className="mt-1 break-words text-slate-900 dark:text-white">{deletionCustomerName(selectedDeletionLog)}</dd></div>
+                <div><dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Original sender</dt><dd className="mt-1 break-words text-slate-900 dark:text-white">{deletionSender(selectedDeletionLog)}</dd></div>
+                <div><dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Deleted by</dt><dd className="mt-1 break-words text-slate-900 dark:text-white">{selectedDeletionLog.deletion_actor_name || 'Unknown'}{selectedDeletionLog.deletion_actor_role ? ` · ${selectedDeletionLog.deletion_actor_role}` : ''}</dd></div>
+                <div><dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Deleted at</dt><dd className="mt-1 break-words text-slate-900 dark:text-white">{formatDate(selectedDeletionLog.deletion_deleted_at || selectedDeletionLog.ldatetime)}</dd></div>
+                <div><dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Record</dt><dd className="mt-1 break-words text-slate-900 dark:text-white">{selectedDeletionLog.deletion_record_type || 'message'} · Thread #{selectedDeletionLog.deletion_thread_id || '—'}</dd></div>
+                <div><dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reason</dt><dd className="mt-1 whitespace-pre-wrap break-words text-slate-900 dark:text-white">{selectedDeletionLog.deletion_reason || '—'}</dd></div>
+              </dl>
+              <div className="mt-5 border-t border-slate-200 pt-5 dark:border-slate-700">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Deleted message</h3>
+                <pre className="mt-2 whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-3 font-sans text-sm text-slate-900 dark:bg-slate-800 dark:text-white">{deletionMessageBody(selectedDeletionLog) || 'No text content was recorded.'}</pre>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

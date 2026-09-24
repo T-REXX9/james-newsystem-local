@@ -17,6 +17,18 @@ export type ActivityLogRecord = {
   ldatetime: string;
   userfname: string;
   userlname: string;
+  deletion_audit_id: number;
+  deletion_contact_id: string;
+  deletion_customer_name: string;
+  deletion_thread_id: string;
+  deletion_message_id: string;
+  deletion_record_type: string;
+  deletion_actor_user_id: string;
+  deletion_actor_name: string;
+  deletion_actor_role: string;
+  deletion_reason: string;
+  deletion_original_payload: string;
+  deletion_deleted_at: string;
 };
 
 export type ActivityLogUser = {
@@ -76,6 +88,18 @@ const mapRecord = (row: any): ActivityLogRecord => ({
   ldatetime: String(row?.ldatetime || ''),
   userfname: String(row?.userfname || ''),
   userlname: String(row?.userlname || ''),
+  deletion_audit_id: toNumber(row?.deletion_audit_id),
+  deletion_contact_id: String(row?.deletion_contact_id || ''),
+  deletion_customer_name: String(row?.deletion_customer_name || ''),
+  deletion_thread_id: String(row?.deletion_thread_id || ''),
+  deletion_message_id: String(row?.deletion_message_id || ''),
+  deletion_record_type: String(row?.deletion_record_type || ''),
+  deletion_actor_user_id: String(row?.deletion_actor_user_id || ''),
+  deletion_actor_name: String(row?.deletion_actor_name || ''),
+  deletion_actor_role: String(row?.deletion_actor_role || ''),
+  deletion_reason: String(row?.deletion_reason || ''),
+  deletion_original_payload: String(row?.deletion_original_payload || ''),
+  deletion_deleted_at: String(row?.deletion_deleted_at || ''),
 });
 
 export const activityLogsLocalApiService = {
@@ -124,5 +148,10 @@ export const activityLogsLocalApiService = {
       first_name: String(row?.first_name || ''),
       last_name: String(row?.last_name || ''),
     })).filter((row: ActivityLogUser) => row.user_id !== '');
+  },
+
+  async deletionDetail(auditId: number): Promise<ActivityLogRecord> {
+    const data = await requestApi(`${API_BASE_URL}/activity-logs/deletions/${encodeURIComponent(String(auditId))}?main_id=${encodeURIComponent(String(getMainId()))}`);
+    return mapRecord(data);
   },
 };
