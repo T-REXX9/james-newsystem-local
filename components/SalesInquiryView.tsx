@@ -168,14 +168,6 @@ const getLocalTimeInputValue = (date = new Date()): string => {
   return `${hours}:${minutes}`;
 };
 
-const getSessionSalesPerson = (): { id: string; name: string } => {
-  const profile = getLocalAuthSession()?.userProfile;
-  return {
-    id: String(profile?.id || '').trim(),
-    name: String(profile?.full_name || '').trim(),
-  };
-};
-
 const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   initialContactId,
   initialInquiryId,
@@ -652,7 +644,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     setSelectedCustomer(null);
     setSalesDate(getLocalDateInputValue());
     setSalesTime(getLocalTimeInputValue());
-    setSalesPerson(getSessionSalesPerson().name);
+    setSalesPerson('');
     setDeliveryAddress('');
     setReferenceNo(newInquiryNo);
     setCustomerReference('');
@@ -799,9 +791,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     const defaultReference = String(customer.contactPersons?.[0]?.name || '').trim();
     setSelectedCustomer(customer);
     setDeliveryAddress(customer.deliveryAddress || customer.address || '');
-    // Keep the logged-in creator as Sales Person. Never replace with the customer's
-    // assigned agent — that broke accountability (e.g. test@... saved as APOSTOL ELLA).
-    setSalesPerson((current) => current.trim() || getSessionSalesPerson().name || customer.salesman || '');
+    setSalesPerson(customer.salesman || '');
     setPriceGroup(normalizedGroup);
     setCreditLimit(Number(customer.creditLimit || 0));
     setTerms(customer.terms || '');
@@ -1149,13 +1139,12 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         finalInquiryType = newInquiryType;
       }
 
-      const sessionSalesPerson = getSessionSalesPerson();
       const inquiryData: SalesInquiryDTO = {
         contact_id: selectedCustomer.id,
         sales_date: salesDate,
         sales_time: salesTime,
-        sales_person: salesPerson.trim() || sessionSalesPerson.name,
-        sales_person_id: sessionSalesPerson.id,
+        sales_person: selectedCustomer.salesman || '',
+        sales_person_id: selectedCustomer.assignedAgentId || '',
         delivery_address: deliveryAddress,
         reference_no: activeInquiryReferenceNo,
         customer_reference: customerReference,
@@ -1743,7 +1732,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
             <table className="w-full border-separate border-spacing-y-[9px] text-[13px]">
               <tbody>
-                <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[15%_31%_9%_10%_9%_9%_8%_9%]"><label className={legacyLabelClass}>Sold to :</label><div className="pl-3"><CustomerAutocomplete contacts={customers} selectedCustomer={selectedCustomer} disabled={isReadOnly} onSelect={(customer) => handleCustomerSelect(customer)} placeholder="Select Customer" inputClassName={`h-[34px] rounded-[4px] border-[#c9c9c9] bg-white text-center text-[13px] ${validationErrors.customer ? 'border-red-400' : ''}`} /></div><label className={legacyLabelClass}>Date :</label><div className="pl-2"><input type="date" required disabled={isReadOnly || !canEditSalesDate} max={salesDateMax} value={salesDate} onChange={(event) => setSalesDate(event.target.value)} className={legacyInputClass} /></div><label className={legacyLabelClass}>Time :</label><div className="pl-2"><input type="time" required disabled={isReadOnly} value={salesTime} onChange={(event) => setSalesTime(event.target.value)} className={legacyInputClass} /></div><label className={legacyLabelClass}>Sales Person:</label><div className="pl-2"><input type="text" disabled={isReadOnly} value={salesPerson} onChange={(event) => setSalesPerson(event.target.value)} className={legacyInputClass} /></div></div></td></tr>
+                <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[15%_31%_9%_10%_9%_9%_8%_9%]"><label className={legacyLabelClass}>Sold to :</label><div className="pl-3"><CustomerAutocomplete contacts={customers} selectedCustomer={selectedCustomer} disabled={isReadOnly} onSelect={(customer) => handleCustomerSelect(customer)} placeholder="Select Customer" inputClassName={`h-[34px] rounded-[4px] border-[#c9c9c9] bg-white text-center text-[13px] ${validationErrors.customer ? 'border-red-400' : ''}`} /></div><label className={legacyLabelClass}>Date :</label><div className="pl-2"><input type="date" required disabled={isReadOnly || !canEditSalesDate} max={salesDateMax} value={salesDate} onChange={(event) => setSalesDate(event.target.value)} className={legacyInputClass} /></div><label className={legacyLabelClass}>Time :</label><div className="pl-2"><input type="time" required disabled={isReadOnly} value={salesTime} onChange={(event) => setSalesTime(event.target.value)} className={legacyInputClass} /></div><label className={legacyLabelClass}>Sales Person:</label><div className="pl-2"><input type="text" readOnly value={salesPerson} className={legacyInputClass} /></div></div></td></tr>
                 <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[17%_40%_10.5%_10.5%_9.5%_12.5%]"><label className={legacyLabelClass}>Delivery Address :</label><div className="relative flex gap-1 pl-3"><input type="text" disabled={isReadOnly || !selectedCustomer} value={deliveryAddress} onChange={(event) => setDeliveryAddress(event.target.value)} className={legacyInputClass} /><button type="button" disabled={isReadOnly || !selectedCustomer || deliveryAddressOptions.length === 0} onClick={() => setDeliveryAddressMenuOpen((open) => !open)} className="rounded border border-[#c9c9c9] px-2 text-[11px] disabled:bg-[#f2f2f2] disabled:text-[#777]">Select</button>{deliveryAddressMenuOpen && <div className="absolute left-3 right-0 top-full z-20 mt-1 max-h-40 overflow-y-auto rounded border border-slate-200 bg-white p-1 shadow-lg">{deliveryAddressOptions.map((address) => <button key={address} type="button" onClick={() => { setDeliveryAddress(address); setDeliveryAddressMenuOpen(false); }} className="block w-full rounded px-2 py-1.5 text-left text-[12px] hover:bg-slate-100">{address}</button>)}</div>}</div><label className={legacyLabelClass}>Our Reference:</label><div className="pl-2"><input type="text" readOnly value={activeInquiryReferenceNo} className={legacyInputClass} /></div><label className={legacyLabelClass}>Your Reference:</label><div className="pl-2"><select disabled={isReadOnly || !selectedCustomer} value={customerReference} onChange={(event) => setCustomerReference(event.target.value)} className={legacyInputClass}><option value="">Select reference</option>{customerReferenceOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div></div></td></tr>
                 <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[12%_20%_10%_19%_10%_11%_9%_9%]"><label className={legacyLabelClass}>Send By:</label><div className="pl-3"><SearchableSelect value={sendBy} options={courierOptions.map((option) => ({ value: option.name, label: option.name }))} onChange={setSendBy} placeholder="Select..." searchPlaceholder="Search courier..." disabled={isReadOnly} /></div><label className={legacyLabelClass}>Price Code:</label><div className="pl-2"><select disabled={isReadOnly || !selectedCustomer} value={priceGroup} onChange={(event) => void handlePriceGroupChange(event.target.value)} className={legacyInputClass}>{!selectedCustomer && <option value="">Select</option>}{WRITABLE_PRICING_GROUP_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div><label className={legacyLabelClass}>Credit Limit:</label><div className="pl-2"><input type="text" readOnly value={creditLimit ? creditLimit.toLocaleString('en-US', { minimumFractionDigits: 2 }) : ''} className={legacyInputClass} /></div><label className={legacyLabelClass}>Terms Strictly:</label><div className="pl-2"><input type="text" readOnly value={terms} className={legacyInputClass} /></div></div></td></tr>
                 <tr><td><div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-y-2 xl:grid-cols-[17%_63%_10%_10%]"><label className={legacyLabelClass}>Promise to Pay:</label><div className="pl-3"><input type="text" disabled={isReadOnly} value={promiseToPay} onChange={(event) => setPromiseToPay(event.target.value)} placeholder="if applicable" className={legacyInputClass} /></div><label className={legacyLabelClass}>PO No.:</label><div className="pl-2"><input type="text" disabled={isReadOnly} value={poNumber} onChange={(event) => setPoNumber(event.target.value)} placeholder="if applicable" className={legacyInputClass} /></div></div></td></tr>
@@ -1828,7 +1817,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
           inquiry={printableInquiry}
           customer={selectedCustomer}
           inquiryNumberLabel={activeInquiryNumberDisplay}
-          preparedBy={String(getLocalAuthSession()?.userProfile?.full_name || '').trim()}
+          preparedBy={String(printableInquiry.created_by_name || getLocalAuthSession()?.userProfile?.full_name || '').trim()}
           vipConfig={vipConfig}
           currentMonthSales={postedSales.currentMonthSales}
           captureMode={jpegCaptureMode}
@@ -2106,7 +2095,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                 items={[
                   { label: 'Document No.', value: activeInquiryNumberDisplay },
                   { label: 'Status', value: !isCreatingNew && selectedInquiry?.status ? <StatusBadge status={selectedInquiry.status} /> : 'Draft' },
-                  { label: 'Created By', value: selectedInquiry?.created_by || salesPerson || '-' },
+                  { label: 'Created By', value: selectedInquiry?.created_by_name || selectedInquiry?.created_by || '-' },
                   { label: 'Created Date/Time', value: formatLegacyListDateTime(selectedInquiry?.sales_date || salesDate, selectedInquiry?.sales_time || salesTime) || '-' },
                 ]}
               />
@@ -2194,7 +2183,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                     </td>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Sales Person:</td>
                     <td>
-                      <input type="text" disabled={isReadOnly} value={salesPerson} onChange={(e) => setSalesPerson(e.target.value)} className={`w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}`} />
+                      <input type="text" readOnly value={salesPerson} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" />
                     </td>
                   </tr>
                   <tr>
@@ -2700,7 +2689,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
           inquiry={printableInquiry}
           customer={selectedCustomer}
           inquiryNumberLabel={activeInquiryNumberDisplay}
-          preparedBy={String(getLocalAuthSession()?.userProfile?.full_name || '').trim()}
+          preparedBy={String(printableInquiry.created_by_name || getLocalAuthSession()?.userProfile?.full_name || '').trim()}
           vipConfig={vipConfig}
           currentMonthSales={postedSales.currentMonthSales}
           onClose={() => setShowPrintPreview(false)}

@@ -490,7 +490,7 @@ describe('SalesInquiryView', () => {
     expect(addToastMock).toHaveBeenCalledWith({ type: 'success', message: 'Sales inquiry JPEG exported.' });
   });
 
-  it('keeps the logged-in creator as Sales Person when a customer with another agent is selected', async () => {
+  it('uses the selected customer\'s assigned agent as Sales Person', async () => {
     const user = userEvent.setup();
     render(<SalesInquiryView />);
     await waitFor(() => expect(fetchContactsMock).toHaveBeenCalled());
@@ -499,8 +499,8 @@ describe('SalesInquiryView', () => {
     await user.selectOptions(screen.getByLabelText('Customer'), 'c-1');
 
     // Customer salesman is Jane Doe; creator session is "test".
-    expect(screen.getByDisplayValue('test')).toBeInTheDocument();
-    expect(screen.queryByDisplayValue('Jane Doe')).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue('Jane Doe')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('test')).not.toBeInTheDocument();
   });
 
   it('auto-selects the first customer contact and keeps PO No. editable when creating an inquiry', async () => {

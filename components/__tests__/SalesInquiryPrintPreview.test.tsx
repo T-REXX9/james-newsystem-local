@@ -67,12 +67,14 @@ describe('SalesInquiryPrintPreview', () => {
           address: '123 Main St',
         } as Contact}
         inquiryNumberLabel="INQ26-99"
-        preparedBy="Jane Doe"
+        preparedBy="Melson Creator"
         onClose={() => undefined}
       />
     );
 
     expect(screen.getByText('CUSTOMER INQUIRY')).toBeInTheDocument();
+    expect(screen.getByText('Sales Person:').parentElement).toHaveTextContent('Jane Doe');
+    expect(screen.getByText(/Prepared By :/).parentElement).toHaveTextContent('Melson Creator');
     const ourReferenceValue = screen.getByText('Our Reference:').nextElementSibling;
     expect(ourReferenceValue).toHaveTextContent('INQ26-99');
     expect(ourReferenceValue).not.toHaveTextContent('REF-STALE-99');
