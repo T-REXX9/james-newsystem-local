@@ -25,6 +25,7 @@ vi.mock('../../services/dailyCollectionService', async () => {
       getApproverLogs: vi.fn(),
       getCustomers: vi.fn(),
       getUnpaidTransactions: vi.fn(),
+      updateItem: vi.fn(),
     },
   };
 });
@@ -91,6 +92,7 @@ describe('DailyCollectionEntryView scrolling', () => {
     vi.mocked(dailyCollectionService.getApproverLogs).mockResolvedValue([]);
     vi.mocked(dailyCollectionService.getCustomers).mockResolvedValue([]);
     vi.mocked(dailyCollectionService.getUnpaidTransactions).mockResolvedValue([]);
+    vi.mocked(dailyCollectionService.updateItem).mockResolvedValue(undefined);
   });
 
   it('shows the Daily Collection Entry title and accountable agent or account on each DCR', async () => {
@@ -153,6 +155,36 @@ describe('DailyCollectionEntryView scrolling', () => {
     const collectionDateInput = collectionDateLabel.parentElement?.querySelector('input[type="date"]');
     expect(collectionDateInput).toBeTruthy();
     await waitFor(() => expect(collectionDateInput).not.toBeDisabled());
+  });
+
+  it('lets a user with Edit permission correct an unposted payment line', async () => {
+    localAuthState.session = {
+      userProfile: {
+        id: 'staff-1',
+        role: 'Staff',
+        action_permissions: {
+          global: { can_edit: true },
+          pages: { 'Daily Collection Entry': { can_edit: true } },
+        },
+      },
+      context: { permissions: { web: [] } },
+    };
+
+    render(<DailyCollectionEntryView />);
+
+    const [editButton] = await screen.findAllByRole('button', { name: 'Edit' });
+    fireEvent.click(editButton);
+
+    const amountInput = screen.getByDisplayValue('1');
+    fireEvent.change(amountInput, { target: { value: '99.50' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      expect(dailyCollectionService.updateItem).toHaveBeenCalledWith(
+        expect.objectContaining({ lid: 1 }),
+        expect.objectContaining({ amount: 99.5, type: 'Cash', status: 'Pending' }),
+      );
+    });
   });
 
   it('provides vertical scrolling for the page, record list, and detail rows', async () => {

@@ -80,6 +80,11 @@ export type CollectionPaymentPayload = {
   transactions: CollectionPaymentTransaction[];
 };
 
+export type CollectionPaymentLineUpdate = Pick<
+  CollectionPaymentPayload,
+  'type' | 'bank' | 'checkNo' | 'checkDate' | 'amount' | 'status' | 'remarks'
+>;
+
 export const LEGACY_COLLECTION_ITEM_STATUSES = [
   'Pending',
   'Deposited',
@@ -346,7 +351,7 @@ export const dailyCollectionService = {
     });
   },
 
-  async updateItemStatus(item: DailyCollectionItem, status: LegacyCollectionItemStatus): Promise<void> {
+  async updateItem(item: DailyCollectionItem, update: CollectionPaymentLineUpdate): Promise<void> {
     const ctx = getUserContext();
     await requestApi(`${API_BASE_URL}/collection-items/${encodeURIComponent(String(item.lid))}`, {
       method: 'PATCH',
@@ -354,13 +359,13 @@ export const dailyCollectionService = {
       body: JSON.stringify({
         main_id: ctx.mainId,
         user_id: ctx.userId,
-        type: item.ltype,
-        bank: item.lbank,
-        check_no: item.lchk_no,
-        check_date: item.lchk_date,
-        amount: item.lamt,
-        status,
-        remarks: item.lremarks,
+        type: update.type,
+        bank: update.bank,
+        check_no: update.checkNo,
+        check_date: update.checkDate,
+        amount: update.amount,
+        status: update.status,
+        remarks: update.remarks,
       }),
     });
   },
