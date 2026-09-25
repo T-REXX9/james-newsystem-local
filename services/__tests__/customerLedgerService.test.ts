@@ -51,6 +51,16 @@ describe('customerLedgerService', () => {
     expect(new Headers(requestInit.headers).get('Authorization')).toBe('Bearer test-token');
   });
 
+  it('requests the complete customer list when the picker search is blank', async () => {
+    const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue(okResponse({ items: [] }));
+
+    await customerLedgerService.getCustomers();
+
+    const [url] = fetchMock.mock.calls[0] || [];
+    expect(url).toEqual(expect.stringContaining('per_page=0'));
+    expect(url).toEqual(expect.stringContaining('mode=picker'));
+  });
+
   it('filters picker options without a company name and customer code', async () => {
     vi.spyOn(global, 'fetch').mockResolvedValue(okResponse({
       items: [

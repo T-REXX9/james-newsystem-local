@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import CustomerAutocomplete from '../CustomerAutocomplete';
 
@@ -8,6 +8,7 @@ describe('CustomerAutocomplete', () => {
   const originalInnerHeight = window.innerHeight;
 
   afterEach(() => {
+    cleanup();
     rectSpy.mockReset();
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: originalInnerHeight });
   });
@@ -41,5 +42,18 @@ describe('CustomerAutocomplete', () => {
         maxHeight: '320px',
       });
     });
+  });
+
+  it('shows every supplied customer when the search is blank', () => {
+    const contacts = Array.from({ length: 51 }, (_, index) => ({
+      id: `customer-${index + 1}`,
+      company: `Customer ${String(index + 1).padStart(2, '0')}`,
+    }));
+
+    render(<CustomerAutocomplete contacts={contacts} onSelect={vi.fn()} />);
+
+    fireEvent.focus(screen.getByPlaceholderText('Search customer...'));
+
+    expect(screen.getByText('Customer 51')).toBeInTheDocument();
   });
 });

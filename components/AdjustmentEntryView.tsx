@@ -10,6 +10,7 @@ import {
 import { canBackdatePosting, canPerformAction } from '../utils/actionPermissions';
 import { canMutateDocumentDateField, localTodayYmd, validateDocumentDateWrite } from '../utils/backdatedPosting';
 import { formatDate } from '../utils/formatUtils';
+import CustomerAutocomplete from './CustomerAutocomplete';
 
 import { shouldSuppressAuthError } from '../services/localApiAuth';
 const MONTHS = [
@@ -163,17 +164,28 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      fetchCustomers(customerSearch.trim());
+      void fetchCustomers(customerSearch.trim());
     }, 250);
     return () => window.clearTimeout(timer);
   }, [customerSearch]);
 
+  const customerOptions = useMemo(
+    () => customers.map((customer) => ({ id: customer.sessionId, company: customer.company })),
+    [customers],
+  );
+
+  const selectedCustomerOption = useMemo(() => {
+    const current = customerOptions.find((customer) => customer.id === form.customerId);
+    if (current) return current;
+    if (selected?.lcustomerid === form.customerId && form.customerId) {
+      return { id: form.customerId, company: selected.lcustomername || form.customerId };
+    }
+    return null;
+  }, [customerOptions, form.customerId, selected]);
+
   const selectedCustomerName = useMemo(() => {
-    const customer = customers.find((c) => c.sessionId === form.customerId);
-    if (customer) return customer.company;
-    if (selected?.lcustomerid === form.customerId) return selected.lcustomername;
-    return '';
-  }, [customers, form.customerId, selected]);
+    return selectedCustomerOption?.company || '';
+  }, [selectedCustomerOption]);
 
   const canEdit = (isCreating && canAdd) || (selected?.lstatus === 'Pending' && canEditPermission);
   const canMutateDocDate = canMutateDocumentDateField({
@@ -196,9 +208,7 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
       amount: '',
       remark: '',
     });
-    if (customers.length === 0) {
-      await fetchCustomers('');
-    }
+    if (customers.length === 0) await fetchCustomers();
   };
 
   const handleCreate = async () => {
@@ -409,11 +419,16 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
                 <div className="grid grid-cols-[110px_1fr_90px_240px] items-center gap-x-4 gap-y-5">
                   <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Sold to :</label>
                   <div>
-                    <input value={customerSearch} onChange={(e) => setCustomerSearch(e.target.value)} disabled={!canEdit} placeholder="Search customer" className="mb-2 h-[34px] w-full rounded-[3px] border border-[#ccc] px-3 disabled:bg-[#eee]" />
-                    <select value={form.customerId} onChange={(e) => setForm((prev) => ({ ...prev, customerId: e.target.value }))} disabled={!canEdit || loadingCustomers} className="h-[34px] w-full rounded-[3px] border border-[#ccc] bg-white px-3 disabled:bg-[#eee]">
-                      <option value="">Select Customer</option>
-                      {customers.map((customer) => <option key={customer.sessionId} value={customer.sessionId}>{customer.company}</option>)}
-                    </select>
+                    <CustomerAutocomplete
+                      contacts={customerOptions}
+                      selectedCustomer={selectedCustomerOption}
+                      onSearch={setCustomerSearch}
+                      onSelect={(customer) => setForm((prev) => ({ ...prev, customerId: customer.id }))}
+                      isLoading={loadingCustomers}
+                      disabled={!canEdit}
+                      placeholder="Search customer..."
+                      inputClassName="h-[34px] rounded-[3px] border-[#ccc] bg-white text-[13px] text-[#333]"
+                    />
                   </div>
                   <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Date :</label>
                   <input type="date" value={form.date} onChange={(e) => setForm((prev) => ({ ...prev, date: e.target.value }))} disabled={!canMutateDocDate} max={dateMax} className="h-[34px] rounded-[3px] border border-[#ccc] px-3 disabled:bg-[#eee]" />

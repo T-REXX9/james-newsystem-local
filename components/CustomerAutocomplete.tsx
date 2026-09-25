@@ -113,7 +113,7 @@ const CustomerAutocomplete = <T extends CustomerAutocompleteOption,>({
     const q = debouncedQuery.trim().toLowerCase();
 
     if (!q) {
-      return sortedContacts.slice(0, 50);
+      return sortedContacts;
     }
 
     return sortedContacts.filter((contact) => {
@@ -217,9 +217,10 @@ const CustomerAutocomplete = <T extends CustomerAutocompleteOption,>({
           placeholder={placeholder}
           className={`block w-full pl-8 pr-3 py-1.5 border rounded-md leading-5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-blue/50 focus:border-brand-blue sm:text-xs transition-shadow ${disabled ? 'opacity-60 cursor-not-allowed' : ''} ${inputClassName}`}
           onChange={(event) => {
-            setQuery(event.target.value);
+            const nextQuery = event.target.value;
+            setQuery(nextQuery);
             setShowDropdown(true);
-            onSearch?.(event.target.value);
+            onSearch?.(nextQuery);
           }}
           onFocus={() => {
             if (!disabled) {

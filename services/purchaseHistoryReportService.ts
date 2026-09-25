@@ -134,7 +134,7 @@ export const purchaseHistoryReportService = {
       status: 'all',
       mode: 'picker',
       page: '1',
-      per_page: search.trim() ? '60' : '120',
+      per_page: search.trim() ? '60' : '0',
       search: search.trim(),
     });
 
