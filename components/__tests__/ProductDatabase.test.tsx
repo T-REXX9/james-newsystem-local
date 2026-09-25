@@ -1,5 +1,5 @@
 import React from 'react';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ProductDatabase from '../ProductDatabase';
 import type { Product } from '../../types';
@@ -89,6 +89,11 @@ const sampleProduct: Product = {
   incident_report_count: 2,
   return_report_count: 1,
   last_price_update: '2026-07-21 08:00:00',
+  sales_by_year: {
+    '2026': 26,
+    '2024': 24,
+    '2025': 25,
+  },
 };
 
 describe('ProductDatabase', () => {
@@ -161,6 +166,20 @@ describe('ProductDatabase', () => {
     expect(screen.getByDisplayValue('8')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled();
+  });
+
+  it('lists yearly sales from the oldest year to the current year', async () => {
+    render(<ProductDatabase currentUser={{ role: 'Owner' } as any} />);
+
+    await screen.findByText('QK2-001');
+    const yearlySalesCell = screen.getByText('2024 :').closest('td');
+
+    expect(yearlySalesCell).not.toBeNull();
+    expect(within(yearlySalesCell!).getAllByText(/^20\d{2} :$/).map((year) => year.textContent)).toEqual([
+      '2024 :',
+      '2025 :',
+      '2026 :',
+    ]);
   });
 
   it('opens the matching 12-month incident and return reports in new tabs', async () => {
