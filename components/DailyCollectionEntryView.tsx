@@ -11,7 +11,7 @@ import {
   LEGACY_COLLECTION_ITEM_STATUSES,
   LegacyCollectionItemStatus,
 } from '../services/dailyCollectionService';
-import { getLocalAuthSession } from '../services/localAuthService';
+import { getLocalAuthSession, restoreLocalAuthSession } from '../services/localAuthService';
 import {
   dispatchWorkflowNotification,
   markNotificationsAsReadByEntityKey,
@@ -76,6 +76,7 @@ const INPUT_CLASS = 'w-full px-3 py-2 rounded border border-slate-300 bg-white t
 const SELECT_CLASS = 'px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 text-sm';
 
 const DailyCollectionEntryView: React.FC = () => {
+  const [permissionRevision, setPermissionRevision] = useState(0);
   const [headers, setHeaders] = useState<DailyCollectionHeader[]>([]);
   const [selectedRefno, setSelectedRefno] = useState<string>('');
   const [selectedHeader, setSelectedHeader] = useState<DailyCollectionHeader | null>(null);
@@ -129,7 +130,7 @@ const DailyCollectionEntryView: React.FC = () => {
     collectDate: toDateInput(new Date().toISOString()),
     remarks: '',
   });
-  const session = getLocalAuthSession();
+  const session = useMemo(() => getLocalAuthSession(), [permissionRevision]);
   const actorId = session?.userProfile?.id;
   const actorRole = session?.userProfile?.role || 'Unknown';
   const canAdd = canPerformAction('can_add');
@@ -144,6 +145,26 @@ const DailyCollectionEntryView: React.FC = () => {
     isPosted: false,
   });
   const collectionDateMax = localTodayYmd();
+
+  useEffect(() => {
+    let active = true;
+    const refreshPermissions = () => {
+      void restoreLocalAuthSession()
+        .then(() => {
+          if (active) setPermissionRevision((current) => current + 1);
+        })
+        .catch(() => {
+          // Keep the existing session state if the refresh is temporarily unavailable.
+        });
+    };
+
+    refreshPermissions();
+    window.addEventListener('focus', refreshPermissions);
+    return () => {
+      active = false;
+      window.removeEventListener('focus', refreshPermissions);
+    };
+  }, []);
 
   const selectedAmount = useMemo(() => {
     return unpaidRows

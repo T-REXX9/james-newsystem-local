@@ -4,6 +4,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DailyCollectionEntryView from '../DailyCollectionEntryView';
 import { dailyCollectionService } from '../../services/dailyCollectionService';
 
+const localAuthState = vi.hoisted(() => ({
+  session: {
+    userProfile: { id: 'staff-1', role: 'Staff' },
+    context: { permissions: { web: [] } },
+  },
+  restore: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock('../../services/dailyCollectionService', async () => {
   const actual = await vi.importActual<typeof import('../../services/dailyCollectionService')>(
     '../../services/dailyCollectionService',
@@ -22,10 +30,8 @@ vi.mock('../../services/dailyCollectionService', async () => {
 });
 
 vi.mock('../../services/localAuthService', () => ({
-  getLocalAuthSession: () => ({
-    userProfile: { id: 'staff-1', role: 'Staff' },
-    context: { permissions: { web: [] } },
-  }),
+  getLocalAuthSession: () => localAuthState.session,
+  restoreLocalAuthSession: localAuthState.restore,
 }));
 
 vi.mock('../../services/notificationLocalApiService', () => ({
@@ -37,6 +43,11 @@ describe('DailyCollectionEntryView scrolling', () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    localAuthState.session = {
+      userProfile: { id: 'staff-1', role: 'Staff' },
+      context: { permissions: { web: [] } },
+    };
+    localAuthState.restore.mockResolvedValue(null);
     vi.mocked(dailyCollectionService.listCollections).mockResolvedValue(
       Array.from({ length: 20 }, (_, index) => ({
         lrefno: `REF-${index + 1}`,
@@ -105,6 +116,43 @@ describe('DailyCollectionEntryView scrolling', () => {
     const dateInputs = Array.from(document.querySelectorAll('input[type="date"]'));
     expect(dateInputs.length).toBeGreaterThanOrEqual(1);
     dateInputs.forEach((input) => expect(input).toBeDisabled());
+  });
+
+  it('refreshes granted Edit and Backdated posting permissions when the page opens', async () => {
+    localAuthState.session = {
+      userProfile: {
+        id: 'staff-1',
+        role: 'Staff',
+        action_permissions: {
+          global: { can_add: true, can_edit: false },
+          pages: { 'Daily Collection Entry': { can_add: true, can_edit: false } },
+          can_backdate: false,
+        },
+      },
+      context: { permissions: { web: [] } },
+    };
+    localAuthState.restore.mockImplementation(async () => {
+      localAuthState.session = {
+        userProfile: {
+          id: 'staff-1',
+          role: 'Staff',
+          action_permissions: {
+            global: { can_add: true, can_edit: true },
+            pages: { 'Daily Collection Entry': { can_add: true, can_edit: true } },
+            can_backdate: true,
+          },
+        },
+        context: { permissions: { web: [] } },
+      };
+      return null;
+    });
+
+    render(<DailyCollectionEntryView />);
+
+    const collectionDateLabel = await screen.findByText('Collection Date');
+    const collectionDateInput = collectionDateLabel.parentElement?.querySelector('input[type="date"]');
+    expect(collectionDateInput).toBeTruthy();
+    await waitFor(() => expect(collectionDateInput).not.toBeDisabled());
   });
 
   it('provides vertical scrolling for the page, record list, and detail rows', async () => {
