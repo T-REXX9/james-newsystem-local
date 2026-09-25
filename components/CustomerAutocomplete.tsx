@@ -51,12 +51,21 @@ const CustomerAutocomplete = <T extends CustomerAutocompleteOption,>({
   const updatePosition = useCallback(() => {
     if (inputRef.current && showDropdown) {
       const rect = inputRef.current.getBoundingClientRect();
+      const viewportPadding = 8;
+      const gap = 4;
+      const maxDropdownHeight = 320;
+      const spaceAbove = Math.max(0, rect.top - viewportPadding);
+      const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - viewportPadding);
+      const openAbove = spaceBelow < maxDropdownHeight && spaceAbove > spaceBelow;
+      const availableHeight = openAbove ? spaceAbove : spaceBelow;
+      const dropdownHeight = Math.min(maxDropdownHeight, availableHeight);
+
       setDropdownStyle({
         position: 'fixed',
-        top: `${rect.bottom + 4}px`,
+        top: `${openAbove ? rect.top - gap - dropdownHeight : rect.bottom + gap}px`,
         left: `${rect.left}px`,
         width: `${Math.max(rect.width, 300)}px`,
-        maxHeight: '320px',
+        maxHeight: `${dropdownHeight}px`,
         zIndex: 9999,
       });
     }
