@@ -9,7 +9,7 @@ import {
   CollectionCustomer,
   CollectionUnpaidRow,
   LEGACY_COLLECTION_ITEM_STATUSES,
-  LegacyCollectionItemStatus,
+  CollectionPaymentLineUpdate,
 } from '../services/dailyCollectionService';
 import { getLocalAuthSession, restoreLocalAuthSession } from '../services/localAuthService';
 import {
@@ -104,7 +104,9 @@ const DailyCollectionEntryView: React.FC = () => {
   const [listLoading, setListLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [savingPayment, setSavingPayment] = useState(false);
-  const [savingItemStatusId, setSavingItemStatusId] = useState<number | null>(null);
+  const [editingItemId, setEditingItemId] = useState<number | null>(null);
+  const [savingItemId, setSavingItemId] = useState<number | null>(null);
+  const [editingItem, setEditingItem] = useState<CollectionPaymentLineUpdate | null>(null);
   const [workingAction, setWorkingAction] = useState('');
   const [showDeleteReportModal, setShowDeleteReportModal] = useState(false);
   const [lineDeleteConfirm, setLineDeleteConfirm] = useState<{
@@ -644,19 +646,68 @@ const DailyCollectionEntryView: React.FC = () => {
     }));
   };
 
-  const handleItemStatusChange = async (item: DailyCollectionItem, nextStatus: LegacyCollectionItemStatus) => {
-    if (!canEdit || !selectedRefno || item.lstatus === nextStatus) return;
+  const startEditingItem = (item: DailyCollectionItem) => {
+    if (
+      !canEdit
+      || selectedHeader?.lstatus !== 'Pending'
+      || item.lpost === 1
+      || item.lcollection_status === 'Posted'
+    ) return;
+    setEditingItemId(item.lid);
+    setEditingItem({
+      type: item.ltype || 'Cash',
+      bank: item.lbank || '',
+      checkNo: item.lchk_no || '',
+      checkDate: toDateInput(item.lchk_date),
+      amount: Number(item.lamt || 0),
+      status: item.lstatus || 'Pending',
+      remarks: item.lremarks || '',
+    });
+  };
 
-    setSavingItemStatusId(item.lid);
+  const cancelEditingItem = () => {
+    setEditingItemId(null);
+    setEditingItem(null);
+  };
+
+  const handleEditItemTypeChange = (type: string) => {
+    setEditingItem((current) => {
+      if (!current) return current;
+      const status = type === 'Check' ? 'Pending' : type === 'TT' ? 'Deposited' : 'Received';
+      return { ...current, type, status };
+    });
+  };
+
+  const saveEditedItem = async (item: DailyCollectionItem) => {
+    if (!canEdit || !selectedRefno || !editingItem || editingItemId !== item.lid) return;
+    if (!(Number(editingItem.amount) > 0)) {
+      setError('Amount must be greater than 0');
+      return;
+    }
+    if (editingItem.checkDate) {
+      const checkDateCheck = validateDocumentDateWrite({
+        hasBackdatedPosting,
+        proposedYmd: editingItem.checkDate,
+        previousYmd: toDateInput(item.lchk_date) || null,
+        todayYmd: collectionDateMax,
+      });
+      if (!checkDateCheck.ok) {
+        setError(checkDateCheck.reason);
+        return;
+      }
+    }
+
+    setSavingItemId(item.lid);
     setError('');
     try {
-      await dailyCollectionService.updateItemStatus(item, nextStatus);
+      await dailyCollectionService.updateItem(item, editingItem);
       await fetchDetail(selectedRefno);
+      cancelEditingItem();
     } catch (err: any) {
       if (shouldSuppressAuthError(err)) return;
-      setError(err?.message || 'Failed to update payment status');
+      setError(err?.message || 'Failed to update payment line');
     } finally {
-      setSavingItemStatusId(null);
+      setSavingItemId(null);
     }
   };
 
@@ -1127,6 +1178,8 @@ const DailyCollectionEntryView: React.FC = () => {
                       )}
                       {!detailLoading && items.map((item, index) => {
                         const posted = item.lpost === 1 || item.lcollection_status === 'Posted';
+                        const canEditLine = canEdit && selectedHeader?.lstatus === 'Pending' && !posted;
+                        const isEditing = editingItemId === item.lid && editingItem !== null;
                         return (
                           <tr
                             key={item.lid}
@@ -1147,19 +1200,75 @@ const DailyCollectionEntryView: React.FC = () => {
                             </td>
                             <td className="px-3 py-2">{item.lcustomer_fname || item.lcustomer || '-'}</td>
                             <td className="px-3 py-2">{item.ltransaction_no || '-'}</td>
-                            <td className="px-3 py-2">{item.ltype || '-'}</td>
-                            <td className="px-3 py-2">{item.lbank || '-'}</td>
-                            <td className="px-3 py-2">{item.lchk_no || '-'}</td>
-                            <td className="px-3 py-2">{item.lchk_date ? toDisplayDate(item.lchk_date) : '-'}</td>
-                            <td className="px-3 py-2 text-right">{peso.format(item.lamt || 0)}</td>
+                            <td className="px-3 py-2 min-w-[130px]">
+                              {isEditing ? (
+                                <select
+                                  className={`${SELECT_CLASS} w-full`}
+                                  value={editingItem.type}
+                                  onChange={(e) => handleEditItemTypeChange(e.target.value)}
+                                  disabled={savingItemId === item.lid}
+                                >
+                                  <option value="Cash">Cash</option>
+                                  <option value="Check">Check</option>
+                                  <option value="TT">TT</option>
+                                </select>
+                              ) : (item.ltype || '-')}
+                            </td>
+                            <td className="px-3 py-2 min-w-[140px]">
+                              {isEditing ? (
+                                <input
+                                  className={INPUT_CLASS}
+                                  value={editingItem.bank}
+                                  onChange={(e) => setEditingItem((current) => current ? { ...current, bank: e.target.value } : current)}
+                                  disabled={savingItemId === item.lid}
+                                  placeholder="Bank"
+                                />
+                              ) : (item.lbank || '-')}
+                            </td>
+                            <td className="px-3 py-2 min-w-[140px]">
+                              {isEditing ? (
+                                <input
+                                  className={INPUT_CLASS}
+                                  value={editingItem.checkNo}
+                                  onChange={(e) => setEditingItem((current) => current ? { ...current, checkNo: e.target.value } : current)}
+                                  disabled={savingItemId === item.lid}
+                                  placeholder="Check Number"
+                                />
+                              ) : (item.lchk_no || '-')}
+                            </td>
+                            <td className="px-3 py-2 min-w-[150px]">
+                              {isEditing ? (
+                                <input
+                                  type="date"
+                                  className={INPUT_CLASS}
+                                  value={editingItem.checkDate}
+                                  max={collectionDateMax}
+                                  onChange={(e) => setEditingItem((current) => current ? { ...current, checkDate: e.target.value } : current)}
+                                  disabled={savingItemId === item.lid || !canMutateCollectionDates}
+                                />
+                              ) : (item.lchk_date ? toDisplayDate(item.lchk_date) : '-')}
+                            </td>
+                            <td className="px-3 py-2 min-w-[140px] text-right">
+                              {isEditing ? (
+                                <input
+                                  type="number"
+                                  className={INPUT_CLASS}
+                                  value={editingItem.amount}
+                                  onChange={(e) => setEditingItem((current) => current ? { ...current, amount: Number(e.target.value) } : current)}
+                                  disabled={savingItemId === item.lid}
+                                  step="0.01"
+                                  min="0"
+                                />
+                              ) : peso.format(item.lamt || 0)}
+                            </td>
                             <td className="px-3 py-2">
                               <span>{item.lstatus || item.lcollection_status || 'Pending'}</span>
-                              {!posted && (
+                              {isEditing && (
                                 <select
                                   className={`${SELECT_CLASS} w-full mt-2`}
-                                  value={item.lstatus || 'Pending'}
-                                  onChange={(e) => handleItemStatusChange(item, e.target.value as LegacyCollectionItemStatus)}
-                                  disabled={savingItemStatusId === item.lid}
+                                  value={editingItem.status}
+                                  onChange={(e) => setEditingItem((current) => current ? { ...current, status: e.target.value } : current)}
+                                  disabled={savingItemId === item.lid}
                                 >
                                   {LEGACY_COLLECTION_ITEM_STATUSES.map((statusOption) => (
                                     <option key={statusOption} value={statusOption}>
@@ -1169,20 +1278,60 @@ const DailyCollectionEntryView: React.FC = () => {
                                 </select>
                               )}
                             </td>
-                            <td className="px-3 py-2">{item.lremarks || '-'}</td>
+                            <td className="px-3 py-2 min-w-[180px]">
+                              {isEditing ? (
+                                <input
+                                  className={INPUT_CLASS}
+                                  value={editingItem.remarks}
+                                  onChange={(e) => setEditingItem((current) => current ? { ...current, remarks: e.target.value } : current)}
+                                  disabled={savingItemId === item.lid}
+                                  placeholder="Remarks"
+                                />
+                              ) : (item.lremarks || '-')}
+                            </td>
                             <td className="px-3 py-2">
                               {posted ? (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300">
                                   Posted
                                 </span>
+                              ) : isEditing ? (
+                                <div className="flex gap-2">
+                                  <button
+                                    className={`${BUTTON_PRIMARY} disabled:opacity-50 disabled:cursor-not-allowed`}
+                                    onClick={() => saveEditedItem(item)}
+                                    disabled={savingItemId === item.lid}
+                                  >
+                                    {savingItemId === item.lid ? 'Saving...' : 'Save'}
+                                  </button>
+                                  <button
+                                    className={`${BUTTON_BASE} disabled:opacity-50 disabled:cursor-not-allowed`}
+                                    onClick={cancelEditingItem}
+                                    disabled={savingItemId === item.lid}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
                               ) : (
-                                <button
-                                  className={`${BUTTON_BASE} text-red-600 border-red-300 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed`}
-                                  onClick={() => handleDeleteItem(item.lid)}
-                                  disabled={!!workingAction}
-                                >
-                                  Delete
-                                </button>
+                                <div className="flex gap-2">
+                                  {canEditLine && (
+                                    <button
+                                      className={`${BUTTON_BASE} disabled:opacity-50 disabled:cursor-not-allowed`}
+                                      onClick={() => startEditingItem(item)}
+                                      disabled={!!workingAction || (editingItemId !== null && editingItemId !== item.lid)}
+                                    >
+                                      Edit
+                                    </button>
+                                  )}
+                                  {canDelete && (
+                                    <button
+                                      className={`${BUTTON_BASE} text-red-600 border-red-300 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed`}
+                                      onClick={() => handleDeleteItem(item.lid)}
+                                      disabled={!!workingAction || editingItemId !== null}
+                                    >
+                                      Delete
+                                    </button>
+                                  )}
+                                </div>
                               )}
                             </td>
                           </tr>
