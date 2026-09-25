@@ -1,28 +1,41 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { AlertCircle, Building2, Loader2, Search } from 'lucide-react';
-import { Contact } from '../types';
 import { useDebounce } from '../hooks/useDebounce';
 
-interface CustomerAutocompleteProps {
-  contacts: Contact[];
-  onSelect: (customer: Contact) => void;
-  selectedCustomer?: Contact | null;
+export type CustomerAutocompleteOption = {
+  id: string;
+  company: string;
+  address?: string;
+  deliveryAddress?: string;
+  salesman?: string;
+  city?: string;
+  terms?: string;
+};
+
+interface CustomerAutocompleteProps<T extends CustomerAutocompleteOption> {
+  contacts: T[];
+  onSelect: (customer: T) => void;
+  selectedCustomer?: T | null;
+  onSearch?: (query: string) => void;
+  isLoading?: boolean;
   disabled?: boolean;
   placeholder?: string;
   className?: string;
   inputClassName?: string;
 }
 
-const CustomerAutocomplete: React.FC<CustomerAutocompleteProps> = ({
+const CustomerAutocomplete = <T extends CustomerAutocompleteOption,>({
   contacts,
   onSelect,
   selectedCustomer = null,
+  onSearch,
+  isLoading = false,
   disabled = false,
   placeholder = 'Search customer...',
   className = '',
   inputClassName = '',
-}) => {
+}: CustomerAutocompleteProps<T>) => {
   const [query, setQuery] = useState(selectedCustomer?.company || '');
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -175,7 +188,7 @@ const CustomerAutocomplete: React.FC<CustomerAutocompleteProps> = ({
   };
 
   const noResults = debouncedQuery.trim().length > 0 && results.length === 0;
-  const isSearching = query !== debouncedQuery;
+  const isSearching = query !== debouncedQuery || isLoading;
 
   return (
     <div className={`relative ${className}`} ref={wrapperRef}>
@@ -197,6 +210,7 @@ const CustomerAutocomplete: React.FC<CustomerAutocompleteProps> = ({
           onChange={(event) => {
             setQuery(event.target.value);
             setShowDropdown(true);
+            onSearch?.(event.target.value);
           }}
           onFocus={() => {
             if (!disabled) {
@@ -223,7 +237,11 @@ const CustomerAutocomplete: React.FC<CustomerAutocompleteProps> = ({
             </span>
           </div>
 
-          {results.length > 0 ? (
+          {isLoading ? (
+            <div className="py-6 px-4 text-center text-slate-500 dark:text-slate-400 text-xs">
+              Searching customers...
+            </div>
+          ) : results.length > 0 ? (
             <ul className="divide-y divide-slate-100 dark:divide-slate-800">
               {results.map((customer, index) => {
                 const isSelected = index === selectedIndex;

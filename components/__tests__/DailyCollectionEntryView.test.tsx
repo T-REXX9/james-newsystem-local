@@ -153,4 +153,29 @@ describe('DailyCollectionEntryView scrolling', () => {
     expect(printSpy).toHaveBeenCalledTimes(1);
     printSpy.mockRestore();
   });
+
+  it('searches the full customer directory from the Daily Collection picker', async () => {
+    vi.mocked(dailyCollectionService.getCustomers).mockImplementation(async (search) => (
+      search === 'Bespoke'
+        ? [{ id: 'customer-701', code: 'C-701', company: 'Bespoke Garage' }]
+        : []
+    ));
+
+    render(<DailyCollectionEntryView />);
+
+    const customerInput = await screen.findByPlaceholderText('Search customer');
+    fireEvent.change(customerInput, { target: { value: 'Bespoke' } });
+
+    await waitFor(() => {
+      expect(dailyCollectionService.getCustomers).toHaveBeenCalledWith('Bespoke');
+    });
+
+    fireEvent.click(await screen.findByText((_, element) => (
+      element?.tagName === 'DIV' && element.textContent === 'Bespoke Garage'
+    )));
+    expect(customerInput).toHaveValue('Bespoke Garage');
+    await waitFor(() => {
+      expect(dailyCollectionService.getUnpaidTransactions).toHaveBeenCalledWith('customer-701');
+    });
+  });
 });
