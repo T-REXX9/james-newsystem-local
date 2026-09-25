@@ -198,8 +198,12 @@ describe('DailyCollectionEntryView scrolling', () => {
     await waitFor(() => expect(screen.getByText('Customer 30')).toBeInTheDocument());
 
     expect(screen.getByTestId('daily-collection-detail-scroll')).toHaveClass(
-      'overflow-x-auto',
       'overflow-y-auto',
+      'overflow-x-hidden',
+    );
+    expect(screen.getByTestId('daily-collection-detail-scroll').querySelector('table')).toHaveClass(
+      'w-full',
+      'table-fixed',
     );
     expect(screen.getByText('INV-30')).toBeInTheDocument();
   });

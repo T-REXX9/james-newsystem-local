@@ -946,9 +946,9 @@ const DailyCollectionEntryView: React.FC = () => {
     <>
       <div
         data-testid="daily-collection-scroll-container"
-        className="h-full min-h-0 overflow-y-auto overscroll-contain bg-[#f4f4f4] px-4 py-10 text-[13px] text-[#222]"
+        className="h-full min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain bg-[#f4f4f4] px-2 py-6 sm:px-4 sm:py-10 text-[13px] text-[#222]"
       >
-        <div className="mx-auto flex max-w-[1140px] flex-col gap-6">
+        <div className="mx-auto flex w-full max-w-none flex-col gap-6">
         {/* Old-system collection list */}
         <div className="flex max-h-[275px] w-full shrink-0 flex-col overflow-hidden rounded-[5px] border border-[#d8d8d8] bg-white">
           <div className="flex min-h-[82px] flex-wrap items-center justify-between gap-4 border-b border-[#ddd] px-9 py-5">
@@ -1089,7 +1089,7 @@ const DailyCollectionEntryView: React.FC = () => {
               </div>
 
               {/* Content area */}
-              <div className="flex min-h-0 flex-col gap-4 overflow-auto px-6 py-6">
+              <div className="flex min-h-0 flex-col gap-4 overflow-y-auto overflow-x-hidden px-4 py-4 sm:px-6 sm:py-6">
                 {!detailLoading && canAddPayment && (
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
                     <div className="flex gap-2">
@@ -1128,11 +1128,24 @@ const DailyCollectionEntryView: React.FC = () => {
                 )}
 
                 {/* Payment lines table */}
-                <div data-testid="daily-collection-detail-scroll" className="max-h-[480px] overflow-x-auto overflow-y-auto">
-                  <table className="w-full text-sm min-w-[1400px]">
+                <div data-testid="daily-collection-detail-scroll" className="max-h-[480px] overflow-x-hidden overflow-y-auto">
+                  <table className="w-full table-fixed text-sm">
+                    <colgroup>
+                      <col className="w-[3%]" />
+                      <col className="w-[17%]" />
+                      <col className="w-[10%]" />
+                      <col className="w-[8%]" />
+                      <col className="w-[7%]" />
+                      <col className="w-[13%]" />
+                      <col className="w-[10%]" />
+                      <col className="w-[9%]" />
+                      <col className="w-[8%]" />
+                      <col className="w-[7%]" />
+                      <col className="w-[8%]" />
+                    </colgroup>
                     <thead className="sticky top-0 border-b-2 border-[#ddd] bg-white font-['Oswald'] text-[#222]">
                       <tr>
-                        <th className="px-3 py-2 text-left font-bold whitespace-nowrap w-10">
+                        <th className="px-2 py-2 text-left font-bold">
                           <input
                             type="checkbox"
                             className="accent-brand-blue"
@@ -1149,16 +1162,16 @@ const DailyCollectionEntryView: React.FC = () => {
                             }}
                           />
                         </th>
-                        <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Customer</th>
-                        <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Transaction No.</th>
-                        <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Check/Cash</th>
-                        <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Bank</th>
-                        <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Check Number</th>
-                        <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Check Date</th>
-                        <th className="px-3 py-2 text-right font-bold whitespace-nowrap">Amount</th>
-                        <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Status</th>
-                        <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Remarks</th>
-                        <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Approval</th>
+                        <th className="px-2 py-2 text-left font-bold">Customer</th>
+                        <th className="px-2 py-2 text-left font-bold">Transaction No.</th>
+                        <th className="px-2 py-2 text-left font-bold">Check/Cash</th>
+                        <th className="px-2 py-2 text-left font-bold">Bank</th>
+                        <th className="px-2 py-2 text-left font-bold">Check Number</th>
+                        <th className="px-2 py-2 text-left font-bold">Check Date</th>
+                        <th className="px-2 py-2 text-right font-bold">Amount</th>
+                        <th className="px-2 py-2 text-left font-bold">Status</th>
+                        <th className="px-2 py-2 text-left font-bold">Remarks</th>
+                        <th className="px-2 py-2 text-left font-bold">Approval</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#ddd]">
@@ -1185,7 +1198,7 @@ const DailyCollectionEntryView: React.FC = () => {
                             key={item.lid}
                             className={index % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'}
                           >
-                            <td className="px-3 py-2">
+                            <td className="px-2 py-2">
                               <input
                                 type="checkbox"
                                 className="accent-brand-blue"
@@ -1198,9 +1211,9 @@ const DailyCollectionEntryView: React.FC = () => {
                                 }}
                               />
                             </td>
-                            <td className="px-3 py-2">{item.lcustomer_fname || item.lcustomer || '-'}</td>
-                            <td className="px-3 py-2">{item.ltransaction_no || '-'}</td>
-                            <td className="px-3 py-2 min-w-[130px]">
+                            <td className="break-words px-2 py-2">{item.lcustomer_fname || item.lcustomer || '-'}</td>
+                            <td className="break-words px-2 py-2">{item.ltransaction_no || '-'}</td>
+                            <td className="px-2 py-2">
                               {isEditing ? (
                                 <select
                                   className={`${SELECT_CLASS} w-full`}
@@ -1214,7 +1227,7 @@ const DailyCollectionEntryView: React.FC = () => {
                                 </select>
                               ) : (item.ltype || '-')}
                             </td>
-                            <td className="px-3 py-2 min-w-[140px]">
+                            <td className="break-words px-2 py-2">
                               {isEditing ? (
                                 <input
                                   className={INPUT_CLASS}
@@ -1225,7 +1238,7 @@ const DailyCollectionEntryView: React.FC = () => {
                                 />
                               ) : (item.lbank || '-')}
                             </td>
-                            <td className="px-3 py-2 min-w-[140px]">
+                            <td className="break-all px-2 py-2">
                               {isEditing ? (
                                 <input
                                   className={INPUT_CLASS}
@@ -1236,7 +1249,7 @@ const DailyCollectionEntryView: React.FC = () => {
                                 />
                               ) : (item.lchk_no || '-')}
                             </td>
-                            <td className="px-3 py-2 min-w-[150px]">
+                            <td className="px-2 py-2">
                               {isEditing ? (
                                 <input
                                   type="date"
@@ -1248,7 +1261,7 @@ const DailyCollectionEntryView: React.FC = () => {
                                 />
                               ) : (item.lchk_date ? toDisplayDate(item.lchk_date) : '-')}
                             </td>
-                            <td className="px-3 py-2 min-w-[140px] text-right">
+                            <td className="px-2 py-2 text-right">
                               {isEditing ? (
                                 <input
                                   type="number"
@@ -1261,7 +1274,7 @@ const DailyCollectionEntryView: React.FC = () => {
                                 />
                               ) : peso.format(item.lamt || 0)}
                             </td>
-                            <td className="px-3 py-2">
+                            <td className="break-words px-2 py-2">
                               <span>{item.lstatus || item.lcollection_status || 'Pending'}</span>
                               {isEditing && (
                                 <select
@@ -1278,7 +1291,7 @@ const DailyCollectionEntryView: React.FC = () => {
                                 </select>
                               )}
                             </td>
-                            <td className="px-3 py-2 min-w-[180px]">
+                            <td className="break-words px-2 py-2">
                               {isEditing ? (
                                 <input
                                   className={INPUT_CLASS}
@@ -1289,13 +1302,13 @@ const DailyCollectionEntryView: React.FC = () => {
                                 />
                               ) : (item.lremarks || '-')}
                             </td>
-                            <td className="px-3 py-2">
+                            <td className="px-2 py-2">
                               {posted ? (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300">
                                   Posted
                                 </span>
                               ) : isEditing ? (
-                                <div className="flex gap-2">
+                                <div className="flex flex-wrap gap-2">
                                   <button
                                     className={`${BUTTON_PRIMARY} disabled:opacity-50 disabled:cursor-not-allowed`}
                                     onClick={() => saveEditedItem(item)}
@@ -1312,7 +1325,7 @@ const DailyCollectionEntryView: React.FC = () => {
                                   </button>
                                 </div>
                               ) : (
-                                <div className="flex gap-2">
+                                <div className="flex flex-wrap gap-2">
                                   {canEditLine && (
                                     <button
                                       className={`${BUTTON_BASE} disabled:opacity-50 disabled:cursor-not-allowed`}
@@ -1339,7 +1352,7 @@ const DailyCollectionEntryView: React.FC = () => {
                       })}
                       {!detailLoading && canAddPayment && (
                         <tr className="bg-[#fafafa]">
-                          <td className="px-3 py-2">
+                          <td className="px-2 py-2">
                             <input
                               type="checkbox"
                               className="accent-brand-blue"
@@ -1356,7 +1369,7 @@ const DailyCollectionEntryView: React.FC = () => {
                               }}
                             />
                           </td>
-                          <td className="px-3 py-2 min-w-[220px]">
+                          <td className="px-2 py-2">
                             <CustomerAutocomplete
                               contacts={customerOptions}
                               selectedCustomer={customerOptions.find((customer) => customer.id === form.customerId) || null}
@@ -1373,7 +1386,7 @@ const DailyCollectionEntryView: React.FC = () => {
                               inputClassName="h-[38px] rounded-[3px] border-[#ccc] bg-white text-[13px] text-[#555]"
                             />
                           </td>
-                          <td className="px-3 py-2 min-w-[220px]">
+                          <td className="px-2 py-2">
                             <div className="relative" ref={transactionComboRef}>
                               <button
                                 type="button"
@@ -1389,7 +1402,7 @@ const DailyCollectionEntryView: React.FC = () => {
                               </button>
                             </div>
                           </td>
-                          <td className="px-3 py-2 min-w-[130px]">
+                          <td className="px-2 py-2">
                             <select
                               className={`${SELECT_CLASS} w-full`}
                               value={form.type}
@@ -1400,7 +1413,7 @@ const DailyCollectionEntryView: React.FC = () => {
                               <option value="TT">TT</option>
                             </select>
                           </td>
-                          <td className="px-3 py-2 min-w-[140px]">
+                          <td className="px-2 py-2">
                             <input
                               className={INPUT_CLASS}
                               value={form.bank}
@@ -1408,7 +1421,7 @@ const DailyCollectionEntryView: React.FC = () => {
                               placeholder="Bank"
                             />
                           </td>
-                          <td className="px-3 py-2 min-w-[140px]">
+                          <td className="px-2 py-2">
                             <input
                               className={INPUT_CLASS}
                               value={form.checkNo}
@@ -1416,7 +1429,7 @@ const DailyCollectionEntryView: React.FC = () => {
                               placeholder="Check Number"
                             />
                           </td>
-                          <td className="px-3 py-2 min-w-[150px]">
+                          <td className="px-2 py-2">
                             <input
                               type="date"
                               className={INPUT_CLASS}
@@ -1426,7 +1439,7 @@ const DailyCollectionEntryView: React.FC = () => {
                               onChange={(e) => setForm((prev) => ({ ...prev, checkDate: e.target.value }))}
                             />
                           </td>
-                          <td className="px-3 py-2 min-w-[140px]">
+                          <td className="px-2 py-2">
                             <input
                               type="number"
                               className={INPUT_CLASS}
@@ -1436,12 +1449,12 @@ const DailyCollectionEntryView: React.FC = () => {
                               placeholder="0.00"
                             />
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="px-2 py-2">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusBadgeClasses(form.status)}`}>
                               {form.status}
                             </span>
                           </td>
-                          <td className="px-3 py-2 min-w-[180px]">
+                          <td className="px-2 py-2">
                             <input
                               className={INPUT_CLASS}
                               value={form.remarks}
@@ -1449,7 +1462,7 @@ const DailyCollectionEntryView: React.FC = () => {
                               placeholder="Remarks"
                             />
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="px-2 py-2">
                             <button
                               className={`${BUTTON_PRIMARY} disabled:opacity-50 disabled:cursor-not-allowed`}
                               onClick={handleSavePayment}
