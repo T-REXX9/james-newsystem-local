@@ -733,7 +733,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
               >
                 <table className="w-full table-fixed border-collapse text-left text-[clamp(8px,0.72vw,12px)] leading-[1.35] [&_td]:break-words [&_th]:break-normal [&_th]:[hyphens:none] [&_th]:[word-break:keep-all] [&_th]:[overflow-wrap:normal]">
                   <colgroup>
-                    {[1.8, 7.6, 6.0, 3.8, 5.6, 3.6, 6.6, 3.8, 4.2, 4.2, 3.4, 4.6, 4.4, 4.0, 4.0, 3.4, 3.4, 3.4, 3.4, 5.6, 4.0, 4.0, 5.0].map((width, index) => (
+                    {[1.8, 7.6, 6.0, 3.8, 5.6, 3.6, 6.6, 3.8, 4.2, 4.2, 3.4, 4.6, 4.4, 4.0, 4.0, 3.4, 3.4, 3.4, 8.6, 5.6, 4.0, 4.0].map((width, index) => (
                       <col key={index} style={{ width: `${width}%` }} />
                     ))}
                   </colgroup>
@@ -769,10 +769,13 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
                     </tr>
                   </thead>
                   <tbody>
-                    {!isLoading && products.length === 0 && <tr><td colSpan={23} className="px-3 py-6 text-center text-slate-500">No products found.</td></tr>}
+                    {!isLoading && products.length === 0 && <tr><td colSpan={22} className="px-3 py-6 text-center text-slate-500">No products found.</td></tr>}
                     {products.map((product, productIndex) => {
                       const selected = highlightedProductId === product.id;
-                      const yearlySales = Object.entries(product.sales_by_year || {}).sort(([a], [b]) => Number(a) - Number(b));
+                      const yearlySales = Array.from({ length: new Date().getFullYear() - 2018 + 1 }, (_, index) => {
+                        const year = String(2018 + index);
+                        return [year, Number(product.sales_by_year?.[year] || 0)] as const;
+                      });
                       const background = product.status === 'Active' ? 'bg-white' : 'bg-[#e8e8e8]';
                       const supplierCosts = (product.supplier_costs || []).slice(0, 3);
                       const supplierRows = Array.from({ length: 3 }, (_, index) => supplierCosts[index] || null);
@@ -856,8 +859,8 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
                           <td className="border border-[#ddd] px-0.5 py-2 text-right align-top font-bold text-[#1675bd]">{money(product.price_vip3)}</td>
                           <td className="border border-[#ddd] px-1 py-2 align-top text-slate-500">
                             {yearlySales.map(([year, quantity]) => (
-                              <div key={year} className="grid grid-cols-[auto_1fr] gap-1">
-                                <span>{year} :</span>
+                              <div key={year} className="grid grid-cols-[auto_1fr] gap-1 whitespace-nowrap">
+                                <span>{year}:</span>
                                 <span className="text-right">{compactQuantity(quantity)} pcs</span>
                               </div>
                             ))}
