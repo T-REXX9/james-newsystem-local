@@ -1230,6 +1230,7 @@ export interface SalesInquiry {
   vip_discount_amount?: number;
   total_to_pay?: number;
   created_by: string;
+  created_by_name?: string;
   created_at: string;
   updated_at?: string;
   status: SalesInquiryStatus;

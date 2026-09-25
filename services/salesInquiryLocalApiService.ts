@@ -98,7 +98,8 @@ const mapApiInquiry = (row: any): SalesInquiry => {
     urgency_date: String(row?.urgency_date || ''),
     grand_total: toNumber(row?.grand_total, 0),
     ...readPersistedVip(row),
-    created_by: String(row?.sales_person_id || ''),
+    created_by: String(row?.created_by || ''),
+    created_by_name: String(row?.created_by_name || ''),
     created_at: [row?.sales_date, row?.sales_time].filter(Boolean).join(' '),
     updated_at: undefined,
     status: mapApiStatusToUi(row?.status),
@@ -115,10 +116,8 @@ const mapApiInquiry = (row: any): SalesInquiry => {
 
 const buildInquiryPayload = (dto: SalesInquiryDTO) => {
   const { userId } = getUserContext();
-  const session = getLocalAuthSession();
-  const sessionName = String(session?.userProfile?.full_name || '').trim();
-  const salesPersonId = String(dto.sales_person_id || session?.userProfile?.id || userId || '').trim();
-  const salesPersonName = String(dto.sales_person || sessionName || '').trim();
+  const salesPersonId = String(dto.sales_person_id || '').trim();
+  const salesPersonName = String(dto.sales_person || '').trim();
 
   return {
   main_id: API_MAIN_ID,
