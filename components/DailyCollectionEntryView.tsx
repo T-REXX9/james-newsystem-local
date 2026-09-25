@@ -18,6 +18,7 @@ import {
 } from '../services/notificationLocalApiService';
 import DeleteCollectionReportModal from './DeleteCollectionReportModal';
 import ConfirmModal from './ConfirmModal';
+import CustomerAutocomplete from './CustomerAutocomplete';
 import { BUTTON_BASE, BUTTON_PRIMARY, BUTTON_SUCCESS } from '../utils/uiConstants';
 import { useDialogAccessibility } from '../hooks/useDialogAccessibility';
 import { canBackdatePosting, canPerformAction } from '../utils/actionPermissions';
@@ -1186,40 +1187,21 @@ const DailyCollectionEntryView: React.FC = () => {
                             />
                           </td>
                           <td className="px-3 py-2 min-w-[220px]">
-                            <div className="space-y-2">
-                              <div className="relative">
-                                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                <input
-                                  className={`${INPUT_CLASS} pl-9`}
-                                  value={customerSearch}
-                                  onChange={(e) => setCustomerSearch(e.target.value)}
-                                  placeholder="Search customer"
-                                />
-                              </div>
-                              <select
-                                className={`${SELECT_CLASS} w-full`}
-                                value={form.customerId}
-                                onChange={(e) => {
-                                  const nextCustomerId = e.target.value;
-                                  const selectedCustomer = customers.find((customer) => customer.id === nextCustomerId);
-                                  setForm((prev) => ({
-                                    ...prev,
-                                    customerId: nextCustomerId,
-                                    customerCompany: selectedCustomer?.company || '',
-                                  }));
-                                }}
-                                disabled={loadingCustomers}
-                              >
-                                <option value="">
-                                  {loadingCustomers ? 'Loading customers...' : 'Customer'}
-                                </option>
-                                {customerOptions.map((customer) => (
-                                  <option key={customer.id} value={customer.id}>
-                                    {customer.code ? `${customer.code} - ` : ''}{customer.company}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
+                            <CustomerAutocomplete
+                              contacts={customerOptions}
+                              selectedCustomer={customerOptions.find((customer) => customer.id === form.customerId) || null}
+                              onSearch={setCustomerSearch}
+                              isLoading={loadingCustomers}
+                              onSelect={(customer) => {
+                                setForm((prev) => ({
+                                  ...prev,
+                                  customerId: customer.id,
+                                  customerCompany: customer.company,
+                                }));
+                              }}
+                              placeholder="Search customer"
+                              inputClassName="h-[38px] rounded-[3px] border-[#ccc] bg-white text-[13px] text-[#555]"
+                            />
                           </td>
                           <td className="px-3 py-2 min-w-[220px]">
                             <div className="relative" ref={transactionComboRef}>
