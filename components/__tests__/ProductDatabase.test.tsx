@@ -168,18 +168,28 @@ describe('ProductDatabase', () => {
     expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled();
   });
 
-  it('lists yearly sales from the oldest year to the current year', async () => {
+  it('lists yearly sales from 2018 through the current year without clipping them', async () => {
     render(<ProductDatabase currentUser={{ role: 'Owner' } as any} />);
 
     await screen.findByText('QK2-001');
-    const yearlySalesCell = screen.getByText('2024 :').closest('td');
+    const yearlySalesCell = screen.getByText('2018:').closest('td');
+    const expectedYears = Array.from({ length: new Date().getFullYear() - 2018 + 1 }, (_, index) => `${2018 + index}:`);
 
     expect(yearlySalesCell).not.toBeNull();
-    expect(within(yearlySalesCell!).getAllByText(/^20\d{2} :$/).map((year) => year.textContent)).toEqual([
-      '2024 :',
-      '2025 :',
-      '2026 :',
-    ]);
+    expect(within(yearlySalesCell!).getAllByText(/^20\d{2}:$/).map((year) => year.textContent)).toEqual(expectedYears);
+    expect(within(yearlySalesCell!).getByText('2024:').nextElementSibling).toHaveTextContent('24 pcs');
+    expect(within(yearlySalesCell!).getByText('2026:').nextElementSibling).toHaveTextContent('26 pcs');
+  });
+
+  it('uses every product-table column and gives yearly sales enough width', async () => {
+    render(<ProductDatabase currentUser={{ role: 'Owner' } as any} />);
+
+    await screen.findByText('QK2-001');
+    const productTable = screen.getByText('Specifications').closest('table');
+    const columns = productTable?.querySelectorAll('col');
+
+    expect(columns).toHaveLength(22);
+    expect(columns?.[18]).toHaveStyle({ width: '8.6%' });
   });
 
   it('opens the matching 12-month incident and return reports in new tabs', async () => {
