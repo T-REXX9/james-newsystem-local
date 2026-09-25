@@ -772,7 +772,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
                     {!isLoading && products.length === 0 && <tr><td colSpan={23} className="px-3 py-6 text-center text-slate-500">No products found.</td></tr>}
                     {products.map((product, productIndex) => {
                       const selected = highlightedProductId === product.id;
-                      const yearlySales = Object.entries(product.sales_by_year || {}).sort(([a], [b]) => Number(b) - Number(a));
+                      const yearlySales = Object.entries(product.sales_by_year || {}).sort(([a], [b]) => Number(a) - Number(b));
                       const background = product.status === 'Active' ? 'bg-white' : 'bg-[#e8e8e8]';
                       const supplierCosts = (product.supplier_costs || []).slice(0, 3);
                       const supplierRows = Array.from({ length: 3 }, (_, index) => supplierCosts[index] || null);
