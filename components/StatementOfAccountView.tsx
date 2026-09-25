@@ -7,6 +7,7 @@ import {
   statementOfAccountService,
 } from '../services/statementOfAccountService';
 import { formatDate as formatPhilippineDate } from '../utils/formatUtils';
+import CustomerAutocomplete from './CustomerAutocomplete';
 
 import { shouldSuppressAuthError } from '../services/localApiAuth';
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
@@ -72,6 +73,20 @@ const StatementOfAccountView: React.FC = () => {
     () => customers.find((row) => row.sessionId === selectedCustomerId) || null,
     [customers, selectedCustomerId]
   );
+  const autocompleteCustomers = useMemo(
+    () => customers.map((customer) => ({
+      id: customer.sessionId,
+      company: customer.company || customer.customerCode || customer.sessionId,
+    })),
+    [customers],
+  );
+  const selectedAutocompleteCustomer = useMemo(
+    () => selectedCustomer ? {
+      id: selectedCustomer.sessionId,
+      company: selectedCustomer.company || selectedCustomer.customerCode || selectedCustomer.sessionId,
+    } : null,
+    [selectedCustomer],
+  );
 
   const generate = async () => {
     if (!selectedCustomerId) {
@@ -113,13 +128,15 @@ const StatementOfAccountView: React.FC = () => {
             <div className="mx-auto max-w-[760px] space-y-5">
               <div className="grid grid-cols-[210px_1fr] items-start gap-4">
                 <label className="pt-2 text-right text-sm font-semibold">Select Customer <span className="text-red-600">*</span></label>
-                <div className="space-y-2">
-                  <input value={customerSearch} onChange={e => setCustomerSearch(e.target.value)} placeholder="Search customer..." className="w-full rounded border border-[#ccc] px-3 py-2 text-sm" />
-                  <select value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)} className="w-full rounded border border-[#ccc] bg-white px-3 py-2 text-sm">
-                    <option value="">{loadingCustomers ? 'Loading customers...' : 'Select Customer'}</option>
-                    {customers.map(customer => <option key={customer.sessionId} value={customer.sessionId}>{customer.company || customer.customerCode || customer.sessionId}</option>)}
-                  </select>
-                </div>
+                <CustomerAutocomplete
+                  contacts={autocompleteCustomers}
+                  selectedCustomer={selectedAutocompleteCustomer}
+                  onSearch={setCustomerSearch}
+                  onSelect={(customer) => setSelectedCustomerId(customer.id)}
+                  isLoading={loadingCustomers}
+                  placeholder="Search customer..."
+                  inputClassName="rounded border-[#ccc] py-2 text-sm text-[#333]"
+                />
               </div>
               <div className="grid grid-cols-[210px_1fr] items-center gap-4">
                 <label className="text-right text-sm font-semibold">Type <span className="text-red-600">*</span></label>

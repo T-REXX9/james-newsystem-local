@@ -91,7 +91,7 @@ export const statementOfAccountService = {
       main_id: String(getMainId()),
       user_type: getUserType(),
       search: search.trim(),
-      limit: search.trim() === '' ? '120' : '60',
+      limit: search.trim() === '' ? '0' : '60',
     });
 
     const data = await requestApi(`${API_BASE_URL}/statements/customers?${query.toString()}`);

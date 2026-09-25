@@ -200,7 +200,7 @@ export const adjustmentEntryService = {
       status: 'all',
       mode: 'picker',
       page: '1',
-      per_page: search ? '50' : '100',
+      per_page: search ? '50' : '0',
       search,
     });
 

@@ -275,7 +275,7 @@ export const dailyCollectionService = {
       main_id: String(API_MAIN_ID),
       status: 'all',
       page: '1',
-      per_page: trimmedSearch === '' ? '100' : '50',
+      per_page: trimmedSearch === '' ? '0' : '50',
       mode: 'picker',
       search: trimmedSearch,
     });

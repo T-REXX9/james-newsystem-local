@@ -212,7 +212,7 @@ export const customerLedgerService = {
       status: 'all',
       search: trimmedSearch,
       page: '1',
-      per_page: trimmedSearch === '' ? '100' : '50',
+      per_page: trimmedSearch === '' ? '0' : '50',
       mode: 'picker',
     });
 

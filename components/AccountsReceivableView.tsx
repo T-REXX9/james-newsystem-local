@@ -10,6 +10,7 @@ import {
 import { LedgerCustomer, customerLedgerService } from '../services/customerLedgerService';
 import { BUTTON_BASE, BUTTON_PRIMARY } from '../utils/uiConstants';
 import { formatDate as formatPhilippineDate } from '../utils/formatUtils';
+import CustomerAutocomplete from './CustomerAutocomplete';
 
 import { shouldSuppressAuthError } from '../services/localApiAuth';
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
@@ -166,6 +167,14 @@ const AccountsReceivableView: React.FC<AccountsReceivableViewProps> = ({ initial
     if (!selectedCustomer) return '';
     return customerOptions.find((customer) => customer.sessionId === selectedCustomer)?.company || selectedCustomerOption?.company || '';
   }, [customerOptions, selectedCustomer, selectedCustomerOption]);
+  const autocompleteCustomers = useMemo(
+    () => customerOptions.map((customer) => ({ id: customer.sessionId, company: customer.company || customer.customerCode || customer.sessionId })),
+    [customerOptions],
+  );
+  const selectedAutocompleteCustomer = useMemo(
+    () => selectedCustomerOption ? { id: selectedCustomerOption.sessionId, company: selectedCustomerOption.company || selectedCustomerOption.customerCode || selectedCustomerOption.sessionId } : null,
+    [selectedCustomerOption],
+  );
 
   return (
     <div className="min-h-full overflow-y-auto bg-[#f4f4f4] p-5 text-[#333]">
@@ -178,13 +187,18 @@ const AccountsReceivableView: React.FC<AccountsReceivableViewProps> = ({ initial
               <div className="grid grid-cols-[210px_1fr] items-start gap-4">
                 <label className="contents">
                 <span className="pt-2 text-right text-sm font-semibold"><span className="sr-only">Customer</span><span aria-hidden="true">Select Customer <span className="text-red-600">*</span></span></span>
-                <div className="space-y-2">
-                  <input value={customerSearch} onChange={e => setCustomerSearch(e.target.value)} placeholder="Search customer — leave it blank to show all customers" className="w-full rounded border border-[#ccc] px-3 py-2 text-sm" />
-                  <select value={selectedCustomer} onChange={e => { const id = e.target.value; setSelectedCustomer(id); setSelectedCustomerOption(customerOptions.find(c => c.sessionId === id) || null); }} className="w-full rounded border border-[#ccc] bg-white px-3 py-2 text-sm">
-                    <option value="">{customersLoading ? 'Loading customers...' : 'All Customers'}</option>
-                    {customerOptions.map(customer => <option key={customer.sessionId} value={customer.sessionId}>{customer.company || customer.customerCode || customer.sessionId}</option>)}
-                  </select>
-                </div>
+                <CustomerAutocomplete
+                  contacts={autocompleteCustomers}
+                  selectedCustomer={selectedAutocompleteCustomer}
+                  onSearch={setCustomerSearch}
+                  onSelect={(customer) => {
+                    setSelectedCustomer(customer.id);
+                    setSelectedCustomerOption(customerOptions.find((option) => option.sessionId === customer.id) || null);
+                  }}
+                  isLoading={customersLoading}
+                  placeholder="Search customer..."
+                  inputClassName="rounded border-[#ccc] py-2 text-sm text-[#333]"
+                />
                 </label>
               </div>
               <div className="grid grid-cols-[210px_1fr] items-start gap-4">
