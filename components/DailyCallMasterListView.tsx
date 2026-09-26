@@ -1133,27 +1133,19 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                           {(() => {
                             const createdBy = (row.prospectCreatedBy || '').trim();
                             const rawSource = (row.prospectSource || '').trim();
-                            // New prospects store lrefer_by as "<staff> - <source>"; older ones store just the source.
-                            // Prefer the reliable creator name; strip a redundant "<staff> - " prefix from the source.
+                            // Show the SOURCE only (no staff name). New prospects store lrefer_by as
+                            // "<staff> - <source>"; strip a leading "<creator> - " prefix when present.
                             let source = rawSource;
                             const sep = rawSource.indexOf(' - ');
                             if (sep >= 0) {
                               const prefix = rawSource.slice(0, sep).trim();
                               const rest = rawSource.slice(sep + 3).trim();
-                              // Only treat the prefix as a staff name when it matches the recorded creator.
-                              if (createdBy && prefix.toLowerCase() === createdBy.toLowerCase()) {
+                              if (rest && (!createdBy || prefix.toLowerCase() === createdBy.toLowerCase())) {
                                 source = rest;
                               }
                             }
-                            const staff = createdBy || (sep >= 0 ? rawSource.slice(0, sep).trim() : '');
-                            if (sep >= 0 && !createdBy) source = rawSource.slice(sep + 3).trim();
-                            if (!staff && !source) return <span className="text-slate-400">—</span>;
-                            return (
-                              <>
-                                {staff && <span className="block font-semibold text-slate-700">{staff}</span>}
-                                {source && <span className="block text-[11px] font-medium text-indigo-700">{source}</span>}
-                              </>
-                            );
+                            if (!source) return <span className="text-slate-400">—</span>;
+                            return <span className="block font-medium text-slate-700">{source}</span>;
                           })()}
                         </td>
                         <td className="whitespace-normal break-normal px-2 py-2.5 text-sm font-semibold text-slate-600">
