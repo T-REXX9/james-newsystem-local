@@ -191,10 +191,10 @@ export default function ApprovalRequestsView({
                 <div>
                     <h3 className="flex items-center gap-2 text-base font-bold text-slate-900 dark:text-white">
                         <ClipboardList className="h-4 w-4 text-blue-600" />
-                        Customer Detail Update Requests
+                        Customer Approval Requests
                     </h3>
                     <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                        Review every pending customer detail update request from the Customer Database. Click a customer to open its profile.
+                        Review pending customer updates and duplicate prospect requests.
                     </p>
                 </div>
                 <button
@@ -267,7 +267,7 @@ export default function ApprovalRequestsView({
                 <div className="rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/50 px-6 py-12 text-center dark:border-slate-700 dark:bg-slate-900/30">
                     <ClipboardList className="mx-auto mb-3 h-10 w-10 text-slate-300 dark:text-slate-600" />
                     <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">No {statusFilter === 'all' ? '' : statusFilter} requests</p>
-                    <p className="mt-1 text-xs text-slate-500">Submit a customer change from any customer's profile to see it here.</p>
+                    <p className="mt-1 text-xs text-slate-500">Submitted customer updates and duplicate prospects appear here.</p>
                 </div>
             ) : (
                 <div className="space-y-2">
@@ -275,10 +275,11 @@ export default function ApprovalRequestsView({
                         const status = STATUS_STYLES[row.status] || STATUS_STYLES.pending;
                         const StatusIcon = status.icon;
                         const isDiscount = row.kind === 'discount';
+                        const isDuplicateProspect = row.kind === 'duplicate_prospect';
                         const KindIcon = isDiscount ? Tag : FileText;
                         const isExpanded = expandedIds.has(String(row.id));
                         const contact = contacts.get(String(row.contact_id));
-                        const customerLabel = contact?.company || contact?.name || `Customer #${row.contact_id}`;
+                        const customerLabel = contact?.company || contact?.name || String(row.payload?.company || (isDuplicateProspect ? 'Duplicate prospect' : `Customer #${row.contact_id}`));
                         const payloadEntries = Object.entries(row.payload || {}).filter(([k]) => k !== 'notes');
                         return (
                             <article
@@ -294,8 +295,8 @@ export default function ApprovalRequestsView({
                                         <div className="flex flex-wrap items-center gap-2">
                                             <button
                                                 type="button"
-                                                onClick={() => onSelectCustomer?.(String(row.contact_id))}
-                                                disabled={!onSelectCustomer}
+                                                onClick={() => { if (!isDuplicateProspect) onSelectCustomer?.(String(row.contact_id)); }}
+                                                disabled={!onSelectCustomer || isDuplicateProspect}
                                                 className="flex items-center gap-1.5 truncate text-sm font-bold text-slate-900 hover:text-blue-700 disabled:cursor-default disabled:hover:text-slate-900 dark:text-white dark:hover:text-blue-300"
                                             >
                                                 <Building2 className="h-3.5 w-3.5 text-slate-400" />
@@ -303,7 +304,7 @@ export default function ApprovalRequestsView({
                                             </button>
                                             <span className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                                                 <KindIcon className="h-2.5 w-2.5" />
-                                                {isDiscount ? 'Discount' : 'Customer Update'}
+                                                {isDiscount ? 'Discount' : (isDuplicateProspect ? 'Duplicate Prospect' : 'Customer Update')}
                                             </span>
                                             <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${status.bg} ${status.text} ${status.border}`}>
                                                 <StatusIcon className="h-2.5 w-2.5" />

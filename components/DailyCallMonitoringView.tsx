@@ -60,7 +60,7 @@ import {
   releaseCustomerCallForDailyCall,
   subscribeToDailyCallMonitoringUpdates
 } from '../services/dailyCallMonitoringService';
-import { createContact, fetchContactById, fetchContactForDailyCall, updateContact } from '../services/customerDatabaseLocalApiService';
+import { createContact, fetchContactById, fetchContactForDailyCall, isPendingDuplicateProspectApproval, updateContact } from '../services/customerDatabaseLocalApiService';
 import { queueCallRequest } from '../services/callingSystemService';
 import { navigateWorkflow } from '../utils/workflowNavigate';
 import {
@@ -898,6 +898,11 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
     try {
       const created = await createContact(payload);
+      if (isPendingDuplicateProspectApproval(created)) {
+        setShowAddCustomerModal(false);
+        addToast({ type: 'success', title: 'Duplicate prospect submitted', description: 'It is waiting for Master User approval.', durationMs: 4000 });
+        return created;
+      }
       setContacts((prev) => (prev.some((contact) => contact.id === created.id) ? prev : [...prev, created]));
       await loadAgentData();
       setSelectedClientId(created.id);

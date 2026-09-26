@@ -32,7 +32,7 @@ interface ToastOverrides {
 interface AddContactModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: Omit<Contact, 'id'>) => Promise<Contact>;
+  onSubmit: (data: Omit<Contact, 'id'>) => Promise<Contact | { pendingApproval: true } | void>;
   mode?: 'create' | 'edit';
   initialData?: Contact;
   defaultVerification?: string;
@@ -355,13 +355,13 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
         setLoading(false);
         return;
       }
-      await onSubmit(newContact);
+      const submission = await onSubmit(newContact);
       if (enableToasts) {
         const successToast = toastOverrides?.success;
         addToast({ 
           type: 'success', 
-          title: successToast?.title ?? (isEditMode ? 'Customer updated' : 'Customer created'),
-          description: successToast?.description ?? (isEditMode ? 'Customer information has been updated successfully.' : 'New customer has been added to the database.'),
+          title: successToast?.title ?? ((submission && 'pendingApproval' in submission && submission.pendingApproval) ? 'Duplicate prospect submitted' : (isEditMode ? 'Customer updated' : 'Customer created')),
+          description: successToast?.description ?? ((submission && 'pendingApproval' in submission && submission.pendingApproval) ? 'It is waiting for Master User approval.' : (isEditMode ? 'Customer information has been updated successfully.' : 'New customer has been added to the database.')),
           durationMs: successToast?.durationMs ?? 4000,
         });
       }
