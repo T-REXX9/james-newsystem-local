@@ -456,7 +456,6 @@ const MasterTableRow = React.memo(({
           </p>
           {row.contact.pastName && <p className="mt-0.5 truncate text-[10px] font-medium uppercase leading-tight text-slate-500 dark:text-slate-400">Old: {row.contact.pastName}</p>}
         </div>
-        {row.contact.team && <p className="mt-0.5 truncate text-[10px] font-bold leading-tight text-indigo-700 dark:text-indigo-300" title={`Team: ${row.contact.team}`}>Team: {row.contact.team}</p>}
         <p className="mt-0.5 truncate text-[11px] font-medium uppercase leading-tight text-slate-500 dark:text-slate-400" title={locationLabel}>
           {locationLabel}
         </p>
@@ -2039,6 +2038,11 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                     </span>
                                   )}
                                 </span>
+                                {row.contact.team && (
+                                  <span className="mt-0.5 block truncate text-[9px] font-bold uppercase leading-tight text-indigo-700 dark:text-indigo-300" title={`Team: ${row.contact.team}`}>
+                                    Team: {row.contact.team}
+                                  </span>
+                                )}
                                 <span className={`mt-0.5 block truncate text-[10px] font-medium leading-tight ${highlight.mutedClassName} dark:text-slate-400`} title={getPhoneNumber(row.contact) || getContactLocationLabel(row.contact)}>
                                   {getPhoneNumber(row.contact) || getContactLocationLabel(row.contact)}
                                 </span>
