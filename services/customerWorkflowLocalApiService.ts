@@ -16,7 +16,7 @@ export interface CustomerHistoryRecord {
 export interface CustomerRequest {
   id: string;
   contact_id: string;
-  kind: 'customer_update' | 'discount';
+  kind: 'customer_update' | 'discount' | 'duplicate_prospect';
   payload: Record<string, unknown>;
   status: 'pending' | 'approved' | 'rejected';
   submitted_by_name: string;
@@ -110,7 +110,7 @@ export const requestCustomerUpdate = (id: string, changes: Partial<Contact>) => 
 };
 export const reviewCustomerRequest = async (contactId: string, id: string, decision: 'approved' | 'rejected', note: string) => {
   requireSession();
-  const result = await requestLocalApi(`${pathFor(contactId)}/requests/${encodeURIComponent(id)}/review`, 'POST', { decision, note });
-  if (decision === 'approved' && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(CUSTOMER_UPDATED_EVENT, { detail: { contactId } }));
+  const result = await requestLocalApi<{ id: string; status: string; contact_id?: string }>(`${pathFor(contactId)}/requests/${encodeURIComponent(id)}/review`, 'POST', { decision, note });
+  if (decision === 'approved' && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(CUSTOMER_UPDATED_EVENT, { detail: { contactId: result.contact_id || contactId } }));
   return result;
 };

@@ -105,6 +105,16 @@ interface ApiCustomerDatabaseResponse {
   };
 }
 
+export interface PendingDuplicateProspectApproval {
+  pendingApproval: true;
+  requestId: string;
+}
+
+export type CreateContactResult = Contact | PendingDuplicateProspectApproval;
+
+export const isPendingDuplicateProspectApproval = (result: CreateContactResult): result is PendingDuplicateProspectApproval =>
+  'pendingApproval' in result && result.pendingApproval === true;
+
 interface ApiTransactionRow {
   source_type?: string | null;
   lqty?: string | number | null;
@@ -671,7 +681,7 @@ export const fetchContacts = async (): Promise<Contact[]> => {
   }
 };
 
-export const createContact = async (contact: Omit<Contact, 'id'>): Promise<Contact> => {
+export const createContact = async (contact: Omit<Contact, 'id'>): Promise<CreateContactResult> => {
   const { mainId, userId } = getUserContext();
   const payload = {
     main_id: mainId,
@@ -682,11 +692,14 @@ export const createContact = async (contact: Omit<Contact, 'id'>): Promise<Conta
       .map((cp) => mapContactPersonPayloadToApi(cp)),
   };
 
-  const created = await requestJson<{ data?: ApiCustomerRow }>(`${API_BASE_URL}/customer-database`, {
+  const created = await requestJson<{ data?: ApiCustomerRow & { pending_approval?: boolean; request_id?: string } }>(`${API_BASE_URL}/customer-database`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
+  if (created?.data?.pending_approval) {
+    return { pendingApproval: true, requestId: String(created.data.request_id || '') };
+  }
   return mapApiCustomerToContact(created?.data || {});
 };
 

@@ -20,7 +20,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { createCustomerLogForDailyCall, fetchCustomersForDailyCall, fetchDailyCallMasterList, getCachedDailyCallMasterList } from '../services/dailyCallMonitoringService';
-import { bulkUpdateContacts, createContact, fetchSalesAgents, updateContact } from '../services/customerDatabaseLocalApiService';
+import { bulkUpdateContacts, createContact, fetchSalesAgents, isPendingDuplicateProspectApproval, updateContact } from '../services/customerDatabaseLocalApiService';
 import { fetchTeams, TeamRecord } from '../services/teamLocalApiService';
 import { getVipTierConfig } from '../services/vipTierSettingsService';
 import { Contact, CustomerStatus, DailyCallCustomerRow, DailyCallMasterCustomerRow, DailyCallMasterListMeta, UserProfile, VipTierConfig } from '../types';
@@ -386,6 +386,11 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
       status: CustomerStatus.PROSPECTIVE,
       verification: 'Unverified',
     });
+    if (isPendingDuplicateProspectApproval(created)) {
+      setShowAddProspectModal(false);
+      addToast({ type: 'success', title: 'Duplicate prospect submitted', description: 'It is waiting for Master User approval.' });
+      return created;
+    }
     setShowAddProspectModal(false);
     // Do not keep the modal open while the analytics-heavy master list refreshes.
     // The background refresh updates the dashboard once it completes.
