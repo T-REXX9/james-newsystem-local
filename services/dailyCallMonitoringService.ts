@@ -505,6 +505,7 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
     dataIntegrityMessage: cleanNullableText(row?.dataIntegrityMessage ?? row?.data_integrity_message),
     verifiedBy: cleanNullableText(row?.verifiedBy ?? row?.verified_by),
     verifiedInSystem: Boolean(row?.verifiedInSystem ?? row?.verified_in_system),
+    prospectSource: cleanNullableText(row?.prospectSource ?? row?.prospect_source),
     latestSalesReportMessage: cleanNullableText(row?.latestSalesReportMessage ?? row?.latest_sales_report_message),
     latestSalesReportAuthor: cleanNullableText(row?.latestSalesReportAuthor ?? row?.latest_sales_report_author),
     latestSalesReportSource: cleanNullableText(row?.latestSalesReportSource ?? row?.latest_sales_report_source),

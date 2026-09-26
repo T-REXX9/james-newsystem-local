@@ -805,6 +805,8 @@ export interface DailyCallMasterCustomerRow {
   dataIntegrityException?: boolean;
   dataIntegrityMessage?: string;
   verifiedBy?: string;
+  /** Prospect source, stored as "<staff name> - <source>" (tblpatient.lrefer_by). */
+  prospectSource?: string;
   /** True only when a Verify Prospect audit entry was written by this system. */
   verifiedInSystem?: boolean;
   createdAt?: string;

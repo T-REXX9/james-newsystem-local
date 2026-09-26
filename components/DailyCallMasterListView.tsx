@@ -1130,15 +1130,18 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                           )}
                         </td>
                         <td className="w-[150px] break-words px-2 py-2.5 text-sm">
-                          {(row.latestSalesReportAuthor || row.latestSalesReportSource) ? (
-                            <>
-                              {row.latestSalesReportAuthor && (
-                                <span className="block font-semibold text-slate-700">{row.latestSalesReportAuthor}</span>
-                              )}
-                              {row.latestSalesReportSource && (
-                                <span className="block text-[11px] font-medium text-indigo-700">{row.latestSalesReportSource}</span>
-                              )}
-                            </>
+                          {row.prospectSource ? (
+                            (() => {
+                              const sep = row.prospectSource.indexOf(' - ');
+                              const staff = sep >= 0 ? row.prospectSource.slice(0, sep).trim() : '';
+                              const src = sep >= 0 ? row.prospectSource.slice(sep + 3).trim() : row.prospectSource.trim();
+                              return (
+                                <>
+                                  {staff && <span className="block font-semibold text-slate-700">{staff}</span>}
+                                  {src && <span className="block text-[11px] font-medium text-indigo-700">{src}</span>}
+                                </>
+                              );
+                            })()
                           ) : (
                             <span className="text-slate-400">—</span>
                           )}
