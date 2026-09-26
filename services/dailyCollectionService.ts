@@ -164,6 +164,25 @@ const toNumber = (value: unknown, fallback = 0): number => {
   return Number.isFinite(n) ? n : fallback;
 };
 
+const mapCollectionItem = (row: any): DailyCollectionItem => ({
+  lid: toNumber(row?.lid, 0),
+  lrefno: String(row?.lrefno || ''),
+  lcustomer: String(row?.lcustomer || ''),
+  lcustomer_fname: String(row?.lcustomer_fname || ''),
+  lcustomer_lname: String(row?.lcustomer_lname || ''),
+  ltype: String(row?.ltype || ''),
+  lbank: String(row?.lbank || ''),
+  lchk_no: String(row?.lchk_no || ''),
+  lchk_date: String(row?.lchk_date || ''),
+  lamt: toNumber(row?.lamt, 0),
+  lstatus: String(row?.lstatus || ''),
+  lremarks: String(row?.lremarks || ''),
+  lcollect_date: String(row?.lcollect_date || ''),
+  lpost: toNumber(row?.lpost, 0),
+  lcollection_status: String(row?.lcollection_status || ''),
+  ltransaction_no: String(row?.ltransaction_no || ''),
+});
+
 const getUserContext = () => {
   const session = getLocalAuthSession();
   const userId = Number(session?.context?.user?.id || 1);
@@ -234,24 +253,7 @@ export const dailyCollectionService = {
   async getCollectionItems(refno: string): Promise<DailyCollectionItem[]> {
     const data = await requestApi(`${API_BASE_URL}/collections/${encodeURIComponent(refno)}/items`);
     const rows = Array.isArray(data?.items) ? data.items : [];
-    return rows.map((row: any) => ({
-      lid: toNumber(row?.lid, 0),
-      lrefno: String(row?.lrefno || ''),
-      lcustomer: String(row?.lcustomer || ''),
-      lcustomer_fname: String(row?.lcustomer_fname || ''),
-      lcustomer_lname: String(row?.lcustomer_lname || ''),
-      ltype: String(row?.ltype || ''),
-      lbank: String(row?.lbank || ''),
-      lchk_no: String(row?.lchk_no || ''),
-      lchk_date: String(row?.lchk_date || ''),
-      lamt: toNumber(row?.lamt, 0),
-      lstatus: String(row?.lstatus || ''),
-      lremarks: String(row?.lremarks || ''),
-      lcollect_date: String(row?.lcollect_date || ''),
-      lpost: toNumber(row?.lpost, 0),
-      lcollection_status: String(row?.lcollection_status || ''),
-      ltransaction_no: String(row?.ltransaction_no || ''),
-    }));
+    return rows.map(mapCollectionItem);
   },
 
   async getApproverLogs(refno: string): Promise<DailyCollectionApproverLog[]> {
@@ -351,9 +353,9 @@ export const dailyCollectionService = {
     });
   },
 
-  async updateItem(item: DailyCollectionItem, update: CollectionPaymentLineUpdate): Promise<void> {
+  async updateItem(item: DailyCollectionItem, update: CollectionPaymentLineUpdate): Promise<DailyCollectionItem | null> {
     const ctx = getUserContext();
-    await requestApi(`${API_BASE_URL}/collection-items/${encodeURIComponent(String(item.lid))}`, {
+    const data = await requestApi(`${API_BASE_URL}/collection-items/${encodeURIComponent(String(item.lid))}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -368,6 +370,7 @@ export const dailyCollectionService = {
         remarks: update.remarks,
       }),
     });
+    return data?.item ? mapCollectionItem(data.item) : null;
   },
 
   async postItems(refno: string, itemIds: number[]): Promise<void> {
