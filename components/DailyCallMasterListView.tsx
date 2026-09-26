@@ -1025,6 +1025,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                     <th className="w-[135px] px-2 py-2.5">Last Purchase</th>
                     <th className="w-[135px] px-2 py-2.5">Agent</th>
                     <th className="w-[220px] px-2 py-2.5">Latest Agent Sales Report</th>
+                    <th className="w-[150px] px-2 py-2.5">Source</th>
                     <th className="w-[150px] px-2 py-2.5">Verified By</th>
                     <th className="w-[105px] px-2 py-2.5 text-center">Action</th>
                   </tr>
@@ -1109,12 +1110,6 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                         <td className="max-w-[280px] break-words px-2 py-2.5 text-sm">
                           {row.latestSalesReportMessage ? (
                             <>
-                              {(row.latestSalesReportAuthor || row.latestSalesReportSource) && (
-                                <p className="mb-0.5 text-[11px] font-semibold text-indigo-700">
-                                  {row.latestSalesReportAuthor || 'Unknown staff'}
-                                  {row.latestSalesReportSource ? ` : ${row.latestSalesReportSource}` : ''}
-                                </p>
-                              )}
                               <button
                                 type="button"
                                 onClick={() => setReplyModalRow(row)}
@@ -1128,6 +1123,20 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                                 <p className="mt-1 text-[10px] font-medium text-slate-400">
                                   {formatSalesReportTimestamp(row.latestSalesReportAt)}
                                 </p>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="w-[150px] break-words px-2 py-2.5 text-sm">
+                          {(row.latestSalesReportAuthor || row.latestSalesReportSource) ? (
+                            <>
+                              {row.latestSalesReportAuthor && (
+                                <span className="block font-semibold text-slate-700">{row.latestSalesReportAuthor}</span>
+                              )}
+                              {row.latestSalesReportSource && (
+                                <span className="block text-[11px] font-medium text-indigo-700">{row.latestSalesReportSource}</span>
                               )}
                             </>
                           ) : (
@@ -1207,7 +1216,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                     );
                   })}
                   {activeCategory.rows.length === 0 && (
-                    <tr><td colSpan={10} className="px-3 py-12 text-center text-xs text-slate-400">No customers in this category.</td></tr>
+                    <tr><td colSpan={11} className="px-3 py-12 text-center text-xs text-slate-400">No customers in this category.</td></tr>
                   )}
                 </tbody>
               </table>
