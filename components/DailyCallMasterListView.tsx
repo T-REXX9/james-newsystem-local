@@ -1004,30 +1004,30 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
               data-testid="daily-call-table-scroll"
               onScroll={handleTableScroll}
             >
-              <table className="min-w-[1650px] w-full table-fixed border-separate border-spacing-0 text-left text-sm">
+              <table className="min-w-[1450px] w-full table-fixed border-separate border-spacing-0 text-left text-sm">
                 <thead className="sticky top-0 z-20 bg-slate-50 text-xs text-slate-600 shadow-sm [&_th]:sticky [&_th]:top-0 [&_th]:z-20 [&_th]:border-b [&_th]:border-slate-200 [&_th]:bg-slate-50">
                   <tr>
                     <th className="w-12 px-3 py-2.5">#</th>
-                    <th className="w-[250px] px-2 py-2.5">Customer / Mobile</th>
-                    <th className="w-[135px] px-2 py-2.5 text-center">VIP Status</th>
-                    <th className="w-[220px] px-2 py-2.5">
+                    <th className="w-[200px] px-2 py-2.5">Customer / Mobile</th>
+                    <th className="w-[125px] px-2 py-2.5 text-center">VIP Status</th>
+                    <th className="w-[175px] px-2 py-2.5">
                       <span className="inline-flex items-center gap-2">
                         Avg. Purchase per Month (Ledger)
                         <Info className="h-4 w-4 text-slate-400" />
                       </span>
                     </th>
-                    <th className="w-[150px] px-2 py-2.5 text-center">
+                    <th className="w-[120px] px-2 py-2.5 text-center">
                       <span className="inline-flex items-center justify-center gap-2">
                         Sales (Current Month)
                         <Info className="h-4 w-4 text-slate-400" />
                       </span>
                     </th>
-                    <th className="w-[135px] px-2 py-2.5">Last Purchase</th>
-                    <th className="w-[135px] px-2 py-2.5">Agent</th>
-                    <th className="w-[220px] px-2 py-2.5">Latest Agent Sales Report</th>
-                    <th className="w-[150px] px-2 py-2.5">Source</th>
-                    <th className="w-[150px] px-2 py-2.5">Verified By</th>
-                    <th className="w-[105px] px-2 py-2.5 text-center">Action</th>
+                    <th className="w-[120px] px-2 py-2.5">Last Purchase</th>
+                    <th className="w-[130px] px-2 py-2.5">Agent</th>
+                    <th className="w-[200px] px-2 py-2.5">Latest Agent Sales Report</th>
+                    <th className="w-[140px] px-2 py-2.5">Source</th>
+                    <th className="w-[110px] px-2 py-2.5">Verified By</th>
+                    <th className="w-[95px] px-2 py-2.5 text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1107,7 +1107,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                           {row.assignedTeam && <p className="mt-1 text-[10px] font-bold text-indigo-700">Team: {row.assignedTeam}</p>}
                           {row.assignedAgentTeam && <p className="mt-1 text-[10px] font-bold text-indigo-700">Agent team: {row.assignedAgentTeam}</p>}
                         </td>
-                        <td className="max-w-[280px] break-words px-2 py-2.5 text-sm">
+                        <td className="max-w-[200px] break-words px-2 py-2.5 text-sm">
                           {row.latestSalesReportMessage ? (
                             <>
                               <button
@@ -1129,22 +1129,32 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                             <span className="text-slate-400">—</span>
                           )}
                         </td>
-                        <td className="w-[150px] break-words px-2 py-2.5 text-sm">
-                          {row.prospectSource ? (
-                            (() => {
-                              const sep = row.prospectSource.indexOf(' - ');
-                              const staff = sep >= 0 ? row.prospectSource.slice(0, sep).trim() : '';
-                              const src = sep >= 0 ? row.prospectSource.slice(sep + 3).trim() : row.prospectSource.trim();
-                              return (
-                                <>
-                                  {staff && <span className="block font-semibold text-slate-700">{staff}</span>}
-                                  {src && <span className="block text-[11px] font-medium text-indigo-700">{src}</span>}
-                                </>
-                              );
-                            })()
-                          ) : (
-                            <span className="text-slate-400">—</span>
-                          )}
+                        <td className="w-[140px] break-words px-2 py-2.5 text-sm">
+                          {(() => {
+                            const createdBy = (row.prospectCreatedBy || '').trim();
+                            const rawSource = (row.prospectSource || '').trim();
+                            // New prospects store lrefer_by as "<staff> - <source>"; older ones store just the source.
+                            // Prefer the reliable creator name; strip a redundant "<staff> - " prefix from the source.
+                            let source = rawSource;
+                            const sep = rawSource.indexOf(' - ');
+                            if (sep >= 0) {
+                              const prefix = rawSource.slice(0, sep).trim();
+                              const rest = rawSource.slice(sep + 3).trim();
+                              // Only treat the prefix as a staff name when it matches the recorded creator.
+                              if (createdBy && prefix.toLowerCase() === createdBy.toLowerCase()) {
+                                source = rest;
+                              }
+                            }
+                            const staff = createdBy || (sep >= 0 ? rawSource.slice(0, sep).trim() : '');
+                            if (sep >= 0 && !createdBy) source = rawSource.slice(sep + 3).trim();
+                            if (!staff && !source) return <span className="text-slate-400">—</span>;
+                            return (
+                              <>
+                                {staff && <span className="block font-semibold text-slate-700">{staff}</span>}
+                                {source && <span className="block text-[11px] font-medium text-indigo-700">{source}</span>}
+                              </>
+                            );
+                          })()}
                         </td>
                         <td className="whitespace-normal break-normal px-2 py-2.5 text-sm font-semibold text-slate-600">
                           {row.verification === 'Verified' ? (row.verifiedBy || 'Verification recorded') : '—'}

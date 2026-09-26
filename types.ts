@@ -807,6 +807,8 @@ export interface DailyCallMasterCustomerRow {
   verifiedBy?: string;
   /** Prospect source, stored as "<staff name> - <source>" (tblpatient.lrefer_by). */
   prospectSource?: string;
+  /** Staff who created the prospect (tblpatient.lencoded_by → account name). */
+  prospectCreatedBy?: string;
   /** True only when a Verify Prospect audit entry was written by this system. */
   verifiedInSystem?: boolean;
   createdAt?: string;

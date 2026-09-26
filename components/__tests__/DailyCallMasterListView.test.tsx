@@ -394,7 +394,7 @@ describe('DailyCallMasterListView', () => {
     const tableScroll = screen.getByTestId('daily-call-table-scroll');
     expect(screen.getByTestId('master-list-scroll-region')).toHaveClass('overflow-auto');
     expect(tableScroll).not.toHaveClass('overflow-auto');
-    expect(tableScroll.querySelector('table')).toHaveClass('min-w-[1650px]', 'table-fixed');
+    expect(tableScroll.querySelector('table')).toHaveClass('min-w-[1450px]', 'table-fixed');
     const tableHeader = tableScroll.querySelector('thead');
     expect(tableHeader).toHaveClass('sticky', 'top-0');
     expect(screen.getAllByText('Apostol Ella').length).toBeGreaterThan(0);
