@@ -53,7 +53,15 @@ export async function getVipTierConfig(): Promise<VipTierConfig> {
     });
     return normalizeVipTierConfig(data);
   } catch (error) {
-    console.error('Error loading VIP tier settings:', error);
+    // Non-master users (account status role != 1) are not allowed to read VIP
+    // discount settings and the API answers 403 "Only account status role 1
+    // can manage VIP discount settings." That is expected, not a failure: the
+    // caller falls back to the default config. Only log genuinely unexpected
+    // errors so this does not spam the console for every ordinary user.
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/account status role 1/i.test(message)) {
+      console.error('Error loading VIP tier settings:', error);
+    }
     return DEFAULT_VIP_TIER_CONFIG;
   }
 }
