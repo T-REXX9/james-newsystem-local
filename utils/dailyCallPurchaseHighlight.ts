@@ -19,13 +19,21 @@ const normalizePurchaseDate = (raw?: string | null): string => {
 
 /**
  * Purchase-age row colours for Daily Call lists:
- * - green: bought this month (current-month sales or last purchase in current month)
+ * - green: actually bought this month (posted current-month sales > 0)
  * - yellow: 1 month no purchase
  * - purple: 2 months no purchase
  * - white: 3+ months / no purchase yet
  * - red: blacklisted / rejected
  *
  * No-purchase rows must never resolve to green, even when monthsSinceLastPurchase is 0.
+ *
+ * "Green = bought this month" means real posted sales this month, NOT merely a
+ * ledger date landing in the current month. Last-purchase reflects any ledger
+ * activity (payments, returns, adjustments, credits), so a row can have a
+ * current-month last-purchase date while current-month SALES are ₱0 — that row
+ * is NOT green. currentMonthSales is authoritative when supplied: an explicit 0
+ * falls through to the age-based colour. The last-purchase-in-current-month
+ * fallback only applies when currentMonthSales is not provided at all.
  */
 export const resolveDailyCallPurchaseHighlightColor = (
   input: DailyCallPurchaseHighlightInput
@@ -44,7 +52,16 @@ export const resolveDailyCallPurchaseHighlightColor = (
       + (reference.getMonth() - lastPurchase!.getMonth())
     : Number(input.monthsSinceLastPurchase ?? 0);
 
-  if (Number(input.currentMonthSales ?? 0) > 0 || monthsSincePurchase <= 0) return 'green';
+  // currentMonthSales is authoritative when supplied. An explicit 0 must NOT be
+  // overridden to green just because the last ledger date is in the current
+  // month — that ledger date can be a payment/return/adjustment, not a sale.
+  const currentMonthSales = input.currentMonthSales;
+  const hasCurrentMonthSalesSignal = currentMonthSales !== null && currentMonthSales !== undefined;
+  const boughtThisMonth = hasCurrentMonthSalesSignal
+    ? Number(currentMonthSales) > 0
+    : monthsSincePurchase <= 0;
+
+  if (boughtThisMonth) return 'green';
   if (monthsSincePurchase >= 3) return 'white';
   if (monthsSincePurchase === 2) return 'purple';
   return 'yellow';
