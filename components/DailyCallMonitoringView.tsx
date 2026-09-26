@@ -281,7 +281,7 @@ const toContactModel = (row: any): Contact => {
   company: String(row?.shopName || 'Unnamed Shop'),
   pastName: String(row?.pastName || ''),
   customerSince: String(row?.clientSince || ''),
-  team: '',
+  team: String(row?.assignedTeam ?? row?.assigned_team ?? '').trim(),
   salesman: String(row?.assignedTo || 'Unassigned'),
   assignedAgentId: String(row?.assignedAgentId || ''),
   referBy: String(row?.source || ''),
@@ -456,6 +456,7 @@ const MasterTableRow = React.memo(({
           </p>
           {row.contact.pastName && <p className="mt-0.5 truncate text-[10px] font-medium uppercase leading-tight text-slate-500 dark:text-slate-400">Old: {row.contact.pastName}</p>}
         </div>
+        {row.contact.team && <p className="mt-0.5 truncate text-[10px] font-bold leading-tight text-indigo-700 dark:text-indigo-300" title={`Team: ${row.contact.team}`}>Team: {row.contact.team}</p>}
         <p className="mt-0.5 truncate text-[11px] font-medium uppercase leading-tight text-slate-500 dark:text-slate-400" title={locationLabel}>
           {locationLabel}
         </p>
@@ -529,6 +530,7 @@ const MasterTableRow = React.memo(({
     previousProps.row.contact.id === nextProps.row.contact.id &&
     previousProps.row.contact.updated_at === nextProps.row.contact.updated_at &&
     previousProps.row.contact.status === nextProps.row.contact.status &&
+    previousProps.row.contact.team === nextProps.row.contact.team &&
     previousProps.row.lastContact === nextProps.row.lastContact &&
     previousProps.row.lastPurchase === nextProps.row.lastPurchase &&
     previousProps.row.totalSales === nextProps.row.totalSales &&
