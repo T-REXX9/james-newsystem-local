@@ -185,6 +185,17 @@ const ageLabel = (row: DailyCallMasterCustomerRow) => {
   return row.daysSinceLastPurchase === 1 ? '1 day ago' : `${row.daysSinceLastPurchase} days ago`;
 };
 
+// Format the latest Agent Sales Report timestamp as e.g. "Sep 25, 2026 · 3:42 PM".
+const formatSalesReportTimestamp = (raw?: string): string | null => {
+  if (!raw) return null;
+  // Backend sends DATETIME as "YYYY-MM-DD HH:MM:SS"; normalize for Safari/JS Date parsing.
+  const parsed = new Date(raw.includes('T') ? raw : raw.replace(' ', 'T'));
+  if (Number.isNaN(parsed.getTime())) return null;
+  const datePart = parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const timePart = parsed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return `${datePart} · ${timePart}`;
+};
+
 const purchaseHighlight = (row: DailyCallMasterCustomerRow) => {
   const color = resolveDailyCallPurchaseHighlightColor({
     isBlocked: isBlockedDailyCallMasterRow(row),
@@ -1098,6 +1109,12 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                         <td className="max-w-[280px] break-words px-2 py-2.5 text-sm">
                           {row.latestSalesReportMessage ? (
                             <>
+                              {(row.latestSalesReportAuthor || row.latestSalesReportSource) && (
+                                <p className="mb-0.5 text-[11px] font-semibold text-indigo-700">
+                                  {row.latestSalesReportAuthor || 'Unknown staff'}
+                                  {row.latestSalesReportSource ? ` : ${row.latestSalesReportSource}` : ''}
+                                </p>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => setReplyModalRow(row)}
@@ -1107,6 +1124,11 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                               >
                                 {row.latestSalesReportMessage}
                               </button>
+                              {formatSalesReportTimestamp(row.latestSalesReportAt) && (
+                                <p className="mt-1 text-[10px] font-medium text-slate-400">
+                                  {formatSalesReportTimestamp(row.latestSalesReportAt)}
+                                </p>
+                              )}
                             </>
                           ) : (
                             <span className="text-slate-400">—</span>
