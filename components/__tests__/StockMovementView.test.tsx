@@ -295,8 +295,11 @@ describe('StockMovementView', () => {
     const printArea = screen.getByTestId('stock-movement-print-area');
     expect(within(printArea).getByText('STOCK MOVEMENT')).toBeInTheDocument();
     expect(within(printArea).getByText('Inventory:')).toBeInTheDocument();
+    // Header still shows the combined "Centralized" scope (filter defaults to all),
+    // while the movement rows now show each entry's real warehouse (WH1) instead of
+    // a hardcoded "Centralized".
     expect(within(printArea).getAllByText('Centralized').length).toBeGreaterThan(0);
-    expect(within(printArea).queryByText('WH1')).not.toBeInTheDocument();
+    expect(within(printArea).getAllByText('WH1').length).toBeGreaterThan(0);
     expect(within(printArea).getByText('Item Code: IC-100')).toBeInTheDocument();
     expect(within(printArea).getByText('Part No: PN-100')).toBeInTheDocument();
     expect(within(printArea).getByText('Brand: ACME')).toBeInTheDocument();
