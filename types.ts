@@ -809,6 +809,9 @@ export interface DailyCallMasterCustomerRow {
   verifiedInSystem?: boolean;
   createdAt?: string;
   latestSalesReportMessage?: string;
+  latestSalesReportAuthor?: string;
+  latestSalesReportSource?: string;
+  latestSalesReportAt?: string;
   priceGroup?: string;
   firstPurchaseDate?: string;
   firstPurchaseDateRaw?: string;
