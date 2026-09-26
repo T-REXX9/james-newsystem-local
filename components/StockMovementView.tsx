@@ -15,6 +15,9 @@ import { getCentralStock } from '../utils/productStock';
 import { formatDate } from '../utils/formatUtils';
 
 const TRANSACTION_TYPES = ['Purchase Order', 'Invoice', 'Order Slip', 'Transfer Product', 'Transfer Receipt', 'Credit Memo', 'Stock Adjustment'];
+// Selectable warehouses for the movement filter. 'all' shows every warehouse
+// rolled up (the "Centralized" combined view). Mirrors TransferStockView.
+const WAREHOUSES = ['WH1', 'WH2', 'WH3', 'WH4', 'WH5', 'WH6'];
 type MovementViewMode = 'audit' | 'legacy';
 type ProductSearchFilters = {
   partNo: string;
@@ -55,6 +58,15 @@ const matchesProductSearch = (product: Product, filters: ProductSearchFilters) =
 
 const formatLegacyDate = (dateString: string) => {
   return formatDate(dateString);
+};
+
+// Label shown in the row's Inventory column: the row's actual warehouse when it
+// has one, otherwise the combined "Centralized" scope. Keeps the ledger honest
+// about which warehouse each movement belongs to instead of always saying
+// "Centralized".
+const inventoryScopeLabel = (log: InventoryLogWithProduct): string => {
+  const wh = (log.warehouse_id || '').trim();
+  return wh !== '' ? wh : 'Centralized';
 };
 
 const formatLegacyPrice = (log: InventoryLogWithProduct) => {
@@ -421,13 +433,13 @@ const StockMovementView: React.FC = () => {
         <td>{isStockIn ? source : ''}</td>
         <td>{isStockIn ? log.partner : ''}</td>
         <td>{isStockIn ? log.qty_in : ''}</td>
-        <td>{isStockIn ? 'Centralized' : ''}</td>
+        <td>{isStockIn ? inventoryScopeLabel(log) : ''}</td>
         <td>{!isStockIn ? formatLegacyDate(log.date) : ''}</td>
         <td>{!isStockIn ? source : ''}</td>
         <td>{!isStockIn ? log.partner : ''}</td>
         <td>{!isStockIn ? log.qty_out : ''}</td>
         <td>{!isStockIn ? formatLegacyPrice(log) : ''}</td>
-        <td>{!isStockIn ? 'Centralized' : ''}</td>
+        <td>{!isStockIn ? inventoryScopeLabel(log) : ''}</td>
         <td>{log.balance ?? ''}</td>
       </tr>
     );
@@ -456,13 +468,13 @@ const StockMovementView: React.FC = () => {
         <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{isStockIn ? source : ''}</td>
         <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{isStockIn ? log.partner : ''}</td>
         <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{isStockIn ? log.qty_in : ''}</td>
-        <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{isStockIn ? 'Centralized' : ''}</td>
+        <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{isStockIn ? inventoryScopeLabel(log) : ''}</td>
         <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{!isStockIn ? formatLegacyDate(log.date) : ''}</td>
         <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{!isStockIn ? source : ''}</td>
         <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{!isStockIn ? log.partner : ''}</td>
         <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{!isStockIn ? log.qty_out : ''}</td>
         <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{!isStockIn ? formatLegacyPrice(log) : ''}</td>
-        <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{!isStockIn ? 'Centralized' : ''}</td>
+        <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{!isStockIn ? inventoryScopeLabel(log) : ''}</td>
         <td className="break-words border border-[#d9dee3] px-2 py-3 align-top">{log.balance ?? ''}</td>
       </tr>
     );
@@ -482,7 +494,7 @@ const StockMovementView: React.FC = () => {
         <div className="stock-movement-print-title">
           <h3>STOCK MOVEMENT</h3>
           <h5>Inventory:</h5>
-          <h5>Centralized</h5>
+          <h5>{warehouseFilter === 'all' ? 'Centralized' : warehouseFilter}</h5>
         </div>
       </div>
 
@@ -670,7 +682,7 @@ const StockMovementView: React.FC = () => {
                     Inventory:
                   </label>
                   <div className="mt-2 h-[34px] w-full rounded-[3px] border border-[#d6d6d6] bg-slate-50 px-3 py-2 text-[13px] text-[#334653]">
-                    Centralized quantity
+                    {warehouseFilter === 'all' ? 'Centralized (all warehouses)' : warehouseFilter}
                   </div>
                 </div>
               </div>
@@ -1006,12 +1018,19 @@ const StockMovementView: React.FC = () => {
                   <span className="text-xs font-medium">Filters</span>
                 </div>
 
-                {/* Centralized inventory scope */}
+                {/* Warehouse scope selector */}
                 <div className="flex items-center gap-2">
                   <label className="text-xs text-slate-500">Inventory:</label>
-                  <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                    Centralized quantity
-                  </span>
+                  <select
+                    value={warehouseFilter}
+                    onChange={(e) => setWarehouseFilter(e.target.value)}
+                    className="text-xs border border-slate-200 dark:border-slate-700 rounded px-2 py-1.5 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 outline-none focus:border-brand-blue"
+                  >
+                    <option value="all">Centralized (all)</option>
+                    {WAREHOUSES.map((wh) => (
+                      <option key={wh} value={wh}>{wh}</option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Date From */}
@@ -1311,13 +1330,13 @@ const StockMovementView: React.FC = () => {
                               <td className="p-3 text-slate-600 dark:text-slate-300">{isStockIn ? source : ''}</td>
                               <td className="p-3 text-slate-600 dark:text-slate-300">{isStockIn ? log.partner : ''}</td>
                               <td className="p-3 text-right font-bold text-emerald-600 dark:text-emerald-400">{isStockIn ? log.qty_in : ''}</td>
-                              <td className="p-3 text-center text-slate-600 dark:text-slate-300">{isStockIn ? 'Centralized' : ''}</td>
+                              <td className="p-3 text-center text-slate-600 dark:text-slate-300">{isStockIn ? inventoryScopeLabel(log) : ''}</td>
                               <td className="p-3 text-slate-600 dark:text-slate-300 border-l-4 border-l-slate-300 dark:border-l-slate-600 bg-rose-50/20 dark:bg-rose-950/10">{!isStockIn ? formatLegacyDate(log.date) : ''}</td>
                               <td className="p-3 text-slate-600 dark:text-slate-300 bg-rose-50/20 dark:bg-rose-950/10">{!isStockIn ? source : ''}</td>
                               <td className="p-3 text-slate-600 dark:text-slate-300">{!isStockIn ? log.partner : ''}</td>
                               <td className="p-3 text-right font-bold text-rose-600 dark:text-rose-400">{!isStockIn ? log.qty_out : ''}</td>
                               <td className="p-3 text-right text-slate-600 dark:text-slate-300">{!isStockIn ? formatLegacyPrice(log) : ''}</td>
-                              <td className="p-3 text-center text-slate-600 dark:text-slate-300">{!isStockIn ? 'Centralized' : ''}</td>
+                              <td className="p-3 text-center text-slate-600 dark:text-slate-300">{!isStockIn ? inventoryScopeLabel(log) : ''}</td>
                               <td className="p-3 text-right font-bold text-slate-700 dark:text-slate-200 border-l-4 border-l-slate-300 dark:border-l-slate-600 bg-slate-50 dark:bg-slate-800/60">{log.balance ?? ''}</td>
                             </tr>
                           );
@@ -1346,7 +1365,7 @@ const StockMovementView: React.FC = () => {
             <div className="stock-movement-print-title">
               <h3>STOCK MOVEMENT</h3>
               <h5>Inventory:</h5>
-              <h5>Centralized</h5>
+              <h5>{warehouseFilter === 'all' ? 'Centralized' : warehouseFilter}</h5>
             </div>
           </div>
 

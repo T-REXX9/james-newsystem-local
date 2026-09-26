@@ -969,7 +969,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
               </h3>
               <div className="flex items-center gap-3">
                 <span className="flex items-center gap-2 text-sm"><i className={`h-3 w-3 rounded-full ${activeCategory.dot}`} />{activeCategory.state}</span>
-                {showMasterActions && activeCategory.id !== 'blocked' && (
+                {showMasterActions && (
                   <div className="flex items-center gap-2">
                     <select
                       aria-label={`Assign sales agent to ${activeCategory.label}`}
