@@ -29,6 +29,7 @@ vi.mock('../../services/customerDatabaseLocalApiService', () => ({
     { id: 'agent-1', full_name: 'Joan Jerusalem', email: '', role: 'Sales Agent' },
     { id: 'agent-2', full_name: 'Apostol Ella', email: '', role: 'Sales Agent' },
   ]),
+  getAssignmentHistory: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('../../services/vipTierSettingsService', () => ({

@@ -20,7 +20,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { createCustomerLogForDailyCall, fetchCustomersForDailyCall, fetchDailyCallMasterList, getCachedDailyCallMasterList } from '../services/dailyCallMonitoringService';
-import { bulkUpdateContacts, createContact, fetchSalesAgents, updateContact } from '../services/customerDatabaseLocalApiService';
+import { bulkUpdateContacts, createContact, fetchSalesAgents, getAssignmentHistory, updateContact } from '../services/customerDatabaseLocalApiService';
 import { fetchTeams, TeamRecord } from '../services/teamLocalApiService';
 import { getVipTierConfig } from '../services/vipTierSettingsService';
 import { Contact, CustomerStatus, DailyCallCustomerRow, DailyCallMasterCustomerRow, DailyCallMasterListMeta, UserProfile, VipTierConfig } from '../types';
@@ -1119,6 +1119,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                             saving={assigningCustomerId === row.id}
                             disabled={viewOnlyRow || !isMasterUserAccount(currentUser)}
                             onAssign={handleAssignAgent}
+                            fetchHistory={getAssignmentHistory}
                           />
                           {row.assignedTeam && <p className="mt-1 text-[10px] font-bold text-indigo-700">Team: {row.assignedTeam}</p>}
                           {row.assignedAgentTeam && <p className="mt-1 text-[10px] font-bold text-indigo-700">Agent team: {row.assignedAgentTeam}</p>}

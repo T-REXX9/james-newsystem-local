@@ -886,6 +886,51 @@ export const fetchContactTransactions = async (contactId: string): Promise<Conta
   }
 };
 
+export interface AgentAssignmentHistoryEntry {
+  agentId: string;
+  agentName: string;
+  assignedByName: string;
+  assignedAt: string;
+}
+
+interface ApiAssignmentHistoryRow {
+  agent_id?: string;
+  agent_name?: string;
+  assigned_by_name?: string;
+  assigned_at?: string;
+}
+
+interface ApiAssignmentHistoryResponse {
+  data?: { items?: ApiAssignmentHistoryRow[] };
+}
+
+/**
+ * Fetch a customer's agent-assignment history, newest first, so the reassign
+ * dropdown can show which agents held this customer and when.
+ */
+export const getAssignmentHistory = async (
+  customerId: string,
+): Promise<AgentAssignmentHistoryEntry[]> => {
+  const id = String(customerId || '').trim();
+  if (!id) return [];
+  const query = new URLSearchParams({ main_id: String(API_MAIN_ID) });
+  try {
+    const payload = await requestJson<ApiAssignmentHistoryResponse>(
+      `${API_BASE_URL}/customer-database/${encodeURIComponent(id)}/assignment-history?${query.toString()}`
+    );
+    const rows = Array.isArray(payload?.data?.items) ? payload.data.items : [];
+    return rows.map((row) => ({
+      agentId: String(row?.agent_id || ''),
+      agentName: String(row?.agent_name || '').trim(),
+      assignedByName: String(row?.assigned_by_name || '').trim(),
+      assignedAt: String(row?.assigned_at || ''),
+    }));
+  } catch (err) {
+    console.error('Error fetching assignment history via local API:', err);
+    return [];
+  }
+};
+
 export const fetchPurchasedItems = async (
   contactId: string,
   search = '',
