@@ -218,7 +218,7 @@ describe('DailyCallMasterListView', () => {
     await user.click(await screen.findByRole('button', { name: 'Unverified Prospects (1)' }));
     await user.click(await screen.findByRole('button', { name: 'Approve verification for Pending Prospect Shop' }));
 
-    expect(updateContact).toHaveBeenCalledWith('pending-verified-1', { verification: 'Verified' });
+    expect(updateContact).toHaveBeenCalledWith('pending-verified-1', { verification: 'Verified' }, 'master-1');
   });
 
   it('classifies current VIP status from last month sales instead of stored price group', async () => {

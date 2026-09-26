@@ -405,12 +405,28 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   }, [loadRows]);
 
   const handleVerifyExistingProspect = useCallback(async (row: DailyCallMasterCustomerRow) => {
-    await updateContact(row.id, { verification: 'Verified' });
-    setRows((prev) => prev.map((item) =>
-      item.id === row.id ? { ...item, verification: 'Verified' } : item
-    ));
-    await loadRows(false, true);
-  }, [loadRows]);
+    setLoadingCustomerId(row.id);
+    try {
+      await updateContact(row.id, { verification: 'Verified' }, currentUser?.id);
+      setRows((prev) => prev.map((item) =>
+        item.id === row.id ? { ...item, verification: 'Verified', verifiedInSystem: true } : item
+      ));
+      await loadRows(false, true);
+      addToast({
+        type: 'success',
+        title: 'Prospect verified',
+        description: `${row.shopName} moved to Verified Prospects.`,
+      });
+    } catch {
+      addToast({
+        type: 'error',
+        title: 'Unable to verify prospect',
+        description: 'Please try again or verify from Customer Database.',
+      });
+    } finally {
+      setLoadingCustomerId(null);
+    }
+  }, [addToast, currentUser?.id, loadRows]);
 
   const handleConfirmDoNotContact = useCallback(async () => {
     const row = pendingDoNotContactRow;
