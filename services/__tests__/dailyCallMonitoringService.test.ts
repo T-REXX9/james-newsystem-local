@@ -206,13 +206,36 @@ describe('dailyCallMonitoringService', () => {
   it('falls back to the legacy customer endpoint when the aggregate snapshot is unavailable', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({ error: 'snapshot unavailable' }) } as Response)
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: [{ id: '1', shop_name: 'Fallback Shop' }] }) } as Response);
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: [{ id: '1', shop_name: 'Fallback Shop' }] }) } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: {
+            items: [{
+              id: '1',
+              shop_name: 'Fallback Shop',
+              list_category: 'priority',
+              current_month_sales: 10_200,
+              purchase_count: 1,
+              priority_transaction_count: 1,
+              ledger_transaction_count: 1,
+            }],
+            meta: {},
+          },
+        }),
+      } as Response);
 
     const result = await fetchAgentSnapshotForDailyCall('63');
 
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
     expect(String(fetchSpy.mock.calls[1][0])).toContain('/daily-call-monitoring/excel?');
     expect(result.contacts).toMatchObject([{ id: '1', shopName: 'Fallback Shop' }]);
+    expect(String(fetchSpy.mock.calls[2][0])).toContain('/daily-call-monitoring/master-list?');
+    expect(result.masterList).toMatchObject([{
+      id: '1',
+      listCategory: 'priority',
+      currentMonthSales: 10_200,
+    }]);
     expect(result.callLogs).toEqual([]);
   });
 

@@ -698,10 +698,13 @@ export const fetchAgentSnapshotForDailyCall = async (
   try {
     const payload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/agent-snapshot?${params.toString()}`, { signal: options?.signal });
     const data = payload?.data || {};
+    const masterList = Array.isArray(data?.master_list)
+      ? data.master_list.map(mapDailyCallMasterCustomerRow)
+      : (await fetchDailyCallMasterList()).items;
 
     return {
       contacts: Array.isArray(data?.contacts) ? data.contacts.map(mapDailyCallCustomerRow) : [],
-      masterList: Array.isArray(data?.master_list) ? data.master_list.map(mapDailyCallMasterCustomerRow) : [],
+      masterList,
       callLogs: Array.isArray(data?.call_logs) ? data.call_logs.map(mapCallLog) : [],
       inquiries: Array.isArray(data?.inquiries) ? data.inquiries.map(mapInquiry) : [],
       purchases: Array.isArray(data?.purchases) ? data.purchases.map(mapPurchase) : [],
@@ -722,9 +725,16 @@ export const fetchAgentSnapshotForDailyCall = async (
     try {
       const fallbackPayload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/excel?${fallbackParams.toString()}`, { signal: options?.signal });
       const fallbackData = Array.isArray(fallbackPayload?.data) ? fallbackPayload.data : [];
+      let masterList: DailyCallMasterCustomerRow[] = [];
+      try {
+        masterList = (await fetchDailyCallMasterList()).items;
+      } catch {
+        // Keep the established customer-list fallback usable when this older
+        // deployment also lacks the master-list endpoint.
+      }
       return {
         contacts: fallbackData.map(mapDailyCallCustomerRow),
-        masterList: [],
+        masterList,
         callLogs: [],
         inquiries: [],
         purchases: [],
