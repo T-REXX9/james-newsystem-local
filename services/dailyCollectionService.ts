@@ -164,6 +164,14 @@ const toNumber = (value: unknown, fallback = 0): number => {
   return Number.isFinite(n) ? n : fallback;
 };
 
+const toDisplayCollectionType = (type: unknown, checkNo: unknown): string => {
+  const normalizedType = String(type || '').trim();
+  if (normalizedType.toLowerCase() === 'check' && String(checkNo || '').trim() === '') {
+    return 'TT';
+  }
+  return normalizedType;
+};
+
 const getUserContext = () => {
   const session = getLocalAuthSession();
   const userId = Number(session?.context?.user?.id || 1);
@@ -240,7 +248,7 @@ export const dailyCollectionService = {
       lcustomer: String(row?.lcustomer || ''),
       lcustomer_fname: String(row?.lcustomer_fname || ''),
       lcustomer_lname: String(row?.lcustomer_lname || ''),
-      ltype: String(row?.ltype || ''),
+      ltype: toDisplayCollectionType(row?.ltype, row?.lchk_no),
       lbank: String(row?.lbank || ''),
       lchk_no: String(row?.lchk_no || ''),
       lchk_date: String(row?.lchk_date || ''),
