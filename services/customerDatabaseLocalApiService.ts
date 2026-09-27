@@ -541,7 +541,26 @@ const requestJson = async <T>(url: string, init?: RequestInit): Promise<T> => {
   if (!response.ok) {
     throw new Error(await parseApiErrorMessage(response));
   }
-  return (await response.json()) as T;
+  
+  // Parse response, handling both JSON and non-JSON responses (e.g., error pages)
+  const contentType = response.headers.get('content-type');
+  const isJson = contentType?.includes('application/json');
+  
+  if (!isJson) {
+    const text = await response.text();
+    if (text.trim().length === 0) {
+      return {} as T;
+    }
+    // If we got HTML or other non-JSON, treat as an error
+    throw new Error(`API returned non-JSON response (${contentType || 'unknown'}): ${text.substring(0, 200)}`);
+  }
+  
+  try {
+    return (await response.json()) as T;
+  } catch (e) {
+    const text = await response.text();
+    throw new Error(`Failed to parse API response as JSON: ${text.substring(0, 200)}`);
+  }
 };
 
 export interface SimilarCustomerNameMatch {
