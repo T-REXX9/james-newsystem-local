@@ -65,6 +65,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
   const [salesAgents, setSalesAgents] = useState<UserProfile[]>([]);
   const [showDuplicateApprovalModal, setShowDuplicateApprovalModal] = useState(false);
   const [pendingDuplicates, setPendingDuplicates] = useState<any[]>([]);
+  const checkCompanyNameTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const { addToast } = useToast();
   
   type ContactPersonDraft = Omit<ContactPerson, 'id'> & { id?: string };
@@ -225,6 +226,15 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     };
   }, [isOpen, canAssignSalesAgent]);
 
+  // Cleanup debounce timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (checkCompanyNameTimeoutRef.current) {
+        clearTimeout(checkCompanyNameTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Safe status options
   const statusOptions = (CustomerStatus && Object.keys(CustomerStatus).length > 0)
     ? Object.values(CustomerStatus)
@@ -327,6 +337,9 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
         isHidden: !!formData.isHidden,
         debtType: (formData.debtType as any) || 'Good',
         duplicateOverrideReason: duplicateOverrideReason.trim(),
+        // Snake_case versions for API compatibility with backend duplicate detection
+        duplicate_override_reason: duplicateOverrideReason.trim(),
+        duplicate_override_confirmed: similarNameMatches.length > 0 && duplicateOverrideReason.trim() !== '',
 
         // Nested Data
         contactPersons: fullContactPersons,
@@ -406,6 +419,16 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     } finally {
       setCheckingCompanyName(false);
     }
+  };
+
+  // Debounced wrapper: delays API call by 300ms to avoid multiple rapid requests when user tabs through fields
+  const debouncedCheckCompanyName = (company: string) => {
+    if (checkCompanyNameTimeoutRef.current) {
+      clearTimeout(checkCompanyNameTimeoutRef.current);
+    }
+    checkCompanyNameTimeoutRef.current = setTimeout(() => {
+      void checkCompanyName(company);
+    }, 300);
   };
 
   const validateForm = (): boolean => {
@@ -509,7 +532,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                              onChange={e => setFormData({...formData, company: e.target.value})}
                              onBlur={e => {
                                handleBlur('company', e.target.value);
-                               void checkCompanyName(e.target.value);
+                               debouncedCheckCompanyName(e.target.value);
                              }}
                              placeholder="e.g. Acme Corp"
                            />
@@ -612,7 +635,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="md:col-span-3">
                           <label className="label">Address (Street/Bldg)</label>
-                          <input className="input" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} onBlur={() => void checkCompanyName(formData.company || '')} />
+                          <input className="input" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} onBlur={() => debouncedCheckCompanyName(formData.company || '')} />
                       </div>
                       <div>
                           <label className="label">Province</label>
@@ -829,7 +852,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                                          onBlur={e => {
                                            if (idx !== 0) return;
                                            handleBlur('primaryMobile', e.target.value);
-                                           void checkCompanyName(formData.company || '');
+                                           debouncedCheckCompanyName(formData.company || '');
                                          }}
                                        />
                                        {idx === 0 && validationErrors.primaryMobile && (
