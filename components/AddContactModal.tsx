@@ -15,6 +15,7 @@ import { fetchSalesAgents, fetchSimilarCustomerNames, type SimilarCustomerNameMa
 import RecordImagePicker from './RecordImagePicker';
 import { getLocalAuthSession } from '../services/localAuthService';
 import { isMasterUserAccount } from '../constants';
+import DuplicateApprovalModal from './DuplicateApprovalModal';
 
 const TRANSACTION_TYPE_OPTIONS = ['Order Slip', 'Invoice'] as const;
 
@@ -62,6 +63,8 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
   const [checkingCompanyName, setCheckingCompanyName] = useState(false);
   const [duplicateOverrideReason, setDuplicateOverrideReason] = useState('');
   const [salesAgents, setSalesAgents] = useState<UserProfile[]>([]);
+  const [showDuplicateApprovalModal, setShowDuplicateApprovalModal] = useState(false);
+  const [pendingDuplicates, setPendingDuplicates] = useState<any[]>([]);
   const { addToast } = useToast();
   
   type ContactPersonDraft = Omit<ContactPerson, 'id'> & { id?: string };
@@ -470,6 +473,8 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
   };
 
   const modal = (
+    <>
+      {/* Main AddContact Modal */}
     <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
         
@@ -924,7 +929,42 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
 
       </div>
     </div>
+
+      <DuplicateApprovalModal
+        isOpen={showDuplicateApprovalModal}
+        onClose={() => setShowDuplicateApprovalModal(false)}
+        duplicates={pendingDuplicates}
+        onApprove={async (duplicateId, action) => {
+          try {
+            const endpoint = action === 'merge' 
+              ? `/api/duplicate-requests/${duplicateId}/approve`
+              : `/api/duplicate-requests/${duplicateId}/reject`;
+            
+            const response = await fetch(endpoint, { method: 'POST' });
+            if (response.ok) {
+              addToast({
+                title: 'Success',
+                description: `Duplicate ${action === 'merge' ? 'approved' : 'rejected'} successfully`,
+                type: 'success',
+              });
+              setPendingDuplicates(pendingDuplicates.filter(d => d.id !== duplicateId));
+            }
+          } catch (error) {
+            addToast({
+              title: 'Error',
+              description: 'Failed to process duplicate approval',
+              type: 'error',
+            });
+          }
+        }}
+        snoozeEnabled={true}
+        onSnooze={async (duration) => {
+          // Implementation for snooze functionality
+        }}
+      />
+    </>
   );
+
   if (typeof document === 'undefined' || !document.body) return null;
   return createPortal(modal, document.body);
 };
