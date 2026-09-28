@@ -693,6 +693,17 @@ export const fetchDailyCallMasterList = async (
           referBy: String(r?.refer_by ?? ''),
           salesPersonId: String(r?.sales_person_id ?? ''),
           duplicateOverrideReason: String(r?.duplicate_override_reason ?? ''),
+          conflictingCustomers: Array.isArray(r?.conflicting_customers)
+            ? (r.conflicting_customers as Record<string, unknown>[]).map((c): PendingDuplicateConflict => ({
+                sessionId: String(c?.session_id ?? ''),
+                company: String(c?.company ?? ''),
+                mobile: String(c?.mobile ?? ''),
+                phone: String(c?.phone ?? ''),
+                address: String(c?.address ?? ''),
+                verification: String(c?.verification ?? ''),
+                profileType: String(c?.profile_type ?? ''),
+              }))
+            : [],
         })),
         meta: {
           fromDate: String(meta?.from_date || params.fromDate || '2025-10-01'),
