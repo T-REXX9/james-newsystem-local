@@ -76,7 +76,7 @@ const mapApiOrderSummary = (raw: any): SalesOrder => {
     delivery_address: String(raw?.delivery_address || ''),
     reference_no: String(raw?.reference_no || ''),
     customer_reference: String(raw?.customer_reference || ''),
-    send_by: '',
+    send_by: String(raw?.send_by || ''),
     price_group: String(raw?.price_group || ''),
     credit_limit: toNumber(raw?.credit_limit, 0),
     terms: String(raw?.terms || ''),
