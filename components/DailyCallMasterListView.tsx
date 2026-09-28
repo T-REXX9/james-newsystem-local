@@ -306,6 +306,10 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const initialCachedResult = useMemo(() => getCachedDailyCallMasterList({ fromDate }), []);
   const [rows, setRows] = useState<DailyCallMasterCustomerRow[]>(() => initialCachedResult?.items || []);
   const [pendingDuplicateProspects, setPendingDuplicateProspects] = useState<PendingDuplicateProspect[]>(() => initialCachedResult?.pendingDuplicateProspects || []);
+  const reviewingDuplicateRef = useRef(false);
+  const [reviewingDuplicate, setReviewingDuplicate] = useState(false);
+  const reviewedDuplicateIds = useRef(new Set<string>());
+  const loadSequence = useRef(0);
   const [meta, setMeta] = useState<DailyCallMasterListMeta>(() => initialCachedResult?.meta || { fromDate, toDate: '', count: 0 });
   const rowsRef = useRef<DailyCallMasterCustomerRow[]>(initialCachedResult?.items || []);
   const [search, setSearch] = useState('');
@@ -362,18 +366,20 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   }, [rows]);
 
   const loadRows = useCallback(async (withLoading = true, forceRefresh = false) => {
+    const sequence = ++loadSequence.current;
     if (withLoading && (forceRefresh || rowsRef.current.length === 0)) setLoading(true);
     setError(null);
     try {
       // Always fetch the full master list; search filters client-side so typing stays instant.
       const result = await fetchDailyCallMasterList({ fromDate, search: '', forceRefresh });
+      if (sequence !== loadSequence.current) return;
       setRows(result.items);
-      setPendingDuplicateProspects(result.pendingDuplicateProspects || []);
+      setPendingDuplicateProspects((result.pendingDuplicateProspects || []).filter(row => !reviewedDuplicateIds.current.has(row.requestId)));
       setMeta(result.meta);
     } catch {
-      setError('Unable to load master list.');
+      if (sequence === loadSequence.current) setError('Unable to load master list.');
     } finally {
-      if (withLoading) setLoading(false);
+      if (sequence === loadSequence.current) setLoading(false);
     }
   }, []);
 
@@ -394,6 +400,26 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     window.addEventListener(CUSTOMER_UPDATED_EVENT, refreshCustomer);
     return () => { active = false; window.removeEventListener(CUSTOMER_UPDATED_EVENT, refreshCustomer); };
   }, [loadRows, selectedCustomer?.id]);
+
+  const reviewDuplicate = async (pending: PendingDuplicateProspect, decision: 'approved' | 'rejected') => {
+    if (reviewingDuplicateRef.current || !canUseMasterDailyCallActions(currentUser)) return;
+    reviewingDuplicateRef.current = true;
+    setReviewingDuplicate(true);
+    try {
+      await reviewCustomerRequest(pending.contactId, pending.requestId, decision, '');
+      reviewedDuplicateIds.current.add(pending.requestId);
+      setPendingDuplicateProspects(current => current.filter(row => row.requestId !== pending.requestId));
+      addToast({ type: 'success', title: decision === 'approved' ? 'Approved' : 'Rejected', description: decision === 'approved' ? `${pending.company} has been added as a prospect.` : `${pending.company} duplicate request rejected.` });
+    } catch (err) {
+      const message = getUserFacingErrorMessage(err, 'Review failed');
+      if (!message) return;
+      addToast({ type: 'error', title: 'Review failed', description: message });
+    } finally {
+      await loadRows(false, true);
+      reviewingDuplicateRef.current = false;
+      setReviewingDuplicate(false);
+    }
+  };
 
   const handleSubmitProspect = useCallback(async (data: Omit<Contact, 'id'>) => {
     const created = await createContact({
@@ -1081,32 +1107,18 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                             <button
                               type="button"
                               title="Approve"
-                              onClick={async () => {
-                                try {
-                                  await reviewCustomerRequest(pending.contactId, pending.requestId, 'approved', '');
-                                  addToast({ type: 'success', title: 'Approved', description: `${pending.company} has been added as a prospect.` });
-                                  void loadRows(false, true);
-                                } catch {
-                                  addToast({ type: 'error', title: 'Failed to approve' });
-                                }
-                              }}
-                              className="rounded-full bg-green-100 p-1.5 text-green-700 hover:bg-green-200"
+                              disabled={reviewingDuplicate || !canUseMasterDailyCallActions(currentUser)}
+                              onClick={() => void reviewDuplicate(pending, 'approved')}
+                              className="rounded-full bg-green-100 p-1.5 text-green-700 hover:bg-green-200 disabled:opacity-50"
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
                             </button>
                             <button
                               type="button"
                               title="Reject"
-                              onClick={async () => {
-                                try {
-                                  await reviewCustomerRequest(pending.contactId, pending.requestId, 'rejected', '');
-                                  addToast({ type: 'success', title: 'Rejected', description: `${pending.company} duplicate request rejected.` });
-                                  void loadRows(false, true);
-                                } catch {
-                                  addToast({ type: 'error', title: 'Failed to reject' });
-                                }
-                              }}
-                              className="rounded-full bg-red-100 p-1.5 text-red-700 hover:bg-red-200"
+                              disabled={reviewingDuplicate || !canUseMasterDailyCallActions(currentUser)}
+                              onClick={() => void reviewDuplicate(pending, 'rejected')}
+                              className="rounded-full bg-red-100 p-1.5 text-red-700 hover:bg-red-200 disabled:opacity-50"
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                             </button>

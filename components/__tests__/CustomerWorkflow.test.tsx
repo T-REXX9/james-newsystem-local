@@ -1,17 +1,40 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import ApprovalRequestsView from '../ApprovalRequestsView';
+import { fetchContacts } from '../../services/customerDatabaseLocalApiService';
 import CustomerHistoryTab from '../CustomerHistoryTab';
 import CustomerRequestsTab from '../CustomerRequestsTab';
-import { fetchCustomerInquiries, fetchCustomerReturns, fetchCustomerRequests, reviewCustomerRequest, CustomerRequest } from '../../services/customerWorkflowLocalApiService';
+import { fetchAllCustomerRequests, fetchCustomerInquiries, fetchCustomerReturns, fetchCustomerRequests, reviewCustomerRequest, CustomerRequest } from '../../services/customerWorkflowLocalApiService';
 import type { UserProfile } from '../../types';
-vi.mock('../../services/customerWorkflowLocalApiService', () => ({ fetchCustomerInquiries: vi.fn(), fetchCustomerReturns: vi.fn(), fetchCustomerRequests: vi.fn(), reviewCustomerRequest: vi.fn() }));
+vi.mock('../../services/customerWorkflowLocalApiService', () => ({ fetchAllCustomerRequests: vi.fn(), fetchCustomerInquiries: vi.fn(), fetchCustomerReturns: vi.fn(), fetchCustomerRequests: vi.fn(), reviewCustomerRequest: vi.fn() }));
+vi.mock('../../services/customerDatabaseLocalApiService', () => ({ fetchContacts: vi.fn() }));
 const pending: CustomerRequest = { id: 'r1', contact_id: 'c1', kind: 'customer_update', payload: { company: 'New company' }, status: 'pending', submitted_by_name: 'Agent', submitted_at: '2026-08-29', reviewed_at: null, review_note: '' };
 const owner = { id: '1', role: 'Company Owner' } as UserProfile;
 beforeEach(() => { vi.resetAllMocks(); });
 afterEach(cleanup);
 describe('customer workflow screens', () => {
+  it.each(['profile', 'centralized'])('prevents concurrent %s reviews and reloads server state after a conflict', async (view) => {
+    const fetchRequests = view === 'profile' ? vi.mocked(fetchCustomerRequests) : vi.mocked(fetchAllCustomerRequests);
+    fetchRequests.mockResolvedValueOnce([pending]).mockResolvedValueOnce([{ ...pending, status: 'approved' }]);
+    vi.mocked(fetchContacts).mockResolvedValue([]);
+    let fail!: (reason: Error) => void;
+    vi.mocked(reviewCustomerRequest).mockImplementationOnce(() => new Promise((_, reject) => { fail = reject; }));
+    render(view === 'profile' ? <CustomerRequestsTab contactId="c1" currentUser={owner} /> : <ApprovalRequestsView currentUser={owner} />);
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Details|Hide/ })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }));
+    const approve = await screen.findByRole('button', { name: 'Approve' });
+    fireEvent.click(approve);
+    fireEvent.click(approve);
+    fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
+    expect(reviewCustomerRequest).toHaveBeenCalledTimes(1);
+    expect(approve).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Reject' })).toBeDisabled();
+    fail(new Error('Request is already reviewed'));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument());
+    expect(fetchRequests).toHaveBeenCalledTimes(2);
+  });
   it('distinguishes a failed history request from an empty database and supports retry', async () => {
     const user = userEvent.setup();
     vi.mocked(fetchCustomerReturns).mockRejectedValueOnce(new Error('Database unavailable')).mockResolvedValueOnce([]);
