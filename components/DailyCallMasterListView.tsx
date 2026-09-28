@@ -24,7 +24,7 @@ import { bulkUpdateContacts, createContact, fetchSalesAgents, getAssignmentHisto
 import { createDuplicateProspectRequest } from '../services/customerWorkflowLocalApiService';
 import { fetchTeams, TeamRecord } from '../services/teamLocalApiService';
 import { getVipTierConfig } from '../services/vipTierSettingsService';
-import { Contact, CustomerStatus, DailyCallCustomerRow, DailyCallMasterCustomerRow, DailyCallMasterListMeta, UserProfile, VipTierConfig } from '../types';
+import { Contact, CustomerStatus, DailyCallCustomerRow, DailyCallMasterCustomerRow, DailyCallMasterListMeta, PendingDuplicateProspect, UserProfile, VipTierConfig } from '../types';
 import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
 import { resolveVipDiscountLevel } from '../utils/vipStanding';
 import { DO_NOT_CONTACT_LABEL, isBlockedDailyCallMasterRow } from '../utils/dailyCallBlockedCustomer';
@@ -304,6 +304,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const { addToast } = useToast();
   const initialCachedResult = useMemo(() => getCachedDailyCallMasterList({ fromDate }), []);
   const [rows, setRows] = useState<DailyCallMasterCustomerRow[]>(() => initialCachedResult?.items || []);
+  const [pendingDuplicateProspects, setPendingDuplicateProspects] = useState<PendingDuplicateProspect[]>(() => initialCachedResult?.pendingDuplicateProspects || []);
   const [meta, setMeta] = useState<DailyCallMasterListMeta>(() => initialCachedResult?.meta || { fromDate, toDate: '', count: 0 });
   const rowsRef = useRef<DailyCallMasterCustomerRow[]>(initialCachedResult?.items || []);
   const [search, setSearch] = useState('');
@@ -366,6 +367,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
       // Always fetch the full master list; search filters client-side so typing stays instant.
       const result = await fetchDailyCallMasterList({ fromDate, search: '', forceRefresh });
       setRows(result.items);
+      setPendingDuplicateProspects(result.pendingDuplicateProspects || []);
       setMeta(result.meta);
     } catch {
       setError('Unable to load master list.');
@@ -401,6 +403,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     if (isPendingDuplicateProspectApproval(created)) {
       setShowAddProspectModal(false);
       addToast({ type: 'success', title: 'Duplicate prospect submitted', description: 'It is waiting for Master User approval.' });
+      void loadRows(false, true);
       return created;
     }
     setShowAddProspectModal(false);
@@ -953,7 +956,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
               >
                 <span>{category.label}</span>
                 <span className={`rounded-full px-2.5 py-0.5 text-xs text-white ${isActive ? category.iconBg : 'bg-slate-500'}`}>
-                  {category.rows.length}
+                  {category.id === 'unverified' ? category.rows.length + pendingDuplicateProspects.length : category.rows.length}
                 </span>
               </button>
             );
@@ -1053,6 +1056,29 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                   </tr>
                 </thead>
                 <tbody>
+                  {activeCategory.id === 'unverified' && pendingDuplicateProspects.length > 0 && pendingDuplicateProspects.map((pending) => (
+                    <tr key={`pending-dup-${pending.requestId}`} className="border-t border-amber-200 bg-amber-50 align-top">
+                      <td className="px-3 py-2.5 text-sm font-bold text-amber-700">—</td>
+                      <td className="px-2 py-2.5">
+                        <div className="font-semibold text-amber-900">{pending.company}</div>
+                        {pending.mobile && <div className="text-xs text-slate-500">{pending.mobile}</div>}
+                        <div className="mt-1 inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                          Duplicate Approval Pending
+                        </div>
+                        {pending.duplicateOverrideReason && (
+                          <div className="mt-1 text-xs text-amber-700">Reason: {pending.duplicateOverrideReason}</div>
+                        )}
+                      </td>
+                      <td className="px-2 py-2.5 text-xs text-slate-400">—</td>
+                      <td className="px-2 py-2.5 text-xs text-slate-400">—</td>
+                      <td className="px-2 py-2.5 text-xs text-slate-400">—</td>
+                      <td className="px-2 py-2.5 text-xs text-slate-500">{pending.submittedByName || '—'}</td>
+                      <td className="px-2 py-2.5 text-xs text-slate-400">—</td>
+                      <td className="px-2 py-2.5 text-xs text-slate-400">{pending.referBy || '—'}</td>
+                      <td className="px-2 py-2.5 text-xs text-slate-400">—</td>
+                      <td className="px-2 py-2.5 text-center text-xs text-slate-400">—</td>
+                    </tr>
+                  ))}
                   {visibleRows.map((row, index) => {
                     const rowBlocked = isBlockedDailyCallMasterRow(row);
                     const viewOnlyRow = activeCategory.id === 'blocked' || rowBlocked || Boolean(row.dataIntegrityException);

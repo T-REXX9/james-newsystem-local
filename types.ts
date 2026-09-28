@@ -2605,3 +2605,18 @@ export interface AIAgentCapabilities {
   max_discount_percentage: number;
   requires_human_approval_for: string[];
 }
+
+export interface PendingDuplicateProspect {
+  requestId: string;
+  contactId: string;
+  submittedAt: string;
+  submittedBy: number;
+  submittedByName: string;
+  company: string;
+  mobile: string;
+  phone: string;
+  address: string;
+  referBy: string;
+  salesPersonId: string;
+  duplicateOverrideReason: string;
+}
