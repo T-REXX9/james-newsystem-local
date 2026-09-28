@@ -83,6 +83,53 @@ describe('DailyCallMasterListView', () => {
     });
   });
 
+  it('aligns pending approvals and opens each conflicting customer profile', async () => {
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: '2026-09-28', count: 0 },
+      items: [],
+      pendingDuplicateProspects: [{
+        requestId: 'request-1', contactId: 'pending-1', company: 'Pending Company',
+        mobile: '0917', phone: '', address: '', submittedAt: '', submittedBy: 1,
+        submittedByName: 'Submitting Staff', referBy: 'Google', salesPersonId: 'agent-1',
+        duplicateOverrideReason: 'Different company',
+        conflictingCustomers: [
+          { sessionId: 'customer/1', company: 'Existing Company', mobile: '0918', phone: '', address: '', verification: 'Verified', profileType: 'Customer' },
+          { sessionId: 'prospect-2', company: 'Existing Prospect', mobile: '', phone: '12345', address: '', verification: 'Unverified', profileType: 'Prospect' },
+        ],
+      }],
+    });
+    const navigate = vi.fn();
+    window.addEventListener('workflow:navigate', navigate);
+    const openWindow = vi.spyOn(window, 'open').mockImplementation(() => null);
+    try {
+      render(<DailyCallMasterListView currentUser={masterUser} />);
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole('button', { name: 'Unverified Prospects (1)' }));
+      const row = screen.getByText('Pending Company').closest('tr')!;
+      const cells = within(row).getAllByRole('cell');
+      expect(cells).toHaveLength(screen.getAllByRole('columnheader').length);
+      expect(cells[6]).toHaveTextContent('Joan Jerusalem');
+      expect(cells[8]).toHaveTextContent('Google');
+      expect(within(cells[10]).getByRole('button', { name: 'Approve' })).toBeInTheDocument();
+      expect(within(cells[10]).getByRole('button', { name: 'Reject' })).toBeInTheDocument();
+      expect(screen.getByText('Submitted by: Submitting Staff')).toBeInTheDocument();
+      for (const [company, contactId] of [['Existing Company', 'customer/1'], ['Existing Prospect', 'prospect-2']]) {
+        const link = screen.getByRole('link', { name: `Open ${company} in customer database` });
+        expect(link).toHaveAttribute('href', `#/sales-database-customer-database?contactId=${encodeURIComponent(contactId)}`);
+        await user.click(link);
+        expect(navigate.mock.lastCall?.[0].detail).toEqual({
+          tab: 'sales-database-customer-database', payload: { contactId }, mode: 'push',
+        });
+      }
+      await user.click(screen.getByRole('button', { name: 'Open Existing Company in a new window' }));
+      expect(openWindow).toHaveBeenCalledWith(expect.stringContaining('contactId=customer%2F1'), '_blank', 'noopener,noreferrer');
+      expect(screen.getByText('12345')).toBeInTheDocument();
+    } finally {
+      window.removeEventListener('workflow:navigate', navigate);
+      openWindow.mockRestore();
+    }
+  });
+
   it('keeps the column header in the master list scroll region', async () => {
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
       meta: { fromDate: '2025-10-01', toDate: '2026-09-10', count: 1 },
