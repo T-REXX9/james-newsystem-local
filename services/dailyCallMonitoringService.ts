@@ -10,6 +10,7 @@ import {
   DailyCallCustomerRow,
   DailyCallMasterCustomerRow,
   DailyCallMasterListMeta,
+  PendingDuplicateProspect,
   Inquiry,
   LBCRTORecord,
   Purchase,
@@ -57,6 +58,7 @@ export interface DailyCallMasterListParams {
 
 export interface DailyCallMasterListResult {
   items: DailyCallMasterCustomerRow[];
+  pendingDuplicateProspects: PendingDuplicateProspect[];
   meta: DailyCallMasterListMeta;
 }
 
@@ -675,8 +677,23 @@ export const fetchDailyCallMasterList = async (
     .then((payload) => {
       const data = payload?.data || {};
       const meta = data?.meta || {};
+      const rawPending = Array.isArray(data?.pending_duplicate_prospects) ? data.pending_duplicate_prospects : [];
       const result = {
         items: Array.isArray(data?.items) ? data.items.map(mapDailyCallMasterCustomerRow) : [],
+        pendingDuplicateProspects: rawPending.map((r: Record<string, unknown>): PendingDuplicateProspect => ({
+          requestId: String(r?.request_id ?? ''),
+          contactId: String(r?.contact_id ?? ''),
+          submittedAt: String(r?.submitted_at ?? ''),
+          submittedBy: Number(r?.submitted_by ?? 0),
+          submittedByName: String(r?.submitted_by_name ?? ''),
+          company: String(r?.company ?? ''),
+          mobile: String(r?.mobile ?? ''),
+          phone: String(r?.phone ?? ''),
+          address: String(r?.address ?? ''),
+          referBy: String(r?.refer_by ?? ''),
+          salesPersonId: String(r?.sales_person_id ?? ''),
+          duplicateOverrideReason: String(r?.duplicate_override_reason ?? ''),
+        })),
         meta: {
           fromDate: String(meta?.from_date || params.fromDate || '2025-10-01'),
           toDate: String(meta?.to_date || ''),
