@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ClipboardList, Plus, RefreshCw, CheckCircle2, XCircle, Clock3,
     Send, Tag, FileText, MessageSquare, AlertCircle, ChevronDown, ChevronUp,
@@ -61,6 +61,7 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
     const [rows, setRows] = useState<CustomerRequest[]>([]);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(true);
+    const reviewingRef = useRef(false);
     const [busy, setBusy] = useState('');
     const [notes, setNotes] = useState<Record<string, string>>({});
     const [refresh, setRefresh] = useState(0);
@@ -97,11 +98,13 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
     }, [createCategory]);
 
     const review = async (row: CustomerRequest, decision: 'approved' | 'rejected') => {
-        if (!canApprove) return;
+        if (!canApprove || reviewingRef.current || row.status !== 'pending') return;
+        reviewingRef.current = true;
         setBusy(row.id);
         setError('');
         try {
             await reviewCustomerRequest(contactId, row.id, decision, notes[row.id] || '');
+            setRows(current => current.map(item => item.id === row.id ? { ...item, status: decision } : item));
             setRefresh(n => n + 1);
             toast.success(`Request ${decision === 'approved' ? 'approved' : 'rejected'}`);
         } catch (err) {
@@ -109,7 +112,9 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
             const msg = err instanceof Error ? err.message : 'Review failed';
             setError(msg);
             toast.error(msg);
+            try { setRows(await fetchCustomerRequests(contactId)); } catch { /* Keep the last known state when refresh is unavailable. */ }
         } finally {
+            reviewingRef.current = false;
             setBusy('');
         }
     };
@@ -516,7 +521,7 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
                                         <div className="flex items-center gap-2">
                                             <button
                                                 type="button"
-                                                disabled={busy === row.id}
+                                                disabled={!!busy}
                                                 onClick={() => void review(row, 'approved')}
                                                 className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:opacity-50"
                                             >
@@ -525,7 +530,7 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
                                             </button>
                                             <button
                                                 type="button"
-                                                disabled={busy === row.id}
+                                                disabled={!!busy}
                                                 onClick={() => void review(row, 'rejected')}
                                                 className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-600 transition-colors hover:bg-rose-50 disabled:opacity-50 dark:border-rose-800 dark:bg-slate-900 dark:text-rose-300 dark:hover:bg-rose-900/20"
                                             >

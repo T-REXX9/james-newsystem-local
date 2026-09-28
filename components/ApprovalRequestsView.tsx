@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ClipboardList, RefreshCw, Search, CheckCircle2, XCircle, Clock3,
     Building2, Tag, FileText, ChevronDown, ChevronUp, User,
@@ -71,6 +71,7 @@ export default function ApprovalRequestsView({
     const [refreshing, setRefreshing] = useState(false);
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending');
     const [search, setSearch] = useState('');
+    const reviewingRef = useRef(false);
     const [busyId, setBusyId] = useState('');
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
     const [notes, setNotes] = useState<Record<string, string>>({});
@@ -154,7 +155,8 @@ export default function ApprovalRequestsView({
     }, [rows, statusFilter, search, contacts]);
 
     const review = async (row: CustomerRequest, decision: 'approved' | 'rejected') => {
-        if (!canApprove) return;
+        if (!canApprove || reviewingRef.current || row.status !== 'pending') return;
+        reviewingRef.current = true;
         setBusyId(row.id);
         try {
             await reviewCustomerRequest(
@@ -164,12 +166,15 @@ export default function ApprovalRequestsView({
                 notes[row.id] || '',
             );
             toast.success(`Request ${decision === 'approved' ? 'approved' : 'rejected'}`);
+            setRows(current => current.map(item => item.id === row.id ? { ...item, status: decision } : item));
             setRefreshTick((n) => n + 1);
         } catch (err) {
       if (shouldSuppressAuthError(err)) return;
             const msg = err instanceof Error ? err.message : 'Review failed';
             toast.error(msg);
+            try { setRows(await fetchAllCustomerRequests()); } catch { /* Keep the last known state when refresh is unavailable. */ }
         } finally {
+            reviewingRef.current = false;
             setBusyId('');
         }
     };

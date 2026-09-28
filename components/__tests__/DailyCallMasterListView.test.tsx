@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import DailyCallMasterListView from '../DailyCallMasterListView';
+import { reviewCustomerRequest } from '../../services/customerWorkflowLocalApiService';
 import { createCustomerLogForDailyCall, fetchCustomersForDailyCall, fetchDailyCallMasterList } from '../../services/dailyCallMonitoringService';
 import { bulkUpdateContacts, updateContact, fetchSalesAgents } from '../../services/customerDatabaseLocalApiService';
 import { getVipTierConfig } from '../../services/vipTierSettingsService';
@@ -13,6 +14,9 @@ const masterUser: UserProfile = {
   email: 'master@example.com',
   role: 'Master User',
 };
+
+vi.mock('../../services/customerWorkflowLocalApiService', () => ({ reviewCustomerRequest: vi.fn(), createDuplicateProspectRequest: vi.fn() }));
+const addToast = vi.fn();
 
 vi.mock('../../services/dailyCallMonitoringService', () => ({
   fetchDailyCallMasterList: vi.fn(),
@@ -62,7 +66,7 @@ vi.mock('../CustomerSalesReportChat', () => ({
 
 vi.mock('../ToastProvider', () => ({
   useToast: () => ({
-    addToast: vi.fn(),
+    addToast,
   }),
 }));
 
@@ -81,6 +85,28 @@ describe('DailyCallMasterListView', () => {
       created_by: 'master-1',
       created_by_name: 'Master User',
     });
+  });
+
+  it.each(['approved', 'rejected'] as const)('blocks repeated duplicate %s reviews and reconciles a failed response', async (decision) => {
+    const pending = { requestId: 'request-1', contactId: 'pending-1', company: 'Pending Company', mobile: '', phone: '', address: '', submittedAt: '', submittedBy: 1, submittedByName: '', referBy: '', salesPersonId: '', duplicateOverrideReason: 'Different company', conflictingCustomers: [] };
+    const empty = { meta: { fromDate: '2025-10-01', toDate: '2026-09-28', count: 0 }, items: [] };
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({ ...empty, pendingDuplicateProspects: [pending] });
+    let fail!: (reason: Error) => void;
+    vi.mocked(reviewCustomerRequest).mockImplementationOnce(() => new Promise((_, reject) => { fail = reject; }));
+    render(<DailyCallMasterListView currentUser={masterUser} />);
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Unverified Prospects (1)' }));
+    const button = screen.getByTitle(decision === 'approved' ? 'Approve' : 'Reject');
+    fireEvent.click(button);
+    fireEvent.click(button);
+    fireEvent.click(screen.getByTitle(decision === 'approved' ? 'Reject' : 'Approve'));
+    expect(reviewCustomerRequest).toHaveBeenCalledTimes(1);
+    expect(screen.getByTitle('Approve')).toBeDisabled();
+    expect(screen.getByTitle('Reject')).toBeDisabled();
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue(empty);
+    fail(new Error('Request is already reviewed'));
+    await waitFor(() => expect(screen.queryByText('Pending Company')).not.toBeInTheDocument());
+    expect(addToast).toHaveBeenCalledWith({ type: 'error', title: 'Review failed', description: 'Request is already reviewed' });
+    expect(screen.getByRole('button', { name: 'Unverified Prospects (0)' })).toBeInTheDocument();
   });
 
   it('aligns pending approvals and opens each conflicting customer profile', async () => {
