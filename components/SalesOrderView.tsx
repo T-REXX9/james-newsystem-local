@@ -22,6 +22,7 @@ import {
   syncDocumentPolicyState,
   getAllSalesOrders,
   unpostSalesOrder,
+  updateSalesOrder,
 } from '../services/salesOrderLocalApiService';
 import { fetchContactById, fetchContacts } from '../services/customerDatabaseLocalApiService';
 import { getLocalAuthSession } from '../services/localAuthService';
@@ -44,6 +45,8 @@ import { persistedVipDiscount } from '../utils/vipDocumentDiscount';
 import { DISPLAY_TIME_ZONE, formatCustomerSince, formatDate as formatDisplayDate } from '../utils/formatUtils';
 import VipDocumentTotals from './VipDocumentTotals';
 import VipStandingBadge from './VipStandingBadge';
+import SearchableSelect from './SearchableSelect';
+import { fetchCouriers, CourierRecord } from '../services/courierLocalApiService';
 import { cascadeSalesDocumentDate } from '../services/salesDocumentDateService';
 import { canBackdatePosting, canPerformAction } from '../utils/actionPermissions';
 import {
@@ -127,6 +130,9 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
   const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null);
   const [salesDateDraft, setSalesDateDraft] = useState(localTodayYmd());
   const [savingSalesDate, setSavingSalesDate] = useState(false);
+  const [sendByDraft, setSendByDraft] = useState('');
+  const [savingSendBy, setSavingSendBy] = useState(false);
+  const [courierOptions, setCourierOptions] = useState<CourierRecord[]>([]);
   const [statusFilter, setStatusFilter] = useState<'all' | string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [dateRange, setDateRange] = useState<{ from: string; to: string }>(() => {
@@ -710,6 +716,10 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
     hasBackdatedPosting,
     isPosted: selectedOrderStatus === 'posted' || selectedOrderStatus === 'cancelled' || selectedOrder?.is_editable === false,
   });
+  const canEditSendBy = canEdit
+    && selectedOrderStatus !== 'posted'
+    && selectedOrderStatus !== 'cancelled'
+    && selectedOrder?.is_editable !== false;
 
   useEffect(() => {
     setSalesDateDraft((selectedOrder?.sales_date || '').slice(0, 10) || localTodayYmd());
@@ -752,6 +762,50 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
       });
     } finally {
       setSavingSalesDate(false);
+    }
+  };
+
+  useEffect(() => {
+    setSendByDraft(selectedOrder?.send_by || '');
+  }, [selectedOrder?.id, selectedOrder?.send_by]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadCouriers = async () => {
+      try {
+        const res = await fetchCouriers();
+        if (!cancelled) setCourierOptions(res.items || []);
+      } catch (error) {
+        if (shouldSuppressAuthError(error)) return;
+        // Non-fatal: Send By simply falls back to a plain text-less list.
+      }
+    };
+    void loadCouriers();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleSaveSendBy = async () => {
+    if (!selectedOrder || !canEditSendBy) return;
+    setSavingSendBy(true);
+    try {
+      const updated = await updateSalesOrder(selectedOrder.id, { send_by: sendByDraft });
+      const refreshed = updated || (await getSalesOrder(selectedOrder.id));
+      if (refreshed) {
+        setSelectedOrder(refreshed);
+        setOrders((prev) => prev.map((row) => (row.id === refreshed.id ? { ...row, send_by: refreshed.send_by } : row)));
+      }
+      addToast({ type: 'success', title: 'Send By updated' });
+    } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
+      addToast({
+        type: 'error',
+        title: 'Unable to update Send By',
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    } finally {
+      setSavingSendBy(false);
     }
   };
 
@@ -1042,7 +1096,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
             <div className="space-y-[9px]">
               <div className="grid grid-cols-[5%_38%_11%_18%_10%_18%] items-center">
                 <label className={legacyLabelClass}>Sold to :</label><div className="pl-3"><input readOnly value={selectedOrder ? selectedCustomerLabel : ''} placeholder="Select Customer" className={`${legacyInputClass} text-center`} /></div>
-                <label className={legacyLabelClass}>Date :</label><div className="pl-2 flex items-center gap-1">{canMutateSalesDate ? (<><input type="date" value={salesDateDraft} max={localTodayYmd()} onChange={(event) => setSalesDateDraft(event.target.value)} className={legacyInputClass} /><button type="button" onClick={() => void handleSaveSalesDate()} disabled={savingSalesDate || salesDateDraft === (selectedOrder?.sales_date || '').slice(0, 10)} className="rounded bg-[#5d82a2] px-2 py-1 text-[11px] text-white disabled:opacity-50">{savingSalesDate ? '...' : 'Save'}</button></>) : (<input readOnly value={legacyListDate(selectedOrder?.sales_date)} className={legacyInputClass} />)}</div>
+                <label className={legacyLabelClass}>Date :</label><div className="pl-2 flex items-center gap-1">{canMutateSalesDate ? (<><input type="date" value={salesDateDraft} max={localTodayYmd()} onChange={(event) => setSalesDateDraft(event.target.value)} className={legacyInputClass} /><button type="button" aria-label="Save sales date" onClick={() => void handleSaveSalesDate()} disabled={savingSalesDate || salesDateDraft === (selectedOrder?.sales_date || '').slice(0, 10)} className="rounded bg-[#5d82a2] px-2 py-1 text-[11px] text-white disabled:opacity-50">{savingSalesDate ? '...' : 'Save'}</button></>) : (<input readOnly value={legacyListDate(selectedOrder?.sales_date)} className={legacyInputClass} />)}</div>
                 <label className={legacyLabelClass}>Terms Strictly:</label><div className="pl-2"><input readOnly value={selectedOrder?.terms || selectedCustomer?.terms || ''} className={legacyInputClass} /></div>
               </div>
               <div className="grid grid-cols-[7%_36%_11%_18%_10%_18%] items-center">
@@ -1051,7 +1105,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                 <label className={legacyLabelClass}>Salesperson:</label><div className="pl-2"><input readOnly value={selectedOrder?.sales_person || ''} className={legacyInputClass} /></div>
               </div>
               <div className="grid grid-cols-[7%_36%_11%_18%_10%_18%] items-center">
-                <label className={legacyLabelClass}>Send By:</label><div className="pl-3"><input readOnly value={selectedOrder?.send_by || ''} className={`${legacyInputClass} text-center`} /></div>
+                <label className={legacyLabelClass}>Send By:</label><div className="pl-3 flex items-center gap-1">{canEditSendBy ? (<><SearchableSelect value={sendByDraft} options={courierOptions.map((option) => ({ value: option.name, label: option.name }))} onChange={setSendByDraft} placeholder="Select..." searchPlaceholder="Search courier..." /><button type="button" aria-label="Save send by" onClick={() => void handleSaveSendBy()} disabled={savingSendBy || sendByDraft === (selectedOrder?.send_by || '')} className="rounded bg-[#5d82a2] px-2 py-1 text-[11px] text-white disabled:opacity-50">{savingSendBy ? '...' : 'Save'}</button></>) : (<input readOnly value={selectedOrder?.send_by || ''} className={`${legacyInputClass} text-center`} />)}</div>
                 <label className={legacyLabelClass}>Tracking No.:</label><div className="pl-2"><input readOnly value={legacyOrder?.tracking_no || ''} className={legacyInputClass} /></div>
                 <label className={legacyLabelClass}>Del. to:</label><div className="pl-2"><input readOnly value={legacyOrder?.delivered_to || legacyOrder?.delivery_to || ''} className={legacyInputClass} /></div>
               </div>

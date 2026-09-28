@@ -8,11 +8,13 @@ import { ToastProvider } from '../ToastProvider';
 const html2canvasMock = vi.hoisted(() => vi.fn());
 const getAllSalesOrdersMock = vi.fn();
 const getSalesOrderMock = vi.fn();
+const updateSalesOrderMock = vi.fn();
 const fetchContactsMock = vi.fn();
 const fetchContactByIdMock = vi.fn();
 const fetchProfilesMock = vi.fn();
 const getLedgerMock = vi.fn();
 const getVipTierConfigMock = vi.fn();
+const fetchCouriersMock = vi.fn();
 
 vi.mock('html2canvas', () => ({
   default: (...args: any[]) => html2canvasMock(...args),
@@ -25,6 +27,11 @@ vi.mock('../../services/salesOrderLocalApiService', () => ({
   getAllSalesOrders: (...args: any[]) => getAllSalesOrdersMock(...args),
   syncDocumentPolicyState: vi.fn(),
   unpostSalesOrder: vi.fn(),
+  updateSalesOrder: (...args: any[]) => updateSalesOrderMock(...args),
+}));
+
+vi.mock('../../services/courierLocalApiService', () => ({
+  fetchCouriers: (...args: any[]) => fetchCouriersMock(...args),
 }));
 
 vi.mock('../../services/customerDatabaseLocalApiService', () => ({
@@ -156,6 +163,7 @@ describe('SalesOrderView', () => {
       unlimited_discount_threshold: 30000,
       discount_percentage: 10,
     });
+    fetchCouriersMock.mockResolvedValue({ items: [{ id: 'courier-1', name: 'LBC Express' }] });
   });
 
   afterEach(() => {
@@ -582,6 +590,37 @@ describe('SalesOrderView', () => {
       expect(dateInputs.length).toBeGreaterThan(0);
       expect(dateInputs.some((input) => input.value === '2026-03-13')).toBe(true);
     });
-    expect(screen.getByRole('button', { name: /^save$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^save sales date$/i })).toBeInTheDocument();
+  });
+
+  it('saves an edited Send By value for an editable order', async () => {
+    const user = userEvent.setup();
+    const order = makeOrder({ id: 'sendby-order', order_no: 'SO-SENDBY', status: 'Pending', send_by: '' });
+    getAllSalesOrdersMock.mockResolvedValue([order]);
+    getSalesOrderMock.mockResolvedValue(order);
+    fetchContactsMock.mockResolvedValue([{ id: 'contact-1', company: 'Acme Corp', transactionType: 'Invoice' }]);
+    fetchContactByIdMock.mockResolvedValue({ id: 'contact-1', company: 'Acme Corp', transactionType: 'Invoice' });
+    updateSalesOrderMock.mockResolvedValue({ ...order, send_by: 'LBC Express' });
+
+    renderView({ initialOrderId: order.id });
+    await screen.findByDisplayValue('SO-SENDBY');
+
+    await waitFor(() => {
+      expect(fetchCouriersMock).toHaveBeenCalled();
+    });
+
+    const saveSendByButton = screen.getByRole('button', { name: /^save send by$/i });
+    expect(saveSendByButton).toBeDisabled();
+
+    const sendBySelectTrigger = screen.getByRole('button', { name: /select\.\.\./i });
+    await user.click(sendBySelectTrigger);
+    await user.click(await screen.findByRole('button', { name: 'LBC Express' }));
+
+    expect(saveSendByButton).toBeEnabled();
+    await user.click(saveSendByButton);
+
+    await waitFor(() => {
+      expect(updateSalesOrderMock).toHaveBeenCalledWith('sendby-order', { send_by: 'LBC Express' });
+    });
   });
 });
