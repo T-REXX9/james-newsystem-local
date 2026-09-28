@@ -1411,7 +1411,17 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     const priorityRows = masterRows.filter((row) => resolveMonitorBucket(row) === 'priority');
     const recoveryRows = masterRows.filter((row) => resolveMonitorBucket(row) === 'recovery');
     const verifiedRows = masterRows.filter((row) => resolveMonitorBucket(row) === 'verified');
-    const unverifiedRows = masterRows.filter((row) => resolveMonitorBucket(row) === 'unverified');
+    const unverifiedRows = masterRows
+      .filter((row) => resolveMonitorBucket(row) === 'unverified')
+      .sort((a, b) => {
+        // Sort duplicate approval prospects to the top
+        const aHasDuplicate = Number(a.contact.duplicateExistingProspectId ?? 0) > 0;
+        const bHasDuplicate = Number(b.contact.duplicateExistingProspectId ?? 0) > 0;
+        if (aHasDuplicate && !bHasDuplicate) return -1;
+        if (!aHasDuplicate && bHasDuplicate) return 1;
+        // Otherwise use default priority ordering
+        return (a.priority ?? 0) - (b.priority ?? 0);
+      });
     const blockedRows = masterRows.filter((row) => resolveMonitorBucket(row) === 'blocked');
 
     return [

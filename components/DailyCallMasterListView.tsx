@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { createCustomerLogForDailyCall, fetchCustomersForDailyCall, fetchDailyCallMasterList, getCachedDailyCallMasterList } from '../services/dailyCallMonitoringService';
 import { bulkUpdateContacts, createContact, fetchSalesAgents, getAssignmentHistory, isPendingDuplicateProspectApproval, updateContact } from '../services/customerDatabaseLocalApiService';
+import { createDuplicateProspectRequest } from '../services/customerWorkflowLocalApiService';
 import { fetchTeams, TeamRecord } from '../services/teamLocalApiService';
 import { getVipTierConfig } from '../services/vipTierSettingsService';
 import { Contact, CustomerStatus, DailyCallCustomerRow, DailyCallMasterCustomerRow, DailyCallMasterListMeta, UserProfile, VipTierConfig } from '../types';
@@ -1084,6 +1085,20 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                             {row.contactNumber}
                             {row.contactPersonName && <span className="font-normal"> · {row.contactPersonName}</span>}
                           </p>
+                          {Number(row.duplicateExistingProspectId ?? 0) > 0 && (
+                            <div className="mt-2 rounded-lg bg-amber-50 border border-amber-200 p-2">
+                              <p className="text-[10px] font-bold text-amber-800 uppercase">Duplicate Approval Pending</p>
+                              <p className="mt-0.5 text-xs font-medium text-amber-900">
+                                Matches: <span className="font-bold">{row.duplicateExistingCompany}</span>
+                              </p>
+                              {row.duplicateExistingContactPerson && (
+                                <p className="text-xs text-amber-900">Contact: {row.duplicateExistingContactPerson}</p>
+                              )}
+                              {row.duplicateExistingPhone && (
+                                <p className="text-xs text-amber-900">Phone: {row.duplicateExistingPhone}</p>
+                              )}
+                            </div>
+                          )}
                         </td>
                         <td className="px-2 py-2.5 text-center">
                           <div className={`mx-auto inline-flex min-w-24 items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-[12px] font-bold uppercase ${vip.className}`}>
