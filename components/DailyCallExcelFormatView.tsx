@@ -5,7 +5,7 @@ import {
   fetchCustomersForDailyCall,
   subscribeToDailyCallMonitoringUpdates,
 } from '../services/dailyCallMonitoringService';
-import { createContact } from '../services/customerDatabaseLocalApiService';
+import { createContact, isPendingDuplicateProspectApproval } from '../services/customerDatabaseLocalApiService';
 import { Contact, DailyCallCustomerFilterStatus, DailyCallCustomerRow, UserProfile } from '../types';
 import { useToast } from './ToastProvider';
 import DailyCallCustomerDetailModal from './DailyCallCustomerDetailModal';
@@ -179,6 +179,11 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
 
     try {
       const created = await createContact(payload);
+      if (isPendingDuplicateProspectApproval(created)) {
+        setShowAddCustomerModal(false);
+        addToast({ type: 'success', title: 'Duplicate prospect submitted', description: 'It is waiting for Master User approval.' });
+        return created;
+      }
       await loadRows(false);
       setSelectedCustomerId(created.id);
       setShowAddCustomerModal(false);

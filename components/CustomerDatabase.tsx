@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useRealtimeList } from '../hooks/useRealtimeList';
-import { fetchContacts, bulkUpdateContacts, createContact, updateContact, deleteCustomer } from '../services/customerDatabaseLocalApiService';
+import { fetchContacts, bulkUpdateContacts, createContact, isPendingDuplicateProspectApproval, updateContact, deleteCustomer } from '../services/customerDatabaseLocalApiService';
 import { Contact } from '../types';
 import CustomerListSidebar from './CustomerListSidebar';
 import CustomerDetailPanel from './CustomerDetailPanel';
@@ -233,6 +233,15 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
     if (!canAdd) return;
     try {
       const created = await createContact(data);
+      if (isPendingDuplicateProspectApproval(created)) {
+        addToast({
+          type: 'success',
+          title: 'Duplicate prospect submitted',
+          description: 'It is waiting for Master User approval.',
+          durationMs: 4000,
+        });
+        return created;
+      }
       // Optimistically add/merge in case realtime hasn't delivered yet
       setCustomers((prev) => (prev.some((c) => c.id === created.id) ? prev : [...prev, created]));
       setSelectedCustomerId(created.id);
