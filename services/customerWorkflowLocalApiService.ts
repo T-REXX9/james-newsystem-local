@@ -3,7 +3,7 @@ import type { Contact } from '../types';
 import { getLocalAuthSession } from './localAuthService';
 import { endAuthSessionSilently } from './localApiAuth';
 import { requestLocalApi } from './localApiClient';
-import { mapContactUpdatesToApi, mapContactPersonPayloadToApi } from './customerDatabaseLocalApiService';
+import { mapContactPayloadToApi, mapContactUpdatesToApi, mapContactPersonPayloadToApi } from './customerDatabaseLocalApiService';
 
 export interface CustomerHistoryRecord {
   id: string;
@@ -108,6 +108,15 @@ export const requestCustomerUpdate = (id: string, changes: Partial<Contact>) => 
   if (!Object.keys(payload).length) throw new Error('No supported customer fields were changed.');
   return requestLocalApi(`${pathFor(id)}/requests`, 'POST', { kind: 'customer_update', payload });
 };
+export const createDuplicateProspectRequest = (contactId: string, contact: Omit<Contact, 'id'>) => {
+  requireSession();
+  const payload: Record<string, unknown> = mapContactPayloadToApi(contact);
+  if (contact.contactPersons) payload.contacts = contact.contactPersons
+    .filter((cp: any) => String(cp?.name || '').trim() !== '')
+    .map((cp: any) => mapContactPersonPayloadToApi(cp));
+  return requestLocalApi(`${pathFor(contactId)}/requests`, 'POST', { kind: 'duplicate_prospect', payload });
+};
+
 export const reviewCustomerRequest = async (contactId: string, id: string, decision: 'approved' | 'rejected', note: string) => {
   requireSession();
   const result = await requestLocalApi<{ id: string; status: string; contact_id?: string }>(`${pathFor(contactId)}/requests/${encodeURIComponent(id)}/review`, 'POST', { decision, note });

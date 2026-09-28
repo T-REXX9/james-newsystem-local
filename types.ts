@@ -812,6 +812,18 @@ export interface DailyCallMasterCustomerRow {
   /** True only when a Verify Prospect audit entry was written by this system. */
   verifiedInSystem?: boolean;
   createdAt?: string;
+    /** Duplicate prospect request - ID of the existing customer it matches */
+    duplicateExistingProspectId?: number;
+    /** Duplicate prospect request - Company name of the existing customer */
+    duplicateExistingCompany?: string;
+    /** Duplicate prospect request - Contact person of the existing customer */
+    duplicateExistingContactPerson?: string;
+    /** Duplicate prospect request - Phone of the existing customer */
+    duplicateExistingPhone?: string;
+    /** Duplicate prospect request - Fields that triggered the duplicate detection */
+    duplicateMatchingFields?: string;
+    /** Duplicate prospect request - Status (pending/approved/rejected/snoozed) */
+    duplicateStatus?: string;
   latestSalesReportMessage?: string;
   latestSalesReportAuthor?: string;
   latestSalesReportSource?: string;
