@@ -198,6 +198,20 @@ export const getInvoice = async (id: string): Promise<Invoice | null> => {
   }
 };
 
+export const updateInvoice = async (id: string, updates: Record<string, unknown>): Promise<Invoice | null> => {
+  const payload = {
+    main_id: API_MAIN_ID,
+    user_id: getUserContext().userId,
+    ...updates,
+  };
+  const data = await requestApi(`${API_BASE_URL}/invoices/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return mapInvoiceDetail(data);
+};
+
 const runInvoiceAction = async (id: string, action: string): Promise<Invoice | null> => {
   const payload = {
     main_id: API_MAIN_ID,
