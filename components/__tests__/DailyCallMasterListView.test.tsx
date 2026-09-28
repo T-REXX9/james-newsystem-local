@@ -29,6 +29,7 @@ vi.mock('../../services/customerDatabaseLocalApiService', () => ({
     { id: 'agent-1', full_name: 'Joan Jerusalem', email: '', role: 'Sales Agent' },
     { id: 'agent-2', full_name: 'Apostol Ella', email: '', role: 'Sales Agent' },
   ]),
+  getAssignmentHistory: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('../../services/vipTierSettingsService', () => ({
@@ -218,7 +219,7 @@ describe('DailyCallMasterListView', () => {
     await user.click(await screen.findByRole('button', { name: 'Unverified Prospects (1)' }));
     await user.click(await screen.findByRole('button', { name: 'Approve verification for Pending Prospect Shop' }));
 
-    expect(updateContact).toHaveBeenCalledWith('pending-verified-1', { verification: 'Verified' });
+    expect(updateContact).toHaveBeenCalledWith('pending-verified-1', { verification: 'Verified' }, 'master-1');
   });
 
   it('classifies current VIP status from last month sales instead of stored price group', async () => {
@@ -394,7 +395,7 @@ describe('DailyCallMasterListView', () => {
     const tableScroll = screen.getByTestId('daily-call-table-scroll');
     expect(screen.getByTestId('master-list-scroll-region')).toHaveClass('overflow-auto');
     expect(tableScroll).not.toHaveClass('overflow-auto');
-    expect(tableScroll.querySelector('table')).toHaveClass('min-w-[1650px]', 'table-fixed');
+    expect(tableScroll.querySelector('table')).toHaveClass('min-w-[1450px]', 'table-fixed');
     const tableHeader = tableScroll.querySelector('thead');
     expect(tableHeader).toHaveClass('sticky', 'top-0');
     expect(screen.getAllByText('Apostol Ella').length).toBeGreaterThan(0);

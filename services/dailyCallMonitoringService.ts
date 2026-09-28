@@ -505,7 +505,12 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
     dataIntegrityMessage: cleanNullableText(row?.dataIntegrityMessage ?? row?.data_integrity_message),
     verifiedBy: cleanNullableText(row?.verifiedBy ?? row?.verified_by),
     verifiedInSystem: Boolean(row?.verifiedInSystem ?? row?.verified_in_system),
+    prospectSource: cleanNullableText(row?.prospectSource ?? row?.prospect_source),
+    prospectCreatedBy: cleanNullableText(row?.prospectCreatedBy ?? row?.prospect_created_by),
     latestSalesReportMessage: cleanNullableText(row?.latestSalesReportMessage ?? row?.latest_sales_report_message),
+    latestSalesReportAuthor: cleanNullableText(row?.latestSalesReportAuthor ?? row?.latest_sales_report_author),
+    latestSalesReportSource: cleanNullableText(row?.latestSalesReportSource ?? row?.latest_sales_report_source),
+    latestSalesReportAt: cleanNullableText(row?.latestSalesReportAt ?? row?.latest_sales_report_at),
     createdAt: cleanNullableText(row?.createdAt ?? row?.created_at ?? row?.statusDate ?? row?.status_date),
     priceGroup: cleanNullableText(row?.priceGroup ?? row?.price_group),
     firstPurchaseDate: cleanNullableText(row?.firstPurchaseDate ?? row?.first_purchase_date, '—'),
@@ -698,10 +703,13 @@ export const fetchAgentSnapshotForDailyCall = async (
   try {
     const payload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/agent-snapshot?${params.toString()}`, { signal: options?.signal });
     const data = payload?.data || {};
+    const masterList = Array.isArray(data?.master_list)
+      ? data.master_list.map(mapDailyCallMasterCustomerRow)
+      : (await fetchDailyCallMasterList()).items;
 
     return {
       contacts: Array.isArray(data?.contacts) ? data.contacts.map(mapDailyCallCustomerRow) : [],
-      masterList: Array.isArray(data?.master_list) ? data.master_list.map(mapDailyCallMasterCustomerRow) : [],
+      masterList,
       callLogs: Array.isArray(data?.call_logs) ? data.call_logs.map(mapCallLog) : [],
       inquiries: Array.isArray(data?.inquiries) ? data.inquiries.map(mapInquiry) : [],
       purchases: Array.isArray(data?.purchases) ? data.purchases.map(mapPurchase) : [],
@@ -722,9 +730,16 @@ export const fetchAgentSnapshotForDailyCall = async (
     try {
       const fallbackPayload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/excel?${fallbackParams.toString()}`, { signal: options?.signal });
       const fallbackData = Array.isArray(fallbackPayload?.data) ? fallbackPayload.data : [];
+      let masterList: DailyCallMasterCustomerRow[] = [];
+      try {
+        masterList = (await fetchDailyCallMasterList()).items;
+      } catch {
+        // Keep the established customer-list fallback usable when this older
+        // deployment also lacks the master-list endpoint.
+      }
       return {
         contacts: fallbackData.map(mapDailyCallCustomerRow),
-        masterList: [],
+        masterList,
         callLogs: [],
         inquiries: [],
         purchases: [],

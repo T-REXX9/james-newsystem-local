@@ -20,7 +20,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { createCustomerLogForDailyCall, fetchCustomersForDailyCall, fetchDailyCallMasterList, getCachedDailyCallMasterList } from '../services/dailyCallMonitoringService';
-import { bulkUpdateContacts, createContact, fetchSalesAgents, isPendingDuplicateProspectApproval, updateContact } from '../services/customerDatabaseLocalApiService';
+import { bulkUpdateContacts, createContact, fetchSalesAgents, getAssignmentHistory, isPendingDuplicateProspectApproval, updateContact } from '../services/customerDatabaseLocalApiService';
 import { fetchTeams, TeamRecord } from '../services/teamLocalApiService';
 import { getVipTierConfig } from '../services/vipTierSettingsService';
 import { Contact, CustomerStatus, DailyCallCustomerRow, DailyCallMasterCustomerRow, DailyCallMasterListMeta, UserProfile, VipTierConfig } from '../types';
@@ -183,6 +183,17 @@ const matchesDailyCallMasterSearch = (row: DailyCallMasterCustomerRow, query: st
 const ageLabel = (row: DailyCallMasterCustomerRow) => {
   if (!row.lastPurchaseDateRaw || (row.ledgerTransactionCount ?? row.purchaseCount) === 0) return 'No purchase yet';
   return row.daysSinceLastPurchase === 1 ? '1 day ago' : `${row.daysSinceLastPurchase} days ago`;
+};
+
+// Format the latest Agent Sales Report timestamp as e.g. "Sep 25, 2026 · 3:42 PM".
+const formatSalesReportTimestamp = (raw?: string): string | null => {
+  if (!raw) return null;
+  // Backend sends DATETIME as "YYYY-MM-DD HH:MM:SS"; normalize for Safari/JS Date parsing.
+  const parsed = new Date(raw.includes('T') ? raw : raw.replace(' ', 'T'));
+  if (Number.isNaN(parsed.getTime())) return null;
+  const datePart = parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const timePart = parsed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return `${datePart} · ${timePart}`;
 };
 
 const purchaseHighlight = (row: DailyCallMasterCustomerRow) => {
@@ -399,12 +410,28 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   }, [loadRows]);
 
   const handleVerifyExistingProspect = useCallback(async (row: DailyCallMasterCustomerRow) => {
-    await updateContact(row.id, { verification: 'Verified' });
-    setRows((prev) => prev.map((item) =>
-      item.id === row.id ? { ...item, verification: 'Verified' } : item
-    ));
-    await loadRows(false, true);
-  }, [loadRows]);
+    setLoadingCustomerId(row.id);
+    try {
+      await updateContact(row.id, { verification: 'Verified' }, currentUser?.id);
+      setRows((prev) => prev.map((item) =>
+        item.id === row.id ? { ...item, verification: 'Verified', verifiedInSystem: true } : item
+      ));
+      await loadRows(false, true);
+      addToast({
+        type: 'success',
+        title: 'Prospect verified',
+        description: `${row.shopName} moved to Verified Prospects.`,
+      });
+    } catch {
+      addToast({
+        type: 'error',
+        title: 'Unable to verify prospect',
+        description: 'Please try again or verify from Customer Database.',
+      });
+    } finally {
+      setLoadingCustomerId(null);
+    }
+  }, [addToast, currentUser?.id, loadRows]);
 
   const handleConfirmDoNotContact = useCallback(async () => {
     const row = pendingDoNotContactRow;
@@ -947,7 +974,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
               </h3>
               <div className="flex items-center gap-3">
                 <span className="flex items-center gap-2 text-sm"><i className={`h-3 w-3 rounded-full ${activeCategory.dot}`} />{activeCategory.state}</span>
-                {showMasterActions && activeCategory.id !== 'blocked' && (
+                {showMasterActions && (
                   <div className="flex items-center gap-2">
                     <select
                       aria-label={`Assign sales agent to ${activeCategory.label}`}
@@ -998,29 +1025,30 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
               data-testid="daily-call-table-scroll"
               onScroll={handleTableScroll}
             >
-              <table className="min-w-[1650px] w-full table-fixed border-separate border-spacing-0 text-left text-sm">
+              <table className="min-w-[1450px] w-full table-fixed border-separate border-spacing-0 text-left text-sm">
                 <thead className="sticky top-0 z-20 bg-slate-50 text-xs text-slate-600 shadow-sm [&_th]:sticky [&_th]:top-0 [&_th]:z-20 [&_th]:border-b [&_th]:border-slate-200 [&_th]:bg-slate-50">
                   <tr>
                     <th className="w-12 px-3 py-2.5">#</th>
-                    <th className="w-[250px] px-2 py-2.5">Customer / Mobile</th>
-                    <th className="w-[135px] px-2 py-2.5 text-center">VIP Status</th>
-                    <th className="w-[220px] px-2 py-2.5">
+                    <th className="w-[200px] px-2 py-2.5">Customer / Mobile</th>
+                    <th className="w-[125px] px-2 py-2.5 text-center">VIP Status</th>
+                    <th className="w-[175px] px-2 py-2.5">
                       <span className="inline-flex items-center gap-2">
                         Avg. Purchase per Month (Ledger)
                         <Info className="h-4 w-4 text-slate-400" />
                       </span>
                     </th>
-                    <th className="w-[150px] px-2 py-2.5 text-center">
+                    <th className="w-[120px] px-2 py-2.5 text-center">
                       <span className="inline-flex items-center justify-center gap-2">
                         Sales (Current Month)
                         <Info className="h-4 w-4 text-slate-400" />
                       </span>
                     </th>
-                    <th className="w-[135px] px-2 py-2.5">Last Purchase</th>
-                    <th className="w-[135px] px-2 py-2.5">Agent</th>
-                    <th className="w-[220px] px-2 py-2.5">Latest Agent Sales Report</th>
-                    <th className="w-[150px] px-2 py-2.5">Verified By</th>
-                    <th className="w-[105px] px-2 py-2.5 text-center">Action</th>
+                    <th className="w-[120px] px-2 py-2.5">Last Purchase</th>
+                    <th className="w-[130px] px-2 py-2.5">Agent</th>
+                    <th className="w-[200px] px-2 py-2.5">Latest Agent Sales Report</th>
+                    <th className="w-[140px] px-2 py-2.5">Source</th>
+                    <th className="w-[110px] px-2 py-2.5">Verified By</th>
+                    <th className="w-[95px] px-2 py-2.5 text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1096,11 +1124,12 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                             saving={assigningCustomerId === row.id}
                             disabled={viewOnlyRow || !isMasterUserAccount(currentUser)}
                             onAssign={handleAssignAgent}
+                            fetchHistory={getAssignmentHistory}
                           />
                           {row.assignedTeam && <p className="mt-1 text-[10px] font-bold text-indigo-700">Team: {row.assignedTeam}</p>}
                           {row.assignedAgentTeam && <p className="mt-1 text-[10px] font-bold text-indigo-700">Agent team: {row.assignedAgentTeam}</p>}
                         </td>
-                        <td className="max-w-[280px] break-words px-2 py-2.5 text-sm">
+                        <td className="max-w-[200px] break-words px-2 py-2.5 text-sm">
                           {row.latestSalesReportMessage ? (
                             <>
                               <button
@@ -1112,10 +1141,34 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                               >
                                 {row.latestSalesReportMessage}
                               </button>
+                              {formatSalesReportTimestamp(row.latestSalesReportAt) && (
+                                <p className="mt-1 text-[10px] font-medium text-slate-400">
+                                  {formatSalesReportTimestamp(row.latestSalesReportAt)}
+                                </p>
+                              )}
                             </>
                           ) : (
                             <span className="text-slate-400">—</span>
                           )}
+                        </td>
+                        <td className="w-[140px] break-words px-2 py-2.5 text-sm">
+                          {(() => {
+                            const createdBy = (row.prospectCreatedBy || '').trim();
+                            const rawSource = (row.prospectSource || '').trim();
+                            // Show the SOURCE only (no staff name). New prospects store lrefer_by as
+                            // "<staff> - <source>"; strip a leading "<creator> - " prefix when present.
+                            let source = rawSource;
+                            const sep = rawSource.indexOf(' - ');
+                            if (sep >= 0) {
+                              const prefix = rawSource.slice(0, sep).trim();
+                              const rest = rawSource.slice(sep + 3).trim();
+                              if (rest && (!createdBy || prefix.toLowerCase() === createdBy.toLowerCase())) {
+                                source = rest;
+                              }
+                            }
+                            if (!source) return <span className="text-slate-400">—</span>;
+                            return <span className="block font-medium text-slate-700">{source}</span>;
+                          })()}
                         </td>
                         <td className="whitespace-normal break-normal px-2 py-2.5 text-sm font-semibold text-slate-600">
                           {row.verification === 'Verified' ? (row.verifiedBy || 'Verification recorded') : '—'}
@@ -1190,7 +1243,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                     );
                   })}
                   {activeCategory.rows.length === 0 && (
-                    <tr><td colSpan={10} className="px-3 py-12 text-center text-xs text-slate-400">No customers in this category.</td></tr>
+                    <tr><td colSpan={11} className="px-3 py-12 text-center text-xs text-slate-400">No customers in this category.</td></tr>
                   )}
                 </tbody>
               </table>

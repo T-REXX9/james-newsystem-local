@@ -92,7 +92,7 @@ describe('DailyCollectionEntryView scrolling', () => {
     vi.mocked(dailyCollectionService.getApproverLogs).mockResolvedValue([]);
     vi.mocked(dailyCollectionService.getCustomers).mockResolvedValue([]);
     vi.mocked(dailyCollectionService.getUnpaidTransactions).mockResolvedValue([]);
-    vi.mocked(dailyCollectionService.updateItem).mockResolvedValue(undefined);
+    vi.mocked(dailyCollectionService.updateItem).mockResolvedValue(null);
   });
 
   it('shows the Daily Collection Entry title and accountable agent or account on each DCR', async () => {
@@ -185,6 +185,48 @@ describe('DailyCollectionEntryView scrolling', () => {
         expect.objectContaining({ amount: 99.5, type: 'Cash', status: 'Pending' }),
       );
     });
+  });
+
+  it('shows the persisted payment line returned by the save request', async () => {
+    localAuthState.session = {
+      userProfile: {
+        id: 'staff-1',
+        role: 'Staff',
+        action_permissions: {
+          global: { can_edit: true },
+          pages: { 'Daily Collection Entry': { can_edit: true } },
+        },
+      },
+      context: { permissions: { web: [] } },
+    };
+    vi.mocked(dailyCollectionService.updateItem).mockResolvedValue({
+      lid: 1,
+      lrefno: 'REF-1',
+      lcustomer: 'customer-1',
+      lcustomer_fname: 'Saved Customer',
+      lcustomer_lname: '',
+      ltype: 'Cash',
+      lbank: '',
+      lchk_no: '',
+      lchk_date: '',
+      lamt: 99.5,
+      lstatus: 'Received',
+      lremarks: 'Saved remark',
+      lcollect_date: '2026-08-04',
+      lpost: 0,
+      lcollection_status: 'Pending',
+      ltransaction_no: 'INV-1',
+    });
+
+    render(<DailyCollectionEntryView />);
+
+    const [editButton] = await screen.findAllByRole('button', { name: 'Edit' });
+    fireEvent.click(editButton);
+    fireEvent.change(screen.getByDisplayValue('1'), { target: { value: '99.50' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(screen.getByText('Saved remark')).toBeInTheDocument());
+    expect(screen.getByText('₱99.50')).toBeInTheDocument();
   });
 
   it('provides vertical scrolling for the page, record list, and detail rows', async () => {

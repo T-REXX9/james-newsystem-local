@@ -551,7 +551,26 @@ const requestJson = async <T>(url: string, init?: RequestInit): Promise<T> => {
   if (!response.ok) {
     throw new Error(await parseApiErrorMessage(response));
   }
-  return (await response.json()) as T;
+  
+  // Parse response, handling both JSON and non-JSON responses (e.g., error pages)
+  const contentType = response.headers.get('content-type');
+  const isJson = contentType?.includes('application/json');
+  
+  if (!isJson) {
+    const text = await response.text();
+    if (text.trim().length === 0) {
+      return {} as T;
+    }
+    // If we got HTML or other non-JSON, treat as an error
+    throw new Error(`API returned non-JSON response (${contentType || 'unknown'}): ${text.substring(0, 200)}`);
+  }
+  
+  try {
+    return (await response.json()) as T;
+  } catch (e) {
+    const text = await response.text();
+    throw new Error(`Failed to parse API response as JSON: ${text.substring(0, 200)}`);
+  }
 };
 
 export interface SimilarCustomerNameMatch {
@@ -895,6 +914,51 @@ export const fetchContactTransactions = async (contactId: string): Promise<Conta
     });
   } catch (err) {
     console.error('Error fetching contact transactions via local API:', err);
+    return [];
+  }
+};
+
+export interface AgentAssignmentHistoryEntry {
+  agentId: string;
+  agentName: string;
+  assignedByName: string;
+  assignedAt: string;
+}
+
+interface ApiAssignmentHistoryRow {
+  agent_id?: string;
+  agent_name?: string;
+  assigned_by_name?: string;
+  assigned_at?: string;
+}
+
+interface ApiAssignmentHistoryResponse {
+  data?: { items?: ApiAssignmentHistoryRow[] };
+}
+
+/**
+ * Fetch a customer's agent-assignment history, newest first, so the reassign
+ * dropdown can show which agents held this customer and when.
+ */
+export const getAssignmentHistory = async (
+  customerId: string,
+): Promise<AgentAssignmentHistoryEntry[]> => {
+  const id = String(customerId || '').trim();
+  if (!id) return [];
+  const query = new URLSearchParams({ main_id: String(API_MAIN_ID) });
+  try {
+    const payload = await requestJson<ApiAssignmentHistoryResponse>(
+      `${API_BASE_URL}/customer-database/${encodeURIComponent(id)}/assignment-history?${query.toString()}`
+    );
+    const rows = Array.isArray(payload?.data?.items) ? payload.data.items : [];
+    return rows.map((row) => ({
+      agentId: String(row?.agent_id || ''),
+      agentName: String(row?.agent_name || '').trim(),
+      assignedByName: String(row?.assigned_by_name || '').trim(),
+      assignedAt: String(row?.assigned_at || ''),
+    }));
+  } catch (err) {
+    console.error('Error fetching assignment history via local API:', err);
     return [];
   }
 };

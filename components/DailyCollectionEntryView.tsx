@@ -700,9 +700,16 @@ const DailyCollectionEntryView: React.FC = () => {
     setSavingItemId(item.lid);
     setError('');
     try {
-      await dailyCollectionService.updateItem(item, editingItem);
-      await fetchDetail(selectedRefno);
+      const savedItem = await dailyCollectionService.updateItem(item, editingItem);
+      if (savedItem) {
+        setItems((current) => current.map((currentItem) => (
+          currentItem.lid === savedItem.lid ? savedItem : currentItem
+        )));
+      } else {
+        await fetchDetail(selectedRefno);
+      }
       cancelEditingItem();
+      void fetchList();
     } catch (err: any) {
       if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to update payment line');
