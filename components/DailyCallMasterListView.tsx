@@ -34,6 +34,7 @@ import { hasActionPermission, isMasterUserAccount } from '../constants';
 import { VERIFIED_PROSPECT_POTENTIAL } from '../utils/dailyCallPotentialSales';
 import { getUserFacingErrorMessage } from '../services/localApiAuth';
 import AddContactModal from './AddContactModal';
+import ModuleRecordAction from './ModuleRecordAction';
 import DailyCallCustomerDetailModal from './DailyCallCustomerDetailModal';
 import CustomerSalesReportChat from './CustomerSalesReportChat';
 import DailyCallInlineAgentSelect, { formatAssignmentDateLabel } from './DailyCallInlineAgentSelect';
@@ -945,7 +946,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
               <button
                 key={category.id}
                 type="button"
-                aria-label={`${category.label} (${category.rows.length})`}
+                aria-label={`${category.label} (${category.id === 'unverified' ? category.rows.length + pendingDuplicateProspects.length : category.rows.length})`}
                 aria-pressed={isActive}
                 onClick={() => handleSelectCategory(category.id)}
                 className={`inline-flex h-10 items-center gap-2 rounded-lg border px-4 text-sm font-bold transition ${
@@ -1057,72 +1058,96 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 </thead>
                 <tbody>
                   {activeCategory.id === 'unverified' && pendingDuplicateProspects.length > 0 && pendingDuplicateProspects.map((pending) => (
-                    <tr key={`pending-dup-${pending.requestId}`} className="border-t border-amber-200 bg-amber-50 align-top">
-                      <td className="px-3 py-2.5 text-sm font-bold text-amber-700">—</td>
-                      <td className="px-2 py-2.5" colSpan={3}>
-                        <div className="font-semibold text-amber-900">{pending.company}</div>
-                        {pending.mobile && <div className="text-xs text-slate-500">{pending.mobile}</div>}
-                        <div className="mt-1 inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-                          Duplicate Approval Pending
-                        </div>
-                        {pending.duplicateOverrideReason && (
-                          <div className="mt-1 text-xs text-amber-700">Reason: &ldquo;{pending.duplicateOverrideReason}&rdquo;</div>
-                        )}
-                        {pending.conflictingCustomers.length > 0 && (
-                          <div className="mt-2 space-y-1">
-                            <div className="text-xs font-semibold text-slate-500">Conflicts with:</div>
-                            {pending.conflictingCustomers.map((c) => (
-                              <div key={c.sessionId} className="rounded border border-amber-200 bg-white px-2 py-1 text-xs text-slate-700">
-                                <span className="font-semibold">{c.company}</span>
-                                {c.mobile && <span className="ml-2 text-slate-500">{c.mobile}</span>}
-                                {c.verification && <span className="ml-2 rounded bg-slate-100 px-1 text-slate-500">{c.verification}</span>}
-                              </div>
-                            ))}
+                    <React.Fragment key={`pending-dup-${pending.requestId}`}>
+                      <tr className="border-t border-amber-200 bg-amber-50 align-top">
+                        <td className="px-3 py-2.5 text-sm font-bold text-amber-700">—</td>
+                        <td className="break-words px-2 py-2.5">
+                          <div className="font-semibold text-amber-900">{pending.company}</div>
+                          {pending.mobile && <div className="text-xs text-slate-500">{pending.mobile}</div>}
+                          <div className="mt-1 inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                            Duplicate Approval Pending
                           </div>
-                        )}
-                      </td>
-                      <td className="px-2 py-2.5 text-xs text-slate-500">{pending.submittedByName || '—'}</td>
-                      <td className="px-2 py-2.5 text-xs text-slate-400">—</td>
-                      <td className="px-2 py-2.5 text-xs text-slate-400">{pending.referBy || '—'}</td>
-                      <td className="px-2 py-2.5 text-xs text-slate-400">—</td>
-                      <td className="px-2 py-2.5 text-xs text-slate-400">—</td>
-                      <td className="px-2 py-2.5 text-center">
-                        <div className="flex justify-center gap-1">
-                          <button
-                            type="button"
-                            title="Approve"
-                            onClick={async () => {
-                              try {
-                                await reviewCustomerRequest(pending.contactId, pending.requestId, 'approved', '');
-                                addToast({ type: 'success', title: 'Approved', description: `${pending.company} has been added as a prospect.` });
-                                void loadRows(false, true);
-                              } catch {
-                                addToast({ type: 'error', title: 'Failed to approve' });
-                              }
-                            }}
-                            className="rounded-full bg-green-100 p-1.5 text-green-700 hover:bg-green-200"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
-                          </button>
-                          <button
-                            type="button"
-                            title="Reject"
-                            onClick={async () => {
-                              try {
-                                await reviewCustomerRequest(pending.contactId, pending.requestId, 'rejected', '');
-                                addToast({ type: 'success', title: 'Rejected', description: `${pending.company} duplicate request rejected.` });
-                                void loadRows(false, true);
-                              } catch {
-                                addToast({ type: 'error', title: 'Failed to reject' });
-                              }
-                            }}
-                            className="rounded-full bg-red-100 p-1.5 text-red-700 hover:bg-red-200"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                        </td>
+                        <td className="px-2 py-2.5 text-center text-slate-400">—</td>
+                        <td className="px-2 py-2.5 text-slate-400">—</td>
+                        <td className="px-2 py-2.5 text-center text-slate-400">—</td>
+                        <td className="px-2 py-2.5 text-slate-400">—</td>
+                        <td className="break-words px-2 py-2.5 text-xs text-slate-500">{salesAgents.find((agent) => agent.id === pending.salesPersonId)?.full_name || '—'}</td>
+                        <td className="px-2 py-2.5 text-slate-400">—</td>
+                        <td className="break-words px-2 py-2.5 text-xs text-slate-500">{pending.referBy || '—'}</td>
+                        <td className="px-2 py-2.5 text-slate-400">—</td>
+                        <td className="px-2 py-2.5 text-center">
+                          <div className="flex justify-center gap-1">
+                            <button
+                              type="button"
+                              title="Approve"
+                              onClick={async () => {
+                                try {
+                                  await reviewCustomerRequest(pending.contactId, pending.requestId, 'approved', '');
+                                  addToast({ type: 'success', title: 'Approved', description: `${pending.company} has been added as a prospect.` });
+                                  void loadRows(false, true);
+                                } catch {
+                                  addToast({ type: 'error', title: 'Failed to approve' });
+                                }
+                              }}
+                              className="rounded-full bg-green-100 p-1.5 text-green-700 hover:bg-green-200"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+                            </button>
+                            <button
+                              type="button"
+                              title="Reject"
+                              onClick={async () => {
+                                try {
+                                  await reviewCustomerRequest(pending.contactId, pending.requestId, 'rejected', '');
+                                  addToast({ type: 'success', title: 'Rejected', description: `${pending.company} duplicate request rejected.` });
+                                  void loadRows(false, true);
+                                } catch {
+                                  addToast({ type: 'error', title: 'Failed to reject' });
+                                }
+                              }}
+                              className="rounded-full bg-red-100 p-1.5 text-red-700 hover:bg-red-200"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      <tr className="bg-amber-50">
+                        <td colSpan={11} className="border-b border-amber-200 px-3 pb-3">
+                          <div className="space-y-2">
+                            {pending.submittedByName && <div className="text-xs text-slate-500">Submitted by: {pending.submittedByName}</div>}
+                            {pending.duplicateOverrideReason && (
+                              <div className="break-words text-xs text-amber-700">Reason: &ldquo;{pending.duplicateOverrideReason}&rdquo;</div>
+                            )}
+                            {pending.conflictingCustomers.length > 0 && (
+                              <div className="space-y-1">
+                                <div className="text-xs font-semibold text-slate-500">Conflicts with:</div>
+                                <div className="grid grid-cols-3 gap-2">
+                                  {pending.conflictingCustomers.map((customer) => (
+                                    <ModuleRecordAction
+                                      key={customer.sessionId}
+                                      tab="sales-database-customer-database"
+                                      payload={{ contactId: customer.sessionId }}
+                                      aria-label={`Open ${customer.company} in customer database`}
+                                      wrapperClassName="flex min-w-0 items-center gap-1 rounded border border-amber-200 bg-white px-2 py-1"
+                                      className="min-w-0 flex-1 rounded text-xs text-slate-700 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                                      newWindowLabel={`Open ${customer.company} in a new window`}
+                                    >
+                                      <span className="block break-words font-semibold underline decoration-slate-300 underline-offset-2">{customer.company}</span>
+                                      <span className="flex flex-wrap items-center gap-2 text-slate-500">
+                                        {(customer.mobile || customer.phone) && <span>{customer.mobile || customer.phone}</span>}
+                                        {customer.verification && <span className="rounded bg-slate-100 px-1">{customer.verification}</span>}
+                                      </span>
+                                    </ModuleRecordAction>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    </React.Fragment>
                   ))}
                   {visibleRows.map((row, index) => {
                     const rowBlocked = isBlockedDailyCallMasterRow(row);
