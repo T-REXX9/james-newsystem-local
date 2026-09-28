@@ -2606,6 +2606,16 @@ export interface AIAgentCapabilities {
   requires_human_approval_for: string[];
 }
 
+export interface PendingDuplicateConflict {
+  sessionId: string;
+  company: string;
+  mobile: string;
+  phone: string;
+  address: string;
+  verification: string;
+  profileType: string;
+}
+
 export interface PendingDuplicateProspect {
   requestId: string;
   contactId: string;
@@ -2619,4 +2629,5 @@ export interface PendingDuplicateProspect {
   referBy: string;
   salesPersonId: string;
   duplicateOverrideReason: string;
+  conflictingCustomers: PendingDuplicateConflict[];
 }
