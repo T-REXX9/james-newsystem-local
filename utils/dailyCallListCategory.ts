@@ -26,11 +26,11 @@ type ListCategoryInput = Pick<
 type MonitorBucketInput = ListCategoryInput &
   Pick<DailyCallMasterCustomerRow, 'customerStatus' | 'debtType' | 'profileType' | 'verification' | 'verifiedInSystem'>;
 
-const isProspectProfile = (profileType?: string) =>
-  String(profileType || '').trim().toLowerCase().includes('prospect');
-
 /** Legacy status 3 = Prospective in tblpatient.lstatus. */
 const isProspectiveCustomerStatus = (customerStatus?: number) => Number(customerStatus) === 3;
+
+const isProspectProfile = (profileType?: string) =>
+  String(profileType || '').trim().toLowerCase().includes('prospect');
 
 const normalizePurchaseDate = (raw?: string): string => {
   const value = String(raw || '').trim();
@@ -102,11 +102,14 @@ export const resolveDailyCallMonitorBucket = (row: MonitorBucketInput): DailyCal
   }
 
   const customerStatus = Number(row.customerStatus ?? 0);
-  // 1 Active / 2 Inactive are existing customer records, not awaiting first-purchase approval.
-  if (customerStatus === 1 || customerStatus === 2) return null;
-
-  const looksLikeProspect = isProspectProfile(row.profileType) || isProspectiveCustomerStatus(row.customerStatus);
-  if (!looksLikeProspect) return null;
+  // The Unverified list is exclusively for canonical prospective records.
+  // Profile labels are legacy/user-editable text and must not turn a regular
+  // or inactive customer into an unverified prospect.
+  if (row.customerStatus !== undefined && row.customerStatus !== null) {
+    if (!isProspectiveCustomerStatus(customerStatus)) return null;
+  } else if (!isProspectProfile(row.profileType)) {
+    return null;
+  }
 
   const isVerifiedByWorkflow = String(row.verification || '') === 'Verified' && row.verifiedInSystem === true;
   return isVerifiedByWorkflow ? 'verified' : 'unverified';

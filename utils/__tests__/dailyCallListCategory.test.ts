@@ -127,4 +127,22 @@ describe('dailyCallListCategory', () => {
       listCategory: 'no_purchase',
     })).toBeNull();
   });
+
+  it('keeps regular and inactive records out of the Unverified Prospects bucket', () => {
+    const base = {
+      profileType: 'Prospect',
+      verification: 'Unverified',
+      purchaseCount: 0,
+      priorityTransactionCount: 0,
+      ledgerTransactionCount: 0,
+      historicalTransactionCount: 0,
+      lastPurchaseDateRaw: '',
+      listCategory: 'no_purchase' as const,
+    };
+
+    expect(resolveDailyCallMonitorBucket({ ...base, customerStatus: 1 })).toBeNull();
+    expect(resolveDailyCallMonitorBucket({ ...base, customerStatus: 2 })).toBeNull();
+    expect(resolveDailyCallMonitorBucket({ ...base, customerStatus: 0 })).toBeNull();
+    expect(resolveDailyCallMonitorBucket({ ...base, customerStatus: 3 })).toBe('unverified');
+  });
 });
