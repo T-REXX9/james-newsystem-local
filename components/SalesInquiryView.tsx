@@ -1380,7 +1380,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
     setLoading(true);
     try {
-      const existingOrder = await getSalesOrderByInquiry(selectedInquiry.id);
+      const existingOrder = await getSalesOrderByInquiry(selectedInquiry.inquiry_no);
       if (!existingOrder?.id) {
         addToast({ type: 'warning', message: 'No linked sales order found for this inquiry yet.' });
         return;
