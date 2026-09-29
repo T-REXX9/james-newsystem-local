@@ -1167,7 +1167,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         })),
       };
 
-      if (selectedInquiry && !isCreatingNew) {
+      if (selectedInquiry?.id) {
         const updated = await updateSalesInquiry(selectedInquiry.id, inquiryData);
         await refetchInquiries();
         addToast({ type: 'success', message: 'Inquiry updated successfully!' });
