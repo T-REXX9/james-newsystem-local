@@ -294,10 +294,23 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
       loadOrders();
     };
     window.addEventListener('salesorder:created', handleSalesOrderCreated);
+
+    const handleInquiryUpdated = () => {
+      if (initialOrderId) {
+        void getSalesOrder(initialOrderId).then((detail) => {
+          if (detail) {
+            setSelectedOrder(detail);
+          }
+        });
+      }
+    };
+    window.addEventListener('inquiry:updated', handleInquiryUpdated);
+
     return () => {
       window.removeEventListener('salesorder:created', handleSalesOrderCreated);
+      window.removeEventListener('inquiry:updated', handleInquiryUpdated);
     };
-  }, [loadOrders]);
+  }, [initialOrderId, loadOrders]);
 
   const customerMap = useMemo(() => new Map(contacts.map(contact => [contact.id, contact])), [contacts]);
   const sortedContacts = useMemo(
