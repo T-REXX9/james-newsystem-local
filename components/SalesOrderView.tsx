@@ -295,14 +295,16 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
     };
     window.addEventListener('salesorder:created', handleSalesOrderCreated);
 
-    const handleInquiryUpdated = () => {
-      if (initialOrderId) {
-        void getSalesOrder(initialOrderId).then((detail) => {
-          if (detail) {
-            setSelectedOrder(detail);
-          }
-        });
-      }
+    const handleInquiryUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ salesOrderId?: string }>).detail;
+      const orderId = detail?.salesOrderId || selectedOrder?.id || initialOrderId;
+      if (!orderId) return;
+
+      void getSalesOrder(orderId).then((refreshedOrder) => {
+        if (!refreshedOrder) return;
+        setSelectedOrder((current) => !current || current.id === refreshedOrder.id ? refreshedOrder : current);
+        setOrders((current) => current.map((row) => row.id === refreshedOrder.id ? refreshedOrder : row));
+      });
     };
     window.addEventListener('inquiry:updated', handleInquiryUpdated);
 
@@ -310,7 +312,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
       window.removeEventListener('salesorder:created', handleSalesOrderCreated);
       window.removeEventListener('inquiry:updated', handleInquiryUpdated);
     };
-  }, [initialOrderId, loadOrders]);
+  }, [initialOrderId, loadOrders, selectedOrder?.id]);
 
   const customerMap = useMemo(() => new Map(contacts.map(contact => [contact.id, contact])), [contacts]);
   const sortedContacts = useMemo(
@@ -730,6 +732,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
     isPosted: selectedOrderStatus === 'posted' || selectedOrderStatus === 'cancelled' || selectedOrder?.is_editable === false,
   });
   const canEditSendBy = canEdit
+    && !selectedOrder?.inquiry_id
     && selectedOrderStatus !== 'posted'
     && selectedOrderStatus !== 'cancelled'
     && selectedOrder?.is_editable !== false;

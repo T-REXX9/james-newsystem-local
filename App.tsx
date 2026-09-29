@@ -106,7 +106,9 @@ const CANONICAL_TO_ALIASES: Record<string, string[]> = Object.entries(MODULE_ID_
 
 const normalizeModuleId = (moduleId: string): string => MODULE_ID_ALIASES[moduleId] || moduleId;
 
-const DEFAULT_ACTIVE_TAB = 'dashboard';
+// Start authenticated sessions on an intentionally blank workspace. A page is
+// selected only when it is present in the URL or the user navigates to it.
+const DEFAULT_ACTIVE_TAB = '';
 
 const getRouteStateFromLocation = (): { tab: string; payload?: Record<string, string> } => {
   if (typeof window === 'undefined') {
@@ -135,7 +137,9 @@ const writeRouteStateToLocation = (
 
   const canonicalTab = normalizeModuleId(tab || DEFAULT_ACTIVE_TAB);
   const params = new URLSearchParams(payload || {});
-  const nextHash = params.toString() ? `#/${canonicalTab}?${params.toString()}` : `#/${canonicalTab}`;
+  const nextHash = canonicalTab
+    ? params.toString() ? `#/${canonicalTab}?${params.toString()}` : `#/${canonicalTab}`
+    : '';
 
   if (window.location.hash === nextHash) {
     return;
@@ -394,6 +398,10 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     const canonicalTab = normalizeModuleId(activeTab);
+
+    if (!canonicalTab) {
+      return <div className="h-full bg-slate-100 dark:bg-slate-950" aria-label="Blank workspace" />;
+    }
 
     // Special case for settings / access control
     if (canonicalTab === 'maintenance-profile-system-access' || activeTab === 'settings') {

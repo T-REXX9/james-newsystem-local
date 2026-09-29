@@ -19,6 +19,7 @@ const product = {
   price_vip2: 440,
   price_vip3: 0,
   total_stock: 92,
+  application: 'ISUZU 4JA1 / 4JB1',
 } as Product;
 
 describe('ProductSearchModal', () => {
@@ -40,5 +41,7 @@ describe('ProductSearchModal', () => {
     expect(screen.getByText('₱445.00')).toBeInTheDocument();
     expect(screen.getByText('₱440.00')).toBeInTheDocument();
     expect(screen.getByText('₱0.00')).toBeInTheDocument();
+    expect(screen.getByText('Application:')).toBeInTheDocument();
+    expect(screen.getByText('ISUZU 4JA1 / 4JB1')).toBeInTheDocument();
   });
 });

@@ -213,6 +213,7 @@ describe('SalesOrderView', () => {
     expect(onNavigate).toHaveBeenCalledWith(expect.objectContaining({ detail: expect.objectContaining({ tab: 'sales-transaction-sales-inquiry', payload: { inquiryId: 'inq-1' } }) }));
     expect(screen.queryByLabelText('Quantity for SKU-1')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^save send by$/i })).not.toBeInTheDocument();
     window.removeEventListener('workflow:navigate', onNavigate);
   });
 
@@ -622,5 +623,22 @@ describe('SalesOrderView', () => {
     await waitFor(() => {
       expect(updateSalesOrderMock).toHaveBeenCalledWith('sendby-order', { send_by: 'LBC Express' });
     });
+  });
+
+  it('refreshes the linked order after its inquiry is saved', async () => {
+    const originalOrder = makeOrder({ id: 'linked-order', order_no: 'SO-LINKED', inquiry_id: 'inq-1' });
+    const refreshedOrder = { ...originalOrder, order_no: 'SO-LINKED-UPDATED' };
+    getAllSalesOrdersMock.mockResolvedValue([originalOrder]);
+    getSalesOrderMock.mockResolvedValueOnce(originalOrder).mockResolvedValueOnce(refreshedOrder);
+    fetchContactsMock.mockResolvedValue([{ id: 'contact-1', company: 'Acme Corp', transactionType: 'Invoice' }]);
+    fetchContactByIdMock.mockResolvedValue({ id: 'contact-1', company: 'Acme Corp', transactionType: 'Invoice' });
+
+    renderView({ initialOrderId: originalOrder.id });
+    await screen.findByDisplayValue('SO-LINKED');
+    getSalesOrderMock.mockResolvedValue(refreshedOrder);
+
+    window.dispatchEvent(new CustomEvent('inquiry:updated', { detail: { salesOrderId: originalOrder.id } }));
+
+    expect(await screen.findByDisplayValue('SO-LINKED-UPDATED')).toBeInTheDocument();
   });
 });

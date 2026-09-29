@@ -269,7 +269,9 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
   const loadCustomers = useCallback(async () => {
     try {
-      const rows = await fetchContacts();
+      // Sales Inquiry only needs customer picker fields. Avoid loading the full
+      // Customer Database payload and its Daily Call classification query here.
+      const rows = await fetchContacts({ lightweight: true });
       setCustomers(rows);
     } catch (error) {
       console.error('Failed loading customers:', error);
@@ -1174,7 +1176,11 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
         // Dispatch event to notify other views (e.g., sales order) to refresh
         window.dispatchEvent(new CustomEvent('inquiry:updated', {
-          detail: { inquiryId: updated.id, inquiryNo: updated.inquiry_no }
+          detail: {
+            inquiryId: updated.id,
+            inquiryNo: updated.inquiry_no,
+            salesOrderId: updated.so_refno || undefined,
+          }
         }));
 
         if (updated?.id && updated?.contact_id) {
@@ -1380,7 +1386,12 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
     setLoading(true);
     try {
-      const existingOrder = await getSalesOrderByInquiry(selectedInquiry.id);
+      // The inquiry stores the linked order reference directly. Use it first so
+      // opening the order does not depend on a second, potentially stale link
+      // lookup through the sales flow endpoint.
+      const existingOrder = (selectedInquiry.so_refno
+        ? await getSalesOrder(selectedInquiry.so_refno)
+        : null) || await getSalesOrderByInquiry(selectedInquiry.id);
       if (!existingOrder?.id) {
         addToast({ type: 'warning', message: 'No linked sales order found for this inquiry yet.' });
         return;

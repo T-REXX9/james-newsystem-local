@@ -644,9 +644,10 @@ const applyDailyCallRecoveryStatusToContacts = async (
   }
 };
 
-export const fetchContacts = async (): Promise<Contact[]> => {
+export const fetchContacts = async (options: { lightweight?: boolean } = {}): Promise<Contact[]> => {
   try {
     const perPage = 500;
+    const lightweight = options.lightweight === true;
     let page = 1;
     let totalPages = 1;
     const merged: Contact[] = [];
@@ -657,12 +658,13 @@ export const fetchContacts = async (): Promise<Contact[]> => {
         status: 'all',
         search: '',
         page: String(page),
-        per_page: String(perPage),
+        per_page: lightweight ? '0' : String(perPage),
+        ...(lightweight ? { mode: 'picker' } : {}),
       });
       const payload = await requestJson<ApiCustomerDatabaseResponse>(`${API_BASE_URL}/customer-database?${query.toString()}`);
       const rows = Array.isArray(payload?.data?.items) ? payload.data.items : [];
       merged.push(...rows.map(mapApiCustomerToContact));
-      totalPages = toNumber(payload?.data?.meta?.total_pages, 1);
+      totalPages = lightweight ? 1 : toNumber(payload?.data?.meta?.total_pages, 1);
       page += 1;
     }
 
@@ -687,9 +689,11 @@ export const fetchContacts = async (): Promise<Contact[]> => {
 
     const contacts = [...dedupedById.values(), ...contactsWithoutId];
 
-    // Force-refresh so a prior viewer’s cached master list cannot leave recovery
-    // buyers incorrectly standing as Active on this page.
-    await applyDailyCallRecoveryStatusToContacts(contacts, { forceRefresh: true });
+    if (!lightweight) {
+      // Full customer-database consumers need the Daily Call recovery overlay.
+      // Lightweight pickers intentionally skip this expensive cross-module query.
+      await applyDailyCallRecoveryStatusToContacts(contacts, { forceRefresh: true });
+    }
 
     return contacts.sort((a, b) =>
       (a.company || '').localeCompare(b.company || ''),

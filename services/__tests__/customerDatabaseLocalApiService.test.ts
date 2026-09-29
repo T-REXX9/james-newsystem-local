@@ -109,6 +109,30 @@ describe('customer database saves and daily call cache', () => {
     expect(contacts[0].status).toBe(CustomerStatus.INACTIVE);
   });
 
+  it('loads the complete customer picker without applying a result cap', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: async () => ({
+        data: {
+          items: [
+            { session_id: 'customer-1', company: 'First Customer' },
+            { session_id: 'customer-999', company: 'Customer Beyond Five Hundred' },
+          ],
+          meta: { total_pages: 99 },
+        },
+      }),
+    } as Response);
+
+    const contacts = await fetchContacts({ lightweight: true });
+    const requestUrl = String(fetchSpy.mock.calls[0][0]);
+
+    expect(contacts).toHaveLength(2);
+    expect(requestUrl).toContain('mode=picker');
+    expect(requestUrl).toContain('per_page=0');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('marks a Daily Call recovery buyer Inactive when loading customer detail', async () => {
     vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce({

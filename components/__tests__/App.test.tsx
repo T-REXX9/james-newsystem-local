@@ -108,6 +108,25 @@ describe('App authentication flow', () => {
     await waitFor(() => expect(mockedLogoutFromLocalApi).toHaveBeenCalled());
   });
 
+  it('starts on a blank workspace when no page is specified', async () => {
+    mockedRestoreLocalAuthSession.mockResolvedValue({
+      token: 'token-blank',
+      context: { user: { id: 1 } },
+      userProfile: {
+        id: '1',
+        email: 'owner@example.com',
+        full_name: 'Owner User',
+        role: 'Owner',
+        access_rights: ['*'],
+      },
+    } as any);
+
+    render(<App />);
+
+    expect(await screen.findByLabelText('Blank workspace')).toBeInTheDocument();
+    expect(window.location.hash).toBe('');
+  });
+
   it('uses browser Back to return to the previous module without logging out', async () => {
     window.history.replaceState(null, '', '/#/home');
     mockedRestoreLocalAuthSession.mockResolvedValue({
