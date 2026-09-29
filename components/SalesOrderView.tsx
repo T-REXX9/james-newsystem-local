@@ -809,7 +809,9 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
     }
   };
 
-  const canGenerate = ['pending', 'submitted', 'approved'].includes(selectedOrderStatus);
+  const canGenerate = ['pending', 'submitted', 'approved'].includes(selectedOrderStatus)
+    && !selectedOrder?.order_slip_no
+    && !selectedOrder?.invoice_no;
   const nextStepGuidance = (() => {
     if (!selectedOrder) {
       return {
