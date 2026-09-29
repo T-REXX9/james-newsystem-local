@@ -1167,10 +1167,15 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         })),
       };
 
-      if (selectedInquiry && !isCreatingNew) {
+      if (selectedInquiry?.id) {
         const updated = await updateSalesInquiry(selectedInquiry.id, inquiryData);
         await refetchInquiries();
         addToast({ type: 'success', message: 'Inquiry updated successfully!' });
+
+        // Dispatch event to notify other views (e.g., sales order) to refresh
+        window.dispatchEvent(new CustomEvent('inquiry:updated', {
+          detail: { inquiryId: updated.id, inquiryNo: updated.inquiry_no }
+        }));
 
         if (updated?.id && updated?.contact_id) {
           setSelectedInquiry(updated);
