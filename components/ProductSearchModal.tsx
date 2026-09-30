@@ -196,6 +196,9 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({ isOpen, onClose
 
                                             <div className="flex items-center gap-4 text-xs text-slate-500">
                                                 <span className="flex items-center gap-1">
+                                                    Brand: <span className="font-medium text-slate-700 dark:text-slate-300">{product.brand || '—'}</span>
+                                                </span>
+                                                <span className="flex items-center gap-1">
                                                     Code: <span className="font-mono text-slate-700 dark:text-slate-300">{highlightMatch(product.item_code, query)}</span>
                                                 </span>
                                                 <span className="flex items-center gap-1">

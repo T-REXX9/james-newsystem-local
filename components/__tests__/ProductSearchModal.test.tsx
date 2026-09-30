@@ -14,6 +14,7 @@ const product = {
   id: 'product-1',
   part_no: 'P-DSLA150PN926',
   item_code: 'QK2-1529',
+  brand: 'DENSO',
   description: 'NOZZLE',
   price_vip1: 445,
   price_vip2: 440,
@@ -43,5 +44,7 @@ describe('ProductSearchModal', () => {
     expect(screen.getByText('₱0.00')).toBeInTheDocument();
     expect(screen.getByText('Application:')).toBeInTheDocument();
     expect(screen.getByText('ISUZU 4JA1 / 4JB1')).toBeInTheDocument();
+    expect(screen.getByText('Brand:')).toBeInTheDocument();
+    expect(screen.getByText('DENSO')).toBeInTheDocument();
   });
 });
