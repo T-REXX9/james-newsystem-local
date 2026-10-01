@@ -11,6 +11,7 @@ interface Props {
 }
 
 const safeFilename = (value: string) => value.trim().replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'product';
+const productFilename = (product: Product) => `${safeFilename(product.part_no || product.item_code)}-${safeFilename(product.description)}-${safeFilename(product.id)}`;
 
 const asImageSource = (value: string) => {
   const image = value.trim();
@@ -82,7 +83,7 @@ const DailyCallProductImageExport: React.FC<Props> = ({ customerName, assignedAg
     try {
       for (const product of selectedProducts) {
         const blob = await imageToJpeg(asImageSource(product.recordImage || ''));
-        downloadBlob(blob, `${safeFilename(product.part_no || product.item_code || product.description)}.jpg`);
+        downloadBlob(blob, `${productFilename(product)}.jpg`);
       }
       setMessage(`Downloaded ${selectedProducts.length} JPG image${selectedProducts.length === 1 ? '' : 's'}.`);
     } catch (reason) {
@@ -189,6 +190,20 @@ const DailyCallProductImageExport: React.FC<Props> = ({ customerName, assignedAg
         <button type="button" disabled={!selectedProducts.length || busy} onClick={() => void downloadZip()} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"><FileArchive className="h-4 w-4" />Download ZIP</button>
         {busy && <span className="inline-flex items-center gap-1 text-xs text-slate-600" role="status"><Download className="h-3.5 w-3.5 animate-bounce" />Preparing export…</span>}
       </div>
+      {selectedProducts.length > 0 && (
+        <ul aria-label="Selected products" className="flex flex-wrap gap-2">
+          {selectedProducts.map((product) => (
+            <li key={product.id} className="flex max-w-full items-center gap-2 rounded-full border border-slate-200 bg-slate-50 py-1 pl-3 pr-1 text-xs text-slate-700">
+              <span className="max-w-56 truncate">{product.description || product.part_no || product.item_code}</span>
+              <button type="button" aria-label={`Remove ${product.description || product.part_no || product.item_code} from selection`} onClick={() => setSelectedProductsById((current) => {
+                const next = new Map(current);
+                next.delete(product.id);
+                return next;
+              })} className="rounded-full px-1.5 py-0.5 font-bold text-slate-500 hover:bg-slate-200 hover:text-slate-900">×</button>
+            </li>
+          ))}
+        </ul>
+      )}
       {message && <p className="text-sm text-emerald-800" role="status">{message}</p>}
     </section>
   );
