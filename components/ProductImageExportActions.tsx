@@ -43,6 +43,12 @@ const downloadBlob = (blob: Blob, filename: string) => {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
+export const exportProductImageAsJpg = async (product: Product): Promise<void> => {
+  if (!product.recordImage?.trim()) throw new Error('This product does not have an image to export.');
+  const blob = await imageToJpeg(asImageSource(product.recordImage));
+  downloadBlob(blob, `${productFilename(product)}.jpg`);
+};
+
 const ProductImageExportActions: React.FC<Props> = ({ products, customerName, compact = false }) => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -54,8 +60,7 @@ const ProductImageExportActions: React.FC<Props> = ({ products, customerName, co
     setBusy(true); setError(''); setMessage('');
     try {
       for (const product of products) {
-        const blob = await imageToJpeg(asImageSource(product.recordImage || ''));
-        downloadBlob(blob, `${productFilename(product)}.jpg`);
+        await exportProductImageAsJpg(product);
       }
       setMessage(`Downloaded ${products.length} JPG image${products.length === 1 ? '' : 's'}.`);
     } catch (reason) {
