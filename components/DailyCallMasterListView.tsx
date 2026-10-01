@@ -347,18 +347,20 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   }, []);
 
   const openCustomerDetails = useCallback(async (row: DailyCallMasterCustomerRow, initialTab: DetailTabId = 'overview') => {
-    setLoadingCustomerId(row.id);
     setDetailInitialTab(initialTab);
     setDetailViewOnly(isBlockedDailyCallMasterRow(row) || Boolean(row.dataIntegrityException));
+    setSelectedCustomer(masterRowFallback(row));
+
+    // Open from the row already in memory. Hydrate the richer customer profile
+    // in the background so the detail view does not wait for the full directory.
     try {
       if (!fullCustomerRowsRef.current) {
         fullCustomerRowsRef.current = await fetchCustomersForDailyCall({});
       }
-      const detailRow =
-        fullCustomerRowsRef.current.find((customer) => customer.id === row.id) || masterRowFallback(row);
-      setSelectedCustomer(detailRow);
-    } finally {
-      setLoadingCustomerId(null);
+      const detailRow = fullCustomerRowsRef.current.find((customer) => customer.id === row.id);
+      if (detailRow) setSelectedCustomer(current => current?.id === row.id ? detailRow : current);
+    } catch {
+      // Keep the master-list row usable when profile hydration is unavailable.
     }
   }, []);
 

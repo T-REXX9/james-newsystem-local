@@ -25,7 +25,6 @@ import { formatLegacyPriceGroupLabel } from '../constants/pricingGroups';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import { getVipStandingSummary } from '../utils/vipStanding';
 import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
-import { getVipTierConfig } from '../services/vipTierSettingsService';
 import { fetchContactCustomerLogsForDailyCall } from '../services/dailyCallMonitoringService';
 import { buildYearlySalesFromSummary, customerLedgerService, type CustomerYearlySales as CustomerYearlySalesEntry } from '../services/customerLedgerService';
 import { DO_NOT_CONTACT_LABEL, isBlockedDailyCallCustomerRow } from '../utils/dailyCallBlockedCustomer';
@@ -47,6 +46,7 @@ interface DailyCallCustomerDetailExpansionProps {
   currentUser: UserProfile | null;
   initialTab?: DetailTabId;
   viewOnlyDoNotContact?: boolean;
+  vipConfig?: VipTierConfig;
 }
 
 const normalizeTabId = (tab?: DetailTabId): DetailTabId => {
@@ -112,6 +112,7 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
   currentUser,
   initialTab = 'overview',
   viewOnlyDoNotContact = false,
+  vipConfig = DEFAULT_VIP_TIER_CONFIG,
 }) => {
   const readOnly = viewOnlyDoNotContact || isBlockedDailyCallCustomerRow(customer);
   const visibleTabs = useMemo(
@@ -119,7 +120,6 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
     [readOnly]
   );
   const [activeTab, setActiveTab] = useState<DetailTabId>(normalizeTabId(initialTab));
-  const [vipConfig, setVipConfig] = useState<VipTierConfig>(DEFAULT_VIP_TIER_CONFIG);
   const [doNotContactReason, setDoNotContactReason] = useState('');
   const [yearlySalesEntries, setYearlySalesEntries] = useState<CustomerYearlySalesEntry[]>([]);
   const [ledgerError, setLedgerError] = useState('');
@@ -133,14 +133,6 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
       setActiveTab('overview');
     }
   }, [activeTab, readOnly]);
-
-  useEffect(() => {
-    let disposed = false;
-    getVipTierConfig().then((config) => {
-      if (!disposed) setVipConfig(config);
-    });
-    return () => { disposed = true; };
-  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -161,6 +153,10 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
   }, [customer.id]);
 
   useEffect(() => {
+    if (!readOnly) {
+      setDoNotContactReason('');
+      return;
+    }
     let disposed = false;
     setDoNotContactReason('');
     void fetchContactCustomerLogsForDailyCall(customer.id).then((logs) => {
@@ -169,7 +165,7 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
       setDoNotContactReason(statusLog?.note?.trim() || '');
     });
     return () => { disposed = true; };
-  }, [customer.id]);
+  }, [customer.id, readOnly]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

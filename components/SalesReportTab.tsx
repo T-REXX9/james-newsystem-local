@@ -222,10 +222,10 @@ const SalesReportTab: React.FC<SalesReportTabProps> = ({ contactId, customerName
                       <button
                         type="button"
                         onClick={() => openDailyCallSalesInquiry(contactId, report.inquiryId)}
-                        aria-label={`Open sales inquiry report ${report.id}`}
+                        aria-label={`Open sales inquiry report ${report.inquiryNo || 'without a number'}`}
                         className="font-medium text-[#337ab7] underline decoration-transparent underline-offset-2 hover:decoration-current focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                       >
-                        Sales Inquiry #{report.inquiryNo || report.id || '—'}
+                        Sales Inquiry #{report.inquiryNo || '—'}
                       </button>
                     </td>
                     <td className="px-2 py-2">{customerName || contactId}</td>

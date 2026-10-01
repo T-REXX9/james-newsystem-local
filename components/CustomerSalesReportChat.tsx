@@ -159,8 +159,9 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
       const conversation = await fetchSalesReportConversation(contactId);
       setMessages(conversation.messages);
       if (conversation.unread_count > 0) {
-        await markSalesReportConversationRead(contactId).catch(() => undefined);
-        onConversationReadRef.current?.(contactId);
+        void markSalesReportConversationRead(contactId)
+          .catch(() => undefined)
+          .finally(() => onConversationReadRef.current?.(contactId));
       }
     } catch (error) {
       if (shouldSuppressAuthError(error)) return;

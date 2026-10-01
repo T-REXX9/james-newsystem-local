@@ -37,8 +37,9 @@ const DailyCallCustomerDetailModal: React.FC<DailyCallCustomerDetailModalProps> 
   const [vipConfig, setVipConfig] = useState<VipTierConfig>(DEFAULT_VIP_TIER_CONFIG);
 
   useEffect(() => {
+    if (!isOpen) return;
     void getVipTierConfig().then(setVipConfig).catch(() => setVipConfig(DEFAULT_VIP_TIER_CONFIG));
-  }, []);
+  }, [isOpen]);
 
   const vipStanding = customer
     ? getVipStandingSummary('', customer.lastMonthOrder, vipConfig)
@@ -147,6 +148,7 @@ const DailyCallCustomerDetailModal: React.FC<DailyCallCustomerDetailModalProps> 
             currentUser={currentUser}
             initialTab={initialTab}
             viewOnlyDoNotContact={viewOnlyDoNotContact}
+            vipConfig={vipConfig}
           />
         </div>
 
