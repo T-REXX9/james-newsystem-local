@@ -7,6 +7,7 @@ import {
   ClipboardList,
   CreditCard,
   FileWarning,
+  Images,
   MessageSquare,
   PackageSearch,
   ShieldCheck,
@@ -18,6 +19,7 @@ import IncidentReportTab from './IncidentReportTab';
 import CustomerRequestsTab from './CustomerRequestsTab';
 import CustomerSalesReportChat from './CustomerSalesReportChat';
 import CustomerYearlySales from './CustomerYearlySales';
+import { Suspense } from 'react';
 import { DailyCallCustomerRow, UserProfile, VipTierConfig } from '../types';
 import { formatLegacyPriceGroupLabel } from '../constants/pricingGroups';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
@@ -37,7 +39,8 @@ export type DetailTabId =
   | 'sales'
   | 'item-issues'
   | 'incident'
-  | 'requests';
+  | 'requests'
+  | 'product-images';
 
 interface DailyCallCustomerDetailExpansionProps {
   customer: DailyCallCustomerRow;
@@ -62,6 +65,7 @@ const tabs: Array<{
   { id: 'item-issues', label: 'Item Issues', icon: PackageSearch },
   { id: 'incident', label: 'Incident Reports', icon: FileWarning },
   { id: 'requests', label: 'Request for management approval', icon: ClipboardList },
+  { id: 'product-images', label: 'Product Images', icon: Images },
 ];
 
 const formatCurrency = (value: number) =>
@@ -78,6 +82,7 @@ const formatDate = (value?: string) => {
 };
 
 const vipBadgeIconUrl = new URL('../vip-svgrepo-com.svg', import.meta.url).href;
+const ProductImageExport = React.lazy(() => import('./DailyCallProductImageExport'));
 
 const PanelCard: React.FC<{
   title: string;
@@ -257,6 +262,13 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
     if (activeTab === 'item-issues') return <ItemIssueReportTab contactId={customer.id} />;
     if (activeTab === 'incident') return <IncidentReportTab contactId={customer.id} currentUser={currentUser} />;
     if (activeTab === 'requests') return <CustomerRequestsTab contactId={customer.id} currentUser={currentUser} />;
+    if (activeTab === 'product-images') {
+      return (
+        <Suspense fallback={<p className="p-5 text-sm text-slate-600">Loading product image export…</p>}>
+          <ProductImageExport customerName={customer.shopName} assignedAgentId={customer.assignedAgentId} currentUser={currentUser} />
+        </Suspense>
+      );
+    }
     if (activeTab === 'sales-report' || activeTab === 'comments' || activeTab === 'human') {
       return (
         <div className="p-5">

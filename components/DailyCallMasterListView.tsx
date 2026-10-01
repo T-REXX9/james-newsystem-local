@@ -233,6 +233,7 @@ const masterRowFallback = (row: DailyCallMasterCustomerRow): DailyCallCustomerRo
   id: row.id,
   source: 'Master List',
   assignedTo: row.assignedTo,
+  assignedAgentId: row.assignedAgentId,
   assignedDate: row.assignedDate,
   clientSince: row.firstPurchaseDate || '—',
   province: row.province,

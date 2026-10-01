@@ -440,6 +440,7 @@ const mapDailyCallCustomerRow = (row: any): DailyCallCustomerRow => ({
   id: String(row?.id || ''),
   source: cleanNullableText(row?.source, 'Manual'),
   assignedTo: cleanNullableText(row?.assignedTo ?? row?.assigned_to, 'Unassigned'),
+  assignedAgentId: cleanNullableText(row?.assignedAgentId ?? row?.assigned_agent_id ?? row?.sales_person_id ?? row?.salesPersonId),
   assignedTeamId: cleanNullableText(row?.assignedTeamId ?? row?.assigned_team_id),
   assignedTeam: cleanNullableText(row?.assignedTeam ?? row?.assigned_team),
   assignedDate: cleanNullableText(row?.assignedDate ?? row?.assigned_date),

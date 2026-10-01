@@ -753,6 +753,7 @@ export interface DailyCallCustomerRow {
   id: string;
   source: string;
   assignedTo: string;
+  assignedAgentId?: string;
   assignedDate?: string;
   clientSince: string;
   province?: string;
