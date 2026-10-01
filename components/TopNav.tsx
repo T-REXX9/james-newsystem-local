@@ -49,7 +49,7 @@ const TopNav: React.FC<TopNavProps> = ({ activeTab = 'home', onNavigate, user, o
       </div>
 
       <div className="flex items-center gap-1 sm:gap-2 2xl:gap-4 2xl:pr-4 shrink-0">
-         <ProductQuickSearchLauncher />
+         <ProductQuickSearchLauncher user={user || null} />
          <InternalChatLauncher user={user || null} />
 
          {/* Notification Center */}

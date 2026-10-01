@@ -1,26 +1,35 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { Search, Loader2, Package, AlertCircle, X, Check } from 'lucide-react';
-import { Product } from '../types';
+import type { Product, UserProfile } from '../types';
 import { searchProducts } from '../services/productLocalApiService';
 import { useDebounce } from '../hooks/useDebounce';
 import { getCentralStock } from '../utils/productStock';
+import { canExportProductImages, isSalesAgentUser } from '../utils/productImageExportAccess';
+import ProductImageExportActions from './ProductImageExportActions';
 
 interface ProductSearchModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSelect: (product: Product) => void;
+    customerName?: string;
+    assignedAgentId?: string;
+    currentUser?: UserProfile | null;
 }
 
-const ProductSearchModal: React.FC<ProductSearchModalProps> = ({ isOpen, onClose, onSelect }) => {
+const ProductSearchModal: React.FC<ProductSearchModalProps> = ({ isOpen, onClose, onSelect, customerName = '', assignedAgentId, currentUser = null }) => {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<Product[]>([]);
     const [loading, setLoading] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState(-1);
     const [noResults, setNoResults] = useState(false);
+    const [exportSelection, setExportSelection] = useState<Map<string, Product>>(() => new Map());
     const inputRef = useRef<HTMLInputElement>(null);
 
     const debouncedQuery = useDebounce(query, 300);
+    const canExport = canExportProductImages(currentUser, assignedAgentId);
+    const isUnassignedSalesAgent = Boolean(currentUser?.id && isSalesAgentUser(currentUser) && !canExport);
+    const selectedExportProducts = Array.from(exportSelection.values());
 
     // Reset state when opened
     useEffect(() => {
@@ -29,6 +38,7 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({ isOpen, onClose
             setResults([]);
             setSelectedIndex(-1);
             setNoResults(false);
+            setExportSelection(new Map());
             // Fetch default results immediately on open
             searchProducts('').then(data => setResults(data));
 
@@ -165,6 +175,20 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({ isOpen, onClose
                                         }}
                                         onMouseEnter={() => setSelectedIndex(index)}
                                     >
+                                        {canExport && product.recordImage?.trim() && (
+                                            <input
+                                                type="checkbox"
+                                                aria-label={`Select ${product.description || product.part_no} image for export`}
+                                                checked={exportSelection.has(product.id)}
+                                                onClick={(event) => event.stopPropagation()}
+                                                onChange={(event) => setExportSelection((current) => {
+                                                    const next = new Map(current);
+                                                    if (event.target.checked) next.set(product.id, product); else next.delete(product.id);
+                                                    return next;
+                                                })}
+                                                className="mt-2 h-4 w-4 shrink-0 accent-blue-700"
+                                            />
+                                        )}
                                         <div className={`mt-1 p-2 rounded-lg ${isSelected ? 'bg-brand-blue text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
                                             <Package className="h-5 w-5" />
                                         </div>
@@ -244,6 +268,30 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({ isOpen, onClose
                         </div>
                     )}
                 </div>
+
+                {canExport && selectedExportProducts.length > 0 && (
+                    <div className="space-y-2 border-t border-slate-100 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <span className="text-xs text-slate-600 dark:text-slate-300">{selectedExportProducts.length} product image{selectedExportProducts.length === 1 ? '' : 's'} selected</span>
+                            <ProductImageExportActions products={selectedExportProducts} customerName={customerName || 'product'} compact />
+                        </div>
+                        <ul aria-label="Selected product images" className="flex max-h-14 flex-wrap gap-1.5 overflow-y-auto">
+                            {selectedExportProducts.map((product) => (
+                                <li key={product.id} className="flex max-w-full items-center gap-1 rounded-full border border-slate-200 bg-slate-50 py-0.5 pl-2.5 pr-1 text-[11px] text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                                    <span className="max-w-40 truncate">{product.description || product.part_no || product.item_code}</span>
+                                    <button type="button" aria-label={`Remove ${product.description || product.part_no || product.item_code} from image export`} onClick={() => setExportSelection((current) => {
+                                        const next = new Map(current);
+                                        next.delete(product.id);
+                                        return next;
+                                    })} className="rounded-full px-1.5 py-0.5 font-bold text-slate-500 hover:bg-slate-200">×</button>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+                {isUnassignedSalesAgent && (
+                    <p className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">Select a customer assigned to you in Sales Inquiry to export product images.</p>
+                )}
 
                 {/* Footer Legend */}
                 <div className="px-4 py-2 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 rounded-b-xl flex justify-between text-xs text-slate-400">

@@ -1846,7 +1846,14 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         />
       )}
       {showDeleteModal && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"><div className="w-full max-w-sm rounded-[5px] bg-white p-5 shadow-xl"><h3 className="mb-3 text-[18px] font-semibold">{selectedInquiry && !isCreatingNew ? 'Cancel Sales Inquiry' : 'Clear Sales Inquiry'}</h3><p className="mb-5 text-[14px] text-[#555]">{selectedInquiry && !isCreatingNew ? 'Are you sure you want to cancel this Sales Inquiry?' : 'Are you sure you want to clear this draft?'}</p><div className="flex justify-end gap-2"><button type="button" onClick={() => setShowDeleteModal(false)} className="rounded border border-[#ccc] px-4 py-2 text-[13px]">Close</button><button type="button" onClick={handleDeleteConfirm} disabled={deleteConfirming} className="rounded bg-[#337ab7] px-4 py-2 text-[13px] text-white">{deleteConfirming ? 'Working...' : 'Proceed'}</button></div></div></div>}
-      <ProductSearchModal isOpen={showProductModal} onClose={handleCloseProductModal} onSelect={handleProductSelect} />
+      <ProductSearchModal
+        isOpen={showProductModal}
+        onClose={handleCloseProductModal}
+        onSelect={handleProductSelect}
+        customerName={selectedCustomer?.company || ''}
+        assignedAgentId={selectedCustomer?.assignedAgentId}
+        currentUser={getLocalAuthSession()?.userProfile || null}
+      />
       <NotListedItemModal
         isOpen={showNotListedItemModal}
         onClose={() => setShowNotListedItemModal(false)}
@@ -2744,6 +2751,9 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         isOpen={showProductModal}
         onClose={handleCloseProductModal}
         onSelect={handleProductSelect}
+        customerName={selectedCustomer?.company || ''}
+        assignedAgentId={selectedCustomer?.assignedAgentId}
+        currentUser={getLocalAuthSession()?.userProfile || null}
       />
     </div>
   );

@@ -9,7 +9,11 @@ import {
   X,
 } from 'lucide-react';
 import type { Product } from '../types';
+import type { DailyCallCustomerRow, UserProfile } from '../types';
 import { fetchProductsPage } from '../services/productLocalApiService';
+import { fetchCustomersForDailyCall } from '../services/dailyCallMonitoringService';
+import { canExportProductImages, isSalesAgentUser } from '../utils/productImageExportAccess';
+import ProductImageExportActions from './ProductImageExportActions';
 import { useToast } from './ToastProvider';
 import { getCentralStock } from '../utils/productStock';
 
@@ -75,7 +79,7 @@ const highlightMatch = (value: string, query: string) => {
   );
 };
 
-const ProductQuickSearchLauncher: React.FC = () => {
+const ProductQuickSearchLauncher: React.FC<{ user?: UserProfile | null }> = ({ user = null }) => {
   const { addToast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -85,6 +89,11 @@ const ProductQuickSearchLauncher: React.FC = () => {
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [assignedCustomers, setAssignedCustomers] = useState<DailyCallCustomerRow[]>([]);
+  const [customerLoading, setCustomerLoading] = useState(false);
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [exportProductsById, setExportProductsById] = useState<Map<string, Product>>(() => new Map());
+  const isSalesAgent = isSalesAgentUser(user);
   const latestRequestRef = useRef(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const modalRef = useRef<HTMLDivElement | null>(null);
@@ -209,6 +218,33 @@ const ProductQuickSearchLauncher: React.FC = () => {
     () => results.find((product) => product.id === selectedProductId) || null,
     [results, selectedProductId]
   );
+  const assignedCustomer = useMemo(
+    () => assignedCustomers.find((customer) => customer.id === selectedCustomerId) || null,
+    [assignedCustomers, selectedCustomerId]
+  );
+  const canExportSelectedProducts = canExportProductImages(user, assignedCustomer?.assignedAgentId);
+  const exportProducts = useMemo(() => Array.from(exportProductsById.values()), [exportProductsById]);
+
+  useEffect(() => {
+    if (!isOpen || isMinimized || !isSalesAgent || !user?.id) return;
+    let active = true;
+    setCustomerLoading(true);
+    void fetchCustomersForDailyCall({ viewerUserId: user.id })
+      .then((rows) => {
+        if (!active) return;
+        setAssignedCustomers(rows.filter((customer) => String(customer.assignedAgentId || '') === String(user.id)));
+      })
+      .catch(() => {
+        if (active) setAssignedCustomers([]);
+      })
+      .finally(() => { if (active) setCustomerLoading(false); });
+    return () => { active = false; };
+  }, [isMinimized, isOpen, isSalesAgent, user?.id]);
+
+  useEffect(() => {
+    setSelectedCustomerId('');
+    setExportProductsById(new Map());
+  }, [user?.id]);
 
   const totalStock = useMemo(
     () => selectedProduct ? getCentralStock(selectedProduct) : 0,
@@ -295,6 +331,16 @@ const ProductQuickSearchLauncher: React.FC = () => {
               <div className="mt-2 text-[11px] text-slate-400">
                 Tip: Press `Ctrl/Cmd + K` anywhere outside text fields to open this panel.
               </div>
+              {isSalesAgent && (
+                <label className="mt-3 block text-xs font-medium text-slate-600">
+                  Customer for image export
+                  <select value={selectedCustomerId} onChange={(event) => setSelectedCustomerId(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-800">
+                    <option value="">{customerLoading ? 'Loading your assigned customers…' : 'Choose an assigned customer'}</option>
+                    {assignedCustomers.map((customer) => <option key={customer.id} value={customer.id}>{customer.shopName}</option>)}
+                  </select>
+                  {!customerLoading && assignedCustomers.length === 0 && <span className="mt-1 block font-normal text-amber-800">No customers currently assigned to your account were found.</span>}
+                </label>
+              )}
             </div>
 
             <div className="flex-1 overflow-y-auto">
@@ -313,10 +359,24 @@ const ProductQuickSearchLauncher: React.FC = () => {
                   const isSelected = selectedProductId === product.id;
 
                   return (
-                    <button
-                      key={product.id}
+                    <div key={product.id} className="flex items-stretch border-b border-slate-100">
+                      {canExportSelectedProducts && product.recordImage?.trim() && (
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${product.description || product.part_no} image for export`}
+                          checked={exportProductsById.has(product.id)}
+                          onClick={(event) => event.stopPropagation()}
+                          onChange={(event) => setExportProductsById((current) => {
+                            const next = new Map(current);
+                            if (event.target.checked) next.set(product.id, product); else next.delete(product.id);
+                            return next;
+                          })}
+                          className="ml-3 mr-1 h-4 w-4 shrink-0 self-center accent-blue-700"
+                        />
+                      )}
+                      <button
                       onClick={() => setSelectedProductId(product.id)}
-                      className={`w-full border-b border-slate-100 px-4 py-3 text-left transition ${
+                      className={`w-full px-4 py-3 text-left transition ${
                         isSelected ? 'bg-brand-blue/10' : 'hover:bg-white'
                       }`}
                     >
@@ -344,6 +404,7 @@ const ProductQuickSearchLauncher: React.FC = () => {
                         </div>
                       </div>
                     </button>
+                    </div>
                   );
                 })
               )}
@@ -379,7 +440,7 @@ const ProductQuickSearchLauncher: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex-1 overflow-hidden bg-slate-50/50 px-4 py-4 max-md:overflow-y-auto">
+            <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/50 px-4 py-4">
               {!selectedProduct ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-10 text-center text-sm text-slate-500">
                   Search and select a product to view stock, warehouse locations, and quick identifiers.
@@ -477,6 +538,33 @@ const ProductQuickSearchLauncher: React.FC = () => {
                       </div>
                     </div>
                   </div>
+
+                  {canExportSelectedProducts && (
+                    <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-4">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-slate-900">Product image export</p>
+                        <span className="text-xs text-slate-600">{exportProducts.length} selected</span>
+                      </div>
+                      {exportProducts.length > 0 ? (
+                        <>
+                          <ul className="mb-3 flex flex-wrap gap-2" aria-label="Selected product images">
+                            {exportProducts.map((product) => (
+                              <li key={product.id} className="flex max-w-full items-center gap-2 rounded-full border border-slate-200 bg-white py-1 pl-3 pr-1 text-xs text-slate-700">
+                                <span className="max-w-48 truncate">{product.description || product.part_no || product.item_code}</span>
+                                <button type="button" aria-label={`Remove ${product.description || product.part_no || product.item_code} from image export`} onClick={() => setExportProductsById((current) => {
+                                  const next = new Map(current); next.delete(product.id); return next;
+                                })} className="rounded-full px-1.5 py-0.5 font-bold text-slate-500 hover:bg-slate-100">×</button>
+                              </li>
+                            ))}
+                          </ul>
+                          <ProductImageExportActions products={exportProducts} customerName={assignedCustomer?.shopName || 'product'} compact />
+                        </>
+                      ) : <p className="text-xs text-slate-600">Select one or more product images from the search results.</p>}
+                    </div>
+                  )}
+                  {isSalesAgent && !canExportSelectedProducts && (
+                    <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Choose a customer currently assigned to you to enable image exports.</p>
+                  )}
 
                   <div className="hidden rounded-2xl border border-brand-blue/15 bg-brand-blue/[0.04] px-4 py-3 text-[11px] text-slate-500 xl:block">
                     Quick view mode keeps pricing, stock, and product identifiers visible without needing to scroll.
