@@ -8,10 +8,14 @@ export interface DailyCallSalesReportProductLine {
   partNo: string;
   itemCode: string;
   description: string;
+  location: string;
+  brand: string;
 }
 
 export interface DailyCallSalesReportRecord {
   id: string;
+  inquiryId: string;
+  inquiryNo: string;
   date: string;
   time: string;
   sales_agent: string;
@@ -39,26 +43,32 @@ export const normalizeProductName = (value: string): string => value.trim().toLo
 
 export const normalizeSalesReportRecords = (data: unknown): DailyCallSalesReportRecord[] =>
   Array.isArray(data)
-    ? data.map((report: Partial<DailyCallSalesReportRecord>) => ({
-        id: String(report.id || ''),
-        date: String(report.date || ''),
-        time: String(report.time || ''),
-        sales_agent: String(report.sales_agent || ''),
-        notes: typeof report.notes === 'string' ? report.notes : '',
-        total_amount: Number(report.total_amount || 0),
-        approval_status: String(report.approval_status || 'pending'),
-        products: Array.isArray(report.products)
-          ? report.products.map((product: Partial<DailyCallSalesReportProductLine>) => ({
-              name: String(product.name || ''),
-              quantity: Number(product.quantity || 0),
-              price: Number(product.price || 0),
-              remark: String(product.remark || ''),
-              partNo: String(product.partNo || ''),
-              itemCode: String(product.itemCode || ''),
-              description: String(product.description || ''),
-            }))
-          : [],
-      }))
+    ? data.map((rawReport: Partial<DailyCallSalesReportRecord>) => {
+        const report = rawReport as any;
+        const products = Array.isArray(report.products) ? report.products : Array.isArray(report.items) ? report.items : [];
+        return {
+          id: String(report.id || report.inquiry_id || ''),
+          inquiryId: String(report.inquiry_id || report.id || ''),
+          inquiryNo: String(report.inquiryNo || report.inquiry_no || ''),
+          date: String(report.date || report.sales_date || ''),
+          time: String(report.time || report.sales_time || ''),
+          sales_agent: String(report.sales_agent || report.sales_person || ''),
+          notes: String(report.notes || report.remarks || ''),
+          total_amount: Number(report.total_amount || report.grand_total || 0),
+          approval_status: String(report.approval_status || report.status || 'pending'),
+          products: products.map((product: any) => ({
+            name: String(product.name || product.product_name || product.description || ''),
+            quantity: Number(product.quantity || product.qty || 0),
+            price: Number(product.price || product.unit_price || 0),
+            remark: String(product.remark || ''),
+            partNo: String(product.partNo || product.part_no || ''),
+            itemCode: String(product.itemCode || product.item_code || ''),
+            description: String(product.description || product.name || ''),
+            location: String(product.location || ''),
+            brand: String(product.brand || ''),
+          })),
+        };
+      })
     : [];
 
 export const openDailyCallSalesInquiry = (contactId: string, inquiryId: string) => {

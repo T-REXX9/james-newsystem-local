@@ -485,7 +485,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
         {activeTab === 'Metrics' && <CustomerMetricsView contactId={contact.id} />}
 
         {/* Sales Reports Tab */}
-        {activeTab === 'SalesReports' && <SalesReportTab contactId={contact.id} currentUserId={currentUser?.id} />}
+        {activeTab === 'SalesReports' && <SalesReportTab contactId={contact.id} customerName={contact.company} currentUserId={currentUser?.id} />}
 
         {/* Purchase History Tab */}
         {activeTab === 'PurchaseHistory' && <PurchaseHistoryTab contactId={contact.id} />}

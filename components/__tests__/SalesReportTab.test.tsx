@@ -14,6 +14,7 @@ vi.mock('../../services/dailyCallCustomerDetailService', () => ({
 const sampleReports = [
   {
     id: 'rep-1',
+    inquiry_no: 'INQ-001',
     date: '2025-10-13',
     time: '16:57:35',
     sales_agent: 'Agent 51',
@@ -21,12 +22,13 @@ const sampleReports = [
     total_amount: 38000,
     notes: 'First inquiry',
     products: [
-      { name: 'Brake Pad', quantity: 2, price: 5000 },
+      { name: 'Brake Pad', description: 'Front brake pad', qty: 2, unit_price: 5000, item_code: 'BP-01', location: 'TOYOTA HIACE', part_no: 'P-BP01', brand: 'ACME', remark: 'Urgent' },
       { name: 'Oil Filter', quantity: 1, price: 1500 },
     ],
   },
   {
     id: 'rep-2',
+    inquiry_id: 'inquiry-db-2',
     date: '2025-11-07',
     time: '11:55:58',
     sales_agent: 'Agent 51',
@@ -63,13 +65,19 @@ describe('SalesReportTab', () => {
   });
 
   it('renders fetched reports and builds deduplicated product dropdown options', async () => {
-    render(<SalesReportTab contactId="contact-1" />);
+    render(<SalesReportTab contactId="contact-1" customerName="Acme Auto" />);
 
     expect(await screen.findByText(/showing/i)).toHaveTextContent('Showing 3 of 3 report(s)');
     expect(screen.getByText('First inquiry')).toBeInTheDocument();
     expect(screen.getByText('Follow-up inquiry')).toBeInTheDocument();
     expect(screen.getByText('December inquiry')).toBeInTheDocument();
-    expect(screen.getByText(/Sales Inquiry #rep-1/)).toBeInTheDocument();
+    expect(screen.getByText('Inquiry Report')).toBeInTheDocument();
+    expect(screen.getByText('Sales Inquiry #INQ-001')).toBeInTheDocument();
+    expect(screen.getAllByText('Acme Auto')).toHaveLength(3);
+    expect(screen.getByText('Front brake pad')).toBeInTheDocument();
+    expect(screen.getByText('BP-01')).toBeInTheDocument();
+    expect(screen.getByText('TOYOTA HIACE')).toBeInTheDocument();
+    expect(screen.getByText('Urgent')).toBeInTheDocument();
 
     const productSelect = screen.getByLabelText('Product') as HTMLSelectElement;
     const optionLabels = Array.from(productSelect.options).map((option) => option.text);
@@ -86,7 +94,7 @@ describe('SalesReportTab', () => {
   it('shows a load error instead of claiming there are no reports', async () => {
     fetchDailyCallSalesReportsMock.mockRejectedValueOnce(new Error('Sales reports unavailable'));
 
-    render(<SalesReportTab contactId="contact-1" />);
+    render(<SalesReportTab contactId="contact-1" customerName="Acme Auto" />);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Sales reports unavailable');
     expect(screen.queryByText('No sales inquiry reports yet')).not.toBeInTheDocument();
@@ -196,7 +204,7 @@ describe('SalesReportTab', () => {
       detail: expect.objectContaining({
         tab: 'sales-transaction-sales-inquiry',
         payload: expect.objectContaining({
-          inquiryId: 'rep-2',
+          inquiryId: 'inquiry-db-2',
           contactId: 'contact-1',
           openMode: 'existing',
         }),

@@ -257,7 +257,7 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
           </div>
         );
       }
-      return <SalesReportTab contactId={customer.id} currentUserId={currentUser?.id} />;
+      return <SalesReportTab contactId={customer.id} customerName={customer.shopName} currentUserId={currentUser?.id} />;
     }
     if (activeTab === 'item-issues') return <ItemIssueReportTab contactId={customer.id} />;
     if (activeTab === 'incident') return <IncidentReportTab contactId={customer.id} currentUser={currentUser} />;
