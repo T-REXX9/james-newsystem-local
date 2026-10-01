@@ -14,6 +14,7 @@ vi.mock('../../services/dailyCallCustomerDetailService', () => ({
 const sampleReports = [
   {
     id: 'inq-1',
+    inquiry_id: 'sales-inquiry-db-1',
     date: '2026-04-08',
     time: '02:06:09',
     sales_agent: 'APOSTOL ELLA',
@@ -54,9 +55,9 @@ describe('ItemIssueReportTab', () => {
     render(<ItemIssueReportTab contactId="contact-1" />);
 
     expect(await screen.findByText(/showing/i)).toHaveTextContent('Showing 2 of 2 item not listed row(s)');
-    expect(screen.getByRole('button', { name: 'Open item not listed inquiry inq-1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open item not listed inquiry sales-inquiry-db-1' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open item not listed inquiry inq-2' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Open item no stock inquiry inq-1' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open item no stock inquiry sales-inquiry-db-1' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /item no stock/i }));
 
@@ -64,7 +65,7 @@ describe('ItemIssueReportTab', () => {
       expect(screen.getByText(/showing/i)).toHaveTextContent('Showing 1 of 1 item no stock row(s)');
     });
 
-    expect(screen.getByRole('button', { name: 'Open item no stock inquiry inq-1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open item no stock inquiry sales-inquiry-db-1' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Open item not listed inquiry inq-2' })).not.toBeInTheDocument();
   });
 
@@ -74,15 +75,15 @@ describe('ItemIssueReportTab', () => {
 
     render(<ItemIssueReportTab contactId="contact-1" />);
 
-    await screen.findByRole('button', { name: 'Open item not listed inquiry inq-1' });
-    await user.click(screen.getByRole('button', { name: 'Open item not listed inquiry inq-1' }));
+    await screen.findByRole('button', { name: 'Open item not listed inquiry sales-inquiry-db-1' });
+    await user.click(screen.getByRole('button', { name: 'Open item not listed inquiry sales-inquiry-db-1' }));
 
     expect(dispatchEventSpy).toHaveBeenCalledWith(expect.objectContaining({
       type: 'workflow:navigate',
       detail: expect.objectContaining({
         tab: 'sales-transaction-sales-inquiry',
         payload: expect.objectContaining({
-          inquiryId: 'inq-1',
+          inquiryId: 'sales-inquiry-db-1',
           contactId: 'contact-1',
           openMode: 'existing',
         }),

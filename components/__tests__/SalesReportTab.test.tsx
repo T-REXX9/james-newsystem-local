@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import SalesReportTab from '../SalesReportTab';
@@ -74,10 +74,19 @@ describe('SalesReportTab', () => {
     expect(screen.getByText('Inquiry Report')).toBeInTheDocument();
     expect(screen.getByText('Sales Inquiry #INQ-001')).toBeInTheDocument();
     expect(screen.getAllByText('Acme Auto')).toHaveLength(3);
-    expect(screen.getByText('Front brake pad')).toBeInTheDocument();
-    expect(screen.getByText('BP-01')).toBeInTheDocument();
-    expect(screen.getByText('TOYOTA HIACE')).toBeInTheDocument();
-    expect(screen.getByText('Urgent')).toBeInTheDocument();
+    expect(screen.getAllByText('Agent 51')).toHaveLength(2);
+    expect(screen.getByText('Approved')).toBeInTheDocument();
+    const brakePadRow = screen.getByText('Front brake pad').closest('tr');
+    expect(brakePadRow).not.toBeNull();
+    const brakePadCells = within(brakePadRow as HTMLElement);
+    expect(brakePadCells.getByText('2')).toBeInTheDocument();
+    expect(brakePadCells.getByText('BP-01')).toBeInTheDocument();
+    expect(brakePadCells.getByText('TOYOTA HIACE')).toBeInTheDocument();
+    expect(brakePadCells.getByText('P-BP01')).toBeInTheDocument();
+    expect(brakePadCells.getByText('ACME')).toBeInTheDocument();
+    expect(brakePadCells.getByText('Urgent')).toBeInTheDocument();
+    expect(brakePadCells.getByText('5,000.00')).toBeInTheDocument();
+    expect(brakePadCells.getByText('10,000.00')).toBeInTheDocument();
 
     const productSelect = screen.getByLabelText('Product') as HTMLSelectElement;
     const optionLabels = Array.from(productSelect.options).map((option) => option.text);

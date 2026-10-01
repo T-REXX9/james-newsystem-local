@@ -86,7 +86,7 @@ const ItemIssueReportTab: React.FC<ItemIssueReportTabProps> = ({ contactId }) =>
 
         rows.push({
           id: `${report.id}-${index}-${remark}`,
-          inquiryId: report.id,
+          inquiryId: report.inquiryId,
           inquiryDate: report.date,
           inquiryTime: report.time,
           salesAgent: report.sales_agent,
