@@ -91,7 +91,7 @@ export default defineConfig(({ mode }) => {
     test: {
       environment: 'jsdom',
       setupFiles: './vitest.setup.ts',
-      exclude: ['**/node_modules/**', '**/dist/**', '**/._*'],
+      exclude: ['**/node_modules/**', '**/dist/**', '**/._*', '**/e2e-tests/**'],
       testTimeout: 15000,
     },
   };

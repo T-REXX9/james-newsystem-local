@@ -38,10 +38,10 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
 
     const currentUser = getLocalAuthSession()?.userProfile ?? null;
     const canViewApprovals = isMasterUserAccount(currentUser);
-    const canAdd = hasActionPermission(currentUser, 'can_add');
+    const canAdd = hasActionPermission(currentUser, 'can_add', 'Customer Data');
     const canAddCustomer = canViewApprovals && canAdd;
-    const canEdit = hasActionPermission(currentUser, 'can_edit');
-    const canDelete = hasActionPermission(currentUser, 'can_delete', 'Customer Database');
+    const canEdit = hasActionPermission(currentUser, 'can_edit', 'Customer Data');
+    const canDelete = hasActionPermission(currentUser, 'can_delete', 'Customer Data');
 
     React.useEffect(() => {
         if (initialApprovalRequestId && canViewApprovals) setViewMode('approvals');

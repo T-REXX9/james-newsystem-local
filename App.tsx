@@ -68,6 +68,7 @@ import Approvers from './components/Maintenance/Profile/Approvers';
 import Staff from './components/Maintenance/Profile/Staff';
 import CustomerGroups from './components/Maintenance/Customer/CustomerGroups';
 import { CustomerData } from './components/Maintenance/Customer/CustomerData';
+const DuplicateCustomersView = React.lazy(() => import('./components/Maintenance/Customer/DuplicateCustomersView'));
 import SpecialPrice from './components/Maintenance/Product/SpecialPrice';
 import ActivityLogs from './components/Maintenance/Profile/ActivityLogs';
 import OperationsDashboard from './components/OperationsDashboard';
@@ -85,7 +86,7 @@ import { Filter, Lock } from 'lucide-react';
 import { ToastProvider } from './components/ToastProvider';
 import { NotificationProvider } from './components/NotificationProvider';
 import CustomLoadingSpinner from './components/CustomLoadingSpinner';
-import { AVAILABLE_APP_MODULES, hasActionPermission, isCompanyOwnerRole, isMasterOnlyDashboardRoute, isMasterUserAccount, isMasterUserType, MODULE_ID_ALIASES, ROLE_NAMES } from './constants';
+import { AVAILABLE_APP_MODULES, hasActionPermission, isCompanyOwnerRole, isMasterOnlyDashboardRoute, isMasterOnlyRoute, isMasterUserAccount, isMasterUserType, MODULE_ID_ALIASES, ROLE_NAMES } from './constants';
 import { hasBinaryModulePageAccess, getAccessPageLabel } from './utils/accessModules';
 import {
   getLocalAuthSession,
@@ -342,6 +343,10 @@ const App: React.FC = () => {
 
     // Extra Dashboards are Master User / owner only — never via staff access_rights alone.
     if (isMasterOnlyDashboardRoute(canonical)) {
+      return isMasterUserAccount(userProfile);
+    }
+
+    if (isMasterOnlyRoute(canonical)) {
       return isMasterUserAccount(userProfile);
     }
 
@@ -911,6 +916,13 @@ const App: React.FC = () => {
               initialActivityRef={moduleContext['maintenance-customer-customer-data']?.activityRef}
             />
           </div>
+        );
+
+      case 'maintenance-customer-duplicate-customers':
+        return (
+          <React.Suspense fallback={<div className="flex h-full items-center justify-center text-sm text-slate-500" role="status">Loading duplicate customer tools...</div>}>
+            <DuplicateCustomersView />
+          </React.Suspense>
         );
 
       case 'maintenance-customer-customer-group':

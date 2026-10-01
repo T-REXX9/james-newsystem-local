@@ -13,7 +13,7 @@ interface ProfitThresholdSettingsProps {
 }
 
 const ProfitThresholdSettings: React.FC<ProfitThresholdSettingsProps> = ({ currentUser }) => {
-    const canEdit = hasActionPermission(currentUser, 'can_edit');
+    const canEdit = hasActionPermission(currentUser, 'can_edit', 'Profit Protection');
     const [config, setConfig] = useState<ProfitThresholdConfig>({
         percentage: 50,
         enforce_approval: true,

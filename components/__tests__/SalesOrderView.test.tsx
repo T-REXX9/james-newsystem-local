@@ -270,7 +270,8 @@ describe('SalesOrderView', () => {
     renderView({ initialOrderId: order.id });
 
     const summary = await screen.findByTestId('sales-order-customer-summary');
-    ['Ishinomoto Sales', 'VIP Silver remaining', 'VIP Gold remaining', 'Total Sales for September', 'Customer Since', 'Credit Limit', 'Terms', 'Balance', 'Price Code', 'Discount Code', 'Preferred Brand'].forEach((label) => {
+    const currentMonthLabel = new Intl.DateTimeFormat('en-PH', { month: 'long', timeZone: 'Asia/Manila' }).format(new Date());
+    ['Ishinomoto Sales', 'VIP Silver remaining', 'VIP Gold remaining', `Total Sales for ${currentMonthLabel}`, 'Customer Since', 'Credit Limit', 'Terms', 'Balance', 'Price Code', 'Discount Code', 'Preferred Brand'].forEach((label) => {
       expect(within(summary).getByText(label)).toBeVisible();
     });
     await waitFor(() => expect(within(summary).getByText('₱7,800')).toBeVisible());

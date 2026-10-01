@@ -19,9 +19,9 @@ const SMS_CAMPAIGN_TYPES = [
 ];
 
 export const SmsTemplatesView: React.FC<Props> = ({ currentUser }) => {
-  const canAdd = hasActionPermission(currentUser, 'can_add');
-  const canEdit = hasActionPermission(currentUser, 'can_edit');
-  const canDelete = hasActionPermission(currentUser, 'can_delete');
+  const canAdd = hasActionPermission(currentUser, 'can_add', 'SMS Templates');
+  const canEdit = hasActionPermission(currentUser, 'can_edit', 'SMS Templates');
+  const canDelete = hasActionPermission(currentUser, 'can_delete', 'SMS Templates');
   const [templates, setTemplates] = useState<AIMessageTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');

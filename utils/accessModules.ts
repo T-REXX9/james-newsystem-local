@@ -26,16 +26,36 @@ const SEE_ALL_RECORDS_PAGE_IDS = [
   'maintenance-profile-recycle-bin',
 ];
 
+const EXTRA_ACCESS_PAGES: Record<string, AccessPage[]> = {
+  warehouse: [{
+    id: 'warehouse-inventory-stock-adjustment',
+    label: 'Stock Adjustment',
+    supportedActions: ['can_view', 'can_add', 'can_edit', 'can_delete', 'can_post'],
+  }],
+};
+
+const PAGE_ACTION_OVERRIDES: Record<string, ActionPermissionName[]> = {
+  'warehouse-inventory-inventory-audit': ['can_view', 'can_add', 'can_edit', 'can_delete', 'can_post'],
+  'warehouse-reports-reorder-report': ['can_view', 'can_add', 'can_edit'],
+  'warehouse-reports-item-suggested-for-stock-report': ['can_view', 'can_add', 'can_delete'],
+  'warehouse-reports-incident-items-report': ['can_view', 'can_approve'],
+  'maintenance-profile-recycle-bin': ['can_view', 'can_edit', 'can_view_all_records'],
+};
+
 const canonicalizePageId = (pageId: string): string => MODULE_ID_ALIASES[pageId] || pageId;
 
 const supportedActionsForPage = (pageId: string): ActionPermissionName[] => {
+  if (PAGE_ACTION_OVERRIDES[pageId]) return PAGE_ACTION_OVERRIDES[pageId];
+
   // Daily Call Monitoring lives under Dashboards as `home`. It has no
   // transaction posting lifecycle; Add is specifically for adding prospects.
   if (pageId === 'home') {
     return ['can_view', 'can_add', 'can_edit', 'can_view_all_records'];
   }
   if (READ_ONLY_ROUTE_PARTS.some((part) => pageId.includes(part))) {
-    return SEE_ALL_RECORDS_PAGE_IDS.includes(pageId) ? ['can_view_all_records'] : [];
+    return SEE_ALL_RECORDS_PAGE_IDS.includes(pageId)
+      ? ['can_view', 'can_view_all_records']
+      : ['can_view'];
   }
   const actions: ActionPermissionName[] = ['can_view', 'can_approve', 'can_add', 'can_edit', 'can_delete', 'can_post', 'can_unpost'];
   if (pageId === 'sales-transaction-invoice') {
@@ -78,8 +98,8 @@ const pagesForMenu = (menuId: string): AccessPage[] => {
 export const ACCESS_MODULES: AccessModule[] = moduleIds.map((id) => ({
   id,
   label: id === 'home' ? 'Dashboards' : id.charAt(0).toUpperCase() + id.slice(1),
-  pages: pagesForMenu(id),
-  pageIds: pageIdsForMenu(id),
+  pages: [...pagesForMenu(id), ...(EXTRA_ACCESS_PAGES[id] || [])],
+  pageIds: [...pageIdsForMenu(id), ...(EXTRA_ACCESS_PAGES[id] || []).map((page) => page.id)],
 }));
 
 const moduleById = new Map(ACCESS_MODULES.map((module) => [module.id, module]));

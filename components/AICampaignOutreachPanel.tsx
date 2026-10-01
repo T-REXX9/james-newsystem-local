@@ -21,7 +21,7 @@ const AICampaignOutreachPanel: React.FC<AICampaignOutreachPanelProps> = ({
     campaignId,
     campaignTitle,
 }) => {
-    const canEdit = hasActionPermission(currentUser, 'can_edit');
+    const canEdit = hasActionPermission(currentUser, 'can_edit', 'Marketing Campaign');
     const [outreachList, setOutreachList] = useState<AICampaignOutreach[]>([]);
     const [stats, setStats] = useState<AICampaignStats | null>(null);
     const [loading, setLoading] = useState(true);

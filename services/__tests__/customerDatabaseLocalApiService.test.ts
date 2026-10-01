@@ -80,6 +80,7 @@ describe('customer database saves and daily call cache', () => {
     vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce({
         ok: true,
+        headers: { get: () => 'application/json' },
         json: async () => ({
           data: {
             items: [{ session_id: 'adtech-1', company: 'AdTech Engineering', status: 1 }],
@@ -89,6 +90,7 @@ describe('customer database saves and daily call cache', () => {
       } as Response)
       .mockResolvedValueOnce({
         ok: true,
+        headers: { get: () => 'application/json' },
         json: async () => ({
           data: {
             items: [{
@@ -137,12 +139,14 @@ describe('customer database saves and daily call cache', () => {
     vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce({
         ok: true,
+        headers: { get: () => 'application/json' },
         json: async () => ({
           data: { session_id: 'adtech-1', company: 'AdTech Engineering', status: 1 },
         }),
       } as Response)
       .mockResolvedValueOnce({
         ok: true,
+        headers: { get: () => 'application/json' },
         json: async () => ({
           data: {
             items: [{
@@ -167,11 +171,13 @@ describe('customer database saves and daily call cache', () => {
       // A prior Daily Call request from another viewer did not include Adtech.
       .mockResolvedValueOnce({
         ok: true,
+        headers: { get: () => 'application/json' },
         json: async () => ({ data: { items: [], meta: { from_date: '2025-10-01', count: 0 } } }),
       } as Response)
       // Customer Data itself includes the customer.
       .mockResolvedValueOnce({
         ok: true,
+        headers: { get: () => 'application/json' },
         json: async () => ({
           data: {
             items: [{ session_id: 'adtech-1', company: 'AdTech Engineering', status: 1 }],
@@ -182,6 +188,7 @@ describe('customer database saves and daily call cache', () => {
       // The current viewer's Daily Call result correctly identifies Adtech as recovery.
       .mockResolvedValueOnce({
         ok: true,
+        headers: { get: () => 'application/json' },
         json: async () => ({
           data: {
             items: [{
@@ -213,6 +220,7 @@ describe('customer database saves and daily call cache', () => {
   it('sends all 400 selected customer IDs in one reassignment request', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
+      headers: { get: () => 'application/json' },
       json: async () => ({ data: { updated: true, updated_count: 400 } }),
     } as Response);
     const customerIds = Array.from({ length: 400 }, (_, index) => `customer-${index + 1}`);
@@ -232,6 +240,7 @@ describe('customer database saves and daily call cache', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce({
         ok: true,
+        headers: { get: () => 'application/json' },
         json: async () => ({
           data: {
             items: [{ id: 'blocked-1', shop_name: 'Blocked Shop', customer_status: 4, debt_type: 'Bad' }],
@@ -241,10 +250,12 @@ describe('customer database saves and daily call cache', () => {
       } as Response)
       .mockResolvedValueOnce({
         ok: true,
+        headers: { get: () => 'application/json' },
         json: async () => ({ data: { id: 'blocked-1' } }),
       } as Response)
       .mockResolvedValueOnce({
         ok: true,
+        headers: { get: () => 'application/json' },
         json: async () => ({
           data: {
             items: [{ id: 'blocked-1', shop_name: 'Active Again Shop', customer_status: 1, debt_type: 'Good' }],
@@ -268,6 +279,7 @@ describe('customer database saves and daily call cache', () => {
   it('uses the customer soft-delete route with the current main context', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
+      headers: { get: () => 'application/json' },
       json: async () => ({ data: { deleted: true, session_id: 'customer-1' } }),
     } as Response);
 
@@ -294,6 +306,7 @@ describe('Daily Call customer profile', () => {
     }));
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
+      headers: { get: () => 'application/json' },
       json: async () => ({ data: { session_id: 'contact-1', company: 'Test Shop', business_line: 'Diesel Injection' } }),
     } as Response);
 

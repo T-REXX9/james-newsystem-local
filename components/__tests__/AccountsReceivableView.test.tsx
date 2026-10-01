@@ -64,9 +64,8 @@ describe('AccountsReceivableView', () => {
     expect(customerField).toBeTruthy();
 
     const customerSelect = within(customerField as HTMLElement).getByRole('combobox');
-    await waitFor(() => expect(within(customerSelect).getByRole('option', { name: 'Zulu Calibration' })).toBeInTheDocument());
-
-    await user.selectOptions(customerSelect, 'cust-z');
+    const customerOption = await screen.findByRole('option', { name: /Zulu Calibration/ });
+    await user.click(customerOption);
     await user.click(screen.getByRole('button', { name: /generate report/i }));
 
     await waitFor(() => {

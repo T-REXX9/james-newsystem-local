@@ -12,6 +12,7 @@ describe('updateContact oversize legacy mobile handling', () => {
       if (method === 'GET') {
         return {
           ok: true,
+          headers: { get: () => 'application/json' },
           status: 200,
           json: async () => ({
             ok: true,
@@ -31,6 +32,7 @@ describe('updateContact oversize legacy mobile handling', () => {
 
       return {
         ok: true,
+        headers: { get: () => 'application/json' },
         status: 200,
         json: async () => ({ ok: true, data: {} }),
       } as Response;

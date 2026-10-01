@@ -74,7 +74,7 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
     const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
     const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
     const owner = isMasterUserAccount(currentUser);
-    const canAdd = hasActionPermission(currentUser, 'can_add');
+    const canAdd = hasActionPermission(currentUser, 'can_add', 'Customer Data');
     // Customer standing and detail requests are approved by the Master User,
     // never by a staff member whose ambient session happens to have approval
     // permissions for another page.

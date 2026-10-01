@@ -47,7 +47,7 @@ describe('SalesReportDataView legacy report display', () => {
     });
   });
 
-  it('renders the old report sections without the non-legacy payment breakdown', async () => {
+  it('renders the legacy report sections with the payment terms summary', async () => {
     render(
       <SalesReportDataView
         dateFrom="2026-09-01"
@@ -70,9 +70,9 @@ describe('SalesReportDataView legacy report display', () => {
     expect(within(salespersonSummary).getByText('Parts')).toBeInTheDocument();
     expect(within(salespersonSummary).getAllByText('125.00')).toHaveLength(3);
 
-    expect(screen.queryByText('PAYMENT TERMS BREAKDOWN')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('payment-terms-breakdown')).not.toBeInTheDocument();
-    expect(screen.queryByText('CASH SALES TOTAL')).not.toBeInTheDocument();
-    expect(screen.queryByText('TERMS SALES TOTAL')).not.toBeInTheDocument();
+    const paymentTerms = screen.getByTestId('payment-terms-breakdown');
+    expect(within(paymentTerms).getByText('PAYMENT TERMS BREAKDOWN')).toBeInTheDocument();
+    expect(within(paymentTerms).getByText('CASH SALES TOTAL')).toBeInTheDocument();
+    expect(within(paymentTerms).getByText('TERMS SALES TOTAL')).toBeInTheDocument();
   });
 });

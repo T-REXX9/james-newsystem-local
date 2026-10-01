@@ -160,10 +160,15 @@ export const getPageActionPermissions = (
     pageLabel === DAILY_CALL_PAGE_LABEL && pages
       ? pages[DAILY_CALL_LEGACY_PAGE_LABEL]
       : undefined;
+  const legacyCustomerData =
+    pageLabel === 'Customer Data' && pages
+      ? pages['Customer Database']
+      : undefined;
   return {
     ...DEFAULT_ACTION_PERMISSIONS,
     ...legacy,
     ...(legacyDailyCall || {}),
+    ...(legacyCustomerData || {}),
     ...(page || {}),
   };
 };
@@ -202,6 +207,19 @@ export const MASTER_ONLY_DASHBOARD_ROUTES = [
 
 export const isMasterOnlyDashboardRoute = (route?: string | null): boolean =>
   (MASTER_ONLY_DASHBOARD_ROUTES as readonly string[]).includes(String(route || '').trim());
+
+export const MASTER_ONLY_ROUTES = [
+  ...MASTER_ONLY_DASHBOARD_ROUTES,
+  'maintenance-profile-recycle-bin',
+  'maintenance-system-loyalty-discounts',
+  'maintenance-system-profit-protection',
+  'maintenance-system-ai-templates',
+  'communication-call-auto-replies',
+  'maintenance-customer-duplicate-customers',
+] as const;
+
+export const isMasterOnlyRoute = (route?: string | null): boolean =>
+  (MASTER_ONLY_ROUTES as readonly string[]).includes(String(route || '').trim());
 
 /**
  * Role-specific default permissions mapping.
@@ -300,6 +318,7 @@ export const AVAILABLE_APP_MODULES = [
   { id: 'sales-reports-inquiry-report', label: 'Inquiry Report' },
   { id: 'sales-reports-sales-report', label: 'Sales Report' },
   { id: 'sales-reports-sales-development-report', label: 'Sales Development Report' },
+  { id: 'sales-reports-sales-map', label: 'Sales Map' },
   { id: 'operations-management-dashboard', label: 'Operations Dashboard' },
   { id: 'sales-performance-management-dashboard', label: 'Sales Performance Dashboard' },
   { id: 'call-records-dashboard', label: 'Call Records' },
@@ -321,6 +340,7 @@ export const AVAILABLE_APP_MODULES = [
   { id: 'accounting-reports-inactive-active-customers', label: 'Inactive/Active Customers' },
   { id: 'accounting-reports-old-new-customers', label: 'Old/New Customers' },
   { id: 'maintenance-customer-customer-data', label: 'Customer Data' },
+  { id: 'maintenance-customer-duplicate-customers', label: 'Duplicate Customers' },
 
   { id: 'maintenance-customer-customer-group', label: 'Customer Group' },
   { id: 'maintenance-customer-vip-thresholds', label: 'VIP Thresholds' },

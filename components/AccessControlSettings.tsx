@@ -68,12 +68,27 @@ const canonicalizeGroups = (groups: AccessGroup[]): AccessGroup[] => {
     const key = name.toLowerCase();
     const existing = merged.get(key);
     const nextRights = Array.from(new Set([...(existing?.access_rights || []), ...(group.access_rights || [])]));
+    const nextActionPermissions = existing?.action_permissions || group.action_permissions
+      ? {
+          ...(existing?.action_permissions || {}),
+          ...(group.action_permissions || {}),
+          global: {
+            ...(existing?.action_permissions?.global || {}),
+            ...(group.action_permissions?.global || {}),
+          },
+          pages: {
+            ...(existing?.action_permissions?.pages || {}),
+            ...(group.action_permissions?.pages || {}),
+          },
+        }
+      : undefined;
 
     if (!existing) {
       merged.set(key, {
         ...group,
         name,
         access_rights: nextRights,
+        action_permissions: nextActionPermissions,
       });
       return;
     }
@@ -81,6 +96,7 @@ const canonicalizeGroups = (groups: AccessGroup[]): AccessGroup[] => {
     merged.set(key, {
       ...existing,
       access_rights: nextRights,
+      action_permissions: nextActionPermissions,
       assigned_staff_count: Math.max(existing.assigned_staff_count || 0, group.assigned_staff_count || 0),
       is_core: Boolean(existing.is_core || group.is_core),
     });
@@ -95,7 +111,7 @@ const canonicalizeProfiles = (profiles: UserProfile[], groups: AccessGroup[]): U
 
   return profiles.map((profile) => {
     const nextRole = canonicalizeRoleName(String(profile.role || ''));
-    const shouldMapGroup = nextRole === 'Sales Agent' && salesAgentGroupId;
+    const shouldMapGroup = nextRole === 'Sales Agent' && salesAgentGroupId && !profile.group_id;
 
     return {
       ...profile,

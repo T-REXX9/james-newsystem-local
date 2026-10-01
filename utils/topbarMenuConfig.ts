@@ -15,6 +15,7 @@ import {
   Shield,
   Trash2,
   HardDrive,
+  GitCompareArrows,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -368,6 +369,13 @@ export const TOPBAR_MENU_CONFIG: TopbarMainMenu[] = [
             label: 'Customer Data',
             route: 'maintenance-customer-customer-data',
             icon: Users,
+          },
+          {
+            id: 'maintenance-customer-duplicate-customers',
+            label: 'Duplicate Customers',
+            route: 'maintenance-customer-duplicate-customers',
+            icon: GitCompareArrows,
+            masterOnly: true,
           },
 
           {

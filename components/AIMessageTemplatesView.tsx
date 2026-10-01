@@ -24,9 +24,9 @@ const TEMPLATE_TYPES = [
 ];
 
 const AIMessageTemplatesView: React.FC<AIMessageTemplatesViewProps> = ({ currentUser }) => {
-    const canAdd = hasActionPermission(currentUser, 'can_add');
-    const canEdit = hasActionPermission(currentUser, 'can_edit');
-    const canDelete = hasActionPermission(currentUser, 'can_delete');
+    const canAdd = hasActionPermission(currentUser, 'can_add', 'AI Message Templates');
+    const canEdit = hasActionPermission(currentUser, 'can_edit', 'AI Message Templates');
+    const canDelete = hasActionPermission(currentUser, 'can_delete', 'AI Message Templates');
     const [templates, setTemplates] = useState<AIMessageTemplate[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');

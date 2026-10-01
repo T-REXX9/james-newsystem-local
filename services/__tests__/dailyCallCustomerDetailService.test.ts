@@ -198,6 +198,6 @@ describe('dailyCallCustomerDetailService incident reports', () => {
       json: async () => ({ error: 'Sales reports unavailable' }),
     } as Response);
 
-    await expect(fetchDailyCallSalesReports('contact-1')).rejects.toThrow('API request failed (503)');
+    await expect(fetchDailyCallSalesReports('contact-1')).rejects.toThrow('Sales reports unavailable');
   });
 });

@@ -37,7 +37,7 @@ const toNumber = (value: unknown, fallback = 0): number => {
 const mapCategoryTotals = (value: any): CategoryTotal[] => {
   const rows = Array.isArray(value) ? value : [];
   return rows.map((entry: any) => ({
-    category: String(entry?.category || 'Uncategorized'),
+    category: String(entry?.category || 'No category recorded'),
     soAmount: toNumber(entry?.soAmount),
     drAmount: toNumber(entry?.drAmount),
     invoiceAmount: toNumber(entry?.invoiceAmount),
@@ -102,6 +102,7 @@ export const getSalesReportData = async (
       customer_id: filters.customerId,
       limit: '2500',
     });
+    if (filters.agentId) query.set('agent_id', filters.agentId);
 
     const data = await requestApi(`${API_BASE_URL}/sales-reports?${query.toString()}`);
 
@@ -117,6 +118,7 @@ export const getSalesReportData = async (
       drAmount: toNumber(tx?.dr_amount),
       invoiceAmount: toNumber(tx?.invoice_amount),
       salesperson: String(tx?.salesperson || 'Unassigned'),
+      currentAgentId: String(tx?.current_agent_id || ''),
       category: String(tx?.category || 'Uncategorized'),
       vatType: tx?.vat_type === 'exclusive' || tx?.vat_type === 'inclusive' ? tx.vat_type : null,
       type: tx?.type === 'dr' ? 'dr' : tx?.type === 'so' ? 'so' : 'invoice',

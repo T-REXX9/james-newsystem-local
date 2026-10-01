@@ -1888,6 +1888,7 @@ export interface SalesReportFilters {
   dateTo: string;
   customerId: string | 'all';
   dateType?: 'all' | 'today' | 'week' | 'month' | 'year' | 'custom';
+  agentId?: string;
 }
 
 export interface SalesReportTransaction {
@@ -1902,6 +1903,7 @@ export interface SalesReportTransaction {
   drAmount: number;
   invoiceAmount: number;
   salesperson: string;
+  currentAgentId?: string;
   category: string;
   vatType: 'exclusive' | 'inclusive' | null;
   type: 'invoice' | 'dr' | 'so';

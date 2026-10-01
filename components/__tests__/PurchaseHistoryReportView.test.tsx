@@ -36,7 +36,7 @@ describe('PurchaseHistoryReportView', () => {
 
   it('shows custom dates only for Custom Date coverage', async () => {
     render(<PurchaseHistoryReportView />);
-    const dateType = screen.getAllByRole('combobox')[0];
+    const dateType = screen.getByRole('combobox', { name: 'Date Covered' });
     fireEvent.change(dateType, { target: { value: 'custom' } });
     expect(screen.getByText(/Date From/)).toBeInTheDocument();
     expect(screen.getByText(/Date To/)).toBeInTheDocument();

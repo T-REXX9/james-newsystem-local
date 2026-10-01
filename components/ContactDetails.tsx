@@ -59,8 +59,8 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
   }, [comments]);
 
   const isOwner = isMasterUserAccount(currentUser);
-  const canAdd = hasActionPermission(currentUser, 'can_add');
-  const canEdit = hasActionPermission(currentUser, 'can_edit');
+  const canAdd = hasActionPermission(currentUser, 'can_add', 'Customer Data');
+  const canEdit = hasActionPermission(currentUser, 'can_edit', 'Customer Data');
 
   const buildChangedFields = (previous: Contact, next: Omit<Contact, 'id'>) => {
     const changed: Record<string, { oldValue: unknown; newValue: unknown }> = {};

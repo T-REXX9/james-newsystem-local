@@ -3,6 +3,8 @@ import type { CustomerOption, UserProfile } from '../types';
 import { getCustomerList } from '../services/salesReportService';
 import SalesReportDataView from './SalesReportDataView';
 import { closeSalesReportResults, isSalesReportResultsView, openSalesReportResults, type SalesReportRouteView } from '../utils/workflowNavigate';
+import { fetchAssignableStaff } from '../services/staffLocalApiService';
+import { canonicalizeRoleName } from '../constants';
 
 interface SalesReportFilterProps {
   currentUser?: UserProfile;
@@ -53,6 +55,8 @@ const SalesReportFilter: React.FC<SalesReportFilterProps> = ({ currentUser, init
   const [reportType, setReportType] = useState<SalesReportPeriod>('all');
   const [selectedCustomer, setSelectedCustomer] = useState('all');
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
+  const [salesAgents, setSalesAgents] = useState<UserProfile[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState('');
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(true);
   const [dateFrom, setDateFrom] = useState('2013-06-01');
   const [dateTo, setDateTo] = useState(todayInput);
@@ -66,7 +70,15 @@ const SalesReportFilter: React.FC<SalesReportFilterProps> = ({ currentUser, init
     const loadCustomers = async () => {
       setIsLoadingCustomers(true);
       try {
-        setCustomers(await getCustomerList());
+        const [customerOptions, staff] = await Promise.all([
+          getCustomerList(),
+          fetchAssignableStaff().catch((error) => {
+            console.error('Error loading sales report agent options:', error);
+            return [];
+          }),
+        ]);
+        setCustomers(customerOptions);
+        setSalesAgents(staff.filter((profile) => canonicalizeRoleName(profile.role || '') === 'Sales Agent'));
       } finally {
         setIsLoadingCustomers(false);
       }
@@ -85,6 +97,7 @@ const SalesReportFilter: React.FC<SalesReportFilterProps> = ({ currentUser, init
   const resetForm = () => {
     setReportType('all');
     setSelectedCustomer('all');
+    setSelectedAgentId('');
     setDateFrom('2013-06-01');
     setDateTo(todayInput());
   };
@@ -104,6 +117,7 @@ const SalesReportFilter: React.FC<SalesReportFilterProps> = ({ currentUser, init
         dateFrom={dateFrom}
         dateTo={dateTo}
         customerId={selectedCustomer}
+        agentId={selectedAgentId}
         reportType={reportType}
         onBack={handleBack}
         currentUser={currentUser}
@@ -166,6 +180,19 @@ const SalesReportFilter: React.FC<SalesReportFilterProps> = ({ currentUser, init
                 <option value="month">This Month</option>
                 <option value="year">This Year</option>
                 <option value="custom">Custom Date</option>
+              </select>
+            </div>
+
+            <div className="grid items-center gap-4 md:grid-cols-[220px_1fr]">
+              <label htmlFor="sales-report-agent" className="text-right font-semibold">Assigned Sales Agent</label>
+              <select
+                id="sales-report-agent"
+                value={selectedAgentId}
+                onChange={(event) => setSelectedAgentId(event.target.value)}
+                className="h-[34px] w-full max-w-[590px] rounded-[3px] border border-[#ccc] bg-white px-3 shadow-inner outline-none focus:border-[#66afe9] focus:ring-1 focus:ring-[#66afe9]"
+              >
+                <option value="">All Sales Agents</option>
+                {salesAgents.map((agent) => <option key={agent.id} value={agent.id}>{agent.full_name}</option>)}
               </select>
             </div>
 

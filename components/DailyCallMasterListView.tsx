@@ -696,7 +696,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   // the legacy master-user access, but do not treat missing action metadata as
   // permission (the shared helper defaults missing metadata to allow).
   const canEditCustomerDatabase = showMasterActions || Boolean(currentUser?.action_permissions)
-    && hasActionPermission(currentUser, 'can_edit', 'Customer Database');
+    && hasActionPermission(currentUser, 'can_edit', 'Customer Data');
 
   const handleAssignTeamToCategory = useCallback(async () => {
     if (!selectedAssignmentTeamId || actionableCategoryRows.length === 0) return;

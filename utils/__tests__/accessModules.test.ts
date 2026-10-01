@@ -102,7 +102,7 @@ describe('access module permissions', () => {
       .flatMap((module) => module.pages)
       .find((page) => page.id === 'maintenance-profile-recycle-bin');
 
-    expect(recycleBin?.supportedActions).toEqual(['can_view_all_records']);
+    expect(recycleBin?.supportedActions).toEqual(['can_view', 'can_edit', 'can_view_all_records']);
   });
 
   it.each(ACCESS_MODULES)('toggles every page in the %s module as one binary permission', (module) => {

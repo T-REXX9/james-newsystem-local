@@ -28,9 +28,9 @@ const DISCOUNT_TYPE_DESCRIPTIONS: Record<LoyaltyDiscountType, string> = {
 };
 
 const LoyaltyDiscountRulesView: React.FC<LoyaltyDiscountRulesViewProps> = ({ currentUser }) => {
-    const canAdd = hasActionPermission(currentUser, 'can_add');
-    const canEdit = hasActionPermission(currentUser, 'can_edit');
-    const canDelete = hasActionPermission(currentUser, 'can_delete');
+    const canAdd = hasActionPermission(currentUser, 'can_add', 'VIP Thresholds');
+    const canEdit = hasActionPermission(currentUser, 'can_edit', 'VIP Thresholds');
+    const canDelete = hasActionPermission(currentUser, 'can_delete', 'VIP Thresholds');
     const [rules, setRules] = useState<LoyaltyDiscountRule[]>([]);
     const [stats, setStats] = useState<LoyaltyDiscountStats | null>(null);
     const [loading, setLoading] = useState(true);

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { AlertCircle, Building2, Loader2, Search } from 'lucide-react';
 import { useDebounce } from '../hooks/useDebounce';
@@ -40,7 +40,9 @@ const CustomerAutocomplete = <T extends CustomerAutocompleteOption,>({
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+  const dropdownId = useId();
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const debouncedQuery = useDebounce(query, 250);
 
@@ -92,8 +94,7 @@ const CustomerAutocomplete = <T extends CustomerAutocompleteOption,>({
         return;
       }
 
-      const dropdownEl = document.getElementById('customer-autocomplete-dropdown');
-      if (dropdownEl?.contains(target)) {
+      if (dropdownRef.current?.contains(target)) {
         return;
       }
 
@@ -128,7 +129,7 @@ const CustomerAutocomplete = <T extends CustomerAutocompleteOption,>({
     setSelectedIndex(results.length > 0 ? 0 : -1);
   }, [results]);
 
-  const handleSelect = (customer: Contact) => {
+  const handleSelect = (customer: T) => {
     onSelect(customer);
     setQuery(customer.company || '');
     setShowDropdown(false);
@@ -212,6 +213,12 @@ const CustomerAutocomplete = <T extends CustomerAutocompleteOption,>({
         <input
           ref={inputRef}
           type="text"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-haspopup="listbox"
+          aria-expanded={showDropdown}
+          aria-controls={showDropdown ? dropdownId : undefined}
+          aria-activedescendant={showDropdown && selectedIndex >= 0 ? `${dropdownId}-option-${selectedIndex}` : undefined}
           value={query}
           disabled={disabled}
           placeholder={placeholder}
@@ -235,7 +242,9 @@ const CustomerAutocomplete = <T extends CustomerAutocompleteOption,>({
 
       {showDropdown && ReactDOM.createPortal(
         <div
-          id="customer-autocomplete-dropdown"
+          ref={dropdownRef}
+          id={dropdownId}
+          role="listbox"
           className="fixed bg-white dark:bg-slate-900 shadow-xl rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm border border-slate-200 dark:border-slate-700"
           style={dropdownStyle}
         >
@@ -259,6 +268,9 @@ const CustomerAutocomplete = <T extends CustomerAutocompleteOption,>({
                 return (
                   <li
                     key={customer.id}
+                    id={`${dropdownId}-option-${index}`}
+                    role="option"
+                    aria-selected={isSelected}
                     className={`cursor-pointer select-none relative py-2 pl-3 pr-4 group transition-colors ${isSelected
                       ? 'bg-brand-blue/10 dark:bg-brand-blue/20'
                       : 'hover:bg-slate-50 dark:hover:bg-slate-800'

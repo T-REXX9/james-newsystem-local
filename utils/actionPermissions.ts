@@ -1,13 +1,14 @@
-import { hasActionPermission, type ActionPermissionName } from '../constants';
+import { hasActionPermission, MODULE_ID_ALIASES, type ActionPermissionName } from '../constants';
 import { getLocalAuthSession } from '../services/localAuthService';
-import { ACCESS_MODULES, getAccessPageLabel } from './accessModules';
+import { ACCESS_MODULES, getAccessPageLabel, hasPageAccess } from './accessModules';
 import { hasBackdatedPostingPermission } from './backdatedPosting';
 
 const getCurrentPageLabel = (): string | undefined => {
   if (typeof window === 'undefined') return undefined;
   const route = window.location.hash.replace(/^#\/?/, '').split('?')[0];
+  const canonicalRoute = MODULE_ID_ALIASES[route] || route;
   for (const module of ACCESS_MODULES) {
-    const page = module.pages.find((candidate) => candidate.id === route);
+    const page = module.pages.find((candidate) => candidate.id === canonicalRoute);
     if (page) return page.label;
   }
   return undefined;
@@ -17,8 +18,12 @@ export const canPerformAction = (action: ActionPermissionName, pageLabel?: strin
   hasActionPermission(getLocalAuthSession()?.userProfile, action, pageLabel || getCurrentPageLabel());
 
 export const canViewPage = (pageId: string): boolean => {
-  const pageLabel = getAccessPageLabel(pageId);
-  return hasActionPermission(getLocalAuthSession()?.userProfile, 'can_view', pageLabel);
+  const session = getLocalAuthSession();
+  if (!session?.userProfile) return false;
+  const canonicalPageId = MODULE_ID_ALIASES[pageId] || pageId;
+  const pageLabel = getAccessPageLabel(canonicalPageId);
+  return hasPageAccess(session.userProfile.access_rights || [], pageId)
+    && hasActionPermission(session.userProfile, 'can_view', pageLabel);
 };
 
 /** Account-wide Backdated posting for the signed-in staff account. */

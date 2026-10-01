@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDiscountRequest, fetchCustomerInquiries, fetchCustomerReturns, requestCustomerUpdate, reviewCustomerRequest } from '../customerWorkflowLocalApiService';
 import { logActivity } from '../activityLogService';
 const auth = vi.hoisted(() => ({ token: 'test-token' }));
-vi.mock('../localAuthService', () => ({ getLocalAuthSession: () => ({ token: auth.token, context: { main_userid: 7 } }) }));
+vi.mock('../localAuthService', () => ({
+  getLocalAuthSession: () => auth.token ? ({ token: auth.token, context: { main_userid: 7 } }) : null,
+  clearInvalidLocalAuthSession: vi.fn(),
+}));
 const fetchMock = vi.fn();
 const reply = (data: unknown, status = 200) => new Response(JSON.stringify({ ok: status === 200, data, error: status === 200 ? undefined : 'Save rejected' }), { status });
 beforeEach(() => { auth.token = 'test-token'; fetchMock.mockReset(); vi.stubGlobal('fetch', fetchMock); });

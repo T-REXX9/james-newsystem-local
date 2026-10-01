@@ -22,6 +22,7 @@ vi.mock('../../services/customerDatabaseLocalApiService', () => ({
   bulkUpdateContacts: vi.fn(),
   updateContact: vi.fn(),
   fetchSalesAgents: vi.fn(async () => []),
+  isPendingDuplicateProspectApproval: vi.fn(() => false),
   createContact: (...args: any[]) => createContactMock(...args),
 }));
 

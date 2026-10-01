@@ -37,7 +37,7 @@ describe('CustomerAutocomplete', () => {
     fireEvent.focus(screen.getByPlaceholderText('Search customer...'));
 
     await waitFor(() => {
-      expect(document.getElementById('customer-autocomplete-dropdown')).toHaveStyle({
+      expect(screen.getByRole('listbox')).toHaveStyle({
         top: '176px',
         maxHeight: '320px',
       });
