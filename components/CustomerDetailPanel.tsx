@@ -3,10 +3,10 @@ import React, { useState, useEffect } from 'react';
 import {
     Building2, User, Phone, Mail, MapPin, Calendar, CreditCard,
     TrendingUp, AlertCircle, ShoppingBag, MessageSquare, RotateCcw,
-    FileText, DollarSign, Activity, Clock, UserCog, Save, X as XIcon, Pencil, Trash2
+    FileText, DollarSign, Activity, Clock, UserCog, Save, X as XIcon, Pencil, Trash2, Star
 } from 'lucide-react';
 import { Contact, CustomerStatus, UserProfile } from '../types';
-import { fetchContactById, fetchCustomerTerms, fetchSalesAgents, updateContact } from '../services/customerDatabaseLocalApiService';
+import { fetchContactById, fetchCustomerTerms, fetchSalesAgents, setCustomerStarred, updateContact } from '../services/customerDatabaseLocalApiService';
 import { buildYearlySales, customerLedgerService, ledgerRowsToContactTransactions } from '../services/customerLedgerService';
 import CustomerHistoryTab from './CustomerHistoryTab';
 import CustomerRequestsTab from './CustomerRequestsTab';
@@ -83,6 +83,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     const [selectedSalesAgent, setSelectedSalesAgent] = useState<string>('');
     const [isSaving, setIsSaving] = useState(false);
     const [recordImageFailed, setRecordImageFailed] = useState(false);
+    const [isSavingStar, setIsSavingStar] = useState(false);
 
     useEffect(() => {
         if (initialConversationType === 'agent_sales_report') setActiveTab('sales-report');
@@ -202,6 +203,24 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
         setIsEditingSalesAgent(false);
     };
 
+    const handleToggleStar = async () => {
+        if (!contact || !isMasterUserAccount(currentUser) || isSavingStar) return;
+        const nextIsStarred = !contact.isStarred;
+        setIsSavingStar(true);
+        try {
+            await setCustomerStarred(contact.id, nextIsStarred);
+            const updatedContact = { ...contact, isStarred: nextIsStarred };
+            setContact(updatedContact);
+            onUpdate(updatedContact);
+            toast.success(nextIsStarred ? 'Customer starred' : 'Customer star removed');
+        } catch (error) {
+            console.error('Failed to update customer star:', error);
+            toast.error('Failed to update customer star');
+        } finally {
+            setIsSavingStar(false);
+        }
+    };
+
     if (!contact) return <div className="p-8 text-center text-slate-400">Select a customer</div>;
 
     // Header Calculations
@@ -221,7 +240,14 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                         {contact.recordImage && !recordImageFailed ? <img src={contact.recordImage} alt="Customer record image" className="h-12 w-12 shrink-0 rounded-xl object-cover shadow-lg shadow-blue-900/20" style={{ objectPosition: contact.recordImagePosition?.replace(',', '% ') }} onError={() => setRecordImageFailed(true)} /> : <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-blue to-blue-600 text-xl font-bold text-white shadow-lg shadow-blue-900/20">{Initials}</div>}
                         <div className="min-w-0">
                             <h1 className="flex items-center gap-2 text-xl font-bold text-slate-900 dark:text-white">
-                                <CompanyName name={contact.company} pastName={contact.pastName} entity={contact} />
+                                <CompanyName name={contact.company} pastName={contact.pastName} entity={contact} showStar={false} />
+                                {isMasterUserAccount(currentUser) ? (
+                                    <button type="button" onClick={handleToggleStar} disabled={isSavingStar} aria-label={contact.isStarred ? 'Remove customer star' : 'Star customer'} title={contact.isStarred ? 'Remove customer star' : 'Star customer'} className="rounded p-1 text-amber-500 hover:bg-amber-50 disabled:opacity-50 dark:hover:bg-amber-500/10">
+                                        <Star className="h-4 w-4" fill={contact.isStarred ? 'currentColor' : 'none'} />
+                                    </button>
+                                ) : contact.isStarred ? (
+                                    <Star aria-label="Starred customer" title="Starred customer" className="h-4 w-4 shrink-0 text-amber-500" fill="currentColor" />
+                                ) : null}
                             </h1>
                             <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
                                 <span className="flex items-center gap-1.5">

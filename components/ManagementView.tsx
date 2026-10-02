@@ -26,6 +26,7 @@ import {
 } from 'recharts';
 import { fetchManagementDashboardData, ManagementDashboardData } from '../services/managementDashboardLocalApiService';
 import CallAccountabilityPanel from './CallAccountabilityPanel';
+import CustomerStarIndicator from './CustomerStarIndicator';
 
 import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface ManagementViewProps {
@@ -194,7 +195,7 @@ export const ManagementView: React.FC<ManagementViewProps> = ({ currentUser }) =
 
           <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <h2 className="text-sm font-extrabold uppercase tracking-wide text-blue-700">Top 10 Customers of the Month ({monthLabel})</h2>
-            <div className="mt-4 overflow-x-auto"><table className="w-full text-sm"><thead className="border-b border-slate-200 text-left text-[11px] uppercase text-slate-500"><tr><th className="px-2 py-2">#</th><th className="px-2 py-2">Customer Name</th><th className="px-2 py-2 text-right">Amount</th></tr></thead><tbody>{dashboard.topCustomers.length ? dashboard.topCustomers.map((row, index) => <tr key={`${row.customerName}-${index}`} className="border-b border-slate-100"><td className="px-2 py-2 text-slate-500">{index + 1}</td><td className="px-2 py-2 font-semibold">{row.customerName}</td><td className="px-2 py-2 text-right font-bold">{formatCurrencyLocal(row.amount)}</td></tr>) : <EmptyTable columns={3} />}</tbody></table></div>
+            <div className="mt-4 overflow-x-auto"><table className="w-full text-sm"><thead className="border-b border-slate-200 text-left text-[11px] uppercase text-slate-500"><tr><th className="px-2 py-2">#</th><th className="px-2 py-2">Customer Name</th><th className="px-2 py-2 text-right">Amount</th></tr></thead><tbody>{dashboard.topCustomers.length ? dashboard.topCustomers.map((row, index) => <tr key={`${row.customerId}-${row.customerName}-${index}`} className="border-b border-slate-100"><td className="px-2 py-2 text-slate-500">{index + 1}</td><td className="px-2 py-2 font-semibold">{row.customerName}<CustomerStarIndicator customerId={row.customerId} className="ml-1 inline h-3.5 w-3.5" /></td><td className="px-2 py-2 text-right font-bold">{formatCurrencyLocal(row.amount)}</td></tr>) : <EmptyTable columns={3} />}</tbody></table></div>
           </article>
         </section>
 

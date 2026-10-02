@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowUp, Printer, Tags } from 'lucide-react';
+import CustomerStarIndicator from './CustomerStarIndicator';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
 import type { SalesReportData, SalesReportTransaction, UserProfile } from '../types';
 import { getSalesReportData } from '../services/salesReportService';
@@ -19,6 +20,12 @@ const money = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
+
+const customerTypeStyles = {
+  new: { label: 'New customers', className: 'border-emerald-200 bg-emerald-50 text-emerald-800' },
+  old: { label: 'Existing customers', className: 'border-sky-200 bg-sky-50 text-sky-800' },
+  unclassified: { label: 'Unclassified', className: 'border-slate-200 bg-slate-100 text-slate-700' },
+} as const;
 
 const normalizePaymentTerm = (value: string): string => {
   const term = value.trim().toUpperCase().replace(/\s+/g, ' ');
@@ -122,6 +129,63 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
     0,
   );
 
+  const salespersonPerformance = useMemo(() => {
+    const agents = new Map<string, {
+      salesperson: string;
+      total: number;
+      transactionCount: number;
+      customers: Set<string>;
+      segments: Record<'new' | 'old' | 'unclassified', { total: number; customers: Set<string> }>;
+    }>();
+
+    for (const salesperson of reportData?.summary.salespersonTotals || []) {
+      agents.set(salesperson.salesperson, {
+        salesperson: salesperson.salesperson,
+        total: 0,
+        transactionCount: 0,
+        customers: new Set<string>(),
+        segments: {
+          new: { total: 0, customers: new Set<string>() },
+          old: { total: 0, customers: new Set<string>() },
+          unclassified: { total: 0, customers: new Set<string>() },
+        },
+      });
+    }
+
+    for (const transaction of transactions) {
+      const name = transaction.salesperson.trim() || 'Unassigned';
+      let agent = agents.get(name);
+      if (!agent) {
+        agent = {
+          salesperson: name,
+          total: 0,
+          transactionCount: 0,
+          customers: new Set<string>(),
+          segments: {
+            new: { total: 0, customers: new Set<string>() },
+            old: { total: 0, customers: new Set<string>() },
+            unclassified: { total: 0, customers: new Set<string>() },
+          },
+        };
+        agents.set(name, agent);
+      }
+
+      const postedSales = (transaction.drAmount || 0) + (transaction.invoiceAmount || 0);
+      const customerType = transaction.customerType === 'new' || transaction.customerType === 'old'
+        ? transaction.customerType
+        : 'unclassified';
+      const customerKey = transaction.customerId.trim()
+        || (transaction.customer.trim() ? 'name:' + transaction.customer.trim().toLowerCase() : 'transaction:' + transaction.type + ':' + transaction.id);
+      agent.total += postedSales;
+      agent.transactionCount += 1;
+      agent.customers.add(customerKey);
+      agent.segments[customerType].total += postedSales;
+      agent.segments[customerType].customers.add(customerKey);
+    }
+
+    return [...agents.values()].sort((left, right) => right.total - left.total || left.salesperson.localeCompare(right.salesperson));
+  }, [transactions, reportData?.summary.salespersonTotals]);
+
   const paymentTerms = useMemo(() => {
     const groups = new Map<string, { label: string; soAmount: number; drAmount: number; invoiceAmount: number; cash: boolean; rawLabel?: string }>();
     for (const transaction of transactions) {
@@ -213,7 +277,12 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
                     {transactions.map(transaction => (
                       <tr key={`${transaction.type}-${transaction.id}`} className="border-t border-[#ddd]">
                         <td className="break-words px-2 py-2">{formatRowDate(transaction.date)}</td>
-                        <td className="break-words px-2 py-2">{transaction.customer}</td>
+                        <td className="break-words px-2 py-2">
+                          <span>{transaction.customer}</span><CustomerStarIndicator customerId={transaction.customerId} isStarred={transaction.isStarred} className="mx-1 inline h-3.5 w-3.5" />{' '}
+                          <span className={'inline-flex rounded-full border px-1.5 py-0.5 align-middle text-[9px] font-semibold ' + customerTypeStyles[transaction.customerType || 'unclassified'].className}>
+                            {transaction.customerType === 'new' ? 'New' : transaction.customerType === 'old' ? 'Existing' : 'Unclassified'}
+                          </span>
+                        </td>
                         <td className="break-words px-2 py-2">{transaction.terms}</td>
                         <td className="break-words px-2 py-2">{transaction.refNo}</td>
                         <td className="break-words px-2 py-2">{transaction.soNo}</td>
@@ -296,9 +365,54 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
                 </table>
               </section>
 
+              <section className="mt-6" aria-labelledby="agent-performance-heading" data-testid="agent-customer-type-breakdown">
+                <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <h2 id="agent-performance-heading" className="text-[15px] font-semibold">SALES PERFORMANCE BY AGENT</h2>
+                    <p className="mt-1 text-xs text-[#666]">Posted sales are delivery receipts plus invoices, matching the report total.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-[11px]" aria-label="Customer type color legend">
+                    {(Object.entries(customerTypeStyles) as [keyof typeof customerTypeStyles, (typeof customerTypeStyles)['new']][]).map(([type, style]) => (
+                      <span key={type} className={'inline-flex items-center rounded-full border px-2.5 py-1 ' + style.className}>
+                        {style.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                {salespersonPerformance.length === 0 ? (
+                  <p className="rounded border border-[#ddd] px-3 py-4 text-center text-sm text-[#666]">No agent sales data available.</p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                    {salespersonPerformance.map(agent => (
+                      <article key={agent.salesperson} className="min-w-0 rounded border border-[#ddd] bg-white p-3" aria-label={agent.salesperson + ' sales performance'}>
+                        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#e5e5e5] pb-2">
+                          <div className="min-w-0">
+                            <h3 className="truncate font-semibold">{agent.salesperson}</h3>
+                            <p className="text-xs text-[#666]">{agent.transactionCount} posted {agent.transactionCount === 1 ? 'transaction' : 'transactions'} · {agent.customers.size} {agent.customers.size === 1 ? 'customer' : 'customers'}</p>
+                          </div>
+                          <p className="shrink-0 text-right text-sm font-bold tabular-nums">{money.format(agent.total)}</p>
+                        </div>
+                        <dl className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                          {(Object.keys(customerTypeStyles) as Array<keyof typeof customerTypeStyles>).map(type => {
+                            const style = customerTypeStyles[type];
+                            const segment = agent.segments[type];
+                            return (
+                              <div key={type} className={'min-w-0 rounded border px-2.5 py-2 ' + style.className}>
+                                <dt className="truncate text-[10px] font-semibold uppercase tracking-wide">{style.label}</dt>
+                                <dd className="mt-1 text-sm font-bold tabular-nums">{money.format(segment.total)}</dd>
+                                <dd className="text-[10px]">{segment.customers.size} {segment.customers.size === 1 ? 'customer' : 'customers'}</dd>
+                              </div>
+                            );
+                          })}
+                        </dl>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+
               <div className="mt-3 grid min-w-0 grid-cols-1 gap-8 md:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
                 <div className="min-w-0 overflow-x-auto">
-                  {reportType !== 'today' && (
                     <table className="w-full min-w-[420px] table-fixed border-collapse text-[12px]" data-testid="salesperson-category-summary">
                       <tbody>
                         {(reportData?.summary.salespersonTotals || []).map(salesperson => (
@@ -324,7 +438,6 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
                         </tr>
                       </tbody>
                     </table>
-                  )}
                 </div>
                 <div className="min-w-0 break-words text-[12px]">
                   <p className="font-semibold">Checked and Audited by/ Date: </p>

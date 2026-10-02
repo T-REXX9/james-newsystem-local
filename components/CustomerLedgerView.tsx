@@ -16,6 +16,7 @@ import {
   LedgerReportType,
 } from '../services/customerLedgerService';
 import ModuleRecordLink from './ModuleRecordLink';
+import CustomerStarIndicator from './CustomerStarIndicator';
 import { formatCustomerSince, formatDate as formatDisplayDate, formatDateTime } from '../utils/formatUtils';
 
 import { shouldSuppressAuthError } from '../services/localApiAuth';
@@ -114,7 +115,7 @@ const CustomerSearchPanel: React.FC<{
                   }`}
                 >
                   <div className="font-medium truncate">
-                    {customer.company.trim() || customer.customerCode.trim() || 'Unnamed customer'}
+                    {customer.company.trim() || customer.customerCode.trim() || 'Unnamed customer'}<CustomerStarIndicator customerId={customer.sessionId} className="ml-1 inline h-3.5 w-3.5" />
                   </div>
                   {customer.oldName && (
                     <div className={`truncate text-xs ${isSelected ? 'text-[#dbeafe]' : 'text-[#666]'}`}>
@@ -501,7 +502,7 @@ const LedgerReport: React.FC<{
       <div className="border-b border-[#ddd] pb-4">
         <div className="text-center">
           <h3 className="font-serif text-xl font-bold">
-            Customer Ledger: {selectedCustomer.company}
+            Customer Ledger: {selectedCustomer.company}<CustomerStarIndicator customerId={selectedCustomer.sessionId} className="ml-1 inline h-4 w-4" />
             {ledgerData?.metrics.old_name && (
               <span className="ml-2 text-sm font-normal text-[#555]">
                 ( Old Name: <span>{ledgerData.metrics.old_name}</span> )

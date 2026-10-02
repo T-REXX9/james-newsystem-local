@@ -7,6 +7,7 @@ import {
   SalespersonTotal,
   GrandTotal,
   CustomerOption,
+  SalesReportProductTotal,
 } from '../types';
 import { getLocalAuthSession } from './localAuthService';
 
@@ -60,6 +61,15 @@ const mapGrandTotal = (value: any): GrandTotal => ({
   total: toNumber(value?.total),
 });
 
+const mapProductTotals = (value: any): SalesReportProductTotal[] =>
+  (Array.isArray(value) ? value : []).map((entry: any) => ({
+    itemCode: String(entry?.itemCode ?? entry?.item_code ?? ''),
+    partNo: String(entry?.partNo ?? entry?.part_no ?? ''),
+    brand: String(entry?.brand ?? ''),
+    product: String(entry?.product || entry?.description || entry?.partNo || entry?.part_no || entry?.itemCode || entry?.item_code || 'Unnamed product'),
+    total: toNumber(entry?.total),
+  }));
+
 export const getCustomerList = async (): Promise<CustomerOption[]> => {
   try {
     const query = new URLSearchParams({
@@ -108,6 +118,7 @@ export const getSalesReportData = async (
 
     const transactions: SalesReportTransaction[] = (Array.isArray(data?.transactions) ? data.transactions : []).map((tx: any) => ({
       id: String(tx?.id || ''),
+      isStarred: tx?.is_starred === true || tx?.is_starred === 1 || tx?.is_starred === '1',
       date: String(tx?.date || ''),
       customer: String(tx?.customer || 'Unknown'),
       customerId: String(tx?.customer_id || ''),
@@ -119,6 +130,7 @@ export const getSalesReportData = async (
       invoiceAmount: toNumber(tx?.invoice_amount),
       salesperson: String(tx?.salesperson || 'Unassigned'),
       currentAgentId: String(tx?.current_agent_id || ''),
+      customerType: tx?.customer_type === 'new' || tx?.customer_type === 'old' ? tx.customer_type : 'unclassified',
       category: String(tx?.category || 'Uncategorized'),
       vatType: tx?.vat_type === 'exclusive' || tx?.vat_type === 'inclusive' ? tx.vat_type : null,
       type: tx?.type === 'dr' ? 'dr' : tx?.type === 'so' ? 'so' : 'invoice',
@@ -128,6 +140,7 @@ export const getSalesReportData = async (
       categoryTotals: mapCategoryTotals(data?.summary?.categoryTotals),
       salespersonTotals: mapSalespersonTotals(data?.summary?.salespersonTotals),
       grandTotal: mapGrandTotal(data?.summary?.grandTotal),
+      productTotals: mapProductTotals(data?.summary?.productTotals),
     };
 
     return { transactions, summary };
@@ -139,6 +152,7 @@ export const getSalesReportData = async (
         categoryTotals: [],
         salespersonTotals: [],
         grandTotal: { soAmount: 0, drAmount: 0, invoiceAmount: 0, total: 0 },
+        productTotals: [],
       },
     };
   }

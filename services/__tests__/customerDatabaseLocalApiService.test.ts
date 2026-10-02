@@ -1,7 +1,7 @@
 import { CustomerStatus } from '../../types';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchDailyCallMasterList, invalidateDailyCallMasterListCache } from '../dailyCallMonitoringService';
-import { bulkUpdateContacts, deleteCustomer, fetchContactById, fetchContactForDailyCall, fetchContacts, mapApiCustomerToContact, mapContactPayloadToApi, mapContactUpdatesToApi, updateContact } from '../customerDatabaseLocalApiService';
+import { bulkUpdateContacts, deleteCustomer, fetchContactById, fetchContactForDailyCall, fetchContacts, mapApiCustomerToContact, mapContactPayloadToApi, mapContactUpdatesToApi, setCustomerStarred, updateContact } from '../customerDatabaseLocalApiService';
 
 const reloadStanding = (patch: Record<string, unknown>) =>
   mapApiCustomerToContact({
@@ -14,6 +14,25 @@ const reloadStanding = (patch: Record<string, unknown>) =>
   }).status;
 
 describe('customer database price and discount codes', () => {
+  it('maps the shared customer star flag from the API', () => {
+    expect(mapApiCustomerToContact({ session_id: 'starred-1', is_starred: 1 }).isStarred).toBe(true);
+    expect(mapApiCustomerToContact({ session_id: 'starred-2', is_starred: 0 }).isStarred).toBe(false);
+  });
+
+  it('writes star changes through the dedicated star endpoint', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: async () => ({ data: { is_starred: true } }),
+    } as Response);
+
+    await setCustomerStarred('customer/1', true);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(String(fetchSpy.mock.calls[0][0])).toContain('/customer-database/customer%2F1/star');
+    expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({ is_starred: true });
+  });
+
   it('maps the legacy company name for display and local search', () => {
     const contact = mapApiCustomerToContact({
       session_id: 'cust-legacy-name',

@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, TrendingUp } from 'lucide-react';
 import { AgentPerformanceSummary } from '../types';
+import CustomerStarIndicator from './CustomerStarIndicator';
 
 interface AgentSummaryModalProps {
   isOpen: boolean;
@@ -190,7 +191,7 @@ const AgentSummaryModal: React.FC<AgentSummaryModalProps> = ({ isOpen, onClose, 
                             {idx + 1}
                           </span>
                           <span className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">
-                            {customer.company}
+                            {customer.company}<CustomerStarIndicator customerId={customer.id} className="ml-1 inline h-3.5 w-3.5" />
                           </span>
                         </div>
                         {customer.last_purchase_date && (

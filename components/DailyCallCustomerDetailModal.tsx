@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ClipboardList, X } from 'lucide-react';
 import { DailyCallCustomerRow, UserProfile, VipTierConfig } from '../types';
 import DailyCallCustomerDetailExpansion from './DailyCallCustomerDetailExpansion';
+import CustomerStarIndicator from './CustomerStarIndicator';
 import { getVipStandingSummary } from '../utils/vipStanding';
 import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
 import { getVipTierConfig } from '../services/vipTierSettingsService';
@@ -113,7 +114,7 @@ const DailyCallCustomerDetailModal: React.FC<DailyCallCustomerDetailModalProps> 
               <h2 id={titleId} className="mt-1 flex items-center gap-2 text-lg font-bold text-slate-900 dark:text-white">
                 <ClipboardList className="h-4 w-4 text-blue-600" />
                 <span className="inline-flex items-center gap-2 min-w-0">
-                  <span className="truncate">{customer.shopName}</span>
+                  <span className="flex min-w-0 items-center gap-1 truncate"><span className="truncate">{customer.shopName}</span><CustomerStarIndicator customerId={customer.id} isStarred={customer.isStarred} /></span>
                   {vipStanding?.badgeVisible && (
                     <img
                       src={vipBadgeIconUrl}

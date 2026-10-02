@@ -17,6 +17,7 @@ export type MonthlySalesPoint = {
 };
 
 export type RankedCustomer = {
+  customerId: string;
   customerName: string;
   amount: number;
 };
@@ -80,6 +81,7 @@ const normalizeDashboardData = (data: any, requestedYear: number): ManagementDas
   });
 
   const topCustomers = (Array.isArray(data?.top_customers) ? data.top_customers : []).map((row: any) => ({
+    customerId: String(row?.customer_id || ''),
     customerName: cleanText(row?.customer_name ?? row?.customerName, 'Unnamed Customer'),
     amount: toNumber(row?.amount),
   }));

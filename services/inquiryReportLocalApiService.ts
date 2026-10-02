@@ -32,6 +32,7 @@ export type InquiryReportRow = {
   sales_date: string;
   sales_time: string;
   created_at: string;
+  converted_to_order: boolean;
   grand_total: number;
   item_count: number;
   items: InquiryReportItem[];
@@ -137,6 +138,7 @@ export const inquiryReportLocalApiService = {
         sales_date: String(row?.sales_date || ''),
         sales_time: String(row?.sales_time || ''),
         created_at: String(row?.created_at || ''),
+        converted_to_order: row?.converted_to_order === true || Number(row?.converted_to_order) === 1,
         grand_total: toNumber(row?.grand_total),
         item_count: toNumber(row?.item_count),
         items: (Array.isArray(row?.items) ? row.items : []).map((item: any) => ({

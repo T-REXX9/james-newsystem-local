@@ -4,6 +4,7 @@ import {
   fetchInactiveActiveCustomersReport,
   InactiveActiveCustomerRow,
 } from '../services/inactiveActiveCustomersReportService';
+import CustomerStarIndicator from './CustomerStarIndicator';
 
 const formatDate = (dateValue: string): string => {
   if (!dateValue) return 'N/A';
@@ -147,7 +148,7 @@ const InactiveActiveCustomersReport: React.FC = () => {
 
     return list.map((row) => (
       <tr key={`${row.id}-${row.customerStatus}`} className="border-t border-slate-100 dark:border-slate-800">
-        <td className="px-3 py-2">{row.customerName || '-'}</td>
+        <td className="px-3 py-2">{row.customerName || '-'}<CustomerStarIndicator customerId={row.id} className="ml-1 inline h-3.5 w-3.5" /></td>
         <td className="px-3 py-2">{row.customerGroup || '-'}</td>
         <td className="px-3 py-2">{row.salesPerson || '-'}</td>
         <td className="px-3 py-2">{formatDate(row.lastPurchase)}</td>

@@ -21,6 +21,7 @@ import {
   IncidentMatchSource,
 } from '../services/incidentItemsReportService';
 import IncidentItemIncidentsDialog from './IncidentItemIncidentsDialog';
+import CustomerStarIndicator from './CustomerStarIndicator';
 import { formatLocalDateInput, localDateDaysAgo } from '../utils/localDateInput';
 
 import { shouldSuppressAuthError } from '../services/localApiAuth';
@@ -402,7 +403,7 @@ const IncidentItemsReport: React.FC<IncidentItemsReportProps> = ({
                       <p className="text-xs font-semibold text-slate-900 dark:text-white" title={incident.ir_number || incident.incident_report_id}>
                         {formatIncidentReportNumber(incident.ir_number)}
                       </p>
-                      <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">{incident.customer_name}</p>
+                      <p className="flex items-center gap-1 text-xs font-semibold text-blue-700 dark:text-blue-300">{incident.customer_name}<CustomerStarIndicator customerId={incident.contact_id} className="h-3 w-3" /></p>
                       <p className="text-xs text-slate-500">{formatDate(incident.date)}</p>
                       <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{incident.summary || '-'}</p>
                     </div>

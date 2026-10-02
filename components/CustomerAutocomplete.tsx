@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 
 import ReactDOM from 'react-dom';
 import { AlertCircle, Building2, Loader2, Search } from 'lucide-react';
 import { useDebounce } from '../hooks/useDebounce';
+import CustomerStarIndicator from './CustomerStarIndicator';
 
 export type CustomerAutocompleteOption = {
   id: string;
@@ -222,7 +223,7 @@ const CustomerAutocomplete = <T extends CustomerAutocompleteOption,>({
           value={query}
           disabled={disabled}
           placeholder={placeholder}
-          className={`block w-full pl-8 pr-3 py-1.5 border rounded-md leading-5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-blue/50 focus:border-brand-blue sm:text-xs transition-shadow ${disabled ? 'opacity-60 cursor-not-allowed' : ''} ${inputClassName}`}
+          className={`block w-full pl-8 pr-8 py-1.5 border rounded-md leading-5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-blue/50 focus:border-brand-blue sm:text-xs transition-shadow ${disabled ? 'opacity-60 cursor-not-allowed' : ''} ${inputClassName}`}
           onChange={(event) => {
             const nextQuery = event.target.value;
             setQuery(nextQuery);
@@ -238,6 +239,11 @@ const CustomerAutocomplete = <T extends CustomerAutocompleteOption,>({
           onKeyDown={handleKeyDown}
           autoComplete="off"
         />
+        {selectedCustomer && (
+          <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center" aria-hidden="true">
+            <CustomerStarIndicator customerId={selectedCustomer.id} isStarred={(selectedCustomer as any).isStarred} />
+          </span>
+        )}
       </div>
 
       {showDropdown && ReactDOM.createPortal(
@@ -285,6 +291,7 @@ const CustomerAutocomplete = <T extends CustomerAutocompleteOption,>({
                       <div className="flex-1 min-w-0">
                         <div className={`text-xs font-bold ${isSelected ? 'text-brand-blue' : 'text-slate-900 dark:text-white'}`}>
                           {highlightMatch(customer.company, debouncedQuery)}
+                          <CustomerStarIndicator customerId={customer.id} isStarred={(customer as any).isStarred} />
                         </div>
                         <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 truncate">
                           {highlightMatch(customer.address || customer.deliveryAddress || customer.city || 'No address on file', debouncedQuery)}

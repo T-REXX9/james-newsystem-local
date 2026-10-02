@@ -18,6 +18,7 @@ import ItemIssueReportTab from './ItemIssueReportTab';
 import IncidentReportTab from './IncidentReportTab';
 import CustomerRequestsTab from './CustomerRequestsTab';
 import CustomerSalesReportChat from './CustomerSalesReportChat';
+import CustomerStarIndicator from './CustomerStarIndicator';
 import CustomerYearlySales from './CustomerYearlySales';
 import { Suspense } from 'react';
 import { DailyCallCustomerRow, UserProfile, VipTierConfig } from '../types';
@@ -296,7 +297,7 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
 
           <div className="min-w-0 py-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="truncate text-2xl font-bold text-slate-950">{customer.shopName}</h2>
+              <h2 className="flex items-center gap-1 truncate text-2xl font-bold text-slate-950"><span className="truncate">{customer.shopName}</span><CustomerStarIndicator customerId={customer.id} isStarred={customer.isStarred} /></h2>
               <span className={`rounded px-2.5 py-1 text-[10px] font-bold ${isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>{customer.status}</span>
               {vipStanding.badgeVisible && <span className="inline-flex items-center gap-1.5 rounded bg-amber-400 px-2.5 py-1 text-[10px] font-bold text-amber-950"><img src={vipBadgeIconUrl} alt={`${vipStanding.tierLabel} badge`} className="h-3.5 w-3.5" /> {vipStanding.tierLabel.toUpperCase()}</span>}
             </div>

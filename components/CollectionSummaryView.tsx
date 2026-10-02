@@ -7,6 +7,7 @@ import {
 } from '../services/dailyCollectionService';
 import { BUTTON_BASE, BUTTON_PRIMARY } from '../utils/uiConstants';
 import { formatDate as formatDisplayDate } from '../utils/formatUtils';
+import CustomerStarIndicator from './CustomerStarIndicator';
 
 import { shouldSuppressAuthError } from '../services/localApiAuth';
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
@@ -172,7 +173,7 @@ const CollectionSummaryView: React.FC<CollectionSummaryViewProps> = ({ initialDa
                           className={`${index % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50 dark:bg-slate-800/30'} hover:bg-slate-100 dark:hover:bg-slate-800`}
                         >
                           <td className="px-3 py-2">{formatDate(row.date)}</td>
-                          <td className="px-3 py-2">{row.customer || '-'}</td>
+                          <td className="px-3 py-2">{row.customer || '-'}<CustomerStarIndicator customerId={row.customer_id} className="ml-1 inline h-3.5 w-3.5" /></td>
                           <td className="px-3 py-2">{row.dcr_no || '-'}</td>
                           <td className="px-3 py-2 text-right">{peso.format(row.cash || 0)}</td>
                           <td className="px-3 py-2 text-right">{peso.format(row.check || 0)}</td>
@@ -231,7 +232,7 @@ const CollectionSummaryView: React.FC<CollectionSummaryViewProps> = ({ initialDa
                           >
                             <td className="px-3 py-2">{row.ldm_no || '-'}</td>
                             <td className="px-3 py-2">{row.lcustomer_code || '-'}</td>
-                            <td className="px-3 py-2">{row.lcustomer_name || '-'}</td>
+                            <td className="px-3 py-2">{row.lcustomer_name || '-'}<CustomerStarIndicator customerId={row.customer_id} className="ml-1 inline h-3.5 w-3.5" /></td>
                             <td className="px-3 py-2">{formatDate(row.ldatetime)}</td>
                             <td className="px-3 py-2 text-right">{peso.format(row.lamount || 0)}</td>
                           </tr>

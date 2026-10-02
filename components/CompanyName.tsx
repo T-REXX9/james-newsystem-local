@@ -1,4 +1,5 @@
 import React from 'react';
+import CustomerStarIndicator from './CustomerStarIndicator';
 
 const DERIVATION_KEYS = [
   'pastName',
@@ -19,6 +20,7 @@ interface CompanyNameProps {
   wrapFormerName?: boolean;
   formerLabel?: string;
   fallback?: string;
+  showStar?: boolean;
 }
 
 /**
@@ -34,7 +36,8 @@ const CompanyName: React.FC<CompanyNameProps> = ({
   showFormerLabel = true,
   wrapFormerName = true,
   formerLabel = 'formerly',
-  fallback = 'Unknown Company'
+  fallback = 'Unknown Company',
+  showStar = true
 }) => {
   const normalizedName = (name || '').trim();
   const normalizedPastName = (() => {
@@ -54,6 +57,7 @@ const CompanyName: React.FC<CompanyNameProps> = ({
   return (
     <span className={className}>
       {displayName}
+      {showStar && entity?.id ? <CustomerStarIndicator customerId={entity.id} isStarred={entity.isStarred} /> : null}
       {normalizedPastName && (
         <span className={formerNameClassName || 'text-xs text-slate-500 font-medium ml-1'}>
           {wrapFormerName ? '(' : ''}

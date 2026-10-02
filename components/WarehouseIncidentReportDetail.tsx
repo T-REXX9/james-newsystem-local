@@ -22,6 +22,7 @@ import {
 import { UserProfile } from '../types';
 import { canPerformAction } from '../utils/actionPermissions';
 import { formatDate } from '../utils/formatUtils';
+import CustomerStarIndicator from './CustomerStarIndicator';
 
 import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface WarehouseIncidentReportDetailProps {
@@ -160,7 +161,7 @@ const WarehouseIncidentReportDetail: React.FC<WarehouseIncidentReportDetailProps
             </span>
           </h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            {report.customer_name || 'Unknown customer'}
+            {report.customer_name || 'Unknown customer'}<CustomerStarIndicator customerId={report.contact_id} className="ml-1 inline h-3.5 w-3.5" />
           </p>
         </div>
 

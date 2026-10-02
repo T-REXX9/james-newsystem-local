@@ -113,6 +113,7 @@ export type CollectionUnpaidRow = {
 export type CollectionSummaryDateType = 'all' | 'today' | 'week' | 'month' | 'year' | 'custom';
 
 export type CollectionSummaryItem = {
+  customer_id: string;
   date: string;
   customer: string;
   dcr_no: string;
@@ -124,6 +125,7 @@ export type CollectionSummaryItem = {
 };
 
 export type CollectionSummaryDebitItem = {
+  customer_id: string;
   lrefno: string;
   ldm_no: string;
   lcustomer_code: string;
@@ -443,6 +445,7 @@ export const dailyCollectionService = {
       date_from: String(data?.date_from || ''),
       date_to: String(data?.date_to || ''),
       collection_items: collectionRows.map((row: any) => ({
+        customer_id: String(row?.raw?.lcustomer || ''),
         date: String(row?.date || ''),
         customer: String(row?.customer || ''),
         dcr_no: String(row?.dcr_no || ''),
@@ -459,6 +462,7 @@ export const dailyCollectionService = {
         less: toNumber(data?.collection_totals?.less),
       },
       debit_items: debitRows.map((row: any) => ({
+        customer_id: String(row?.customer_id || ''),
         lrefno: String(row?.lrefno || ''),
         ldm_no: String(row?.ldm_no || ''),
         lcustomer_code: String(row?.lcustomer_code || ''),

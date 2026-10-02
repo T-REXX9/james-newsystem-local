@@ -9,6 +9,7 @@ import {
   IncidentItemsReportRow,
 } from '../services/incidentItemsReportService';
 import { buildModuleRecordUrl } from '../utils/workflowNavigate';
+import CustomerStarIndicator from './CustomerStarIndicator';
 
 import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface IncidentItemIncidentsDialogProps {
@@ -147,7 +148,7 @@ const IncidentItemIncidentsDialog: React.FC<IncidentItemIncidentsDialogProps> = 
                       <span className="text-xs text-slate-500">{formatDate(incident.date)}</span>
                     </div>
                     <p className="mt-1 text-sm font-semibold text-blue-700 dark:text-blue-300">
-                      {incident.customer_name || 'Unknown customer'}
+                      {incident.customer_name || 'Unknown customer'}<CustomerStarIndicator customerId={incident.contact_id} className="ml-1 inline h-3.5 w-3.5" />
                     </p>
                     <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
                       {incident.summary || '-'}

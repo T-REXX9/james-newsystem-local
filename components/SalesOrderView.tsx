@@ -15,6 +15,7 @@ import {
 } from '../types';
 import ModuleRecordLink from './ModuleRecordLink';
 import ModuleRecordAction from './ModuleRecordAction';
+import CustomerStarIndicator from './CustomerStarIndicator';
 import { navigateWorkflow } from '../utils/workflowNavigate';
 import {
   convertToDocument,
@@ -1345,7 +1346,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                         <td className="px-3 py-2">{formatDisplayDate(order.sales_date)}</td>
                         <td className="px-3 py-2">
                           <div className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" title={getCustomerLabel(order, customer)}>
-                            {getCustomerLabel(order, customer)}
+                            {getCustomerLabel(order, customer)}<CustomerStarIndicator customerId={order.contact_id} className="ml-1 inline h-3.5 w-3.5" />
                           </div>
                         </td>
                         <td className="px-3 py-2">

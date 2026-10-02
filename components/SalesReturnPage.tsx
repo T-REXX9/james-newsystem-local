@@ -11,6 +11,7 @@ import {
 import { Contact } from '../types';
 import { fetchContacts, fetchPurchasedItems } from '../services/customerDatabaseLocalApiService';
 import CustomerAutocomplete from './CustomerAutocomplete';
+import CustomerStarIndicator from './CustomerStarIndicator';
 import { useDebounce } from '../hooks/useDebounce';
 import { canBackdatePosting, canPerformAction } from '../utils/actionPermissions';
 import { canMutateDocumentDateField, localTodayYmd, validateDocumentDateWrite } from '../utils/backdatedPosting';
@@ -1059,7 +1060,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
                     return (
                       <tr key={row.lrefno} onClick={() => setSelectedRefno(row.lrefno)} className={`cursor-pointer border-b border-[#ddd] ${active ? 'text-blue-600' : ''}`}>
                         <td className="px-2 py-2">{formatDate(row.ldate)}</td>
-                        <td className="px-2 py-2">{row.customer_name || '-'}</td>
+                        <td className="px-2 py-2">{row.customer_name || '-'}<CustomerStarIndicator customerId={row.customer_id} className="ml-1 inline h-3.5 w-3.5" /></td>
                         <td className="px-2 py-2 underline">{row.lcredit_no || '-'}</td>
                         <td className="px-2 py-2 underline">{row.linvoice_no || '-'}</td>
                         <td className="px-2 py-2">{row.lstatus || 'Pending'}</td>

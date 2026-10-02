@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { CallRecord, fetchCallRecords } from '../services/callingSystemService';
 import { UserProfile } from '../types';
 import { formatDate as formatDisplayDate } from '../utils/formatUtils';
+import CustomerStarIndicator from './CustomerStarIndicator';
 
 interface CallRecordsViewProps {
   currentUser: UserProfile | null;
@@ -227,6 +228,7 @@ const CallRecordsView: React.FC<CallRecordsViewProps> = ({ currentUser }) => {
                     <div className="min-w-0 overflow-hidden">
                       <span className="block truncate font-semibold" title={customerName}>
                         {customerName || <span className="text-slate-400">—</span>}
+                        <CustomerStarIndicator customerId={record.customerId} className="ml-1 inline h-3.5 w-3.5" />
                       </span>
                       <span className="block text-[10px] text-slate-400">{formatDirection(record.ldirection)} · {formatDuration(record.lduration_seconds)}</span>
                     </div>

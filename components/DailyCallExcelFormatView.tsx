@@ -9,6 +9,7 @@ import { createContact, isPendingDuplicateProspectApproval } from '../services/c
 import { Contact, DailyCallCustomerFilterStatus, DailyCallCustomerRow, UserProfile } from '../types';
 import { useToast } from './ToastProvider';
 import DailyCallCustomerDetailModal from './DailyCallCustomerDetailModal';
+import CustomerStarIndicator from './CustomerStarIndicator';
 import { formatLegacyPriceGroupLabel } from '../constants/pricingGroups';
 import { getVipStandingSummary, resolveVipDiscountLevel } from '../utils/vipStanding';
 import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
@@ -389,7 +390,7 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
                     >
                       <td className="px-1 py-1.5 text-center text-slate-600">{index + 1}</td>
                       <td className="sticky left-0 z-[1] border-r border-slate-100 bg-inherit px-1.5 py-1.5 font-semibold text-slate-800 dark:border-slate-700 dark:text-slate-100 truncate" title={row.shopName}>
-                        {row.shopName}
+                        {row.shopName}<CustomerStarIndicator customerId={row.id} isStarred={row.isStarred} className="ml-1 inline h-3.5 w-3.5" />
                       </td>
                       <td className="px-1.5 py-1.5 text-slate-600 truncate" title={location}>{location}</td>
                       <td className="px-1.5 py-1.5 text-slate-600">

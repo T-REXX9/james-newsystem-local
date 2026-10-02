@@ -1,6 +1,7 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import OwnerDailyCallMonitoringUnifiedView from '../OwnerDailyCallMonitoringUnifiedView';
 
 const getSalesReportDataMock = vi.fn();
@@ -51,5 +52,39 @@ describe('OwnerDailyCallMonitoringUnifiedView', () => {
     expect(await screen.findByText('₱45,678')).toBeInTheDocument();
     expect(getSalesReportDataMock).toHaveBeenCalledWith(expect.objectContaining({ customerId: 'all' }));
     expect(fetchDailyCallMasterListMock).toHaveBeenCalledWith({ fromDate: '2025-10-01', forceRefresh: true });
+  });
+
+  it('opens the month sales breakdown with ranked agents, customers, and products', async () => {
+    const user = userEvent.setup();
+    getSalesReportDataMock.mockResolvedValue({
+      transactions: [
+        { customerId: 'cust-1', customer: 'Top Customer', drAmount: 800, invoiceAmount: 200 },
+        { customerId: 'cust-2', customer: 'Second Customer', drAmount: 500, invoiceAmount: 0 },
+      ],
+      summary: {
+        grandTotal: { soAmount: 0, drAmount: 1300, invoiceAmount: 200, total: 1500 },
+        salespersonTotals: [
+          { salesperson: 'Leading Agent', categories: [], total: 1200 },
+          { salesperson: 'Second Agent', categories: [], total: 300 },
+        ],
+        productTotals: [
+          { product: 'Leading Product', itemCode: 'P-1', partNo: 'PART-1', brand: 'Brand A', total: 900 },
+          { product: 'Second Product', itemCode: 'P-2', partNo: 'PART-2', brand: 'Brand B', total: 600 },
+        ],
+      },
+    });
+
+    render(<OwnerDailyCallMonitoringUnifiedView currentUser={null} />);
+    const salesCard = await screen.findByRole('button', { name: /open current month sales breakdown/i });
+    await user.click(salesCard);
+
+    const dialog = screen.getByRole('dialog', { name: 'Current Month Sales Breakdown' });
+    expect(dialog).toHaveTextContent('₱1,500');
+    expect(dialog).toHaveTextContent('Leading Agent');
+    expect(dialog).toHaveTextContent('Top Customer');
+    expect(dialog).toHaveTextContent('Leading Product');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(salesCard).toHaveFocus();
   });
 });

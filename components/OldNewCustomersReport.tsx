@@ -27,6 +27,7 @@ import {
 import { Download, Printer, RefreshCw, RotateCcw, Search } from 'lucide-react';
 import { fetchOldNewCustomersReport, OldNewCustomerRow } from '../services/oldNewCustomersReportService';
 import { formatCustomerSince } from '../utils/formatUtils';
+import CustomerStarIndicator from './CustomerStarIndicator';
 
 import { shouldSuppressAuthError } from '../services/localApiAuth';
 const formatDate = (dateValue: string): string => {
@@ -179,7 +180,7 @@ const OldNewCustomersReport: React.FC = () => {
 
     return list.map((row) => (
       <TableRow key={`${row.id}-${row.customerType}`} hover>
-        <TableCell>{row.customerName || '-'}</TableCell>
+        <TableCell>{row.customerName || '-'}<CustomerStarIndicator customerId={row.id} className="ml-1 inline h-3.5 w-3.5" /></TableCell>
         <TableCell>{row.customerCode || row.customerGroup || '-'}</TableCell>
         <TableCell>{row.salesPerson || '-'}</TableCell>
         <TableCell>{formatCustomerSince(row.customerSince) || 'N/A'}</TableCell>

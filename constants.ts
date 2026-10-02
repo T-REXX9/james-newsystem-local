@@ -264,6 +264,7 @@ export const ROLE_DEFAULT_ACCESS_RIGHTS: Record<string, string[]> = {
   ],
   [ROLE_NAMES.WAREHOUSE_PERSONNEL]: [
     'home',
+    'sales-reports-sales-report',
     'warehouse-inventory-product-database',
     'warehouse-inventory-stock-movement',
     'warehouse-inventory-stock-adjustment',
@@ -280,6 +281,7 @@ export const ROLE_DEFAULT_ACCESS_RIGHTS: Record<string, string[]> = {
   ],
   Staff: [
     'home',
+    'sales-reports-sales-report',
   ],
 };
 

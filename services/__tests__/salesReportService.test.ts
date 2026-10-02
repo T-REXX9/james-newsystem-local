@@ -15,6 +15,7 @@ describe('salesReportService legacy period request', () => {
           categoryTotals: [],
           salespersonTotals: [],
           grandTotal: { soAmount: 0, drAmount: 0, invoiceAmount: 0, total: 0 },
+          productTotals: [],
         },
       },
     }), { status: 200 })));
@@ -38,5 +39,30 @@ describe('salesReportService legacy period request', () => {
     expect(url.searchParams.get('date_type')).toBe('month');
     expect(url.searchParams.get('date_from')).toBe('2026-09-01');
     expect(url.searchParams.get('date_to')).toBe('2026-09-30');
+  });
+
+  it('maps product sales totals returned by the Sales Report API', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ok: true,
+      data: {
+        transactions: [],
+        summary: {
+          categoryTotals: [],
+          salespersonTotals: [],
+          grandTotal: { soAmount: 0, drAmount: 250, invoiceAmount: 0, total: 250 },
+          productTotals: [{ item_code: 'P-100', part_no: 'PART-100', brand: 'Top Brand', product: 'Top Product', total: 250 }],
+        },
+      },
+    }), { status: 200 })));
+
+    const report = await getSalesReportData({ dateFrom: '2026-10-01', dateTo: '2026-10-02', customerId: 'all' });
+
+    expect(report.summary.productTotals).toEqual([{
+      itemCode: 'P-100',
+      partNo: 'PART-100',
+      brand: 'Top Brand',
+      product: 'Top Product',
+      total: 250,
+    }]);
   });
 });

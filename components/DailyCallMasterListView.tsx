@@ -32,6 +32,7 @@ import { matchesDailyCallMonitorBucket, resolveDailyCallListCategory } from '../
 import { resolveDailyCallPurchaseHighlightColor } from '../utils/dailyCallPurchaseHighlight';
 import { hasActionPermission, isMasterUserAccount } from '../constants';
 import { VERIFIED_PROSPECT_POTENTIAL } from '../utils/dailyCallPotentialSales';
+import CustomerStarIndicator from './CustomerStarIndicator';
 import { getUserFacingErrorMessage } from '../services/localApiAuth';
 import AddContactModal from './AddContactModal';
 import ModuleRecordAction from './ModuleRecordAction';
@@ -840,15 +841,6 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
             <ClipboardList className="h-6 w-6 text-blue-700" /> Daily Call Monitoring Dashboard
           </h2>
         </div>
-        <label className="relative block w-[340px]">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search customer, city, contact..."
-            className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-10 pr-3 text-sm outline-none focus:border-blue-500"
-          />
-        </label>
         <button
           type="button"
           onClick={() => setShowAddProspectModal(true)}
@@ -1054,6 +1046,18 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 </button>
               </div>
             </div>
+            <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-3">
+              <label className="relative block w-full max-w-md">
+                <span className="sr-only">Search master list customers</span>
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search customer, city, contact..."
+                  className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-10 pr-3 text-sm outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                />
+              </label>
+            </div>
             <div
               className="min-h-0 flex-1"
               data-testid="daily-call-table-scroll"
@@ -1186,6 +1190,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                             {loadingCustomerId === row.id && <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />}
                             {row.shopName}
                           </button>
+                          <CustomerStarIndicator customerId={row.id} isStarred={row.isStarred} className="ml-1 inline h-3.5 w-3.5" />
                           {row.dataIntegrityException && (
                             <p className="mt-1 inline-flex rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800" title={row.dataIntegrityMessage || 'Missing active customer record'}>
                               Data repair needed

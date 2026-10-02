@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ArrowLeft, List, Printer, Tags } from 'lucide-react';
 import type { InquiryReportFilters } from '../types';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
+import ModuleRecordLink from './ModuleRecordLink';
 import { inquiryReportLocalApiService } from '../services/inquiryReportLocalApiService';
 import { formatDateTime } from '../utils/formatUtils';
 
@@ -31,6 +32,11 @@ const InquiryReportView: React.FC<InquiryReportViewProps> = ({ filters, onBack }
   const [inquiries, setInquiries] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'summary' | 'detailed'>('summary');
+  const convertedCount = inquiries.reduce(
+    (count, inquiry) => count + (inquiry.converted_to_order === true ? 1 : 0),
+    0,
+  );
+  const notConvertedCount = inquiries.length - convertedCount;
 
   useEffect(() => {
     const loadReport = async () => {
@@ -98,6 +104,24 @@ const InquiryReportView: React.FC<InquiryReportViewProps> = ({ filters, onBack }
             </div>
           </div>
 
+          <section
+            aria-label="Inquiry conversion summary"
+            className="mb-5 grid grid-cols-1 gap-px overflow-hidden rounded-[4px] border border-[#ddd] bg-[#ddd] sm:grid-cols-3"
+          >
+            <dl className="bg-white px-4 py-3">
+              <dt className="text-[11px] font-semibold uppercase tracking-wide text-[#666]">Total inquiries</dt>
+              <dd className="mt-1 text-[22px] font-semibold leading-none text-[#315574]">{inquiries.length}</dd>
+            </dl>
+            <dl className="bg-white px-4 py-3">
+              <dt className="text-[11px] font-semibold uppercase tracking-wide text-[#398439]">Converted to orders</dt>
+              <dd className="mt-1 text-[22px] font-semibold leading-none text-[#398439]">{convertedCount}</dd>
+            </dl>
+            <dl className="bg-white px-4 py-3">
+              <dt className="text-[11px] font-semibold uppercase tracking-wide text-[#666]">Not converted</dt>
+              <dd className="mt-1 text-[22px] font-semibold leading-none text-[#555]">{notConvertedCount}</dd>
+            </dl>
+          </section>
+
           {inquiries.length === 0 ? (
             <div className="py-20 text-center">
               <Tags className="mx-auto mb-4 h-12 w-12 text-[#aaa]" />
@@ -121,6 +145,7 @@ const InquiryReportView: React.FC<InquiryReportViewProps> = ({ filters, onBack }
                     <th className="px-2 py-2 text-left">Sold To</th>
                     <th className="w-[13%] px-2 py-2 text-left">Date</th>
                     <th className="w-[12%] px-2 py-2 text-left">Time</th>
+                    <th className="w-[13%] px-2 py-2 text-center">Converted to Order</th>
                     <th className="w-[13%] px-2 py-2 text-right">{viewMode === 'summary' ? 'Amount' : ''}</th>
                   </tr>
                 </thead>
@@ -129,10 +154,31 @@ const InquiryReportView: React.FC<InquiryReportViewProps> = ({ filters, onBack }
                     <React.Fragment key={inquiry.id || inquiry.inquiry_no || inquiryIndex}>
                       <tr className="border-b border-[#eee] odd:bg-[#f9f9f9]">
                         <td className="px-2 py-2 text-center">{inquiryIndex + 1}</td>
-                        <td className="px-2 py-2">{inquiry.inquiry_no}</td>
-                        <td className="px-2 py-2">{inquiry.customer_company}</td>
+                        <td className="px-2 py-2">
+                          {inquiry.inquiry_refno ? (
+                            <ModuleRecordLink
+                              tab="sales-transaction-sales-inquiry"
+                              payload={{ inquiryId: String(inquiry.inquiry_refno) }}
+                              className="font-medium text-[#337ab7] underline underline-offset-2 hover:text-[#23527c] focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#337ab7]"
+                            >
+                              {inquiry.inquiry_no}
+                            </ModuleRecordLink>
+                          ) : inquiry.inquiry_no}
+                        </td>
+                        <td className="px-2 py-2">
+                          {inquiry.customer_id ? (
+                            <ModuleRecordLink
+                              tab="sales-database-customer-database"
+                              payload={{ contactId: String(inquiry.customer_id) }}
+                              className="font-medium text-[#337ab7] underline underline-offset-2 hover:text-[#23527c] focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#337ab7]"
+                            >
+                              {inquiry.customer_company || inquiry.customer_id}
+                            </ModuleRecordLink>
+                          ) : inquiry.customer_company}
+                        </td>
                         <td className="px-2 py-2">{displayDate(inquiry.sales_date)}</td>
                         <td className="px-2 py-2">{displayTime(inquiry.created_at)}</td>
+                        <td className="px-2 py-2 text-center">{inquiry.converted_to_order ? 'Yes' : 'No'}</td>
                         <td className="px-2 py-2 text-right">
                           {viewMode === 'summary' ? numberFormat.format(Number(inquiry.grand_total || 0)) : ''}
                         </td>
@@ -140,7 +186,7 @@ const InquiryReportView: React.FC<InquiryReportViewProps> = ({ filters, onBack }
 
                       {viewMode === 'detailed' && (
                         <tr>
-                          <td colSpan={6} className="pb-5 pt-1">
+                          <td colSpan={7} className="pb-5 pt-1">
                             <table className="w-full border-collapse text-[11px]">
                               <thead>
                                 <tr className="border-b border-[#ccc] bg-[#f5f5f5]">

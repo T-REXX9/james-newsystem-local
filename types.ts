@@ -322,6 +322,7 @@ export type CustomerVatType = 'Exclusive' | 'Inclusive' | 'Zero-Rated';
 
 export interface Contact {
   id: string;
+  isStarred?: boolean;
   recordImage?: string;
   recordImagePosition?: string;
   // Core Identifiers
@@ -751,6 +752,7 @@ export interface LBCRTORecord {
 
 export interface DailyCallCustomerRow {
   id: string;
+  isStarred?: boolean;
   source: string;
   assignedTo: string;
   assignedAgentId?: string;
@@ -787,6 +789,7 @@ export interface DailyCallCustomerRow {
 export interface DailyCallMasterCustomerRow {
   id: string;
   shopName: string;
+  isStarred?: boolean;
   pastName?: string;
   province: string;
   city: string;
@@ -1894,6 +1897,7 @@ export interface SalesReportFilters {
 
 export interface SalesReportTransaction {
   id: string;
+  isStarred?: boolean;
   date: string;
   customer: string;
   customerId: string;
@@ -1905,6 +1909,7 @@ export interface SalesReportTransaction {
   invoiceAmount: number;
   salesperson: string;
   currentAgentId?: string;
+  customerType?: 'new' | 'old' | 'unclassified';
   category: string;
   vatType: 'exclusive' | 'inclusive' | null;
   type: 'invoice' | 'dr' | 'so';
@@ -1924,6 +1929,14 @@ export interface SalespersonTotal {
   total: number;
 }
 
+export interface SalesReportProductTotal {
+  itemCode: string;
+  partNo: string;
+  brand: string;
+  product: string;
+  total: number;
+}
+
 export interface GrandTotal {
   soAmount: number;
   drAmount: number;
@@ -1935,6 +1948,7 @@ export interface SalesReportSummary {
   categoryTotals: CategoryTotal[];
   salespersonTotals: SalespersonTotal[];
   grandTotal: GrandTotal;
+  productTotals?: SalesReportProductTotal[];
 }
 
 export interface SalesReportData {

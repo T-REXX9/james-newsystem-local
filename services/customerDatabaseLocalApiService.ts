@@ -4,6 +4,7 @@ import { normalizePriceGroup } from '../constants/pricingGroups';
 import { Contact, ContactPerson, ContactTransaction, CustomerStatus, CustomerVatType, DealStage, Product, UserProfile } from '../types';
 import { fetchDailyCallMasterList, invalidateDailyCallMasterListCache } from './dailyCallMonitoringService';
 import { getLocalAuthSession } from './localAuthService';
+import { CUSTOMER_STAR_UPDATED_EVENT } from '../utils/customerStarEvents';
 import { fetchAssignableStaff } from './staffLocalApiService';
 import { customerLedgerService, ledgerRowsToContactTransactions } from './customerLedgerService';
 
@@ -35,6 +36,7 @@ interface ApiContactPersonRow {
 }
 
 interface ApiCustomerRow {
+  is_starred?: boolean | number | string | null;
   verification?: string | null;
   session_id?: string | number | null;
   lsessionid?: string | number | null;
@@ -318,6 +320,7 @@ export const mapApiCustomerToContact = (row: ApiCustomerRow): LocalContact => {
 
   return {
     id: String(row?.session_id ?? row?.lsessionid ?? row?.id ?? ''),
+    isStarred: row?.is_starred === true || row?.is_starred === 1 || row?.is_starred === '1',
     company,
     pastName: sanitizeLegacyString(row?.old_name || row?.past_name || ''),
     customerSince: sanitizeCustomerDate(row?.since || row?.customer_since || row?.lsince || ''),
@@ -378,6 +381,16 @@ export const mapApiCustomerToContact = (row: ApiCustomerRow): LocalContact => {
     updated_at: '',
     __salesPersonId: salesPersonId,
   };
+};
+
+export const setCustomerStarred = async (sessionId: string, isStarred: boolean): Promise<void> => {
+  await requestJson(`${API_BASE_URL}/customer-database/${encodeURIComponent(sessionId)}/star`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_starred: isStarred }),
+  });
+  invalidateDailyCallMasterListCache();
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(CUSTOMER_STAR_UPDATED_EVENT));
 };
 
 export const mapContactPayloadToApi = (contact: ContactPayloadWithSalesPersonId) => {
@@ -692,6 +705,9 @@ export const fetchContacts = async (options: { lightweight?: boolean } = {}): Pr
     if (!lightweight) {
       // Full customer-database consumers need the Daily Call recovery overlay.
       // Lightweight pickers intentionally skip this expensive cross-module query.
+      // Customer Data status follows the viewer-scoped Daily Call result.
+      // Refresh it here so a cached list from before a status change cannot
+      // leave customer records incorrectly marked Active or Inactive.
       await applyDailyCallRecoveryStatusToContacts(contacts, { forceRefresh: true });
     }
 

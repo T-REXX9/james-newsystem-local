@@ -12,6 +12,7 @@ const fetchSalesReportDirectoryStateMock = vi.fn();
 const createCallLogForDailyCallMock = vi.fn();
 const claimCustomerCallForDailyCallMock = vi.fn();
 const releaseCustomerCallForDailyCallMock = vi.fn();
+const setDailyCallBookmarkMock = vi.fn();
 const createCustomerLogForDailyCallMock = vi.fn();
 const subscribeToDailyCallMonitoringUpdatesMock = vi.fn(() => () => {});
 const createContactMock = vi.fn();
@@ -32,6 +33,7 @@ vi.mock('../../services/dailyCallMonitoringService', () => ({
   createCallLogForDailyCall: (...args: unknown[]) => createCallLogForDailyCallMock(...args),
   claimCustomerCallForDailyCall: (...args: unknown[]) => claimCustomerCallForDailyCallMock(...args),
   releaseCustomerCallForDailyCall: (...args: unknown[]) => releaseCustomerCallForDailyCallMock(...args),
+  setDailyCallBookmark: (...args: unknown[]) => setDailyCallBookmarkMock(...args),
   createCustomerLogForDailyCall: (...args: unknown[]) => createCustomerLogForDailyCallMock(...args),
   subscribeToDailyCallMonitoringUpdates: (...args: unknown[]) => subscribeToDailyCallMonitoringUpdatesMock(...args),
 }));
@@ -135,6 +137,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     createCallLogForDailyCallMock.mockReset();
     claimCustomerCallForDailyCallMock.mockReset();
     releaseCustomerCallForDailyCallMock.mockReset();
+    setDailyCallBookmarkMock.mockReset();
     createCustomerLogForDailyCallMock.mockReset();
     subscribeToDailyCallMonitoringUpdatesMock.mockClear();
     createContactMock.mockReset();
@@ -144,6 +147,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     updateContactMock.mockResolvedValue(undefined);
 
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue(baseSnapshot);
+    setDailyCallBookmarkMock.mockImplementation(async (contactId: string | null) => contactId);
     fetchContactCustomerLogsForDailyCallMock.mockResolvedValue([]);
     fetchSalesReportDirectoryStateMock.mockResolvedValue({ unreadByContact: {}, reportedContactIds: new Set() });
     fetchContactByIdMock.mockResolvedValue({
@@ -216,6 +220,31 @@ describe('DailyCallMonitoringView communication actions', () => {
 
   afterEach(() => {
     cleanup();
+  });
+
+  it('saves a calling stop on a Priority List customer and marks it in the list', async () => {
+    const user = userEvent.setup();
+    fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
+      ...baseSnapshot,
+      contacts: [{ ...baseSnapshot.contacts[0], id: 'priority-stop', shopName: 'Stop Point Shop', status: 'active' }],
+      purchases: [{
+        id: 'purchase-stop',
+        contact_id: 'priority-stop',
+        amount: 500,
+        status: 'paid',
+        purchased_at: new Date().toISOString(),
+      }],
+    });
+    setDailyCallBookmarkMock.mockResolvedValue('priority-stop');
+
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    const setBookmarkButton = await screen.findByRole('button', { name: 'Set calling stop at Stop Point Shop' });
+    await user.click(setBookmarkButton);
+
+    expect(setDailyCallBookmarkMock).toHaveBeenCalledWith('priority-stop');
+    expect(await screen.findByText('Stop after Stop Point Shop')).toBeInTheDocument();
+    expect(screen.getByText('Stop here')).toBeInTheDocument();
   });
 
   it('prioritizes the 15-to-30-day cadence, overdue buyers, no-history customers, then very recent buyers', async () => {

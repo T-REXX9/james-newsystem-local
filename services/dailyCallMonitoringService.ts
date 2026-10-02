@@ -48,6 +48,7 @@ export interface DailyCallAgentSnapshot {
   inquiries: Inquiry[];
   purchases: Purchase[];
   teamMessages: TeamMessage[];
+  bookmarkedContactId: string | null;
 }
 
 export interface DailyCallMasterListParams {
@@ -214,6 +215,15 @@ export const releaseCustomerCallForDailyCall = async (contactId: string): Promis
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ main_id: resolveMainId() }),
   });
+};
+
+export const setDailyCallBookmark = async (contactId: string | null): Promise<string | null> => {
+  const payload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/call-bookmark`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ main_id: resolveMainId(), contact_id: contactId }),
+  });
+  return payload?.data?.contact_id ? String(payload.data.contact_id) : null;
 };
 
 const cleanNullableText = (value: unknown, fallback = ''): string => {
@@ -489,6 +499,7 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
   return {
     id: String(row?.id || ''),
     shopName: cleanNullableText(row?.shopName ?? row?.shop_name, 'Unnamed Shop'),
+    isStarred: row?.is_starred === true || row?.is_starred === 1 || row?.is_starred === '1',
     pastName: cleanNullableText(row?.pastName ?? row?.past_name ?? row?.oldName ?? row?.old_name),
     province: cleanNullableText(row?.province, '—'),
     city: cleanNullableText(row?.city, '—'),
@@ -749,6 +760,7 @@ export const fetchAgentSnapshotForDailyCall = async (
       inquiries: Array.isArray(data?.inquiries) ? data.inquiries.map(mapInquiry) : [],
       purchases: Array.isArray(data?.purchases) ? data.purchases.map(mapPurchase) : [],
       teamMessages: Array.isArray(data?.team_messages) ? data.team_messages.map(mapTeamMessage) : [],
+      bookmarkedContactId: data?.bookmarked_contact_id ? String(data.bookmarked_contact_id) : null,
     };
   } catch (error) {
     if ((error as Error)?.name === 'AbortError') throw error;
@@ -779,6 +791,7 @@ export const fetchAgentSnapshotForDailyCall = async (
         inquiries: [],
         purchases: [],
         teamMessages: [],
+        bookmarkedContactId: null,
       };
     } catch {
       throw error;

@@ -27,6 +27,7 @@ import {
 import AddToPurchaseRequestModal from './AddToPurchaseRequestModal';
 import { canPerformAction } from '../utils/actionPermissions';
 import { formatDate } from '../utils/formatUtils';
+import CustomerStarIndicator from './CustomerStarIndicator';
 
 interface SuggestedStockDataViewProps {
   dateFrom: string;
@@ -519,7 +520,7 @@ const SuggestedStockDataView: React.FC<SuggestedStockDataViewProps> = ({
                         {item.inquiryNo || '-'}
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
-                        {item.customerName || '-'}
+                        {item.customerName || '-'}<CustomerStarIndicator customerId={item.customerId} className="ml-1 inline h-3.5 w-3.5" />
                       </td>
                       <td className="px-4 py-3 text-sm font-medium text-slate-800 dark:text-white">
                         {item.partNo || '-'}

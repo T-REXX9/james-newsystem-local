@@ -5,6 +5,7 @@ import {
   ArrowUpRight,
   BarChart3,
   Bell,
+  Bookmark,
   Calendar,
   CheckCircle2,
   ChevronDown,
@@ -40,6 +41,7 @@ import AddContactModal from './AddContactModal';
 import CreateIncidentReportModal from './CreateIncidentReportModal';
 import ModuleRecordAction from './ModuleRecordAction';
 import CustomerSalesReportChat from './CustomerSalesReportChat';
+import CustomerStarIndicator from './CustomerStarIndicator';
 import { useToast } from './ToastProvider';
 import {
   countCallLogsByChannelInRange,
@@ -58,6 +60,7 @@ import {
   fetchContactCustomerLogsForDailyCall,
   fetchSalesReportDirectoryState,
   releaseCustomerCallForDailyCall,
+  setDailyCallBookmark,
   subscribeToDailyCallMonitoringUpdates
 } from '../services/dailyCallMonitoringService';
 import { createContact, fetchContactById, fetchContactForDailyCall, isPendingDuplicateProspectApproval, updateContact } from '../services/customerDatabaseLocalApiService';
@@ -451,8 +454,9 @@ const MasterTableRow = React.memo(({
     >
       <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} overflow-hidden`}>
         <div className="flex min-w-0 items-center gap-2">
-          <p className="truncate text-[12px] font-extrabold uppercase leading-tight text-[#10244c] dark:text-white" title={row.contact.company}>
+          <p className="flex min-w-0 items-center gap-1 truncate text-[12px] font-extrabold uppercase leading-tight text-[#10244c] dark:text-white" title={row.contact.company}>
             {row.contact.company}
+            <CustomerStarIndicator customerId={row.contact.id} isStarred={row.contact.isStarred} />
           </p>
           {row.contact.pastName && <p className="mt-0.5 truncate text-[10px] font-medium uppercase leading-tight text-slate-500 dark:text-slate-400">Old: {row.contact.pastName}</p>}
         </div>
@@ -556,6 +560,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const canEdit = canPerformAction('can_edit');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [masterListRows, setMasterListRows] = useState<DailyCallMasterCustomerRow[]>([]);
+  const [bookmarkedContactId, setBookmarkedContactId] = useState<string | null>(null);
+  const [savingBookmark, setSavingBookmark] = useState(false);
   const [callLogs, setCallLogs] = useState<CallLogEntry[]>([]);
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
@@ -703,6 +709,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
       setContacts(teamScopedContacts);
       setMasterListRows(snapshot.masterList || []);
+      setBookmarkedContactId(snapshot.bookmarkedContactId || null);
       setCallLogs(snapshot.callLogs.filter((log) => log.agent_name === agentDataName));
       setInquiries(snapshot.inquiries);
       setPurchases(snapshot.purchases);
@@ -1641,6 +1648,31 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     setDetailsPanelOpen(true);
   }, []);
 
+  const handleSetCallBookmark = useCallback(async (contactId: string | null) => {
+    if (savingBookmark) return;
+    setSavingBookmark(true);
+    try {
+      const savedContactId = await setDailyCallBookmark(contactId);
+      setBookmarkedContactId(savedContactId);
+      const customerName = masterRows.find((row) => row.contact.id === savedContactId)?.contact.company;
+      addToast({
+        type: 'success',
+        title: savedContactId ? 'Calling stop saved' : 'Calling stop cleared',
+        description: savedContactId && customerName ? `Stop after ${customerName}.` : undefined,
+        durationMs: 3500,
+      });
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: 'Could not save calling stop',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        durationMs: 5000,
+      });
+    } finally {
+      setSavingBookmark(false);
+    }
+  }, [addToast, masterRows, savingBookmark]);
+
   const handleMasterRowCall = useCallback((contact: Contact) => {
     handleOpenCallContact(contact);
   }, [handleOpenCallContact]);
@@ -2000,6 +2032,9 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5" aria-label="Segregated customer category tables">
         {customerListSummaries.map((summary) => {
           const tone = summaryToneClasses[summary.tone];
+          const bookmarkedCustomer = summary.id === 'priority'
+            ? baseMasterRows.find((row) => row.contact.id === bookmarkedContactId)
+            : undefined;
           return (
             <article key={`${summary.id}-table`} className="flex h-[560px] min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900/95 motion-safe:animate-[james-fade-up_500ms_cubic-bezier(0.22,1,0.36,1)_both]">
               <header className="flex min-h-[58px] items-center justify-between gap-2 border-b border-slate-200 px-3 py-3 dark:border-slate-800">
@@ -2008,6 +2043,18 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 </h2>
                 <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${tone.icon}`} aria-hidden="true" />
               </header>
+
+              {summary.id === 'priority' && bookmarkedContactId && (
+                <div className="flex items-center justify-between gap-2 border-b border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] dark:border-emerald-900 dark:bg-emerald-950/40">
+                  <span className="flex min-w-0 items-center gap-1.5 font-bold text-emerald-800 dark:text-emerald-200">
+                    <Bookmark className="h-3.5 w-3.5 shrink-0 fill-current" aria-hidden="true" />
+                    <span className="truncate">{bookmarkedCustomer ? `Stop after ${bookmarkedCustomer.contact.company}` : 'Calling stop saved'}</span>
+                  </span>
+                  <button type="button" onClick={() => void handleSetCallBookmark(null)} disabled={savingBookmark} className="shrink-0 rounded px-1.5 py-1 font-bold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 dark:text-emerald-200 dark:hover:bg-emerald-900">
+                    Clear
+                  </button>
+                </div>
+              )}
 
               <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-slate-50/50 p-2 dark:bg-slate-950/30">
                 {summary.rows.length === 0 ? (
@@ -2034,13 +2081,19 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                             }}
                           >
                             <td className="p-0">
-                              <div className={`grid w-full grid-cols-[1.25rem_minmax(0,1fr)_4.2rem_5.7rem] items-center gap-2 rounded-lg border p-2 text-left shadow-sm transition-colors group-hover:border-blue-200 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800 ${highlight.className} ${selectedClientId === row.contact.id ? 'border-blue-300 ring-1 ring-blue-200 dark:bg-brand-blue/10' : ''}`}>
+                              <div className={`grid w-full grid-cols-[1.25rem_minmax(0,1fr)_4.2rem_7rem] items-center gap-2 rounded-lg border p-2 text-left shadow-sm transition-colors group-hover:border-blue-200 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800 ${highlight.className} ${selectedClientId === row.contact.id ? 'border-blue-300 ring-1 ring-blue-200 dark:bg-brand-blue/10' : ''}`}>
                               <span className="text-[11px] font-extrabold text-slate-400">{index + 1}</span>
                               <span className="min-w-0">
                                 <span className="flex min-w-0 items-center gap-1.5">
                                   <span className="block truncate text-[11px] font-extrabold uppercase leading-tight text-[#10244c] dark:text-white" title={row.contact.company}>
                                     {row.contact.company}
                                   </span>
+                                  <CustomerStarIndicator customerId={row.contact.id} isStarred={row.contact.isStarred} />
+                                  {summary.id === 'priority' && bookmarkedContactId === row.contact.id && (
+                                    <span className="inline-flex shrink-0 items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-extrabold uppercase text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
+                                      <Bookmark className="h-2.5 w-2.5 fill-current" aria-hidden="true" /> Stop here
+                                    </span>
+                                  )}
                                   {row.contact.pastName && <span className="block truncate text-[9px] font-medium uppercase leading-tight text-slate-500 dark:text-slate-400">Old: {row.contact.pastName}</span>}
                                   {(salesReportUnreadByContact[row.contact.id] || 0) > 0 && (
                                     <span
@@ -2091,6 +2144,21 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                 )}
                                 {summary.id !== 'blocked' && !isBlockedContact(row.contact) && (
                                   <>
+                                    {summary.id === 'priority' && (
+                                      <button
+                                        type="button"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          void handleSetCallBookmark(bookmarkedContactId === row.contact.id ? null : row.contact.id);
+                                        }}
+                                        disabled={savingBookmark}
+                                        className={`grid h-6 w-6 place-items-center rounded-full border disabled:opacity-50 ${bookmarkedContactId === row.contact.id ? 'border-amber-300 bg-amber-100 text-amber-700 hover:bg-amber-200' : 'border-slate-200 bg-white text-slate-500 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}
+                                        title={bookmarkedContactId === row.contact.id ? 'Remove calling stop' : 'Set as calling stop'}
+                                        aria-label={bookmarkedContactId === row.contact.id ? `Remove calling stop at ${row.contact.company}` : `Set calling stop at ${row.contact.company}`}
+                                      >
+                                        <Bookmark className={`h-3 w-3 ${bookmarkedContactId === row.contact.id ? 'fill-current' : ''}`} />
+                                      </button>
+                                    )}
                                     <button
                                       type="button"
                                       onClick={(event) => {

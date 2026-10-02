@@ -30,6 +30,7 @@ describe('SalesReportDataView legacy report display', () => {
           drAmount: 0,
           invoiceAmount: 125,
           salesperson: 'Alex',
+          customerType: 'new',
           category: 'Parts',
           vatType: null,
           type: 'invoice',
@@ -41,6 +42,10 @@ describe('SalesReportDataView legacy report display', () => {
           salesperson: 'Alex',
           categories: [{ category: 'Parts', soAmount: 125, drAmount: 0, invoiceAmount: 0 }],
           total: 125,
+        }, {
+          salesperson: 'Taylor',
+          categories: [],
+          total: 0,
         }],
         grandTotal: { soAmount: 125, drAmount: 0, invoiceAmount: 125, total: 125 },
       },
@@ -59,11 +64,20 @@ describe('SalesReportDataView legacy report display', () => {
     );
 
     expect(await screen.findByText('MONTHLY SALES')).toBeInTheDocument();
-    expect(screen.getByText('DATE COVERED: SEP-01-2026 TO SEP-30-2026')).toBeInTheDocument();
+    expect(screen.getByText('FOR THE MONTH OF SEPTEMBER')).toBeInTheDocument();
     expect(screen.getByText('09/01/2026')).toBeInTheDocument();
     expect(screen.getByText('GRAND TOTAL -->')).toBeInTheDocument();
     expect(screen.getByText('Checked and Audited by/ Date:')).toBeInTheDocument();
     expect(screen.getByText('Noted by/ Date:')).toBeInTheDocument();
+
+    const agentBreakdown = screen.getByTestId('agent-customer-type-breakdown');
+    expect(within(agentBreakdown).getByText('SALES PERFORMANCE BY AGENT')).toBeInTheDocument();
+    const agentCard = within(agentBreakdown).getByRole('article', { name: 'Alex sales performance' });
+    expect(agentCard).toHaveTextContent(/1 posted transaction · 1 customer/);
+    expect(within(agentBreakdown).getAllByText('New customers')).toHaveLength(3);
+    expect(within(agentBreakdown).getAllByText('Existing customers')).toHaveLength(3);
+    expect(within(agentBreakdown).getAllByText('Unclassified')).toHaveLength(3);
+    expect(within(agentBreakdown).getByRole('article', { name: 'Taylor sales performance' })).toHaveTextContent('0.00');
 
     const salespersonSummary = screen.getByTestId('salesperson-category-summary');
     expect(within(salespersonSummary).getByText('Alex')).toBeInTheDocument();

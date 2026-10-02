@@ -85,6 +85,7 @@ import { UserProfile } from './types';
 import { Filter, Lock } from 'lucide-react';
 import { ToastProvider } from './components/ToastProvider';
 import { NotificationProvider } from './components/NotificationProvider';
+import { CustomerStarProvider } from './components/CustomerStarIndicator';
 import CustomLoadingSpinner from './components/CustomLoadingSpinner';
 import { AVAILABLE_APP_MODULES, hasActionPermission, isCompanyOwnerRole, isMasterOnlyDashboardRoute, isMasterOnlyRoute, isMasterUserAccount, isMasterUserType, MODULE_ID_ALIASES, ROLE_NAMES } from './constants';
 import { hasBinaryModulePageAccess, getAccessPageLabel } from './utils/accessModules';
@@ -987,6 +988,7 @@ const App: React.FC = () => {
     <ToastProvider>
       {!appLoading && session && userProfile && (
         <NotificationProvider userId={userProfile.id}>
+          <CustomerStarProvider>
           <div className="h-screen overflow-hidden bg-slate-100 dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-100 flex flex-col print:h-auto print:overflow-visible">
             <TopNav
               activeTab={activeTab}
@@ -1003,6 +1005,7 @@ const App: React.FC = () => {
               </main>
             </div>
           </div>
+          </CustomerStarProvider>
         </NotificationProvider>
       )}
       {/* Show loading spinner when app is loading OR when session exists but profile is still being fetched */}

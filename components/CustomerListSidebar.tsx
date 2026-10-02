@@ -152,12 +152,14 @@ const CustomerListSidebar: React.FC<CustomerListSidebarProps> = ({
 
                                     <div className="flex-1 min-w-0">
                                         <div className="flex justify-between items-start">
+                                            <div className="flex min-w-0 items-center gap-1.5">
                                             <CompanyName
                                                 name={customer.company}
                                                 pastName={customer.pastName}
                                                 entity={customer}
                                                 className={`font-semibold text-sm truncate pr-2 ${isSelected ? 'text-brand-blue' : 'text-slate-700 dark:text-slate-200'}`}
                                             />
+                                            </div>
                                             {customer.isHidden && <EyeOff className="w-3 h-3 text-slate-400 shrink-0 mt-0.5" />}
                                         </div>
 

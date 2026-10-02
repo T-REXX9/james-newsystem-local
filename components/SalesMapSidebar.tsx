@@ -3,6 +3,7 @@ import { X, ShoppingBag, User, MapPin, Loader2 } from 'lucide-react';
 import { Contact, CustomerStatus } from '../types';
 import ModuleRecordAction from './ModuleRecordAction';
 import { formatCustomerSince } from '../utils/formatUtils';
+import CustomerStarIndicator from './CustomerStarIndicator';
 
 interface SalesMapSidebarProps {
     provinceName: string | null;
@@ -77,7 +78,7 @@ const SalesMapSidebar: React.FC<SalesMapSidebarProps> = ({ provinceName, contact
                                                 {(contact.company || '??').substring(0, 2).toUpperCase()}
                                             </div>
                                             <div>
-                                                <h4 className="font-semibold text-slate-800 group-hover:text-indigo-600 transition-colors">{contact.company}</h4>
+                                                <h4 className="flex items-center gap-1 font-semibold text-slate-800 group-hover:text-indigo-600 transition-colors">{contact.company}<CustomerStarIndicator customerId={contact.id} isStarred={contact.isStarred} /></h4>
                                                 {contact.salesman && (
                                                     <div className="flex items-center text-xs text-slate-500">
                                                         <User className="w-3 h-3 mr-1" />
