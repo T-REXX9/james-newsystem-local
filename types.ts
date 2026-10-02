@@ -862,6 +862,29 @@ export interface DailyCallMasterListMeta {
   count: number;
 }
 
+export type DailyCallSalesColor = 'green' | 'yellow' | 'purple' | 'white' | 'red';
+
+export interface DailyCallSalesColorTotals {
+  customer_count: number;
+  sales: number;
+}
+
+export interface DailyCallSalesColorAgent {
+  id: string;
+  name: string;
+  customer_count: number;
+  sales: number;
+  unclassified_sales: number;
+  colors: Record<DailyCallSalesColor, DailyCallSalesColorTotals>;
+}
+
+export interface DailyCallSalesColorBreakdown {
+  month: string;
+  company_total: number;
+  agents: DailyCallSalesColorAgent[];
+  unassigned: DailyCallSalesColorAgent;
+}
+
 export interface CustomerDetailExpansionState {
   isOpen: boolean;
   contactId: string | null;

@@ -3,6 +3,7 @@ import { ArrowUp, Award, BarChart3, Clock3, Package, Table2, Target, Wallet, X }
 import { VERIFIED_PROSPECT_POTENTIAL } from '../utils/dailyCallPotentialSales';
 import { matchesDailyCallMonitorBucket } from '../utils/dailyCallListCategory';
 import DailyCallMasterListView from './DailyCallMasterListView';
+import DailyCallSalesColorBreakdown from './DailyCallSalesColorBreakdown';
 import { fetchDailyCallMasterList } from '../services/dailyCallMonitoringService';
 import { getSalesReportData } from '../services/salesReportService';
 import { DailyCallMasterCustomerRow, SalesReportData, UserProfile } from '../types';
@@ -75,6 +76,7 @@ interface CurrentMonthSalesBreakdownModalProps {
 }
 
 const CurrentMonthSalesBreakdownModal: React.FC<CurrentMonthSalesBreakdownModalProps> = ({ report, dateFrom, dateTo, onClose }) => {
+  const dialogRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -84,8 +86,23 @@ const CurrentMonthSalesBreakdownModal: React.FC<CurrentMonthSalesBreakdownModalP
       if (event.key === 'Escape') {
         onClose();
       } else if (event.key === 'Tab') {
-        event.preventDefault();
-        closeButtonRef.current?.focus();
+        const focusableElements = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+        ) ?? []).filter((element) => element.getAttribute('aria-hidden') !== 'true');
+        if (!focusableElements.length) {
+          event.preventDefault();
+          closeButtonRef.current?.focus();
+          return;
+        }
+        const first = focusableElements[0];
+        const last = focusableElements[focusableElements.length - 1];
+        if (event.shiftKey && (document.activeElement === first || !dialogRef.current?.contains(document.activeElement))) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && (document.activeElement === last || !dialogRef.current?.contains(document.activeElement))) {
+          event.preventDefault();
+          first.focus();
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -118,7 +135,7 @@ const CurrentMonthSalesBreakdownModal: React.FC<CurrentMonthSalesBreakdownModalP
 
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center bg-slate-950/55 p-0 backdrop-blur-[2px] sm:items-center sm:p-5" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="current-month-sales-breakdown-title" className="flex max-h-[92dvh] w-full max-w-6xl flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 sm:rounded-2xl">
+      <section ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="current-month-sales-breakdown-title" className="flex max-h-[92dvh] w-full max-w-6xl flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 sm:rounded-2xl">
         <header className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 dark:border-slate-800 sm:px-6">
           <div>
             <p className="text-xs font-bold uppercase tracking-wide text-blue-700 dark:text-blue-300">{period} · Sales Report</p>
@@ -152,6 +169,9 @@ const CurrentMonthSalesBreakdownModal: React.FC<CurrentMonthSalesBreakdownModalP
                 total: product.total,
               })))}</ol>
             </section>
+          </div>
+          <div className="mt-4">
+            <DailyCallSalesColorBreakdown />
           </div>
         </div>
       </section>

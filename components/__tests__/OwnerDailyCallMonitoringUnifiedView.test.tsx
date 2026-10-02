@@ -6,6 +6,13 @@ import OwnerDailyCallMonitoringUnifiedView from '../OwnerDailyCallMonitoringUnif
 
 const getSalesReportDataMock = vi.fn();
 const fetchDailyCallMasterListMock = vi.fn().mockResolvedValue({ items: [] });
+const fetchDailyCallSalesColorBreakdownMock = vi.fn().mockResolvedValue({
+  month: '2026-10', company_total: 0, agents: [],
+  unassigned: { id: '', name: 'Unassigned', customer_count: 0, sales: 0, unclassified_sales: 0, colors: {
+    green: { customer_count: 0, sales: 0 }, yellow: { customer_count: 0, sales: 0 },
+    purple: { customer_count: 0, sales: 0 }, white: { customer_count: 0, sales: 0 }, red: { customer_count: 0, sales: 0 },
+  } },
+});
 
 vi.mock('../DailyCallMasterListView', () => ({
   default: () => <div data-testid="master-list-view">Master List View</div>,
@@ -13,6 +20,7 @@ vi.mock('../DailyCallMasterListView', () => ({
 
 vi.mock('../../services/dailyCallMonitoringService', () => ({
   fetchDailyCallMasterList: (...args: unknown[]) => fetchDailyCallMasterListMock(...args),
+  fetchDailyCallSalesColorBreakdown: (...args: unknown[]) => fetchDailyCallSalesColorBreakdownMock(...args),
 }));
 
 vi.mock('../../services/salesReportService', () => ({
@@ -24,6 +32,7 @@ describe('OwnerDailyCallMonitoringUnifiedView', () => {
     cleanup();
     getSalesReportDataMock.mockReset();
     fetchDailyCallMasterListMock.mockClear();
+    fetchDailyCallSalesColorBreakdownMock.mockClear();
   });
 
   it('renders the Daily Call Monitoring master list by default', () => {
@@ -31,6 +40,8 @@ describe('OwnerDailyCallMonitoringUnifiedView', () => {
     render(<OwnerDailyCallMonitoringUnifiedView currentUser={null} />);
 
     expect(screen.getByTestId('master-list-view')).toBeInTheDocument();
+    expect(screen.queryByText('Team sales by Daily Call status')).not.toBeInTheDocument();
+    expect(fetchDailyCallSalesColorBreakdownMock).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: /purchase follow-up/i })).not.toBeInTheDocument();
   });
 
@@ -83,8 +94,32 @@ describe('OwnerDailyCallMonitoringUnifiedView', () => {
     expect(dialog).toHaveTextContent('Leading Agent');
     expect(dialog).toHaveTextContent('Top Customer');
     expect(dialog).toHaveTextContent('Leading Product');
+    expect(await screen.findByText('Team sales by Daily Call status')).toBeInTheDocument();
+    expect(fetchDailyCallSalesColorBreakdownMock).toHaveBeenCalledTimes(1);
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByText('Team sales by Daily Call status')).not.toBeInTheDocument();
     expect(salesCard).toHaveFocus();
+  });
+
+  it('keeps keyboard focus within the sales breakdown dialog and exposes its retry control', async () => {
+    const user = userEvent.setup();
+    getSalesReportDataMock.mockResolvedValue({
+      summary: { grandTotal: { total: 0 }, salespersonTotals: [], productTotals: [] },
+      transactions: [],
+    });
+    fetchDailyCallSalesColorBreakdownMock.mockRejectedValueOnce(new Error('Request failed'));
+
+    render(<OwnerDailyCallMonitoringUnifiedView currentUser={null} />);
+    await user.click(await screen.findByRole('button', { name: /open current month sales breakdown/i }));
+    const closeButton = await screen.findByRole('button', { name: /close sales breakdown/i });
+    const retryButton = await screen.findByRole('button', { name: /retry/i });
+
+    closeButton.focus();
+    await user.tab();
+    expect(retryButton).toHaveFocus();
+    await user.tab();
+    expect(closeButton).toHaveFocus();
+    await user.keyboard('{Escape}');
   });
 });

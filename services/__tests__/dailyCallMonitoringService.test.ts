@@ -9,6 +9,7 @@ import {
   fetchContactCustomerLogsForDailyCall,
   fetchCustomersForDailyCall,
   fetchDailyCallMasterList,
+  fetchDailyCallSalesColorBreakdown,
   fetchOwnerSnapshotForDailyCall,
   invalidateDailyCallMasterListCache,
   subscribeToDailyCallMonitoringUpdates,
@@ -96,6 +97,20 @@ describe('dailyCallMonitoringService', () => {
     expect(requestUrl).toContain('main_id=1');
     expect(requestUrl).toContain('from_date=2025-10-01');
     expect(requestUrl).toContain('search=priority');
+  });
+
+  it('fetchDailyCallSalesColorBreakdown uses the authenticated tenant endpoint', async () => {
+    const mockBreakdown = { month: '2026-10', company_total: 100, agents: [], unassigned: {} };
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: mockBreakdown }),
+    } as Response);
+
+    const result = await fetchDailyCallSalesColorBreakdown();
+
+    expect(result).toEqual(mockBreakdown);
+    expect(String(fetchSpy.mock.calls[0][0])).toContain('/daily-call-monitoring/sales-color-breakdown?main_id=1');
+    expect(fetchSpy.mock.calls[0][1]?.headers).toBeDefined();
   });
 
   it('strictly maps Priority vs Recovery from Oct 2025 activity (never purchaseCount alone)', async () => {

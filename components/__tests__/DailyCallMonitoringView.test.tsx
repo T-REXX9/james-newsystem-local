@@ -27,6 +27,13 @@ vi.mock('../ToastProvider', () => ({
 }));
 
 vi.mock('../../services/dailyCallMonitoringService', () => ({
+  fetchDailyCallSalesColorBreakdown: vi.fn().mockResolvedValue({
+    month: '2026-10', company_total: 0, agents: [],
+    unassigned: { id: '', name: 'Unassigned', customer_count: 0, sales: 0, unclassified_sales: 0, colors: {
+      green: { customer_count: 0, sales: 0 }, yellow: { customer_count: 0, sales: 0 },
+      purple: { customer_count: 0, sales: 0 }, white: { customer_count: 0, sales: 0 }, red: { customer_count: 0, sales: 0 },
+    } },
+  }),
   fetchAgentSnapshotForDailyCall: (...args: unknown[]) => fetchAgentSnapshotForDailyCallMock(...args),
   fetchContactCustomerLogsForDailyCall: (...args: unknown[]) => fetchContactCustomerLogsForDailyCallMock(...args),
   fetchSalesReportDirectoryState: (...args: unknown[]) => fetchSalesReportDirectoryStateMock(...args),
@@ -128,6 +135,11 @@ const baseSnapshot = {
 };
 
 describe('DailyCallMonitoringView communication actions', () => {
+  const expandSummaries = async () => {
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /Show summaries/i }));
+  };
+
   beforeEach(() => {
     cleanup();
     addToastMock.mockReset();
@@ -186,6 +198,22 @@ describe('DailyCallMonitoringView communication actions', () => {
     }
   });
 
+  it('keeps customer lists primary and reveals sales summaries on demand', async () => {
+    const user = userEvent.setup();
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    const toggle = await screen.findByRole('button', { name: /Show summaries/i });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByLabelText('Customer category summaries')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Segregated customer category tables')).toBeInTheDocument();
+
+    await user.click(toggle);
+
+    expect(screen.getByRole('button', { name: /Hide summaries/i })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByLabelText('Customer category summaries')).toBeInTheDocument();
+    expect(await screen.findByText('Team sales by Daily Call status')).toBeInTheDocument();
+  });
+
   it('uses API debt and customer status rather than outstanding balance for do-not-contact classification', async () => {
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
       ...baseSnapshot,
@@ -216,6 +244,23 @@ describe('DailyCallMonitoringView communication actions', () => {
     const blockedList = (await screen.findByText('Blacklisted By Status')).closest('article')!;
     expect(within(blockedList).getByText('Blacklisted By Status')).toBeInTheDocument();
     expect(within(blockedList).queryByText('Good Debt With Balance')).not.toBeInTheDocument();
+  });
+
+  it('uses the Master List purchase date for agent color coding when snapshot transaction dates disagree', async () => {
+    fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
+      ...baseSnapshot,
+      contacts: [{ ...baseSnapshot.contacts[0], id: 'color-date-customer', shopName: 'Color Date Customer', status: 'active' }],
+      purchases: [{ id: 'linked-order', contact_id: 'color-date-customer', amount: 100, status: 'paid', purchased_at: '2026-09-20' }],
+      masterList: [{
+        id: 'color-date-customer', shopName: 'Color Date Customer', assignedTo: 'Jane Doe',
+        lastPurchaseDateRaw: '2026-07-15', currentMonthSales: 0,
+      }],
+    });
+
+    render(<DailyCallMonitoringView currentUser={currentUser} initialSelectedDate="2026-10-02" />);
+
+    const customerName = await screen.findByText('Color Date Customer');
+    expect(customerName.closest('tr')).toHaveAttribute('title', 'No purchase for 3+ months');
   });
 
   afterEach(() => {
@@ -305,6 +350,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(screen.queryByRole('button', { name: "Today's List" })).not.toBeInTheDocument();
     expect(screen.queryByText('Monthly Quota')).not.toBeInTheDocument();
 
+    await expandSummaries();
     const categorySummaries = screen.getByLabelText('Customer category summaries');
     const prioritySummary = within(categorySummaries)
       .getByTitle('Priority List (Any ledger activity since October 2025 onwards)')
@@ -435,6 +481,7 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     expect(await screen.findByRole('heading', { name: 'Customer List' })).toBeInTheDocument();
 
+    await expandSummaries();
     const categorySummaries = screen.getByLabelText('Customer category summaries');
     const prioritySummary = within(categorySummaries)
       .getByTitle('Priority List (Any ledger activity since October 2025 onwards)')
@@ -487,6 +534,7 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     expect(await screen.findByRole('heading', { name: 'Customer List' })).toBeInTheDocument();
 
+    await expandSummaries();
     const categorySummaries = screen.getByLabelText('Customer category summaries');
     const prioritySummary = within(categorySummaries)
       .getByTitle('Priority List (Any ledger activity since October 2025 onwards)')
@@ -570,6 +618,7 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     expect(await screen.findByRole('heading', { name: 'Customer List' })).toBeInTheDocument();
 
+    await expandSummaries();
     const categorySummaries = screen.getByLabelText('Customer category summaries');
     const verifiedSummary = within(categorySummaries)
       .getByTitle('Verified Prospects (Verified, awaiting first purchase)')
@@ -989,6 +1038,7 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
 
+    await expandSummaries();
     const summaryHeading = (await screen.findAllByTitle('Priority List (Any ledger activity since October 2025 onwards)'))[0];
     const summary = summaryHeading.closest('article');
     expect(summary).not.toBeNull();
@@ -1028,6 +1078,7 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
 
+    await expandSummaries();
     const summaryHeading = (await screen.findAllByTitle('Recovery List (Purchase history before October 2025, with none since)'))[0];
     const summary = summaryHeading.closest('article');
     expect(summary).not.toBeNull();

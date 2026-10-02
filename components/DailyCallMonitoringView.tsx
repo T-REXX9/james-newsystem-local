@@ -36,6 +36,7 @@ import CustomLoadingSpinner from './CustomLoadingSpinner';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import AgentCallActivity from './AgentCallActivity';
 import CallAccountabilityPanel from './CallAccountabilityPanel';
+import DailyCallSalesColorBreakdown from './DailyCallSalesColorBreakdown';
 import ContactDetails from './ContactDetails';
 import AddContactModal from './AddContactModal';
 import CreateIncidentReportModal from './CreateIncidentReportModal';
@@ -147,6 +148,7 @@ interface MasterRow {
   priority: number;
   lastContact?: string;
   lastPurchase?: string;
+  dailyCallStatusLastPurchase?: string;
   totalSales: number;
   currentMonthSales: number;
   averageMonthlySales: number;
@@ -219,8 +221,8 @@ const isProspectContact = (contact: Contact) =>
 
 const getStaffPurchaseHighlight = (row: MasterRow, referenceDate: Date) => {
   const color = resolveDailyCallPurchaseHighlightColor({
-    isBlocked: row.contact.status === CustomerStatus.BLACKLISTED,
-    lastPurchaseDateRaw: row.lastPurchase,
+    isBlocked: isBlockedContact(row.contact),
+    lastPurchaseDateRaw: row.dailyCallStatusLastPurchase ?? row.lastPurchase,
     currentMonthSales: row.currentMonthSales,
     referenceDate,
   });
@@ -246,7 +248,7 @@ const getStaffPurchaseHighlight = (row: MasterRow, referenceDate: Date) => {
     color: 'white' as PurchaseHighlightColor,
     className: 'border-slate-200 bg-white hover:bg-slate-50',
     mutedClassName: 'text-slate-500',
-    label: row.lastPurchase ? 'No purchase for 3+ months' : 'No purchase yet',
+    label: (row.dailyCallStatusLastPurchase ?? row.lastPurchase) ? 'No purchase for 3+ months' : 'No purchase yet',
   };
 };
 
@@ -536,6 +538,7 @@ const MasterTableRow = React.memo(({
     previousProps.row.contact.team === nextProps.row.contact.team &&
     previousProps.row.lastContact === nextProps.row.lastContact &&
     previousProps.row.lastPurchase === nextProps.row.lastPurchase &&
+    previousProps.row.dailyCallStatusLastPurchase === nextProps.row.dailyCallStatusLastPurchase &&
     previousProps.row.totalSales === nextProps.row.totalSales &&
     previousProps.row.currentMonthSales === nextProps.row.currentMonthSales &&
     previousProps.row.averageMonthlySales === nextProps.row.averageMonthlySales &&
@@ -562,6 +565,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [masterListRows, setMasterListRows] = useState<DailyCallMasterCustomerRow[]>([]);
   const [bookmarkedContactId, setBookmarkedContactId] = useState<string | null>(null);
   const [savingBookmark, setSavingBookmark] = useState(false);
+  const [areSummariesExpanded, setAreSummariesExpanded] = useState(false);
   const [callLogs, setCallLogs] = useState<CallLogEntry[]>([]);
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
@@ -1108,6 +1112,12 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     return map;
   }, [masterListRows]);
 
+  const dailyCallPurchaseDateByContact = useMemo(() => {
+    const map = new Map<string, string>();
+    masterListRows.forEach((row) => map.set(row.id, row.lastPurchaseDateRaw || ''));
+    return map;
+  }, [masterListRows]);
+
   const ledgerAverageMonthlySalesByContact = useMemo(() => {
     const map = new Map<string, number>();
     masterListRows.forEach((row) => {
@@ -1308,6 +1318,12 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         .filter((purchase) => purchase.status === 'paid')
         .reduce((sum, purchase) => sum + purchase.amount, 0);
       const lastPurchase = lastPaid?.purchased_at;
+      // The server master-list row is the shared Daily Call color source.
+      // Snapshot transaction history can include linked order dates that do
+      // not represent the last purchase date used by the Master List.
+      const dailyCallStatusLastPurchase = dailyCallPurchaseDateByContact.has(contact.id)
+        ? dailyCallPurchaseDateByContact.get(contact.id) || ''
+        : lastPurchase;
       const listMode = isBlockedContact(contact)
         ? 'recovery'
         : isPriorityListPurchase(lastPurchase)
@@ -1332,6 +1348,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         priority,
         lastContact,
         lastPurchase,
+        dailyCallStatusLastPurchase,
         totalSales,
         currentMonthSales,
         averageMonthlySales,
@@ -1340,7 +1357,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       };
     });
     return rows;
-  }, [contacts, purchasesByContact, ledgerCurrentMonthSalesByContact, ledgerAverageMonthlySalesByContact, lastContactMap, callLogsByContact, inquiriesByContact, selectedReferenceDate]);
+  }, [contacts, purchasesByContact, ledgerCurrentMonthSalesByContact, ledgerAverageMonthlySalesByContact, dailyCallPurchaseDateByContact, lastContactMap, callLogsByContact, inquiriesByContact, selectedReferenceDate]);
 
   const masterRows = useMemo<MasterRow[]>(() => {
     const filtered = baseMasterRows.filter((row) => {
@@ -1917,6 +1934,70 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
       <CallAccountabilityPanel title="Phone and hardware call activity" compact />
 
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900" aria-label="Sales and customer summaries">
+        <h2>
+          <button
+            type="button"
+            aria-expanded={areSummariesExpanded}
+            aria-controls="agent-daily-call-summaries"
+            onClick={() => setAreSummariesExpanded((expanded) => !expanded)}
+            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-blue dark:hover:bg-slate-800/70"
+          >
+            <span>
+              <span className="block text-sm font-bold text-slate-800 dark:text-slate-100">Sales and customer summaries</span>
+              <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">Current-month sales and customer counts by list</span>
+            </span>
+            <span className="flex shrink-0 items-center gap-2 text-xs font-semibold text-brand-blue">
+              {areSummariesExpanded ? 'Hide summaries' : 'Show summaries'}
+              <ChevronDown className={`h-4 w-4 transition-transform ${areSummariesExpanded ? 'rotate-180' : ''}`} aria-hidden="true" />
+            </span>
+          </button>
+        </h2>
+        <div id="agent-daily-call-summaries" hidden={!areSummariesExpanded}>
+          {areSummariesExpanded ? (
+            <div className="space-y-4 border-t border-slate-200 p-3 dark:border-slate-800">
+              <DailyCallSalesColorBreakdown />
+              <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5" aria-label="Customer category summaries">
+                {customerListSummaries.map((summary) => {
+                  const tone = summaryToneClasses[summary.tone];
+                  return (
+                    <article key={summary.id} style={{ animationDelay: `${Math.min(summary.rows.length, 5) * 45}ms` }} className={`h-36 overflow-hidden rounded-lg border p-3 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md motion-safe:animate-[james-fade-up_500ms_cubic-bezier(0.22,1,0.36,1)_both] ${tone.card}`}>
+                      <h3 className={`text-[13px] font-extrabold uppercase leading-tight ${tone.title}`} title={`${summary.label} (${summary.note})`}>
+                        <span className="block truncate">{summary.label}</span>
+                        <span className="block truncate text-[10px] normal-case">{summary.note}</span>
+                      </h3>
+                      <div className="mt-3 grid grid-cols-[2.5rem_minmax(3rem,0.75fr)_minmax(0,1fr)] items-center gap-2">
+                        <div className={`grid h-9 w-9 place-items-center rounded-full text-white ${tone.icon}`}>
+                          <Users className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0 border-r border-slate-200 pr-2">
+                          <p className="truncate text-xl font-extrabold leading-none text-[#10244c] dark:text-white">{summary.rows.length}</p>
+                          <p className="mt-1 truncate text-[11px] font-semibold text-[#10244c] dark:text-slate-200">Customers</p>
+                        </div>
+                        <div className="min-w-0 space-y-1 text-right">
+                          <div>
+                            <p className="truncate text-[10px] font-semibold leading-tight text-[#10244c] dark:text-slate-300" title={summary.metricLabel}>{summary.metricLabel}</p>
+                            <p className={`truncate text-base font-extrabold leading-tight ${tone.value}`} title={formatCurrency(summary.primaryMetric)}>
+                              {formatCurrency(summary.primaryMetric)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="truncate text-[10px] font-semibold leading-tight text-[#10244c] dark:text-slate-300">Potential Sales</p>
+                            <p className={`truncate text-base font-extrabold leading-tight ${tone.value}`} title={formatCurrency(summary.potentialSales)}>
+                              {formatCompactCurrency(summary.potentialSales)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </section>
+            </div>
+          ) : null}
+        </div>
+      </section>
+
       {loadError && (
         <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-900 rounded-xl p-4 shadow-sm flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-start gap-3">
@@ -1938,43 +2019,6 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           </button>
         </div>
       )}
-
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5" aria-label="Customer category summaries">
-        {customerListSummaries.map((summary) => {
-          const tone = summaryToneClasses[summary.tone];
-          return (
-            <article key={summary.id} style={{ animationDelay: `${Math.min(summary.rows.length, 5) * 45}ms` }} className={`h-36 overflow-hidden rounded-lg border p-3 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md motion-safe:animate-[james-fade-up_500ms_cubic-bezier(0.22,1,0.36,1)_both] ${tone.card}`}>
-              <h2 className={`text-[13px] font-extrabold uppercase leading-tight ${tone.title}`} title={`${summary.label} (${summary.note})`}>
-                <span className="block truncate">{summary.label}</span>
-                <span className="block truncate text-[10px] normal-case">{summary.note}</span>
-              </h2>
-              <div className="mt-3 grid grid-cols-[2.5rem_minmax(3rem,0.75fr)_minmax(0,1fr)] items-center gap-2">
-                <div className={`grid h-9 w-9 place-items-center rounded-full text-white ${tone.icon}`}>
-                  <Users className="h-4 w-4" />
-                </div>
-                <div className="min-w-0 border-r border-slate-200 pr-2">
-                  <p className="truncate text-xl font-extrabold leading-none text-[#10244c] dark:text-white">{summary.rows.length}</p>
-                  <p className="mt-1 truncate text-[11px] font-semibold text-[#10244c] dark:text-slate-200">Customers</p>
-                </div>
-                <div className="min-w-0 space-y-1 text-right">
-                  <div>
-                    <p className="truncate text-[10px] font-semibold leading-tight text-[#10244c] dark:text-slate-300" title={summary.metricLabel}>{summary.metricLabel}</p>
-                    <p className={`truncate text-base font-extrabold leading-tight ${tone.value}`} title={formatCurrency(summary.primaryMetric)}>
-                      {formatCurrency(summary.primaryMetric)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="truncate text-[10px] font-semibold leading-tight text-[#10244c] dark:text-slate-300">Potential Sales</p>
-                    <p className={`truncate text-base font-extrabold leading-tight ${tone.value}`} title={formatCurrency(summary.potentialSales)}>
-                      {formatCompactCurrency(summary.potentialSales)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </article>
-          );
-        })}
-      </section>
 
       <section className="rounded-xl border border-slate-200/80 bg-white/90 p-4 shadow-sm backdrop-blur-sm transition-shadow duration-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900/90">
         <div className="flex flex-wrap items-center gap-3">

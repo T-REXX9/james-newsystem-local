@@ -10,6 +10,7 @@ import {
   DailyCallCustomerRow,
   DailyCallMasterCustomerRow,
   DailyCallMasterListMeta,
+  DailyCallSalesColorBreakdown,
   PendingDuplicateProspect,
   Inquiry,
   LBCRTORecord,
@@ -62,6 +63,17 @@ export interface DailyCallMasterListResult {
   pendingDuplicateProspects: PendingDuplicateProspect[];
   meta: DailyCallMasterListMeta;
 }
+
+export const fetchDailyCallSalesColorBreakdown = async (
+  options?: { signal?: AbortSignal }
+): Promise<DailyCallSalesColorBreakdown> => {
+  const params = new URLSearchParams({ main_id: String(resolveMainId()) });
+  const payload = await requestJson(
+    `${API_BASE_URL}/daily-call-monitoring/sales-color-breakdown?${params.toString()}`,
+    { signal: options?.signal }
+  );
+  return payload?.data as DailyCallSalesColorBreakdown;
+};
 
 interface PurchaseHistoryRow {
   id: string;
