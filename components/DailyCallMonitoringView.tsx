@@ -36,6 +36,7 @@ import CustomLoadingSpinner from './CustomLoadingSpinner';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import AgentCallActivity from './AgentCallActivity';
 import CallAccountabilityPanel from './CallAccountabilityPanel';
+import PersonalSalesQuotaEditor from './PersonalSalesQuotaEditor';
 import DailyCallSalesColorBreakdown from './DailyCallSalesColorBreakdown';
 import ContactDetails from './ContactDetails';
 import AddContactModal from './AddContactModal';
@@ -565,7 +566,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [masterListRows, setMasterListRows] = useState<DailyCallMasterCustomerRow[]>([]);
   const [bookmarkedContactId, setBookmarkedContactId] = useState<string | null>(null);
   const [savingBookmark, setSavingBookmark] = useState(false);
-  const [areSummariesExpanded, setAreSummariesExpanded] = useState(false);
+  const [activeWorkspacePanel, setActiveWorkspacePanel] = useState<'quota' | 'calls' | 'summaries' | 'filters' | 'actions' | null>(null);
   const [callLogs, setCallLogs] = useState<CallLogEntry[]>([]);
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
@@ -1173,14 +1174,14 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   }, [contacts, callLogs, inquiries]);
 
   const currentMonthPurchases = useMemo(() => getCurrentMonthPurchases(purchases, selectedReferenceDate), [purchases, selectedReferenceDate]);
-  const quota = currentUser?.monthly_quota || 1_500_000;
+  const quota = Number(currentUser?.monthly_quota || 0);
   const achievements = useMemo(
     () => currentMonthPurchases.reduce((sum, purchase) => sum + (purchase.amount || 0), 0),
     [currentMonthPurchases]
   );
   const achievementsValue = hasLoadedData ? achievements : null;
   const percentAchieved =
-    achievementsValue !== null ? Math.min(100, Math.round(((achievementsValue / quota) * 100) || 0)) : null;
+    achievementsValue !== null && quota > 0 ? Math.min(100, Math.round((achievementsValue / quota) * 100)) : null;
   const remainingQuota = achievementsValue !== null ? Math.max(0, quota - achievementsValue) : null;
 
   const noPurchaseContacts = useMemo(
@@ -1869,134 +1870,43 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       />
 
       <div className="flex min-h-full flex-col gap-5 p-4 lg:p-6">
-      <header className="relative flex-shrink-0 overflow-hidden rounded-2xl border border-blue-100/80 bg-gradient-to-br from-white via-blue-50/60 to-slate-50 px-5 py-5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-blue-950/30 sm:px-6">
-        <div className="pointer-events-none absolute -right-16 -top-24 h-56 w-56 rounded-full bg-blue-400/15 blur-3xl dark:bg-blue-500/10" />
-        <div className="relative flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div className="motion-safe:animate-[james-fade-up_500ms_cubic-bezier(0.22,1,0.36,1)_both]">
-          <p className="text-[12px] font-extrabold uppercase tracking-wide text-slate-500 dark:text-slate-400">Daily Call Monitoring</p>
-          <div className="flex items-center gap-2">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand-blue text-white shadow-lg shadow-blue-900/15 ring-4 ring-blue-100/80 dark:ring-blue-950/60">
-              <ClipboardList className="w-5 h-5" />
-            </span>
-            <h1 className="text-3xl font-extrabold tracking-tight text-[#0f1f46] dark:text-white">Customer List</h1>
-          </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            All customers assigned to <span className="font-semibold">{agentDisplayName}</span>, ordered by priority
-          </p>
-          {initialSelectedDate && <p className="mt-1 text-xs font-semibold text-blue-700 dark:text-blue-300">
-            Opened from dashboard date: {new Date(`${initialSelectedDate}T12:00:00`).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase()}
-          </p>}
-        </div>
-        <div className="relative flex items-center gap-2 motion-safe:animate-[james-fade-up_500ms_cubic-bezier(0.22,1,0.36,1)_120ms_both]">
-          {canAdd && <button
-            onClick={() => {
-              setAddCustomerKind('prospect');
-              setShowAddCustomerModal(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-semibold shadow-sm hover:bg-amber-600"
-            title="Add New Prospect"
-          >
-            <UserPlus className="w-4 h-4" />
-            Add Prospect
-          </button>}
-          {canEdit && <button
-            onClick={() => {
-              setAddCustomerKind('verifiedProspect');
-              setShowAddCustomerModal(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold shadow-sm hover:bg-blue-700"
-            title="Request Prospect Verification"
-          >
-            <UserCheck className="w-4 h-4" />
-            Request Verification
-          </button>}
-          {canAdd && canCreateCustomer && <button
-            onClick={() => {
-              setAddCustomerKind('customer');
-              setShowAddCustomerModal(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-blue text-white text-xs font-semibold shadow-sm hover:bg-blue-700"
-            title="Create New Customer"
-          >
-            <UserPlus className="w-4 h-4" />
-            New Customer
-          </button>}
-          <button
-            onClick={loadAgentData}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Refresh
+      <section className="grid grid-cols-2 gap-2 sm:grid-cols-5" aria-label="Daily call workspace tools">
+        {([
+          { key: 'quota', title: 'Monthly quota', detail: quota > 0 ? `${formatCurrency(quota)} assigned` : 'Set your target', icon: Target },
+          { key: 'calls', title: 'Call activity', detail: 'Phone and hardware', icon: PhoneCall },
+          { key: 'summaries', title: 'Sales summaries', detail: 'Sales and customer totals', icon: BarChart3 },
+          { key: 'filters', title: 'Filters & legend', detail: 'Refine the master list', icon: Filter },
+          { key: 'actions', title: 'Board actions', detail: 'Add, verify, or refresh', icon: ClipboardList },
+        ] as const).map(({ key, title, detail, icon: Icon }) => (
+          <button key={key} type="button" onClick={() => setActiveWorkspacePanel(key)} className="flex min-w-0 items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-left shadow-sm transition-colors hover:border-blue-300 hover:bg-blue-50/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-brand-blue dark:bg-blue-950/60"><Icon className="h-4 w-4" aria-hidden="true" /></span>
+            <span className="min-w-0"><span className="block truncate text-xs font-bold text-slate-800 dark:text-slate-100">{title}</span><span className="block truncate text-[11px] text-slate-500 dark:text-slate-400">{detail}</span></span>
           </button>
-        </div>
-        </div>
-      </header>
-
-      <CallAccountabilityPanel title="Phone and hardware call activity" compact />
-
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900" aria-label="Sales and customer summaries">
-        <h2>
-          <button
-            type="button"
-            aria-expanded={areSummariesExpanded}
-            aria-controls="agent-daily-call-summaries"
-            onClick={() => setAreSummariesExpanded((expanded) => !expanded)}
-            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-blue dark:hover:bg-slate-800/70"
-          >
-            <span>
-              <span className="block text-sm font-bold text-slate-800 dark:text-slate-100">Sales and customer summaries</span>
-              <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">Current-month sales and customer counts by list</span>
-            </span>
-            <span className="flex shrink-0 items-center gap-2 text-xs font-semibold text-brand-blue">
-              {areSummariesExpanded ? 'Hide summaries' : 'Show summaries'}
-              <ChevronDown className={`h-4 w-4 transition-transform ${areSummariesExpanded ? 'rotate-180' : ''}`} aria-hidden="true" />
-            </span>
-          </button>
-        </h2>
-        <div id="agent-daily-call-summaries" hidden={!areSummariesExpanded}>
-          {areSummariesExpanded ? (
-            <div className="space-y-4 border-t border-slate-200 p-3 dark:border-slate-800">
-              <DailyCallSalesColorBreakdown />
-              <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5" aria-label="Customer category summaries">
-                {customerListSummaries.map((summary) => {
-                  const tone = summaryToneClasses[summary.tone];
-                  return (
-                    <article key={summary.id} style={{ animationDelay: `${Math.min(summary.rows.length, 5) * 45}ms` }} className={`h-36 overflow-hidden rounded-lg border p-3 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md motion-safe:animate-[james-fade-up_500ms_cubic-bezier(0.22,1,0.36,1)_both] ${tone.card}`}>
-                      <h3 className={`text-[13px] font-extrabold uppercase leading-tight ${tone.title}`} title={`${summary.label} (${summary.note})`}>
-                        <span className="block truncate">{summary.label}</span>
-                        <span className="block truncate text-[10px] normal-case">{summary.note}</span>
-                      </h3>
-                      <div className="mt-3 grid grid-cols-[2.5rem_minmax(3rem,0.75fr)_minmax(0,1fr)] items-center gap-2">
-                        <div className={`grid h-9 w-9 place-items-center rounded-full text-white ${tone.icon}`}>
-                          <Users className="h-4 w-4" />
-                        </div>
-                        <div className="min-w-0 border-r border-slate-200 pr-2">
-                          <p className="truncate text-xl font-extrabold leading-none text-[#10244c] dark:text-white">{summary.rows.length}</p>
-                          <p className="mt-1 truncate text-[11px] font-semibold text-[#10244c] dark:text-slate-200">Customers</p>
-                        </div>
-                        <div className="min-w-0 space-y-1 text-right">
-                          <div>
-                            <p className="truncate text-[10px] font-semibold leading-tight text-[#10244c] dark:text-slate-300" title={summary.metricLabel}>{summary.metricLabel}</p>
-                            <p className={`truncate text-base font-extrabold leading-tight ${tone.value}`} title={formatCurrency(summary.primaryMetric)}>
-                              {formatCurrency(summary.primaryMetric)}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="truncate text-[10px] font-semibold leading-tight text-[#10244c] dark:text-slate-300">Potential Sales</p>
-                            <p className={`truncate text-base font-extrabold leading-tight ${tone.value}`} title={formatCurrency(summary.potentialSales)}>
-                              {formatCompactCurrency(summary.potentialSales)}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })}
-              </section>
-            </div>
-          ) : null}
-        </div>
+        ))}
       </section>
+
+      {activeWorkspacePanel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) setActiveWorkspacePanel(null); }} onKeyDown={(event) => { if (event.key === 'Escape') setActiveWorkspacePanel(null); }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="daily-call-tools-title" className="flex max-h-[90dvh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+            <header className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+              <div><p className="text-[10px] font-bold uppercase tracking-wider text-brand-blue">Daily Call Monitoring</p><h2 id="daily-call-tools-title" className="text-lg font-extrabold text-slate-900 dark:text-white">{{ quota: 'Monthly quota', calls: 'Call activity', summaries: 'Sales summaries', filters: 'Filters & legend', actions: 'Board actions' }[activeWorkspacePanel]}</h2></div>
+              <button type="button" onClick={() => setActiveWorkspacePanel(null)} aria-label="Close workspace tools" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue dark:hover:bg-slate-800"><X className="h-5 w-5" /></button>
+            </header>
+            <div className="overflow-y-auto p-4 sm:p-5">
+              {activeWorkspacePanel === 'quota' && <section className="flex flex-col gap-4 rounded-xl border border-blue-200 bg-blue-50/70 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-blue-900 dark:bg-blue-950/30" aria-label="Your monthly sales quota" data-testid="daily-call-personal-quota"><div><h3 className="mb-1 text-sm font-bold text-blue-950 dark:text-blue-100">Your monthly sales quota</h3><PersonalSalesQuotaEditor quota={quota} /><p className="mt-1 text-xs text-blue-800/80 dark:text-blue-200/80">Visible only in your Daily Call workspace</p></div>{quota > 0 ? <dl className="flex flex-wrap gap-x-5 gap-y-2 text-sm tabular-nums"><div><dt className="text-xs text-slate-600 dark:text-slate-300">Assigned quota</dt><dd className="font-bold">{formatCurrency(quota)}</dd></div><div><dt className="text-xs text-slate-600 dark:text-slate-300">Achieved this month</dt><dd className="font-bold">{achievementsValue === null ? 'Loading' : formatCurrency(achievementsValue)}</dd></div>{remainingQuota !== null && <div><dt className="text-xs text-slate-600 dark:text-slate-300">Remaining</dt><dd className="font-bold">{formatCurrency(remainingQuota)}</dd></div>}{percentAchieved !== null && <div><dt className="text-xs text-slate-600 dark:text-slate-300">Progress</dt><dd className="font-bold">{percentAchieved}%</dd></div>}</dl> : <p className="text-sm font-semibold">No monthly quota assigned</p>}</section>}
+              {activeWorkspacePanel === 'calls' && <CallAccountabilityPanel title="Phone and hardware call activity" compact />}
+              {activeWorkspacePanel === 'actions' && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {canAdd && <button type="button" onClick={() => { setActiveWorkspacePanel(null); setAddCustomerKind('prospect'); setShowAddCustomerModal(true); }} className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-3 text-sm font-bold text-white hover:bg-amber-600"><UserPlus className="h-4 w-4" />Add Prospect</button>}
+                {canEdit && <button type="button" onClick={() => { setActiveWorkspacePanel(null); setAddCustomerKind('verifiedProspect'); setShowAddCustomerModal(true); }} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-700"><UserCheck className="h-4 w-4" />Request Verification</button>}
+                {canAdd && canCreateCustomer && <button type="button" onClick={() => { setActiveWorkspacePanel(null); setAddCustomerKind('customer'); setShowAddCustomerModal(true); }} className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-3 text-sm font-bold text-white hover:bg-blue-700"><UserPlus className="h-4 w-4" />New Customer</button>}
+                <button type="button" onClick={() => { setActiveWorkspacePanel(null); void loadAgentData(); }} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />Refresh board</button>
+              </div>}
+              {activeWorkspacePanel === 'summaries' && <div className="space-y-4"><DailyCallSalesColorBreakdown /><section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Customer category summaries">{customerListSummaries.map((summary) => { const tone = summaryToneClasses[summary.tone]; return <article key={summary.id} className={`rounded-lg border p-4 ${tone.card}`}><h3 className={`text-xs font-extrabold uppercase ${tone.title}`}>{summary.label}</h3><p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{summary.note}</p><p className="mt-3 text-2xl font-extrabold text-[#10244c] dark:text-white">{summary.rows.length}<span className="ml-1 text-xs font-semibold">customers</span></p><p className={`mt-2 text-sm font-bold ${tone.value}`}>{summary.metricLabel}: {formatCompactCurrency(summary.primaryMetric)}</p><p className={`text-sm font-bold ${tone.value}`}>Potential sales: {formatCompactCurrency(summary.potentialSales)}</p></article>; })}</section></div>}
+              {activeWorkspacePanel === 'filters' && <div className="space-y-5"><div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><label className="text-xs font-bold text-slate-600 dark:text-slate-300">Color status<select aria-label="Color status" value={colorFilter} onChange={(event) => setColorFilter(event.target.value as 'all' | PurchaseHighlightColor)} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium dark:border-slate-700 dark:bg-slate-950"><option value="all">All color statuses</option><option value="green">Green — bought this month</option><option value="yellow">Yellow — 1 month no purchase</option><option value="purple">Purple — 2 months no purchase</option><option value="white">White — 3+ months / no purchase</option><option value="red">Red — blacklisted/rejected -do not contact</option></select></label><label className="text-xs font-bold text-slate-600 dark:text-slate-300">Agent Sales Report<select aria-label="Agent Sales Report filter" value={salesReportFilter} onChange={(event) => setSalesReportFilter(event.target.value as 'all' | 'reported' | 'unread')} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium dark:border-slate-700 dark:bg-slate-950"><option value="all">All customers</option><option value="reported">Has a sales report</option><option value="unread">Unread sales reports</option></select></label></div><div className="flex flex-wrap gap-3 text-[11px] font-semibold text-slate-600 dark:text-slate-300" aria-label="Automatic purchase highlight legend"><span><i className="mr-1 inline-block h-3 w-3 rounded bg-green-500" />Bought this month</span><span><i className="mr-1 inline-block h-3 w-3 rounded bg-yellow-400" />1 month no purchase</span><span><i className="mr-1 inline-block h-3 w-3 rounded bg-purple-500" />2 months no purchase</span><span><i className="mr-1 inline-block h-3 w-3 rounded border border-slate-300 bg-white" />3+ months / no purchase</span><span><i className="mr-1 inline-block h-3 w-3 rounded bg-[#f94449]" />blacklisted/rejected -do not contact</span></div></div>}
+            </div>
+          </section>
+        </div>
+      )}
 
       {loadError && (
         <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-900 rounded-xl p-4 shadow-sm flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
@@ -2020,67 +1930,21 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         </div>
       )}
 
-      <section className="rounded-xl border border-slate-200/80 bg-white/90 p-4 shadow-sm backdrop-blur-sm transition-shadow duration-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900/90">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex min-w-[180px] flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-            <Search className="w-5 h-5 text-slate-400" />
-            <input
-              className="flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-200"
-              placeholder="Search customer, prospect, or agent"
-              value={searchValue}
-              onChange={(event) => setSearchValue(event.target.value)}
-            />
-          </div>
-          <label className="min-w-[220px] text-xs font-bold text-slate-600 dark:text-slate-300">
-            Color status
-            <select
-              aria-label="Color status"
-              value={colorFilter}
-              onChange={(event) => setColorFilter(event.target.value as 'all' | PurchaseHighlightColor)}
-              className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:border-brand-blue dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-            >
-              <option value="all">All color statuses</option>
-              <option value="green">Green — bought this month</option>
-              <option value="yellow">Yellow — 1 month no purchase</option>
-              <option value="purple">Purple — 2 months no purchase</option>
-              <option value="white">White — 3+ months / no purchase</option>
-              <option value="red">Red — blacklisted/rejected -do not contact</option>
-            </select>
-          </label>
-          <label className="min-w-[220px] text-xs font-bold text-slate-600 dark:text-slate-300">
-            Agent Sales Report
-            <select
-              aria-label="Agent Sales Report filter"
-              value={salesReportFilter}
-              onChange={(event) => setSalesReportFilter(event.target.value as 'all' | 'reported' | 'unread')}
-              className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:border-brand-blue dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-            >
-              <option value="all">All customers</option>
-              <option value="reported">Has a sales report</option>
-              <option value="unread">Unread sales reports</option>
-            </select>
-          </label>
-          <span className="shrink-0 text-sm font-bold text-slate-500 dark:text-slate-400">
-            {masterRows.length} {masterRows.length === 1 ? 'customer' : 'customers'}
-          </span>
-        </div>
-        <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] font-semibold text-slate-600 dark:text-slate-300" aria-label="Automatic purchase highlight legend">
-          <span><i className="mr-1 inline-block h-3 w-3 rounded bg-green-500 align-middle" />Bought this month</span>
-          <span><i className="mr-1 inline-block h-3 w-3 rounded bg-yellow-400 align-middle" />1 month no purchase</span>
-          <span><i className="mr-1 inline-block h-3 w-3 rounded bg-purple-500 align-middle" />2 months no purchase</span>
-          <span><i className="mr-1 inline-block h-3 w-3 rounded border border-slate-300 bg-white align-middle" />3+ months / no purchase</span>
-          <span><i className="mr-1 inline-block h-3 w-3 rounded bg-[#f94449] align-middle" />blacklisted/rejected -do not contact</span>
-        </div>
+      <section className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900" aria-label="Customer board controls">
+        <div className="mr-auto min-w-[150px]"><p className="text-sm font-extrabold text-[#10244c] dark:text-white">Customer board</p><p className="text-[11px] text-slate-500 dark:text-slate-400">Assigned to {agentDisplayName}{initialSelectedDate ? ` · ${new Date(`${initialSelectedDate}T12:00:00`).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' })}` : ''}</p></div>
+        <div className="flex min-w-[200px] flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-950"><Search className="h-4 w-4 text-slate-400" /><input aria-label="Search customer, prospect, or agent" className="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-200" placeholder="Search customer, prospect, or agent" value={searchValue} onChange={(event) => setSearchValue(event.target.value)} /></div>
+        <button type="button" onClick={() => setActiveWorkspacePanel('filters')} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"><Filter className="h-4 w-4" />Filters{colorFilter !== 'all' || salesReportFilter !== 'all' ? <span className="h-2 w-2 rounded-full bg-blue-600" aria-label="Filters active" /> : null}</button>
+        <span className="shrink-0 text-sm font-bold text-slate-500 dark:text-slate-400">{masterRows.length} {masterRows.length === 1 ? 'customer' : 'customers'}</span>
       </section>
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5" aria-label="Segregated customer category tables">
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6" aria-label="Segregated customer category tables">
         {customerListSummaries.map((summary) => {
           const tone = summaryToneClasses[summary.tone];
           const bookmarkedCustomer = summary.id === 'priority'
             ? baseMasterRows.find((row) => row.contact.id === bookmarkedContactId)
             : undefined;
           return (
-            <article key={`${summary.id}-table`} className="flex h-[560px] min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900/95 motion-safe:animate-[james-fade-up_500ms_cubic-bezier(0.22,1,0.36,1)_both]">
+            <article key={`${summary.id}-table`} className={`flex h-[560px] min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900/95 motion-safe:animate-[james-fade-up_500ms_cubic-bezier(0.22,1,0.36,1)_both] ${summary.id === 'priority' ? '2xl:col-span-2' : ''}`}>
               <header className="flex min-h-[58px] items-center justify-between gap-2 border-b border-slate-200 px-3 py-3 dark:border-slate-800">
                 <h2 className={`min-w-0 truncate text-sm font-extrabold uppercase leading-tight ${tone.title}`} title={`${summary.label} (${summary.note})`}>
                   {summary.label} <span className="text-[10px] normal-case">({summary.note})</span>

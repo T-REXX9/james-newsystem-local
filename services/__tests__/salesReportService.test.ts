@@ -65,4 +65,28 @@ describe('salesReportService legacy period request', () => {
       total: 250,
     }]);
   });
+
+  it('preserves stable staff IDs on salesperson summary rows', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ok: true,
+      data: {
+        transactions: [],
+        summary: {
+          categoryTotals: [],
+          salespersonTotals: [{ id: 'agent-42', salesperson: 'Taylor', categories: [], total: 0 }],
+          grandTotal: { soAmount: 0, drAmount: 0, invoiceAmount: 0, total: 0 },
+          productTotals: [],
+        },
+      },
+    }), { status: 200 })));
+
+    const report = await getSalesReportData({ dateFrom: '2026-10-01', dateTo: '2026-10-02', customerId: 'all' });
+
+    expect(report.summary.salespersonTotals).toEqual([{
+      id: 'agent-42',
+      salesperson: 'Taylor',
+      categories: [],
+      total: 0,
+    }]);
+  });
 });

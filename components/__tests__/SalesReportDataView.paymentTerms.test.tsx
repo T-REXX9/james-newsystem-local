@@ -40,12 +40,12 @@ describe('SalesReportDataView payment terms breakdown', () => {
         },
         {
           id: 'terms-30', date: '2026-09-03', customer: 'Customer A', customerId: 'customer-a',
-          terms: '30days', refNo: 'REF-3', soNo: 'SO-3', soAmount: 300, drAmount: 290, invoiceAmount: 280,
+          terms: '30days PDC', refNo: 'REF-3', soNo: 'SO-3', soAmount: 300, drAmount: 290, invoiceAmount: 280,
           salesperson: 'Alex', category: 'Parts', vatType: null, type: 'invoice',
         },
         {
           id: 'terms-60', date: '2026-09-04', customer: 'Customer A', customerId: 'customer-a',
-          terms: '60 DAYS', refNo: 'REF-4', soNo: 'SO-4', soAmount: 400, drAmount: 390, invoiceAmount: 380,
+          terms: '60 DAYS P.D.C.', refNo: 'REF-4', soNo: 'SO-4', soAmount: 400, drAmount: 390, invoiceAmount: 380,
           salesperson: 'Alex', category: 'Parts', vatType: null, type: 'invoice',
         },
       ],
@@ -61,12 +61,18 @@ describe('SalesReportDataView payment terms breakdown', () => {
     renderReport();
 
     const breakdown = await screen.findByTestId('payment-terms-breakdown');
-    expect(within(breakdown).getByText('AP/TT-PNB')).toBeInTheDocument();
-    expect(within(breakdown).getByText('LBC COD')).toBeInTheDocument();
-    expect(within(breakdown).getByText('LBC COP')).toBeInTheDocument();
-    expect(within(breakdown).getByText('30 DAYS')).toBeInTheDocument();
-    expect(within(breakdown).getByText('60 DAYS')).toBeInTheDocument();
+    expect(within(breakdown).getByText('CASH SALES', { selector: 'td' })).toBeInTheDocument();
+    expect(within(breakdown).getByText('TERMS PDC', { selector: 'td' })).toBeInTheDocument();
+    expect(within(breakdown).queryByText('AP/TT-PNB')).not.toBeInTheDocument();
+    expect(within(breakdown).queryByText('LBC COP')).not.toBeInTheDocument();
+    expect(within(breakdown).queryByText('30 DAYS PDC')).not.toBeInTheDocument();
+    expect(within(breakdown).queryByText('60 DAYS P.D.C.')).not.toBeInTheDocument();
+    const cashRow = within(breakdown).getByText('CASH SALES', { selector: 'td' }).closest('tr');
+    const pdcRow = within(breakdown).getByText('TERMS PDC', { selector: 'td' }).closest('tr');
+    expect(cashRow && within(cashRow).getAllByRole('cell').map(cell => cell.textContent)).toEqual(['CASH SALES', '300.00', '280.00', '260.00']);
+    expect(pdcRow && within(pdcRow).getAllByRole('cell').map(cell => cell.textContent)).toEqual(['TERMS PDC', '700.00', '680.00', '660.00']);
     expect(within(breakdown).getByText('CASH SALES TOTAL')).toBeInTheDocument();
+    expect(within(breakdown).getByText('TERMS PDC TOTAL')).toBeInTheDocument();
     expect(within(breakdown).getByText('TERMS SALES TOTAL')).toBeInTheDocument();
     expect(within(breakdown).getByText('PAYMENT TERMS TOTAL')).toBeInTheDocument();
     expect(within(breakdown).getByText('1,000.00')).toBeInTheDocument();

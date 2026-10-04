@@ -4,6 +4,7 @@ import { VERIFIED_PROSPECT_POTENTIAL } from '../utils/dailyCallPotentialSales';
 import { matchesDailyCallMonitorBucket } from '../utils/dailyCallListCategory';
 import DailyCallMasterListView from './DailyCallMasterListView';
 import DailyCallSalesColorBreakdown from './DailyCallSalesColorBreakdown';
+import PersonalSalesQuotaEditor from './PersonalSalesQuotaEditor';
 import { fetchDailyCallMasterList } from '../services/dailyCallMonitoringService';
 import { getSalesReportData } from '../services/salesReportService';
 import { DailyCallMasterCustomerRow, SalesReportData, UserProfile } from '../types';
@@ -296,7 +297,10 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
                     Master List
                   </h2>
                 </div>
-                <h3 className="text-sm font-bold uppercase tracking-wide text-slate-800 dark:text-slate-100">Quick Summary (MTD)</h3>
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                  <h3 className="text-sm font-bold uppercase tracking-wide text-slate-800 dark:text-slate-100">Quick Summary (MTD)</h3>
+                  <PersonalSalesQuotaEditor quota={Number(currentUser?.monthly_quota || 0)} />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
                 {quickSummaryItems.map(({ label, value, Icon, tone, iconClass }) => {

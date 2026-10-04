@@ -48,6 +48,7 @@ const mapCategoryTotals = (value: any): CategoryTotal[] => {
 const mapSalespersonTotals = (value: any): SalespersonTotal[] => {
   const rows = Array.isArray(value) ? value : [];
   return rows.map((entry: any) => ({
+    id: String(entry?.id ?? entry?.agentId ?? entry?.agent_id ?? ''),
     salesperson: String(entry?.salesperson || 'Unassigned'),
     categories: mapCategoryTotals(entry?.categories),
     total: toNumber(entry?.total),

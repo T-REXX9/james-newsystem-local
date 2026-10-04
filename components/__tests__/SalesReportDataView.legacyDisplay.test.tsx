@@ -8,6 +8,12 @@ vi.mock('../../services/salesReportService', () => ({
   getSalesReportData: (...args: unknown[]) => getSalesReportDataMock(...args),
 }));
 
+vi.mock('../../services/staffLocalApiService', () => ({
+  fetchAssignableStaff: vi.fn().mockResolvedValue([
+    { id: 'staff-taylor', role: 'Sales Agent', monthly_quota: 10000 },
+  ]),
+}));
+
 describe('SalesReportDataView legacy report display', () => {
   afterEach(() => {
     cleanup();
@@ -30,6 +36,7 @@ describe('SalesReportDataView legacy report display', () => {
           drAmount: 0,
           invoiceAmount: 125,
           salesperson: 'Alex',
+          currentAgentId: 'staff-alex',
           customerType: 'new',
           category: 'Parts',
           vatType: null,
@@ -39,10 +46,17 @@ describe('SalesReportDataView legacy report display', () => {
       summary: {
         categoryTotals: [],
         salespersonTotals: [{
+          id: 'deleted-account',
+          salesperson: 'test',
+          categories: [],
+          total: 999,
+        }, {
+          id: 'staff-alex',
           salesperson: 'Alex',
           categories: [{ category: 'Parts', soAmount: 125, drAmount: 0, invoiceAmount: 0 }],
           total: 125,
         }, {
+          id: 'staff-taylor',
           salesperson: 'Taylor',
           categories: [],
           total: 0,
@@ -60,6 +74,11 @@ describe('SalesReportDataView legacy report display', () => {
         customerId="all"
         reportType="month"
         onBack={vi.fn()}
+        currentUser={{ id: 'staff-taylor', role: 'Sales Agent', monthly_quota: 10000 }}
+        activeSalesAgents={[
+          { id: 'staff-alex', email: 'alex@example.com', full_name: 'Alex', role: 'Sales Agent' },
+          { id: 'staff-taylor', email: 'taylor@example.com', full_name: 'Taylor', role: 'Sales Agent', monthly_quota: 10000 },
+        ]}
       />,
     );
 
@@ -77,16 +96,34 @@ describe('SalesReportDataView legacy report display', () => {
     expect(within(agentBreakdown).getAllByText('New customers')).toHaveLength(3);
     expect(within(agentBreakdown).getAllByText('Existing customers')).toHaveLength(3);
     expect(within(agentBreakdown).getAllByText('Unclassified')).toHaveLength(3);
-    expect(within(agentBreakdown).getByRole('article', { name: 'Taylor sales performance' })).toHaveTextContent('0.00');
+    const summaryOnlyAgentCard = within(agentBreakdown).getByRole('article', { name: 'Taylor sales performance' });
+    expect(summaryOnlyAgentCard).toHaveTextContent('0.00');
+    expect(summaryOnlyAgentCard).toHaveTextContent('10,000.00');
+    expect(within(summaryOnlyAgentCard).getByText('MONTHLY QUOTA')).toBeInTheDocument();
+    expect(within(agentCard).queryByText('MONTHLY QUOTA')).not.toBeInTheDocument();
 
-    const salespersonSummary = screen.getByTestId('salesperson-category-summary');
-    expect(within(salespersonSummary).getByText('Alex')).toBeInTheDocument();
-    expect(within(salespersonSummary).getByText('Parts')).toBeInTheDocument();
-    expect(within(salespersonSummary).getAllByText('125.00')).toHaveLength(3);
+    expect(screen.queryByTestId('salesperson-category-summary')).not.toBeInTheDocument();
+    expect(within(agentBreakdown).queryByRole('article', { name: 'test sales performance' })).not.toBeInTheDocument();
 
     const paymentTerms = screen.getByTestId('payment-terms-breakdown');
     expect(within(paymentTerms).getByText('PAYMENT TERMS BREAKDOWN')).toBeInTheDocument();
     expect(within(paymentTerms).getByText('CASH SALES TOTAL')).toBeInTheDocument();
     expect(within(paymentTerms).getByText('TERMS SALES TOTAL')).toBeInTheDocument();
+  });
+
+  it('does not show another agent’s quota to non-owner staff', async () => {
+    render(
+      <SalesReportDataView
+        dateFrom="2026-09-01"
+        dateTo="2026-09-30"
+        customerId="all"
+        reportType="month"
+        onBack={vi.fn()}
+        currentUser={{ id: 'staff-other', role: 'Warehouse Personnel' }}
+      />,
+    );
+
+    const agentBreakdown = await screen.findByTestId('agent-customer-type-breakdown');
+    expect(within(agentBreakdown).queryByText('MONTHLY QUOTA')).not.toBeInTheDocument();
   });
 });

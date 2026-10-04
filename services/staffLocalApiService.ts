@@ -107,6 +107,7 @@ export const fetchAssignableStaff = async (): Promise<UserProfile[]> => {
             email: String(staff.email || '').trim(),
             full_name: String(staff.full_name || '').trim(),
             role: String(staff.role || '').trim(),
+            monthly_quota: Number(staff.monthly_quota || 0),
         }))
         .filter((staff) => staff.id && staff.full_name && staff.full_name !== '0')
         .sort((a, b) => a.full_name.localeCompare(b.full_name));
@@ -134,6 +135,17 @@ export const updateStaff = async (staffId: string | number, data: StaffUpdateInp
         body: JSON.stringify({ main_id: API_MAIN_ID, ...data }),
     });
     return payload?.data;
+};
+
+export const updateOwnSalesQuota = async (salesQuota: number): Promise<number> => {
+    const payload = await requestJson(`${API_BASE_URL}/staff/me/sales-quota`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sales_quota: salesQuota }),
+    });
+    const savedQuota = Number(payload?.data?.monthly_quota);
+    if (!Number.isFinite(savedQuota)) throw new Error('The saved quota was not returned by the server.');
+    return savedQuota;
 };
 
 export const changeStaffPassword = async (staffId: string | number, newPassword: string): Promise<void> => {

@@ -1947,6 +1947,7 @@ export interface CategoryTotal {
 }
 
 export interface SalespersonTotal {
+  id?: string;
   salesperson: string;
   categories: CategoryTotal[];
   total: number;

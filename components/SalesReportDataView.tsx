@@ -4,6 +4,8 @@ import CustomerStarIndicator from './CustomerStarIndicator';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
 import type { SalesReportData, SalesReportTransaction, UserProfile } from '../types';
 import { getSalesReportData } from '../services/salesReportService';
+import { fetchAssignableStaff } from '../services/staffLocalApiService';
+import { canonicalizeRoleName, isMasterUserAccount } from '../constants';
 import type { SalesReportPeriod } from './SalesReportFilter';
 
 interface SalesReportDataViewProps {
@@ -14,6 +16,7 @@ interface SalesReportDataViewProps {
   reportType: SalesReportPeriod;
   onBack: () => void;
   currentUser?: UserProfile;
+  activeSalesAgents?: UserProfile[];
 }
 
 const money = new Intl.NumberFormat('en-US', {
@@ -36,6 +39,7 @@ const normalizePaymentTerm = (value: string): string => {
 };
 
 const isCashTerm = (term: string): boolean => /\b(CASH|COD|COP)\b/.test(term) || term === 'AP/TT-PNB';
+const isPdcTerm = (term: string): boolean => /\bP\.?\s*D\.?\s*C\.?\b/i.test(term);
 
 const scrollReportToTop = (start: HTMLElement | null): void => {
   let element = start;
@@ -100,10 +104,42 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
   agentId = '',
   reportType,
   onBack,
+  currentUser,
+  activeSalesAgents = [],
 }) => {
   const reportTopRef = useRef<HTMLDivElement>(null);
   const [reportData, setReportData] = useState<SalesReportData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [agentQuotas, setAgentQuotas] = useState<Map<string, number>>(() => new Map());
+  const [agentQuotaStatus, setAgentQuotaStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
+
+  useEffect(() => {
+    const isMaster = isMasterUserAccount(currentUser);
+    const isOwnAgentQuota = canonicalizeRoleName(currentUser?.role || '') === 'Sales Agent' && Boolean(currentUser?.id);
+    if (!isMaster) {
+      setAgentQuotas(isOwnAgentQuota
+        ? new Map([[String(currentUser!.id), Number(currentUser!.monthly_quota || 0)]])
+        : new Map());
+      setAgentQuotaStatus('loaded');
+      return;
+    }
+
+    setAgentQuotaStatus('loading');
+    let isCurrent = true;
+    void fetchAssignableStaff().then((staff) => {
+      if (!isCurrent) return;
+      setAgentQuotas(new Map(
+        staff
+          .filter((profile) => canonicalizeRoleName(profile.role || '') === 'Sales Agent')
+          .map((profile) => [String(profile.id), Number(profile.monthly_quota || 0)]),
+      ));
+      setAgentQuotaStatus('loaded');
+    }).catch((error) => {
+      console.error('Error loading sales report agent quotas:', error);
+      if (isCurrent) setAgentQuotaStatus('error');
+    });
+    return () => { isCurrent = false; };
+  }, [currentUser?.id, currentUser?.monthly_quota, currentUser?.role, currentUser?.user_type]);
 
   useEffect(() => {
     const loadReport = async () => {
@@ -124,23 +160,24 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
     [reportData],
   );
 
-  const salespersonGrandTotal = (reportData?.summary.salespersonTotals || []).reduce(
-    (total, salesperson) => total + salesperson.total,
-    0,
-  );
-
   const salespersonPerformance = useMemo(() => {
-    const agents = new Map<string, {
+    type AgentPerformance = {
       salesperson: string;
+      agentId: string;
       total: number;
       transactionCount: number;
       customers: Set<string>;
       segments: Record<'new' | 'old' | 'unclassified', { total: number; customers: Set<string> }>;
-    }>();
-
-    for (const salesperson of reportData?.summary.salespersonTotals || []) {
-      agents.set(salesperson.salesperson, {
-        salesperson: salesperson.salesperson,
+    };
+    const agents = new Map<string, AgentPerformance>();
+    const allowedAgents = activeSalesAgents.filter((profile) => (
+      canonicalizeRoleName(profile.role || '') === 'Sales Agent'
+      && (!agentId || String(profile.id) === agentId)
+    ));
+    const idByUniqueRosterName = new Map<string, string | null>();
+    const createAgent = (salesperson: string, agentId: string): AgentPerformance => ({
+        salesperson,
+        agentId,
         total: 0,
         transactionCount: 0,
         customers: new Set<string>(),
@@ -150,26 +187,23 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
           unclassified: { total: 0, customers: new Set<string>() },
         },
       });
+
+    for (const profile of allowedAgents) {
+      const name = profile.full_name?.trim() || 'Sales Agent';
+      const staffId = String(profile.id);
+      agents.set(`staff:${staffId}`, createAgent(name, staffId));
+
+      const nameKey = name.toLocaleLowerCase();
+      const existingId = idByUniqueRosterName.get(nameKey);
+      idByUniqueRosterName.set(nameKey, existingId === undefined ? staffId : existingId === staffId ? existingId : null);
     }
 
     for (const transaction of transactions) {
       const name = transaction.salesperson.trim() || 'Unassigned';
-      let agent = agents.get(name);
-      if (!agent) {
-        agent = {
-          salesperson: name,
-          total: 0,
-          transactionCount: 0,
-          customers: new Set<string>(),
-          segments: {
-            new: { total: 0, customers: new Set<string>() },
-            old: { total: 0, customers: new Set<string>() },
-            unclassified: { total: 0, customers: new Set<string>() },
-          },
-        };
-        agents.set(name, agent);
-      }
-
+      const transactionAgentId = (transaction.currentAgentId || '').trim();
+      const rosterAgentId = transactionAgentId || (idByUniqueRosterName.get(name.toLocaleLowerCase()) || '');
+      const agent = rosterAgentId ? agents.get(`staff:${rosterAgentId}`) : undefined;
+      if (!agent) continue;
       const postedSales = (transaction.drAmount || 0) + (transaction.invoiceAmount || 0);
       const customerType = transaction.customerType === 'new' || transaction.customerType === 'old'
         ? transaction.customerType
@@ -184,31 +218,44 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
     }
 
     return [...agents.values()].sort((left, right) => right.total - left.total || left.salesperson.localeCompare(right.salesperson));
-  }, [transactions, reportData?.summary.salespersonTotals]);
+  }, [activeSalesAgents, agentId, transactions]);
 
   const paymentTerms = useMemo(() => {
-    const groups = new Map<string, { label: string; soAmount: number; drAmount: number; invoiceAmount: number; cash: boolean; rawLabel?: string }>();
+    const groups = new Map<string, { label: string; soAmount: number; drAmount: number; invoiceAmount: number; kind: 'cash' | 'pdc' | 'term' }>();
     for (const transaction of transactions) {
       const rawTerm = transaction.terms.trim();
-      const key = rawTerm ? rawTerm.toUpperCase().replace(/\s+/g, ' ') : '__UNSPECIFIED__';
+      const normalizedTerm = normalizePaymentTerm(transaction.terms);
+      const kind = isPdcTerm(normalizedTerm) ? 'pdc' : isCashTerm(normalizedTerm) ? 'cash' : 'term';
+      const key = kind === 'cash'
+        ? '__CASH__'
+        : kind === 'pdc'
+          ? '__PDC__'
+          : rawTerm ? rawTerm.toUpperCase().replace(/\s+/g, ' ') : '__UNSPECIFIED__';
       const existing = groups.get(key) ?? {
-        label: normalizePaymentTerm(transaction.terms), soAmount: 0, drAmount: 0, invoiceAmount: 0,
-        cash: isCashTerm(normalizePaymentTerm(transaction.terms)), rawLabel: rawTerm === 'LBC COD' ? 'LBC COD' : undefined,
+        label: kind === 'cash' ? 'CASH SALES' : kind === 'pdc' ? 'TERMS PDC' : normalizedTerm,
+        soAmount: 0,
+        drAmount: 0,
+        invoiceAmount: 0,
+        kind,
       };
       existing.soAmount += transaction.soAmount || 0;
       existing.drAmount += transaction.drAmount || 0;
       existing.invoiceAmount += transaction.invoiceAmount || 0;
       groups.set(key, existing);
     }
-    const rows = [...groups.entries()].map(([key, value]) => ({ key, ...value }));
+    const rows = [...groups.entries()].map(([key, value]) => ({ key, ...value })).sort((left, right) => {
+      const kindOrder = { cash: 0, pdc: 1, term: 2 };
+      return kindOrder[left.kind] - kindOrder[right.kind] || left.label.localeCompare(right.label);
+    });
     const sum = (items: typeof rows) => items.reduce((total, item) => ({
       soAmount: total.soAmount + item.soAmount,
       drAmount: total.drAmount + item.drAmount,
       invoiceAmount: total.invoiceAmount + item.invoiceAmount,
     }), { soAmount: 0, drAmount: 0, invoiceAmount: 0 });
-    const cashRows = rows.filter(row => row.cash);
-    const termsRows = rows.filter(row => !row.cash);
-    return { rows, cashTotal: sum(cashRows), termsTotal: sum(termsRows), total: sum(rows) };
+    const cashRows = rows.filter(row => row.kind === 'cash');
+    const pdcRows = rows.filter(row => row.kind === 'pdc');
+    const termsRows = rows.filter(row => row.kind !== 'cash');
+    return { rows, cashTotal: sum(cashRows), pdcTotal: sum(pdcRows), termsTotal: sum(termsRows), total: sum(rows) };
   }, [transactions]);
 
   if (isLoading) {
@@ -220,8 +267,8 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
   }
 
   return (
-    <div ref={reportTopRef} className="min-h-full overflow-auto bg-[#f4f4f4] px-4 py-10 text-[#333] print:bg-white print:p-0">
-      <div className="mx-auto max-w-[1140px] overflow-hidden rounded-[5px] border border-[#d8d8d8] bg-white shadow-[0_1px_1px_rgba(0,0,0,0.05)] print:max-w-none print:border-0 print:shadow-none">
+    <div ref={reportTopRef} className="min-h-full overflow-auto bg-[#f4f4f4] px-4 text-[#333] print:bg-white print:p-0">
+      <div className="mx-auto my-10 max-w-[1140px] overflow-visible rounded-[5px] border border-[#d8d8d8] bg-white shadow-[0_1px_1px_rgba(0,0,0,0.05)] print:my-0 print:max-w-none print:border-0 print:shadow-none">
         <header className="flex min-h-[64px] items-center justify-between border-b border-[#e5e5e5] px-5 print:hidden">
           <h1 className="self-stretch border-b border-[#5d82a2] py-5 pr-24 font-['Oswald'] text-[18px] font-semibold uppercase leading-none text-[#315574]">
             Sales Report
@@ -258,9 +305,9 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto">
+              <div>
                 <table className="w-full min-w-[1050px] table-fixed border-collapse text-[11px]">
-                  <thead>
+                  <thead className="sticky top-0 z-20 bg-white shadow-sm print:static print:shadow-none">
                     <tr className="border-b border-black">
                       <th className="w-[9%] px-2 py-2 text-left">DATE</th>
                       <th className="w-[19%] px-2 py-2 text-left">CUSTOMER</th>
@@ -339,11 +386,11 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
               <section className="mt-6" data-testid="payment-terms-breakdown">
                 <h2 className="mb-2 text-[13px] font-semibold">PAYMENT TERMS BREAKDOWN</h2>
                 <table className="w-full border-collapse text-[12px]">
-                  <thead><tr className="border-b border-black"><th className="px-2 py-2 text-left">PAYMENT TERMS</th><th className="px-2 py-2 text-right">SO</th><th className="px-2 py-2 text-right">DR</th><th className="px-2 py-2 text-right">INVOICE</th></tr></thead>
+                  <thead className="sticky top-0 z-20 bg-white shadow-sm print:static print:shadow-none"><tr className="border-b border-black"><th className="px-2 py-2 text-left">PAYMENT TERMS</th><th className="px-2 py-2 text-right">SO</th><th className="px-2 py-2 text-right">DR</th><th className="px-2 py-2 text-right">INVOICE</th></tr></thead>
                   <tbody>
                     {paymentTerms.rows.map(row => (
                       <tr key={row.key} className="border-b border-[#ddd]">
-                        <td className="px-2 py-2">{row.rawLabel && <span className="mr-2">{row.rawLabel}</span>}{row.label}</td>
+                        <td className="px-2 py-2">{row.label}</td>
                         <td className="px-2 py-2 text-right">{money.format(row.soAmount)}</td>
                         <td className="px-2 py-2 text-right">{money.format(row.drAmount)}</td>
                         <td className="px-2 py-2 text-right">{money.format(row.invoiceAmount)}</td>
@@ -351,6 +398,7 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
                     ))}
                     {([
                       ['CASH SALES TOTAL', paymentTerms.cashTotal],
+                      ['TERMS PDC TOTAL', paymentTerms.pdcTotal],
                       ['TERMS SALES TOTAL', paymentTerms.termsTotal],
                       ['PAYMENT TERMS TOTAL', paymentTerms.total],
                     ] as const).map(([label, totals]) => (
@@ -384,13 +432,16 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
                 ) : (
                   <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                     {salespersonPerformance.map(agent => (
-                      <article key={agent.salesperson} className="min-w-0 rounded border border-[#ddd] bg-white p-3" aria-label={agent.salesperson + ' sales performance'}>
+                      <article key={agent.agentId || agent.salesperson} className="min-w-0 rounded border border-[#ddd] bg-white p-3" aria-label={agent.salesperson + ' sales performance'}>
                         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#e5e5e5] pb-2">
                           <div className="min-w-0">
                             <h3 className="truncate font-semibold">{agent.salesperson}</h3>
                             <p className="text-xs text-[#666]">{agent.transactionCount} posted {agent.transactionCount === 1 ? 'transaction' : 'transactions'} · {agent.customers.size} {agent.customers.size === 1 ? 'customer' : 'customers'}</p>
                           </div>
-                          <p className="shrink-0 text-right text-sm font-bold tabular-nums">{money.format(agent.total)}</p>
+                          <dl className="flex min-w-0 flex-wrap justify-end gap-x-4 gap-y-1 text-right tabular-nums">
+                            <div><dt className="text-[10px] font-medium text-[#666]">POSTED SALES</dt><dd className="text-sm font-bold">{money.format(agent.total)}</dd></div>
+                            {(isMasterUserAccount(currentUser) || (canonicalizeRoleName(currentUser?.role || '') === 'Sales Agent' && currentUser?.id === agent.agentId)) && <div><dt className="text-[10px] font-medium text-[#666]">MONTHLY QUOTA</dt><dd className="text-sm font-bold">{agentQuotaStatus === 'loading' ? 'Loading' : agentQuotaStatus === 'error' ? 'Unavailable' : (agentQuotas.get(agent.agentId) || 0) > 0 ? money.format(agentQuotas.get(agent.agentId) || 0) : 'Not assigned'}</dd></div>}
+                          </dl>
                         </div>
                         <dl className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
                           {(Object.keys(customerTypeStyles) as Array<keyof typeof customerTypeStyles>).map(type => {
@@ -411,35 +462,8 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
                 )}
               </section>
 
-              <div className="mt-3 grid min-w-0 grid-cols-1 gap-8 md:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
-                <div className="min-w-0 overflow-x-auto">
-                    <table className="w-full min-w-[420px] table-fixed border-collapse text-[12px]" data-testid="salesperson-category-summary">
-                      <tbody>
-                        {(reportData?.summary.salespersonTotals || []).map(salesperson => (
-                          <React.Fragment key={salesperson.salesperson}>
-                            <tr><td className="px-2 py-2">{salesperson.salesperson}</td><td /><td /></tr>
-                            {salesperson.categories.map(category => (
-                              <tr key={`${salesperson.salesperson}-${category.category}`}>
-                                <td />
-                                <td className="px-2 py-2">{category.category}</td>
-                                <td className="px-2 py-2 text-right">{money.format(category.soAmount + category.drAmount + category.invoiceAmount)}</td>
-                              </tr>
-                            ))}
-                            <tr>
-                              <td colSpan={2} className="border-b border-black" />
-                              <td className="border-y border-black px-2 py-2 text-right">{money.format(salesperson.total)}</td>
-                            </tr>
-                          </React.Fragment>
-                        ))}
-                        <tr><td colSpan={3} className="border-b border-black" /></tr>
-                        <tr>
-                          <td colSpan={2} className="border-b border-black px-2 py-2">TOTAL</td>
-                          <td className="border-b border-black px-2 py-2 text-right">{money.format(salespersonGrandTotal)}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                </div>
-                <div className="min-w-0 break-words text-[12px]">
+              <div className="mt-6 flex justify-end">
+                <div className="w-full max-w-md break-words text-[12px]">
                   <p className="font-semibold">Checked and Audited by/ Date: </p>
                   <p aria-hidden="true" className="mb-4 mt-2 h-5 w-full border-b border-[#333]" />
                   <p className="font-semibold">Noted by/ Date: </p>

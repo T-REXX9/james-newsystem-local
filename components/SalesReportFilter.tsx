@@ -121,6 +121,7 @@ const SalesReportFilter: React.FC<SalesReportFilterProps> = ({ currentUser, init
         reportType={reportType}
         onBack={handleBack}
         currentUser={currentUser}
+        activeSalesAgents={salesAgents}
       />
     );
   }

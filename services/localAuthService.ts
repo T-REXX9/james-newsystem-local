@@ -155,6 +155,21 @@ export const getLocalAuthToken = (): string | null => {
 
 export const getLocalAuthSession = (): LocalAuthSession | null => getStoredSession();
 
+export const updateCachedSalesQuota = (salesQuota: number): void => {
+  const session = getStoredSession();
+  if (!session) return;
+  const updatedSession: LocalAuthSession = {
+    ...session,
+    context: {
+      ...session.context,
+      user: { ...session.context.user, sales_quota: salesQuota },
+    },
+    userProfile: { ...session.userProfile, monthly_quota: salesQuota },
+  };
+  persistSession(updatedSession);
+  dispatchAuthChanged(updatedSession);
+};
+
 export const clearInvalidLocalAuthSession = (): void => {
   persistSession(null);
   dispatchAuthChanged(null);
