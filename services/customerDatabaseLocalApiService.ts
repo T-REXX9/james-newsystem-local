@@ -308,7 +308,7 @@ export const mapApiCustomerToContact = (row: ApiCustomerRow): LocalContact => {
   const company = sanitizeLegacyString(row?.company || row?.lcompany || '');
   const salesPersonName = sanitizeLegacyString(row?.sales_person_name || row?.salesman || row?.assigned_to || '');
   const salesPersonId = sanitizeLegacyString(row?.sales_person_id || row?.lsales_person || '');
-  const resolvedSalesName = salesPersonName || salesPersonId;
+  const resolvedSalesName = salesPersonName || (/^\d+$/.test(salesPersonId) ? '' : salesPersonId);
   const fallbackEmail = sanitizeLegacyString(row?.email || row?.lemail || '');
   const fallbackPhone = sanitizeLegacyString(row?.phone || row?.lphone || '');
   const fallbackMobile = sanitizeLegacyString(row?.mobile || row?.lmobile || '');

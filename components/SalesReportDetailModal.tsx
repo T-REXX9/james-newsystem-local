@@ -86,7 +86,7 @@ const SalesReportDetailModal: React.FC<SalesReportDetailModalProps> = ({
               <p className="text-sm font-semibold text-slate-800 dark:text-white">{transaction.customer}</p>
             </div>
             <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4">
-              <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Salesperson</p>
+              <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Sales Agent</p>
               <p className="text-sm font-semibold text-slate-800 dark:text-white">{transaction.salesperson}</p>
             </div>
             <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4">

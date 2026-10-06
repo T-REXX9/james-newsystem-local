@@ -554,7 +554,7 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
                                 onChange={(e) => setAssignTo(e.target.value as 'all' | 'specific')}
                                 className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             >
-                                <option value="all">All Sales Persons</option>
+                                <option value="all">All Sales Agents</option>
                                 <option value="specific">Select Specific Staff</option>
                             </select>
                         </div>

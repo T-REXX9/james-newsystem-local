@@ -595,9 +595,9 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                        </div>
                        {canAssignSalesAgent && (
                            <div>
-                               <label className="label">Salesman</label>
+                               <label className="label">Sales Agent</label>
                                <select
-                                 aria-label="Salesman"
+                                 aria-label="Sales Agent"
                                  className="input"
                                  value={formData.assignedAgentId || ''}
                                  onChange={(event) => {

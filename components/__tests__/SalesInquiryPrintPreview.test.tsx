@@ -73,7 +73,7 @@ describe('SalesInquiryPrintPreview', () => {
     );
 
     expect(screen.getByText('CUSTOMER INQUIRY')).toBeInTheDocument();
-    expect(screen.getByText('Sales Person:').parentElement).toHaveTextContent('Jane Doe');
+    expect(screen.getByText('Sales Agent:').parentElement).toHaveTextContent('Jane Doe');
     expect(screen.getByText(/Prepared By :/).parentElement).toHaveTextContent('Melson Creator');
     const ourReferenceValue = screen.getByText('Our Reference:').nextElementSibling;
     expect(ourReferenceValue).toHaveTextContent('INQ26-99');

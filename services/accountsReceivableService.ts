@@ -11,6 +11,7 @@ export type ArDateType = 'all' | 'today' | 'week' | 'month' | 'year' | 'custom';
 export type ArRow = {
   terms: string;
   date: string | null;
+  created_at: string;
   reference: string;
   amount: number;
   amount_paid: number;
@@ -98,6 +99,7 @@ export const accountsReceivableService = {
         rows: (Array.isArray(customer?.rows) ? customer.rows : []).map((row: any) => ({
           terms: String(row?.terms || ''),
           date: row?.date || null,
+          created_at: String(row?.created_at || ''),
           reference: String(row?.reference || ''),
           amount: toNumber(row?.amount),
           amount_paid: toNumber(row?.amount_paid),

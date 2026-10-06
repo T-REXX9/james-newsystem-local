@@ -62,6 +62,7 @@ describe('SalesReportDataView legacy report display', () => {
           total: 0,
         }],
         grandTotal: { soAmount: 125, drAmount: 0, invoiceAmount: 125, total: 125 },
+        starredCustomerSales: { total: 125, customerCount: 1 },
       },
     });
   });
@@ -86,6 +87,8 @@ describe('SalesReportDataView legacy report display', () => {
     expect(screen.getByText('FOR THE MONTH OF SEPTEMBER')).toBeInTheDocument();
     expect(screen.getByText('09/01/2026')).toBeInTheDocument();
     expect(screen.getByText('GRAND TOTAL -->')).toBeInTheDocument();
+    expect(screen.getByTestId('starred-customer-sales-summary')).toHaveTextContent('1 customer with posted sales in this report');
+    expect(screen.getByTestId('starred-customer-sales-total')).toHaveTextContent('125.00');
     expect(screen.getByText('Checked and Audited by/ Date:')).toBeInTheDocument();
     expect(screen.getByText('Noted by/ Date:')).toBeInTheDocument();
 
@@ -125,5 +128,30 @@ describe('SalesReportDataView legacy report display', () => {
 
     const agentBreakdown = await screen.findByTestId('agent-customer-type-breakdown');
     expect(within(agentBreakdown).queryByText('MONTHLY QUOTA')).not.toBeInTheDocument();
+  });
+
+  it('shows the starred-sales value as unavailable when the report request fails', async () => {
+    getSalesReportDataMock.mockResolvedValueOnce({
+      transactions: [],
+      error: 'Network unavailable',
+      summary: {
+        categoryTotals: [],
+        salespersonTotals: [],
+        grandTotal: { soAmount: 0, drAmount: 0, invoiceAmount: 0, total: 0 },
+        starredCustomerSales: { total: 0, customerCount: 0 },
+      },
+    });
+
+    render(
+      <SalesReportDataView
+        dateFrom="2026-09-01"
+        dateTo="2026-09-30"
+        customerId="all"
+        reportType="month"
+        onBack={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByTestId('starred-customer-sales-total')).toHaveTextContent('Unavailable');
   });
 });

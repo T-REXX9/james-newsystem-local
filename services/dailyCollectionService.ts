@@ -26,6 +26,7 @@ export type DailyCollectionHeader = {
   lcolection_no: string;
   lstatus: string;
   ldatetime?: string;
+  created_at?: string;
   total_amt?: number;
   created_by?: string;
   approved_by?: string;
@@ -45,6 +46,7 @@ export type DailyCollectionItem = {
   lstatus: string;
   lremarks: string;
   lcollect_date: string;
+  created_at: string;
   lpost: number;
   lcollection_status: string;
   ltransaction_no: string;
@@ -76,6 +78,7 @@ export type CollectionPaymentPayload = {
   amount: number;
   status: string;
   remarks: string;
+  created_at: string;
   collectDate: string;
   transactions: CollectionPaymentTransaction[];
 };
@@ -115,6 +118,7 @@ export type CollectionSummaryDateType = 'all' | 'today' | 'week' | 'month' | 'ye
 export type CollectionSummaryItem = {
   customer_id: string;
   date: string;
+  created_at: string;
   customer: string;
   dcr_no: string;
   cash: number;
@@ -132,6 +136,7 @@ export type CollectionSummaryDebitItem = {
   lcustomer_name: string;
   ldatetime: string;
   lamount: number;
+  created_at: string;
 };
 
 export type CollectionSummaryResponse = {
@@ -191,6 +196,7 @@ const mapCollectionItem = (row: any): DailyCollectionItem => ({
   lpost: toNumber(row?.lpost, 0),
   lcollection_status: String(row?.lcollection_status || ''),
   ltransaction_no: String(row?.ltransaction_no || ''),
+  created_at: String(row?.created_at || ''),
 });
 
 const getUserContext = () => {
@@ -225,6 +231,7 @@ export const dailyCollectionService = {
       lcolection_no: String(row?.lcolection_no || ''),
       lstatus: String(row?.lstatus || 'Pending'),
       ldatetime: String(row?.ldatetime || ''),
+      created_at: String(row?.created_at || ''),
       total_amt: toNumber(row?.total_amt, 0),
       created_by: String(row?.created_by || row?.submitted_by || ''),
       approved_by: String(row?.approved_by || ''),
@@ -251,6 +258,7 @@ export const dailyCollectionService = {
         lcolection_no: String(data?.lcolection_no || ''),
         lstatus: String(data?.lstatus || 'Pending'),
         ldatetime: String(data?.ldatetime || ''),
+        created_at: String(data?.created_at || ''),
         total_amt: toNumber(data?.total_amt, 0),
         created_by: String(data?.created_by || data?.submitted_by || ''),
         approved_by: String(data?.approved_by || ''),
@@ -454,6 +462,7 @@ export const dailyCollectionService = {
         tt: toNumber(row?.tt),
         less: toNumber(row?.less),
         remarks: String(row?.remarks || ''),
+        created_at: String(row?.created_at || ''),
       })),
       collection_totals: {
         cash: toNumber(data?.collection_totals?.cash),
@@ -469,6 +478,7 @@ export const dailyCollectionService = {
         lcustomer_name: String(row?.lcustomer_name || ''),
         ldatetime: String(row?.ldatetime || ''),
         lamount: toNumber(row?.lamount),
+        created_at: String(row?.created_at || ''),
       })),
       debit_totals: {
         amount: toNumber(data?.debit_totals?.amount),

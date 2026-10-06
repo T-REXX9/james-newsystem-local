@@ -26,7 +26,7 @@ import {
 } from '@mui/material';
 import { Download, Printer, RefreshCw, RotateCcw, Search } from 'lucide-react';
 import { fetchOldNewCustomersReport, OldNewCustomerRow } from '../services/oldNewCustomersReportService';
-import { formatCustomerSince } from '../utils/formatUtils';
+import { formatAccountingTimestamp, formatCustomerSince } from '../utils/formatUtils';
 import CustomerStarIndicator from './CustomerStarIndicator';
 
 import { shouldSuppressAuthError } from '../services/localApiAuth';
@@ -39,6 +39,7 @@ const formatDate = (dateValue: string): string => {
 
 const OldNewCustomersReport: React.FC = () => {
   const [loading, setLoading] = useState(false);
+  const [hasLoadedReport, setHasLoadedReport] = useState(false);
   const [rows, setRows] = useState<OldNewCustomerRow[]>([]);
   const [searchInput, setSearchInput] = useState('');
   const [error, setError] = useState('');
@@ -64,7 +65,8 @@ const OldNewCustomersReport: React.FC = () => {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setFilters((prev) => ({ ...prev, search: searchInput.trim(), page: 1 }));
+      const search = searchInput.trim();
+      setFilters((prev) => prev.search === search ? prev : ({ ...prev, search, page: 1 }));
     }, 300);
     return () => window.clearTimeout(timer);
   }, [searchInput]);
@@ -95,8 +97,8 @@ const OldNewCustomersReport: React.FC = () => {
   };
 
   useEffect(() => {
-    void loadReport();
-  }, [filters]);
+    if (hasLoadedReport) void loadReport();
+  }, [filters, hasLoadedReport]);
 
   const grouped = useMemo(() => {
     const oldCustomers = rows.filter((row) => row.customerType === 'old');
@@ -117,7 +119,7 @@ const OldNewCustomersReport: React.FC = () => {
 
   const handleExport = () => {
     if (!rows.length) return;
-    const headers = ['Customer Type', 'Customer Name', 'Customer Code', 'Group', 'Sales Person', 'Customer Since'];
+    const headers = ['Customer Type', 'Customer Name', 'Customer Code', 'Group', 'Sales Agent', 'Customer Since', 'Created Timestamp'];
     const escapeCsv = (value: string) => {
       if (value.includes(',') || value.includes('"') || value.includes('\n')) {
         return `"${value.replace(/"/g, '""')}"`;
@@ -135,6 +137,7 @@ const OldNewCustomersReport: React.FC = () => {
           row.customerGroup,
           row.salesPerson,
           row.customerSince,
+          formatAccountingTimestamp(row.createdAt),
         ]
           .map((value) => escapeCsv(String(value || '')))
           .join(',')
@@ -171,7 +174,7 @@ const OldNewCustomersReport: React.FC = () => {
     if (!list.length) {
       return (
         <TableRow>
-          <TableCell colSpan={4} align="center" sx={{ py: 6, color: 'text.secondary' }}>
+          <TableCell colSpan={5} align="center" sx={{ py: 6, color: 'text.secondary' }}>
             {emptyMessage}
           </TableCell>
         </TableRow>
@@ -184,6 +187,7 @@ const OldNewCustomersReport: React.FC = () => {
         <TableCell>{row.customerCode || row.customerGroup || '-'}</TableCell>
         <TableCell>{row.salesPerson || '-'}</TableCell>
         <TableCell>{formatCustomerSince(row.customerSince) || 'N/A'}</TableCell>
+        <TableCell>{formatAccountingTimestamp(row.createdAt)}</TableCell>
       </TableRow>
     ));
   };
@@ -252,7 +256,7 @@ const OldNewCustomersReport: React.FC = () => {
               fullWidth
               size="small"
               label="Search customer"
-              placeholder="Search customer, code, group, salesperson..."
+              placeholder="Search customer, code, group, sales agent..."
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
               InputProps={{
@@ -285,7 +289,10 @@ const OldNewCustomersReport: React.FC = () => {
             </FormControl>
 
             <Stack direction="row" spacing={1}>
-              <Button variant="contained" color="inherit" startIcon={loading ? <CircularProgress size={14} /> : <RefreshCw size={16} />} onClick={() => void loadReport()}>
+              <Button variant="contained" color="inherit" startIcon={loading ? <CircularProgress size={14} /> : <RefreshCw size={16} />} onClick={() => {
+                if (hasLoadedReport) void loadReport();
+                else setHasLoadedReport(true);
+              }}>
                 Refresh
               </Button>
               <Button variant="outlined" startIcon={<RotateCcw size={16} />} onClick={handleReset}>
@@ -331,7 +338,7 @@ const OldNewCustomersReport: React.FC = () => {
           <Card sx={{ flex: 1, borderRadius: 3 }}>
             <CardContent>
               <Typography variant="overline" color="text.secondary">
-                Cutoff Date
+                Year Split
               </Typography>
               <Typography variant="h6" fontWeight={700}>
                 {formatDate(summary.cutoffDate)}
@@ -342,8 +349,7 @@ const OldNewCustomersReport: React.FC = () => {
 
         <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, bgcolor: '#fcfcfd' }}>
           <Typography variant="body2" color="text.secondary">
-            Old customers are active customer records with a customer-since date older than {summary.cutoffYears} year.
-            New customers are active customer records created within the last {summary.cutoffYears} year.
+            Old customers have a customer-since date in 2025 or earlier. New customers have a customer-since date in 2026 or later.
           </Typography>
         </Paper>
 
@@ -361,8 +367,9 @@ const OldNewCustomersReport: React.FC = () => {
                   <TableRow sx={{ bgcolor: '#fff7ed' }}>
                     <TableCell sx={{ fontWeight: 700 }}>Customer Name</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>Code / Group</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>Salesman</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Sales Agent</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>Customer Since</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Created Timestamp</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>{renderRows(grouped.oldCustomers, 'No old customers for the selected filters.')}</TableBody>
@@ -383,8 +390,9 @@ const OldNewCustomersReport: React.FC = () => {
                   <TableRow sx={{ bgcolor: '#eff6ff' }}>
                     <TableCell sx={{ fontWeight: 700 }}>Customer Name</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>Code / Group</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>Salesman</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Sales Agent</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>Customer Since</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Created Timestamp</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>{renderRows(grouped.newCustomers, 'No new customers for the selected filters.')}</TableBody>

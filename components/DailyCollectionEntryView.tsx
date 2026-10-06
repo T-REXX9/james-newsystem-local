@@ -11,6 +11,7 @@ import {
   LEGACY_COLLECTION_ITEM_STATUSES,
   CollectionPaymentLineUpdate,
 } from '../services/dailyCollectionService';
+import { formatAccountingTimestamp } from '../utils/formatUtils';
 import { getLocalAuthSession, restoreLocalAuthSession } from '../services/localAuthService';
 import {
   dispatchWorkflowNotification,
@@ -75,10 +76,10 @@ const getStatusBadgeClasses = (status?: string): string => {
 const INPUT_CLASS = 'w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 text-sm';
 const SELECT_CLASS = 'px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 text-sm';
 
-const DailyCollectionEntryView: React.FC = () => {
+const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = ({ initialCollectionRefNo }) => {
   const [permissionRevision, setPermissionRevision] = useState(0);
   const [headers, setHeaders] = useState<DailyCollectionHeader[]>([]);
-  const [selectedRefno, setSelectedRefno] = useState<string>('');
+  const [selectedRefno, setSelectedRefno] = useState<string>(initialCollectionRefNo || '');
   const [selectedHeader, setSelectedHeader] = useState<DailyCollectionHeader | null>(null);
   const [items, setItems] = useState<DailyCollectionItem[]>([]);
   const [approverLogs, setApproverLogs] = useState<DailyCollectionApproverLog[]>([]);
@@ -283,9 +284,11 @@ const DailyCollectionEntryView: React.FC = () => {
         dateTo,
       });
       setHeaders(rows);
-      if (!selectedRefno && rows[0]?.lrefno) {
-        setSelectedRefno(rows[0].lrefno);
-      } else if (selectedRefno && !rows.some((row) => row.lrefno === selectedRefno)) {
+      if (initialCollectionRefNo) {
+        if (!rows.some((row) => row.lrefno === initialCollectionRefNo)) {
+          setSelectedRefno(initialCollectionRefNo);
+        }
+      } else if (!selectedRefno || !rows.some((row) => row.lrefno === selectedRefno)) {
         setSelectedRefno(rows[0]?.lrefno || '');
       }
     } catch (err: any) {
@@ -1081,6 +1084,7 @@ const DailyCollectionEntryView: React.FC = () => {
                     <p>
                       Date: {toDisplayDate(selectedHeader?.ldatetime) || '-'}
                     </p>
+                    <p>Created Timestamp: {formatAccountingTimestamp(selectedHeader?.created_at)}</p>
                     <p>
                       Ref No.: {selectedRefno}
                     </p>
@@ -1139,15 +1143,16 @@ const DailyCollectionEntryView: React.FC = () => {
                   <table className="w-full table-fixed text-sm">
                     <colgroup>
                       <col className="w-[3%]" />
-                      <col className="w-[17%]" />
+                      <col className="w-[14%]" />
+                      <col className="w-[10%]" />
+                      <col className="w-[7%]" />
+                      <col className="w-[6%]" />
                       <col className="w-[10%]" />
                       <col className="w-[8%]" />
-                      <col className="w-[7%]" />
-                      <col className="w-[13%]" />
-                      <col className="w-[10%]" />
+                      <col className="w-[12%]" />
                       <col className="w-[9%]" />
-                      <col className="w-[8%]" />
                       <col className="w-[7%]" />
+                      <col className="w-[6%]" />
                       <col className="w-[8%]" />
                     </colgroup>
                     <thead className="sticky top-0 border-b-2 border-[#ddd] bg-white font-['Oswald'] text-[#222]">
@@ -1175,6 +1180,7 @@ const DailyCollectionEntryView: React.FC = () => {
                         <th className="px-2 py-2 text-left font-bold">Bank</th>
                         <th className="px-2 py-2 text-left font-bold">Check Number</th>
                         <th className="px-2 py-2 text-left font-bold">Check Date</th>
+                        <th className="px-2 py-2 text-left font-bold">Timestamp</th>
                         <th className="px-2 py-2 text-right font-bold">Amount</th>
                         <th className="px-2 py-2 text-left font-bold">Status</th>
                         <th className="px-2 py-2 text-left font-bold">Remarks</th>
@@ -1184,14 +1190,14 @@ const DailyCollectionEntryView: React.FC = () => {
                     <tbody className="divide-y divide-[#ddd]">
                       {detailLoading && (
                         <tr>
-                          <td colSpan={11} className="px-3 py-4 text-center text-slate-500 dark:text-slate-400">
+                          <td colSpan={12} className="px-3 py-4 text-center text-slate-500 dark:text-slate-400">
                             Loading payment lines...
                           </td>
                         </tr>
                       )}
                       {!detailLoading && items.length === 0 && !canAddPayment && (
                         <tr>
-                          <td colSpan={11} className="px-3 py-4 text-center text-slate-500 dark:text-slate-400">
+                          <td colSpan={12} className="px-3 py-4 text-center text-slate-500 dark:text-slate-400">
                             No payment lines yet.
                           </td>
                         </tr>
@@ -1268,6 +1274,7 @@ const DailyCollectionEntryView: React.FC = () => {
                                 />
                               ) : (item.lchk_date ? toDisplayDate(item.lchk_date) : '-')}
                             </td>
+                            <td className="whitespace-nowrap px-2 py-2">{formatAccountingTimestamp(item.created_at)}</td>
                             <td className="px-2 py-2 text-right">
                               {isEditing ? (
                                 <input
@@ -1379,7 +1386,7 @@ const DailyCollectionEntryView: React.FC = () => {
                           <td className="px-2 py-2">
                             <CustomerAutocomplete
                               contacts={customerOptions}
-                              selectedCustomer={customerOptions.find((customer) => customer.id === form.customerId) || null}
+                              selectedCustomer={form.customerId ? customerOptions.find((customer) => customer.id === form.customerId) || null : null}
                               onSearch={setCustomerSearch}
                               isLoading={loadingCustomers}
                               onSelect={(customer) => {
@@ -1555,7 +1562,7 @@ const DailyCollectionEntryView: React.FC = () => {
                                   <td className="px-3 py-2">
                                     {((log.staff_fName || '') + ' ' + (log.staff_lName || '')).trim() || log.lstaff_id}
                                   </td>
-                                  <td className="px-3 py-2">{log.ldatetime || '-'}</td>
+                                  <td className="whitespace-nowrap px-3 py-2">{formatAccountingTimestamp(log.ldatetime)}</td>
                                   <td className="px-3 py-2">{log.lremarks || '-'}</td>
                                   <td className="px-3 py-2">
                                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusBadgeClasses(log.lstatus)}`}>

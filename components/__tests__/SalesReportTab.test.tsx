@@ -28,6 +28,7 @@ const sampleReports = [
   },
   {
     id: 'rep-2',
+    inquiry_no: 'rep-2',
     inquiry_id: 'inquiry-db-2',
     date: '2025-11-07',
     time: '11:55:58',

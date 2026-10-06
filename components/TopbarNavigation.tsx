@@ -67,7 +67,7 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
     // Owner always has access
     if (user.role === 'Owner') return true;
 
-    // Sales Agents should always reach their home/dashboard even if access_rights is misconfigured.
+    // Salespersons should always reach their home/dashboard even if access_rights is misconfigured.
     if (
       (canonical === 'home' || route === 'dashboard') &&
       (user.role === 'Sales Agent' || user.role === 'sales_agent')

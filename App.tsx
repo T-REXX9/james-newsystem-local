@@ -812,17 +812,9 @@ const App: React.FC = () => {
       case 'accounting-reports-collection-report':
         return renderComingSoon('Collection Report');
       case 'accounting-reports-sales-return-report': {
-        const context = moduleContext['accounting-reports-sales-return-report'] || {};
         return (
           <div className="h-full overflow-y-auto">
-            <SalesReturnReport
-              initialSearch={context.search}
-              initialDateFrom={context.dateFrom}
-              initialDateTo={context.dateTo}
-              initialItemRefno={context.itemRefno}
-              initialItemCode={context.itemCode}
-              initialStatus={context.status}
-            />
+            <SalesReturnReport />
           </div>
         );
       }
@@ -832,10 +824,8 @@ const App: React.FC = () => {
             <FreightChargesReportView />
           </div>
         );
-      case 'accounting-reports-accounts-receivable-report': {
-        const context = moduleContext['accounting-reports-accounts-receivable-report'] || {};
-        return <div className="h-full overflow-y-auto"><AccountsReceivableView initialDateType={context.dashboardDate ? 'custom' : undefined} initialDateFrom={context.dashboardDate ? '2000-01-01' : undefined} initialDateTo={context.dashboardDate} /></div>;
-      }
+      case 'accounting-reports-accounts-receivable-report':
+        return <div className="h-full overflow-y-auto"><AccountsReceivableView /></div>;
       case 'accounting-reports-purchase-history':
         return (
           <div className="h-full overflow-y-auto">
@@ -858,14 +848,17 @@ const App: React.FC = () => {
       case 'accounting-transactions-freight-charges-debit':
         return (
           <div className="h-full overflow-y-auto">
-            <FreightChargesDebitView />
+            <FreightChargesDebitView
+              initialFreightRefNo={moduleContext['accounting-transactions-freight-charges-debit']?.freightRefNo}
+              initialCreate={moduleContext['accounting-transactions-freight-charges-debit']?.createNew === 'true'}
+            />
           </div>
         );
       case 'accounting-transactions-sales-return-credit': {
         const context = moduleContext['accounting-transactions-sales-return-credit'] || {};
         return (
           <div className="h-full overflow-y-auto">
-            <SalesReturnPage initialMonth={context.dashboardMonth} initialYear={context.dashboardYear} initialStatus={context.dashboardReturnStatus} />
+            <SalesReturnPage initialMonth={context.dashboardMonth} initialYear={context.dashboardYear} initialStatus={context.dashboardReturnStatus} initialSalesReturnRefNo={context.salesReturnRefNo} />
           </div>
         );
       }
@@ -873,17 +866,15 @@ const App: React.FC = () => {
         return (
           <div className="h-full overflow-y-auto">
             <AdjustmentEntryView
-              initialAdjustmentNo={
-                moduleContext['accounting-transactions-adjustment-entry']?.adjustmentNo ||
-                moduleContext.adjustmententry?.adjustmentNo
-              }
+              initialAdjustmentNo={moduleContext['accounting-transactions-adjustment-entry']?.adjustmentNo || moduleContext.adjustmententry?.adjustmentNo}
+              initialAdjustmentRefNo={moduleContext['accounting-transactions-adjustment-entry']?.adjustmentRefNo}
             />
           </div>
         );
       case 'accounting-transactions-daily-collection-entry':
         return (
           <div className="h-full min-h-0 overflow-y-auto overscroll-contain">
-            <DailyCollectionEntryView />
+            <DailyCollectionEntryView initialCollectionRefNo={moduleContext['accounting-transactions-daily-collection-entry']?.collectionRefNo} />
           </div>
         );
       case 'accounting-accounting-customer-ledger':
@@ -893,10 +884,9 @@ const App: React.FC = () => {
           </div>
         );
       case 'accounting-accounting-collection-summary': {
-        const context = moduleContext['accounting-accounting-collection-summary'] || {};
         return (
           <div className="h-full overflow-y-auto">
-            <CollectionSummaryView initialDateType={context.dashboardMonthStart && context.dashboardMonthEnd ? 'custom' : undefined} initialDateFrom={context.dashboardMonthStart} initialDateTo={context.dashboardMonthEnd} />
+            <CollectionSummaryView />
           </div>
         );
       }

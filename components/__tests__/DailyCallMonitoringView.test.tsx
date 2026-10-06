@@ -137,7 +137,7 @@ const baseSnapshot = {
 describe('DailyCallMonitoringView communication actions', () => {
   const expandSummaries = async () => {
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: /Show summaries/i }));
+    await user.click(await screen.findByRole('button', { name: /Sales summaries/i }));
   };
 
   beforeEach(() => {
@@ -202,14 +202,13 @@ describe('DailyCallMonitoringView communication actions', () => {
     const user = userEvent.setup();
     render(<DailyCallMonitoringView currentUser={currentUser} />);
 
-    const toggle = await screen.findByRole('button', { name: /Show summaries/i });
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    const toggle = await screen.findByRole('button', { name: /Sales summaries/i });
     expect(screen.queryByLabelText('Customer category summaries')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Segregated customer category tables')).toBeInTheDocument();
 
     await user.click(toggle);
 
-    expect(screen.getByRole('button', { name: /Hide summaries/i })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('dialog', { name: 'Sales summaries' })).toBeInTheDocument();
     expect(screen.getByLabelText('Customer category summaries')).toBeInTheDocument();
     expect(await screen.findByText('Team sales by Daily Call status')).toBeInTheDocument();
   });
@@ -345,7 +344,7 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
 
-    expect(await screen.findByRole('heading', { name: 'Customer List' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Customer board controls')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'All Clients' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: "Today's List" })).not.toBeInTheDocument();
     expect(screen.queryByText('Monthly Quota')).not.toBeInTheDocument();
@@ -353,16 +352,16 @@ describe('DailyCallMonitoringView communication actions', () => {
     await expandSummaries();
     const categorySummaries = screen.getByLabelText('Customer category summaries');
     const prioritySummary = within(categorySummaries)
-      .getByTitle('Priority List (Any ledger activity since October 2025 onwards)')
+      .getByRole('heading', { name: 'Priority List' })
       .closest('article')!;
     const recoverySummary = within(categorySummaries)
-      .getByTitle('Recovery List (Purchase history before October 2025, with none since)')
+      .getByRole('heading', { name: 'Recovery List' })
       .closest('article')!;
     const verifiedSummary = within(categorySummaries)
-      .getByTitle('Verified Prospects (Verified, awaiting first purchase)')
+      .getByRole('heading', { name: 'Verified Prospects' })
       .closest('article')!;
     const unverifiedSummary = within(categorySummaries)
-      .getByTitle('Unverified Prospects (No purchases yet)')
+      .getByRole('heading', { name: 'Unverified Prospects' })
       .closest('article')!;
 
     expect(within(prioritySummary).getByText('2')).toBeInTheDocument();
@@ -479,25 +478,25 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
 
-    expect(await screen.findByRole('heading', { name: 'Customer List' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Customer board controls')).toBeInTheDocument();
 
     await expandSummaries();
     const categorySummaries = screen.getByLabelText('Customer category summaries');
     const prioritySummary = within(categorySummaries)
-      .getByTitle('Priority List (Any ledger activity since October 2025 onwards)')
+      .getByRole('heading', { name: 'Priority List' })
       .closest('article')!;
     const recoverySummary = within(categorySummaries)
-      .getByTitle('Recovery List (Purchase history before October 2025, with none since)')
+      .getByRole('heading', { name: 'Recovery List' })
       .closest('article')!;
 
-    const priorityPotential = within(prioritySummary).getByText('Potential Sales').parentElement!;
-    const recoveryPotential = within(recoverySummary).getByText('Potential Sales').parentElement!;
+    const priorityPotential = within(prioritySummary).getByText(/Potential sales/i).parentElement!;
+    const recoveryPotential = within(recoverySummary).getByText(/Potential sales/i).parentElement!;
 
     // Lifetime totals would compact to ₱25M / ₱105K — Potential Sales must use monthly averages instead.
     expect(within(priorityPotential).queryByText('₱25M')).not.toBeInTheDocument();
     expect(within(recoveryPotential).queryByText('₱105K')).not.toBeInTheDocument();
-    expect(within(priorityPotential).getByText('₱5M')).toBeInTheDocument();
-    expect(within(recoveryPotential).getByText('₱35K')).toBeInTheDocument();
+    expect(priorityPotential).toHaveTextContent('₱5M');
+    expect(recoveryPotential).toHaveTextContent('₱35K');
 
     // Client symptom: a Test Client record still appears in the prospect list.
     // (Deletion is handled by migration 039; this UI assertion documents the unwanted inclusion path.)
@@ -532,17 +531,17 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
 
-    expect(await screen.findByRole('heading', { name: 'Customer List' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Customer board controls')).toBeInTheDocument();
 
     await expandSummaries();
     const categorySummaries = screen.getByLabelText('Customer category summaries');
     const prioritySummary = within(categorySummaries)
-      .getByTitle('Priority List (Any ledger activity since October 2025 onwards)')
+      .getByRole('heading', { name: 'Priority List' })
       .closest('article')!;
-    const currentMonthSales = within(prioritySummary).getByText('Current Month Sales').parentElement!;
+    const currentMonthSales = within(prioritySummary).getByText(/Current Month Sales/);
 
-    expect(within(currentMonthSales).getByText('₱1,000,000')).toBeInTheDocument();
-    expect(within(currentMonthSales).queryByText('₱1M')).not.toBeInTheDocument();
+    expect(currentMonthSales).toHaveTextContent('₱1,000,000');
+    expect(currentMonthSales).not.toHaveTextContent('₱1M');
   });
 
   it('shows only workflow-verified prospects in the verified list after refresh', async () => {
@@ -616,15 +615,15 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
 
-    expect(await screen.findByRole('heading', { name: 'Customer List' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Customer board controls')).toBeInTheDocument();
 
     await expandSummaries();
     const categorySummaries = screen.getByLabelText('Customer category summaries');
     const verifiedSummary = within(categorySummaries)
-      .getByTitle('Verified Prospects (Verified, awaiting first purchase)')
+      .getByRole('heading', { name: 'Verified Prospects' })
       .closest('article')!;
     const unverifiedSummary = within(categorySummaries)
-      .getByTitle('Unverified Prospects (No purchases yet)')
+      .getByRole('heading', { name: 'Unverified Prospects' })
       .closest('article')!;
 
     expect(within(verifiedSummary).getByText('1')).toBeInTheDocument();
@@ -678,6 +677,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     const user = userEvent.setup();
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
+    await user.click(await screen.findByRole('button', { name: /^Filters$/i }));
     const filter = await screen.findByLabelText('Agent Sales Report filter');
     await user.selectOptions(filter, 'reported');
     expect(screen.getByText('1 customer')).toBeInTheDocument();
@@ -738,7 +738,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     );
     expect(screen.queryByRole('button', { name: 'Open Patient Chart' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open Full Details' })).toHaveTextContent('Full Details');
-    expect(screen.getByText('Agent Sales Report')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Agent Sales Report' })).toBeInTheDocument();
     expect(screen.queryByText('Customer Log')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Customer note')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Customer comments')).not.toBeInTheDocument();
@@ -945,7 +945,7 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
 
-    expect(await screen.findByRole('heading', { name: 'Customer List' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Customer board controls')).toBeInTheDocument();
     expect(screen.queryByText('Other Customers')).not.toBeInTheDocument();
 
     const categoryTables = screen.getByLabelText('Segregated customer category tables');
@@ -1039,10 +1039,10 @@ describe('DailyCallMonitoringView communication actions', () => {
     render(<DailyCallMonitoringView currentUser={currentUser} />);
 
     await expandSummaries();
-    const summaryHeading = (await screen.findAllByTitle('Priority List (Any ledger activity since October 2025 onwards)'))[0];
-    const summary = summaryHeading.closest('article');
+    const summary = within(screen.getByLabelText('Customer category summaries'))
+      .getByRole('heading', { name: 'Priority List' }).closest('article');
     expect(summary).not.toBeNull();
-    expect(within(summary as HTMLElement).getByTitle('₱10,200')).toBeInTheDocument();
+    expect(within(summary as HTMLElement).getByText(/Current Month Sales:/)).toHaveTextContent('₱10,200');
   });
 
   it('uses the ledger average monthly sales for potential sales', async () => {
@@ -1079,9 +1079,10 @@ describe('DailyCallMonitoringView communication actions', () => {
     render(<DailyCallMonitoringView currentUser={currentUser} />);
 
     await expandSummaries();
-    const summaryHeading = (await screen.findAllByTitle('Recovery List (Purchase history before October 2025, with none since)'))[0];
-    const summary = summaryHeading.closest('article');
+    const summary = within(screen.getByLabelText('Customer category summaries'))
+      .getByRole('heading', { name: 'Recovery List' }).closest('article');
     expect(summary).not.toBeNull();
-    expect(within(summary as HTMLElement).getAllByTitle('₱18,000')).toHaveLength(2);
+    expect(within(summary as HTMLElement).getByText(/Average Monthly Sales:/)).toHaveTextContent('₱18K');
+    expect(within(summary as HTMLElement).getByText(/Potential sales:/)).toHaveTextContent('₱18K');
   });
 });

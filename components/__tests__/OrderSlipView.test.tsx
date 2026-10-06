@@ -81,7 +81,7 @@ describe('OrderSlipView', () => {
     expect(list).toHaveClass('overflow-x-auto', 'lg:overflow-x-hidden');
     expect(list.querySelectorAll('table')).toHaveLength(1);
     expect(list.querySelector('table')).toHaveClass('min-w-[1100px]', 'lg:min-w-0');
-    ['Date', 'Customer', 'SO No.', 'OS No.', 'DM No.', 'Tracking No.', 'Sales Person', 'Status'].forEach((heading) => {
+    ['Date', 'Customer', 'SO No.', 'OS No.', 'DM No.', 'Tracking No.', 'Sales Agent', 'Status'].forEach((heading) => {
       expect(within(list).getByText(heading)).toBeVisible();
     });
   });

@@ -498,7 +498,7 @@ const SuggestedStockDataView: React.FC<SuggestedStockDataViewProps> = ({
                       Qty
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Sales Person
+                      Sales Agent
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Remark

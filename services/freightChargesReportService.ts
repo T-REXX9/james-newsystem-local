@@ -16,6 +16,7 @@ export type FreightChargesReportRow = {
   tracking_no: string;
   courier: string;
   date: string;
+  created_at: string;
   status: string;
   amount: number;
 };
@@ -84,6 +85,7 @@ export const freightChargesReportService = {
         tracking_no: String(row?.tracking_no || ''),
         courier: String(row?.courier || ''),
         date: String(row?.date || ''),
+        created_at: String(row?.created_at || ''),
         status: String(row?.status || ''),
         amount: toNumber(row?.amount),
       })),

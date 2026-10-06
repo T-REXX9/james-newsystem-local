@@ -39,6 +39,7 @@ export interface SalesReturnReportRow {
   id: string;
   returnNo: string;
   returnDate: string;
+  createdAt: string;
   transactionNo: string;
   customer: string;
   status: string;
@@ -100,6 +101,7 @@ export const fetchSalesReturnReport = async (
       id: String(row?.id || ''),
       returnNo: String(row?.return_no || ''),
       returnDate: String(row?.return_date || ''),
+      createdAt: String(row?.created_at || ''),
       transactionNo: String(row?.transaction_no || ''),
       customer: String(row?.customer || ''),
       status: String(row?.status || ''),

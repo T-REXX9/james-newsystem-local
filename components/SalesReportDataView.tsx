@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowUp, Printer, Tags } from 'lucide-react';
+import { ArrowLeft, ArrowUp, Printer, Star, Tags } from 'lucide-react';
 import CustomerStarIndicator from './CustomerStarIndicator';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
 import type { SalesReportData, SalesReportTransaction, UserProfile } from '../types';
@@ -297,6 +297,27 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
           <div className="mb-5">
             {displayReportHeading(reportType, dateFrom, dateTo)}
           </div>
+
+          <section
+            className="mb-5 flex flex-col gap-3 rounded-[5px] border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+            aria-label="Starred customer sales summary"
+            data-testid="starred-customer-sales-summary"
+          >
+            <div className="flex min-w-0 items-start gap-3">
+              <Star className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" fill="currentColor" aria-hidden="true" />
+              <div>
+                <h2 className="text-[12px] font-bold uppercase tracking-wide text-[#6b4d0b]">Starred Customers’ Posted Sales</h2>
+                <p className="mt-0.5 text-[11px] text-[#755c27]">
+                  {reportData?.error
+                    ? 'Starred sales are unavailable because the report could not be loaded.'
+                    : `Current star status · ${reportData?.summary.starredCustomerSales?.customerCount || 0} ${reportData?.summary.starredCustomerSales?.customerCount === 1 ? 'customer' : 'customers'} with posted sales in this report`}
+                </p>
+              </div>
+            </div>
+            <p className="shrink-0 text-xl font-bold tabular-nums text-[#49340a]" data-testid="starred-customer-sales-total">
+              {reportData?.error ? 'Unavailable' : money.format(reportData?.summary.starredCustomerSales?.total || 0)}
+            </p>
+          </section>
 
           {transactions.length === 0 ? (
             <div className="py-20 text-center text-[#777]">

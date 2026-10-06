@@ -71,6 +71,16 @@ describe('access module permissions', () => {
     expect(invoice?.supportedActions).toContain('can_edit_invoice_number');
   });
 
+  it('exposes Sales Development Report as an individually grantable view-only page', () => {
+    const report = ACCESS_MODULES
+      .flatMap((module) => module.pages)
+      .find((page) => page.id === 'sales-reports-sales-development-report');
+
+    expect(report?.label).toBe('Sales Development Report');
+    expect(report?.supportedActions).toEqual(['can_view']);
+    expect(hasPageAccess(['sales-reports-sales-development-report'], report!.id)).toBe(true);
+  });
+
   it('exposes See all records only on pages that hold per-staff records', () => {
     const pageById = (id: string) => ACCESS_MODULES.flatMap((module) => module.pages).find((page) => page.id === id);
 

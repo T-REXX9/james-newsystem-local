@@ -31,6 +31,7 @@ export interface OldNewCustomerRow {
   customerGroup: string;
   salesPerson: string;
   customerSince: string;
+  createdAt: string;
   customerType: 'old' | 'new';
 }
 
@@ -81,6 +82,7 @@ export const fetchOldNewCustomersReport = async (
         customerGroup: String(row?.customer_group || ''),
         salesPerson: String(row?.sales_person || ''),
         customerSince: String(row?.customer_since || ''),
+        createdAt: String(row?.created_at || ''),
         customerType: String(row?.customer_type || 'new') === 'old' ? 'old' : 'new',
       })),
       summary: {

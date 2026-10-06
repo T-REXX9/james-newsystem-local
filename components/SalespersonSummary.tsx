@@ -30,17 +30,17 @@ const SalespersonSummary: React.FC<SalespersonSummaryProps> = ({
       <div className="p-6 border-b border-slate-200/60 dark:border-slate-700/60">
         <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
           <Users className="w-5 h-5 text-brand-blue" />
-          Salesperson Performance Summary
+          Sales Agent Performance Summary
         </h2>
         <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-          Sales breakdown by salesperson and product category
+          Sales breakdown by sales agent and product category
         </p>
       </div>
 
       <div className="divide-y divide-slate-200/60 dark:divide-slate-700/60">
         {salespersonTotals.length === 0 ? (
           <div className="px-6 py-8 text-center text-slate-500 dark:text-slate-400">
-            No salesperson data available.
+            No sales agent data available.
           </div>
         ) : (
           salespersonTotals.map((sp) => {
@@ -140,7 +140,7 @@ const SalespersonSummary: React.FC<SalespersonSummaryProps> = ({
       {salespersonTotals.length > 0 && (
         <div className="px-6 py-4 bg-brand-blue/10 dark:bg-brand-blue/20 border-t border-slate-200/60 dark:border-slate-700/60">
           <div className="flex items-center justify-between">
-            <span className="font-bold text-brand-blue">Total Sales (All Salespersons)</span>
+            <span className="font-bold text-brand-blue">Total Sales (All Sales Agents)</span>
             <span className="font-bold text-brand-blue text-lg">{formatCurrency(grandTotal)}</span>
           </div>
         </div>

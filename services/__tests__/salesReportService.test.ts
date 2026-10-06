@@ -41,6 +41,16 @@ describe('salesReportService legacy period request', () => {
     expect(url.searchParams.get('date_to')).toBe('2026-09-30');
   });
 
+  it('marks an unavailable report instead of returning an indistinguishable zero summary', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network unavailable')));
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const report = await getSalesReportData({ dateFrom: '2026-10-01', dateTo: '2026-10-02', customerId: 'all' });
+
+    expect(report.error).toBe('Network unavailable');
+    expect(report.summary.starredCustomerSales).toEqual({ total: 0, customerCount: 0 });
+  });
+
   it('maps product sales totals returned by the Sales Report API', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
       ok: true,
@@ -50,6 +60,7 @@ describe('salesReportService legacy period request', () => {
           categoryTotals: [],
           salespersonTotals: [],
           grandTotal: { soAmount: 0, drAmount: 250, invoiceAmount: 0, total: 250 },
+          starredCustomerSales: { total: 125, customerCount: 2 },
           productTotals: [{ item_code: 'P-100', part_no: 'PART-100', brand: 'Top Brand', product: 'Top Product', total: 250 }],
         },
       },
@@ -64,6 +75,7 @@ describe('salesReportService legacy period request', () => {
       product: 'Top Product',
       total: 250,
     }]);
+    expect(report.summary.starredCustomerSales).toEqual({ total: 125, customerCount: 2 });
   });
 
   it('preserves stable staff IDs on salesperson summary rows', async () => {

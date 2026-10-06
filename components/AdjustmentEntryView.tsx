@@ -9,7 +9,7 @@ import {
 } from '../services/adjustmentEntryService';
 import { canBackdatePosting, canPerformAction } from '../utils/actionPermissions';
 import { canMutateDocumentDateField, localTodayYmd, validateDocumentDateWrite } from '../utils/backdatedPosting';
-import { formatDate } from '../utils/formatUtils';
+import { formatAccountingTimestamp, formatDate } from '../utils/formatUtils';
 import CustomerAutocomplete from './CustomerAutocomplete';
 
 import { shouldSuppressAuthError } from '../services/localApiAuth';
@@ -34,12 +34,13 @@ const formatLegacyDate = (value?: string): string => {
 
 interface AdjustmentEntryViewProps {
   initialAdjustmentNo?: string;
+  initialAdjustmentRefNo?: string;
 }
 
-const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjustmentNo }) => {
+const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjustmentNo, initialAdjustmentRefNo }) => {
   const today = new Date();
   const [rows, setRows] = useState<AdjustmentEntry[]>([]);
-  const [selectedRefno, setSelectedRefno] = useState('');
+  const [selectedRefno, setSelectedRefno] = useState(initialAdjustmentRefNo || '');
   const [selected, setSelected] = useState<AdjustmentEntry | null>(null);
 
   const [loadingList, setLoadingList] = useState(false);
@@ -91,6 +92,11 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
       setRows(data.items);
 
       if (isCreating) return;
+
+      if (initialAdjustmentRefNo) {
+        if (selectedRefno !== initialAdjustmentRefNo) setSelectedRefno(initialAdjustmentRefNo);
+        return;
+      }
 
       if (initialAdjustmentNo) {
         const foundByNo = data.items.find((row) => String(row.lno || '').toLowerCase() === initialAdjustmentNo.toLowerCase());
@@ -153,6 +159,10 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
   }, [statusFilter, typeFilter, month, year]);
 
   useEffect(() => {
+    if (initialAdjustmentRefNo) setSelectedRefno(initialAdjustmentRefNo);
+  }, [initialAdjustmentRefNo]);
+
+  useEffect(() => {
     if (!selectedRefno || isCreating) {
       if (!isCreating) {
         setSelected(null);
@@ -175,6 +185,7 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
   );
 
   const selectedCustomerOption = useMemo(() => {
+    if (!form.customerId) return null;
     const current = customerOptions.find((customer) => customer.id === form.customerId);
     if (current) return current;
     if (selected?.lcustomerid === form.customerId && form.customerId) {
@@ -365,6 +376,7 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
                 <thead className="sticky top-0 bg-white font-['Oswald'] text-[14px]">
                   <tr className="border-b-2 border-[#ddd]">
                     <th className="w-[12%] px-2 py-2">Date</th>
+                    <th className="w-[18%] px-2 py-2">Timestamp</th>
                     <th className="w-[35%] px-2 py-2">Customer</th>
                     <th className="w-[16%] px-2 py-2">Ref No.</th>
                     <th className="w-[18%] px-2 py-2">Type</th>
@@ -372,8 +384,8 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
                   </tr>
                 </thead>
                 <tbody>
-                  {loadingList && <tr><td colSpan={5} className="px-2 py-4 text-slate-500">Loading entries...</td></tr>}
-                  {!loadingList && rows.length === 0 && <tr><td colSpan={5} className="px-2 py-4 text-slate-500">No records found.</td></tr>}
+                  {loadingList && <tr><td colSpan={6} className="px-2 py-4 text-slate-500">Loading entries...</td></tr>}
+                  {!loadingList && rows.length === 0 && <tr><td colSpan={6} className="px-2 py-4 text-slate-500">No records found.</td></tr>}
                   {!loadingList && rows.map((row) => {
                     const active = selectedRefno === row.lrefno && !isCreating;
                     return (
@@ -383,6 +395,7 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
                         className={`cursor-pointer border-b border-[#ddd] ${active ? 'text-blue-600' : ''}`}
                       >
                         <td className="px-2 py-2">{formatLegacyDate(row.ldate)}</td>
+                        <td className="px-2 py-2 whitespace-nowrap">{formatAccountingTimestamp(row.created_at)}</td>
                         <td className="px-2 py-2">{row.lcustomername || '-'}</td>
                         <td className="px-2 py-2 underline">{row.lno || row.lrefno}</td>
                         <td className="px-2 py-2">{row.ltype}</td>
@@ -454,7 +467,7 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
                   {isCreating ? (
                     <>
                       {canAdd && <button type="button" onClick={handleCreate} disabled={saving} className="rounded-[4px] bg-[#5d82a2] px-4 py-2 text-white disabled:opacity-50">Add Record</button>}
-                      <button type="button" onClick={() => { setIsCreating(false); setSelectedRefno(rows[0]?.lrefno || ''); }} className="rounded-[4px] border border-[#ccc] bg-white px-4 py-2">Cancel</button>
+                      <button type="button" onClick={() => { setIsCreating(false); setSelectedRefno(''); setSelected(null); }} className="rounded-[4px] border border-[#ccc] bg-white px-4 py-2">Cancel</button>
                     </>
                   ) : selected?.lstatus === 'Pending' ? (
                     <>

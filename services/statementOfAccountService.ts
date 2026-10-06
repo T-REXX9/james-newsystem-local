@@ -18,6 +18,7 @@ export type SoaDetailedRow = {
   terms: string;
   date: string | null;
   datetime: string;
+  created_at: string;
   reference: string;
   amount: number;
   amount_paid: number;
@@ -141,6 +142,7 @@ export const statementOfAccountService = {
         terms: String(row?.terms || ''),
         date: row?.date || null,
         datetime: String(row?.datetime || ''),
+        created_at: String(row?.created_at || ''),
         reference: String(row?.reference || ''),
         amount: toNumber(row?.amount),
         amount_paid: toNumber(row?.amount_paid),

@@ -9,6 +9,7 @@ export interface SalesReturnRecord {
   lcredit_no: string;
   linvoice_no: string;
   ldate: string;
+  created_at: string;
   lstatus: string;
   ltype: string;
   customer_name: string;
@@ -23,6 +24,7 @@ export interface SalesReturnRecord {
 
 export interface SalesReturnItem {
   id: number;
+  created_at: string;
   item_code: string;
   part_no: string;
   brand: string;
@@ -126,6 +128,7 @@ const mapRecord = (row: any): SalesReturnRecord => ({
   lcredit_no: String(row?.lcredit_no || ''),
   linvoice_no: String(row?.linvoice_no || ''),
   ldate: String(row?.ldate || ''),
+  created_at: String(row?.created_at || ''),
   lstatus: String(row?.lstatus || 'Pending'),
   ltype: String(row?.ltype || ''),
   customer_name: String(row?.customer_name || 'Unknown Customer'),
@@ -140,6 +143,7 @@ const mapRecord = (row: any): SalesReturnRecord => ({
 
 const mapItem = (row: any): SalesReturnItem => ({
   id: toNumber(row?.id),
+  created_at: String(row?.created_at || ''),
   item_code: String(row?.item_code || ''),
   part_no: String(row?.part_no || ''),
   brand: String(row?.brand || ''),

@@ -14,6 +14,25 @@ const reloadStanding = (patch: Record<string, unknown>) =>
   }).status;
 
 describe('customer database price and discount codes', () => {
+  it('shows the current active sales agent name and never exposes an inactive agent ID as a name', () => {
+    const assigned = mapApiCustomerToContact({
+      session_id: 'cust-current-agent',
+      sales_person_id: '42',
+      sales_person_name: 'Current Agent',
+    });
+    const unassigned = mapApiCustomerToContact({
+      session_id: 'cust-inactive-agent',
+      sales_person_id: '42',
+      sales_person_name: '',
+    });
+
+    expect(assigned.salesman).toBe('Current Agent');
+    expect(assigned.assignedAgent).toBe('Current Agent');
+    expect(unassigned.salesman).toBe('');
+    expect(unassigned.assignedAgent).toBe('');
+    expect(unassigned.assignedAgentId).toBe('42');
+  });
+
   it('maps the shared customer star flag from the API', () => {
     expect(mapApiCustomerToContact({ session_id: 'starred-1', is_starred: 1 }).isStarred).toBe(true);
     expect(mapApiCustomerToContact({ session_id: 'starred-2', is_starred: 0 }).isStarred).toBe(false);

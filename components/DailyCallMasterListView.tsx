@@ -61,6 +61,7 @@ const compactPeso = new Intl.NumberFormat('en-PH', {
 });
 
 type CategoryId = 'priority' | 'recovery' | 'verified' | 'unverified' | 'blocked' | 'all';
+type UnverifiedListTab = 'customers' | 'submissions';
 
 interface CategoryDefinition {
   id: CategoryId;
@@ -327,6 +328,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const [pendingDoNotContactRow, setPendingDoNotContactRow] = useState<DailyCallMasterCustomerRow | null>(null);
   const [doNotContactReason, setDoNotContactReason] = useState('');
   const [activeCategoryId, setActiveCategoryId] = useState<CategoryId>('priority');
+  const [unverifiedListTab, setUnverifiedListTab] = useState<UnverifiedListTab>('customers');
   const [visibleLimit, setVisibleLimit] = useState(INITIAL_VISIBLE_ROWS);
   const [currentVipFilter, setCurrentVipFilter] = useState('all');
   const [nextVipFilter, setNextVipFilter] = useState('all');
@@ -693,8 +695,9 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
 
   const activeCategory = categoryData.find((category) => category.id === activeCategoryId) || categoryData[0];
   const actionableCategoryRows = activeCategory.rows.filter((row) => !row.dataIntegrityException);
-  const visibleRows = activeCategory.rows.slice(0, visibleLimit);
-  const hasMoreRows = visibleRows.length < activeCategory.rows.length;
+  const showingUnverifiedSubmissions = activeCategory.id === 'unverified' && unverifiedListTab === 'submissions';
+  const visibleRows = showingUnverifiedSubmissions ? [] : activeCategory.rows.slice(0, visibleLimit);
+  const hasMoreRows = !showingUnverifiedSubmissions && visibleRows.length < activeCategory.rows.length;
   const showMasterActions = canUseMasterDailyCallActions(currentUser);
   // Daily Call actions follow the explicit Customer Database edit grant. Keep
   // the legacy master-user access, but do not treat missing action metadata as
@@ -1000,7 +1003,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
               </h3>
               <div className="flex items-center gap-3">
                 <span className="flex items-center gap-2 text-sm"><i className={`h-3 w-3 rounded-full ${activeCategory.dot}`} />{activeCategory.state}</span>
-                {showMasterActions && (
+                {showMasterActions && !showingUnverifiedSubmissions && (
                   <div className="flex items-center gap-2">
                     <select
                       aria-label={`Assign sales agent to ${activeCategory.label}`}
@@ -1058,6 +1061,26 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 />
               </label>
             </div>
+            {activeCategory.id === 'unverified' && (
+              <div className="flex flex-wrap gap-2 border-b border-slate-200 bg-white px-4 py-3" role="group" aria-label="Unverified prospective list views">
+                <button
+                  type="button"
+                  aria-pressed={unverifiedListTab === 'customers'}
+                  onClick={() => { setUnverifiedListTab('customers'); setVisibleLimit(INITIAL_VISIBLE_ROWS); }}
+                  className={`rounded-lg border px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${unverifiedListTab === 'customers' ? 'border-orange-300 bg-orange-50 text-orange-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                >
+                  Unverified customers <span className="ml-1 rounded-full bg-white/80 px-2 py-0.5 text-xs">{activeCategory.rows.length}</span>
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={unverifiedListTab === 'submissions'}
+                  onClick={() => setUnverifiedListTab('submissions')}
+                  className={`rounded-lg border px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${unverifiedListTab === 'submissions' ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                >
+                  Duplicate submissions <span className="ml-1 rounded-full bg-white/80 px-2 py-0.5 text-xs">{pendingDuplicateProspects.length}</span>
+                </button>
+              </div>
+            )}
             <div
               className="min-h-0 flex-1"
               data-testid="daily-call-table-scroll"
@@ -1090,7 +1113,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                   </tr>
                 </thead>
                 <tbody>
-                  {activeCategory.id === 'unverified' && pendingDuplicateProspects.length > 0 && pendingDuplicateProspects.map((pending) => (
+                  {showingUnverifiedSubmissions && pendingDuplicateProspects.length > 0 && pendingDuplicateProspects.map((pending) => (
                     <React.Fragment key={`pending-dup-${pending.requestId}`}>
                       <tr className="border-t border-amber-200 bg-amber-50 align-top">
                         <td className="px-3 py-2.5 text-sm font-bold text-amber-700">—</td>
@@ -1168,7 +1191,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                       </tr>
                     </React.Fragment>
                   ))}
-                  {visibleRows.map((row, index) => {
+                  {!showingUnverifiedSubmissions && visibleRows.map((row, index) => {
                     const rowBlocked = isBlockedDailyCallMasterRow(row);
                     const viewOnlyRow = activeCategory.id === 'blocked' || rowBlocked || Boolean(row.dataIntegrityException);
                     const highlight = purchaseHighlight(row);
@@ -1373,8 +1396,12 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                       </tr>
                     );
                   })}
-                  {activeCategory.rows.length === 0 && (
-                    <tr><td colSpan={11} className="px-3 py-12 text-center text-xs text-slate-400">No customers in this category.</td></tr>
+                  {((showingUnverifiedSubmissions && pendingDuplicateProspects.length === 0)
+                    || (activeCategory.id === 'unverified' && !showingUnverifiedSubmissions && activeCategory.rows.length === 0)
+                    || (activeCategory.id !== 'unverified' && activeCategory.rows.length === 0)) && (
+                    <tr><td colSpan={11} className="px-3 py-12 text-center text-xs text-slate-400">
+                      {showingUnverifiedSubmissions ? 'No duplicate prospect submissions from sales agents awaiting review.' : 'No customers in this category.'}
+                    </td></tr>
                   )}
                 </tbody>
               </table>

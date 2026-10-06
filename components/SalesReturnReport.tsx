@@ -6,6 +6,7 @@ import {
   SalesReturnReportFilters,
   SalesReturnReportRow,
 } from '../services/salesReturnReportService';
+import { formatAccountingTimestamp } from '../utils/formatUtils';
 
 import { shouldSuppressAuthError } from '../services/localApiAuth';
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
@@ -19,6 +20,33 @@ interface SalesReturnReportProps {
   initialStatus?: string;
 }
 
+type DatePreset = 'today' | 'week' | 'month' | 'year' | 'all' | 'custom';
+
+const toLocalDateValue = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getDateRange = (preset: Exclude<DatePreset, 'custom'>) => {
+  const today = new Date();
+  const dateTo = toLocalDateValue(today);
+  if (preset === 'all') return { dateFrom: '', dateTo: '' };
+
+  const dateFrom = new Date(today);
+  if (preset === 'week') {
+    const daysSinceMonday = (today.getDay() + 6) % 7;
+    dateFrom.setDate(today.getDate() - daysSinceMonday);
+  } else if (preset === 'month') {
+    dateFrom.setDate(1);
+  } else if (preset === 'year') {
+    dateFrom.setMonth(0, 1);
+  }
+
+  return { dateFrom: toLocalDateValue(dateFrom), dateTo };
+};
+
 const SalesReturnReport: React.FC<SalesReturnReportProps> = ({
   initialSearch = '',
   initialDateFrom = '',
@@ -27,8 +55,9 @@ const SalesReturnReport: React.FC<SalesReturnReportProps> = ({
   initialItemCode = '',
   initialStatus = '',
 }) => {
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const today = useMemo(() => toLocalDateValue(new Date()), []);
   const [loading, setLoading] = useState(false);
+  const [hasLoadedReport, setHasLoadedReport] = useState(false);
   const [error, setError] = useState('');
   const [searchInput, setSearchInput] = useState(initialSearch);
   const [statuses, setStatuses] = useState<string[]>([]);
@@ -46,6 +75,7 @@ const SalesReturnReport: React.FC<SalesReturnReportProps> = ({
     page: 1,
     perPage: 100,
   });
+  const [datePreset, setDatePreset] = useState<DatePreset>(initialDateFrom || initialDateTo ? 'custom' : 'today');
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -84,11 +114,12 @@ const SalesReturnReport: React.FC<SalesReturnReportProps> = ({
   }, [filters]);
 
   useEffect(() => {
-    loadReport();
-  }, [loadReport]);
+    if (hasLoadedReport) loadReport();
+  }, [hasLoadedReport, loadReport]);
 
   const handleClear = () => {
     setSearchInput('');
+    setDatePreset('today');
     setFilters({
       dateFrom: today,
       dateTo: today,
@@ -101,9 +132,14 @@ const SalesReturnReport: React.FC<SalesReturnReportProps> = ({
     });
   };
 
+  const applyDatePreset = (preset: Exclude<DatePreset, 'custom'>) => {
+    setDatePreset(preset);
+    setFilters((prev) => ({ ...prev, ...getDateRange(preset), page: 1 }));
+  };
+
   const handleExport = () => {
     if (rows.length === 0) return;
-    const headers = ['Return No', 'Date', 'Transaction No', 'Customer', 'Status', 'Item Code', 'Part No', 'Brand', 'Price', 'Qty', 'Total'];
+    const headers = ['Return No', 'Date', 'Timestamp', 'Transaction No', 'Customer', 'Status', 'Item Code', 'Part No', 'Brand', 'Price', 'Qty', 'Total'];
     const esc = (value: string | number) => {
       const str = String(value ?? '');
       if (str.includes(',') || str.includes('"') || str.includes('\n')) {
@@ -117,6 +153,7 @@ const SalesReturnReport: React.FC<SalesReturnReportProps> = ({
         [
           r.returnNo,
           r.returnDate,
+          formatAccountingTimestamp(r.createdAt),
           r.transactionNo,
           r.customer,
           r.status,
@@ -165,18 +202,59 @@ const SalesReturnReport: React.FC<SalesReturnReportProps> = ({
       </div>
 
       <div className="mb-4 grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-6 dark:border-slate-800 dark:bg-slate-900">
-        <input
-          type="date"
-          value={filters.dateFrom || ''}
-          onChange={(e) => setFilters((prev) => ({ ...prev, dateFrom: e.target.value, page: 1 }))}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
-        />
-        <input
-          type="date"
-          value={filters.dateTo || ''}
-          onChange={(e) => setFilters((prev) => ({ ...prev, dateTo: e.target.value, page: 1 }))}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
-        />
+        <div className="md:col-span-6">
+          <span className="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-200">Date range</span>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Quick date ranges">
+            {([
+              ['today', 'Today'],
+              ['week', 'This week'],
+              ['month', 'This month'],
+              ['year', 'This year'],
+              ['all', 'All dates'],
+            ] as const).map(([preset, label]) => (
+              <button
+                key={preset}
+                type="button"
+                aria-pressed={datePreset === preset}
+                onClick={() => applyDatePreset(preset)}
+                className={`rounded-lg border px-3 py-2 text-sm font-semibold transition-colors active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-2 ${datePreset === preset
+                  ? 'border-brand-blue bg-brand-blue text-white'
+                  : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700'}`}
+              >
+                {label}
+              </button>
+            ))}
+            <span className={`self-center px-2 text-sm font-medium ${datePreset === 'custom' ? 'text-brand-blue' : 'text-slate-500 dark:text-slate-400'}`} aria-current={datePreset === 'custom' ? 'true' : undefined}>
+              Custom range
+            </span>
+          </div>
+        </div>
+        <label className="text-sm font-medium text-slate-600 dark:text-slate-300">
+          From
+          <input
+            type="date"
+            aria-label="Date from"
+            value={filters.dateFrom || ''}
+            onChange={(e) => {
+              setDatePreset('custom');
+              setFilters((prev) => ({ ...prev, dateFrom: e.target.value, page: 1 }));
+            }}
+            className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+          />
+        </label>
+        <label className="text-sm font-medium text-slate-600 dark:text-slate-300">
+          To
+          <input
+            type="date"
+            aria-label="Date to"
+            value={filters.dateTo || ''}
+            onChange={(e) => {
+              setDatePreset('custom');
+              setFilters((prev) => ({ ...prev, dateTo: e.target.value, page: 1 }));
+            }}
+            className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+          />
+        </label>
         <select
           value={filters.status || ''}
           onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value, page: 1 }))}
@@ -204,7 +282,10 @@ const SalesReturnReport: React.FC<SalesReturnReportProps> = ({
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={loadReport}
+            onClick={() => {
+              if (hasLoadedReport) loadReport();
+              else setHasLoadedReport(true);
+            }}
             className="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-3 py-2 text-sm font-semibold text-white dark:bg-slate-700"
           >
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
@@ -246,6 +327,7 @@ const SalesReturnReport: React.FC<SalesReturnReportProps> = ({
             <tr>
               <th className="px-3 py-2 text-left">Return No</th>
               <th className="px-3 py-2 text-left">Date</th>
+              <th className="px-3 py-2 text-left">Timestamp</th>
               <th className="px-3 py-2 text-left">Transaction No</th>
               <th className="px-3 py-2 text-left">Customer</th>
               <th className="px-3 py-2 text-left">Status</th>
@@ -260,7 +342,7 @@ const SalesReturnReport: React.FC<SalesReturnReportProps> = ({
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={11} className="px-3 py-8 text-center text-slate-500">
+                <td colSpan={12} className="px-3 py-8 text-center text-slate-500">
                   <span className="inline-flex items-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin" /> Loading report...
                   </span>
@@ -268,7 +350,7 @@ const SalesReturnReport: React.FC<SalesReturnReportProps> = ({
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={11} className="px-3 py-8 text-center text-slate-500">
+                <td colSpan={12} className="px-3 py-8 text-center text-slate-500">
                   No sales returns found for selected filters.
                 </td>
               </tr>
@@ -277,6 +359,7 @@ const SalesReturnReport: React.FC<SalesReturnReportProps> = ({
                 <tr key={`${row.id}-${row.itemCode}-${row.partNo}`} className="border-t border-slate-100 dark:border-slate-800">
                   <td className="px-3 py-2 font-medium text-slate-900 dark:text-slate-100">{row.returnNo || '-'}</td>
                   <td className="px-3 py-2">{row.returnDate || '-'}</td>
+                  <td className="whitespace-nowrap px-3 py-2">{formatAccountingTimestamp(row.createdAt)}</td>
                   <td className="px-3 py-2">{row.transactionNo || '-'}</td>
                   <td className="px-3 py-2">{row.customer || '-'}</td>
                   <td className="px-3 py-2">{row.status || '-'}</td>

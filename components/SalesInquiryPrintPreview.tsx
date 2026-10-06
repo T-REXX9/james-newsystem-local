@@ -390,7 +390,7 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
                     <VipStandingBadge tier={inquiry.vip_tier} print />
                   </span>
                 </td>
-                <td className="sales-inquiry-label">Sales Person:</td>
+                <td className="sales-inquiry-label">Sales Agent:</td>
                 <td><b>{inquiry.sales_person || '-'}</b></td>
               </tr>
               <tr>

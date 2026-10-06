@@ -17,7 +17,7 @@ import {
 } from '../services/customerLedgerService';
 import ModuleRecordLink from './ModuleRecordLink';
 import CustomerStarIndicator from './CustomerStarIndicator';
-import { formatCustomerSince, formatDate as formatDisplayDate, formatDateTime } from '../utils/formatUtils';
+import { formatAccountingTime, formatCustomerSince, formatDate as formatDisplayDate, formatDateTime } from '../utils/formatUtils';
 
 import { shouldSuppressAuthError } from '../services/localApiAuth';
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
@@ -41,26 +41,68 @@ const dateTypeOptions: Array<{ value: LedgerDateType; label: string }> = [
 ];
 
 type LedgerDocumentLink = {
-  tab: 'sales-transaction-invoice' | 'sales-transaction-order-slip';
+  tab: string;
   payload: Record<string, string>;
+  label: string;
+  displayReference: string;
 };
 
 const getLedgerDocumentLink = (row: CustomerLedgerResponse['rows'][number]): LedgerDocumentLink | null => {
   const reference = String(row.ref_no || '').trim();
-  const displayReference = String(row.reference || '').trim();
+  const normalizedType = row.ref_type.trim().toLowerCase().replace(/_/g, ' ');
+  const displayReference = String(
+    normalizedType === 'dcr'
+      ? row.dcr || row.reference || row.ref_no
+      : row.reference || row.ref_no,
+  ).trim();
   if (!reference || !displayReference || displayReference.toUpperCase() === 'OPENING BALANCE') return null;
 
-  const normalizedType = row.ref_type.trim().toLowerCase().replace(/_/g, ' ');
   if (normalizedType === 'invoice' || normalizedType === 'sales invoice') {
     return {
       tab: 'sales-transaction-invoice',
       payload: { invoiceId: reference, invoiceRefNo: displayReference },
+      label: 'Invoice',
+      displayReference,
     };
   }
   if (normalizedType === 'order slip' || normalizedType === 'orderslip') {
     return {
       tab: 'sales-transaction-order-slip',
       payload: { orderSlipId: reference, orderSlipRefNo: displayReference },
+      label: 'Order Slip',
+      displayReference,
+    };
+  }
+  if (normalizedType === 'dcr' || normalizedType === 'payment' || normalizedType === 'collection') {
+    return {
+      tab: 'accounting-transactions-daily-collection-entry',
+      payload: { collectionRefNo: reference },
+      label: 'Collection',
+      displayReference,
+    };
+  }
+  if (normalizedType === 'adjustment') {
+    return {
+      tab: 'accounting-transactions-adjustment-entry',
+      payload: { adjustmentRefNo: reference },
+      label: 'Adjustment',
+      displayReference,
+    };
+  }
+  if (normalizedType === 'freight charges' || normalizedType === 'debit memo') {
+    return {
+      tab: 'accounting-transactions-freight-charges-debit',
+      payload: { freightRefNo: reference },
+      label: 'Freight Charge',
+      displayReference,
+    };
+  }
+  if (normalizedType === 'credit memo' || normalizedType === 'sales return') {
+    return {
+      tab: 'accounting-transactions-sales-return-credit',
+      payload: { salesReturnRefNo: reference },
+      label: 'Sales Return',
+      displayReference,
     };
   }
   return null;
@@ -79,28 +121,28 @@ const CustomerSearchPanel: React.FC<{
   onCustomerSelect: (sessionId: string) => void;
 }> = ({ customers, loading, search, onSearchChange, selectedCustomerId, onCustomerSelect }) => (
   <div className="flex h-full flex-col border-r border-[#ddd] bg-white">
-    <div className="border-b border-[#ddd] px-4 py-3">
-      <h3 className="text-sm font-semibold uppercase text-[#555]">Customer Search</h3>
+    <div className="border-b border-[#ddd] px-5 py-4">
+      <h3 className="text-base font-semibold uppercase text-[#444]">Customer Search</h3>
       <input
         type="text"
         value={search}
         onChange={(e) => onSearchChange(e.target.value)}
         placeholder="Search customer..."
-        className="mt-2 w-full rounded border border-[#ccc] px-3 py-2 text-sm"
+        className="mt-2 w-full rounded border border-[#ccc] px-3 py-2.5 text-base"
         aria-label="Search customers"
       />
     </div>
     <div className="flex-1 overflow-y-auto" data-testid="customer-list-scroll">
       {loading ? (
-        <div className="px-4 py-6 text-center text-sm text-[#999]">Loading customers...</div>
+        <div className="px-4 py-6 text-center text-base text-[#777]">Loading customers...</div>
       ) : customers.length === 0 ? (
-        <div className="px-4 py-6 text-center text-sm text-[#999]">
+        <div className="px-4 py-6 text-center text-base text-[#777]">
           {search.trim() ? 'No customers found' : 'No customers available'}
         </div>
       ) : (
         <ul role="listbox" aria-label="Customer list">
           {customers.map((customer) => {
-            const isSelected = customer.sessionId === selectedCustomerId;
+            const isSelected = Boolean(selectedCustomerId) && customer.sessionId === selectedCustomerId;
             return (
               <li key={customer.sessionId}>
                 <button
@@ -108,7 +150,7 @@ const CustomerSearchPanel: React.FC<{
                   role="option"
                   aria-selected={isSelected}
                   onClick={() => onCustomerSelect(customer.sessionId)}
-                  className={`w-full px-4 py-2.5 text-left text-sm transition-colors ${
+                  className={`w-full px-5 py-3.5 text-left text-base transition-colors ${
                     isSelected
                       ? 'bg-[#337ab7] text-white'
                       : 'text-[#333] hover:bg-[#e8f0fe]'
@@ -118,13 +160,13 @@ const CustomerSearchPanel: React.FC<{
                     {customer.company.trim() || customer.customerCode.trim() || 'Unnamed customer'}<CustomerStarIndicator customerId={customer.sessionId} className="ml-1 inline h-3.5 w-3.5" />
                   </div>
                   {customer.oldName && (
-                    <div className={`truncate text-xs ${isSelected ? 'text-[#dbeafe]' : 'text-[#666]'}`}>
+                    <div className={`truncate text-sm ${isSelected ? 'text-[#dbeafe]' : 'text-[#666]'}`}>
                       Old Name: {customer.oldName}
                     </div>
                   )}
                   {customer.customerCode && (
                     <div
-                      className={`text-xs truncate ${
+                      className={`text-sm truncate ${
                         isSelected ? 'text-[#cce5ff]' : 'text-[#999]'
                       }`}
                     >
@@ -166,7 +208,7 @@ const ReportControls: React.FC<{
   onDateToChange,
   loading,
 }) => (
-  <div className="flex flex-wrap items-center gap-3 text-sm">
+  <div className="flex flex-wrap items-center gap-3 text-base">
     <label className="flex items-center gap-1.5">
       <input
         type="radio"
@@ -185,11 +227,11 @@ const ReportControls: React.FC<{
       />
       Summary
     </label>
-    <span className="ml-2 text-xs text-[#999]">|</span>
+    <span className="ml-2 text-sm text-[#777]">|</span>
     <select
       value={dateType}
       onChange={(e) => onDateTypeChange(e.target.value as LedgerDateType)}
-      className="rounded border border-[#ccc] bg-white px-2 py-1.5 text-sm"
+      className="rounded border border-[#ccc] bg-white px-3 py-2 text-base"
       disabled={loading}
     >
       {dateTypeOptions.map((opt) => (
@@ -204,22 +246,22 @@ const ReportControls: React.FC<{
           type="date"
           value={dateFrom}
           onChange={(e) => onDateFromChange(e.target.value)}
-          className="rounded border border-[#ccc] px-2 py-1.5 text-sm"
+          className="rounded border border-[#ccc] px-3 py-2 text-base"
           disabled={loading}
           aria-label="Date from"
         />
-        <span className="text-xs text-[#999]">to</span>
+        <span className="text-sm text-[#777]">to</span>
         <input
           type="date"
           value={dateTo}
           onChange={(e) => onDateToChange(e.target.value)}
-          className="rounded border border-[#ccc] px-2 py-1.5 text-sm"
+          className="rounded border border-[#ccc] px-3 py-2 text-base"
           disabled={loading}
           aria-label="Date to"
         />
       </>
     )}
-    {loading && <span className="ml-1 animate-pulse text-xs text-[#999]">Loading...</span>}
+    {loading && <span className="ml-1 animate-pulse text-sm text-[#777]">Loading...</span>}
   </div>
 );
 
@@ -228,20 +270,21 @@ const ReportControls: React.FC<{
 /* -------------------------------------------------------------------------- */
 
 const DetailedTable: React.FC<{ data: CustomerLedgerResponse }> = ({ data }) => (
-  <table className="min-w-full text-xs">
-    <thead className="bg-[#f5f5f5] text-[#555]">
+  <table className="min-w-full text-sm 2xl:text-base">
+    <thead className="bg-[#f5f5f5] text-[#444]">
       <tr>
-        <th className="whitespace-nowrap px-2 py-2 text-left">Date</th>
-        <th className="whitespace-nowrap px-2 py-2 text-left">Ref</th>
-        <th className="whitespace-nowrap px-2 py-2 text-left">Chk No.</th>
-        <th className="whitespace-nowrap px-2 py-2 text-left">Chk Date</th>
-        <th className="whitespace-nowrap px-2 py-2 text-left">DCR</th>
-        <th className="whitespace-nowrap px-2 py-2 text-right">Debit</th>
-        <th className="whitespace-nowrap px-2 py-2 text-right">Credit</th>
-        <th className="whitespace-nowrap px-2 py-2 text-right">PDC</th>
-        <th className="whitespace-nowrap px-2 py-2 text-right">Balance</th>
-        <th className="whitespace-nowrap px-2 py-2 text-left">Remarks</th>
-        <th className="whitespace-nowrap px-2 py-2 text-left">Promise to Pay</th>
+        <th className="sticky top-0 z-10 whitespace-nowrap bg-[#f5f5f5] px-2 py-2 text-left">Date</th>
+        <th className="sticky top-0 z-10 whitespace-nowrap bg-[#f5f5f5] px-2 py-2 text-left">Timestamp</th>
+        <th className="sticky top-0 z-10 whitespace-nowrap bg-[#f5f5f5] px-2 py-2 text-left">Ref</th>
+        <th className="sticky top-0 z-10 whitespace-nowrap bg-[#f5f5f5] px-2 py-2 text-left">Chk No.</th>
+        <th className="sticky top-0 z-10 whitespace-nowrap bg-[#f5f5f5] px-2 py-2 text-left">Chk Date</th>
+        <th className="sticky top-0 z-10 whitespace-nowrap bg-[#f5f5f5] px-2 py-2 text-left">DCR</th>
+        <th className="sticky top-0 z-10 whitespace-nowrap bg-[#f5f5f5] px-2 py-2 text-right">Debit</th>
+        <th className="sticky top-0 z-10 whitespace-nowrap bg-[#f5f5f5] px-2 py-2 text-right">Credit</th>
+        <th className="sticky top-0 z-10 whitespace-nowrap bg-[#f5f5f5] px-2 py-2 text-right">PDC</th>
+        <th className="sticky top-0 z-10 whitespace-nowrap bg-[#f5f5f5] px-2 py-2 text-right">Balance</th>
+        <th className="sticky top-0 z-10 whitespace-nowrap bg-[#f5f5f5] px-2 py-2 text-left">Remarks</th>
+        <th className="sticky top-0 z-10 whitespace-nowrap bg-[#f5f5f5] px-2 py-2 text-left">Promise to Pay</th>
       </tr>
     </thead>
     <tbody>
@@ -257,21 +300,19 @@ const DetailedTable: React.FC<{ data: CustomerLedgerResponse }> = ({ data }) => 
           <td className="whitespace-nowrap px-2 py-1.5">
             {row.reference === 'OPENING BALANCE' ? '' : formatDate(row.date)}
           </td>
+          <td className="whitespace-nowrap px-2 py-1.5">{row.reference === 'OPENING BALANCE' ? '' : formatAccountingTime(row.created_at)}</td>
           <td className="whitespace-nowrap px-2 py-1.5">
             {(() => {
               const documentLink = getLedgerDocumentLink(row);
-              if (!documentLink) return row.reference || '-';
-              const documentLabel = documentLink.tab === 'sales-transaction-order-slip'
-                ? 'Order Slip'
-                : 'Invoice';
+              if (!documentLink) return row.reference || row.ref_no || '-';
               return (
                 <ModuleRecordLink
                   tab={documentLink.tab}
                   payload={documentLink.payload}
-                  className="text-brand-blue underline decoration-dotted underline-offset-2 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
-                  aria-label={`Open ${documentLabel} ${row.reference}`}
+                  className="rounded-sm font-semibold text-brand-blue underline decoration-dotted underline-offset-2 hover:text-blue-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/50"
+                  aria-label={`Open ${documentLink.label} ${documentLink.displayReference}`}
                 >
-                  {row.reference || '-'}
+                  {documentLink.displayReference}
                 </ModuleRecordLink>
               );
             })()}
@@ -314,14 +355,14 @@ const DetailedTable: React.FC<{ data: CustomerLedgerResponse }> = ({ data }) => 
 /* -------------------------------------------------------------------------- */
 
 const SummaryTable: React.FC<{ data: CustomerLedgerResponse }> = ({ data }) => (
-  <table className="min-w-full text-xs">
-    <thead className="bg-[#f5f5f5] text-[#555]">
+  <table className="min-w-full text-sm 2xl:text-base">
+    <thead className="bg-[#f5f5f5] text-[#444]">
       <tr>
-        <th className="whitespace-nowrap px-2 py-2 text-left">Year</th>
-        <th className="whitespace-nowrap px-2 py-2 text-left">Month</th>
-        <th className="whitespace-nowrap px-2 py-2 text-right">Debit</th>
-        <th className="whitespace-nowrap px-2 py-2 text-right">Credit</th>
-        <th className="whitespace-nowrap px-2 py-2 text-right">Balance</th>
+        <th className="sticky top-0 z-10 whitespace-nowrap bg-[#f5f5f5] px-2 py-2 text-left">Year</th>
+        <th className="sticky top-0 z-10 whitespace-nowrap bg-[#f5f5f5] px-2 py-2 text-left">Month</th>
+        <th className="sticky top-0 z-10 whitespace-nowrap bg-[#f5f5f5] px-2 py-2 text-right">Debit</th>
+        <th className="sticky top-0 z-10 whitespace-nowrap bg-[#f5f5f5] px-2 py-2 text-right">Credit</th>
+        <th className="sticky top-0 z-10 whitespace-nowrap bg-[#f5f5f5] px-2 py-2 text-right">Balance</th>
       </tr>
     </thead>
     <tbody>
@@ -378,7 +419,7 @@ const AgingBuckets: React.FC<{ aging: CustomerLedgerResponse['metrics']['aging']
 
   return (
     <div className="rounded border border-[#ddd] bg-white">
-      <table className="min-w-full text-xs">
+      <table className="min-w-full text-sm 2xl:text-base">
         <thead className="bg-[#f5f5f5] text-[#555]">
           <tr>
             {buckets.map((b) => (
@@ -410,10 +451,10 @@ const LedgerMetricCard: React.FC<{
   color: string;
   icon: React.ReactNode;
 }> = ({ label, value, color, icon }) => (
-  <div className="flex min-h-28 min-w-36 flex-col items-center justify-center border-r border-[#ddd] px-3 py-4 text-center last:border-r-0">
+  <div className="flex min-h-32 min-w-36 flex-col items-center justify-center border-r border-[#ddd] px-4 py-4 text-center last:border-r-0">
     <div className={color}>{icon}</div>
-    <div className="mt-2 text-xs font-medium text-[#333]">{label}</div>
-    <div className={`mt-1 text-base font-bold ${color}`}>{value}</div>
+    <div className="mt-2 text-sm font-medium text-[#333]">{label}</div>
+    <div className={`mt-1 text-lg font-bold ${color}`}>{value}</div>
   </div>
 );
 
@@ -464,7 +505,7 @@ const LedgerReport: React.FC<{
   };
 
   return (
-    <div className="h-full overflow-y-auto" data-testid="ledger-report-scroll">
+    <div className="h-full overflow-auto" data-testid="ledger-report-scroll">
       {error && (
         <div className="mb-4 rounded border border-[#ebccd1] bg-[#f2dede] px-4 py-3 text-sm text-[#a94442]">
           <b>Oops!</b> {error}
@@ -472,8 +513,8 @@ const LedgerReport: React.FC<{
       )}
 
       {/* Old-system report title and actions */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[#ddd] pb-3">
-        <h2 className="font-serif text-lg font-bold uppercase">Customer Ledger (Accounting Copy)</h2>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-[#ddd] pb-4">
+        <h2 className="text-xl font-bold uppercase tracking-tight text-[#263f52] 2xl:text-2xl">Customer Ledger (Accounting Copy)</h2>
         <div className="flex items-center gap-2">
           <button
             onClick={handleExportExcel}
@@ -501,15 +542,15 @@ const LedgerReport: React.FC<{
       {/* Report header */}
       <div className="border-b border-[#ddd] pb-4">
         <div className="text-center">
-          <h3 className="font-serif text-xl font-bold">
+          <h3 className="text-2xl font-bold tracking-tight text-[#263f52] 2xl:text-3xl">
             Customer Ledger: {selectedCustomer.company}<CustomerStarIndicator customerId={selectedCustomer.sessionId} className="ml-1 inline h-4 w-4" />
             {ledgerData?.metrics.old_name && (
-              <span className="ml-2 text-sm font-normal text-[#555]">
+              <span className="ml-2 text-base font-normal text-[#555]">
                 ( Old Name: <span>{ledgerData.metrics.old_name}</span> )
               </span>
             )}
           </h3>
-          <p className="text-xs text-[#555]">System generated: {formatDateTime(new Date())}</p>
+          <p className="text-sm text-[#555]">System generated: {formatDateTime(new Date())}</p>
         </div>
         <div className="mt-3 flex flex-wrap justify-end gap-3">
           <ReportControls
@@ -579,7 +620,7 @@ const LedgerReport: React.FC<{
           </div>
 
           {/* Table */}
-          <div className="mb-4 overflow-auto border border-[#ddd]">
+          <div className="mb-4 border border-[#ddd]">
             {reportType === 'summary' ? (
               <SummaryTable data={ledgerData} />
             ) : (
@@ -589,7 +630,7 @@ const LedgerReport: React.FC<{
 
           {/* Aging buckets appear below the ledger, as in James's reference. */}
           <div className="mb-4 overflow-x-auto">
-            <h4 className="mb-2 text-xs font-bold uppercase text-[#555]">Aging Balances</h4>
+            <h4 className="mb-2 text-sm font-bold uppercase text-[#444]">Aging Balances</h4>
             <AgingBuckets aging={ledgerData.metrics.aging} />
           </div>
         </>
@@ -658,7 +699,7 @@ const CustomerLedgerView: React.FC = () => {
   }, [debouncedSearch]);
 
   const selectedCustomer = useMemo(
-    () => customers.find((row) => row.sessionId === selectedCustomerId) || null,
+    () => selectedCustomerId ? customers.find((row) => row.sessionId === selectedCustomerId) || null : null,
     [customers, selectedCustomerId],
   );
 
@@ -722,9 +763,9 @@ const CustomerLedgerView: React.FC = () => {
   };
 
   return (
-    <div className="flex h-full min-h-0 bg-[#f4f4f4] text-[#333]">
+    <div className="flex h-full min-h-0 w-full bg-[#f4f4f4] font-sans text-[15px] leading-relaxed text-[#333] 2xl:text-base">
       {/* Left panel: permanent customer search */}
-      <div className="w-[300px] flex-shrink-0">
+      <div className="w-72 flex-shrink-0 xl:w-80 2xl:w-[360px]">
         <CustomerSearchPanel
           customers={customers}
           loading={loadingCustomers}
@@ -736,9 +777,9 @@ const CustomerLedgerView: React.FC = () => {
       </div>
 
       {/* Right panel: ledger report */}
-      <div className="flex flex-1 flex-col min-w-0 p-5">
-        <h1 className="mb-3 text-xl font-bold text-[#333]">Customer Ledger</h1>
-        <div className="flex-1 rounded border border-[#d5d5d5] bg-white p-5 shadow-sm">
+      <div className="flex min-w-0 flex-1 flex-col p-5 xl:p-6 2xl:p-8">
+        <h1 className="mb-4 text-2xl font-bold tracking-tight text-[#263f52] 2xl:text-3xl">Customer Ledger</h1>
+        <div className="min-h-0 flex-1 rounded-lg border border-[#d5d5d5] bg-white p-5 shadow-sm xl:p-6 2xl:p-8">
           <LedgerReport
             ledgerData={ledgerData}
             selectedCustomer={selectedCustomer}

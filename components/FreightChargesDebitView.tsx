@@ -12,7 +12,7 @@ import { useDebounce } from '../hooks/useDebounce';
 import { canBackdatePosting, canPerformAction } from '../utils/actionPermissions';
 import { canMutateDocumentDateField, localTodayYmd, validateDocumentDateWrite } from '../utils/backdatedPosting';
 import CustomerAutocomplete from './CustomerAutocomplete';
-import { formatDate } from '../utils/formatUtils';
+import { formatAccountingTimestamp, formatDate } from '../utils/formatUtils';
 
 import { shouldSuppressAuthError } from '../services/localApiAuth';
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
@@ -79,7 +79,7 @@ const SourceDocumentAutocomplete: React.FC<{
   }, [debouncedQuery, documents]);
 
   useEffect(() => {
-    setSelectedIndex(results.length > 0 ? 0 : -1);
+    setSelectedIndex(-1);
   }, [results]);
 
   const handleSelect = (doc: SourceDocument) => {
@@ -177,10 +177,10 @@ const SourceDocumentAutocomplete: React.FC<{
   );
 };
 
-const FreightChargesDebitView: React.FC = () => {
+const FreightChargesDebitView: React.FC<{ initialFreightRefNo?: string; initialCreate?: boolean }> = ({ initialFreightRefNo, initialCreate = false }) => {
   const today = new Date();
   const [rows, setRows] = useState<FreightCharge[]>([]);
-  const [selectedRefno, setSelectedRefno] = useState('');
+  const [selectedRefno, setSelectedRefno] = useState(initialFreightRefNo || '');
   const [selected, setSelected] = useState<FreightCharge | null>(null);
 
   const [loadingList, setLoadingList] = useState(false);
@@ -210,7 +210,7 @@ const FreightChargesDebitView: React.FC = () => {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<SourceDocument | null>(null);
 
-  const [isCreating, setIsCreating] = useState(false);
+  const [isCreating, setIsCreating] = useState(initialCreate);
   const [form, setForm] = useState({
     customerId: '',
     date: toDateInput(new Date().toISOString()),
@@ -249,10 +249,8 @@ const FreightChargesDebitView: React.FC = () => {
 
       if (isCreating) return;
 
-      if (!selectedRefno && data.items[0]?.lrefno) {
-        setSelectedRefno(data.items[0].lrefno);
-      } else if (selectedRefno && !data.items.some((row) => row.lrefno === selectedRefno)) {
-        setSelectedRefno(data.items[0]?.lrefno || '');
+      if (selectedRefno && selectedRefno !== initialFreightRefNo && !data.items.some((row) => row.lrefno === selectedRefno)) {
+        setSelectedRefno('');
       }
     } catch (err: any) {
       if (shouldSuppressAuthError(err)) return;
@@ -388,6 +386,7 @@ const FreightChargesDebitView: React.FC = () => {
   }, [form.transactionRefNo, form.invoiceNo, form.transactionType, sourceDocs]);
 
   const selectedCustomerName = useMemo(() => {
+    if (!form.customerId) return '';
     const customer = contacts.find((c) => c.id === form.customerId);
     if (customer) return customer.company;
     if (selected?.lcustomer === form.customerId) return selected.lcustomer_lname;
@@ -668,6 +667,7 @@ const FreightChargesDebitView: React.FC = () => {
                 <thead className="sticky top-0 z-10 bg-white">
                   <tr>
                     <th className={`${cellClass} w-[10%] text-left font-medium shadow-[2px_2px_2px_-1px_rgba(0,0,0,.4)]`}>Date</th>
+                    <th className={`${cellClass} w-[15%] text-left font-medium shadow-[2px_2px_2px_-1px_rgba(0,0,0,.4)]`}>Timestamp</th>
                     <th className={`${cellClass} w-[25%] text-left font-medium shadow-[2px_2px_2px_-1px_rgba(0,0,0,.4)]`}>Customer</th>
                     <th className={`${cellClass} w-[10%] text-left font-medium shadow-[2px_2px_2px_-1px_rgba(0,0,0,.4)]`}>DM No.</th>
                     <th className={`${cellClass} w-[10%] text-left font-medium shadow-[2px_2px_2px_-1px_rgba(0,0,0,.4)]`}>Transaction No.</th>
@@ -676,13 +676,14 @@ const FreightChargesDebitView: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {loadingList && <tr><td colSpan={6} className={`${cellClass} text-center`}>Loading records...</td></tr>}
-                  {!loadingList && rows.length === 0 && <tr><td colSpan={6} className={`${cellClass} text-center`}>No freight charges found.</td></tr>}
+                  {loadingList && <tr><td colSpan={7} className={`${cellClass} text-center`}>Loading records...</td></tr>}
+                  {!loadingList && rows.length === 0 && <tr><td colSpan={7} className={`${cellClass} text-center`}>No freight charges found.</td></tr>}
                   {!loadingList && rows.map((row) => {
                     const isSelected = selectedRefno === row.lrefno;
                     return (
                       <tr key={row.lrefno} onClick={() => openSelectedRecord(row)} className={`cursor-pointer ${isSelected ? 'text-blue-600' : ''}`}>
                         <td className={`${cellClass} ${isSelected ? 'text-blue-600' : ''}`}>{formatShortDate(row.ldate)}</td>
+                        <td className={`${cellClass} whitespace-nowrap`}>{formatAccountingTimestamp(row.created_at)}</td>
                         <td className={`${cellClass} ${isSelected ? 'text-blue-600' : ''}`}>{row.lcustomer_lname || '-'}</td>
                         <td className={`${cellClass} underline ${isSelected ? 'text-blue-600' : ''}`}>{row.ldm_no || row.lrefno}</td>
                         <td className={`${cellClass} text-blue-600 underline`}>{getTransactionNo(row)}</td>
@@ -731,7 +732,7 @@ const FreightChargesDebitView: React.FC = () => {
                       {canEdit ? (
                         <CustomerAutocomplete
                           contacts={contacts}
-                          selectedCustomer={contacts.find((contact) => contact.id === form.customerId) || null}
+                          selectedCustomer={form.customerId ? contacts.find((contact) => contact.id === form.customerId) || null : null}
                           onSelect={(customer) => setForm((prev) => ({ ...prev, customerId: customer.id }))}
                           placeholder="Select Customer"
                           inputClassName="h-[34px] rounded-[3px] border-[#ccc] bg-white text-[13px] text-[#555]"
@@ -853,7 +854,7 @@ const FreightChargesDebitView: React.FC = () => {
                 <span className="text-right font-semibold pr-[15px]">Customer</span>
                 <CustomerAutocomplete
                   contacts={contacts}
-                  selectedCustomer={contacts.find((contact) => contact.company === searchDraft.customer) || null}
+                  selectedCustomer={searchDraft.customer ? contacts.find((contact) => contact.company === searchDraft.customer) || null : null}
                   onSelect={(customer) => setSearchDraft((prev) => ({ ...prev, customer: customer.company }))}
                   placeholder="Search customer..."
                   inputClassName="h-[34px] rounded-[3px] border-[#ccc] bg-white text-[13px] text-[#555]"

@@ -12,11 +12,14 @@ interface SearchableSelectProps {
     value: string;
     options: SearchableSelectOption[];
     onChange: (value: string) => void;
+    onSearch?: (query: string) => void;
+    loading?: boolean;
     placeholder?: string;
     searchPlaceholder?: string;
     disabled?: boolean;
     className?: string;
     buttonClassName?: string;
+    searchInputClassName?: string;
     dropdownClassName?: string;
 }
 
@@ -24,11 +27,14 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     value,
     options,
     onChange,
+    onSearch,
+    loading = false,
     placeholder = 'Select an option',
     searchPlaceholder = 'Search...',
     disabled = false,
     className = '',
     buttonClassName = '',
+    searchInputClassName = '',
     dropdownClassName = '',
 }) => {
     const selectId = useId().replace(/:/g, '-');
@@ -105,12 +111,14 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
 
             setIsOpen(false);
             setQuery('');
+            onSearch?.('');
         };
 
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
                 setIsOpen(false);
                 setQuery('');
+                onSearch?.('');
             }
         };
 
@@ -120,7 +128,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
             document.removeEventListener('mousedown', handleClickOutside);
             document.removeEventListener('keydown', handleKeyDown);
         };
-    }, [isOpen, selectId]);
+    }, [isOpen, onSearch, selectId]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -137,6 +145,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
         onChange(nextValue);
         setIsOpen(false);
         setQuery('');
+        onSearch?.('');
     };
 
     return (
@@ -147,7 +156,13 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                 disabled={disabled}
                 onClick={() => {
                     if (disabled) return;
-                    setIsOpen((open) => !open);
+                    if (isOpen) {
+                        setIsOpen(false);
+                        setQuery('');
+                        onSearch?.('');
+                    } else {
+                        setIsOpen(true);
+                    }
                 }}
                 className={`flex w-full items-center justify-between gap-3 rounded-md border border-gray-300 bg-white px-3 py-2 text-left text-sm text-gray-900 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 ${buttonClassName}`}
             >
@@ -171,14 +186,20 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                                     ref={inputRef}
                                     type="text"
                                     value={query}
-                                    onChange={(event) => setQuery(event.target.value)}
+                                    onChange={(event) => {
+                                        const nextQuery = event.target.value;
+                                        setQuery(nextQuery);
+                                        onSearch?.(nextQuery);
+                                    }}
                                     placeholder={searchPlaceholder}
-                                    className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                                    className={`w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 ${searchInputClassName}`}
                                 />
                             </div>
                         </div>
                         <div className="overflow-y-auto py-1" style={{ maxHeight: `${optionsMaxHeight}px` }}>
-                            {filteredOptions.length === 0 ? (
+                            {loading ? (
+                                <div className="px-3 py-4 text-sm text-gray-500 dark:text-gray-400" role="status">Searching...</div>
+                            ) : filteredOptions.length === 0 ? (
                                 <div className="px-3 py-4 text-sm text-gray-500 dark:text-gray-400">No matches found</div>
                             ) : (
                                 filteredOptions.map((option) => {

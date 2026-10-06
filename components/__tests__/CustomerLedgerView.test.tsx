@@ -54,6 +54,7 @@ const buildMockLedgerDetailed = () => ({
     {
       id: 1,
       date: '2026-07-15',
+      created_at: '2026-07-15 10:30:00',
       datetime: '2026-07-15T10:30:00',
       reference: 'INV-001',
       ref_no: 'INV-REF-001',
@@ -243,6 +244,27 @@ describe('CustomerLedgerView', () => {
     });
   });
 
+  it('shows only the time in the Timestamp column beside the separate date column', async () => {
+    await selectCustomer('Alpha Corp');
+
+    const reference = await screen.findByText('INV-001');
+    const cells = reference.closest('tr')?.querySelectorAll('td');
+    expect(cells?.[0]).toHaveTextContent('JUL‑15‑26');
+    expect(cells?.[1]).toHaveTextContent('10:30:00 AM');
+    expect(cells?.[1]).not.toHaveTextContent('JUL');
+  });
+
+  it('keeps the ledger table headers sticky while its rows scroll', async () => {
+    await selectCustomer('Alpha Corp');
+
+    const timestampHeader = await screen.findByRole('columnheader', { name: 'Timestamp' });
+    const reportScroller = screen.getByTestId('ledger-report-scroll');
+    const tableWrapper = timestampHeader.closest('table')?.parentElement;
+    expect(timestampHeader).toHaveClass('sticky', 'top-0', 'z-10');
+    expect(reportScroller).toHaveClass('overflow-auto');
+    expect(tableWrapper).not.toHaveClass('overflow-auto');
+  });
+
   it('shows the selected customer highlighted in the left panel', async () => {
     const user = userEvent.setup();
     render(<CustomerLedgerView />);
@@ -405,7 +427,40 @@ describe('CustomerLedgerView', () => {
     });
   });
 
-  it('leaves non-document and missing-reference rows as plain text', async () => {
+  it('links collection, adjustment, freight, and credit memo references to their detail pages', async () => {
+    const baseRow = buildMockLedgerDetailed().rows[1];
+    mockGetLedger.mockResolvedValueOnce({
+      ...buildMockLedgerDetailed(),
+      rows: [
+        { ...baseRow, id: 3, reference: 'CASH', dcr: 'DCR-100', ref_no: 'COL-100', ref_type: 'DCR' },
+        { ...baseRow, id: 4, reference: 'ADJ-100', ref_no: 'ADJ-100', ref_type: 'Adjustment' },
+        { ...baseRow, id: 5, reference: 'DM-100', ref_no: 'DM-100', ref_type: 'Freight Charges' },
+        { ...baseRow, id: 6, reference: 'CM-100', ref_no: 'CM-100', ref_type: 'Credit Memo' },
+      ],
+    });
+
+    await selectCustomer('Alpha Corp');
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: 'Open Collection DCR-100' })).toHaveAttribute(
+        'href',
+        '#/accounting-transactions-daily-collection-entry?collectionRefNo=COL-100',
+      );
+      expect(screen.getByRole('link', { name: 'Open Adjustment ADJ-100' })).toHaveAttribute(
+        'href',
+        '#/accounting-transactions-adjustment-entry?adjustmentRefNo=ADJ-100',
+      );
+      expect(screen.getByRole('link', { name: 'Open Freight Charge DM-100' })).toHaveAttribute(
+        'href',
+        '#/accounting-transactions-freight-charges-debit?freightRefNo=DM-100',
+      );
+      expect(screen.getByRole('link', { name: 'Open Sales Return CM-100' })).toHaveAttribute(
+        'href',
+        '#/accounting-transactions-sales-return-credit?salesReturnRefNo=CM-100',
+      );
+    });
+  });
+
+  it('keeps opening balances and missing-reference rows as plain text while linking payments', async () => {
     mockGetLedger.mockResolvedValueOnce({
       ...buildMockLedgerDetailed(),
       rows: [
@@ -438,7 +493,10 @@ describe('CustomerLedgerView', () => {
       expect(screen.getByText('INV-MISSING')).toBeInTheDocument();
     });
     expect(screen.queryByRole('link', { name: /OPENING BALANCE/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /PAY-003/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open Collection PAY-003' })).toHaveAttribute(
+      'href',
+      '#/accounting-transactions-daily-collection-entry?collectionRefNo=PAY-003',
+    );
     expect(screen.queryByRole('link', { name: /INV-MISSING/i })).not.toBeInTheDocument();
   });
 

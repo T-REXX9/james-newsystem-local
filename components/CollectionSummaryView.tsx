@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CreditCard, FileText } from 'lucide-react';
+import { ArrowLeft, Printer } from 'lucide-react';
 import {
   CollectionSummaryDateType,
   CollectionSummaryResponse,
   dailyCollectionService,
 } from '../services/dailyCollectionService';
 import { BUTTON_BASE, BUTTON_PRIMARY } from '../utils/uiConstants';
-import { formatDate as formatDisplayDate } from '../utils/formatUtils';
+import { formatAccountingTimestamp, formatDate as formatDisplayDate } from '../utils/formatUtils';
 import CustomerStarIndicator from './CustomerStarIndicator';
 
 import { shouldSuppressAuthError } from '../services/localApiAuth';
@@ -30,8 +30,7 @@ const formatTimestamp = (value?: Date | null): string => {
   return value.toLocaleString('en-US');
 };
 
-const INPUT_CLASS = 'w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 text-sm';
-const SELECT_CLASS = 'px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 text-sm';
+const INPUT_CLASS = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100';
 
 interface CollectionSummaryViewProps {
   initialDateType?: CollectionSummaryDateType;
@@ -96,35 +95,50 @@ const CollectionSummaryView: React.FC<CollectionSummaryViewProps> = ({ initialDa
     setReport(null);
   };
 
+  const handleCancel = () => {
+    setDateType('today');
+    setDateFrom('');
+    setDateTo('');
+    setError('');
+  };
+
   return (
     <div className="min-h-full overflow-y-auto bg-[#f4f4f4] p-5 text-[#333]">
       <div className="mx-auto max-w-[1140px] space-y-5">
-      <section className="rounded border border-[#d5d5d5] bg-white shadow-sm">
-        <header className="border-b border-[#ddd] px-5 py-4"><h2 className="font-serif text-lg font-bold">Collection Report</h2></header>
+      {!report && <section className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <header className="border-b border-slate-200 px-5 py-4 dark:border-slate-800"><h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Collection Report</h2></header>
         <div className="p-6">
           <p className="mb-8 text-sm">Field mark with (<span className="text-red-600">*</span>) is required. Press generate after you select the sorting options</p>
-          {error && <div className="mb-5 rounded border border-[#ebccd1] bg-[#f2dede] px-4 py-3 text-sm text-[#a94442]"><b>Oops!</b> {error}</div>}
+          {error && <div role="alert" className="mb-5 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200"><b>Oops!</b> {error}</div>}
           <div className="mx-auto max-w-[720px] space-y-5">
-            <div className="grid grid-cols-[200px_1fr] items-center gap-4">
-              <label className="text-right text-sm font-semibold">Report Type <span className="text-red-600">*</span></label>
-              <select className="rounded border border-[#ccc] bg-white px-3 py-2 text-sm" value={dateType} onChange={e => setDateType(e.target.value as CollectionSummaryDateType)}>
+            <div className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[200px_1fr] sm:gap-4">
+              <label htmlFor="collection-report-type" className="text-sm font-semibold text-slate-700 dark:text-slate-200">Report Type <span className="text-rose-600">*</span></label>
+              <select id="collection-report-type" className={INPUT_CLASS} value={dateType} onChange={e => setDateType(e.target.value as CollectionSummaryDateType)}>
                 {dateTypeOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
               </select>
             </div>
             {dateType === 'custom' && <>
-              <div className="grid grid-cols-[200px_1fr] items-center gap-4"><label className="text-right text-sm font-semibold">Date From <span className="text-red-600">*</span></label><input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="rounded border border-[#ccc] px-3 py-2 text-sm" /></div>
-              <div className="grid grid-cols-[200px_1fr] items-center gap-4"><label className="text-right text-sm font-semibold">Date To <span className="text-red-600">*</span></label><input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="rounded border border-[#ccc] px-3 py-2 text-sm" /></div>
+              <div className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[200px_1fr] sm:gap-4"><label htmlFor="collection-date-from" className="text-sm font-semibold text-slate-700 dark:text-slate-200">Date From <span className="text-rose-600">*</span></label><input id="collection-date-from" type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={INPUT_CLASS} /></div>
+              <div className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[200px_1fr] sm:gap-4"><label htmlFor="collection-date-to" className="text-sm font-semibold text-slate-700 dark:text-slate-200">Date To <span className="text-rose-600">*</span></label><input id="collection-date-to" type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={INPUT_CLASS} /></div>
             </>}
-            <div className="grid grid-cols-[200px_1fr] gap-4"><span/><div className="flex gap-2">
-              <button className="rounded border border-[#2e6da4] bg-[#337ab7] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" onClick={generate} disabled={loading}>{loading ? 'Generating...' : 'Generate Report'}</button>
-              <button className="rounded border border-[#ccc] bg-white px-4 py-2 text-sm" onClick={handleBackToOption}>Cancel</button>
-            </div></div>
+            <div className="flex flex-wrap gap-2 sm:ml-[216px]">
+              <button className={`${BUTTON_PRIMARY} disabled:cursor-wait disabled:opacity-50`} onClick={generate} disabled={loading}>{loading ? 'Generating...' : 'Generate Report'}</button>
+              <button className={BUTTON_BASE} onClick={handleCancel}>Cancel</button>
+            </div>
           </div>
         </div>
-      </section>
+      </section>}
 
       {/* Report content card */}
-      {report && <div className="rounded border border-[#d5d5d5] bg-white p-5 shadow-sm">
+      {report && <div className="mx-auto max-w-[1600px] rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4 dark:border-slate-800">
+          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Collection Summary</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" className={BUTTON_BASE} onClick={handleBackToOption}><ArrowLeft size={16} /> Back to Option</button>
+            <button type="button" className={BUTTON_PRIMARY} onClick={() => window.print()}><Printer size={16} /> Print Preview</button>
+          </div>
+        </div>
+        <div id="collection-summary-print-area">
         <div className="flex flex-col gap-4">
           {error && (
             <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
@@ -137,11 +151,10 @@ const CollectionSummaryView: React.FC<CollectionSummaryViewProps> = ({ initialDa
           {!report || loading ? null : (
             <>
               {/* Report header */}
-              <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-lg py-4 px-6 text-center">
+              <div className="border-b-2 border-brand-blue bg-slate-50 px-6 py-4 text-center dark:bg-slate-800/50">
                 <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">COLLECTION SUMMARY</h3>
-                <hr className="my-2 border-brand-blue border-b-2" />
-                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{reportRangeLabel}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">System generated {formatTimestamp(generatedAt)}</p>
+                <p className="mt-2 text-sm font-semibold text-slate-700 dark:text-slate-300">{reportRangeLabel}</p>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">System generated <strong>{formatTimestamp(generatedAt)}</strong></p>
               </div>
 
               {/* Collection items table */}
@@ -150,6 +163,7 @@ const CollectionSummaryView: React.FC<CollectionSummaryViewProps> = ({ initialDa
                   <thead className="bg-slate-800 text-white sticky top-0">
                     <tr>
                       <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Date</th>
+                      <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Timestamp</th>
                       <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Customer</th>
                       <th className="px-3 py-2 text-left font-bold whitespace-nowrap">DCR No.</th>
                       <th className="px-3 py-2 text-right font-bold whitespace-nowrap">Cash</th>
@@ -162,7 +176,7 @@ const CollectionSummaryView: React.FC<CollectionSummaryViewProps> = ({ initialDa
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                     {report.collection_items.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="px-3 py-4 text-center text-slate-500 dark:text-slate-400">
+                        <td colSpan={9} className="px-3 py-4 text-center text-slate-500 dark:text-slate-400">
                           No collection rows found.
                         </td>
                       </tr>
@@ -173,6 +187,7 @@ const CollectionSummaryView: React.FC<CollectionSummaryViewProps> = ({ initialDa
                           className={`${index % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50 dark:bg-slate-800/30'} hover:bg-slate-100 dark:hover:bg-slate-800`}
                         >
                           <td className="px-3 py-2">{formatDate(row.date)}</td>
+                          <td className="whitespace-nowrap px-3 py-2">{formatAccountingTimestamp(row.created_at)}</td>
                           <td className="px-3 py-2">{row.customer || '-'}<CustomerStarIndicator customerId={row.customer_id} className="ml-1 inline h-3.5 w-3.5" /></td>
                           <td className="px-3 py-2">{row.dcr_no || '-'}</td>
                           <td className="px-3 py-2 text-right">{peso.format(row.cash || 0)}</td>
@@ -186,7 +201,7 @@ const CollectionSummaryView: React.FC<CollectionSummaryViewProps> = ({ initialDa
                   </tbody>
                   <tfoot>
                     <tr className="bg-slate-100 dark:bg-slate-800 border-t-2 border-slate-300 dark:border-slate-700 font-bold text-sm">
-                      <td colSpan={3} className="px-3 py-3 text-red-600 dark:text-red-400">GRAND TOTAL</td>
+                      <td colSpan={4} className="px-3 py-3 text-right text-red-600 dark:text-red-400"><span className="underline decoration-double underline-offset-2">GRAND TOTAL --&gt;</span></td>
                       <td className="px-3 py-3 text-right text-red-600 dark:text-red-400">{peso.format(report.collection_totals.cash || 0)}</td>
                       <td className="px-3 py-3 text-right text-red-600 dark:text-red-400">{peso.format(report.collection_totals.check || 0)}</td>
                       <td className="px-3 py-3 text-right text-red-600 dark:text-red-400">{peso.format(report.collection_totals.tt || 0)}</td>
@@ -200,11 +215,10 @@ const CollectionSummaryView: React.FC<CollectionSummaryViewProps> = ({ initialDa
               {/* Debit memo section */}
               <div>
                 <hr className="my-4 border-slate-200 dark:border-slate-800" />
-                <div className="flex items-center gap-2 mb-3">
-                  <CreditCard size={18} className="text-slate-600 dark:text-slate-400" />
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold tracking-wide border border-brand-blue text-brand-blue">
-                    DEBIT MEMO (DM) SUMMARY
-                  </span>
+                <div className="mb-3 border-b border-slate-200 pb-3 text-center dark:border-slate-800">
+                  <h4 className="mt-1 text-lg font-bold tracking-wide text-slate-900 dark:text-slate-100">DEBIT MEMO (DM) SUMMARY</h4>
+                  <p className="mt-1 text-sm text-slate-700 dark:text-slate-300">{reportRangeLabel}</p>
+                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">System generated <strong>{formatTimestamp(generatedAt)}</strong></p>
                 </div>
                 <div className="overflow-x-auto border border-slate-300 dark:border-slate-700 rounded-lg max-h-[480px] overflow-y-auto">
                   <table className="w-full text-sm">
@@ -214,13 +228,14 @@ const CollectionSummaryView: React.FC<CollectionSummaryViewProps> = ({ initialDa
                         <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Code</th>
                         <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Name</th>
                         <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Date</th>
+                        <th className="px-3 py-2 text-left font-bold whitespace-nowrap">Timestamp</th>
                         <th className="px-3 py-2 text-right font-bold whitespace-nowrap">Amount</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                       {report.debit_items.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="px-3 py-4 text-center text-slate-500 dark:text-slate-400">
+                          <td colSpan={6} className="px-3 py-4 text-center text-slate-500 dark:text-slate-400">
                             No debit memo rows found.
                           </td>
                         </tr>
@@ -234,6 +249,7 @@ const CollectionSummaryView: React.FC<CollectionSummaryViewProps> = ({ initialDa
                             <td className="px-3 py-2">{row.lcustomer_code || '-'}</td>
                             <td className="px-3 py-2">{row.lcustomer_name || '-'}<CustomerStarIndicator customerId={row.customer_id} className="ml-1 inline h-3.5 w-3.5" /></td>
                             <td className="px-3 py-2">{formatDate(row.ldatetime)}</td>
+                            <td className="whitespace-nowrap px-3 py-2">{formatAccountingTimestamp(row.created_at)}</td>
                             <td className="px-3 py-2 text-right">{peso.format(row.lamount || 0)}</td>
                           </tr>
                         ))
@@ -241,7 +257,7 @@ const CollectionSummaryView: React.FC<CollectionSummaryViewProps> = ({ initialDa
                     </tbody>
                     <tfoot>
                       <tr className="bg-slate-100 dark:bg-slate-800 border-t-2 border-slate-300 dark:border-slate-700 font-bold text-sm">
-                        <td colSpan={4} className="px-3 py-3 text-slate-900 dark:text-slate-100">TOTAL</td>
+                        <td colSpan={5} className="px-3 py-3 text-slate-900 dark:text-slate-100">TOTAL</td>
                         <td className="px-3 py-3 text-right text-slate-900 dark:text-slate-100">{peso.format(report.debit_totals.amount || 0)}</td>
                       </tr>
                     </tfoot>
@@ -251,6 +267,16 @@ const CollectionSummaryView: React.FC<CollectionSummaryViewProps> = ({ initialDa
             </>
           )}
         </div>
+        </div>
+        <style>{`@media print {
+          body * { visibility: hidden !important; }
+          #collection-summary-print-area, #collection-summary-print-area * { visibility: visible !important; }
+          #collection-summary-print-area { position: fixed !important; inset: 0 !important; width: 100% !important; padding: 0 !important; background: #fff !important; color: #111 !important; overflow: visible !important; }
+          #collection-summary-print-area .overflow-x-auto { overflow: visible !important; max-height: none !important; }
+          #collection-summary-print-area table { width: 100% !important; min-width: 0 !important; font-size: 10pt !important; }
+          #collection-summary-print-area th, #collection-summary-print-area td { border: 1px solid #bbb !important; color: #111 !important; }
+          #collection-summary-print-area tr { break-inside: avoid; }
+        }`}</style>
       </div>}
       </div>
     </div>

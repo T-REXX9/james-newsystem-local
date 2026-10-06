@@ -37,7 +37,8 @@ const CustomerAutocomplete = <T extends CustomerAutocompleteOption,>({
   className = '',
   inputClassName = '',
 }: CustomerAutocompleteProps<T>) => {
-  const [query, setQuery] = useState(selectedCustomer?.company || '');
+  const resolvedSelectedCustomer = selectedCustomer?.id ? selectedCustomer : null;
+  const [query, setQuery] = useState(resolvedSelectedCustomer?.company || '');
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
@@ -48,8 +49,8 @@ const CustomerAutocomplete = <T extends CustomerAutocompleteOption,>({
   const debouncedQuery = useDebounce(query, 250);
 
   useEffect(() => {
-    setQuery(selectedCustomer?.company || '');
-  }, [selectedCustomer]);
+    setQuery(resolvedSelectedCustomer?.company || '');
+  }, [resolvedSelectedCustomer]);
 
   const updatePosition = useCallback(() => {
     if (inputRef.current && showDropdown) {
@@ -127,7 +128,7 @@ const CustomerAutocomplete = <T extends CustomerAutocompleteOption,>({
   }, [debouncedQuery, sortedContacts]);
 
   useEffect(() => {
-    setSelectedIndex(results.length > 0 ? 0 : -1);
+    setSelectedIndex(-1);
   }, [results]);
 
   const handleSelect = (customer: T) => {
@@ -239,9 +240,9 @@ const CustomerAutocomplete = <T extends CustomerAutocompleteOption,>({
           onKeyDown={handleKeyDown}
           autoComplete="off"
         />
-        {selectedCustomer && (
+        {resolvedSelectedCustomer && (
           <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center" aria-hidden="true">
-            <CustomerStarIndicator customerId={selectedCustomer.id} isStarred={(selectedCustomer as any).isStarred} />
+            <CustomerStarIndicator customerId={resolvedSelectedCustomer.id} isStarred={(resolvedSelectedCustomer as any).isStarred} />
           </span>
         )}
       </div>
@@ -297,7 +298,7 @@ const CustomerAutocomplete = <T extends CustomerAutocompleteOption,>({
                           {highlightMatch(customer.address || customer.deliveryAddress || customer.city || 'No address on file', debouncedQuery)}
                         </div>
                         <div className="flex items-center gap-3 mt-1 text-[10px] text-slate-400">
-                          <span>Salesman: {customer.salesman || '—'}</span>
+                          <span>Sales Agent: {customer.salesman || '—'}</span>
                           <span>•</span>
                           <span>City: {customer.city || '—'}</span>
                           <span>•</span>
@@ -315,7 +316,7 @@ const CustomerAutocomplete = <T extends CustomerAutocompleteOption,>({
                 <AlertCircle className="h-8 w-8 text-slate-300 dark:text-slate-600" />
               </div>
               <p className="text-sm font-medium">No customers found</p>
-              <p className="text-xs mt-1">Try searching by company, salesman, or city.</p>
+              <p className="text-xs mt-1">Try searching by company, sales agent, or city.</p>
             </div>
           ) : (
             <div className="py-6 px-4 text-center text-slate-500 dark:text-slate-400 text-xs">

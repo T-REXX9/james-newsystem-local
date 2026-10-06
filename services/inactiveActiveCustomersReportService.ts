@@ -31,7 +31,20 @@ export interface InactiveActiveCustomerRow {
   customerGroup: string;
   salesPerson: string;
   lastPurchase: string;
+  lastPurchaseAt: string;
   customerStatus: 'active' | 'inactive';
+  vipStatus: string;
+  latestSalesReportMessage: string;
+  latestSalesReportAuthor: string;
+  latestSalesReportAt: string;
+  lastPurchaseRaw: string;
+  isBlocked: boolean;
+  purchaseAgeGroup: string;
+  currentMonthSales: number;
+  lastMonthSales: number;
+  purchaseCount: number;
+  monthsSinceLastPurchase: number;
+  dailyCallColor: string;
 }
 
 export interface InactiveActiveCustomersReportFilters {
@@ -40,6 +53,8 @@ export interface InactiveActiveCustomersReportFilters {
   cutoffMonths: number;
   page: number;
   perPage: number;
+  yearFrom?: number | null;
+  yearTo?: number | null;
 }
 
 export interface InactiveActiveCustomersReportData {
@@ -69,10 +84,12 @@ export const fetchInactiveActiveCustomersReport = async (
       main_id: String(getMainId()),
       status: filters.status,
       search: filters.search || '',
-      cutoff_months: String(filters.cutoffMonths || 3),
+      cutoff_months: '3',
       page: String(filters.page || 1),
       per_page: String(filters.perPage || 100),
     });
+    if (filters.yearFrom) query.set('year_from', String(filters.yearFrom));
+    if (filters.yearTo) query.set('year_to', String(filters.yearTo));
 
     const data = await requestApi(`${API_BASE_URL}/inactive-active-customers-report?${query.toString()}`);
     return {
@@ -84,6 +101,19 @@ export const fetchInactiveActiveCustomersReport = async (
         salesPerson: String(row?.sales_person || ''),
         lastPurchase: String(row?.last_purchase || ''),
         customerStatus: String(row?.customer_status || 'inactive') === 'active' ? 'active' : 'inactive',
+        vipStatus: '',
+        latestSalesReportMessage: '',
+        latestSalesReportAuthor: '',
+        latestSalesReportAt: '',
+        lastPurchaseRaw: String(row?.last_purchase || ''),
+        lastPurchaseAt: String(row?.last_purchase_at || ''),
+        isBlocked: false,
+        purchaseAgeGroup: '',
+        currentMonthSales: 0,
+        lastMonthSales: 0,
+        purchaseCount: 0,
+        monthsSinceLastPurchase: 0,
+        dailyCallColor: '',
       })),
       summary: {
         activeCount: toNumber(data?.summary?.active_count),
@@ -103,23 +133,6 @@ export const fetchInactiveActiveCustomersReport = async (
     };
   } catch (error) {
     console.error('Error fetching inactive/active customers report:', error);
-    return {
-      items: [],
-      summary: {
-        activeCount: 0,
-        inactiveCount: 0,
-        totalCount: 0,
-        cutoffMonths: filters.cutoffMonths || 3,
-        cutoffDate: '',
-      },
-      meta: {
-        page: 1,
-        perPage: filters.perPage || 100,
-        total: 0,
-        totalPages: 0,
-        status: filters.status,
-        search: filters.search || '',
-      },
-    };
+    throw error;
   }
 };

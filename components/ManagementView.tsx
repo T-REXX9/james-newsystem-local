@@ -201,8 +201,8 @@ export const ManagementView: React.FC<ManagementViewProps> = ({ currentUser }) =
 
         <section className="grid gap-4 xl:grid-cols-[0.9fr_1.2fr_1.2fr]">
           <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-extrabold uppercase tracking-wide text-emerald-700">Top Salesperson of the Month ({monthLabel})</h2>
-            <div className="mt-4 overflow-x-auto"><table className="w-full text-sm"><thead className="border-b border-slate-200 text-left text-[11px] uppercase text-slate-500"><tr><th className="px-2 py-2">Salesperson</th><th className="px-2 py-2 text-right">Amount</th></tr></thead><tbody>{dashboard.topSalespeople.length ? dashboard.topSalespeople.map((row, index) => <tr key={`${row.salesperson}-${index}`} className="border-b border-slate-100"><td className="px-2 py-2 font-semibold">{index === 0 && <TrendingUp className="mr-1 inline h-3.5 w-3.5 text-emerald-600" />}{row.salesperson}</td><td className="px-2 py-2 text-right font-bold">{formatCurrencyLocal(row.amount)}</td></tr>) : <EmptyTable columns={2} />}</tbody></table></div>
+            <h2 className="text-sm font-extrabold uppercase tracking-wide text-emerald-700">Top Sales Agent of the Month ({monthLabel})</h2>
+            <div className="mt-4 overflow-x-auto"><table className="w-full text-sm"><thead className="border-b border-slate-200 text-left text-[11px] uppercase text-slate-500"><tr><th className="px-2 py-2">Sales Agent</th><th className="px-2 py-2 text-right">Amount</th></tr></thead><tbody>{dashboard.topSalespeople.length ? dashboard.topSalespeople.map((row, index) => <tr key={`${row.salesperson}-${index}`} className="border-b border-slate-100"><td className="px-2 py-2 font-semibold">{index === 0 && <TrendingUp className="mr-1 inline h-3.5 w-3.5 text-emerald-600" />}{row.salesperson}</td><td className="px-2 py-2 text-right font-bold">{formatCurrencyLocal(row.amount)}</td></tr>) : <EmptyTable columns={2} />}</tbody></table></div>
             <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-3 text-sm font-bold"><span>Total Sales</span><span className="text-emerald-700">{formatCurrencyLocal(dashboard.topSalespeople.reduce((sum, row) => sum + row.amount, 0))}</span></div>
           </article>
 
@@ -211,7 +211,7 @@ export const ManagementView: React.FC<ManagementViewProps> = ({ currentUser }) =
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-700">Salesperson Details</h2><p className="mt-1 text-xs text-slate-500">Double-click a customer in the dashboard's call-monitoring view for account details.</p></div><span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600"><UserRound className="h-3.5 w-3.5" /> Master User only</span></div>
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-700">Sales Agent Details</h2><p className="mt-1 text-xs text-slate-500">Double-click a customer in the dashboard's call-monitoring view for account details.</p></div><span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600"><UserRound className="h-3.5 w-3.5" /> Master User only</span></div>
         </section>
       </div>
     </div>

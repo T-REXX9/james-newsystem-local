@@ -19,6 +19,7 @@ import {
 import InquiryDetailsModal from './InquiryDetailsModal';
 import DemandSummaryModal from './DemandSummaryModal';
 import { formatDate as formatDisplayDate } from '../utils/formatUtils';
+import ModuleRecordLink from './ModuleRecordLink';
 
 interface SalesDevelopmentReportDataViewProps {
   dateFrom: string;
@@ -346,7 +347,7 @@ const SalesDevelopmentReportDataView: React.FC<SalesDevelopmentReportDataViewPro
             Detailed Inquiry Log
           </h2>
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            {filteredInquiries.length} visible rows — Search by inquiry, customer, item, or salesperson and sort the list
+            {filteredInquiries.length} visible rows — Search by inquiry, customer, item, or sales agent and sort the list
           </p>
 
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mt-3 sm:mt-4">
@@ -378,7 +379,7 @@ const SalesDevelopmentReportDataView: React.FC<SalesDevelopmentReportDataViewPro
                 <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Inquiry</th>
                 <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Date</th>
                 <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Customer</th>
-                <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Salesperson</th>
+                <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Sales Agent</th>
                 <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Item</th>
                 <th className="px-6 py-3 text-right text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Qty</th>
                 <th className="px-6 py-3 text-right text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Amount</th>
@@ -440,16 +441,16 @@ const SalesDevelopmentReportDataView: React.FC<SalesDevelopmentReportDataViewPro
                       </span>
                     </td>
                     <td className="px-4 sm:px-6 py-2 text-center align-top">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedInquiry(inquiry);
-                        }}
+                      <ModuleRecordLink
+                        tab="sales-transaction-sales-inquiry"
+                        payload={{ inquiryId: inquiry.inquiry_id }}
+                        target="_self"
+                        aria-label={`Open inquiry ${inquiry.inquiry_no}`}
                         className="inline-flex items-center gap-1 rounded-lg bg-brand-blue px-3 py-1.5 text-xs font-bold text-white shadow-md shadow-blue-500/20 transition-all hover:-translate-y-0.5 hover:shadow-blue-500/35"
                       >
                         <ArrowUpRight className="h-3 w-3" />
                         <span className="hidden sm:inline">View</span>
-                      </button>
+                      </ModuleRecordLink>
                     </td>
                   </tr>
                 ))

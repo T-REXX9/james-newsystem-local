@@ -1,6 +1,6 @@
 import React from 'react';
 import { X, Calendar, User, Briefcase, Package, DollarSign, Inbox, Code, FileText, Users } from 'lucide-react';
-import { formatDate } from '../utils/formatUtils';
+import { formatDate as formatDisplayDate } from '../utils/formatUtils';
 
 interface InquiryDetailsModalProps {
   isOpen: boolean;
@@ -19,7 +19,7 @@ const InquiryDetailsModal: React.FC<InquiryDetailsModalProps> = ({ isOpen, onClo
   };
 
   const formatDate = (dateString: string) => {
-    return formatDate(dateString);
+    return formatDisplayDate(dateString);
   };
 
   return (
@@ -58,7 +58,7 @@ const InquiryDetailsModal: React.FC<InquiryDetailsModalProps> = ({ isOpen, onClo
               <div>
                 <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-2 mb-1">
                   <User className="w-4 h-4" />
-                  Salesperson
+                  Sales Agent
                 </label>
                 <p className="text-sm text-gray-700 dark:text-slate-300">{inquiry.sales_person || 'N/A'}</p>
               </div>

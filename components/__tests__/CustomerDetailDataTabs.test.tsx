@@ -44,4 +44,33 @@ describe('customer detail data tabs', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Purchase history unavailable');
     expect(screen.queryByText('No purchase history yet')).not.toBeInTheDocument();
   });
+
+  it('groups purchases by month and shows monthly and grand totals', async () => {
+    fetchDailyCallPurchaseHistoryMock.mockResolvedValueOnce([
+      {
+        id: 'txn-2',
+        purchase_date: '2026-09-18',
+        invoice_number: 'INV-102',
+        total_amount: '2500',
+        payment_status: 'paid',
+        products: [{ name: 'Brake Pad', quantity: 2, price: 1250 }],
+      },
+      {
+        id: 'txn-1',
+        purchase_date: '2026-08-04',
+        invoice_number: 'INV-101',
+        total_amount: 1000,
+        payment_status: 'pending',
+        products: [],
+      },
+    ]);
+
+    render(<PurchaseHistoryTab contactId="contact-1" />);
+
+    expect(await screen.findByRole('heading', { name: 'September 2026' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'August 2026' })).toBeInTheDocument();
+    expect(screen.getByText('Brake Pad')).toBeInTheDocument();
+    expect(screen.getByText('September 2026 Total')).toBeInTheDocument();
+    expect(screen.getByText('Grand Total: ₱3,500.00')).toBeInTheDocument();
+  });
 });

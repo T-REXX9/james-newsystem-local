@@ -6,20 +6,11 @@ import {
   SoaResponse,
   statementOfAccountService,
 } from '../services/statementOfAccountService';
-import { formatDate as formatPhilippineDate } from '../utils/formatUtils';
-import CustomerAutocomplete from './CustomerAutocomplete';
+import { formatAccountingTimestamp, formatDate as formatPhilippineDate } from '../utils/formatUtils';
+import SearchableSelect, { SearchableSelectOption } from './SearchableSelect';
 
 import { shouldSuppressAuthError } from '../services/localApiAuth';
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
-
-const dateTypeOptions: Array<{ value: SoaDateType; label: string }> = [
-  { value: 'all', label: 'All' },
-  { value: 'today', label: 'Today' },
-  { value: 'week', label: 'Week' },
-  { value: 'month', label: 'Month' },
-  { value: 'year', label: 'Year' },
-  { value: 'custom', label: 'Custom' },
-];
 
 const formatDate = (value?: string | null): string => {
   if (!value) return '-';
@@ -33,9 +24,7 @@ const StatementOfAccountView: React.FC = () => {
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
 
   const [reportType, setReportType] = useState<SoaReportType>('detailed');
-  const [dateType, setDateType] = useState<SoaDateType>('all');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const dateType: SoaDateType = 'all';
 
   const [loadingCustomers, setLoadingCustomers] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -69,35 +58,31 @@ const StatementOfAccountView: React.FC = () => {
     };
   }, [debouncedSearch]);
 
-  const selectedCustomer = useMemo(
-    () => customers.find((row) => row.sessionId === selectedCustomerId) || null,
-    [customers, selectedCustomerId]
-  );
-  const autocompleteCustomers = useMemo(
-    () => customers.map((customer) => ({
-      id: customer.sessionId,
-      company: customer.company || customer.customerCode || customer.sessionId,
-    })),
-    [customers],
-  );
-  const selectedAutocompleteCustomer = useMemo(
-    () => selectedCustomer ? {
-      id: selectedCustomer.sessionId,
-      company: selectedCustomer.company || selectedCustomer.customerCode || selectedCustomer.sessionId,
-    } : null,
-    [selectedCustomer],
-  );
+  const [selectedCustomerSnapshot, setSelectedCustomerSnapshot] = useState<SoaCustomer | null>(null);
+  const customerOptions = useMemo<SearchableSelectOption[]>(() => {
+    const options = new Map<string, SearchableSelectOption>();
+    for (const customer of customers) {
+      options.set(customer.sessionId, {
+        value: customer.sessionId,
+        label: customer.company || customer.customerCode || customer.sessionId,
+        keywords: [customer.customerCode],
+      });
+    }
+    if (selectedCustomerSnapshot && !options.has(selectedCustomerSnapshot.sessionId)) {
+      options.set(selectedCustomerSnapshot.sessionId, {
+        value: selectedCustomerSnapshot.sessionId,
+        label: selectedCustomerSnapshot.company || selectedCustomerSnapshot.customerCode || selectedCustomerSnapshot.sessionId,
+        keywords: [selectedCustomerSnapshot.customerCode],
+      });
+    }
+    return Array.from(options.values());
+  }, [customers, selectedCustomerSnapshot]);
 
   const generate = async () => {
     if (!selectedCustomerId) {
       setError('Select a customer first');
       return;
     }
-    if (dateType === 'custom' && (!dateFrom || !dateTo)) {
-      setError('Custom date range requires Date From and Date To');
-      return;
-    }
-
     setLoading(true);
     setError('');
     try {
@@ -105,8 +90,6 @@ const StatementOfAccountView: React.FC = () => {
         customerId: selectedCustomerId,
         reportType,
         dateType,
-        dateFrom: dateType === 'custom' ? dateFrom : undefined,
-        dateTo: dateType === 'custom' ? dateTo : undefined,
       });
       setReport(payload);
     } catch (err: any) {
@@ -119,38 +102,50 @@ const StatementOfAccountView: React.FC = () => {
   };
 
   return (
-    <div className="min-h-full overflow-y-auto bg-[#f4f4f4] p-5 text-[#333]">
-      <div className="mx-auto max-w-[1140px] space-y-5">
-        <section className="rounded border border-[#d5d5d5] bg-white shadow-sm">
-          <header className="border-b border-[#ddd] px-5 py-4"><h2 className="font-serif text-lg font-bold uppercase">Statement of Account</h2></header>
-          <div className="p-8">
-            {error && <div className="mb-5 rounded border border-[#ebccd1] bg-[#f2dede] px-4 py-3 text-sm text-[#a94442]"><b>Oops!</b> {error}</div>}
-            <div className="mx-auto max-w-[760px] space-y-5">
-              <div className="grid grid-cols-[210px_1fr] items-start gap-4">
-                <label className="pt-2 text-right text-sm font-semibold">Select Customer <span className="text-red-600">*</span></label>
-                <CustomerAutocomplete
-                  contacts={autocompleteCustomers}
-                  selectedCustomer={selectedAutocompleteCustomer}
+    <div className="min-h-full overflow-y-auto bg-slate-100 p-4 text-slate-800 dark:bg-slate-950 dark:text-slate-100 sm:p-6">
+      <div className="mx-auto max-w-7xl space-y-5">
+        {!report && <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <header className="border-b border-slate-200 px-5 py-4 dark:border-slate-800"><h2 className="text-base font-bold uppercase tracking-wide text-slate-800 dark:text-slate-100">Statement of Account</h2></header>
+          <div className="p-5 sm:p-8">
+            {error && <div role="alert" className="mb-5 rounded border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200"><b>Oops!</b> {error}</div>}
+            <div className="mx-auto max-w-4xl space-y-5">
+              <div className="grid grid-cols-1 items-start gap-2 sm:grid-cols-[minmax(160px,25%)_minmax(0,1fr)] sm:gap-4">
+                <label className="pt-2 text-sm font-semibold sm:text-right">Select Customer <span className="text-rose-600">*</span></label>
+                <SearchableSelect
+                  value={selectedCustomerId}
+                  options={customerOptions}
+                  onChange={(customerId) => {
+                    setSelectedCustomerId(customerId);
+                    const customer = customers.find((row) => row.sessionId === customerId);
+                    if (customer) setSelectedCustomerSnapshot(customer);
+                    setError('');
+                  }}
                   onSearch={setCustomerSearch}
-                  onSelect={(customer) => setSelectedCustomerId(customer.id)}
-                  isLoading={loadingCustomers}
+                  loading={loadingCustomers}
                   placeholder="Search customer..."
-                  inputClassName="rounded border-[#ccc] py-2 text-sm text-[#333]"
+                  searchPlaceholder="Search customer..."
+                  buttonClassName="min-h-10 rounded border-slate-300 py-2 text-sm dark:border-slate-700"
+                  searchInputClassName="focus:border-brand-blue focus:ring-brand-blue"
+                  dropdownClassName="dark:text-slate-100"
                 />
               </div>
-              <div className="grid grid-cols-[210px_1fr] items-center gap-4">
-                <label className="text-right text-sm font-semibold">Type <span className="text-red-600">*</span></label>
-                <div className="flex gap-5 text-sm"><label><input type="radio" checked={reportType === 'detailed'} onChange={() => setReportType('detailed')} /> Detailed</label><label><input type="radio" checked={reportType === 'summary'} onChange={() => setReportType('summary')} /> Monthly</label></div>
+              <div className="grid grid-cols-1 items-start gap-2 sm:grid-cols-[minmax(160px,25%)_minmax(0,1fr)] sm:gap-4">
+                <label className="pt-1 text-sm font-semibold sm:text-right">Type <span className="text-rose-600">*</span></label>
+                <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+                  <label className="inline-flex items-center gap-2"><input className="h-4 w-4 accent-brand-blue" type="radio" name="soa-report-type" checked={reportType === 'detailed'} onChange={() => setReportType('detailed')} /> Detailed</label>
+                  <label className="inline-flex items-center gap-2"><input className="h-4 w-4 accent-brand-blue" type="radio" name="soa-report-type" checked={reportType === 'summary'} onChange={() => setReportType('summary')} /> Monthly</label>
+                </div>
               </div>
-              <div className="grid grid-cols-[210px_1fr] gap-4"><span/><div className="flex gap-2">
-                <button type="button" onClick={generate} disabled={loading} className="rounded border border-[#2e6da4] bg-[#337ab7] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{loading ? 'Generating...' : 'Generate Report'}</button>
-                <button type="button" onClick={() => { setReport(null); setError(''); }} className="rounded border border-[#ccc] bg-white px-4 py-2 text-sm">Cancel</button>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(160px,25%)_minmax(0,1fr)] sm:gap-4"><span className="hidden sm:block"/><div className="flex flex-wrap gap-2">
+                <button type="button" onClick={generate} disabled={loading || !selectedCustomerId} className="rounded border border-brand-blue bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">{loading ? 'Generating...' : 'Generate Report'}</button>
+                <button type="button" onClick={() => { setReport(null); setError(''); }} className="rounded border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">Cancel</button>
               </div></div>
             </div>
           </div>
-        </section>
-        {report && <section className="rounded border border-[#d5d5d5] bg-white p-5 shadow-sm">
-          <div className="mb-5 flex items-start justify-between border-b border-[#ddd] pb-4"><div><h3 className="font-serif text-lg font-bold uppercase">Statement of Account</h3><p className="text-sm">{selectedCustomer?.company || '-'}</p></div><button onClick={() => window.print()} className="rounded border border-[#ccc] px-3 py-2 text-sm">Print</button></div>
+        </section>}
+        {report && <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
+          <div className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-4 dark:border-slate-800"><div><h3 className="text-base font-bold uppercase tracking-wide">Statement of Account</h3><p className="text-sm">{selectedCustomerSnapshot?.company || report.customer.company || '-'}</p></div><div className="flex gap-2"><button onClick={() => window.print()} className="rounded border border-brand-blue px-3 py-2 text-sm font-semibold text-brand-blue hover:bg-brand-blue hover:text-white">Print</button><button onClick={() => setReport(null)} className="rounded border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">Back</button></div></div>
+          <div className="mb-5 text-center"><h4 className="text-base font-bold">STATEMENT OF ACCOUNT</h4><p className="font-semibold">{selectedCustomerSnapshot?.company || report.customer.company || '-'}</p><p className="text-sm text-slate-600 dark:text-slate-400">As of: {formatDate(new Date().toISOString())}</p></div>
           <div className="overflow-auto">{reportType === 'summary' ? <SummaryTable report={report} /> : <DetailedTable report={report} />}</div>
         </section>}
       </div>
@@ -159,12 +154,13 @@ const StatementOfAccountView: React.FC = () => {
 };
 
 const DetailedTable: React.FC<{ report: SoaResponse }> = ({ report }) => (
-  <div className="overflow-auto rounded-xl border border-slate-200 dark:border-slate-800">
+  <div className="overflow-auto rounded border border-slate-200 dark:border-slate-800">
     <table className="min-w-full text-sm">
       <thead className="bg-slate-50 dark:bg-slate-900/60 text-slate-600 dark:text-slate-300">
         <tr>
           <th className="px-3 py-2 text-left">Terms</th>
           <th className="px-3 py-2 text-left">Date</th>
+          <th className="px-3 py-2 text-left">Timestamp</th>
           <th className="px-3 py-2 text-left">DR/INV</th>
           <th className="px-3 py-2 text-right">Amount</th>
           <th className="px-3 py-2 text-right">Amount Paid</th>
@@ -174,13 +170,14 @@ const DetailedTable: React.FC<{ report: SoaResponse }> = ({ report }) => (
       <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
         {report.rows.length === 0 ? (
           <tr>
-            <td colSpan={6} className="px-3 py-6 text-center text-slate-500">No statement rows found.</td>
+            <td colSpan={7} className="px-3 py-6 text-center text-slate-500">No statement rows found.</td>
           </tr>
         ) : (
           report.rows.map((row) => (
             <tr key={row.id}>
               <td className="px-3 py-2">{row.terms || '-'}</td>
               <td className="px-3 py-2">{formatDate(row.date)}</td>
+              <td className="whitespace-nowrap px-3 py-2">{formatAccountingTimestamp(row.created_at)}</td>
               <td className="px-3 py-2">{row.reference || '-'}</td>
               <td className="px-3 py-2 text-right">{peso.format(row.amount || 0)}</td>
               <td className="px-3 py-2 text-right">{peso.format(row.amount_paid || 0)}</td>
@@ -191,10 +188,8 @@ const DetailedTable: React.FC<{ report: SoaResponse }> = ({ report }) => (
       </tbody>
       <tfoot className="bg-slate-50 dark:bg-slate-900/60 font-semibold">
         <tr>
-          <td className="px-3 py-2" colSpan={3}>TOTAL BALANCE</td>
-          <td className="px-3 py-2 text-right">{peso.format(report.totals.amount || 0)}</td>
-          <td className="px-3 py-2 text-right">{peso.format(report.totals.amount_paid || 0)}</td>
-          <td className="px-3 py-2 text-right text-rose-600">{peso.format(report.totals.balance || 0)}</td>
+          <td className="px-3 py-2 text-right" colSpan={6}>BALANCE =&gt;</td>
+          <td className="border-y-2 border-slate-700 px-3 py-2 text-right text-rose-600 dark:border-slate-300">{peso.format(report.totals.balance || 0)}</td>
         </tr>
       </tfoot>
     </table>
@@ -202,7 +197,7 @@ const DetailedTable: React.FC<{ report: SoaResponse }> = ({ report }) => (
 );
 
 const SummaryTable: React.FC<{ report: SoaResponse }> = ({ report }) => (
-  <div className="overflow-auto rounded-xl border border-slate-200 dark:border-slate-800">
+  <div className="overflow-auto rounded border border-slate-200 dark:border-slate-800">
     <table className="min-w-full text-sm">
       <thead className="bg-slate-50 dark:bg-slate-900/60 text-slate-600 dark:text-slate-300">
         <tr>

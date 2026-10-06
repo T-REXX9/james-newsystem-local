@@ -322,7 +322,7 @@ describe('SalesInquiryView', () => {
     expect(list).toHaveClass('overflow-x-auto', 'lg:overflow-x-hidden');
     expect(list.querySelectorAll('table')).toHaveLength(1);
     expect(list.querySelector('table')).toHaveClass('min-w-[1100px]', 'lg:min-w-0');
-    ['Date', 'Customer', 'SI No.', 'SO No.', 'Transaction No.', 'Sales Person', 'Status'].forEach((heading) => {
+    ['Date', 'Customer', 'SI No.', 'SO No.', 'Transaction No.', 'Sales Agent', 'Status'].forEach((heading) => {
       expect(within(list).getByText(heading)).toBeVisible();
     });
   });
@@ -367,7 +367,7 @@ describe('SalesInquiryView', () => {
       contact_id: 'c-1',
       delivery_address: 'Existing delivery address',
       po_number: 'PO-EXISTING',
-      sales_person: 'Existing Salesperson',
+      sales_person: 'Jane Doe',
       sales_date: '2026-04-08',
       sales_time: '11:45:00',
       created_at: '2026-04-08',
@@ -384,6 +384,7 @@ describe('SalesInquiryView', () => {
     await waitFor(() => expect(getSalesInquiryMock).toHaveBeenCalledWith('inq-route'));
     await waitFor(() => expect(screen.getByLabelText('Customer')).toHaveValue('c-1'));
     expect(screen.getByDisplayValue('PO-EXISTING')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Jane Doe')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /create new/i }));
 
@@ -490,7 +491,7 @@ describe('SalesInquiryView', () => {
     expect(addToastMock).toHaveBeenCalledWith({ type: 'success', message: 'Sales inquiry JPEG exported.' });
   });
 
-  it('uses the selected customer\'s assigned agent as Sales Person', async () => {
+  it('uses the selected customer\'s assigned agent as Sales Agent', async () => {
     const user = userEvent.setup();
     render(<SalesInquiryView />);
     await waitFor(() => expect(fetchContactsMock).toHaveBeenCalled());

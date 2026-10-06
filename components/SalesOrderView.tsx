@@ -1055,7 +1055,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
               <table className="w-full min-w-[1100px] table-fixed border-collapse text-[13px] lg:min-w-0">
                 <colgroup>{SALES_ORDER_LIST_COLUMN_WIDTHS.map((width, index) => <col key={`${width}-${index}`} style={{ width }} />)}</colgroup>
                 <thead className="sticky top-0 z-10 bg-white"><tr className="border-b-2 border-[#d5d5d5] text-left text-[14px] font-semibold">
-                  <th className="px-2 pb-2">Date</th><th className="px-2 pb-2">Customer</th><th className="px-2 pb-2">SI No.</th><th className="px-2 pb-2">SO No.</th><th className="px-2 pb-2">Transaction No.</th><th className="px-2 pb-2">Sales Person</th><th className="px-2 pb-2">Status</th>
+                  <th className="px-2 pb-2">Date</th><th className="px-2 pb-2">Customer</th><th className="px-2 pb-2">SI No.</th><th className="px-2 pb-2">SO No.</th><th className="px-2 pb-2">Transaction No.</th><th className="px-2 pb-2">Sales Agent</th><th className="px-2 pb-2">Status</th>
                 </tr></thead>
                 <tbody>
                   {loading ? <tr><td colSpan={7} className="border border-[#d7d7d7] px-2 py-4 text-center text-[#777]">Loading sales orders...</td></tr> : orders.length === 0 ? <tr><td colSpan={7} className="border border-[#d7d7d7] px-2 py-4 text-center text-[#777]">No sales orders found.</td></tr> : orders.map((order) => {
@@ -1121,7 +1121,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
               <div className="grid grid-cols-[7%_36%_11%_18%_10%_18%] items-center">
                 <label className={legacyLabelClass}>Address :</label><div className="pl-3"><input readOnly value={selectedOrder?.delivery_address || selectedCustomer?.deliveryAddress || ''} className={legacyInputClass} /></div>
                 <label className={legacyLabelClass}>Reference No.:</label><div className="pl-2"><input readOnly value={selectedOrder?.reference_no || ''} className={legacyInputClass} /></div>
-                <label className={legacyLabelClass}>Salesperson:</label><div className="pl-2"><input readOnly value={selectedOrder?.sales_person || ''} className={legacyInputClass} /></div>
+                <label className={legacyLabelClass}>Sales Agent:</label><div className="pl-2"><input readOnly value={selectedOrder?.sales_person || ''} className={legacyInputClass} /></div>
               </div>
               <div className="grid grid-cols-[7%_36%_11%_18%_10%_18%] items-center">
                 <label className={legacyLabelClass}>Send By:</label><div className="pl-3 flex items-center gap-1">{canEditSendBy ? (<><SearchableSelect value={sendByDraft} options={courierOptions.map((option) => ({ value: option.name, label: option.name }))} onChange={setSendByDraft} placeholder="Select..." searchPlaceholder="Search courier..." /><button type="button" aria-label="Save send by" onClick={() => void handleSaveSendBy()} disabled={savingSendBy || sendByDraft === (selectedOrder?.send_by || '')} className="rounded bg-[#5d82a2] px-2 py-1 text-[11px] text-white disabled:opacity-50">{savingSendBy ? '...' : 'Save'}</button></>) : (<input readOnly value={selectedOrder?.send_by || ''} className={`${legacyInputClass} text-center`} />)}</div>
@@ -1312,7 +1312,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                   <th className="px-3 py-2 text-left">SI No.</th>
                   <th className="px-3 py-2 text-left">SO No.</th>
                   <th className="px-3 py-2 text-left">Transaction No.</th>
-                  <th className="px-3 py-2 text-left">Sales Person</th>
+                  <th className="px-3 py-2 text-left">Sales Agent</th>
                   <th className="px-3 py-2 text-left">Status</th>
                 </tr>
               </thead>
@@ -1517,7 +1517,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                           <input readOnly value={formatDisplayDate(selectedOrder.sales_date)} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" />
                         )}
                       </td>
-                      <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Sales Person:</td>
+                      <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Sales Agent:</td>
                       <td><input readOnly value={selectedOrder.sales_person || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
                     </tr>
                     <tr>

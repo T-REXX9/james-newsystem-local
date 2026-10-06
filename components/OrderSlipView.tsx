@@ -852,7 +852,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
               <table className="w-full min-w-[1100px] table-fixed border-collapse text-[13px] lg:min-w-0">
                 <colgroup>{ORDER_SLIP_LIST_COLUMN_WIDTHS.map((width, index) => <col key={`${width}-${index}`} style={{ width }} />)}</colgroup>
                 <thead className="sticky top-0 z-10 bg-white"><tr className="border-b-2 border-[#d5d5d5] text-left text-[14px] font-semibold">
-                  <th className="px-2 pb-2">Date</th><th className="px-2 pb-2">Customer</th><th className="px-2 pb-2">SO No.</th><th className="px-2 pb-2">OS No.</th><th className="px-2 pb-2">DM No.</th><th className="px-2 pb-2">Tracking No.</th><th className="px-2 pb-2">Sales Person</th><th className="px-2 pb-2">Status</th>
+                  <th className="px-2 pb-2">Date</th><th className="px-2 pb-2">Customer</th><th className="px-2 pb-2">SO No.</th><th className="px-2 pb-2">OS No.</th><th className="px-2 pb-2">DM No.</th><th className="px-2 pb-2">Tracking No.</th><th className="px-2 pb-2">Sales Agent</th><th className="px-2 pb-2">Status</th>
                 </tr></thead>
                 <tbody>
                   {loading ? <tr><td colSpan={8} className="border border-[#d7d7d7] px-2 py-4 text-center text-[#777]">Loading order slips...</td></tr> : orderSlips.length === 0 ? <tr><td colSpan={8} className="border border-[#d7d7d7] px-2 py-4 text-center text-[#777]">No order slips found.</td></tr> : orderSlips.map((slip) => {
@@ -907,7 +907,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
               <div className="grid grid-cols-[7%_38%_10%_18%_9%_18%] items-center">
                 <label className={legacyLabelClass}>Address :</label><div className="pl-[19px] pr-[3px]"><input readOnly value={selectedSlip?.delivery_address || ''} className={legacyInputClass} /></div>
                 <label className={legacyLabelClass}>Reference No.:</label><div className="pl-2"><input readOnly value={selectedSlip?.reference_no || ''} className={legacyInputClass} /></div>
-                <label className={legacyLabelClass}>Salesperson:</label><div><input readOnly value={selectedSlip?.sales_person || ''} className={legacyInputClass} /></div>
+                <label className={legacyLabelClass}>Sales Agent:</label><div><input readOnly value={selectedSlip?.sales_person || ''} className={legacyInputClass} /></div>
               </div>
               <div className="grid grid-cols-[7%_38%_10%_18%_9%_18%] items-center">
                 <label className={legacyLabelClass}>Shipped Via:</label><div className="pl-[19px] pr-[3px]"><input readOnly value={selectedSlip?.send_by || ''} className={legacyInputClass} /></div>
@@ -1080,7 +1080,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                   <th className="px-3 py-2 text-left">OS No.</th>
                   <th className="px-3 py-2 text-left">DM No.</th>
                   <th className="px-3 py-2 text-left">Tracking No.</th>
-                  <th className="px-3 py-2 text-left">Sales Person</th>
+                  <th className="px-3 py-2 text-left">Sales Agent</th>
                   <th className="px-3 py-2 text-left">Status</th>
                 </tr>
               </thead>
@@ -1247,7 +1247,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                     <td><input readOnly value={selectedSlip.delivery_address || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
                     <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Reference No.:</td>
                     <td><input readOnly value={selectedSlip.reference_no || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
-                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Salesperson:</td>
+                    <td className="text-right font-semibold text-sm pr-2 whitespace-nowrap">Sales Agent:</td>
                     <td><input readOnly value={selectedSlip.sales_person || ''} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-sm" /></td>
                   </tr>
                   <tr>

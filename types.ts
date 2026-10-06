@@ -1972,12 +1972,17 @@ export interface SalesReportSummary {
   categoryTotals: CategoryTotal[];
   salespersonTotals: SalespersonTotal[];
   grandTotal: GrandTotal;
+  starredCustomerSales?: {
+    total: number;
+    customerCount: number;
+  };
   productTotals?: SalesReportProductTotal[];
 }
 
 export interface SalesReportData {
   transactions: SalesReportTransaction[];
   summary: SalesReportSummary;
+  error?: string;
 }
 
 export interface CustomerOption {

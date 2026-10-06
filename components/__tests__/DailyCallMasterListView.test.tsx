@@ -95,6 +95,7 @@ describe('DailyCallMasterListView', () => {
     vi.mocked(reviewCustomerRequest).mockImplementationOnce(() => new Promise((_, reject) => { fail = reject; }));
     render(<DailyCallMasterListView currentUser={masterUser} />);
     await userEvent.setup().click(await screen.findByRole('button', { name: 'Unverified Prospects (1)' }));
+    await userEvent.setup().click(screen.getByRole('button', { name: /Duplicate submissions/i }));
     const button = screen.getByTitle(decision === 'approved' ? 'Approve' : 'Reject');
     fireEvent.click(button);
     fireEvent.click(button);
@@ -131,6 +132,7 @@ describe('DailyCallMasterListView', () => {
       render(<DailyCallMasterListView currentUser={masterUser} />);
       const user = userEvent.setup();
       await user.click(await screen.findByRole('button', { name: 'Unverified Prospects (1)' }));
+      await user.click(screen.getByRole('button', { name: /Duplicate submissions/i }));
       const row = screen.getByText('Pending Company').closest('tr')!;
       const cells = within(row).getAllByRole('cell');
       expect(cells).toHaveLength(screen.getAllByRole('columnheader').length);
@@ -154,6 +156,34 @@ describe('DailyCallMasterListView', () => {
       window.removeEventListener('workflow:navigate', navigate);
       openWindow.mockRestore();
     }
+  });
+
+  it('separates unverified customers from sales-agent duplicate submissions in their own tabs', async () => {
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: '', count: 1 },
+      items: [{
+        id: 'unverified-tab-customer', shopName: 'Unverified Customer Row', province: '', city: '',
+        contactNumber: '', assignedTo: 'Unassigned', profileType: 'Prospect', verification: 'Unverified',
+        purchaseCount: 0, totalSales: 0, currentMonthSales: 0, averageMonthlySales: 0,
+        averageMonthlySalesMonthCount: 0, recentThreeMonthSales: 0, previousThreeMonthSales: 0,
+        salesTrendPercent: 0, daysSinceLastPurchase: 0, monthsSinceLastPurchase: 0,
+        purchaseAgeGroup: 'no_purchase', listCategory: 'no_purchase',
+      }],
+      pendingDuplicateProspects: [{
+        requestId: 'request-tab-1', contactId: 'pending-tab-1', company: 'Submitted Duplicate Prospect',
+        mobile: '', phone: '', address: '', submittedAt: '', submittedBy: 1, submittedByName: '',
+        referBy: '', salesPersonId: '', duplicateOverrideReason: '', conflictingCustomers: [],
+      }],
+    });
+    render(<DailyCallMasterListView currentUser={masterUser} />);
+
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Unverified Prospects (2)' }));
+    expect(await screen.findByText('Unverified Customer Row')).toBeInTheDocument();
+    expect(screen.queryByText('Submitted Possible Prospect')).not.toBeInTheDocument();
+
+    await userEvent.setup().click(screen.getByRole('button', { name: /Duplicate submissions/i }));
+    expect(await screen.findByText('Submitted Duplicate Prospect')).toBeInTheDocument();
+    expect(screen.queryByText('Unverified Customer Row')).not.toBeInTheDocument();
   });
 
   it('keeps the column header in the master list scroll region', async () => {

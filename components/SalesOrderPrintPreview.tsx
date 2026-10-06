@@ -273,7 +273,7 @@ const SalesOrderPrintPreview: React.FC<SalesOrderPrintPreviewProps> = ({
               <tr>
                 <td className="sales-order-label">Reference No.:</td>
                 <td><b>{order.reference_no || '-'}</b></td>
-                <td className="sales-order-label">Salesperson:</td>
+                <td className="sales-order-label">Sales Agent:</td>
                 <td><b>{order.sales_person || '-'}</b></td>
               </tr>
               <tr>

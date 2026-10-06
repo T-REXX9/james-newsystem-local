@@ -15,7 +15,7 @@ import CustomerStarIndicator from './CustomerStarIndicator';
 import { useDebounce } from '../hooks/useDebounce';
 import { canBackdatePosting, canPerformAction } from '../utils/actionPermissions';
 import { canMutateDocumentDateField, localTodayYmd, validateDocumentDateWrite } from '../utils/backdatedPosting';
-import { formatDate as formatPhilippineDate } from '../utils/formatUtils';
+import { formatAccountingTimestamp, formatDate as formatPhilippineDate } from '../utils/formatUtils';
 
 import { shouldSuppressAuthError } from '../services/localApiAuth';
 type SourceDocument = SalesReturnSourceDocument;
@@ -296,7 +296,7 @@ export const SourceDocAutocomplete: React.FC<{
   }, [debouncedQuery, documents, remoteResults, customerMap]);
 
   useEffect(() => {
-    setSelectedIndex(results.length > 0 ? 0 : -1);
+    setSelectedIndex(-1);
   }, [results]);
 
   const handleSelect = (doc: SourceDocument) => {
@@ -413,7 +413,7 @@ export const SourceDocAutocomplete: React.FC<{
                         <div className="flex items-center gap-3 mt-1 text-[10px] text-slate-400">
                           <span>Date: {formatDate(doc.sales_date)}</span>
                           <span>•</span>
-                          <span>Salesman: {doc.sales_person || '—'}</span>
+                          <span>Sales Agent: {doc.sales_person || '—'}</span>
                           <span>•</span>
                           <span>Total: {peso.format(doc.grand_total)}</span>
                         </div>
@@ -592,7 +592,7 @@ const CreateModal: React.FC<{
               placeholder="Search invoice or OR number..."
               inputClassName="border-slate-300 dark:border-slate-600"
             />
-            <p className="text-[10px] text-slate-400 mt-0.5">Selecting a document auto-fills customer, type, and salesman.</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Selecting a document auto-fills customer, type, and sales agent.</p>
           </div>}
           <div className="block">
             <span className="text-slate-600 dark:text-slate-300 text-sm">Customer</span>
@@ -636,7 +636,7 @@ const CreateModal: React.FC<{
             </label>
           </div>
           <label className="block">
-            <span className="text-slate-600 dark:text-slate-300">Salesman</span>
+            <span className="text-slate-600 dark:text-slate-300">Sales Agent</span>
             <input
               value={form.salesman}
               onChange={(e) => setForm((f) => ({ ...f, salesman: e.target.value }))}
@@ -682,9 +682,10 @@ interface SalesReturnPageProps {
   initialMonth?: string;
   initialYear?: string;
   initialStatus?: string;
+  initialSalesReturnRefNo?: string;
 }
 
-const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initialYear, initialStatus }) => {
+const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initialYear, initialStatus, initialSalesReturnRefNo }) => {
   const canAdd = canPerformAction('can_add');
   const canEdit = canPerformAction('can_edit');
   const canDelete = canPerformAction('can_delete');
@@ -693,7 +694,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
   const hasBackdatedPosting = canBackdatePosting();
   const today = new Date();
   const [rows, setRows] = useState<SalesReturnRecord[]>([]);
-  const [selectedRefno, setSelectedRefno] = useState('');
+  const [selectedRefno, setSelectedRefno] = useState(initialSalesReturnRefNo || '');
   const [selected, setSelected] = useState<SalesReturnRecord | null>(null);
   const [items, setItems] = useState<SalesReturnItem[]>([]);
   const [dateDraft, setDateDraft] = useState(localTodayYmd());
@@ -784,7 +785,9 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
       const data = await salesReturnService.list({ search, status, month, year, page, perPage });
       setRows(data.items);
 
-      if (!selectedRefno && data.items[0]?.lrefno) {
+      if (initialSalesReturnRefNo) {
+        if (selectedRefno !== initialSalesReturnRefNo) setSelectedRefno(initialSalesReturnRefNo);
+      } else if (!selectedRefno && data.items[0]?.lrefno) {
         setSelectedRefno(data.items[0].lrefno);
       } else if (selectedRefno && !data.items.some((r) => r.lrefno === selectedRefno)) {
         setSelectedRefno(data.items[0]?.lrefno || '');
@@ -1046,6 +1049,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
                 <thead className="sticky top-0 bg-white font-['Oswald'] text-[14px]">
                   <tr className="border-b-2 border-[#ddd]">
                     <th className="w-[12%] px-2 py-2">Date</th>
+                    <th className="w-[18%] px-2 py-2">Timestamp</th>
                     <th className="w-[42%] px-2 py-2">Customer</th>
                     <th className="w-[15%] px-2 py-2">CM No.</th>
                     <th className="w-[18%] px-2 py-2">Transaction No.</th>
@@ -1053,13 +1057,14 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
                   </tr>
                 </thead>
                 <tbody>
-                  {loadingList && <tr><td colSpan={5} className="px-2 py-4 text-slate-500">Loading...</td></tr>}
-                  {!loadingList && rows.length === 0 && <tr><td colSpan={5} className="px-2 py-4 text-slate-500">No sales return records found.</td></tr>}
+                  {loadingList && <tr><td colSpan={6} className="px-2 py-4 text-slate-500">Loading...</td></tr>}
+                  {!loadingList && rows.length === 0 && <tr><td colSpan={6} className="px-2 py-4 text-slate-500">No sales return records found.</td></tr>}
                   {!loadingList && rows.map((row) => {
                     const active = selectedRefno === row.lrefno;
                     return (
                       <tr key={row.lrefno} onClick={() => setSelectedRefno(row.lrefno)} className={`cursor-pointer border-b border-[#ddd] ${active ? 'text-blue-600' : ''}`}>
                         <td className="px-2 py-2">{formatDate(row.ldate)}</td>
+                        <td className="px-2 py-2 whitespace-nowrap">{formatAccountingTimestamp(row.created_at)}</td>
                         <td className="px-2 py-2">{row.customer_name || '-'}<CustomerStarIndicator customerId={row.customer_id} className="ml-1 inline h-3.5 w-3.5" /></td>
                         <td className="px-2 py-2 underline">{row.lcredit_no || '-'}</td>
                         <td className="px-2 py-2 underline">{row.linvoice_no || '-'}</td>
@@ -1115,7 +1120,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
                   ) : (
                     <input readOnly value={formatDate(selected.ldate)} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
                   )}
-                  <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Sales Person:</label>
+                  <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Sales Agent:</label>
                   <input readOnly value={selected.sales_person || ''} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
 
                   <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">DR/Invoice</label>
@@ -1145,6 +1150,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
                       <tr className="border-b-2 border-[#ddd]">
                         {isPending && canDelete && <th className="w-8 px-2 py-2" />}
                         <th className="px-2 py-2">Item Code</th>
+                        <th className="px-2 py-2">Timestamp</th>
                         <th className="px-2 py-2 text-right">Quantity</th>
                         <th className="px-2 py-2">Location.</th>
                         <th className="px-2 py-2">Part No.</th>
@@ -1156,12 +1162,13 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
                       </tr>
                     </thead>
                     <tbody>
-                      {loadingDetail && <tr><td colSpan={10} className="px-2 py-5 text-slate-500">Loading items...</td></tr>}
-                      {!loadingDetail && items.length === 0 && <tr><td colSpan={10} className="px-2 py-5 text-slate-500">No line items for this record.</td></tr>}
+                      {loadingDetail && <tr><td colSpan={isPending && canDelete ? 11 : 10} className="px-2 py-5 text-slate-500">Loading items...</td></tr>}
+                      {!loadingDetail && items.length === 0 && <tr><td colSpan={isPending && canDelete ? 11 : 10} className="px-2 py-5 text-slate-500">No line items for this record.</td></tr>}
                       {!loadingDetail && items.map((item) => (
                         <tr key={item.id} className="border-b border-[#ddd]">
                           {isPending && canDelete && <td className="px-2 py-2"><button type="button" onClick={() => handleDeleteItem(item.id)} disabled={actionLoading} className="text-[#d9534f]" title="Remove item"><Trash2 className="h-4 w-4" /></button></td>}
                           <td className="px-2 py-2">{item.item_code || '-'}</td>
+                          <td className="whitespace-nowrap px-2 py-2">{formatAccountingTimestamp(item.created_at)}</td>
                           <td className="px-2 py-2 text-right">{item.qty.toFixed(2)}</td>
                           <td className="px-2 py-2">{item.location || '-'}</td>
                           <td className="px-2 py-2">{item.part_no || '-'}</td>

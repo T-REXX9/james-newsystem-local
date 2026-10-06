@@ -141,6 +141,10 @@ export const getSalesReportData = async (
       categoryTotals: mapCategoryTotals(data?.summary?.categoryTotals),
       salespersonTotals: mapSalespersonTotals(data?.summary?.salespersonTotals),
       grandTotal: mapGrandTotal(data?.summary?.grandTotal),
+      starredCustomerSales: {
+        total: toNumber(data?.summary?.starredCustomerSales?.total),
+        customerCount: toNumber(data?.summary?.starredCustomerSales?.customerCount),
+      },
       productTotals: mapProductTotals(data?.summary?.productTotals),
     };
 
@@ -149,10 +153,12 @@ export const getSalesReportData = async (
     console.error('Error in getSalesReportData:', err);
     return {
       transactions: [],
+      error: err instanceof Error ? err.message : 'Sales data is unavailable',
       summary: {
         categoryTotals: [],
         salespersonTotals: [],
         grandTotal: { soAmount: 0, drAmount: 0, invoiceAmount: 0, total: 0 },
+        starredCustomerSales: { total: 0, customerCount: 0 },
         productTotals: [],
       },
     };

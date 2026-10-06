@@ -26,8 +26,24 @@ export type FreightCharge = {
   ltrans_refno: string;
   linvoice_no: string;
   ldatetime?: string;
+  created_at?: string;
   userfname?: string;
   userlname?: string;
+};
+
+export type FreightChargesReportRow = {
+  id: number;
+  refno: string;
+  dm_no: string;
+  customer_id: string;
+  customer: string;
+  transaction: string;
+  tracking_no: string;
+  courier: string;
+  date: string;
+  created_at: string;
+  status: string;
+  amount: number;
 };
 
 export type FreightChargeListResponse = {
@@ -85,6 +101,7 @@ const mapEntry = (row: any): FreightCharge => ({
   ltrans_refno: String(row?.ltrans_refno || ''),
   linvoice_no: String(row?.linvoice_no || ''),
   ldatetime: String(row?.ldatetime || ''),
+  created_at: String(row?.created_at || ''),
   userfname: String(row?.userfname || ''),
   userlname: String(row?.userlname || ''),
 });

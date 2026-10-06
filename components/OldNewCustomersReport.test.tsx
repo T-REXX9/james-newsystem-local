@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import OldNewCustomersReport from './OldNewCustomersReport';
 
@@ -13,6 +13,7 @@ const fetchOldNewCustomersReportMock = fetchOldNewCustomersReport as unknown as 
 
 describe('OldNewCustomersReport', () => {
   beforeEach(() => {
+    cleanup();
     vi.resetAllMocks();
   });
 
@@ -58,6 +59,7 @@ describe('OldNewCustomersReport', () => {
     render(<OldNewCustomersReport />);
 
     expect(screen.getByText('Old/New Customers')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
     await waitFor(() => expect(fetchOldNewCustomersReportMock).toHaveBeenCalledTimes(1));
     expect(screen.getByText('Legacy Motors')).toBeInTheDocument();
     expect(screen.getByText('Fresh Parts')).toBeInTheDocument();
@@ -87,6 +89,7 @@ describe('OldNewCustomersReport', () => {
 
     render(<OldNewCustomersReport />);
 
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
     await waitFor(() => expect(fetchOldNewCustomersReportMock).toHaveBeenCalledTimes(1));
     expect(screen.getByText('No old customers for the selected filters.')).toBeInTheDocument();
     expect(screen.getByText('No new customers for the selected filters.')).toBeInTheDocument();

@@ -17,6 +17,7 @@ export type PurchaseHistoryRow = {
   source_refno: string;
   source_no: string;
   ldate: string;
+  created_at: string;
   litemcode: string;
   lpartno: string;
   ldesc: string;
@@ -199,6 +200,7 @@ export const purchaseHistoryReportService = {
           source_refno: String(row?.source_refno || ''),
           source_no: String(row?.source_no || ''),
           ldate: String(row?.ldate || ''),
+          created_at: String(row?.created_at || ''),
           litemcode: String(row?.litemcode || ''),
           lpartno: String(row?.lpartno || ''),
           ldesc: String(row?.ldesc || ''),

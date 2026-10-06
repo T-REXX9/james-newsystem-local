@@ -1,5 +1,6 @@
 import { getLocalAuthSession } from './localAuthService';
 import { ContactTransaction } from '../types';
+import { formatAccountingTimestamp } from '../utils/formatUtils';
 
 import { parseApiErrorMessage } from './localApiAuth';
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
@@ -43,6 +44,7 @@ export type CustomerLedgerDetailedRow = {
   id: number;
   date: string | null;
   datetime: string;
+  created_at: string;
   reference: string;
   ref_no: string;
   ref_type: string;
@@ -287,6 +289,7 @@ export const customerLedgerService = {
         id: toNumber(row?.id),
         date: row?.date || null,
         datetime: String(row?.datetime || ''),
+        created_at: String(row?.created_at || ''),
         reference: String(row?.reference || ''),
         ref_no: String(row?.ref_no || ''),
         ref_type: String(row?.ref_type || ''),
@@ -322,7 +325,7 @@ export const customerLedgerService = {
   exportLedgerCsv(response: CustomerLedgerResponse): void {
     const rows = response.rows;
     const header = [
-      'Date', 'Ref', 'Chk No.', 'Chk Date', 'DCR',
+      'Date', 'Timestamp', 'Ref', 'Chk No.', 'Chk Date', 'DCR',
       'Debit', 'Credit', 'PDC', 'Balance', 'Remarks', 'Promise to Pay',
     ];
     const csvRows = [header.join(',')];
@@ -334,6 +337,7 @@ export const customerLedgerService = {
       csvRows.push(
         [
           esc(r.date || ''),
+          esc(r.reference === 'OPENING BALANCE' ? '' : formatAccountingTimestamp(r.created_at)),
           esc(r.reference || ''),
           esc(r.check_no || ''),
           esc(r.check_date || ''),
@@ -351,7 +355,7 @@ export const customerLedgerService = {
     // Totals row
     csvRows.push(
       [
-        esc('TOTAL'), '', '', '', '',
+        esc('TOTAL'), '', '', '', '', '',
         fmt(response.totals.debit),
         fmt(response.totals.credit),
         fmt(response.totals.pdc),

@@ -14,6 +14,7 @@ export type AdjustmentEntry = {
   lcustomerid: string;
   lcustomername: string;
   ldate: string;
+  created_at: string;
   ltype: AdjustmentType;
   lamount: number;
   lremark: string;
@@ -66,6 +67,7 @@ const mapEntry = (row: any): AdjustmentEntry => ({
   lcustomerid: String(row?.lcustomerid || ''),
   lcustomername: String(row?.lcustomername || ''),
   ldate: String(row?.ldate || ''),
+  created_at: String(row?.created_at || ''),
   ltype: (String(row?.ltype || 'Debit') as AdjustmentType),
   lamount: toNumber(row?.lamount),
   lremark: String(row?.lremark || ''),

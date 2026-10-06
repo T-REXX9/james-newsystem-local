@@ -95,6 +95,35 @@ describe('AccessControlSettings - create staff account', () => {
     );
   });
 
+  it('saves Sales Development Report page access for an individual account', async () => {
+    const user = userEvent.setup();
+    const homePages = expandAccessModule('home');
+    fetchProfilesMock.mockResolvedValue({
+      items: [{
+        id: '2',
+        full_name: 'melson',
+        email: 'melson@example.com',
+        role: 'Sales Agent',
+        access_rights: homePages,
+        access_override: false,
+        group_id: '2',
+      }],
+      meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
+    });
+    updateProfileMock.mockResolvedValue({ id: '2', full_name: 'melson' });
+
+    renderWithProviders(<AccessControlSettings />);
+
+    await user.click(await screen.findByText('Sales', { selector: 'span' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Sales Development Report page access for melson' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(updateProfileMock).toHaveBeenCalledWith('2', expect.objectContaining({
+      access_rights: [...homePages, 'sales-reports-sales-development-report'],
+      access_override: true,
+    })));
+  });
+
   it('saves Edit invoice number for Invoice when that is the only action toggled', async () => {
     const user = userEvent.setup();
     const salesPages = expandAccessModule('sales');

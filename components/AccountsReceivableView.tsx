@@ -9,7 +9,7 @@ import {
 } from '../services/accountsReceivableService';
 import { LedgerCustomer, customerLedgerService } from '../services/customerLedgerService';
 import { BUTTON_BASE, BUTTON_PRIMARY } from '../utils/uiConstants';
-import { formatDate as formatPhilippineDate } from '../utils/formatUtils';
+import { formatAccountingTimestamp, formatDate as formatPhilippineDate } from '../utils/formatUtils';
 import CustomerAutocomplete from './CustomerAutocomplete';
 import CustomerStarIndicator from './CustomerStarIndicator';
 
@@ -221,9 +221,9 @@ const AccountsReceivableView: React.FC<AccountsReceivableViewProps> = ({ initial
           {flattenedRows.length === 0 ? <p className="py-8 text-center text-sm text-gray-500">No outstanding balances found.</p> :
           <div className="overflow-auto border border-[#ddd]">
             <table className="min-w-full text-sm">
-              <thead className="bg-[#f5f5f5]"><tr>{!isSingleCustomer && <th className="px-3 py-2 text-left">Customer</th>}<th className="px-3 py-2 text-left">Terms</th><th className="px-3 py-2 text-left">Date</th><th className="px-3 py-2 text-left">DR/INV</th><th className="px-3 py-2 text-right">Amount</th><th className="px-3 py-2 text-right">Amount Paid</th><th className="px-3 py-2 text-right">Balance</th></tr></thead>
-              <tbody>{flattenedRows.map((row,index) => <tr key={`${row.sessionId}-${row.reference}-${index}`} className="border-t border-[#eee]">{!isSingleCustomer && <td className="px-3 py-2">{row.customer || '-'}<CustomerStarIndicator customerId={row.sessionId} className="ml-1 inline h-3.5 w-3.5" /></td>}<td className="px-3 py-2">{row.terms || '-'}</td><td className="px-3 py-2">{formatDate(row.date)}</td><td className="px-3 py-2">{row.reference || '-'}</td><td className="px-3 py-2 text-right">{peso.format(row.amount || 0)}</td><td className="px-3 py-2 text-right">{peso.format(row.amount_paid || 0)}</td><td className="px-3 py-2 text-right font-semibold">{peso.format(row.balance || 0)}</td></tr>)}</tbody>
-              <tfoot className="border-t-2 border-[#aaa] font-bold text-red-600"><tr><td colSpan={isSingleCustomer ? 6 : 7} className="px-3 py-3">GRAND TOTAL BALANCE: {peso.format(report.grand_total_balance || 0)}</td></tr></tfoot>
+              <thead className="bg-[#f5f5f5]"><tr>{!isSingleCustomer && <th className="px-3 py-2 text-left">Customer</th>}<th className="px-3 py-2 text-left">Terms</th><th className="px-3 py-2 text-left">Date</th><th className="px-3 py-2 text-left">Timestamp</th><th className="px-3 py-2 text-left">DR/INV</th><th className="px-3 py-2 text-right">Amount</th><th className="px-3 py-2 text-right">Amount Paid</th><th className="px-3 py-2 text-right">Balance</th></tr></thead>
+              <tbody>{flattenedRows.map((row,index) => <tr key={`${row.sessionId}-${row.reference}-${index}`} className="border-t border-[#eee]">{!isSingleCustomer && <td className="px-3 py-2">{row.customer || '-'}<CustomerStarIndicator customerId={row.sessionId} className="ml-1 inline h-3.5 w-3.5" /></td>}<td className="px-3 py-2">{row.terms || '-'}</td><td className="px-3 py-2">{formatDate(row.date)}</td><td className="whitespace-nowrap px-3 py-2">{formatAccountingTimestamp(row.created_at)}</td><td className="px-3 py-2">{row.reference || '-'}</td><td className="px-3 py-2 text-right">{peso.format(row.amount || 0)}</td><td className="px-3 py-2 text-right">{peso.format(row.amount_paid || 0)}</td><td className="px-3 py-2 text-right font-semibold">{peso.format(row.balance || 0)}</td></tr>)}</tbody>
+              <tfoot className="border-t-2 border-[#aaa] font-bold text-red-600"><tr><td colSpan={isSingleCustomer ? 7 : 8} className="px-3 py-3">GRAND TOTAL BALANCE: {peso.format(report.grand_total_balance || 0)}</td></tr></tfoot>
             </table>
           </div>}
         </section>}

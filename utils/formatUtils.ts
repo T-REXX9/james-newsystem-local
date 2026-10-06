@@ -64,6 +64,28 @@ export const formatDateTime = (value?: string | Date | null) => {
   })}`;
 };
 
+const formatAccountingClock = (value: Date): string => new Intl.DateTimeFormat('en-PH', {
+  timeZone: DISPLAY_TIME_ZONE,
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: true,
+}).format(value);
+
+/** Format only the trustworthy Accounting creation time in Philippine 12-hour time. */
+export const formatAccountingTime = (value?: string | Date | null) => {
+  if (!value || (typeof value === 'string' && value.trim() === '')) return 'Unavailable';
+  if (typeof value === 'string' && !/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(value.trim())) return 'Unavailable';
+  const parsed = parseDisplayDate(value);
+  return parsed ? formatAccountingClock(parsed) : 'Unavailable';
+};
+
+/** Format only the clock portion of trustworthy Accounting timestamps in Philippine 12-hour time.
+ * Missing legacy timestamps are explicit so a business date is never mistaken
+ * for an entry time.
+ */
+export const formatAccountingTimestamp = (value?: string | Date | null) => formatAccountingTime(value);
+
 export const formatRelativeTime = (value?: string | null) => {
   if (!value) return 'No activity yet';
   const parsed = new Date(value);

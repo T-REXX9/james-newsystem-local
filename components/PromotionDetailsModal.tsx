@@ -242,7 +242,7 @@ const PromotionDetailsModal: React.FC<Props> = ({
                                 <div className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
                                     <Users className="w-4 h-4 text-slate-400" />
                                     {promotion.assigned_to.length === 0
-                                        ? 'All Sales Persons'
+                                        ? 'All Sales Agents'
                                         : `${promotion.assigned_to.length} Specific Staff`}
                                 </div>
                             </div>
