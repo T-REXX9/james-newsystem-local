@@ -14,6 +14,7 @@ import {
   Filter,
   Loader2,
   Mail,
+  MapPin,
   MessageSquare,
   Package,
   Phone,
@@ -1934,6 +1935,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         <div className="mr-auto min-w-[150px]"><p className="text-sm font-extrabold text-[#10244c] dark:text-white">Customer board</p><p className="text-[11px] text-slate-500 dark:text-slate-400">Assigned to {agentDisplayName}{initialSelectedDate ? ` · ${new Date(`${initialSelectedDate}T12:00:00`).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' })}` : ''}</p></div>
         <div className="flex min-w-[200px] flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-950"><Search className="h-4 w-4 text-slate-400" /><input aria-label="Search customer, prospect, or agent" className="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-200" placeholder="Search customer, prospect, or agent" value={searchValue} onChange={(event) => setSearchValue(event.target.value)} /></div>
         <button type="button" onClick={() => setActiveWorkspacePanel('filters')} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"><Filter className="h-4 w-4" />Filters{colorFilter !== 'all' || salesReportFilter !== 'all' ? <span className="h-2 w-2 rounded-full bg-blue-600" aria-label="Filters active" /> : null}</button>
+        <button type="button" onClick={() => navigateWorkflow('sales-reports-sales-map')} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200 dark:hover:bg-blue-950/70"><MapPin className="h-4 w-4" aria-hidden="true" />Sales Map</button>
         <span className="shrink-0 text-sm font-bold text-slate-500 dark:text-slate-400">{masterRows.length} {masterRows.length === 1 ? 'customer' : 'customers'}</span>
       </section>
 
