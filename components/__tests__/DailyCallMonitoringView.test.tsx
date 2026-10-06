@@ -213,6 +213,21 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(await screen.findByText('Team sales by Daily Call status')).toBeInTheDocument();
   });
 
+  it('shows a Sales Map shortcut that navigates to the Sales Map route', async () => {
+    const user = userEvent.setup();
+    const navigationHandler = vi.fn();
+    window.addEventListener('workflow:navigate', navigationHandler);
+
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+    await user.click(await screen.findByRole('button', { name: /Sales Map/i }));
+
+    expect(navigationHandler).toHaveBeenCalledOnce();
+    expect(navigationHandler.mock.calls[0][0]).toMatchObject({
+      detail: { tab: 'sales-reports-sales-map' },
+    });
+    window.removeEventListener('workflow:navigate', navigationHandler);
+  });
+
   it('uses API debt and customer status rather than outstanding balance for do-not-contact classification', async () => {
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
       ...baseSnapshot,
