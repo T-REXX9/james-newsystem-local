@@ -7,6 +7,7 @@ import {
 } from '../services/freightChargesReportService';
 import { BUTTON_BASE, BUTTON_PRIMARY } from '../utils/uiConstants';
 import { navigateWorkflow } from '../utils/workflowNavigate';
+import { formatAccountingTimestamp } from '../utils/formatUtils';
 
 import { shouldSuppressAuthError } from '../services/localApiAuth';
 
@@ -204,8 +205,9 @@ const FreightChargesReportView: React.FC = () => {
                           <th scope="col" className="px-3 py-2 font-semibold">Transaction</th>
                           <th scope="col" className="px-3 py-2 font-semibold">Tracking No.</th>
                           <th scope="col" className="px-3 py-2 font-semibold">Courier</th>
-                          <th scope="col" className="px-3 py-2 font-semibold">Date</th>
-                          <th scope="col" className="px-3 py-2 font-semibold">Status</th>
+                      <th scope="col" className="px-3 py-2 font-semibold">Date</th>
+                      <th scope="col" className="px-3 py-2 font-semibold">Timestamp</th>
+                      <th scope="col" className="px-3 py-2 font-semibold">Status</th>
                           <th scope="col" className="px-3 py-2 text-right font-semibold">Amount</th>
                         </tr>
                       </thead>
@@ -218,12 +220,13 @@ const FreightChargesReportView: React.FC = () => {
                             <td className="px-3 py-2">{row.tracking_no || '-'}</td>
                             <td className="px-3 py-2">{row.courier || '-'}</td>
                             <td className="whitespace-nowrap px-3 py-2">{formatDate(row.date)}</td>
+                            <td className="whitespace-nowrap px-3 py-2">{formatAccountingTimestamp(row.created_at)}</td>
                             <td className="px-3 py-2">{row.status || '-'}</td>
                             <td className="whitespace-nowrap px-3 py-2 text-right">{amountFormat.format(row.amount || 0)}</td>
                           </tr>
                         ))}
                         <tr className="font-semibold">
-                          <td colSpan={7} className="px-3 py-3 text-right">Total:</td>
+                          <td colSpan={8} className="px-3 py-3 text-right">Total:</td>
                           <td className="whitespace-nowrap border-b-2 border-slate-700 px-3 py-3 text-right dark:border-slate-200 print:border-black">
                             {amountFormat.format(report.total_amount || 0)}
                           </td>
