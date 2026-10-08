@@ -32,6 +32,7 @@ interface ContactDetailsProps {
 
 const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, onClose, onUpdate }) => {
   const [activeTab, setActiveTab] = useState('Overview');
+  const [recordImageFailed, setRecordImageFailed] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [comments, setComments] = useState<Comment[]>(contact.comments || []);
   const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
@@ -151,6 +152,10 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
     : [];
   const normalizedPriceGroup = contact.priceGroup ? normalizePriceGroup(contact.priceGroup) : '';
 
+  useEffect(() => {
+    setRecordImageFailed(false);
+  }, [contact.recordImage]);
+
   const tabs = [
     { id: 'Overview', label: 'Overview', icon: Layout },
     { id: 'Metrics', label: 'Metrics', icon: TrendingUp },
@@ -196,14 +201,27 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
       </div>
 
       {/* Profile Header Card */}
-      <div className="px-8 py-8 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-          <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
-              <div className="flex items-start gap-6">
-                  <div className="w-24 h-24 rounded-2xl shadow-md border-2 border-white dark:border-slate-700 bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold text-3xl text-slate-400 dark:text-slate-500">
-                      {contact.company ? contact.company.charAt(0) : contact.name.charAt(0)}
+      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+          <div className="relative h-[172px] bg-gradient-to-r from-slate-700 via-brand-blue to-blue-500 sm:h-[230px]">
+              {contact.recordImage && !recordImageFailed ? (
+                  <img
+                    src={contact.recordImage}
+                    alt={`${contact.company || contact.name || 'Customer'} cover photo`}
+                    className="h-full w-full object-cover"
+                    style={{ objectPosition: contact.recordImagePosition?.replace(',', '% ') }}
+                    onError={() => setRecordImageFailed(true)}
+                  />
+              ) : (
+                  <div className="flex h-full items-center justify-center text-6xl font-bold tracking-widest text-white/80" aria-hidden="true">
+                    {(contact.company || contact.name || '??').substring(0, 2).toUpperCase()}
                   </div>
-                  <div>
-                      <div className="flex flex-wrap items-center gap-3 mb-1">
+              )}
+              <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-950/45 to-transparent" aria-hidden="true" />
+          </div>
+          <div className="px-4 py-5 sm:px-8 sm:py-6">
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
+              <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-3 mb-1">
                           <h1 className="text-2xl font-bold text-slate-800 dark:text-white">
                               <CompanyName 
                                 name={contact.company} 
@@ -236,7 +254,6 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
                           <span className="flex items-center gap-1.5 font-bold">Preferred Brand: <span className="text-brand-blue">{formatPreferredBrand(contact.preferredBrand)}</span></span>
                       </div>
                   </div>
-              </div>
 
               <div className="flex flex-col items-end gap-2">
                   <div className="text-right">
@@ -254,6 +271,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
                        </div>
                   </div>
               </div>
+          </div>
           </div>
       </div>
 

@@ -1,51 +1,37 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertTriangle,
-  ArrowRightLeft,
   BookOpen,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   GitCompareArrows,
   RefreshCw,
-  Search,
   ShieldCheck,
   X,
 } from "lucide-react";
 import type { Contact } from "../../../types";
+import SearchableSelect from "../../SearchableSelect";
 import {
   fetchContactById,
   fetchContacts,
 } from "../../../services/customerDatabaseLocalApiService";
 import {
   executeCustomerMerge,
-  findPotentialDuplicates,
   previewCustomerMerge,
   type CustomerMergePreview,
-  type PotentialDuplicateMatch,
 } from "../../../services/duplicateCustomerService";
 import { shouldSuppressAuthError } from "../../../services/localApiAuth";
 import { useToast } from "../../ToastProvider";
 
-const MATCH_LABELS: Record<string, string> = {
-  company_exact: "Exact company name",
-  company_similar: "Similar company name",
-  tin: "TIN",
-  phone: "Phone number",
-  address: "Address",
-  contact_person: "Contact person",
-};
-
 const PAGE_TUTORIAL_STEPS = [
   {
-    title: "Choose a customer to check",
-    body: "Click a customer card in the directory. The page will check that customer against the live records. If it finds no matches, close the results and choose another customer.",
-    target: "[data-tutorial='customer-card']",
+    title: "Choose customer A",
+    body: "Search the live customer directory and choose the first record to compare.",
+    target: "[data-tutorial='customer-a-select']",
   },
   {
-    title: "Open a possible match",
-    body: "When a pair is found, click Review disparities on that pair. No button appears when there are no matches.",
-    target: "[data-tutorial='match-review']:not(:disabled)",
+    title: "Choose customer B",
+    body: "Search for the second customer. The same customer cannot be selected in both cards.",
+    target: "[data-tutorial='customer-b-select']",
   },
   {
     title: "Compare the actual records",
@@ -53,18 +39,18 @@ const PAGE_TUTORIAL_STEPS = [
     target: "[data-tutorial='customer-diff']",
   },
   {
+    title: "Open the merge controls",
+    body: "Open the merge controls for your selected pair. The next step lets you choose which customer record and company name will survive.",
+    target: "[data-tutorial='match-review']",
+  },
+  {
     title: "Choose the customer record that survives",
-    body: "Choose A or B. The surviving record keeps its customer ID and becomes the destination for the other customer’s transferred history and transactions.",
+    body: "Choose A or B. That record keeps its customer ID and company name, and becomes the destination for the other customer’s transferred history and transactions.",
     target: "[data-tutorial='survivor-select']",
   },
   {
-    title: "Choose the final company name",
-    body: "The survivor’s name is selected by default. You can keep the other customer’s name or enter a new one. This is separate from choosing which record survives.",
-    target: "[data-tutorial='name-choice']",
-  },
-  {
     title: "Explain why these records are duplicates",
-    body: "Enter a clear reason for the audit trail. The preview button becomes available once the survivor, final name, and reason are set.",
+    body: "The survivor’s company name will be retained. Enter a clear reason for the audit trail before previewing." ,
     target: "[data-tutorial='merge-reason']",
   },
   {
@@ -84,7 +70,7 @@ const PAGE_TUTORIAL_STEPS = [
   },
   {
     title: "Run the customer merge",
-    body: "This permanently performs the reviewed merge. Use it only after confirming the survivor, final company name, transferred history, totals, and decisions are correct.",
+    body: "This permanently performs the reviewed merge. Use it only after confirming the survivor and its company name, transferred history, totals, and decisions are correct.",
     target: "[data-tutorial='confirm-merge']",
   },
 ];
@@ -148,9 +134,34 @@ const DiffComparison: React.FC<{
   compact?: boolean;
   "data-tutorial"?: string;
 }> = ({ left, right, leftLabel, rightLabel, compact = false, "data-tutorial": tutorialTarget }) => {
+  const formatContactPersons = (contact: Contact): string =>
+    contact.contactPersons?.length
+      ? contact.contactPersons.map((person, index) => {
+          const details = [
+            person.position,
+            person.telephone && `Tel: ${person.telephone}`,
+            person.mobile && `Mobile: ${person.mobile}`,
+            person.email,
+            person.birthday && `Birthday: ${person.birthday}`,
+          ].filter(Boolean);
+          return `${index + 1}. ${person.name || "Unnamed contact"} (${person.enabled ? "Enabled" : "Disabled"})${details.length ? `\n   ${details.join(" · ")}` : ""}`;
+        }).join("\n")
+      : "—";
+  const formatDeliveryAddresses = (contact: Contact): string =>
+    [...new Set([contact.deliveryAddress, ...(contact.deliveryAddresses || [])].filter(Boolean))].join("\n") || "—";
+  const formatComments = (contact: Contact): string =>
+    contact.comments?.length
+      ? contact.comments.map((comment, index) => `${index + 1}. ${comment.text}${comment.author ? ` — ${comment.author}` : ""}${comment.timestamp ? ` (${comment.timestamp})` : ""}`).join("\n")
+      : "—";
   const rows = [
     ["Company name", left.company, right.company],
-    ["Contact person", primaryContactPerson(left), primaryContactPerson(right)],
+    ["Previous company name", left.pastName, right.pastName],
+    ["Customer since", left.customerSince, right.customerSince],
+    ["Team", left.team, right.team],
+    ["Sales assignment", left.salesman || left.assignedAgent, right.salesman || right.assignedAgent],
+    ["Referred by", left.referBy, right.referBy],
+    ["Contact persons", formatContactPersons(left), formatContactPersons(right)],
+    ["Primary contact", primaryContactPerson(left), primaryContactPerson(right)],
     [
       "Email",
       left.contactPersons?.[0]?.email || left.email,
@@ -158,18 +169,35 @@ const DiffComparison: React.FC<{
     ],
     ["Phone", contactPhone(left), contactPhone(right)],
     ["Address", contactLocation(left), contactLocation(right)],
-    ["Delivery address", left.deliveryAddress, right.deliveryAddress],
+    ["Area", left.area, right.area],
+    ["Delivery address(es)", formatDeliveryAddresses(left), formatDeliveryAddresses(right)],
     ["TIN", left.tin, right.tin],
-    ["VAT type", left.vatType, right.vatType],
+    ["Business line", left.businessLine, right.businessLine],
     ["Payment terms", left.terms, right.terms],
+    ["Transaction type", left.transactionType, right.transactionType],
+    ["VAT type", left.vatType, right.vatType],
+    ["VAT percentage", left.vatPercentage, right.vatPercentage],
     ["Price group", left.priceGroup, right.priceGroup],
-    [
-      "Sales assignment",
-      left.salesman || left.assignedAgentId,
-      right.salesman || right.assignedAgentId,
-    ],
+    ["Price code", left.priceCode, right.priceCode],
+    ["Discount code", left.discountCode, right.discountCode],
+    ["Credit limit", left.creditLimit, right.creditLimit],
+    ["Dealership terms", left.dealershipTerms, right.dealershipTerms],
+    ["Dealership since", left.dealershipSince, right.dealershipSince],
+    ["Dealership quota", left.dealershipQuota, right.dealershipQuota],
+    ["Preferred brand", left.preferredBrand, right.preferredBrand],
+    ["Ishinomoto dealer since", left.ishinomotoDealerSince, right.ishinomotoDealerSince],
+    ["Ishinomoto signage since", left.ishinomotoSignageSince, right.ishinomotoSignageSince],
+    ["Signage since", left.signageSince, right.signageSince],
+    ["Customer code", left.codeText, right.codeText],
+    ["Customer code date", left.codeDate, right.codeDate],
     ["Status", left.status, right.status],
     ["Verification", left.verification, right.verification],
+    ["Customer status", left.customerStatus, right.customerStatus],
+    ["Debt type", left.debtType, right.debtType],
+    ["Hidden from lists", left.isHidden ? "Yes" : "No", right.isHidden ? "Yes" : "No"],
+    ["Customer note", left.comment, right.comment],
+    ["Recorded comments", formatComments(left), formatComments(right)],
+    ["Duplicate override reason", left.duplicateOverrideReason, right.duplicateOverrideReason],
   ].map(([label, leftValue, rightValue]) => ({
     label,
     leftValue: comparisonValue(leftValue),
@@ -238,17 +266,17 @@ const DiffComparison: React.FC<{
               className="grid grid-cols-[10rem_minmax(0,1fr)_minmax(0,1fr)] border-b border-slate-200 last:border-b-0"
             >
               <div
-                className={`flex items-center bg-slate-50 text-xs font-bold text-slate-600 ${compact ? "px-3 py-2" : "px-4 py-3"}`}
+                className={`break-words bg-slate-50 text-xs font-bold text-slate-600 ${compact ? "px-3 py-2" : "px-4 py-3"}`}
               >
                 {label}
               </div>
               <div
-                className={`border-l-4 border-blue-400 text-sm ${compact ? "px-3 py-2 text-xs" : "px-4 py-3"} ${isDifferent ? "bg-amber-50 font-semibold text-amber-950" : "bg-blue-50/60 text-slate-500"}`}
+                className={`whitespace-pre-wrap break-words border-l-4 border-blue-400 text-sm ${compact ? "px-3 py-2 text-xs" : "px-4 py-3"} ${isDifferent ? "bg-amber-50 font-semibold text-amber-950" : "bg-blue-50/60 text-slate-500"}`}
               >
                 {leftValue}
               </div>
               <div
-                className={`border-l-4 border-violet-400 text-sm ${compact ? "px-3 py-2 text-xs" : "px-4 py-3"} ${isDifferent ? "bg-amber-50 font-semibold text-amber-950" : "bg-violet-50/60 text-slate-500"}`}
+                className={`whitespace-pre-wrap break-words border-l-4 border-violet-400 text-sm ${compact ? "px-3 py-2 text-xs" : "px-4 py-3"} ${isDifferent ? "bg-amber-50 font-semibold text-amber-950" : "bg-violet-50/60 text-slate-500"}`}
               >
                 {rightValue}
               </div>
@@ -270,25 +298,19 @@ const DiffComparison: React.FC<{
 export default function DuplicateCustomersView() {
   const { addToast } = useToast();
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Contact | null>(null);
-  const [matches, setMatches] = useState<PotentialDuplicateMatch[]>([]);
-  const [matchDetails, setMatchDetails] = useState<Contact[]>([]);
-  const [hasRunDetection, setHasRunDetection] = useState(false);
-  const [showMatchesModal, setShowMatchesModal] = useState(false);
+  const [selectedBId, setSelectedBId] = useState("");
+  const [selectedB, setSelectedB] = useState<Contact | null>(null);
+  const [showMergeReviewModal, setShowMergeReviewModal] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
   const [spotlightBounds, setSpotlightBounds] = useState<SpotlightBounds | null>(null);
-  const [activeDuplicateId, setActiveDuplicateId] = useState("");
   const [loadingContacts, setLoadingContacts] = useState(true);
-  const [loadingMatches, setLoadingMatches] = useState(false);
+  const [loadingA, setLoadingA] = useState(false);
+  const [loadingB, setLoadingB] = useState(false);
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<CustomerMergePreview | null>(null);
   const [survivorId, setSurvivorId] = useState("");
-  const [nameChoice, setNameChoice] = useState<
-    "survivor" | "duplicate" | "custom" | ""
-  >("");
-  const [customFinalName, setCustomFinalName] = useState("");
   const [mergeReason, setMergeReason] = useState("");
   const [fieldDecisions, setFieldDecisions] = useState<
     Record<string, "survivor" | "duplicate">
@@ -296,11 +318,9 @@ export default function DuplicateCustomersView() {
   const [confirmation, setConfirmation] = useState("");
   const [mergeKey, setMergeKey] = useState("");
   const [merging, setMerging] = useState(false);
-  const detectionSequence = useRef(0);
-  const tutorialTargetSelector =
-    tutorialStep === 4 && nameChoice === "custom"
-      ? "[data-tutorial='custom-name']"
-      : PAGE_TUTORIAL_STEPS[tutorialStep]?.target;
+  const selectionSequence = useRef({ a: 0, b: 0 });
+  const previewRequestSequence = useRef(0);
+  const tutorialTargetSelector = PAGE_TUTORIAL_STEPS[tutorialStep]?.target;
 
   useEffect(() => {
     if (!showTutorial) {
@@ -376,57 +396,23 @@ export default function DuplicateCustomersView() {
     void loadContacts();
   }, [loadContacts]);
 
-  const filteredContacts = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    if (!needle) return contacts.slice(0, 20);
-    return contacts
-      .filter((contact) =>
-        [
-          contact.company,
-          contact.name,
-          contact.mobile,
-          contact.phone,
-          contact.address,
-        ].some((value) =>
-          String(value || "")
-            .toLowerCase()
-            .includes(needle),
-        ),
-      )
-      .slice(0, 20);
-  }, [contacts, search]);
+  const customerOptions = useMemo(
+    () => contacts.map((contact) => ({
+      value: String(contact.id),
+      label: `${contact.company || "Unnamed customer"} · ${contact.id}`,
+      keywords: [contact.name, contact.mobile, contact.phone, contact.address].filter(Boolean),
+    })),
+    [contacts],
+  );
 
-  const detailById = useMemo(
-    () => new Map(matchDetails.map((contact) => [String(contact.id), contact])),
-    [matchDetails],
-  );
-  const hasReviewableMatch = matches.some((match) =>
-    detailById.has(String(match.session_id)),
-  );
-  const activeMatch =
-    matches.find((match) => String(match.session_id) === activeDuplicateId) ||
-    null;
-  const activeDuplicate = activeMatch
-    ? detailById.get(String(activeMatch.session_id)) || null
-    : null;
+  const activeDuplicate = selectedB;
   const survivorContact =
     survivorId === String(selected?.id)
       ? selected
       : survivorId === String(activeDuplicate?.id)
         ? activeDuplicate
         : null;
-  const duplicateContact =
-    survivorId === String(selected?.id)
-      ? activeDuplicate
-      : survivorId === String(activeDuplicate?.id)
-        ? selected
-        : null;
-  const finalName =
-    nameChoice === "survivor"
-      ? survivorContact?.company || ""
-      : nameChoice === "duplicate"
-        ? duplicateContact?.company || ""
-        : customFinalName;
+  const finalName = survivorContact?.company || "";
   const canPreview = Boolean(
     selected &&
     activeDuplicate &&
@@ -435,84 +421,92 @@ export default function DuplicateCustomersView() {
     mergeReason.trim(),
   );
   const tutorialCanAdvance =
-    tutorialStep === 2 ||
-    (tutorialStep === 3 && Boolean(survivorId)) ||
-    (tutorialStep === 4 && Boolean(survivorId && finalName.trim())) ||
+    (tutorialStep === 0 && Boolean(selected)) ||
+    (tutorialStep === 1 && Boolean(activeDuplicate)) ||
+    (tutorialStep === 2 && Boolean(selected && activeDuplicate)) ||
+    (tutorialStep === 4 && Boolean(survivorId)) ||
     (tutorialStep === 5 && Boolean(mergeReason.trim())) ||
     (tutorialStep === 6 && Boolean(preview)) ||
     (tutorialStep === 7 && Boolean(preview?.executable)) ||
     (tutorialStep === 8 && confirmation === "MERGE CUSTOMER RECORDS");
 
+  const invalidateMergePreview = () => {
+    previewRequestSequence.current += 1;
+    setPreview(null);
+    setConfirmation("");
+    setError("");
+  };
+
   const resetMerge = () => {
-    setActiveDuplicateId("");
+    previewRequestSequence.current += 1;
     setPreview(null);
     setSurvivorId("");
-    setNameChoice("");
-    setCustomFinalName("");
     setMergeReason("");
     setFieldDecisions({});
     setConfirmation("");
     setMergeKey("");
   };
 
-  const runDetection = async (sourceContact?: Contact) => {
-    const source = sourceContact || selected;
-    if (!source) return;
-    const sequence = ++detectionSequence.current;
-    setShowMatchesModal(true);
-    setLoadingMatches(true);
+  const selectCustomer = async (side: "a" | "b", id: string) => {
+    const sequence = ++selectionSequence.current[side];
     setError("");
-    setHasRunDetection(false);
-    setMatches([]);
-    setMatchDetails([]);
+    if (side === "a") {
+      if (id && id === selectedBId) {
+        selectionSequence.current.b += 1;
+        setLoadingB(false);
+        setSelectedBId("");
+        setSelectedB(null);
+      }
+      setLoadingA(Boolean(id));
+      setSelected(null);
+    } else {
+      setLoadingB(Boolean(id));
+      setSelectedBId(id);
+      setSelectedB(null);
+    }
+    setShowMergeReviewModal(false);
     resetMerge();
+    if (!id) {
+      if (side === "a") setSelected(null);
+      else { setSelectedBId(""); setSelectedB(null); }
+      if (side === "a") setLoadingA(false);
+      else setLoadingB(false);
+      return;
+    }
+    if (side === "b" && id === String(selected?.id || "")) {
+      setSelectedBId("");
+      setLoadingB(false);
+      return;
+    }
     try {
-      const result = await findPotentialDuplicates(source);
-      if (sequence !== detectionSequence.current) return;
-      setMatches(result);
-      const details = await Promise.all(
-        result.map((match) => fetchContactById(match.session_id)),
-      );
-      if (sequence !== detectionSequence.current) return;
-      setMatchDetails(
-        details.filter((contact): contact is Contact => Boolean(contact)),
-      );
-      setHasRunDetection(true);
-      if (result.length === 0) {
-        addToast({
-          type: "success",
-          title: "No potential duplicates found",
-          description:
-            "The selected customer did not match another live customer.",
-          durationMs: 4000,
-        });
+      const contact = await fetchContactById(id);
+      if (sequence !== selectionSequence.current[side]) return;
+      if (!contact) throw new Error("Customer details could not be loaded.");
+      if (side === "a") {
+        setSelected(contact);
+        if (showTutorial && tutorialStep === 0) setTutorialStep(1);
+        if (selectedBId && selectedBId !== id) {
+          setMergeKey(newMergeKey());
+        }
+      } else {
+        if (showTutorial && tutorialStep === 1) setTutorialStep(2);
+        setSelectedB(contact);
+        setMergeKey(newMergeKey());
       }
     } catch (err) {
-      if (sequence !== detectionSequence.current) return;
-      if (!shouldSuppressAuthError(err))
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Unable to check for duplicates.",
-        );
+      if (sequence === selectionSequence.current[side] && !shouldSuppressAuthError(err))
+        setError(err instanceof Error ? err.message : "Unable to load customer details.");
     } finally {
-      if (sequence === detectionSequence.current) setLoadingMatches(false);
+      if (sequence === selectionSequence.current[side]) {
+        if (side === "a") setLoadingA(false);
+        else setLoadingB(false);
+      }
     }
-  };
-
-  const chooseMatch = (match: PotentialDuplicateMatch) => {
-    setActiveDuplicateId(String(match.session_id));
-    setPreview(null);
-    setSurvivorId("");
-    setNameChoice("");
-    setCustomFinalName("");
-    setFieldDecisions({});
-    setConfirmation("");
-    setMergeKey(newMergeKey());
   };
 
   const requestPreview = async () => {
     if (!selected || !activeDuplicate || !canPreview) return;
+    const sequence = ++previewRequestSequence.current;
     setError("");
     setConfirmation("");
     const key = mergeKey || newMergeKey();
@@ -529,9 +523,11 @@ export default function DuplicateCustomersView() {
         idempotency_key: key,
         field_decisions: fieldDecisions,
       });
+      if (sequence !== previewRequestSequence.current) return;
       setPreview(result);
       if (showTutorial && tutorialStep === 6) setTutorialStep(7);
     } catch (err) {
+      if (sequence !== previewRequestSequence.current) return;
       if (!shouldSuppressAuthError(err))
         setError(
           err instanceof Error ? err.message : "Unable to preview the merge.",
@@ -564,14 +560,11 @@ export default function DuplicateCustomersView() {
         description: `${preview.final_company_name} is now the surviving customer.`,
         durationMs: 5000,
       });
-      setMatches((previous) =>
-        previous.filter(
-          (match) => String(match.session_id) !== activeDuplicateId,
-        ),
-      );
-      setMatchDetails((previous) =>
-        previous.filter((contact) => String(contact.id) !== activeDuplicateId),
-      );
+      selectionSequence.current.a += 1;
+      selectionSequence.current.b += 1;
+      setSelected(null);
+      setSelectedBId("");
+      setSelectedB(null);
       resetMerge();
       await loadContacts();
       if (showTutorial) setShowTutorial(false);
@@ -598,17 +591,14 @@ export default function DuplicateCustomersView() {
             </div>
             <h1 className="mt-1 text-2xl font-black">Duplicate Customers</h1>
             <p className="mt-1 max-w-3xl text-sm text-slate-500">
-              Investigate possible duplicate records, review a complete merge
-              preview, and confirm the controlled operation.
+                Select two customer records manually, compare their details, and review a complete merge preview before confirming.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => {
-                setShowMatchesModal(false);
-                resetMerge();
-                setSearch("");
+                setShowMergeReviewModal(false);
                 setTutorialStep(0);
                 setShowTutorial(true);
               }}
@@ -700,64 +690,10 @@ export default function DuplicateCustomersView() {
               ) : null}
               {!spotlightBounds ? (
                 <p className="mt-2 text-xs font-semibold text-amber-800">
-                  {tutorialStep === 0 && loadingContacts
-                    ? "The customer directory is still loading. The customer cards will be highlighted when they appear."
-                    : tutorialStep === 1 && loadingMatches
-                    ? "Checking this customer for possible matches… the review button will be highlighted if a pair is found."
-                    : tutorialStep === 1 && hasRunDetection && matches.length === 0
-                      ? "No pair was found for this customer, so there is no review button. Choose another customer to continue."
-                      : tutorialStep === 1 && hasRunDetection && !hasReviewableMatch
-                        ? "A possible pair was found, but its full customer details could not be loaded. Retry the check or choose a different customer."
-                      : tutorialStep === 1 && error
-                        ? "The duplicate check did not finish. Retry it from the results window, or close the walkthrough."
-                        : tutorialStep === 0 && !loadingContacts && contacts.length === 0
-                          ? "There are no customer records to select yet. Refresh the directory or add customers, then restart the walkthrough."
-                          : "This control is not available yet. Complete the action described above; the highlight will move here when it appears."}
+                  {loadingContacts
+                    ? "Loading the live customer directory…"
+                    : "Complete the highlighted customer selection or review step to continue."}
                 </p>
-              ) : null}
-              {tutorialStep === 1 && hasRunDetection && matches.length === 0 ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowMatchesModal(false);
-                    resetMerge();
-                    setTutorialStep(0);
-                  }}
-                  className="mt-3 rounded-md bg-blue-700 px-3 py-2 text-sm font-bold text-white hover:bg-blue-800"
-                >
-                  Choose another customer
-                </button>
-              ) : null}
-              {tutorialStep === 1 && error && !loadingMatches ? (
-                <button
-                  type="button"
-                  onClick={() => void runDetection()}
-                  className="mt-3 rounded-md bg-blue-700 px-3 py-2 text-sm font-bold text-white hover:bg-blue-800"
-                >
-                  Retry duplicate check
-                </button>
-              ) : null}
-              {tutorialStep === 1 && hasRunDetection && matches.length > 0 && !hasReviewableMatch ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void runDetection()}
-                    className="rounded-md bg-blue-700 px-3 py-2 text-sm font-bold text-white hover:bg-blue-800"
-                  >
-                    Retry loading match details
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowMatchesModal(false);
-                      resetMerge();
-                      setTutorialStep(0);
-                    }}
-                    className="rounded-md border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
-                  >
-                    Choose another customer
-                  </button>
-                </div>
               ) : null}
               {tutorialStep === 0 && !loadingContacts && contacts.length === 0 ? (
                 <button
@@ -770,11 +706,9 @@ export default function DuplicateCustomersView() {
               ) : null}
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                 <span className="text-xs font-semibold text-slate-500">
-                  {tutorialStep === 4 && nameChoice === "survivor"
-                    ? "The survivor name is already selected; click Next or choose another name."
-                    : tutorialCanAdvance
-                      ? "Review this highlighted area, then click Next."
-                      : "Click the highlighted control; the guide advances after the action."}
+                  {tutorialCanAdvance
+                    ? "Review this highlighted area, then click Next."
+                    : "Click the highlighted control; the guide advances after the action."}
                 </span>
                 <div className="flex w-full shrink-0 items-center justify-between gap-2 sm:w-auto">
                   <button
@@ -788,12 +722,8 @@ export default function DuplicateCustomersView() {
                   <button
                     type="button"
                     onClick={() => {
-                      if (tutorialStep === 1) {
-                        setShowMatchesModal(false);
-                        resetMerge();
-                      } else if (tutorialStep === 2) {
-                        setActiveDuplicateId("");
-                      }
+                      const previousStep = Math.max(0, tutorialStep - 1);
+                      if (previousStep < 4) setShowMergeReviewModal(false);
                       setTutorialStep((step) => Math.max(0, step - 1));
                     }}
                     disabled={tutorialStep === 0}
@@ -823,723 +753,377 @@ export default function DuplicateCustomersView() {
           </>
         ) : null}
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <Search className="h-5 w-5 text-blue-700" />
-                <h2 className="text-lg font-black">Customer directory</h2>
-              </div>
-              <p className="mt-1 text-sm text-slate-500">
-                Select a customer card to compare it with possible duplicates.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {selected ? (
-                <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-800">
-                  Selected: {selected.company || "Unnamed customer"}
-                </span>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => void runDetection()}
-                disabled={!selected || loadingMatches}
-                className="inline-flex items-center justify-center gap-2 rounded-md bg-blue-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {loadingMatches
-                  ? "Checking..."
-                  : hasRunDetection
-                    ? "Check again"
-                    : "Check duplicates"}
-              </button>
-            </div>
-          </div>
-          <div className="relative mt-4 max-w-xl">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              aria-label="Search customers for duplicate review"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search company, phone, or contact"
-              className="h-11 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
-            />
+          <div className="mb-4">
+            <h2 className="text-lg font-black">Choose customers to compare</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Search and select two live customer records. Review every field before choosing which record will survive.
+            </p>
           </div>
           {loadingContacts ? (
-            <p role="status" className="mt-4 text-sm text-slate-500">
-              Loading customers...
-            </p>
-          ) : filteredContacts.length === 0 ? (
-            <p className="mt-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
-              No customers found.
-            </p>
-          ) : (
-            <div className="mt-4 grid max-h-[520px] gap-3 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3">
-              {filteredContacts.map((contact) => {
-                const isSelected = selected?.id === contact.id;
-                return (
-                  <button
-                    type="button"
-                    key={contact.id}
-                    data-tutorial="customer-card"
-                    aria-pressed={isSelected}
-                    onClick={() => {
-                      setSelected(contact);
-                      setMatches([]);
-                      setMatchDetails([]);
-                      setHasRunDetection(false);
-                      setShowMatchesModal(true);
-                      resetMerge();
-                      if (showTutorial && tutorialStep === 0) setTutorialStep(1);
-                      void runDetection(contact);
-                    }}
-                    className={`group rounded-xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-400 hover:shadow-md ${isSelected ? "border-blue-600 bg-blue-50 ring-2 ring-blue-200" : "border-slate-200 bg-slate-50/40"}`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-black text-slate-900">
-                          {contact.company || "Unnamed customer"}
-                        </p>
-                        <p className="mt-1 truncate text-xs text-slate-500">
-                          {primaryContactPerson(contact)}
-                        </p>
-                      </div>
-                      {isSelected ? (
-                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-blue-700 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-white">
-                          <CheckCircle2 className="h-3 w-3" /> Selected
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="mt-4 grid gap-2 text-xs text-slate-600">
-                      <p className="truncate">
-                        <span className="font-bold text-slate-500">Phone:</span>{" "}
-                        {contactPhone(contact)}
-                      </p>
-                      <p className="truncate">
-                        <span className="font-bold text-slate-500">
-                          Address:
-                        </span>{" "}
-                        {contactLocation(contact)}
-                      </p>
-                    </div>
-                    <p className="mt-4 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                      Customer ID: {contact.id}
-                    </p>
-                  </button>
-                );
-              })}
+            <p role="status" className="mb-4 text-sm text-slate-500">Loading customer directory…</p>
+          ) : null}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <section className="rounded-xl border border-blue-200 bg-blue-50/40 p-4" aria-labelledby="customer-a-heading">
+              <div className="mb-3 flex items-center gap-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-800 text-lg font-black text-white">A</span>
+                <div><h3 id="customer-a-heading" className="font-black text-slate-900">Customer A</h3><p className="text-xs text-slate-500">First record</p></div>
+              </div>
+              <div data-tutorial="customer-a-select"><SearchableSelect value={String(selected?.id || "")} options={customerOptions} onChange={(id) => void selectCustomer("a", id)} disabled={loadingContacts || loadingA || merging} loading={loadingA} placeholder="Search and select customer A" searchPlaceholder="Search company, contact, phone, or address…" /></div>
+              {selected ? <p className="mt-2 text-xs text-slate-500">Customer ID: {selected.id}</p> : null}
+            </section>
+            <section className="rounded-xl border border-violet-200 bg-violet-50/40 p-4" aria-labelledby="customer-b-heading">
+              <div className="mb-3 flex items-center gap-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-800 text-lg font-black text-white">B</span>
+                <div><h3 id="customer-b-heading" className="font-black text-slate-900">Customer B</h3><p className="text-xs text-slate-500">Second record</p></div>
+              </div>
+              <div data-tutorial="customer-b-select"><SearchableSelect value={selectedBId} options={customerOptions.filter((option) => option.value !== String(selected?.id || ""))} onChange={(id) => void selectCustomer("b", id)} disabled={loadingContacts || loadingA || loadingB || merging} loading={loadingB} placeholder="Search and select customer B" searchPlaceholder="Search company, contact, phone, or address…" /></div>
+              {activeDuplicate ? <p className="mt-2 text-xs text-slate-500">Customer ID: {activeDuplicate.id}</p> : null}
+            </section>
+          </div>
+          {loadingA || loadingB ? <p className="mt-4 text-sm text-blue-700" role="status">Loading full customer details…</p> : null}
+          {selected && activeDuplicate ? (
+            <div className="mt-4 space-y-3">
+              <DiffComparison left={selected} right={activeDuplicate} leftLabel={selected.company || "Customer A"} rightLabel={activeDuplicate.company || "Customer B"} data-tutorial="customer-diff" />
+              <div className="flex justify-end">
+                <button type="button" data-tutorial="match-review" onClick={() => { setShowMergeReviewModal(true); if (showTutorial && tutorialStep === 3) setTutorialStep(4); }} disabled={loadingA || loadingB || merging} className="rounded-md bg-blue-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-800 disabled:opacity-50">Configure merge</button>
+              </div>
             </div>
+          ) : (
+            <p className="mt-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-5 text-center text-sm text-slate-500">Choose both customer records to display their side-by-side comparison.</p>
           )}
         </section>
-        {showMatchesModal ? (
+        {showMergeReviewModal && selected && activeDuplicate ? (
           <div
-            className="fixed inset-x-0 bottom-0 top-16 z-40 flex items-center justify-center bg-slate-950/60 p-2 sm:p-4"
+            className="fixed inset-x-0 bottom-0 top-16 z-50 flex items-center justify-center bg-slate-950/60 p-2 sm:p-4"
             role="dialog"
             aria-modal="true"
-            aria-labelledby="possible-duplicates-dialog-title"
+            aria-labelledby="duplicate-review-dialog-title"
           >
-            <div className="flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-              <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4">
+            <div className="flex h-full w-full max-w-[98vw] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+              <header className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-6">
                 <div>
                   <p className="text-xs font-black uppercase tracking-wide text-blue-700">
-                    Customer duplicate check
+                    Customer merge review
                   </p>
                   <h2
-                    id="possible-duplicates-dialog-title"
-                    className="mt-1 text-xl font-black text-slate-900"
+                    id="duplicate-review-dialog-title"
+                    className="mt-1 text-lg font-black text-slate-900 sm:text-xl"
                   >
-                    Possible matches for{" "}
-                    {selected?.company || "selected customer"}
+                    Review all customer details before merging
                   </h2>
                   <p className="mt-1 text-sm text-slate-500">
-                    Review a pair to compare all customer details and configure
-                    its merge.
+                    Choose the surviving record; its company name will remain.
+                    Review transferred history, conflicts, and totals before
+                    explicitly confirming the merge.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => {
-                    setShowMatchesModal(false);
-                    resetMerge();
+                    setShowMergeReviewModal(false);
+                    if (showTutorial && tutorialStep >= 4) setTutorialStep(3);
                   }}
-                  aria-label="Close possible duplicates"
+                  aria-label="Close customer merge review"
                   className="rounded-full p-2 text-slate-500 hover:bg-slate-200 hover:text-slate-900"
                 >
                   <X className="h-5 w-5" />
                 </button>
-              </div>
-              <main className="max-h-[calc(100vh-13rem)] overflow-y-auto p-4 sm:p-6">
-                {!selected ? (
-                  <div className="flex min-h-[300px] items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
-                    <div>
-                      <AlertTriangle className="mx-auto h-8 w-8 text-slate-300" />
-                      <p className="mt-2 font-semibold">
-                        Select a customer to begin an investigation.
+              </header>
+              <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto p-3 sm:p-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:overflow-hidden">
+                <div className="min-h-0 space-y-3 lg:overflow-y-auto">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm">
+                      <p className="text-xs font-black uppercase tracking-wide text-blue-700">
+                        Customer A
+                      </p>
+                      <p className="mt-1 font-black text-slate-900">
+                        {selected.company || "Unnamed customer"}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-600">
+                        ID: {selected.id} · Status: {selected.status || "—"}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm">
+                      <p className="text-xs font-black uppercase tracking-wide text-violet-700">
+                        Customer B
+                      </p>
+                      <p className="mt-1 font-black text-slate-900">
+                        {activeDuplicate.company || "Unnamed customer"}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-600">
+                        ID: {activeDuplicate.id} · Status: {activeDuplicate.status || "—"}
                       </p>
                     </div>
                   </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="flex flex-wrap items-end justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <ArrowRightLeft className="h-4 w-4 text-slate-500" />
-                          <h2 className="text-lg font-black">
-                            Possible duplicate pairs
-                          </h2>
-                        </div>
-                        <p className="mt-1 text-xs text-slate-500">
-                          Each comparison below shows the two records field by
-                          field. Select one pair to configure the merge.
-                        </p>
-                      </div>
-                      {hasRunDetection ? (
-                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">
-                          {matches.length}{" "}
-                          {matches.length === 1 ? "pair" : "pairs"} found
-                        </span>
-                      ) : (
-                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-500">
-                          Not checked yet
-                        </span>
-                      )}
+                  <DiffComparison
+                    left={selected}
+                    right={activeDuplicate}
+                    leftLabel="Customer A"
+                    rightLabel="Customer B"
+                    compact
+                    data-tutorial="customer-diff"
+                  />
+                </div>
+                <div className="min-h-0 overflow-y-auto rounded-xl border border-blue-200 bg-white p-4 shadow-sm">
+                  <p className="text-xs font-black uppercase tracking-wide text-blue-800">
+                    Step 2 · Choose the surviving record
+                  </p>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="text-xs font-bold text-slate-600">
+                      1. Select the surviving customer
+                      <select
+                        data-tutorial="survivor-select"
+                        className="mt-1 h-10 w-full rounded-md border border-slate-300 px-2 text-sm"
+                        value={survivorId}
+                        onChange={(event) => {
+                          setSurvivorId(event.target.value);
+                          setMergeKey(newMergeKey());
+                          setFieldDecisions({});
+                          invalidateMergePreview();
+                          if (event.target.value && showTutorial && tutorialStep === 4) setTutorialStep(5);
+                        }}
+                      >
+                        <option value="">
+                          Choose the customer whose history
+                          will remain
+                        </option>
+                        <option value={String(selected.id)}>
+                          Customer A · {selected.company || "Unnamed customer"} · {selected.id}
+                        </option>
+                        <option value={String(activeDuplicate.id)}>
+                          Customer B · {activeDuplicate.company || "Unnamed customer"} · {activeDuplicate.id}
+                        </option>
+                      </select>
+                    </label>
+                    <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+                      <span className="font-bold text-slate-600">Final company name</span>
+                      <p className="mt-1 font-semibold text-slate-900">{finalName || "Choose the surviving customer to set the final name."}</p>
                     </div>
-                    {matches.length === 0 ? (
-                      <div className="rounded-lg border border-slate-200 bg-white p-8 text-center">
-                        <CheckCircle2 className="mx-auto h-8 w-8 text-slate-300" />
-                        <p className="mt-2 font-bold text-slate-700">
-                          {hasRunDetection
-                            ? "No possible duplicate pairs found"
-                            : "Duplicate results will appear here"}
-                        </p>
-                        <p className="mt-1 text-sm text-slate-500">
-                          {hasRunDetection
-                            ? "This selected source customer has no matching pair based on the current detection rules."
-                            : "Run detection to check this source customer against the live customer directory."}
-                        </p>
-                      </div>
-                    ) : (
-                      matches.map((match) => {
-                        const detail = detailById.get(String(match.session_id));
-                        const isActive =
-                          activeDuplicateId === String(match.session_id);
-                        return (
-                          <article
-                            key={match.session_id}
-                            className={`rounded-xl border p-4 shadow-sm transition ${isActive ? "border-blue-500 bg-blue-50/50 ring-2 ring-blue-200" : "border-amber-200 bg-amber-50/40"}`}
+                    <label className="text-xs font-bold text-slate-600 md:col-span-2">
+                      Merge reason
+                      <textarea
+                        className="mt-1 min-h-20 w-full rounded-md border border-slate-300 px-2 py-2 text-sm"
+                        value={mergeReason}
+                        onChange={(event) => {
+                          setMergeReason(
+                            event.target.value,
+                          );
+                          setMergeKey(newMergeKey());
+                          invalidateMergePreview();
+                          if (event.target.value.trim() && showTutorial && tutorialStep === 5) setTutorialStep(6);
+                        }}
+                        data-tutorial="merge-reason"
+                        placeholder="Why are these records duplicates?"
+                      />
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    data-tutorial="preview-merge"
+                    onClick={() => void requestPreview()}
+                    disabled={!canPreview}
+                    className="rounded-md bg-slate-800 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+                  >
+                    Preview safe merge
+                  </button>
+                  {preview ? (
+                    <div data-tutorial="merge-preview" className="space-y-3 rounded-md border border-slate-300 bg-slate-50 p-3 text-sm">
+                      <p className="font-black">
+                        Preview:{" "}
+                        {preview.executable
+                          ? "ready for confirmation"
+                          : "blocked"}
+                      </p>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {Object.entries(
+                          preview.financial_totals,
+                        ).map(([key, value]) => (
+                          <div
+                            key={key}
+                            className="rounded border border-slate-200 bg-white px-2 py-1"
                           >
-                            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <p
-                                    className={`text-xs font-black uppercase tracking-wide ${isActive ? "text-blue-800" : "text-amber-800"}`}
-                                  >
-                                    {isActive
-                                      ? "Active merge pair"
-                                      : "Possible duplicate pair"}
-                                  </p>
-                                  {isActive ? (
-                                    <span className="rounded-full bg-blue-700 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-white">
-                                      Selected for review
-                                    </span>
-                                  ) : null}
-                                </div>
-                                <p className="mt-1 text-sm font-bold text-slate-800">
-                                  {match.company || "Unnamed customer"}
-                                </p>
-                                {match.is_blacklisted ? (
-                                  <span className="mt-1 inline-flex rounded-full bg-red-100 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-red-800">
-                                    Blacklisted
-                                  </span>
-                                ) : null}
-                              </div>
-                              <div className="flex flex-wrap gap-1">
-                                {match.matched_fields.map((field) => (
-                                  <span
-                                    key={field}
-                                    className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-bold text-amber-800"
-                                  >
-                                    {MATCH_LABELS[field] || field}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                            {detail ? (
-                              <div className="grid gap-3 sm:grid-cols-2">
-                                <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
-                                  <p className="text-[10px] font-black uppercase tracking-wide text-blue-700">
-                                    Customer A · Selected source
-                                  </p>
-                                  <p className="mt-1 font-bold text-slate-900">
-                                    {selected.company || "Unnamed customer"}
-                                  </p>
-                                  <p className="mt-1 text-xs text-slate-600">
-                                    {primaryContactPerson(selected)} ·{" "}
-                                    {contactPhone(selected)}
-                                  </p>
-                                </div>
-                                <div className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3">
-                                  <p className="text-[10px] font-black uppercase tracking-wide text-violet-700">
-                                    Customer B · Possible match
-                                  </p>
-                                  <p className="mt-1 font-bold text-slate-900">
-                                    {detail.company || "Unnamed customer"}
-                                  </p>
-                                  <p className="mt-1 text-xs text-slate-600">
-                                    {primaryContactPerson(detail)} ·{" "}
-                                    {contactPhone(detail)}
-                                  </p>
-                                </div>
-                              </div>
-                            ) : (
-                              <p className="text-sm text-slate-600">
-                                Match ID: {match.session_id}. Full customer
-                                details could not be loaded.
-                              </p>
-                            )}
-                            <button
-                              type="button"
-                              data-tutorial="match-review"
-                              onClick={() => {
-                                chooseMatch(match);
-                                if (showTutorial && tutorialStep === 1) setTutorialStep(2);
-                              }}
-                              disabled={!detail}
-                              className={`mt-4 inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-bold disabled:opacity-50 ${isActive ? "bg-blue-700 text-white" : "border border-slate-400 bg-white text-slate-700 hover:bg-slate-50"}`}
-                            >
-                              <ArrowRightLeft className="h-4 w-4" />
-                              Review disparities
-                            </button>
-                            {isActive && detail ? (
+                            <span className="text-xs text-slate-500">
+                              {key.replaceAll("_", " ")}
+                            </span>
+                            <strong className="ml-2">
+                              {value ?? "not available"}
+                            </strong>
+                          </div>
+                        ))}
+                      </div>
+                      <details className="rounded border border-slate-200 bg-white p-2">
+                        <summary className="cursor-pointer text-xs font-semibold text-slate-600">
+                          Show technical transfer details
+                        </summary>
+                        <p className="mt-2 text-xs leading-5 text-slate-500">
+                          The merge checks related records
+                          before transferring them. This
+                          detail is normally safe to leave
+                          closed.
+                        </p>
+                        <p className="mt-2 text-xs leading-5 text-slate-500">
+                          {Object.entries(preview.counts)
+                            .map(
+                              ([table, count]) =>
+                                `${table}=${count ?? "unknown"}`,
+                            )
+                            .join(", ")||
+                            "No related records found."}
+                        </p>
+                      </details>
+                      {Object.keys(preview.conflicts)
+                        .length > 0 ? (
+                        <div className="rounded border border-amber-200 bg-amber-50 p-3">
+                          <p className="font-bold text-amber-900">
+                            One decision is needed before
+                            merging
+                          </p>
+                          <p className="mt-1 text-sm text-amber-900">
+                            These two customers have
+                            different values. Choose which
+                            value the merged customer should
+                            keep.
+                          </p>
+                          {Object.entries(
+                            preview.conflicts,
+                          ).map(([field, label]) => {
+                            const survivorPreview=
+                              preview.customers.find(
+                                (customer) =>
+                                  String(customer.id) ===
+                                  preview.survivor_session_id,
+                              );
+                            const duplicatePreview=
+                              preview.customers.find(
+                                (customer) =>
+                                  String(customer.id) ===
+                                  preview.duplicate_session_id,
+                              );
+                            return (
                               <div
-                                className="fixed inset-x-0 bottom-0 top-16 z-50 flex items-center justify-center bg-slate-950/60 p-2 sm:p-4"
-                                role="dialog"
-                                aria-modal="true"
-                                aria-labelledby="duplicate-review-dialog-title"
+                                key={field}
+                                className="mt-3 rounded border border-amber-200 bg-white p-3"
                               >
-                                <div className="flex h-full w-full max-w-[98vw] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-                                  <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-6">
-                                    <div>
-                                      <p className="text-xs font-black uppercase tracking-wide text-blue-700">
-                                        Duplicate customer review
-                                      </p>
-                                      <h2
-                                        id="duplicate-review-dialog-title"
-                                        className="mt-1 text-lg font-black text-slate-900 sm:text-xl"
-                                      >
-                                        Review all disparities before merging
-                                      </h2>
-                                      <p className="mt-1 text-sm text-slate-500">
-                                        Compare the complete records, then
-                                        choose the surviving customer and final
-                                        company name.
-                                      </p>
-                                    </div>
+                                <p className="text-sm font-bold text-slate-800">
+                                  {label}
+                                </p>
+                                {field === "tin" ? (
+                                  <span className="mt-2 block font-semibold text-red-700">
+                                    These TINs cannot be
+                                    chosen automatically.
+                                    Resolve the TIN
+                                    difference before
+                                    merging.
+                                  </span>
+                                ) : (
+                                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
                                     <button
                                       type="button"
-                                      onClick={resetMerge}
-                                      aria-label="Close duplicate customer review"
-                                      className="rounded-full p-2 text-slate-500 hover:bg-slate-200 hover:text-slate-900"
+                                      onClick={() => {
+                                        setFieldDecisions(
+                                          (previous) => ({
+                                            ...previous,
+                                            [field]:
+                                              "survivor",
+                                          }),
+                                        );
+                                        setMergeKey(newMergeKey());
+                                        invalidateMergePreview();
+                                        if (showTutorial && tutorialStep === 7) setTutorialStep(6);
+                                      }}
+                                      className={`rounded border px-3 py-2 text-left text-xs ${fieldDecisions[field] === "survivor" ? "border-blue-600 bg-blue-100 ring-2 ring-blue-200" : "border-slate-300 hover:bg-slate-50"}`}
                                     >
-                                      <X className="h-5 w-5" />
+                                      <span className="block font-bold text-slate-700">
+                                        Keep Customer A
+                                      </span>
+                                      <span className="mt-1 block text-slate-600">
+                                        {mergeFieldValue(
+                                          survivorPreview,
+                                          field,
+                                        )}
+                                      </span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setFieldDecisions(
+                                          (previous) => ({
+                                            ...previous,
+                                            [field]:
+                                              "duplicate",
+                                          }),
+                                        );
+                                        setMergeKey(newMergeKey());
+                                        invalidateMergePreview();
+                                        if (showTutorial && tutorialStep === 7) setTutorialStep(6);
+                                      }}
+                                      className={`rounded border px-3 py-2 text-left text-xs ${fieldDecisions[field] === "duplicate" ? "border-blue-600 bg-blue-100 ring-2 ring-blue-200" : "border-slate-300 hover:bg-slate-50"}`}
+                                    >
+                                      <span className="block font-bold text-slate-700">
+                                        Keep Customer B
+                                      </span>
+                                      <span className="mt-1 block text-slate-600">
+                                        {mergeFieldValue(
+                                          duplicatePreview,
+                                          field,
+                                        )}
+                                      </span>
                                     </button>
                                   </div>
-                                  <div className="grid min-h-0 flex-1 gap-4 overflow-hidden p-3 sm:p-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
-                                    <div className="min-h-0 overflow-hidden">
-                                      <div className="grid gap-3 sm:grid-cols-2">
-                                        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm">
-                                          <p className="text-xs font-black uppercase tracking-wide text-blue-700">
-                                            Customer A · Selected source
-                                          </p>
-                                          <p className="mt-1 font-black text-slate-900">
-                                            {selected.company ||
-                                              "Unnamed customer"}
-                                          </p>
-                                          <p className="mt-1 text-xs text-slate-600">
-                                            ID: {selected.id} · Status:{" "}
-                                            {selected.status || "—"}
-                                          </p>
-                                        </div>
-                                        <div className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm">
-                                          <p className="text-xs font-black uppercase tracking-wide text-violet-700">
-                                            Customer B · Possible match
-                                          </p>
-                                          <p className="mt-1 font-black text-slate-900">
-                                            {detail.company ||
-                                              "Unnamed customer"}
-                                          </p>
-                                          <p className="mt-1 text-xs text-slate-600">
-                                            ID: {detail.id} · Status:{" "}
-                                            {detail.status || "—"}
-                                          </p>
-                                        </div>
-                                      </div>
-                                      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-                                        <span className="text-xs font-black uppercase tracking-wide text-amber-900">
-                                          Matched because:
-                                        </span>
-                                        {match.matched_fields.map((field) => (
-                                          <span
-                                            key={field}
-                                            className="rounded-full bg-white px-2 py-1 text-xs font-bold text-amber-900"
-                                          >
-                                            {MATCH_LABELS[field] || field}
-                                          </span>
-                                        ))}
-                                      </div>
-                                      <DiffComparison
-                                        left={selected}
-                                        right={detail}
-                                        leftLabel="Customer A · Selected source"
-                                        rightLabel="Customer B · Possible match"
-                                        compact
-                                        data-tutorial="customer-diff"
-                                      />
-                                    </div>
-                                    <div className="min-h-0 overflow-y-auto rounded-xl border border-blue-200 bg-white p-4 shadow-sm">
-                                      <p className="text-xs font-black uppercase tracking-wide text-blue-800">
-                                        Step 2 · Confirm the pair and choose the
-                                        final name
-                                      </p>
-                                      <div className="grid gap-3 md:grid-cols-2">
-                                        <label className="text-xs font-bold text-slate-600">
-                                          1. Select the surviving customer
-                                          <select
-                                            data-tutorial="survivor-select"
-                                            className="mt-1 h-10 w-full rounded-md border border-slate-300 px-2 text-sm"
-                                            value={survivorId}
-                                            onChange={(event) => {
-                                              setSurvivorId(event.target.value);
-                                              setMergeKey(newMergeKey());
-                                              setNameChoice(
-                                                event.target.value
-                                                  ? "survivor"
-                                                  : "",
-                                              );
-                                              setCustomFinalName("");
-                                              setPreview(null);
-                                              if (event.target.value && showTutorial && tutorialStep === 3) setTutorialStep(4);
-                                            }}
-                                          >
-                                            <option value="">
-                                              Choose the customer whose history
-                                              will remain
-                                            </option>
-                                            <option value={String(selected.id)}>
-                                              {selected.company || selected.id}
-                                            </option>
-                                            <option value={String(detail.id)}>
-                                              {detail.company || detail.id}
-                                            </option>
-                                          </select>
-                                        </label>
-                                        <div className="text-xs font-bold text-slate-600">
-                                          <span>
-                                            2. Company name to keep{" "}
-                                            <span className="font-normal text-slate-500">
-                                              (defaults to the survivor)
-                                            </span>
-                                          </span>
-                                          <div className="mt-1 flex flex-wrap gap-2">
-                                            <button
-                                              type="button"
-                                              data-tutorial="name-choice"
-                                              disabled={!survivorId}
-                                              onClick={() => {
-                                                setNameChoice("survivor");
-                                                setCustomFinalName("");
-                                                setPreview(null);
-                                                if (showTutorial && tutorialStep === 4) setTutorialStep(5);
-                                              }}
-                                              className={`rounded border px-2 py-2 text-left text-xs disabled:cursor-not-allowed disabled:opacity-50 ${nameChoice === "survivor" ? "border-blue-600 bg-blue-50" : "border-slate-300"}`}
-                                            >
-                                              Keep survivor name
-                                              {survivorContact
-                                                ? `: ${survivorContact.company || "Unnamed"}`
-                                                : ""}
-                                            </button>
-                                            <button
-                                              type="button"
-                                              disabled={!survivorId}
-                                              onClick={() => {
-                                                setNameChoice("duplicate");
-                                                setCustomFinalName("");
-                                                setPreview(null);
-                                                if (showTutorial && tutorialStep === 4) setTutorialStep(5);
-                                              }}
-                                              className={`rounded border px-2 py-2 text-left text-xs disabled:cursor-not-allowed disabled:opacity-50 ${nameChoice === "duplicate" ? "border-blue-600 bg-blue-50" : "border-slate-300"}`}
-                                            >
-                                              Use other customer name
-                                              {duplicateContact
-                                                ? `: ${duplicateContact.company || "Unnamed"}`
-                                                : ""}
-                                            </button>
-                                            <button
-                                              type="button"
-                                              disabled={!survivorId}
-                                              onClick={() => {
-                                                setNameChoice("custom");
-                                                setCustomFinalName("");
-                                                setPreview(null);
-                                              }}
-                                              className={`rounded border px-2 py-2 text-left text-xs disabled:cursor-not-allowed disabled:opacity-50 ${nameChoice === "custom" ? "border-blue-600 bg-blue-50" : "border-slate-300"}`}
-                                            >
-                                              Enter a different name
-                                            </button>
-                                          </div>
-                                          {nameChoice === "custom" ? (
-                                            <input
-                                              data-tutorial="custom-name"
-                                              className="mt-2 h-10 w-full rounded-md border border-slate-300 px-2 text-sm"
-                                              value={customFinalName}
-                                              onChange={(event) => {
-                                                setCustomFinalName(
-                                                  event.target.value,
-                                                );
-                                                setPreview(null);
-                                                if (event.target.value.trim() && showTutorial && tutorialStep === 4) setTutorialStep(5);
-                                              }}
-                                              placeholder="Exact final company name"
-                                            />
-                                          ) : null}
-                                          <p
-                                            className={`mt-2 text-xs font-semibold ${finalName ? "text-blue-700" : "text-slate-500"}`}
-                                          >
-                                            {finalName
-                                              ? `Final company name: ${finalName}`
-                                              : "Select the surviving customer first. Its company name will be used automatically."}
-                                          </p>
-                                        </div>
-                                        <label className="text-xs font-bold text-slate-600 md:col-span-2">
-                                          Merge reason
-                                          <textarea
-                                            className="mt-1 min-h-20 w-full rounded-md border border-slate-300 px-2 py-2 text-sm"
-                                            value={mergeReason}
-                                              onChange={(event) => {
-                                                setMergeReason(
-                                                  event.target.value,
-                                                );
-                                                setPreview(null);
-                                                if (event.target.value.trim() && showTutorial && tutorialStep === 5) setTutorialStep(6);
-                                              }}
-                                              data-tutorial="merge-reason"
-                                            placeholder="Why are these records duplicates?"
-                                          />
-                                        </label>
-                                      </div>
-                                      <button
-                                        type="button"
-                                        data-tutorial="preview-merge"
-                                        onClick={() => void requestPreview()}
-                                        disabled={!canPreview}
-                                        className="rounded-md bg-slate-800 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
-                                      >
-                                        Preview safe merge
-                                      </button>
-                                      {preview ? (
-                                        <div data-tutorial="merge-preview" className="space-y-3 rounded-md border border-slate-300 bg-slate-50 p-3 text-sm">
-                                          <p className="font-black">
-                                            Preview:{" "}
-                                            {preview.executable
-                                              ? "ready for confirmation"
-                                              : "blocked"}
-                                          </p>
-                                          <div className="grid gap-2 sm:grid-cols-2">
-                                            {Object.entries(
-                                              preview.financial_totals,
-                                            ).map(([key, value]) => (
-                                              <div
-                                                key={key}
-                                                className="rounded border border-slate-200 bg-white px-2 py-1"
-                                              >
-                                                <span className="text-xs text-slate-500">
-                                                  {key.replaceAll("_", " ")}
-                                                </span>
-                                                <strong className="ml-2">
-                                                  {value ?? "not available"}
-                                                </strong>
-                                              </div>
-                                            ))}
-                                          </div>
-                                          <details className="rounded border border-slate-200 bg-white p-2">
-                                            <summary className="cursor-pointer text-xs font-semibold text-slate-600">
-                                              Show technical transfer details
-                                            </summary>
-                                            <p className="mt-2 text-xs leading-5 text-slate-500">
-                                              The merge checks related records
-                                              before transferring them. This
-                                              detail is normally safe to leave
-                                              closed.
-                                            </p>
-                                            <p className="mt-2 text-xs leading-5 text-slate-500">
-                                              {Object.entries(preview.counts)
-                                                .map(
-                                                  ([table, count]) =>
-                                                    `${table}=${count ?? "unknown"}`,
-                                                )
-                                                .join(", ") ||
-                                                "No related records found."}
-                                            </p>
-                                          </details>
-                                          {Object.keys(preview.conflicts)
-                                            .length > 0 ? (
-                                            <div className="rounded border border-amber-200 bg-amber-50 p-3">
-                                              <p className="font-bold text-amber-900">
-                                                One decision is needed before
-                                                merging
-                                              </p>
-                                              <p className="mt-1 text-sm text-amber-900">
-                                                These two customers have
-                                                different values. Choose which
-                                                value the merged customer should
-                                                keep.
-                                              </p>
-                                              {Object.entries(
-                                                preview.conflicts,
-                                              ).map(([field, label]) => {
-                                                const survivorPreview =
-                                                  preview.customers.find(
-                                                    (customer) =>
-                                                      String(customer.id) ===
-                                                      preview.survivor_session_id,
-                                                  );
-                                                const duplicatePreview =
-                                                  preview.customers.find(
-                                                    (customer) =>
-                                                      String(customer.id) ===
-                                                      preview.duplicate_session_id,
-                                                  );
-                                                return (
-                                                  <div
-                                                    key={field}
-                                                    className="mt-3 rounded border border-amber-200 bg-white p-3"
-                                                  >
-                                                    <p className="text-sm font-bold text-slate-800">
-                                                      {label}
-                                                    </p>
-                                                    {field === "tin" ? (
-                                                      <span className="mt-2 block font-semibold text-red-700">
-                                                        These TINs cannot be
-                                                        chosen automatically.
-                                                        Resolve the TIN
-                                                        difference before
-                                                        merging.
-                                                      </span>
-                                                    ) : (
-                                                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => {
-                                                            setFieldDecisions(
-                                                              (previous) => ({
-                                                                ...previous,
-                                                                [field]:
-                                                                  "survivor",
-                                                              }),
-                                                            );
-                                                            setPreview(null);
-                                                            if (showTutorial && tutorialStep === 7) setTutorialStep(6);
-                                                          }}
-                                                          className={`rounded border px-3 py-2 text-left text-xs ${fieldDecisions[field] === "survivor" ? "border-blue-600 bg-blue-100 ring-2 ring-blue-200" : "border-slate-300 hover:bg-slate-50"}`}
-                                                        >
-                                                          <span className="block font-bold text-slate-700">
-                                                            Keep Customer A
-                                                          </span>
-                                                          <span className="mt-1 block text-slate-600">
-                                                            {mergeFieldValue(
-                                                              survivorPreview,
-                                                              field,
-                                                            )}
-                                                          </span>
-                                                        </button>
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => {
-                                                            setFieldDecisions(
-                                                              (previous) => ({
-                                                                ...previous,
-                                                                [field]:
-                                                                  "duplicate",
-                                                              }),
-                                                            );
-                                                            setPreview(null);
-                                                            if (showTutorial && tutorialStep === 7) setTutorialStep(6);
-                                                          }}
-                                                          className={`rounded border px-3 py-2 text-left text-xs ${fieldDecisions[field] === "duplicate" ? "border-blue-600 bg-blue-100 ring-2 ring-blue-200" : "border-slate-300 hover:bg-slate-50"}`}
-                                                        >
-                                                          <span className="block font-bold text-slate-700">
-                                                            Keep Customer B
-                                                          </span>
-                                                          <span className="mt-1 block text-slate-600">
-                                                            {mergeFieldValue(
-                                                              duplicatePreview,
-                                                              field,
-                                                            )}
-                                                          </span>
-                                                        </button>
-                                                      </div>
-                                                    )}
-                                                  </div>
-                                                );
-                                              })}
-                                            </div>
-                                          ) : null}
-                                          {preview.blocking_warnings.length >
-                                          0 ? (
-                                            <ul className="list-disc pl-5 text-red-700">
-                                              {preview.blocking_warnings.map(
-                                                (warning) => (
-                                                  <li key={warning}>
-                                                    {warning}
-                                                  </li>
-                                                ),
-                                              )}
-                                            </ul>
-                                          ) : null}
-                                          {preview.executable ? (
-                                            <div className="flex flex-wrap gap-2">
-                                              <input
-                                                aria-label="Merge confirmation phrase"
-                                                data-tutorial="merge-confirmation"
-                                                className="h-10 rounded-md border border-slate-300 px-2 text-sm"
-                                                value={confirmation}
-                                                onChange={(event) => {
-                                                  setConfirmation(event.target.value);
-                                                  if (event.target.value === "MERGE CUSTOMER RECORDS" && showTutorial && tutorialStep === 8) setTutorialStep(9);
-                                                }}
-                                                placeholder="MERGE CUSTOMER RECORDS"
-                                              />
-                                              <button
-                                                type="button"
-                                                data-tutorial="confirm-merge"
-                                                onClick={() =>
-                                                  void executeMerge()
-                                                }
-                                                disabled={
-                                                  merging ||
-                                                  confirmation !==
-                                                    "MERGE CUSTOMER RECORDS"
-                                                }
-                                                className="rounded-md bg-red-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
-                                              >
-                                                {merging
-                                                  ? "Merging..."
-                                                  : "Confirm merge"}
-                                              </button>
-                                            </div>
-                                          ) : null}
-                                        </div>
-                                      ) : null}
-                                    </div>
-                                  </div>
-                                </div>
+                                )}
                               </div>
-                            ) : null}
-                          </article>
-                        );
-                      })
-                    )}
-                  </div>
-                )}
-              </main>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                      {preview.blocking_warnings.length>
+                        0 ? (
+                        <ul className="list-disc pl-5 text-red-700">
+                          {preview.blocking_warnings.map(
+                            (warning) => (
+                              <li key={warning}>
+                                {warning}
+                              </li>
+                            ),
+                          )}
+                        </ul>
+                      ) : null}
+                      {preview.executable ? (
+                        <div className="flex flex-wrap gap-2">
+                          <input
+                            aria-label="Merge confirmation phrase"
+                            data-tutorial="merge-confirmation"
+                            className="h-10 rounded-md border border-slate-300 px-2 text-sm"
+                            value={confirmation}
+                            onChange={(event) => {
+                              setConfirmation(event.target.value);
+                              if (event.target.value === "MERGE CUSTOMER RECORDS" && showTutorial && tutorialStep === 8) setTutorialStep(9);
+                            }}
+                            placeholder="MERGE CUSTOMER RECORDS"
+                          />
+                          <button
+                            type="button"
+                            data-tutorial="confirm-merge"
+                            onClick={() =>
+                              void executeMerge()
+                            }
+                            disabled={
+                              merging ||
+                              confirmation !==
+                              "MERGE CUSTOMER RECORDS"
+                            }
+                            className="rounded-md bg-red-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+                          >
+                            {merging
+                              ? "Merging..."
+                              : "Confirm merge"}
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
             </div>
           </div>
         ) : null}

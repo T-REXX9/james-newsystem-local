@@ -234,11 +234,23 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
 
             {/* 1. Ultra Headers (Glass / Premium feel) */}
                 <div className="z-10 border-b border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-
-                    <div className="flex min-w-0 items-center gap-3">
-                        {contact.recordImage && !recordImageFailed ? <img src={contact.recordImage} alt="Customer record image" className="h-12 w-12 shrink-0 rounded-xl object-cover shadow-lg shadow-blue-900/20" style={{ objectPosition: contact.recordImagePosition?.replace(',', '% ') }} onError={() => setRecordImageFailed(true)} /> : <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-blue to-blue-600 text-xl font-bold text-white shadow-lg shadow-blue-900/20">{Initials}</div>}
-                        <div className="min-w-0">
+                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <div className="relative h-[172px] bg-gradient-to-r from-slate-700 via-brand-blue to-blue-500 sm:h-[230px]">
+                        {contact.recordImage && !recordImageFailed ? (
+                            <img
+                                src={contact.recordImage}
+                                alt={`${contact.company || contact.name || 'Customer'} cover photo`}
+                                className="h-full w-full object-cover"
+                                style={{ objectPosition: contact.recordImagePosition?.replace(',', '% ') }}
+                                onError={() => setRecordImageFailed(true)}
+                            />
+                        ) : (
+                            <div className="flex h-full items-center justify-center text-6xl font-bold tracking-widest text-white/80" aria-hidden="true">{Initials}</div>
+                        )}
+                        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-950/45 to-transparent" aria-hidden="true" />
+                    </div>
+                    <div className="flex flex-wrap items-start justify-between gap-4 p-4 sm:p-5">
+                    <div className="min-w-0">
                             <h1 className="flex items-center gap-2 text-xl font-bold text-slate-900 dark:text-white">
                                 <CompanyName name={contact.company} pastName={contact.pastName} entity={contact} showStar={false} />
                                 {isMasterUserAccount(currentUser) ? (
@@ -270,7 +282,6 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                 )}
                             </div>
                         </div>
-                    </div>
 
                     <div className="shrink-0 text-right">
                         <div className="mb-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Outstanding Balance</div>
@@ -312,6 +323,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                 </button>
                             )}
                         </div>
+                    </div>
                     </div>
                 </div>
 

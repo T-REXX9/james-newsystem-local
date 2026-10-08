@@ -10,6 +10,11 @@ export interface PotentialDuplicateMatch {
   matched_fields: string[];
 }
 
+export interface DuplicateCustomerGroup {
+  session_ids: string[];
+  matched_fields: string[];
+}
+
 export interface CustomerMergePreview {
   merge_id: number;
   customers: Contact[];
@@ -52,6 +57,13 @@ export async function findPotentialDuplicates(contact: Contact): Promise<Potenti
   });
   const result = await requestLocalApi<{ items?: PotentialDuplicateMatch[] }>(
     `/customer-database/name-check?${query.toString()}`,
+  );
+  return Array.isArray(result?.items) ? result.items : [];
+}
+
+export async function fetchDuplicateCustomerGroups(): Promise<DuplicateCustomerGroup[]> {
+  const result = await requestLocalApi<{ items?: DuplicateCustomerGroup[] }>(
+    '/customer-database/duplicate-groups',
   );
   return Array.isArray(result?.items) ? result.items : [];
 }

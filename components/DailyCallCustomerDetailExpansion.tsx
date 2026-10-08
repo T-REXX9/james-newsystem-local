@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   BarChart3,
   Bot,
-  Building2,
   CheckCircle2,
   ClipboardList,
   CreditCard,
@@ -30,6 +29,7 @@ import { fetchContactCustomerLogsForDailyCall } from '../services/dailyCallMonit
 import { buildYearlySalesFromSummary, customerLedgerService, type CustomerYearlySales as CustomerYearlySalesEntry } from '../services/customerLedgerService';
 import { DO_NOT_CONTACT_LABEL, isBlockedDailyCallCustomerRow } from '../utils/dailyCallBlockedCustomer';
 import { formatDate as formatDisplayDate } from '../utils/formatUtils';
+import { fetchContactForDailyCall } from '../services/customerDatabaseLocalApiService';
 
 export type DetailTabId =
   | 'overview'
@@ -124,10 +124,30 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
   const [doNotContactReason, setDoNotContactReason] = useState('');
   const [yearlySalesEntries, setYearlySalesEntries] = useState<CustomerYearlySalesEntry[]>([]);
   const [ledgerError, setLedgerError] = useState('');
+  const [recordImage, setRecordImage] = useState('');
+  const [recordImagePosition, setRecordImagePosition] = useState('50,50');
+  const [recordImageFailed, setRecordImageFailed] = useState(false);
 
   useEffect(() => {
     setActiveTab(normalizeTabId(initialTab));
   }, [initialTab, customer.id]);
+
+  useEffect(() => {
+    let disposed = false;
+    setRecordImage('');
+    setRecordImagePosition('50,50');
+    setRecordImageFailed(false);
+    void fetchContactForDailyCall(customer.id)
+      .then((contact) => {
+        if (disposed) return;
+        setRecordImage(contact.recordImage || '');
+        setRecordImagePosition(contact.recordImagePosition || '50,50');
+      })
+      .catch(() => {
+        if (!disposed) setRecordImage('');
+      });
+    return () => { disposed = true; };
+  }, [customer.id]);
 
   useEffect(() => {
     if (readOnly && activeTab === 'sales') {
@@ -287,14 +307,24 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
   return (
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-sm">
       <header className="border-b border-slate-200 bg-white p-4">
-        <div className="grid gap-4 xl:grid-cols-[220px_1.55fr_1fr_0.85fr]">
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-            <div className="grid h-32 place-items-center bg-gradient-to-br from-slate-200 to-slate-100 text-slate-400">
-              <Building2 className="h-14 w-14" />
-            </div>
-            <p className="border-t border-slate-200 py-2 text-center text-[11px] font-bold text-blue-700">Customer photo unavailable</p>
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+          <div className="relative h-[172px] bg-gradient-to-r from-slate-700 via-brand-blue to-blue-500 sm:h-[230px]">
+            {recordImage && !recordImageFailed ? (
+              <img
+                src={recordImage}
+                alt={`${customer.shopName || 'Customer'} cover photo`}
+                className="h-full w-full object-cover"
+                style={{ objectPosition: recordImagePosition.replace(',', '% ') }}
+                onError={() => setRecordImageFailed(true)}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-6xl font-bold tracking-widest text-white/80" aria-hidden="true">
+                {(customer.shopName || '??').substring(0, 2).toUpperCase()}
+              </div>
+            )}
+            <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-950/45 to-transparent" aria-hidden="true" />
           </div>
-
+          <div className="grid gap-4 p-3 sm:p-4 xl:grid-cols-[1.55fr_1fr_0.85fr]">
           <div className="min-w-0 py-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="flex items-center gap-1 truncate text-2xl font-bold text-slate-950"><span className="truncate">{customer.shopName}</span><CustomerStarIndicator customerId={customer.id} isStarred={customer.isStarred} /></h2>
@@ -334,6 +364,7 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
               <button type="button" onClick={() => setActiveTab('sales')} className="mt-5 w-full rounded-lg border border-slate-200 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50">View Sales Inquiries</button>
             )}
           </section>
+        </div>
         </div>
       </header>
 
