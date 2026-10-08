@@ -382,11 +382,11 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
 
       <footer className="border-t border-slate-200 bg-white px-4 py-3">
         <h3 className="text-[10px] font-bold uppercase tracking-wide text-slate-700">Quick Actions</h3>
-        <div className="mt-2 grid grid-cols-3 gap-2 lg:grid-cols-6">
+        <div className="mt-2 flex flex-wrap gap-2">
           {[
             ['Agent Sales Report', MessageSquare, 'text-violet-700 border-violet-200 bg-violet-50', 'sales-report'],
             ...(!readOnly ? [['Sales Inquiry', BarChart3, 'text-white border-blue-900 bg-blue-950', 'sales']] : []),
-          ].map(([label, Icon, tone, target]) => <button key={String(label)} type="button" onClick={() => setActiveTab(target as DetailTabId)} className={`flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-[10px] font-bold ${tone}`}><Icon className="h-3.5 w-3.5" />{String(label)}</button>)}
+          ].map(([label, Icon, tone, target]) => <button key={String(label)} type="button" onClick={() => setActiveTab(target as DetailTabId)} className={`inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-2 ${tone}`}><Icon className="h-3.5 w-3.5" />{String(label)}</button>)}
         </div>
       </footer>
     </section>

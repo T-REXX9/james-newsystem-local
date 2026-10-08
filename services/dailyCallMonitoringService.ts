@@ -8,6 +8,7 @@ import {
   DailyActivityRecord,
   DailyCallCustomerFilterStatus,
   DailyCallCustomerRow,
+  DailyCallDoNotContactCustomer,
   DailyCallMasterCustomerRow,
   DailyCallMasterListMeta,
   DailyCallSalesColorBreakdown,
@@ -45,6 +46,7 @@ export interface DailyCallRealtimeCallbacks {
 export interface DailyCallAgentSnapshot {
   contacts: DailyCallCustomerRow[];
   masterList: DailyCallMasterCustomerRow[];
+  doNotContactCustomers: DailyCallDoNotContactCustomer[];
   callLogs: CallLogEntry[];
   inquiries: Inquiry[];
   purchases: Purchase[];
@@ -580,6 +582,25 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
   };
 };
 
+const mapDailyCallDoNotContactCustomer = (row: any): DailyCallDoNotContactCustomer => ({
+  id: String(row?.id || ''),
+  shopName: cleanNullableText(row?.shopName ?? row?.shop_name, 'Unnamed Shop'),
+  assignedTo: cleanNullableText(row?.assignedTo ?? row?.assigned_to, 'Unassigned'),
+  assignedTeam: cleanNullableText(row?.assignedTeam ?? row?.assigned_team),
+});
+
+const fetchCompanyDoNotContactCustomers = async (signal?: AbortSignal): Promise<DailyCallDoNotContactCustomer[]> => {
+  const params = new URLSearchParams({ main_id: String(resolveMainId()) });
+  const payload = await requestJson(
+    `${API_BASE_URL}/daily-call-monitoring/do-not-contact-customers?${params.toString()}`,
+    { signal }
+  );
+  if (!Array.isArray(payload?.data)) {
+    throw new Error('Company Do Not Contact list is unavailable.');
+  }
+  return payload.data.map(mapDailyCallDoNotContactCustomer);
+};
+
 const matchesSearch = (contact: Contact, query: string) => {
   if (!query) return true;
   const normalizedQuery = normalizeText(query);
@@ -769,6 +790,9 @@ export const fetchAgentSnapshotForDailyCall = async (
     return {
       contacts: Array.isArray(data?.contacts) ? data.contacts.map(mapDailyCallCustomerRow) : [],
       masterList,
+      doNotContactCustomers: Array.isArray(data?.do_not_contact_customers)
+        ? data.do_not_contact_customers.map(mapDailyCallDoNotContactCustomer)
+        : await fetchCompanyDoNotContactCustomers(options?.signal),
       callLogs: Array.isArray(data?.call_logs) ? data.call_logs.map(mapCallLog) : [],
       inquiries: Array.isArray(data?.inquiries) ? data.inquiries.map(mapInquiry) : [],
       purchases: Array.isArray(data?.purchases) ? data.purchases.map(mapPurchase) : [],
@@ -797,9 +821,11 @@ export const fetchAgentSnapshotForDailyCall = async (
         // Keep the established customer-list fallback usable when this older
         // deployment also lacks the master-list endpoint.
       }
+      const doNotContactRows = await fetchCompanyDoNotContactCustomers(options?.signal);
       return {
         contacts: fallbackData.map(mapDailyCallCustomerRow),
         masterList,
+        doNotContactCustomers: doNotContactRows,
         callLogs: [],
         inquiries: [],
         purchases: [],

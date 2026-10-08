@@ -314,7 +314,7 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
 
   // Layout
   return (
-    <div data-testid="customer-database-page" className="relative flex h-full w-full flex-col overflow-hidden bg-slate-50 p-2 dark:bg-slate-950 sm:p-3">
+    <div data-testid="customer-database-page" className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-slate-50 p-2 dark:bg-slate-950 sm:p-3">
       <PageHeader
         compact
         eyebrow="Sales Database"
@@ -393,7 +393,7 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
         message={`${customers.find((customer) => customer.id === selectedCustomerId)?.company || 'This customer'} will be moved to Recycle Bin and can be restored later.`}
         confirmLabel="Delete Customer"
       />
-      <div data-testid="customer-database-workspace" className="flex min-h-0 w-full flex-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div data-testid="customer-database-workspace" className="flex min-h-0 w-full min-w-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <AddContactModal
         isOpen={showAddCustomerModal}
         onClose={() => setShowAddCustomerModal(false)}
@@ -430,7 +430,7 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
       />
 
       {/* Main Content (Detail Panel) */}
-      <main className="flex-1 h-full overflow-hidden relative">
+      <main className="relative min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain">
         {viewMode === 'approvals' && canViewApprovals ? (
           <ApprovalRequestsView
             currentUser={currentUser}

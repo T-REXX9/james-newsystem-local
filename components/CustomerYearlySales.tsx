@@ -123,7 +123,7 @@ const CustomerYearlySales: React.FC<CustomerYearlySalesProps> = ({
   return (
     <section
       aria-labelledby="customer-yearly-sales-heading"
-      className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm col-span-1 md:col-span-2 lg:col-span-3"
+      className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm"
       data-testid="customer-yearly-sales"
     >
       <div className="flex items-start justify-between gap-4 mb-4">

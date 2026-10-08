@@ -199,6 +199,7 @@ describe('dailyCallMonitoringService', () => {
         data: {
           contacts: [{ id: '1', shopName: 'Test Shop' }],
           master_list: [{ id: '1', shop_name: 'Test Shop', list_category: 'recovery', purchase_count: 1 }],
+          do_not_contact_customers: [{ id: 'blocked-1', shop_name: 'Blocked Shop', assigned_to: 'Other Agent', assigned_team: 'Alpha' }],
           call_logs: [{ id: 'log-1', contact_id: '1', agent_name: 'Jane Doe', channel: 'text', outcome: 'logged', occurred_at: '2026-03-07T00:00:00Z' }],
           inquiries: [{ id: 'inq-1', contact_id: '1', sales_date: '2026-03-07T00:00:00Z', status: 'Submitted' }],
           purchases: [{ id: 'pur-1', contact_id: '1', total_amount: 1200, purchase_date: '2026-03-07T00:00:00Z' }],
@@ -212,10 +213,29 @@ describe('dailyCallMonitoringService', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(result.contacts).toHaveLength(1);
     expect(result.masterList).toMatchObject([{ id: '1', listCategory: 'recovery' }]);
+    expect(result.doNotContactCustomers).toEqual([{ id: 'blocked-1', shopName: 'Blocked Shop', assignedTo: 'Other Agent', assignedTeam: 'Alpha' }]);
     expect(result.callLogs[0]).toMatchObject({ id: 'log-1', agent_name: 'Jane Doe', channel: 'text' });
     expect(result.inquiries[0]).toMatchObject({ id: 'inq-1', title: 'Submitted' });
     expect(result.purchases[0]).toMatchObject({ id: 'pur-1', amount: 1200 });
     expect(result.teamMessages[0]).toMatchObject({ id: 'msg-1', is_from_owner: true });
+  });
+
+  it('loads the company-wide Do Not Contact list when an older successful snapshot omits it', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { contacts: [], master_list: [] } }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: [{ id: 'blocked-legacy', shop_name: 'Legacy API Blocked Shop', assigned_to: 'Another Agent' }] }),
+      } as Response);
+
+    const result = await fetchAgentSnapshotForDailyCall('63');
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(String(fetchSpy.mock.calls[1][0])).toContain('/daily-call-monitoring/do-not-contact-customers?');
+    expect(result.doNotContactCustomers).toEqual([{ id: 'blocked-legacy', shopName: 'Legacy API Blocked Shop', assignedTo: 'Another Agent', assignedTeam: '' }]);
   });
 
   it('falls back to the legacy customer endpoint when the aggregate snapshot is unavailable', async () => {
@@ -238,14 +258,20 @@ describe('dailyCallMonitoringService', () => {
             meta: {},
           },
         }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: [{ id: 'blocked-1', shop_name: 'Blocked Shop', assigned_to: 'Other Agent', assigned_team: 'Alpha' }] }),
       } as Response);
 
     const result = await fetchAgentSnapshotForDailyCall('63');
 
-    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
     expect(String(fetchSpy.mock.calls[1][0])).toContain('/daily-call-monitoring/excel?');
     expect(result.contacts).toMatchObject([{ id: '1', shopName: 'Fallback Shop' }]);
     expect(String(fetchSpy.mock.calls[2][0])).toContain('/daily-call-monitoring/master-list?');
+    expect(String(fetchSpy.mock.calls[3][0])).toContain('/daily-call-monitoring/do-not-contact-customers?');
+    expect(result.doNotContactCustomers).toEqual([{ id: 'blocked-1', shopName: 'Blocked Shop', assignedTo: 'Other Agent', assignedTeam: 'Alpha' }]);
     expect(result.masterList).toMatchObject([{
       id: '1',
       listCategory: 'priority',
@@ -272,6 +298,7 @@ describe('dailyCallMonitoringService', () => {
               status_label: 'active',
             },
           ],
+          do_not_contact_customers: [],
           call_logs: [],
           inquiries: [],
           purchases: [],

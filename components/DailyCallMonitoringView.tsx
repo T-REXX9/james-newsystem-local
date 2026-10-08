@@ -77,6 +77,7 @@ import {
   CustomerLogTopic,
   CustomerStatus,
   DailyCallMasterCustomerRow,
+  DailyCallDoNotContactCustomer,
   DealStage,
   Inquiry,
   Purchase,
@@ -565,6 +566,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const canEdit = canPerformAction('can_edit');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [masterListRows, setMasterListRows] = useState<DailyCallMasterCustomerRow[]>([]);
+  const [doNotContactCustomers, setDoNotContactCustomers] = useState<DailyCallDoNotContactCustomer[]>([]);
   const [bookmarkedContactId, setBookmarkedContactId] = useState<string | null>(null);
   const [savingBookmark, setSavingBookmark] = useState(false);
   const [activeWorkspacePanel, setActiveWorkspacePanel] = useState<'quota' | 'calls' | 'summaries' | 'filters' | 'actions' | null>(null);
@@ -604,6 +606,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [noPurchaseOnly, setNoPurchaseOnly] = useState(false);
   const [colorFilter, setColorFilter] = useState<'all' | PurchaseHighlightColor>('all');
   const [salesReportFilter, setSalesReportFilter] = useState<'all' | 'reported' | 'unread'>('all');
+  const [expandedCustomerCategory, setExpandedCustomerCategory] = useState<'priority' | 'recovery' | 'verified' | 'unverified' | 'blocked'>('priority');
   const [searchValue, setSearchValue] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sortField, setSortField] = useState<'priority' | 'lastContact' | 'lastPurchase' | 'salesValue'>('priority');
@@ -715,6 +718,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
       setContacts(teamScopedContacts);
       setMasterListRows(snapshot.masterList || []);
+      setDoNotContactCustomers(snapshot.doNotContactCustomers || []);
       setBookmarkedContactId(snapshot.bookmarkedContactId || null);
       setCallLogs(snapshot.callLogs.filter((log) => log.agent_name === agentDataName));
       setInquiries(snapshot.inquiries);
@@ -1448,7 +1452,28 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         // Otherwise use default priority ordering
         return (a.priority ?? 0) - (b.priority ?? 0);
       });
-    const blockedRows = masterRows.filter((row) => resolveMonitorBucket(row) === 'blocked');
+    const assignedBlockedRows = masterRows.filter((row) => resolveMonitorBucket(row) === 'blocked');
+    const assignedBlockedIds = new Set(assignedBlockedRows.map((row) => row.contact.id));
+    const searchTerm = debouncedSearch.trim().toLocaleLowerCase();
+    const companyBlockedRows: MasterRow[] = doNotContactCustomers
+      .filter((customer) => !assignedBlockedIds.has(customer.id))
+      .filter((customer) => !searchTerm || `${customer.shopName} ${customer.assignedTo} ${customer.assignedTeam}`.toLocaleLowerCase().includes(searchTerm))
+      .map((customer) => ({
+        contact: {
+          id: customer.id,
+          company: customer.shopName,
+          salesman: customer.assignedTo,
+          team: customer.assignedTeam,
+          status: CustomerStatus.BLACKLISTED,
+          debtType: 'Bad',
+        } as Contact,
+        priority: 0,
+        totalSales: 0,
+        currentMonthSales: 0,
+        averageMonthlySales: 0,
+        totalInteractions: 0,
+      }));
+    const blockedRows = [...assignedBlockedRows, ...companyBlockedRows];
 
     return [
       summarize(priorityRows, 'priority', 'Priority List', 'Any ledger activity since October 2025 onwards', 'emerald', 'Current Month Sales'),
@@ -1457,7 +1482,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       summarize(unverifiedRows, 'unverified', 'Unverified Prospects', 'No purchases yet', 'orange', 'Average Monthly Purchase'),
       summarize(blockedRows, 'blocked', DO_NOT_CONTACT_LABEL, 'View only — no contact or sales inquiry', 'red', 'Average Monthly Sales'),
     ];
-  }, [masterListRows, masterRows]);
+  }, [debouncedSearch, doNotContactCustomers, masterListRows, masterRows]);
 
   useEffect(() => {
     if (!masterRows.length) {
@@ -1871,7 +1896,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       />
 
       <div className="flex min-h-full flex-col gap-5 p-4 lg:p-6">
-      <section className="grid grid-cols-2 gap-2 sm:grid-cols-5" aria-label="Daily call workspace tools">
+      <section className="grid grid-cols-2 gap-2 lg:grid-cols-3 2xl:grid-cols-5" aria-label="Daily call workspace tools">
         {([
           { key: 'quota', title: 'Monthly quota', detail: quota > 0 ? `${formatCurrency(quota)} assigned` : 'Set your target', icon: Target },
           { key: 'calls', title: 'Call activity', detail: 'Phone and hardware', icon: PhoneCall },
@@ -1896,13 +1921,13 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             <div className="overflow-y-auto p-4 sm:p-5">
               {activeWorkspacePanel === 'quota' && <section className="flex flex-col gap-4 rounded-xl border border-blue-200 bg-blue-50/70 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-blue-900 dark:bg-blue-950/30" aria-label="Your monthly sales quota" data-testid="daily-call-personal-quota"><div><h3 className="mb-1 text-sm font-bold text-blue-950 dark:text-blue-100">Your monthly sales quota</h3><PersonalSalesQuotaEditor quota={quota} /><p className="mt-1 text-xs text-blue-800/80 dark:text-blue-200/80">Visible only in your Daily Call workspace</p></div>{quota > 0 ? <dl className="flex flex-wrap gap-x-5 gap-y-2 text-sm tabular-nums"><div><dt className="text-xs text-slate-600 dark:text-slate-300">Assigned quota</dt><dd className="font-bold">{formatCurrency(quota)}</dd></div><div><dt className="text-xs text-slate-600 dark:text-slate-300">Achieved this month</dt><dd className="font-bold">{achievementsValue === null ? 'Loading' : formatCurrency(achievementsValue)}</dd></div>{remainingQuota !== null && <div><dt className="text-xs text-slate-600 dark:text-slate-300">Remaining</dt><dd className="font-bold">{formatCurrency(remainingQuota)}</dd></div>}{percentAchieved !== null && <div><dt className="text-xs text-slate-600 dark:text-slate-300">Progress</dt><dd className="font-bold">{percentAchieved}%</dd></div>}</dl> : <p className="text-sm font-semibold">No monthly quota assigned</p>}</section>}
               {activeWorkspacePanel === 'calls' && <CallAccountabilityPanel title="Phone and hardware call activity" compact />}
-              {activeWorkspacePanel === 'actions' && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {canAdd && <button type="button" onClick={() => { setActiveWorkspacePanel(null); setAddCustomerKind('prospect'); setShowAddCustomerModal(true); }} className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-3 text-sm font-bold text-white hover:bg-amber-600"><UserPlus className="h-4 w-4" />Add Prospect</button>}
-                {canEdit && <button type="button" onClick={() => { setActiveWorkspacePanel(null); setAddCustomerKind('verifiedProspect'); setShowAddCustomerModal(true); }} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-700"><UserCheck className="h-4 w-4" />Request Verification</button>}
-                {canAdd && canCreateCustomer && <button type="button" onClick={() => { setActiveWorkspacePanel(null); setAddCustomerKind('customer'); setShowAddCustomerModal(true); }} className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-3 text-sm font-bold text-white hover:bg-blue-700"><UserPlus className="h-4 w-4" />New Customer</button>}
-                <button type="button" onClick={() => { setActiveWorkspacePanel(null); void loadAgentData(); }} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />Refresh board</button>
+              {activeWorkspacePanel === 'actions' && <div className="flex flex-wrap items-center gap-2">
+                {canAdd && <button type="button" onClick={() => { setActiveWorkspacePanel(null); setAddCustomerKind('prospect'); setShowAddCustomerModal(true); }} className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-amber-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 sm:w-auto"><UserPlus className="h-4 w-4" />Add Prospect</button>}
+                {canEdit && <button type="button" onClick={() => { setActiveWorkspacePanel(null); setAddCustomerKind('verifiedProspect'); setShowAddCustomerModal(true); }} className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 sm:w-auto"><UserCheck className="h-4 w-4" />Request Verification</button>}
+                {canAdd && canCreateCustomer && <button type="button" onClick={() => { setActiveWorkspacePanel(null); setAddCustomerKind('customer'); setShowAddCustomerModal(true); }} className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-brand-blue px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-2 sm:w-auto"><UserPlus className="h-4 w-4" />New Customer</button>}
+                <button type="button" onClick={() => { setActiveWorkspacePanel(null); void loadAgentData(); }} className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-2 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 sm:w-auto"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />Refresh board</button>
               </div>}
-              {activeWorkspacePanel === 'summaries' && <div className="space-y-4"><DailyCallSalesColorBreakdown /><section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Customer category summaries">{customerListSummaries.map((summary) => { const tone = summaryToneClasses[summary.tone]; return <article key={summary.id} className={`rounded-lg border p-4 ${tone.card}`}><h3 className={`text-xs font-extrabold uppercase ${tone.title}`}>{summary.label}</h3><p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{summary.note}</p><p className="mt-3 text-2xl font-extrabold text-[#10244c] dark:text-white">{summary.rows.length}<span className="ml-1 text-xs font-semibold">customers</span></p><p className={`mt-2 text-sm font-bold ${tone.value}`}>{summary.metricLabel}: {summary.metricLabel === 'Current Month Sales' ? formatCurrency(summary.primaryMetric) : formatCompactCurrency(summary.primaryMetric)}</p><p className={`text-sm font-bold ${tone.value}`}>Potential sales: {formatCompactCurrency(summary.potentialSales)}</p></article>; })}</section></div>}
+              {activeWorkspacePanel === 'summaries' && <div className="space-y-4"><DailyCallSalesColorBreakdown /><section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Customer category summaries">{customerListSummaries.map((summary) => { const tone = summaryToneClasses[summary.tone]; return <article key={summary.id} className={`rounded-lg border p-4 ${tone.card}`}><h3 className={`text-xs font-extrabold uppercase ${tone.title}`}>{summary.label}</h3><p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{summary.note}</p><p className="mt-3 text-2xl font-extrabold text-[#10244c] dark:text-white">{summary.rows.length}<span className="ml-1 text-xs font-semibold">customers</span></p>{summary.id === 'blocked' ? <p className={`mt-2 text-sm font-bold ${tone.value}`}>Customer identities only · no contact actions</p> : <><p className={`mt-2 text-sm font-bold ${tone.value}`}>{summary.metricLabel}: {summary.metricLabel === 'Current Month Sales' ? formatCurrency(summary.primaryMetric) : formatCompactCurrency(summary.primaryMetric)}</p><p className={`text-sm font-bold ${tone.value}`}>Potential sales: {formatCompactCurrency(summary.potentialSales)}</p></>}</article>; })}</section></div>}
               {activeWorkspacePanel === 'filters' && <div className="space-y-5"><div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><label className="text-xs font-bold text-slate-600 dark:text-slate-300">Color status<select aria-label="Color status" value={colorFilter} onChange={(event) => setColorFilter(event.target.value as 'all' | PurchaseHighlightColor)} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium dark:border-slate-700 dark:bg-slate-950"><option value="all">All color statuses</option><option value="green">Green — bought this month</option><option value="yellow">Yellow — 1 month no purchase</option><option value="purple">Purple — 2 months no purchase</option><option value="white">White — 3+ months / no purchase</option><option value="red">Red — blacklisted/rejected -do not contact</option></select></label><label className="text-xs font-bold text-slate-600 dark:text-slate-300">Agent Sales Report<select aria-label="Agent Sales Report filter" value={salesReportFilter} onChange={(event) => setSalesReportFilter(event.target.value as 'all' | 'reported' | 'unread')} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium dark:border-slate-700 dark:bg-slate-950"><option value="all">All customers</option><option value="reported">Has a sales report</option><option value="unread">Unread sales reports</option></select></label></div><div className="flex flex-wrap gap-3 text-[11px] font-semibold text-slate-600 dark:text-slate-300" aria-label="Automatic purchase highlight legend"><span><i className="mr-1 inline-block h-3 w-3 rounded bg-green-500" />Bought this month</span><span><i className="mr-1 inline-block h-3 w-3 rounded bg-yellow-400" />1 month no purchase</span><span><i className="mr-1 inline-block h-3 w-3 rounded bg-purple-500" />2 months no purchase</span><span><i className="mr-1 inline-block h-3 w-3 rounded border border-slate-300 bg-white" />3+ months / no purchase</span><span><i className="mr-1 inline-block h-3 w-3 rounded bg-[#f94449]" />blacklisted/rejected -do not contact</span></div></div>}
             </div>
           </section>
@@ -1939,20 +1964,31 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         <span className="shrink-0 text-sm font-bold text-slate-500 dark:text-slate-400">{masterRows.length} {masterRows.length === 1 ? 'customer' : 'customers'}</span>
       </section>
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6" aria-label="Segregated customer category tables">
+      <div className="overflow-x-auto">
+      <section className="grid min-w-[1200px] grid-cols-6 gap-3" aria-label="Segregated customer category tables">
         {customerListSummaries.map((summary) => {
           const tone = summaryToneClasses[summary.tone];
+          const isExpanded = expandedCustomerCategory === summary.id;
           const bookmarkedCustomer = summary.id === 'priority'
-            ? baseMasterRows.find((row) => row.contact.id === bookmarkedContactId)
+            ? baseMasterRows.find((row) => row.contact.id === bookmarkedContactId && !isBlockedContact(row.contact))
             : undefined;
           return (
-            <article key={`${summary.id}-table`} className={`flex h-[560px] min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900/95 motion-safe:animate-[james-fade-up_500ms_cubic-bezier(0.22,1,0.36,1)_both] ${summary.id === 'priority' ? '2xl:col-span-2' : ''}`}>
-              <header className="flex min-h-[58px] items-center justify-between gap-2 border-b border-slate-200 px-3 py-3 dark:border-slate-800">
-                <h2 className={`min-w-0 truncate text-sm font-extrabold uppercase leading-tight ${tone.title}`} title={`${summary.label} (${summary.note})`}>
-                  {summary.label} <span className="text-[10px] normal-case">({summary.note})</span>
-                </h2>
-                <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${tone.icon}`} aria-hidden="true" />
-              </header>
+            <article key={`${summary.id}-table`} className={`flex min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 shadow-sm transition-[grid-column] duration-300 dark:border-slate-800 dark:bg-slate-900/95 motion-safe:animate-[james-fade-up_500ms_cubic-bezier(0.22,1,0.36,1)_both] ${isExpanded ? 'col-span-2 h-[560px]' : 'col-span-1 h-[560px]'}`}>
+              <h2 className="min-w-0">
+                <button
+                  type="button"
+                  aria-expanded={isExpanded}
+                  aria-controls={`${summary.id}-customer-list`}
+                  onClick={() => setExpandedCustomerCategory(summary.id)}
+                  className={`flex min-h-[58px] w-full items-center justify-between gap-2 px-3 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-blue ${isExpanded ? 'border-b border-slate-200 dark:border-slate-800' : ''}`}
+                  title={`${summary.label} (${summary.note})`}
+                >
+                  <span className={`min-w-0 truncate text-sm font-extrabold uppercase leading-tight ${tone.title}`}>
+                    {summary.label} <span className="text-[10px] normal-case">({summary.note})</span>
+                  </span>
+                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${tone.icon}`} aria-hidden="true" />
+                </button>
+              </h2>
 
               {summary.id === 'priority' && bookmarkedContactId && (
                 <div className="flex items-center justify-between gap-2 border-b border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] dark:border-emerald-900 dark:bg-emerald-950/40">
@@ -1966,7 +2002,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 </div>
               )}
 
-              <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-slate-50/50 p-2 dark:bg-slate-950/30">
+              <div id={`${summary.id}-customer-list`} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-slate-50/50 p-2 dark:bg-slate-950/30">
                 {summary.rows.length === 0 ? (
                   <div className="flex h-full min-h-[220px] items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white px-4 text-center text-sm font-semibold text-slate-400 dark:border-slate-800 dark:bg-slate-900">
                     {dataUnavailable ? 'Client data is unavailable. Retry loading the dashboard.' : 'No customers in this category.'}
@@ -1979,19 +2015,28 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                         return (
                           <tr
                             key={row.contact.id}
-                            className="group cursor-pointer"
+                            className={`group ${summary.id === 'blocked' ? '' : 'cursor-pointer'}`}
                             title={highlight.label}
-                            onClick={() => handleSelectClient(row.contact.id)}
-                            tabIndex={0}
+                            onClick={summary.id === 'blocked' ? undefined : () => handleSelectClient(row.contact.id)}
+                            tabIndex={summary.id === 'blocked' ? undefined : 0}
                             onKeyDown={(event) => {
-                              if (event.key === 'Enter' || event.key === ' ') {
+                              if (summary.id !== 'blocked' && (event.key === 'Enter' || event.key === ' ')) {
                                 event.preventDefault();
                                 handleSelectClient(row.contact.id);
                               }
                             }}
                           >
                             <td className="p-0">
-                              <div className={`grid w-full grid-cols-[1.25rem_minmax(0,1fr)_4.2rem_7rem] items-center gap-2 rounded-lg border p-2 text-left shadow-sm transition-colors group-hover:border-blue-200 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800 ${highlight.className} ${selectedClientId === row.contact.id ? 'border-blue-300 ring-1 ring-blue-200 dark:bg-brand-blue/10' : ''}`}>
+                              {summary.id === 'blocked' ? (
+                                <div className="grid w-full grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-2 text-left shadow-sm dark:border-red-900/70 dark:bg-red-950/20">
+                                  <span className="text-[11px] font-extrabold text-slate-400">{index + 1}</span>
+                                  <span className="min-w-0">
+                                    <span className="block truncate text-[11px] font-extrabold uppercase leading-tight text-[#10244c] dark:text-white" title={row.contact.company}>{row.contact.company}</span>
+                                    <span className="mt-0.5 block truncate text-[10px] font-semibold text-slate-600 dark:text-slate-300">Assigned to {row.contact.salesman || 'Unassigned'}{row.contact.team ? ` · ${row.contact.team}` : ''}</span>
+                                    <span className="mt-1 inline-flex rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-extrabold uppercase text-red-800 dark:bg-red-900/50 dark:text-red-200">Do not contact</span>
+                                  </span>
+                                </div>
+                              ) : <div className={`grid w-full grid-cols-[1.25rem_minmax(0,1fr)_4.2rem_7rem] items-center gap-2 rounded-lg border p-2 text-left shadow-sm transition-colors group-hover:border-blue-200 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800 ${highlight.className} ${selectedClientId === row.contact.id ? 'border-blue-300 ring-1 ring-blue-200 dark:bg-brand-blue/10' : ''}`}>
                               <span className="text-[11px] font-extrabold text-slate-400">{index + 1}</span>
                               <span className="min-w-0">
                                 <span className="flex min-w-0 items-center gap-1.5">
@@ -1999,7 +2044,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                     {row.contact.company}
                                   </span>
                                   <CustomerStarIndicator customerId={row.contact.id} isStarred={row.contact.isStarred} />
-                                  {summary.id === 'priority' && bookmarkedContactId === row.contact.id && (
+                                  {summary.id !== 'blocked' && bookmarkedContactId === row.contact.id && (
                                     <span className="inline-flex shrink-0 items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-extrabold uppercase text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
                                       <Bookmark className="h-2.5 w-2.5 fill-current" aria-hidden="true" /> Stop here
                                     </span>
@@ -2036,7 +2081,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                   {row.contact.salesman || agentDisplayName}
                                 </span>
                               </span>
-                              <span className="flex justify-end gap-1">
+                              <span className="grid grid-cols-4 place-items-center gap-1">
                                 {canEdit && summary.id === 'unverified' && (
                                   <button
                                     type="button"
@@ -2044,7 +2089,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                       event.stopPropagation();
                                       handleRequestProspectVerification(row.contact);
                                     }}
-                                    className="grid h-6 w-6 place-items-center rounded-full border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
+                                    className="grid h-6 w-6 place-items-center rounded-full border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-1"
                                     title={row.contact.verification === 'Pending Verification' ? 'Verification already requested' : 'Request verification'}
                                     aria-label={row.contact.verification === 'Pending Verification' ? `Verification already requested for ${row.contact.company}` : `Request verification for ${row.contact.company}`}
                                     disabled={row.contact.verification === 'Pending Verification'}
@@ -2054,7 +2099,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                 )}
                                 {summary.id !== 'blocked' && !isBlockedContact(row.contact) && (
                                   <>
-                                    {summary.id === 'priority' && (
+                                    {summary.id !== 'blocked' && (
                                       <button
                                         type="button"
                                         onClick={(event) => {
@@ -2062,7 +2107,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                           void handleSetCallBookmark(bookmarkedContactId === row.contact.id ? null : row.contact.id);
                                         }}
                                         disabled={savingBookmark}
-                                        className={`grid h-6 w-6 place-items-center rounded-full border disabled:opacity-50 ${bookmarkedContactId === row.contact.id ? 'border-amber-300 bg-amber-100 text-amber-700 hover:bg-amber-200' : 'border-slate-200 bg-white text-slate-500 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}
+                                        className={`grid h-6 w-6 place-items-center rounded-full border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-1 disabled:opacity-50 ${bookmarkedContactId === row.contact.id ? 'border-amber-300 bg-amber-100 text-amber-700 hover:bg-amber-200' : 'border-slate-200 bg-white text-slate-500 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}
                                         title={bookmarkedContactId === row.contact.id ? 'Remove calling stop' : 'Set as calling stop'}
                                         aria-label={bookmarkedContactId === row.contact.id ? `Remove calling stop at ${row.contact.company}` : `Set calling stop at ${row.contact.company}`}
                                       >
@@ -2075,7 +2120,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                         event.stopPropagation();
                                         handleMasterRowCall(row.contact);
                                       }}
-                                      className="grid h-6 w-6 place-items-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                                      className="grid h-6 w-6 place-items-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-1"
                                       title="Call"
                                       aria-label={`Call ${row.contact.company}`}
                                     >
@@ -2087,7 +2132,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                         event.stopPropagation();
                                         handleMasterRowSMS(row.contact);
                                       }}
-                                      className="grid h-6 w-6 place-items-center rounded-full border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
+                                      className="grid h-6 w-6 place-items-center rounded-full border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-1"
                                       title="SMS"
                                       aria-label={`Send SMS to ${row.contact.company}`}
                                     >
@@ -2096,7 +2141,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                   </>
                                 )}
                               </span>
-                            </div>
+                            </div>}
                             </td>
                           </tr>
                         );
@@ -2118,6 +2163,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           );
         })}
       </section>
+      </div>
       </div>
       {detailsPanelOpen && selectedClient && (
         <div
@@ -2180,24 +2226,24 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               <span>Preferred Brand: {formatPreferredBrand(selectedClient.preferredBrand)}</span>
             </div>
             {!selectedClientBlocked && (
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               <button
                 onClick={() => handleOpenCallContact(selectedClient)}
-                className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-brand-blue hover:text-white transition-colors"
+                className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-brand-blue hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-2 dark:border-slate-800 dark:text-slate-300"
               >
                 <Phone className="w-4 h-4" />
                 Call
               </button>
               <button
                 onClick={() => handleOpenSMSModal(selectedClient)}
-                className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-emerald-500 hover:text-white transition-colors"
+                className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-emerald-500 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:border-slate-800 dark:text-slate-300"
               >
                 <MessageSquare className="w-4 h-4" />
                 SMS
               </button>
               <button
                 onClick={() => handleEmailContact(selectedClient)}
-                className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-blue-500 hover:text-white transition-colors"
+                className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-blue-500 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:border-slate-800 dark:text-slate-300"
               >
                 <Mail className="w-4 h-4" />
                 Email
@@ -2206,7 +2252,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 tab="sales-transaction-sales-inquiry"
                 payload={buildSalesInquiryPayload(selectedClient.id)}
                 onOpen={() => handleOpenSalesInquiry(selectedClient.id)}
-                className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+                className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-700 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2 dark:border-slate-800 dark:text-slate-300"
                 newWindowLabel="Open Sales Inquiry in new window"
               >
                 <FileText className="w-4 h-4" />
@@ -2215,7 +2261,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               {canAdd && <button
                 type="button"
                 onClick={() => setShowIncidentReportModal(true)}
-                className="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 transition-colors hover:bg-rose-100 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-950/50"
+                className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] font-semibold text-rose-700 transition-colors hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-950/50"
                 aria-label="Create Incident Report"
               >
                 <AlertTriangle className="h-4 w-4" />

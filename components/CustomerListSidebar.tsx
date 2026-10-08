@@ -56,7 +56,7 @@ const CustomerListSidebar: React.FC<CustomerListSidebarProps> = ({
     }, [customers, searchQuery, filterStatus, filterVisibility]);
 
     return (
-        <div className="flex flex-col h-full bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 w-full md:w-80 lg:w-96 shadow-lg z-10 transition-all duration-300">
+        <div className="flex min-h-0 flex-col h-full bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 w-full md:w-80 lg:w-96 shadow-lg z-10 transition-all duration-300">
 
             {/* Header & Search */}
             <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col gap-3">

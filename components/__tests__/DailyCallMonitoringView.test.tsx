@@ -139,6 +139,10 @@ describe('DailyCallMonitoringView communication actions', () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /Sales summaries/i }));
   };
+  const expandList = async (label: string, user = userEvent.setup()) => {
+    await user.click(await screen.findByRole('button', { name: new RegExp(`^${label}`, 'i') }));
+    return user;
+  };
 
   beforeEach(() => {
     cleanup();
@@ -213,6 +217,36 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(await screen.findByText('Team sales by Daily Call status')).toBeInTheDocument();
   });
 
+  it('expands only the selected category for all five customer lists', async () => {
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+    const categoryGrid = await screen.findByLabelText('Segregated customer category tables');
+    expect(categoryGrid).toHaveClass('grid-cols-6');
+    expect(await screen.findByText('Test Shop')).toBeInTheDocument();
+    for (const id of ['priority', 'recovery', 'verified', 'unverified', 'blocked']) {
+      expect(document.getElementById(`${id}-customer-list`)).toBeInTheDocument();
+    }
+
+    for (const [label, id] of [
+      ['Priority List', 'priority'],
+      ['Recovery List', 'recovery'],
+      ['Verified Prospects', 'verified'],
+      ['Unverified Prospects', 'unverified'],
+      ['blacklisted/rejected -do not contact', 'blocked'],
+    ]) {
+      await expandList(label);
+      const expandedButton = screen.getByRole('button', { name: new RegExp(`^${label}`, 'i') });
+      expect(expandedButton).toHaveAttribute('aria-expanded', 'true');
+      expect(expandedButton.closest('article')).toHaveClass('col-span-2');
+      expect(document.getElementById(`${id}-customer-list`)).toBeInTheDocument();
+      expect(screen.getByText('Test Shop')).toBeInTheDocument();
+      const categoryButtons = screen.getAllByRole('button', { name: /^(Priority List|Recovery List|Verified Prospects|Unverified Prospects|blacklisted\/rejected)/i });
+      expect(categoryButtons.filter((button) => button.getAttribute('aria-expanded') === 'true')).toHaveLength(1);
+      for (const button of categoryButtons) {
+        expect(button.closest('article')).toHaveClass(button === expandedButton ? 'col-span-2' : 'col-span-1');
+      }
+    }
+  });
+
   it('shows a Sales Map shortcut that navigates to the Sales Map route', async () => {
     const user = userEvent.setup();
     const navigationHandler = vi.fn();
@@ -255,9 +289,34 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
 
+    await expandList('blacklisted/rejected -do not contact');
     const blockedList = (await screen.findByText('Blacklisted By Status')).closest('article')!;
     expect(within(blockedList).getByText('Blacklisted By Status')).toBeInTheDocument();
     expect(within(blockedList).queryByText('Good Debt With Balance')).not.toBeInTheDocument();
+  });
+
+  it('shows company-wide do-not-contact identities without exposing contact or sales actions', async () => {
+    fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
+      ...baseSnapshot,
+      doNotContactCustomers: [{
+        id: 'foreign-blocked-customer',
+        shopName: 'Foreign Blacklist Customer',
+        assignedTo: 'Other Sales Agent',
+        assignedTeam: 'Beta',
+      }],
+    });
+
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+    await expandList('blacklisted/rejected -do not contact');
+
+    const blockedList = document.getElementById('blocked-customer-list')!;
+    expect(within(blockedList).getByText('Foreign Blacklist Customer')).toBeInTheDocument();
+    expect(within(blockedList).getByText('Assigned to Other Sales Agent · Beta')).toBeInTheDocument();
+    expect(within(blockedList).getByText('Do not contact')).toBeInTheDocument();
+    expect(within(blockedList).queryByText('09123456789')).not.toBeInTheDocument();
+    expect(within(blockedList).queryByRole('button', { name: /Call Foreign Blacklist Customer/i })).not.toBeInTheDocument();
+    expect(within(blockedList).queryByRole('button', { name: /Send SMS to Foreign Blacklist Customer/i })).not.toBeInTheDocument();
+    expect(within(blockedList.closest('article')!).getByText('Showing 1 to 1 of 1 entries')).toBeInTheDocument();
   });
 
   it('uses the Master List purchase date for agent color coding when snapshot transaction dates disagree', async () => {
@@ -304,6 +363,74 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(setDailyCallBookmarkMock).toHaveBeenCalledWith('priority-stop');
     expect(await screen.findByText('Stop after Stop Point Shop')).toBeInTheDocument();
     expect(screen.getByText('Stop here')).toBeInTheDocument();
+  });
+
+  it.each([
+    {
+      label: 'Recovery List',
+      id: 'recovery-bookmark',
+      name: 'Recovery Bookmark Shop',
+      status: 'active',
+      master: { listCategory: 'recovery', purchaseCount: 1, lastPurchaseDateRaw: '2025-09-01' },
+    },
+    {
+      label: 'Verified Prospects',
+      id: 'verified-bookmark',
+      name: 'Verified Bookmark Prospect',
+      status: 'verified_prospect',
+      master: { profileType: 'Prospect', verification: 'Verified', verifiedInSystem: true, customerStatus: 3, listCategory: 'no_purchase' },
+    },
+    {
+      label: 'Unverified Prospects',
+      id: 'unverified-bookmark',
+      name: 'Unverified Bookmark Prospect',
+      status: 'prospective',
+      master: { profileType: 'Prospect', verification: 'Unverified', customerStatus: 3, listCategory: 'no_purchase' },
+    },
+  ])('saves a calling stop from $label', async ({ label, id, name, status, master }) => {
+    const user = userEvent.setup();
+    fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
+      ...baseSnapshot,
+      contacts: [{ ...baseSnapshot.contacts[0], id, shopName: name, status }],
+      masterList: [{
+        id,
+        shopName: name,
+        purchaseCount: 0,
+        priorityTransactionCount: 0,
+        ledgerTransactionCount: 0,
+        historicalTransactionCount: 0,
+        ...master,
+      }],
+    });
+    setDailyCallBookmarkMock.mockImplementation(async (contactId: string | null) => contactId);
+
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+    await expandList(label, user);
+    await user.click(await screen.findByRole('button', { name: `Set calling stop at ${name}` }));
+
+    expect(setDailyCallBookmarkMock).toHaveBeenCalledWith(id);
+    expect(await screen.findByText(`Stop after ${name}`)).toBeInTheDocument();
+    cleanup();
+  });
+
+  it('keeps the saved-stop clear action available when search hides the bookmarked customer', async () => {
+    const user = userEvent.setup();
+    fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
+      ...baseSnapshot,
+      contacts: [{ ...baseSnapshot.contacts[0], id: 'filtered-bookmark', shopName: 'Filtered Recovery Shop', status: 'active' }],
+      masterList: [{ id: 'filtered-bookmark', shopName: 'Filtered Recovery Shop', listCategory: 'recovery', purchaseCount: 1, lastPurchaseDateRaw: '2025-09-01' }],
+    });
+    setDailyCallBookmarkMock.mockImplementation(async (contactId: string | null) => contactId);
+
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+    await expandList('Recovery List', user);
+    await user.click(await screen.findByRole('button', { name: 'Set calling stop at Filtered Recovery Shop' }));
+    await user.type(screen.getByRole('textbox', { name: 'Search customer, prospect, or agent' }), 'no matching customer');
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument());
+    expect(screen.getByText('Stop after Filtered Recovery Shop')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(setDailyCallBookmarkMock).toHaveBeenLastCalledWith(null);
   });
 
   it('prioritizes the 15-to-30-day cadence, overdue buyers, no-history customers, then very recent buyers', async () => {
@@ -397,9 +524,11 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     const cadenceRow = within(priorityTable).getByText('Cadence Window Shop').closest('tr')!;
     const freshRow = within(priorityTable).getByText('Fresh Purchase Shop').closest('tr')!;
-
     expect(cadenceRow.compareDocumentPosition(freshRow)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
+    await expandList('Recovery List');
     expect(within(recoveryTable).getByText('Overdue Shop')).toBeInTheDocument();
+    await expandList('Unverified Prospects');
     expect(within(unverifiedTable).getByText('No Purchase Shop')).toBeInTheDocument();
   });
 
@@ -521,6 +650,7 @@ describe('DailyCallMonitoringView communication actions', () => {
       .closest('article')!;
     // Soft-delete is a data migration; until deleted, prospective Test Client still lists here.
     // After migration 039, API no longer returns these rows. Keep the fixture to prove list membership rules.
+    await expandList('Unverified Prospects');
     expect(within(unverifiedTable).getByText('Test Client')).toBeInTheDocument();
   });
 
@@ -661,6 +791,7 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
 
+    await expandList('Unverified Prospects', user);
     await user.click(await screen.findByRole('button', { name: 'Request verification for Existing Unverified Prospect' }));
 
     expect(updateContactMock).toHaveBeenCalledWith('unverified-existing', {
@@ -677,6 +808,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     const user = userEvent.setup();
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
+    await expandList('Unverified Prospects', user);
     expect(await screen.findByLabelText(/2 unread Agent Sales Report messages/i)).toBeInTheDocument();
     await user.click(await screen.findByText('Test Shop'));
 
@@ -706,6 +838,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     const user = userEvent.setup();
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
+    await expandList('Unverified Prospects', user);
     await user.click(await screen.findByRole('button', { name: 'Call Test Shop' }));
 
     expect(screen.queryByRole('dialog', { name: 'Contact Test Shop' })).not.toBeInTheDocument();
@@ -719,6 +852,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     const user = userEvent.setup();
     render(<DailyCallMonitoringView currentUser={currentUser} />);
 
+    await expandList('Unverified Prospects', user);
     await user.click(await screen.findByRole('button', { name: 'Call Test Shop' }));
     await user.click(await screen.findByRole('button', { name: 'Close contact window' }));
 
@@ -732,6 +866,7 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
 
+    await expandList('Unverified Prospects', user);
     await user.click(await screen.findByText('Test Shop'));
 
     const closeButton = await screen.findByRole('button', { name: 'Close details panel' });
@@ -771,6 +906,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     const user = userEvent.setup();
     render(<DailyCallMonitoringView currentUser={currentUser} />);
 
+    await expandList('Unverified Prospects', user);
     await user.click(await screen.findByText('Test Shop'));
     await user.click(screen.getByRole('button', { name: 'Open Full Details' }));
 
@@ -798,6 +934,7 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
 
+    await expandList('Unverified Prospects');
     const smsButton = await screen.findByRole('button', { name: 'Send SMS to Test Shop' });
     await user.click(smsButton);
 
@@ -932,6 +1069,7 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
 
+    await expandList('Recovery List');
     expect(await screen.findByText('Assigned Customer 400')).toBeInTheDocument();
     expect(screen.getByText('400 customers')).toBeInTheDocument();
   });
@@ -962,6 +1100,7 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     expect(await screen.findByLabelText('Customer board controls')).toBeInTheDocument();
     expect(screen.queryByText('Other Customers')).not.toBeInTheDocument();
+    await expandList('Recovery List');
 
     const categoryTables = screen.getByLabelText('Segregated customer category tables');
     const recoveryTable = within(categoryTables)
@@ -1003,6 +1142,7 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
 
+    await expandList('Recovery List');
     await screen.findByText('ARL KENT DIESEL CALIBRATION AND PARTS SALES');
     await userEvent.setup().type(screen.getByPlaceholderText('Search customer, prospect, or agent'), 'Ejurango');
 

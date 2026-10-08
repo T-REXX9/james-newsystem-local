@@ -900,7 +900,7 @@ const App: React.FC = () => {
         return <div className="h-full overflow-y-auto"><AccountsReceivableView /></div>;
       case 'maintenance-customer-customer-data':
         return (
-          <div className="h-full overflow-y-auto">
+          <div className="h-full min-h-0 overflow-hidden">
             <CustomerData
               initialContactId={moduleContext['maintenance-customer-customer-data']?.contactId}
               initialConversationType={moduleContext['maintenance-customer-customer-data']?.conversationType}

@@ -856,6 +856,14 @@ export interface DailyCallMasterCustomerRow {
   purchaseAgeGroup: 'recent' | 'two_weeks_to_one_month' | 'over_one_month' | 'no_purchase';
 }
 
+/** Minimal identity data for the company-wide Daily Call do-not-contact list. */
+export interface DailyCallDoNotContactCustomer {
+  id: string;
+  shopName: string;
+  assignedTo: string;
+  assignedTeam: string;
+}
+
 export interface DailyCallMasterListMeta {
   fromDate: string;
   toDate: string;

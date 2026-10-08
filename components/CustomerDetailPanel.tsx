@@ -230,7 +230,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     const normalizedPriceGroup = contact.priceGroup ? normalizePriceGroup(contact.priceGroup) : '';
 
     return (
-        <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950 overflow-hidden animate-fadeIn">
+        <div className="min-h-full flex flex-col bg-slate-50 dark:bg-slate-950 overflow-visible animate-fadeIn">
 
             {/* 1. Ultra Headers (Glass / Premium feel) */}
                 <div className="z-10 border-b border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -362,7 +362,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
             </div>
 
             {/* 2. Content Area */}
-            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+            <div className="flex-none p-4">
 
                 {loading && (
                     <div className="flex justify-center py-12">
