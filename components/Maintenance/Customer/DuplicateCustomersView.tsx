@@ -45,7 +45,7 @@ const PAGE_TUTORIAL_STEPS = [
   },
   {
     title: "Choose the customer record that survives",
-    body: "Choose A or B. That record keeps its customer ID and company name, and becomes the destination for the other customer’s transferred history and transactions.",
+    body: "Choose A or B. That record and company name will remain, and become the destination for the other customer’s transferred history and transactions.",
     target: "[data-tutorial='survivor-select']",
   },
   {
@@ -397,9 +397,9 @@ export default function DuplicateCustomersView() {
   }, [loadContacts]);
 
   const customerOptions = useMemo(
-    () => contacts.map((contact) => ({
+    () => contacts.filter((contact) => String(contact.id || "").trim()).map((contact) => ({
       value: String(contact.id),
-      label: `${contact.company || "Unnamed customer"} · ${contact.id}`,
+      label: `${contact.company || "Unnamed customer"}${contact.mobile || contact.phone ? ` · ${contact.mobile || contact.phone}` : ""}`,
       keywords: [contact.name, contact.mobile, contact.phone, contact.address].filter(Boolean),
     })),
     [contacts],
@@ -768,16 +768,14 @@ export default function DuplicateCustomersView() {
                 <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-800 text-lg font-black text-white">A</span>
                 <div><h3 id="customer-a-heading" className="font-black text-slate-900">Customer A</h3><p className="text-xs text-slate-500">First record</p></div>
               </div>
-              <div data-tutorial="customer-a-select"><SearchableSelect value={String(selected?.id || "")} options={customerOptions} onChange={(id) => void selectCustomer("a", id)} disabled={loadingContacts || loadingA || merging} loading={loadingA} placeholder="Search and select customer A" searchPlaceholder="Search company, contact, phone, or address…" /></div>
-              {selected ? <p className="mt-2 text-xs text-slate-500">Customer ID: {selected.id}</p> : null}
+              <div data-tutorial="customer-a-select"><SearchableSelect value={selected ? String(selected.id) : ""} options={customerOptions} onChange={(id) => void selectCustomer("a", id)} disabled={loadingContacts || loadingA || merging} loading={loadingA} placeholder="Search and select customer A" searchPlaceholder="Search company, contact, phone, or address…" /></div>
             </section>
             <section className="rounded-xl border border-violet-200 bg-violet-50/40 p-4" aria-labelledby="customer-b-heading">
               <div className="mb-3 flex items-center gap-3">
                 <span className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-800 text-lg font-black text-white">B</span>
                 <div><h3 id="customer-b-heading" className="font-black text-slate-900">Customer B</h3><p className="text-xs text-slate-500">Second record</p></div>
               </div>
-              <div data-tutorial="customer-b-select"><SearchableSelect value={selectedBId} options={customerOptions.filter((option) => option.value !== String(selected?.id || ""))} onChange={(id) => void selectCustomer("b", id)} disabled={loadingContacts || loadingA || loadingB || merging} loading={loadingB} placeholder="Search and select customer B" searchPlaceholder="Search company, contact, phone, or address…" /></div>
-              {activeDuplicate ? <p className="mt-2 text-xs text-slate-500">Customer ID: {activeDuplicate.id}</p> : null}
+              <div data-tutorial="customer-b-select"><SearchableSelect value={activeDuplicate ? selectedBId : ""} options={customerOptions.filter((option) => option.value !== String(selected?.id || ""))} onChange={(id) => void selectCustomer("b", id)} disabled={loadingContacts || loadingA || loadingB || merging} loading={loadingB} placeholder="Search and select customer B" searchPlaceholder="Search company, contact, phone, or address…" /></div>
             </section>
           </div>
           {loadingA || loadingB ? <p className="mt-4 text-sm text-blue-700" role="status">Loading full customer details…</p> : null}
@@ -839,9 +837,7 @@ export default function DuplicateCustomersView() {
                       <p className="mt-1 font-black text-slate-900">
                         {selected.company || "Unnamed customer"}
                       </p>
-                      <p className="mt-1 text-xs text-slate-600">
-                        ID: {selected.id} · Status: {selected.status || "—"}
-                      </p>
+                      <p className="mt-1 text-xs text-slate-600">Status: {selected.status || "—"}</p>
                     </div>
                     <div className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm">
                       <p className="text-xs font-black uppercase tracking-wide text-violet-700">
@@ -850,9 +846,7 @@ export default function DuplicateCustomersView() {
                       <p className="mt-1 font-black text-slate-900">
                         {activeDuplicate.company || "Unnamed customer"}
                       </p>
-                      <p className="mt-1 text-xs text-slate-600">
-                        ID: {activeDuplicate.id} · Status: {activeDuplicate.status || "—"}
-                      </p>
+                      <p className="mt-1 text-xs text-slate-600">Status: {activeDuplicate.status || "—"}</p>
                     </div>
                   </div>
                   <DiffComparison
@@ -888,10 +882,10 @@ export default function DuplicateCustomersView() {
                           will remain
                         </option>
                         <option value={String(selected.id)}>
-                          Customer A · {selected.company || "Unnamed customer"} · {selected.id}
+                          Customer A · {selected.company || "Unnamed customer"}
                         </option>
                         <option value={String(activeDuplicate.id)}>
-                          Customer B · {activeDuplicate.company || "Unnamed customer"} · {activeDuplicate.id}
+                          Customer B · {activeDuplicate.company || "Unnamed customer"}
                         </option>
                       </select>
                     </label>

@@ -309,6 +309,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const initialCachedResult = useMemo(() => getCachedDailyCallMasterList({ fromDate }), []);
   const [rows, setRows] = useState<DailyCallMasterCustomerRow[]>(() => initialCachedResult?.items || []);
   const [pendingDuplicateProspects, setPendingDuplicateProspects] = useState<PendingDuplicateProspect[]>(() => initialCachedResult?.pendingDuplicateProspects || []);
+  const [selectedDuplicateSubmission, setSelectedDuplicateSubmission] = useState<PendingDuplicateProspect | null>(null);
   const reviewingDuplicateRef = useRef(false);
   const [reviewingDuplicate, setReviewingDuplicate] = useState(false);
   const reviewedDuplicateIds = useRef(new Set<string>());
@@ -1118,8 +1119,16 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                       <tr className="border-t border-amber-200 bg-amber-50 align-top">
                         <td className="px-3 py-2.5 text-sm font-bold text-amber-700">—</td>
                         <td className="break-words px-2 py-2.5">
-                          <div className="font-semibold text-amber-900">{pending.company}</div>
-                          {pending.mobile && <div className="text-xs text-slate-500">{pending.mobile}</div>}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedDuplicateSubmission(pending)}
+                            aria-label={`Compare ${pending.company} with possible duplicate customers`}
+                            className="text-left focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                          >
+                            <span className="block font-semibold text-amber-900 underline decoration-amber-400 underline-offset-2">{pending.company}</span>
+                            {pending.mobile && <span className="block text-xs text-slate-500">{pending.mobile}</span>}
+                            <span className="mt-1 block text-[11px] font-semibold text-amber-700">Open side-by-side comparison</span>
+                          </button>
                           <div className="mt-1 inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
                             Duplicate Approval Pending
                           </div>
@@ -1482,6 +1491,89 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
           setDetailViewOnly(false);
         }}
       />
+      {selectedDuplicateSubmission && createPortal(
+        <div
+          className="fixed inset-0 z-[2200] flex items-center justify-center bg-slate-950/60 p-3 sm:p-6"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setSelectedDuplicateSubmission(null);
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="duplicate-submission-comparison-title"
+            className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
+          >
+            <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-amber-700">Duplicate submission review</p>
+                <h2 id="duplicate-submission-comparison-title" className="mt-1 text-lg font-bold text-slate-950">Compare customer records</h2>
+                <p className="mt-1 text-sm text-slate-600">Review the submitted prospect beside each possible match before deciding.</p>
+              </div>
+              <button type="button" onClick={() => setSelectedDuplicateSubmission(null)} aria-label="Close comparison" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+                <XCircle className="h-5 w-5" />
+              </button>
+            </header>
+            <div className="min-h-0 space-y-5 overflow-y-auto p-4 sm:p-5">
+              {selectedDuplicateSubmission.conflictingCustomers.length ? selectedDuplicateSubmission.conflictingCustomers.map((conflict, index) => {
+                const fields = [
+                  ['Company', selectedDuplicateSubmission.company, conflict.company],
+                  ['Mobile', selectedDuplicateSubmission.mobile, conflict.mobile],
+                  ['Phone', selectedDuplicateSubmission.phone, conflict.phone],
+                  ['Address', selectedDuplicateSubmission.address, conflict.address],
+                  ['Profile type', 'Prospect', conflict.profileType],
+                  ['Verification', 'Pending', conflict.verification],
+                ] as const;
+                return (
+                  <section key={conflict.sessionId || `${conflict.company}-${index}`} className="overflow-hidden rounded-lg border border-slate-200">
+                    <div className="grid grid-cols-2 border-b border-slate-200 bg-slate-50 text-sm font-bold text-slate-800">
+                      <div className="border-r border-slate-200 px-3 py-2.5">Customer A · Submitted prospect</div>
+                      <div className="px-3 py-2.5">Customer B · Possible match {selectedDuplicateSubmission.conflictingCustomers.length > 1 ? index + 1 : ''}</div>
+                    </div>
+                    <div className="grid grid-cols-2">
+                      {fields.map(([label, submittedValue, existingValue]) => {
+                        const submittedMissing = !submittedValue.trim();
+                        const existingMissing = !existingValue.trim();
+                        const submitted = submittedValue.trim() || '—';
+                        const existing = existingValue.trim() || '—';
+                        const matches = !submittedMissing && !existingMissing && submitted.toLocaleLowerCase() === existing.toLocaleLowerCase();
+                        const comparisonLabel = submittedMissing && existingMissing
+                          ? 'Missing on both'
+                          : submittedMissing || existingMissing
+                            ? 'Missing on one side'
+                            : matches ? 'Same' : 'Different';
+                        return (
+                          <React.Fragment key={label}>
+                            <div className="border-b border-r border-slate-100 px-3 py-2.5 last:border-b-0">
+                              <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</span>
+                              <span className={`mt-1 block break-words text-sm ${matches ? 'font-semibold text-emerald-800' : 'text-slate-900'}`}>{submitted}</span>
+                            </div>
+                            <div className="border-b border-slate-100 px-3 py-2.5 last:border-b-0">
+                              <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</span>
+                              <span className={`mt-1 block break-words text-sm ${matches ? 'font-semibold text-emerald-800' : 'text-slate-900'}`}>{existing}</span>
+                              <span className={`mt-1 inline-flex rounded px-1.5 py-0.5 text-[10px] font-bold ${matches ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{comparisonLabel}</span>
+                            </div>
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
+                  </section>
+                );
+              }) : (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">No conflicting customer details were returned for this submission.</p>
+              )}
+              <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                {selectedDuplicateSubmission.submittedByName && <span>Submitted by {selectedDuplicateSubmission.submittedByName}. </span>}
+                {selectedDuplicateSubmission.duplicateOverrideReason && <span>Reason: “{selectedDuplicateSubmission.duplicateOverrideReason}”</span>}
+              </div>
+            </div>
+            <footer className="flex justify-end border-t border-slate-200 px-5 py-3">
+              <button type="button" onClick={() => setSelectedDuplicateSubmission(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">Close</button>
+            </footer>
+          </section>
+        </div>,
+        document.body
+      )}
       {replyModalRow && createPortal(
         <div
           className="fixed inset-0 z-[2100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"

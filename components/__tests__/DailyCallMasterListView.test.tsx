@@ -158,6 +158,37 @@ describe('DailyCallMasterListView', () => {
     }
   });
 
+  it('opens a side-by-side comparison from a duplicate submission and labels matching fields', async () => {
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: '', count: 0 },
+      items: [],
+      pendingDuplicateProspects: [{
+        requestId: 'compare-request', contactId: 'pending-compare', company: 'North Star Trading',
+        mobile: '09170000000', phone: '', address: '12 Main Street', submittedAt: '', submittedBy: 1,
+        submittedByName: 'Submitting Staff', referBy: '', salesPersonId: '', duplicateOverrideReason: 'Possible existing record',
+        conflictingCustomers: [{
+          sessionId: 'existing-customer', company: 'North Star Trading', mobile: '09170000000',
+          phone: '02-1234', address: '99 Other Road', verification: 'Verified', profileType: 'Customer',
+        }],
+      }],
+    });
+    render(<DailyCallMasterListView currentUser={masterUser} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Unverified Prospects (1)' }));
+    await user.click(screen.getByRole('button', { name: /Duplicate submissions/i }));
+    await user.click(screen.getByRole('button', { name: 'Compare North Star Trading with possible duplicate customers' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Compare customer records' });
+    expect(within(dialog).getByText('Customer A · Submitted prospect')).toBeInTheDocument();
+    expect(within(dialog).getByText('Customer B · Possible match')).toBeInTheDocument();
+    expect(within(dialog).getAllByText('Same')).toHaveLength(2);
+    expect(within(dialog).getAllByText('Different')).toHaveLength(3);
+    expect(within(dialog).getByText('Missing on one side')).toBeInTheDocument();
+    expect(dialog).toHaveTextContent('Possible existing record');
+    await user.click(within(dialog).getByRole('button', { name: 'Close comparison' }));
+    expect(screen.queryByRole('dialog', { name: 'Compare customer records' })).not.toBeInTheDocument();
+  });
+
   it('separates unverified customers from sales-agent duplicate submissions in their own tabs', async () => {
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
       meta: { fromDate: '2025-10-01', toDate: '', count: 1 },
