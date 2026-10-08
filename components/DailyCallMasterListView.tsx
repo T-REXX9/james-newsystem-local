@@ -20,8 +20,9 @@ import {
   XCircle,
 } from 'lucide-react';
 import { createCustomerLogForDailyCall, fetchCustomersForDailyCall, fetchDailyCallMasterList, getCachedDailyCallMasterList } from '../services/dailyCallMonitoringService';
-import { bulkUpdateContacts, createContact, fetchSalesAgents, getAssignmentHistory, isPendingDuplicateProspectApproval, updateContact } from '../services/customerDatabaseLocalApiService';
-import { createDuplicateProspectRequest, reviewCustomerRequest } from '../services/customerWorkflowLocalApiService';
+import { bulkUpdateContacts, createContact, fetchContactById, fetchSalesAgents, getAssignmentHistory, isPendingDuplicateProspectApproval, mapApiCustomerToContact, updateContact } from '../services/customerDatabaseLocalApiService';
+import { createDuplicateProspectRequest, fetchAllCustomerRequests, reviewCustomerRequest } from '../services/customerWorkflowLocalApiService';
+import type { CustomerRequest } from '../services/customerWorkflowLocalApiService';
 import { fetchTeams, TeamRecord } from '../services/teamLocalApiService';
 import { getVipTierConfig } from '../services/vipTierSettingsService';
 import { Contact, CustomerStatus, DailyCallCustomerRow, DailyCallMasterCustomerRow, DailyCallMasterListMeta, PendingDuplicateProspect, UserProfile, VipTierConfig } from '../types';
@@ -263,6 +264,53 @@ const masterRowFallback = (row: DailyCallMasterCustomerRow): DailyCallCustomerRo
   dailyActivity: [],
 });
 
+const duplicateComparisonFields: Array<[string, (contact: Contact) => unknown]> = [
+  ['Company name', contact => contact.company],
+  ['Previous company name', contact => contact.pastName],
+  ['Customer since', contact => contact.customerSince],
+  ['Team', contact => contact.team],
+  ['Sales assignment', contact => contact.salesman || contact.assignedAgent],
+  ['Referred by', contact => contact.referBy],
+  ['Contact persons', contact => contact.contactPersons?.map(person => [person.name, person.position, person.telephone, person.mobile, person.email].filter(Boolean).join(' · ')).join('\n')],
+  ['Email', contact => contact.email],
+  ['Phone', contact => [contact.phone, contact.mobile].filter(Boolean).join(' · ')],
+  ['Address', contact => [contact.address, contact.city, contact.province].filter(Boolean).join(', ')],
+  ['Area', contact => contact.area],
+  ['Delivery addresses', contact => [contact.deliveryAddress, ...(contact.deliveryAddresses || [])].filter(Boolean).join('\n')],
+  ['TIN', contact => contact.tin],
+  ['Business line', contact => contact.businessLine],
+  ['Payment terms', contact => contact.terms],
+  ['Transaction type', contact => contact.transactionType],
+  ['VAT type', contact => contact.vatType],
+  ['VAT percentage', contact => contact.vatPercentage],
+  ['Price group', contact => contact.priceGroup],
+  ['Price code', contact => contact.priceCode],
+  ['Discount code', contact => contact.discountCode],
+  ['Credit limit', contact => contact.creditLimit],
+  ['Dealership terms', contact => contact.dealershipTerms],
+  ['Dealership since', contact => contact.dealershipSince],
+  ['Dealership quota', contact => contact.dealershipQuota],
+  ['Preferred brand', contact => contact.preferredBrand],
+  ['Ishinomoto dealer since', contact => contact.ishinomotoDealerSince],
+  ['Ishinomoto signage since', contact => contact.ishinomotoSignageSince],
+  ['Signage since', contact => contact.signageSince],
+  ['Customer code', contact => contact.codeText],
+  ['Customer code date', contact => contact.codeDate],
+  ['Status', contact => contact.status],
+  ['Verification', contact => contact.verification],
+  ['Customer status', contact => contact.customerStatus],
+  ['Debt type', contact => contact.debtType],
+  ['Hidden from lists', contact => contact.isHidden ? 'Yes' : 'No'],
+  ['Customer note', contact => contact.comment],
+  ['Recorded comments', contact => contact.comments?.map(comment => comment.text).join('\n')],
+  ['Duplicate override reason', contact => contact.duplicateOverrideReason],
+];
+
+const comparisonText = (value: unknown): string => {
+  if (value === null || value === undefined || String(value).trim() === '') return '—';
+  return String(value);
+};
+
 const vipDetails = (row: DailyCallMasterCustomerRow, config: VipTierConfig) => {
   const level = resolveVipDiscountLevel(row.lastMonthSales || 0, config);
   if (level === 'gold') {
@@ -310,6 +358,10 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const [rows, setRows] = useState<DailyCallMasterCustomerRow[]>(() => initialCachedResult?.items || []);
   const [pendingDuplicateProspects, setPendingDuplicateProspects] = useState<PendingDuplicateProspect[]>(() => initialCachedResult?.pendingDuplicateProspects || []);
   const [selectedDuplicateSubmission, setSelectedDuplicateSubmission] = useState<PendingDuplicateProspect | null>(null);
+  const [duplicateComparisonSubmitted, setDuplicateComparisonSubmitted] = useState<Contact | null>(null);
+  const [duplicateComparisonCustomers, setDuplicateComparisonCustomers] = useState<Contact[]>([]);
+  const [loadingDuplicateComparison, setLoadingDuplicateComparison] = useState(false);
+  const [duplicateComparisonError, setDuplicateComparisonError] = useState('');
   const reviewingDuplicateRef = useRef(false);
   const [reviewingDuplicate, setReviewingDuplicate] = useState(false);
   const reviewedDuplicateIds = useRef(new Set<string>());
@@ -344,6 +396,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const [loadingTeams, setLoadingTeams] = useState(true);
   const [assigningCustomerId, setAssigningCustomerId] = useState<string | null>(null);
   const [replyModalRow, setReplyModalRow] = useState<DailyCallMasterCustomerRow | null>(null);
+  const duplicateComparisonSequence = useRef(0);
 
   const handleSelectCategory = useCallback((categoryId: CategoryId) => {
     setActiveCategoryId(categoryId);
@@ -390,6 +443,43 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     }
   }, []);
 
+  const openDuplicateComparison = async (pending: PendingDuplicateProspect) => {
+    const sequence = ++duplicateComparisonSequence.current;
+    setSelectedDuplicateSubmission(pending);
+    setDuplicateComparisonSubmitted(null);
+    setDuplicateComparisonCustomers([]);
+    setDuplicateComparisonError('');
+    setLoadingDuplicateComparison(true);
+    try {
+      const [requests, masterList] = await Promise.all([
+        fetchAllCustomerRequests(),
+        fetchDailyCallMasterList({ fromDate, search: '', forceRefresh: true }),
+      ]);
+      if (sequence !== duplicateComparisonSequence.current) return;
+
+      const request = requests.find((item: CustomerRequest) => item.id === pending.requestId && item.kind === 'duplicate_prospect');
+      if (!request || !request.payload) throw new Error('The submitted customer details could not be loaded. Refresh the list and try again.');
+      const submitted = mapApiCustomerToContact({ ...request.payload, id: request.contact_id, session_id: request.contact_id });
+      const currentRequest = masterList.pendingDuplicateProspects.find(item => item.requestId === pending.requestId) || pending;
+      const candidateLoads = await Promise.allSettled(currentRequest.conflictingCustomers.map(candidate => fetchContactById(candidate.sessionId)));
+      if (sequence !== duplicateComparisonSequence.current) return;
+      const candidates = candidateLoads.flatMap(result => result.status === 'fulfilled' && result.value ? [result.value] : []);
+      setDuplicateComparisonSubmitted(submitted);
+      setDuplicateComparisonCustomers(candidates);
+      if (currentRequest.conflictingCustomers.length === 0) {
+        setDuplicateComparisonError('No matching customer records were returned. Refresh and review the duplicate submission again.');
+      } else if (candidates.length === 0) {
+        setDuplicateComparisonError('The possible matches were found, but their full customer profiles could not be loaded.');
+      }
+    } catch (err) {
+      if (sequence === duplicateComparisonSequence.current) {
+        setDuplicateComparisonError(err instanceof Error ? err.message : 'Unable to load the customer comparison.');
+      }
+    } finally {
+      if (sequence === duplicateComparisonSequence.current) setLoadingDuplicateComparison(false);
+    }
+  };
+
   useEffect(() => {
     let active = true;
     const refreshCustomer = (event: Event) => {
@@ -408,24 +498,26 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     return () => { active = false; window.removeEventListener(CUSTOMER_UPDATED_EVENT, refreshCustomer); };
   }, [loadRows, selectedCustomer?.id]);
 
-  const reviewDuplicate = async (pending: PendingDuplicateProspect, decision: 'approved' | 'rejected') => {
-    if (reviewingDuplicateRef.current || !canUseMasterDailyCallActions(currentUser)) return;
+  const reviewDuplicate = async (pending: PendingDuplicateProspect, decision: 'approved' | 'rejected'): Promise<boolean> => {
+    if (reviewingDuplicateRef.current || !canUseMasterDailyCallActions(currentUser)) return false;
     reviewingDuplicateRef.current = true;
     setReviewingDuplicate(true);
+    let succeeded = false;
     try {
       await reviewCustomerRequest(pending.contactId, pending.requestId, decision, '');
+      succeeded = true;
       reviewedDuplicateIds.current.add(pending.requestId);
       setPendingDuplicateProspects(current => current.filter(row => row.requestId !== pending.requestId));
       addToast({ type: 'success', title: decision === 'approved' ? 'Approved' : 'Rejected', description: decision === 'approved' ? `${pending.company} has been added as a prospect.` : `${pending.company} duplicate request rejected.` });
     } catch (err) {
       const message = getUserFacingErrorMessage(err, 'Review failed');
-      if (!message) return;
-      addToast({ type: 'error', title: 'Review failed', description: message });
+      if (message) addToast({ type: 'error', title: 'Review failed', description: message });
     } finally {
       await loadRows(false, true);
       reviewingDuplicateRef.current = false;
       setReviewingDuplicate(false);
     }
+    return succeeded;
   };
 
   const handleSubmitProspect = useCallback(async (data: Omit<Contact, 'id'>) => {
@@ -1121,7 +1213,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                         <td className="break-words px-2 py-2.5">
                           <button
                             type="button"
-                            onClick={() => setSelectedDuplicateSubmission(pending)}
+                            onClick={() => void openDuplicateComparison(pending)}
                             aria-label={`Compare ${pending.company} with possible duplicate customers`}
                             className="text-left focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
                           >
@@ -1495,7 +1587,10 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
         <div
           className="fixed inset-0 z-[2200] flex items-center justify-center bg-slate-950/60 p-3 sm:p-6"
           onClick={(event) => {
-            if (event.target === event.currentTarget) setSelectedDuplicateSubmission(null);
+            if (event.target === event.currentTarget && !reviewingDuplicate) {
+              duplicateComparisonSequence.current += 1;
+              setSelectedDuplicateSubmission(null);
+            }
           }}
         >
           <section
@@ -1510,33 +1605,33 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 <h2 id="duplicate-submission-comparison-title" className="mt-1 text-lg font-bold text-slate-950">Compare customer records</h2>
                 <p className="mt-1 text-sm text-slate-600">Review the submitted prospect beside each possible match before deciding.</p>
               </div>
-              <button type="button" onClick={() => setSelectedDuplicateSubmission(null)} aria-label="Close comparison" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+              <button type="button" onClick={() => { duplicateComparisonSequence.current += 1; setSelectedDuplicateSubmission(null); }} aria-label="Close comparison" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
                 <XCircle className="h-5 w-5" />
               </button>
             </header>
             <div className="min-h-0 space-y-5 overflow-y-auto p-4 sm:p-5">
-              {selectedDuplicateSubmission.conflictingCustomers.length ? selectedDuplicateSubmission.conflictingCustomers.map((conflict, index) => {
-                const fields = [
-                  ['Company', selectedDuplicateSubmission.company, conflict.company],
-                  ['Mobile', selectedDuplicateSubmission.mobile, conflict.mobile],
-                  ['Phone', selectedDuplicateSubmission.phone, conflict.phone],
-                  ['Address', selectedDuplicateSubmission.address, conflict.address],
-                  ['Profile type', 'Prospect', conflict.profileType],
-                  ['Verification', 'Pending', conflict.verification],
-                ] as const;
+              {loadingDuplicateComparison ? (
+                <div className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 p-8 text-sm text-slate-600"><Loader2 className="h-4 w-4 animate-spin" /> Loading submitted and matching customer records…</div>
+              ) : duplicateComparisonSubmitted ? selectedDuplicateSubmission.conflictingCustomers.map((conflict, index) => {
+                const customer = duplicateComparisonCustomers[index];
+                if (!customer) return (
+                  <p key={conflict.sessionId || index} className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Customer profile {index + 1} could not be loaded. {duplicateComparisonError}</p>
+                );
+                const normalized = (value: string) => value.trim().toLocaleLowerCase().replace(/\s+/g, ' ');
                 return (
                   <section key={conflict.sessionId || `${conflict.company}-${index}`} className="overflow-hidden rounded-lg border border-slate-200">
-                    <div className="grid grid-cols-2 border-b border-slate-200 bg-slate-50 text-sm font-bold text-slate-800">
-                      <div className="border-r border-slate-200 px-3 py-2.5">Customer A · Submitted prospect</div>
-                      <div className="px-3 py-2.5">Customer B · Possible match {selectedDuplicateSubmission.conflictingCustomers.length > 1 ? index + 1 : ''}</div>
+                    <div className="grid min-w-[760px] grid-cols-[minmax(0,1fr)_minmax(0,1fr)] border-b border-slate-200 bg-slate-50 text-sm font-bold text-slate-800">
+                      <div className="border-r border-slate-200 px-3 py-3">Customer A · {duplicateComparisonSubmitted.company || 'Submitted prospect'}</div>
+                      <div className="px-3 py-3">Customer B · {customer.company || `Possible match ${index + 1}`}</div>
                     </div>
-                    <div className="grid grid-cols-2">
-                      {fields.map(([label, submittedValue, existingValue]) => {
-                        const submittedMissing = !submittedValue.trim();
-                        const existingMissing = !existingValue.trim();
-                        const submitted = submittedValue.trim() || '—';
-                        const existing = existingValue.trim() || '—';
-                        const matches = !submittedMissing && !existingMissing && submitted.toLocaleLowerCase() === existing.toLocaleLowerCase();
+                    <div className="overflow-x-auto">
+                    <div className="min-w-[760px]">
+                      {duplicateComparisonFields.map(([label, getValue]) => {
+                        const submitted = comparisonText(getValue(duplicateComparisonSubmitted));
+                        const existing = comparisonText(getValue(customer));
+                        const submittedMissing = submitted === '—';
+                        const existingMissing = existing === '—';
+                        const matches = !submittedMissing && !existingMissing && normalized(submitted) === normalized(existing);
                         const comparisonLabel = submittedMissing && existingMissing
                           ? 'Missing on both'
                           : submittedMissing || existingMissing
@@ -1544,31 +1639,37 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                             : matches ? 'Same' : 'Different';
                         return (
                           <React.Fragment key={label}>
-                            <div className="border-b border-r border-slate-100 px-3 py-2.5 last:border-b-0">
-                              <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</span>
-                              <span className={`mt-1 block break-words text-sm ${matches ? 'font-semibold text-emerald-800' : 'text-slate-900'}`}>{submitted}</span>
-                            </div>
-                            <div className="border-b border-slate-100 px-3 py-2.5 last:border-b-0">
-                              <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</span>
-                              <span className={`mt-1 block break-words text-sm ${matches ? 'font-semibold text-emerald-800' : 'text-slate-900'}`}>{existing}</span>
-                              <span className={`mt-1 inline-flex rounded px-1.5 py-0.5 text-[10px] font-bold ${matches ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{comparisonLabel}</span>
+                            <div className="grid grid-cols-[150px_minmax(0,1fr)_minmax(0,1fr)] border-b border-slate-100 text-sm last:border-b-0">
+                              <div className="border-r border-slate-100 bg-slate-50 px-3 py-2.5 text-xs font-semibold text-slate-600">{label}</div>
+                              <div className={`border-r border-slate-100 px-3 py-2.5 break-words ${matches ? 'font-semibold text-emerald-800' : 'text-slate-900'}`}>{submitted}</div>
+                              <div className={`px-3 py-2.5 break-words ${matches ? 'font-semibold text-emerald-800' : 'text-slate-900'}`}>
+                                <span>{existing}</span>
+                                <span className={`ml-2 inline-flex rounded px-1.5 py-0.5 align-middle text-[10px] font-bold ${matches ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{comparisonLabel}</span>
+                              </div>
                             </div>
                           </React.Fragment>
                         );
                       })}
-                    </div>
+                    </div></div>
+                    <p className="border-t border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600">Matched on: {conflict.matchedFields?.length ? conflict.matchedFields.join(', ') : 'duplicate review rules'}.</p>
                   </section>
                 );
-              }) : (
-                <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">No conflicting customer details were returned for this submission.</p>
+              }) : duplicateComparisonError ? (
+                <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{duplicateComparisonError}</p>
+              ) : (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Customer details are unavailable for comparison. You can still review this submission below.</p>
               )}
               <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
                 {selectedDuplicateSubmission.submittedByName && <span>Submitted by {selectedDuplicateSubmission.submittedByName}. </span>}
                 {selectedDuplicateSubmission.duplicateOverrideReason && <span>Reason: “{selectedDuplicateSubmission.duplicateOverrideReason}”</span>}
               </div>
             </div>
-            <footer className="flex justify-end border-t border-slate-200 px-5 py-3">
-              <button type="button" onClick={() => setSelectedDuplicateSubmission(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">Close</button>
+            <footer className="flex flex-wrap justify-between gap-2 border-t border-slate-200 px-5 py-3">
+              <div className="flex gap-2">
+                <button type="button" disabled={reviewingDuplicate || !canUseMasterDailyCallActions(currentUser)} onClick={async () => { if (await reviewDuplicate(selectedDuplicateSubmission, 'rejected')) { duplicateComparisonSequence.current += 1; setSelectedDuplicateSubmission(null); } }} className="rounded-lg border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50">{reviewingDuplicate ? 'Saving…' : 'Reject submission'}</button>
+                <button type="button" disabled={reviewingDuplicate || !canUseMasterDailyCallActions(currentUser)} onClick={async () => { if (await reviewDuplicate(selectedDuplicateSubmission, 'approved')) { duplicateComparisonSequence.current += 1; setSelectedDuplicateSubmission(null); } }} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">{reviewingDuplicate ? 'Saving…' : 'Approve submission'}</button>
+              </div>
+              <button type="button" onClick={() => { duplicateComparisonSequence.current += 1; setSelectedDuplicateSubmission(null); }} disabled={reviewingDuplicate} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50">Close</button>
             </footer>
           </section>
         </div>,

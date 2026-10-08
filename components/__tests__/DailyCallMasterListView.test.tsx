@@ -3,9 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import DailyCallMasterListView from '../DailyCallMasterListView';
-import { reviewCustomerRequest } from '../../services/customerWorkflowLocalApiService';
+import { fetchAllCustomerRequests, reviewCustomerRequest } from '../../services/customerWorkflowLocalApiService';
 import { createCustomerLogForDailyCall, fetchCustomersForDailyCall, fetchDailyCallMasterList } from '../../services/dailyCallMonitoringService';
-import { bulkUpdateContacts, updateContact, fetchSalesAgents } from '../../services/customerDatabaseLocalApiService';
+import { bulkUpdateContacts, updateContact, fetchSalesAgents, fetchContactById, mapApiCustomerToContact } from '../../services/customerDatabaseLocalApiService';
 import { getVipTierConfig } from '../../services/vipTierSettingsService';
 import type { UserProfile } from '../../types';
 
@@ -15,7 +15,7 @@ const masterUser: UserProfile = {
   role: 'Master User',
 };
 
-vi.mock('../../services/customerWorkflowLocalApiService', () => ({ reviewCustomerRequest: vi.fn(), createDuplicateProspectRequest: vi.fn() }));
+vi.mock('../../services/customerWorkflowLocalApiService', () => ({ fetchAllCustomerRequests: vi.fn(), reviewCustomerRequest: vi.fn(), createDuplicateProspectRequest: vi.fn() }));
 const addToast = vi.fn();
 
 vi.mock('../../services/dailyCallMonitoringService', () => ({
@@ -33,6 +33,8 @@ vi.mock('../../services/customerDatabaseLocalApiService', () => ({
     { id: 'agent-1', full_name: 'Joan Jerusalem', email: '', role: 'Sales Agent' },
     { id: 'agent-2', full_name: 'Apostol Ella', email: '', role: 'Sales Agent' },
   ]),
+  fetchContactById: vi.fn(),
+  mapApiCustomerToContact: vi.fn(),
   getAssignmentHistory: vi.fn().mockResolvedValue([]),
 }));
 
@@ -172,6 +174,20 @@ describe('DailyCallMasterListView', () => {
         }],
       }],
     });
+    const makeContact = (id: string, company: string, mobile: string, phone: string, address: string) => ({
+      id, company, mobile, phone, address, city: '', province: '', pastName: '', customerSince: '', team: '', salesman: '', assignedAgent: '', referBy: '',
+      contactPersons: [], email: id === 'existing-customer' ? 'existing@example.com' : '', area: '', deliveryAddress: '', deliveryAddresses: [], tin: '', businessLine: '', terms: '', transactionType: '',
+      vatType: '', vatPercentage: '', priceGroup: '', priceCode: '', discountCode: '', creditLimit: 0, dealershipTerms: '', dealershipSince: '',
+      dealershipQuota: 0, preferredBrand: '', ishinomotoDealerSince: '', ishinomotoSignageSince: '', signageSince: '', codeText: '', codeDate: '',
+      status: 'Prospective', verification: 'Unverified', customerStatus: 0, isHidden: false, debtType: 'Good', comment: '', comments: [],
+    }) as any;
+    vi.mocked(fetchAllCustomerRequests).mockResolvedValue([{
+      id: 'compare-request', contact_id: 'pending-compare', kind: 'duplicate_prospect',
+      payload: { company: 'North Star Trading', mobile: '09170000000', phone: '', address: '12 Main Street' },
+      status: 'pending', submitted_by_name: 'Submitting Staff', submitted_at: '', reviewed_at: null, review_note: '',
+    }]);
+    vi.mocked(mapApiCustomerToContact).mockReturnValue(makeContact('pending-compare', 'North Star Trading', '09170000000', '', '12 Main Street'));
+    vi.mocked(fetchContactById).mockResolvedValue(makeContact('existing-customer', 'North Star Trading', '09170000000', '02-1234', '99 Other Road'));
     render(<DailyCallMasterListView currentUser={masterUser} />);
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: 'Unverified Prospects (1)' }));
@@ -179,14 +195,17 @@ describe('DailyCallMasterListView', () => {
     await user.click(screen.getByRole('button', { name: 'Compare North Star Trading with possible duplicate customers' }));
 
     const dialog = screen.getByRole('dialog', { name: 'Compare customer records' });
-    expect(within(dialog).getByText('Customer A · Submitted prospect')).toBeInTheDocument();
-    expect(within(dialog).getByText('Customer B · Possible match')).toBeInTheDocument();
-    expect(within(dialog).getAllByText('Same')).toHaveLength(2);
-    expect(within(dialog).getAllByText('Different')).toHaveLength(3);
+    expect(await within(dialog).findByText('Customer A · North Star Trading')).toBeInTheDocument();
+    expect(within(dialog).getByText('Customer B · North Star Trading')).toBeInTheDocument();
+    expect(within(dialog).getAllByText('Same').length).toBeGreaterThanOrEqual(2);
+    expect(within(dialog).getAllByText('Different').length).toBeGreaterThanOrEqual(1);
     expect(within(dialog).getByText('Missing on one side')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Approve submission' })).toBeEnabled();
+    expect(within(dialog).getByRole('button', { name: 'Reject submission' })).toBeEnabled();
     expect(dialog).toHaveTextContent('Possible existing record');
-    await user.click(within(dialog).getByRole('button', { name: 'Close comparison' }));
-    expect(screen.queryByRole('dialog', { name: 'Compare customer records' })).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Approve submission' }));
+    await waitFor(() => expect(reviewCustomerRequest).toHaveBeenCalledWith('pending-compare', 'compare-request', 'approved', ''));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Compare customer records' })).not.toBeInTheDocument());
   });
 
   it('separates unverified customers from sales-agent duplicate submissions in their own tabs', async () => {

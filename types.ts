@@ -2660,6 +2660,7 @@ export interface PendingDuplicateConflict {
   address: string;
   verification: string;
   profileType: string;
+  matchedFields?: string[];
 }
 
 export interface PendingDuplicateProspect {

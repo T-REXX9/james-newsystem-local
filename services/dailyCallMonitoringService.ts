@@ -726,6 +726,7 @@ export const fetchDailyCallMasterList = async (
                 address: String(c?.address ?? ''),
                 verification: String(c?.verification ?? ''),
                 profileType: String(c?.profile_type ?? ''),
+                matchedFields: Array.isArray(c?.matched_fields) ? c.matched_fields.map(String) : [],
               }))
             : [],
         })),
