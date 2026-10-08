@@ -160,7 +160,10 @@ describe('DailyCallMasterListView', () => {
     }
   });
 
-  it('opens a side-by-side comparison from a duplicate submission and labels matching fields', async () => {
+  it.each([
+    { decision: 'approved', actionButton: 'Approve submission' },
+    { decision: 'rejected', actionButton: 'Reject submission' },
+  ] as const)('opens a side-by-side comparison and can $decision the submission', async ({ decision, actionButton }) => {
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
       meta: { fromDate: '2025-10-01', toDate: '', count: 0 },
       items: [],
@@ -203,9 +206,46 @@ describe('DailyCallMasterListView', () => {
     expect(within(dialog).getByRole('button', { name: 'Approve submission' })).toBeEnabled();
     expect(within(dialog).getByRole('button', { name: 'Reject submission' })).toBeEnabled();
     expect(dialog).toHaveTextContent('Possible existing record');
-    await user.click(within(dialog).getByRole('button', { name: 'Approve submission' }));
-    await waitFor(() => expect(reviewCustomerRequest).toHaveBeenCalledWith('pending-compare', 'compare-request', 'approved', ''));
+    await user.click(within(dialog).getByRole('button', { name: actionButton }));
+    await waitFor(() => expect(reviewCustomerRequest).toHaveBeenCalledWith('pending-compare', 'compare-request', decision, ''));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Compare customer records' })).not.toBeInTheDocument());
+  });
+
+  it('keeps possible-match profiles aligned and blocks decisions when a profile fails to load', async () => {
+    const pending = {
+      requestId: 'alignment-request', contactId: 'pending-alignment', company: 'Submitted Prospect',
+      mobile: '', phone: '', address: '', submittedAt: '', submittedBy: 1, submittedByName: 'Submitting Staff',
+      referBy: '', salesPersonId: '', duplicateOverrideReason: 'Possible duplicate',
+      conflictingCustomers: [
+        { sessionId: 'first-match', company: 'First Match', mobile: '', phone: '', address: '', verification: '', profileType: 'Customer' },
+        { sessionId: 'second-match', company: 'Second Match', mobile: '', phone: '', address: '', verification: '', profileType: 'Customer' },
+      ],
+    };
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: '', count: 0 }, items: [], pendingDuplicateProspects: [pending],
+    });
+    vi.mocked(fetchAllCustomerRequests).mockResolvedValue([{
+      id: 'alignment-request', contact_id: 'pending-alignment', kind: 'duplicate_prospect',
+      payload: { company: 'Submitted Prospect' }, status: 'pending', submitted_by_name: 'Submitting Staff',
+      submitted_at: '', reviewed_at: null, review_note: '',
+    }]);
+    vi.mocked(mapApiCustomerToContact).mockReturnValue({ company: 'Submitted Prospect' } as any);
+    vi.mocked(fetchContactById)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ company: 'Second Match' } as any);
+
+    render(<DailyCallMasterListView currentUser={masterUser} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Unverified Prospects (1)' }));
+    await user.click(screen.getByRole('button', { name: /Duplicate submissions/i }));
+    await user.click(screen.getByRole('button', { name: 'Compare Submitted Prospect with possible duplicate customers' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Compare customer records' });
+    await waitFor(() => expect(dialog).toHaveTextContent('Customer profile 1 could not be loaded.'));
+    expect(within(dialog).getByText('Customer B · Second Match')).toBeInTheDocument();
+    expect(dialog).toHaveTextContent(/Some possible match profiles could not be loaded/);
+    expect(within(dialog).getByRole('button', { name: 'Approve submission' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Reject submission' })).toBeDisabled();
   });
 
   it('separates unverified customers from sales-agent duplicate submissions in their own tabs', async () => {

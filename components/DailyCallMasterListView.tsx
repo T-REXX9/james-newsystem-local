@@ -359,7 +359,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const [pendingDuplicateProspects, setPendingDuplicateProspects] = useState<PendingDuplicateProspect[]>(() => initialCachedResult?.pendingDuplicateProspects || []);
   const [selectedDuplicateSubmission, setSelectedDuplicateSubmission] = useState<PendingDuplicateProspect | null>(null);
   const [duplicateComparisonSubmitted, setDuplicateComparisonSubmitted] = useState<Contact | null>(null);
-  const [duplicateComparisonCustomers, setDuplicateComparisonCustomers] = useState<Contact[]>([]);
+  const [duplicateComparisonCustomers, setDuplicateComparisonCustomers] = useState<Array<Contact | null>>([]);
   const [loadingDuplicateComparison, setLoadingDuplicateComparison] = useState(false);
   const [duplicateComparisonError, setDuplicateComparisonError] = useState('');
   const reviewingDuplicateRef = useRef(false);
@@ -461,15 +461,19 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
       if (!request || !request.payload) throw new Error('The submitted customer details could not be loaded. Refresh the list and try again.');
       const submitted = mapApiCustomerToContact({ ...request.payload, id: request.contact_id, session_id: request.contact_id });
       const currentRequest = masterList.pendingDuplicateProspects.find(item => item.requestId === pending.requestId) || pending;
+      setSelectedDuplicateSubmission(currentRequest);
       const candidateLoads = await Promise.allSettled(currentRequest.conflictingCustomers.map(candidate => fetchContactById(candidate.sessionId)));
       if (sequence !== duplicateComparisonSequence.current) return;
-      const candidates = candidateLoads.flatMap(result => result.status === 'fulfilled' && result.value ? [result.value] : []);
+      // Keep profile results aligned with the match list even when one request fails.
+      const candidates = candidateLoads.map(result => result.status === 'fulfilled' ? result.value : null);
       setDuplicateComparisonSubmitted(submitted);
       setDuplicateComparisonCustomers(candidates);
       if (currentRequest.conflictingCustomers.length === 0) {
         setDuplicateComparisonError('No matching customer records were returned. Refresh and review the duplicate submission again.');
-      } else if (candidates.length === 0) {
+      } else if (candidates.every(candidate => !candidate)) {
         setDuplicateComparisonError('The possible matches were found, but their full customer profiles could not be loaded.');
+      } else if (candidates.some(candidate => !candidate)) {
+        setDuplicateComparisonError('Some possible match profiles could not be loaded. Review the available comparisons and refresh before deciding about the missing profile.');
       }
     } catch (err) {
       if (sequence === duplicateComparisonSequence.current) {
@@ -519,6 +523,12 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     }
     return succeeded;
   };
+
+  const duplicateReviewUnavailable = !duplicateComparisonSubmitted
+    || loadingDuplicateComparison
+    || (Boolean(selectedDuplicateSubmission?.conflictingCustomers.length)
+      && (duplicateComparisonCustomers.length !== selectedDuplicateSubmission?.conflictingCustomers.length
+        || duplicateComparisonCustomers.some(customer => !customer)));
 
   const handleSubmitProspect = useCallback(async (data: Omit<Contact, 'id'>) => {
     const created = await createContact({
@@ -1613,7 +1623,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
               {loadingDuplicateComparison ? (
                 <div className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 p-8 text-sm text-slate-600"><Loader2 className="h-4 w-4 animate-spin" /> Loading submitted and matching customer records…</div>
               ) : duplicateComparisonSubmitted ? selectedDuplicateSubmission.conflictingCustomers.map((conflict, index) => {
-                const customer = duplicateComparisonCustomers[index];
+                const customer = duplicateComparisonCustomers[index] || null;
                 if (!customer) return (
                   <p key={conflict.sessionId || index} className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Customer profile {index + 1} could not be loaded. {duplicateComparisonError}</p>
                 );
@@ -1666,8 +1676,8 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
             </div>
             <footer className="flex flex-wrap justify-between gap-2 border-t border-slate-200 px-5 py-3">
               <div className="flex gap-2">
-                <button type="button" disabled={reviewingDuplicate || !canUseMasterDailyCallActions(currentUser)} onClick={async () => { if (await reviewDuplicate(selectedDuplicateSubmission, 'rejected')) { duplicateComparisonSequence.current += 1; setSelectedDuplicateSubmission(null); } }} className="rounded-lg border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50">{reviewingDuplicate ? 'Saving…' : 'Reject submission'}</button>
-                <button type="button" disabled={reviewingDuplicate || !canUseMasterDailyCallActions(currentUser)} onClick={async () => { if (await reviewDuplicate(selectedDuplicateSubmission, 'approved')) { duplicateComparisonSequence.current += 1; setSelectedDuplicateSubmission(null); } }} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">{reviewingDuplicate ? 'Saving…' : 'Approve submission'}</button>
+                <button type="button" disabled={reviewingDuplicate || duplicateReviewUnavailable || !canUseMasterDailyCallActions(currentUser)} onClick={async () => { if (await reviewDuplicate(selectedDuplicateSubmission, 'rejected')) { duplicateComparisonSequence.current += 1; setSelectedDuplicateSubmission(null); } }} className="rounded-lg border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50">{reviewingDuplicate ? 'Saving…' : 'Reject submission'}</button>
+                <button type="button" disabled={reviewingDuplicate || duplicateReviewUnavailable || !canUseMasterDailyCallActions(currentUser)} onClick={async () => { if (await reviewDuplicate(selectedDuplicateSubmission, 'approved')) { duplicateComparisonSequence.current += 1; setSelectedDuplicateSubmission(null); } }} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">{reviewingDuplicate ? 'Saving…' : 'Approve submission'}</button>
               </div>
               <button type="button" onClick={() => { duplicateComparisonSequence.current += 1; setSelectedDuplicateSubmission(null); }} disabled={reviewingDuplicate} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50">Close</button>
             </footer>
