@@ -15,9 +15,19 @@ export interface DuplicateCustomerGroup {
   matched_fields: string[];
 }
 
+export interface CustomerMergeRecord {
+  lsessionid?: string | number | null;
+  id?: string | number | null;
+  lvat_type?: string | null;
+  lterms?: string | null;
+  lprice_group?: string | null;
+  lsales_person?: string | number | null;
+  [field: string]: unknown;
+}
+
 export interface CustomerMergePreview {
   merge_id: number;
-  customers: Contact[];
+  customers: CustomerMergeRecord[];
   survivor_session_id: string;
   duplicate_session_id: string;
   final_company_name: string;

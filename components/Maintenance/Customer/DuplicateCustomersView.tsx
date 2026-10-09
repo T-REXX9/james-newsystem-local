@@ -86,21 +86,33 @@ const contactPhone = (contact: Contact): string =>
   [contact.mobile, contact.phone].filter(Boolean).join(" · ") || "—";
 
 const mergeFieldValue = (
-  contact: Contact | undefined,
+  contact: Record<string, unknown> | undefined,
   field: string,
 ): string => {
   if (!contact) return "Not available";
   const value =
     field === "vat_type"
-      ? contact.vatType
+      ? contact.lvat_type ?? contact.vat_type ?? contact.vatType
       : field === "terms"
-        ? contact.terms
+        ? contact.lterms ?? contact.terms
         : field === "price_group"
-          ? contact.priceGroup
+          ? contact.lprice_group ?? contact.price_group ?? contact.priceGroup
           : field === "sales_person"
-            ? contact.salesman || contact.assignedAgent || "Unassigned"
+            ? contact.lsales_person ?? contact.sales_person ?? contact.salesman ?? contact.assignedAgent ?? "Unassigned"
             : "";
   return String(value || "Not set");
+};
+
+const mergeDecisionFieldValue = (
+  record: Record<string, unknown> | undefined,
+  contact: Contact | undefined,
+  field: string,
+): string => {
+  if (field === "sales_person") {
+    const salespersonName = contact?.salesman || contact?.assignedAgent;
+    if (salespersonName) return salespersonName;
+  }
+  return mergeFieldValue(record, field);
 };
 
 const newMergeKey = (): string => {
@@ -920,6 +932,11 @@ export default function DuplicateCustomersView() {
                   >
                     Preview safe merge
                   </button>
+                  {!preview && Object.keys(fieldDecisions).length > 0 ? (
+                    <p role="status" className="text-sm font-medium text-blue-800">
+                      Your choice is saved. Preview the merge again to continue.
+                    </p>
+                  ) : null}
                   {preview ? (
                     <div data-tutorial="merge-preview" className="space-y-3 rounded-md border border-slate-300 bg-slate-50 p-3 text-sm">
                       <p className="font-black">
@@ -928,6 +945,115 @@ export default function DuplicateCustomersView() {
                           ? "ready for confirmation"
                           : "blocked"}
                       </p>
+                      {Object.keys(preview.conflicts)
+                        .length > 0 ? (
+                        <div className="rounded border border-amber-200 bg-amber-50 p-3">
+                          <p className="font-bold text-amber-900">
+                            Resolve field differences ({Object.keys(preview.conflicts).length})
+                          </p>
+                          <p className="mt-1 text-sm text-amber-900">
+                            These two customers have
+                            different values. Choose which
+                            value the merged customer should
+                            keep.
+                          </p>
+                          {Object.entries(
+                            preview.conflicts,
+                          ).map(([field, label]) => {
+                            const survivorPreview=
+                              preview.customers.find(
+                                (customer) =>
+                                  String(customer.lsessionid ?? customer.id) ===
+                                  preview.survivor_session_id,
+                              );
+                            const duplicatePreview=
+                              preview.customers.find(
+                                (customer) =>
+                                  String(customer.lsessionid ?? customer.id) ===
+                                  preview.duplicate_session_id,
+                              );
+                            return (
+                              <div
+                                key={field}
+                                className="mt-3 rounded border border-amber-200 bg-white p-3"
+                              >
+                                <p className="text-sm font-bold text-slate-800">
+                                  {label}
+                                  {fieldDecisions[field] ? ` · Keeping Customer ${fieldDecisions[field] === "survivor" ? "A" : "B"}` : " · Choose one"}
+                                </p>
+                                {field === "tin" ? (
+                                  <span className="mt-2 block font-semibold text-red-700">
+                                    These TINs cannot be
+                                    chosen automatically.
+                                    Resolve the TIN
+                                    difference before
+                                    merging.
+                                  </span>
+                                ) : (
+                                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                                    <button
+                                      type="button"
+                                      aria-pressed={fieldDecisions[field] === "survivor"}
+                                      onClick={() => {
+                                        setFieldDecisions(
+                                          (previous) => ({
+                                            ...previous,
+                                            [field]:
+                                              "survivor",
+                                          }),
+                                        );
+                                        setMergeKey(newMergeKey());
+                                        invalidateMergePreview();
+                                        if (showTutorial && tutorialStep === 7) setTutorialStep(6);
+                                      }}
+                                      className={`rounded border px-3 py-2 text-left text-xs ${fieldDecisions[field] === "survivor" ? "border-blue-600 bg-blue-100 ring-2 ring-blue-200" : "border-slate-300 hover:bg-slate-50"}`}
+                                    >
+                                      <span className="block font-bold text-slate-700">
+                                        Keep Customer A
+                                      </span>
+                                      <span className="mt-1 block text-slate-600">
+                                        {mergeDecisionFieldValue(
+                                          survivorPreview,
+                                          selected,
+                                          field,
+                                        )}
+                                      </span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      aria-pressed={fieldDecisions[field] === "duplicate"}
+                                      onClick={() => {
+                                        setFieldDecisions(
+                                          (previous) => ({
+                                            ...previous,
+                                            [field]:
+                                              "duplicate",
+                                          }),
+                                        );
+                                        setMergeKey(newMergeKey());
+                                        invalidateMergePreview();
+                                        if (showTutorial && tutorialStep === 7) setTutorialStep(6);
+                                      }}
+                                      className={`rounded border px-3 py-2 text-left text-xs ${fieldDecisions[field] === "duplicate" ? "border-blue-600 bg-blue-100 ring-2 ring-blue-200" : "border-slate-300 hover:bg-slate-50"}`}
+                                    >
+                                      <span className="block font-bold text-slate-700">
+                                        Keep Customer B
+                                      </span>
+                                      <span className="mt-1 block text-slate-600">
+                                        {mergeDecisionFieldValue(
+                                          duplicatePreview,
+                                          activeDuplicate,
+                                          field,
+                                        )}
+                                      </span>
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : null}
                       <div className="grid gap-2 sm:grid-cols-2">
                         {Object.entries(
                           preview.financial_totals,
@@ -965,111 +1091,6 @@ export default function DuplicateCustomersView() {
                             "No related records found."}
                         </p>
                       </details>
-                      {Object.keys(preview.conflicts)
-                        .length > 0 ? (
-                        <div className="rounded border border-amber-200 bg-amber-50 p-3">
-                          <p className="font-bold text-amber-900">
-                            One decision is needed before
-                            merging
-                          </p>
-                          <p className="mt-1 text-sm text-amber-900">
-                            These two customers have
-                            different values. Choose which
-                            value the merged customer should
-                            keep.
-                          </p>
-                          {Object.entries(
-                            preview.conflicts,
-                          ).map(([field, label]) => {
-                            const survivorPreview=
-                              preview.customers.find(
-                                (customer) =>
-                                  String(customer.id) ===
-                                  preview.survivor_session_id,
-                              );
-                            const duplicatePreview=
-                              preview.customers.find(
-                                (customer) =>
-                                  String(customer.id) ===
-                                  preview.duplicate_session_id,
-                              );
-                            return (
-                              <div
-                                key={field}
-                                className="mt-3 rounded border border-amber-200 bg-white p-3"
-                              >
-                                <p className="text-sm font-bold text-slate-800">
-                                  {label}
-                                </p>
-                                {field === "tin" ? (
-                                  <span className="mt-2 block font-semibold text-red-700">
-                                    These TINs cannot be
-                                    chosen automatically.
-                                    Resolve the TIN
-                                    difference before
-                                    merging.
-                                  </span>
-                                ) : (
-                                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setFieldDecisions(
-                                          (previous) => ({
-                                            ...previous,
-                                            [field]:
-                                              "survivor",
-                                          }),
-                                        );
-                                        setMergeKey(newMergeKey());
-                                        invalidateMergePreview();
-                                        if (showTutorial && tutorialStep === 7) setTutorialStep(6);
-                                      }}
-                                      className={`rounded border px-3 py-2 text-left text-xs ${fieldDecisions[field] === "survivor" ? "border-blue-600 bg-blue-100 ring-2 ring-blue-200" : "border-slate-300 hover:bg-slate-50"}`}
-                                    >
-                                      <span className="block font-bold text-slate-700">
-                                        Keep Customer A
-                                      </span>
-                                      <span className="mt-1 block text-slate-600">
-                                        {mergeFieldValue(
-                                          survivorPreview,
-                                          field,
-                                        )}
-                                      </span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setFieldDecisions(
-                                          (previous) => ({
-                                            ...previous,
-                                            [field]:
-                                              "duplicate",
-                                          }),
-                                        );
-                                        setMergeKey(newMergeKey());
-                                        invalidateMergePreview();
-                                        if (showTutorial && tutorialStep === 7) setTutorialStep(6);
-                                      }}
-                                      className={`rounded border px-3 py-2 text-left text-xs ${fieldDecisions[field] === "duplicate" ? "border-blue-600 bg-blue-100 ring-2 ring-blue-200" : "border-slate-300 hover:bg-slate-50"}`}
-                                    >
-                                      <span className="block font-bold text-slate-700">
-                                        Keep Customer B
-                                      </span>
-                                      <span className="mt-1 block text-slate-600">
-                                        {mergeFieldValue(
-                                          duplicatePreview,
-                                          field,
-                                        )}
-                                      </span>
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : null}
                       {preview.blocking_warnings.length>
                         0 ? (
                         <ul className="list-disc pl-5 text-red-700">
