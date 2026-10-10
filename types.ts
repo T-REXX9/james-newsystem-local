@@ -328,6 +328,8 @@ export interface Contact {
   // Core Identifiers
   company: string; // "customer_name"
   pastName?: string;
+  searchContactNames?: string;
+  searchPhoneNumbers?: string;
   customerSince: string; // "since"
   team: string;
   salesman: string; // "salesman" (Assigned Agent)
@@ -764,6 +766,8 @@ export interface DailyCallCustomerRow {
   pastName?: string;
   contactNumber: string;
   contactPersonName?: string;
+  contactPersonNames?: string;
+  contactNumbers?: string;
   codeDate: string;
   dealerPriceGroup?: string;
   dealerPriceDate?: string;

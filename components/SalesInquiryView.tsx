@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Plus,
   Trash2,
@@ -195,6 +195,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   const [exportingJpeg, setExportingJpeg] = useState(false);
   const [jpegCaptureMode, setJpegCaptureMode] = useState(false);
   const [selectedInquiry, setSelectedInquiry] = useState<SalesInquiry | null>(null);
+  const previousInquiryRouteRef = useRef(initialInquiryId || '');
   const [statusFilter, setStatusFilter] = useState<'all' | SalesInquiryStatus>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -746,8 +747,18 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     setClearedRouteInquiryId(initialInquiryId || null);
     setSelectedInquiry(null);
     resetFormForNew();
-    navigateWorkflow(SALES_INQUIRY_TAB_ID, undefined, 'replace');
+    navigateWorkflow(SALES_INQUIRY_TAB_ID);
   }, [canAdd, initialInquiryId, resetFormForNew]);
+
+  useEffect(() => {
+    const previousRouteId = previousInquiryRouteRef.current;
+    previousInquiryRouteRef.current = initialInquiryId || '';
+    if (previousRouteId && !initialInquiryId && !isCreatingNew) {
+      setClearedRouteInquiryId(null);
+      setSelectedInquiry(null);
+      resetFormForNew();
+    }
+  }, [initialInquiryId, isCreatingNew, resetFormForNew]);
 
   const selectInquiry = useCallback(async (inquiry: SalesInquiry) => {
     setIsCreatingNew(false);
@@ -760,7 +771,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
   const selectInquiryAndSync = useCallback((inquiry: SalesInquiry) => {
     void selectInquiry(inquiry);
-    navigateWorkflow(SALES_INQUIRY_TAB_ID, { inquiryId: inquiry.id }, 'replace');
+    navigateWorkflow(SALES_INQUIRY_TAB_ID, { inquiryId: inquiry.id });
   }, [selectInquiry]);
 
   // Removed auto-select of first inquiry to prevent pre-filling forms with test data
@@ -1689,7 +1700,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                     return <tr key={inquiry.id} onClick={() => selectInquiryAndSync(inquiry)} className={`cursor-pointer hover:bg-[#f7f7f7] ${rowColor}`}>
                       <td className="border border-[#d7d7d7] px-2 py-[9px]">{formatLegacyListDateTime(inquiry.sales_date, inquiry.sales_time)}</td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] truncate" title={customer?.company || ''}>{customer?.company || ''}</td>
-                      <td className="border border-[#d7d7d7] px-2 py-[9px]"><ModuleRecordLink tab="sales-transaction-sales-inquiry" payload={{ inquiryId: inquiry.id }} mode="replace" onOpen={() => void selectInquiry(inquiry)} className="underline">{formatInquiryDisplayNo(inquiry.inquiry_no)}</ModuleRecordLink> <Copy className="ml-1 inline h-3.5 w-3.5 text-[#337ab7]" /></td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px]"><ModuleRecordLink tab="sales-transaction-sales-inquiry" payload={{ inquiryId: inquiry.id }} mode="push" onOpen={() => void selectInquiry(inquiry)} className="underline">{formatInquiryDisplayNo(inquiry.inquiry_no)}</ModuleRecordLink> <Copy className="ml-1 inline h-3.5 w-3.5 text-[#337ab7]" /></td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{inquiry.so_refno ? <ModuleRecordAction tab="sales-transaction-sales-order" payload={{ orderId: inquiry.so_refno }} className="underline" newWindowLabel="Open sales order in new window">{inquiry.so_no || inquiry.so_refno}</ModuleRecordAction> : (inquiry.so_no || '')}</td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{inquiry.invoice_no || inquiry.dr_no || ''}</td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] truncate">{inquiry.sales_person || ''}</td>

@@ -61,6 +61,7 @@ import {
   createCustomerLogForDailyCall,
   fetchAgentSnapshotForDailyCall,
   fetchContactCustomerLogsForDailyCall,
+  fetchDailySubmittedSalesReportContactIds,
   fetchSalesReportDirectoryState,
   releaseCustomerCallForDailyCall,
   setDailyCallBookmark,
@@ -91,7 +92,6 @@ import {
   formatRelativeTime,
   getDaysSince,
   formatComment,
-  matchesSearch,
   getPhoneNumber
 } from '../utils/formatUtils';
 import { DO_NOT_CONTACT_LABEL, isBlockedContact } from '../utils/dailyCallBlockedCustomer';
@@ -107,7 +107,8 @@ import {
 import { VERIFIED_PROSPECT_POTENTIAL, averageMonthlyPaidSales } from '../utils/dailyCallPotentialSales';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import { DEFAULT_CUSTOMER_VAT_TYPE } from '../constants/customerVat';
-import { isMasterUserAccount } from '../constants';
+import { DAILY_CALL_PAGE_LABEL, isMasterUserAccount } from '../constants';
+import { createWorkflowHistoryState } from '../utils/workflowHistory';
 import { canPerformAction } from '../utils/actionPermissions';
 import {
   BUTTON_BASE,
@@ -330,6 +331,8 @@ const toContactModel = (row: any): Contact => {
     mobile: contactNumber,
     email: '',
   }] : [],
+  searchContactNames: String(row?.contactPersonNames || contactPersonName),
+  searchPhoneNumbers: String(row?.contactNumbers || contactNumber),
   name: contactPersonName || String(row?.shopName || 'Unnamed Shop'),
   title: '',
   email: '',
@@ -348,6 +351,82 @@ const toContactModel = (row: any): Contact => {
   balance: Number(row?.outstandingBalance || 0),
   };
 };
+
+const toLocalDateKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+const splitSearchValues = (value: string) => value.split(/[\/,;|\r\n]+/).map((part) => part.trim()).filter(Boolean);
+
+const phoneSearchVariants = (value: string): string[] => {
+  const withoutExtension = value.replace(/\s*(?:ext\.?|extension|x|#)\s*\d+\s*$/i, '');
+  let digits = withoutExtension.replace(/\D/g, '');
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  if (digits.startsWith('63')) {
+    const nationalNumber = digits.slice(2).replace(/^0/, '');
+    digits = `0${nationalNumber}`;
+  }
+  else if (digits.startsWith('9') && digits.length === 10) digits = `0${digits}`;
+  if (!digits) return [];
+  return digits.startsWith('0') ? [digits, digits.slice(1)] : [digits];
+};
+
+const matchesContactNameSearch = (contact: Contact, query: string) => {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const contactNames = [contact.searchContactNames || '', ...(contact.contactPersons || []).map((person) => person.name || '')]
+    .join(' ')
+    .toLocaleLowerCase();
+  return (contact.name || '').toLocaleLowerCase().includes(normalizedQuery) || contactNames.includes(normalizedQuery);
+};
+
+const matchesPhoneSearch = (contact: Contact, query: string) => {
+  const queryPhoneVariants = phoneSearchVariants(query).filter((candidate) => candidate.length >= 3);
+  if (queryPhoneVariants.length === 0) return false;
+  const phoneValues = [
+    contact.phone,
+    contact.mobile || '',
+    contact.searchPhoneNumbers || '',
+    ...(contact.contactPersons || []).flatMap((person) => [person.mobile || '', person.telephone || '']),
+  ];
+  const storedNumbers = phoneValues.flatMap(splitSearchValues).flatMap(phoneSearchVariants);
+  return queryPhoneVariants.some((queryNumber) => storedNumbers.some((storedNumber) => storedNumber.includes(queryNumber)));
+};
+
+type DailyCallSearch = { customer: string; phone: string; contact: string; agent: string };
+
+type DailyCallViewSnapshot = {
+  activeTab?: 'master' | 'today' | 'activity';
+  colorFilter?: 'all' | PurchaseHighlightColor;
+  density?: DensityMode;
+  detailsPanelOpen?: boolean;
+  expandedCustomerCategory?: 'priority' | 'recovery' | 'verified' | 'unverified' | 'blocked';
+  masterScrollTop?: number;
+  noPurchaseOnly?: boolean;
+  openClientLists?: Record<ClientListKey, boolean>;
+  provinceFilter?: string;
+  repFilter?: string;
+  salesReportFilter?: 'all' | 'reported' | 'unread';
+  scrollTop?: number;
+  showContactDetails?: boolean;
+  searchValue?: DailyCallSearch;
+  selectedClientId?: string | null;
+  sortDirection?: 'asc' | 'desc';
+  sortField?: 'priority' | 'lastContact' | 'lastPurchase' | 'salesValue';
+  statusFilters?: string[];
+  summaryCollapsed?: boolean;
+};
+
+const dailyCallSnapshotKey = (userId?: string, selectedDate?: string) =>
+  `daily-call-view:${userId || 'unknown'}:${selectedDate || 'today'}`;
+
+const matchesDailyCallSearch = (contact: Contact, search: DailyCallSearch): boolean => {
+  const customerQuery = search.customer.trim().toLocaleLowerCase();
+  const agentQuery = search.agent.trim().toLocaleLowerCase();
+  return (!customerQuery || `${contact.company || ''} ${contact.pastName || ''}`.toLocaleLowerCase().includes(customerQuery))
+    && (!search.phone.trim() || matchesPhoneSearch(contact, search.phone))
+    && (!search.contact.trim() || matchesContactNameSearch(contact, search.contact))
+    && (!agentQuery || `${contact.salesman || ''} ${contact.assignedAgent || ''}`.toLocaleLowerCase().includes(agentQuery));
+};
+
+const hasDailyCallSearch = (search: DailyCallSearch) => Object.values(search).some((value) => value.trim().length > 0);
 
 type DensityMode = 'comfortable' | 'compact' | 'ultra-compact';
 
@@ -556,6 +635,16 @@ const MasterTableRow = React.memo(({
 });
 
 const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ currentUser, initialSelectedDate, initialContactId, initialConversationType, initialActivityRef }) => {
+  const [restoredViewSnapshot] = useState<DailyCallViewSnapshot | null>(() => {
+    try {
+      const key = dailyCallSnapshotKey(currentUser?.id, initialSelectedDate);
+      const rawSnapshot = window.sessionStorage.getItem(key);
+      if (!rawSnapshot) return null;
+      return JSON.parse(rawSnapshot) as DailyCallViewSnapshot;
+    } catch {
+      return null;
+    }
+  });
   const selectedReferenceDate = useMemo(() => {
     if (!initialSelectedDate) return new Date();
     const parsed = new Date(`${initialSelectedDate}T12:00:00`);
@@ -577,7 +666,6 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [hasLoadedData, setHasLoadedData] = useState(false);
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [callForwardingEnabled, setCallForwardingEnabled] = useState(false);
   const [showForwardingInput, setShowForwardingInput] = useState(false);
   const [historyTab, setHistoryTab] = useState<'all' | 'calls' | 'sms'>('all');
@@ -588,6 +676,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [callNumberOptions, setCallNumberOptions] = useState<string[] | null>(null);
   const [salesReportUnreadByContact, setSalesReportUnreadByContact] = useState<Record<string, number>>({});
   const [salesReportContactIds, setSalesReportContactIds] = useState<Set<string>>(() => new Set());
+  const [dailySalesReportContactIds, setDailySalesReportContactIds] = useState<Set<string>>(() => new Set());
   const [smsMessage, setSMSMessage] = useState('');
   const [sendingSMS, setSendingSMS] = useState(false);
   const [customerLogs, setCustomerLogs] = useState<CustomerLogEntry[]>([]);
@@ -600,29 +689,30 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [savingCustomerLog, setSavingCustomerLog] = useState(false);
   const [savingStatusLog, setSavingStatusLog] = useState(false);
 
-  const [repFilter, setRepFilter] = useState('All');
-  const [provinceFilter, setProvinceFilter] = useState('All');
-  const [statusFilters, setStatusFilters] = useState<CustomerStatus[]>([]);
-  const [noPurchaseOnly, setNoPurchaseOnly] = useState(false);
-  const [colorFilter, setColorFilter] = useState<'all' | PurchaseHighlightColor>('all');
-  const [salesReportFilter, setSalesReportFilter] = useState<'all' | 'reported' | 'unread'>('all');
-  const [expandedCustomerCategory, setExpandedCustomerCategory] = useState<'priority' | 'recovery' | 'verified' | 'unverified' | 'blocked'>('priority');
-  const [searchValue, setSearchValue] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [sortField, setSortField] = useState<'priority' | 'lastContact' | 'lastPurchase' | 'salesValue'>('priority');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [repFilter, setRepFilter] = useState(() => restoredViewSnapshot?.repFilter || 'All');
+  const [provinceFilter, setProvinceFilter] = useState(() => restoredViewSnapshot?.provinceFilter || 'All');
+  const [statusFilters, setStatusFilters] = useState<CustomerStatus[]>(() => (restoredViewSnapshot?.statusFilters || []) as CustomerStatus[]);
+  const [noPurchaseOnly, setNoPurchaseOnly] = useState(() => restoredViewSnapshot?.noPurchaseOnly || false);
+  const [colorFilter, setColorFilter] = useState<'all' | PurchaseHighlightColor>(() => restoredViewSnapshot?.colorFilter || 'all');
+  const [salesReportFilter, setSalesReportFilter] = useState<'all' | 'reported' | 'unread'>(() => restoredViewSnapshot?.salesReportFilter || 'all');
+  const [expandedCustomerCategory, setExpandedCustomerCategory] = useState<'priority' | 'recovery' | 'verified' | 'unverified' | 'blocked'>(() => restoredViewSnapshot?.expandedCustomerCategory || 'priority');
+  const [searchValue, setSearchValue] = useState<DailyCallSearch>(() => restoredViewSnapshot?.searchValue || { customer: '', phone: '', contact: '', agent: '' });
+  const [debouncedSearch, setDebouncedSearch] = useState<DailyCallSearch>(() => restoredViewSnapshot?.searchValue || { customer: '', phone: '', contact: '', agent: '' });
+  const [sortField, setSortField] = useState<'priority' | 'lastContact' | 'lastPurchase' | 'salesValue'>(() => restoredViewSnapshot?.sortField || 'priority');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(() => restoredViewSnapshot?.sortDirection || 'desc');
   const [readActivityIds, setReadActivityIds] = useState<Set<string>>(() => new Set());
-  const [openClientLists, setOpenClientLists] = useState<Record<ClientListKey, boolean>>({
+  const [openClientLists, setOpenClientLists] = useState<Record<ClientListKey, boolean>>(() => restoredViewSnapshot?.openClientLists || ({
     active: false,
     inactivePositive: false,
     prospectivePositive: false
-  });
-  const [summaryCollapsed, setSummaryCollapsed] = useState(false);
-  const [density, setDensity] = useState<'comfortable' | 'compact' | 'ultra-compact'>('compact');
-  const [activeTab, setActiveTab] = useState<'master' | 'today' | 'activity'>('master');
-  const [detailsPanelOpen, setDetailsPanelOpen] = useState(false);
+  }));
+  const [summaryCollapsed, setSummaryCollapsed] = useState(() => restoredViewSnapshot?.summaryCollapsed || false);
+  const [density, setDensity] = useState<DensityMode>(() => restoredViewSnapshot?.density || 'compact');
+  const [activeTab, setActiveTab] = useState<'master' | 'today' | 'activity'>(() => restoredViewSnapshot?.activeTab || 'master');
+  const [detailsPanelOpen, setDetailsPanelOpen] = useState(() => restoredViewSnapshot?.detailsPanelOpen || false);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(() => restoredViewSnapshot?.selectedClientId || null);
   const [pendingInitialActivityRef, setPendingInitialActivityRef] = useState<string | undefined>(undefined);
-  const [showContactDetails, setShowContactDetails] = useState(false);
+  const [showContactDetails, setShowContactDetails] = useState(() => restoredViewSnapshot?.showContactDetails || false);
   const [fullDetailsContact, setFullDetailsContact] = useState<Contact | null>(null);
   const [fullDetailsLoading, setFullDetailsLoading] = useState(false);
   const [fullDetailsError, setFullDetailsError] = useState<string | null>(null);
@@ -633,10 +723,70 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [masterViewportHeight, setMasterViewportHeight] = useState(420);
   const masterViewportWrapperRef = useRef<HTMLDivElement | null>(null);
   const masterScrollRef = useRef<HTMLDivElement | null>(null);
+  const viewScrollRef = useRef<HTMLDivElement | null>(null);
+  const restoredScrollAppliedRef = useRef(false);
   const selectionInitializedRef = useRef(false);
   const pendingFilterSnapshotRef = useRef<{ scrollTop: number; selectedClientId: string | null } | null>(null);
   const isFetchingSnapshotRef = useRef(false);
   const snapshotAbortControllerRef = useRef<AbortController | null>(null);
+  const mountedRouteHashRef = useRef(typeof window === 'undefined' ? '' : window.location.hash);
+  const viewSnapshotRef = useRef<DailyCallViewSnapshot | null>(null);
+  viewSnapshotRef.current = {
+    activeTab,
+    colorFilter,
+    density,
+    detailsPanelOpen,
+    expandedCustomerCategory,
+    masterScrollTop: masterScrollRef.current?.scrollTop || restoredViewSnapshot?.masterScrollTop || 0,
+    noPurchaseOnly,
+    openClientLists,
+    provinceFilter,
+    repFilter,
+    salesReportFilter,
+    scrollTop: viewScrollRef.current?.scrollTop || restoredViewSnapshot?.scrollTop || 0,
+    showContactDetails,
+    searchValue,
+    selectedClientId,
+    sortDirection,
+    sortField,
+    statusFilters,
+    summaryCollapsed,
+  };
+
+  useEffect(() => {
+    if (!restoredViewSnapshot) return;
+    try {
+      window.sessionStorage.removeItem(dailyCallSnapshotKey(currentUser?.id, initialSelectedDate));
+    } catch {
+      // Ignore unavailable session storage; the in-memory snapshot is enough for this visit.
+    }
+  }, [currentUser?.id, initialSelectedDate, restoredViewSnapshot]);
+
+  useEffect(() => () => {
+    if (window.location.hash === mountedRouteHashRef.current || !viewSnapshotRef.current) return;
+    try {
+      window.sessionStorage.setItem(
+        dailyCallSnapshotKey(currentUser?.id, initialSelectedDate),
+        JSON.stringify({
+          ...viewSnapshotRef.current,
+          scrollTop: viewScrollRef.current?.scrollTop || 0,
+          masterScrollTop: masterScrollRef.current?.scrollTop || 0,
+        })
+      );
+    } catch {
+      // The board still works when session storage is unavailable.
+    }
+  }, [currentUser?.id, initialSelectedDate]);
+
+  useEffect(() => {
+    if (!restoredViewSnapshot || !hasLoadedData || restoredScrollAppliedRef.current) return;
+    restoredScrollAppliedRef.current = true;
+    const frame = window.requestAnimationFrame(() => {
+      if (viewScrollRef.current) viewScrollRef.current.scrollTop = restoredViewSnapshot.scrollTop || 0;
+      if (masterScrollRef.current) masterScrollRef.current.scrollTop = restoredViewSnapshot.masterScrollTop || 0;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [hasLoadedData, restoredViewSnapshot]);
 
   const buildSalesInquiryPayload = useCallback((contactId?: string) => {
     const targetContactId = contactId || selectedClientId || undefined;
@@ -727,6 +877,13 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       setLoadError(null);
       setHasLoadedData(true);
       const contactIds = teamScopedContacts.map((contact) => contact.id);
+      void fetchDailySubmittedSalesReportContactIds(contactIds, toLocalDateKey(selectedReferenceDate))
+        .then((reportedIds) => {
+          if (!controller.signal.aborted) setDailySalesReportContactIds(reportedIds);
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setDailySalesReportContactIds(new Set());
+        });
       void fetchSalesReportDirectoryState(contactIds)
         .then(({ unreadByContact, reportedContactIds }) => {
           // finally clears snapshotAbortControllerRef before this microtask; only honor abort.
@@ -757,7 +914,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       snapshotAbortControllerRef.current = null;
       setLoading(false);
     }
-  }, [agentDataName, currentUser?.id, isSalesAgent]);
+  }, [agentDataName, currentUser?.id, isSalesAgent, selectedReferenceDate]);
 
   // Handle initialContactId from navigation (e.g., notification click)
   useEffect(() => {
@@ -803,7 +960,12 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
   useEffect(() => {
     const handler = setTimeout(() => {
-      setDebouncedSearch(searchValue.trim().toLowerCase());
+      setDebouncedSearch({
+        customer: searchValue.customer.trim().toLowerCase(),
+        phone: searchValue.phone.trim(),
+        contact: searchValue.contact.trim().toLowerCase(),
+        agent: searchValue.agent.trim().toLowerCase(),
+      });
     }, 600);
     return () => clearTimeout(handler);
   }, [searchValue]);
@@ -1076,9 +1238,38 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     setFullDetailsError(null);
     setFullDetailsLoading(true);
     try {
-      setFullDetailsContact(await fetchContactForDailyCall(contact.id));
+      const profile = await fetchContactForDailyCall(contact.id);
+      const fallbackContactPerson = contact.contactPersons?.find((person) => person.enabled !== false)
+        || contact.contactPersons?.[0];
+      const profileContactPerson = profile.contactPersons?.find((person) => person.enabled !== false)
+        || profile.contactPersons?.[0];
+      const mergedContactPersons = profile.contactPersons?.length
+        ? profile.contactPersons.map((person) => person === profileContactPerson && fallbackContactPerson
+          ? {
+            ...fallbackContactPerson,
+            ...person,
+            name: person.name && person.name !== 'N/A' ? person.name : fallbackContactPerson.name,
+            mobile: person.mobile || fallbackContactPerson.mobile,
+            telephone: person.telephone || fallbackContactPerson.telephone,
+            email: person.email || fallbackContactPerson.email,
+            position: person.position || fallbackContactPerson.position,
+          }
+          : person)
+        : contact.contactPersons || [];
+      setFullDetailsContact({
+        ...contact,
+        ...profile,
+        contactPersons: mergedContactPersons,
+        name: profileContactPerson?.name || fallbackContactPerson?.name || profile.name || contact.name,
+        mobile: profile.mobile || contact.mobile || fallbackContactPerson?.mobile || '',
+        phone: profile.phone || profile.mobile || contact.phone || contact.mobile
+          || fallbackContactPerson?.telephone || fallbackContactPerson?.mobile || '',
+      });
     } catch (error) {
-      if (shouldSuppressAuthError(error)) return;
+      if (shouldSuppressAuthError(error)) {
+        setFullDetailsError('The full customer profile is unavailable. Showing the contact details from your list.');
+        return;
+      }
       console.error('Error loading full customer details:', error);
       setFullDetailsError(error instanceof Error ? error.message : 'Customer details could not be loaded.');
     } finally {
@@ -1092,6 +1283,13 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     setFullDetailsError(null);
     setFullDetailsLoading(false);
   }, []);
+
+  useEffect(() => {
+    if (!restoredViewSnapshot?.showContactDetails || !selectedClientId || fullDetailsContact || fullDetailsLoading) return;
+    const contact = contacts.find((item) => item.id === selectedClientId);
+    if (contact) void handleOpenFullDetails(contact);
+  }, [contacts, fullDetailsContact, fullDetailsLoading, handleOpenFullDetails, restoredViewSnapshot, selectedClientId]);
+
   const callContactPerson = useMemo(
     () => callContact?.contactPersons?.find((person) => person.enabled !== false) || callContact?.contactPersons?.[0] || null,
     [callContact]
@@ -1195,7 +1393,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   );
   const noPurchaseSet = useMemo(() => new Set(noPurchaseContacts.map((contact) => contact.id)), [noPurchaseContacts]);
   const searchScopedNoPurchase = useMemo(
-    () => (debouncedSearch ? noPurchaseContacts.filter((contact) => matchesSearch(contact, debouncedSearch)) : noPurchaseContacts),
+    () => (hasDailyCallSearch(debouncedSearch) ? noPurchaseContacts.filter((contact) => matchesDailyCallSearch(contact, debouncedSearch)) : noPurchaseContacts),
     [noPurchaseContacts, debouncedSearch]
   );
 
@@ -1367,7 +1565,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
   const masterRows = useMemo<MasterRow[]>(() => {
     const filtered = baseMasterRows.filter((row) => {
-      if (!matchesSearch(row.contact, debouncedSearch)) return false;
+      if (!matchesDailyCallSearch(row.contact, debouncedSearch)) return false;
       if (salesReportFilter === 'reported' && !salesReportContactIds.has(row.contact.id)) return false;
       if (salesReportFilter === 'unread' && !(salesReportUnreadByContact[row.contact.id] || 0)) return false;
       return colorFilter === 'all' || getStaffPurchaseHighlight(row, selectedReferenceDate).color === colorFilter;
@@ -1454,7 +1652,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       });
     const assignedBlockedRows = masterRows.filter((row) => resolveMonitorBucket(row) === 'blocked');
     const assignedBlockedIds = new Set(assignedBlockedRows.map((row) => row.contact.id));
-    const searchTerm = debouncedSearch.trim().toLocaleLowerCase();
+    const searchTerm = `${debouncedSearch.customer} ${debouncedSearch.agent}`.trim();
     const companyBlockedRows: MasterRow[] = doNotContactCustomers
       .filter((customer) => !assignedBlockedIds.has(customer.id))
       .filter((customer) => !searchTerm || `${customer.shopName} ${customer.assignedTo} ${customer.assignedTeam}`.toLocaleLowerCase().includes(searchTerm))
@@ -1688,9 +1886,50 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   }, [masterVirtual]);
 
   const handleSelectClient = useCallback((contactId: string) => {
+    if (!detailsPanelOpen) {
+      window.history.pushState(
+        { ...createWorkflowHistoryState(window.location.hash), __jamesDailyCallDetail: { contactId, fullDetails: isSalesAgent } },
+        '',
+        window.location.href
+      );
+    }
     setSelectedClientId(contactId);
     setDetailsPanelOpen(true);
+    const contact = contacts.find((item) => item.id === contactId);
+    if (isSalesAgent && contact) {
+      void handleOpenFullDetails(contact);
+    }
+  }, [contacts, detailsPanelOpen, handleOpenFullDetails, isSalesAgent]);
+
+  const closeClientDetails = useCallback(() => {
+    const state = window.history.state as { __jamesDailyCallDetail?: { contactId?: string } } | null;
+    if (state?.__jamesDailyCallDetail) {
+      window.history.back();
+      return;
+    }
+    setDetailsPanelOpen(false);
   }, []);
+
+  useEffect(() => {
+    const syncDetailsFromHistory = (event: PopStateEvent) => {
+      const state = event.state as { __jamesDailyCallDetail?: { contactId?: string; fullDetails?: boolean } } | null;
+      const detail = state?.__jamesDailyCallDetail;
+      const contactId = detail?.contactId;
+      if (contactId) {
+        setSelectedClientId(contactId);
+        setDetailsPanelOpen(true);
+        if (detail?.fullDetails) {
+          const contact = contacts.find((item) => item.id === contactId);
+          if (contact) void handleOpenFullDetails(contact);
+        }
+      } else {
+        setDetailsPanelOpen(false);
+        handleCloseFullDetails();
+      }
+    };
+    window.addEventListener('popstate', syncDetailsFromHistory);
+    return () => window.removeEventListener('popstate', syncDetailsFromHistory);
+  }, [contacts, handleCloseFullDetails, handleOpenFullDetails]);
 
   const handleSetCallBookmark = useCallback(async (contactId: string | null) => {
     if (savingBookmark) return;
@@ -1884,7 +2123,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   } as const;
 
   return (
-    <div className="h-full min-h-0 overflow-y-auto bg-gradient-to-b from-slate-50 via-white to-slate-100/70 text-[#10244c] dark:from-slate-950 dark:via-slate-950 dark:to-slate-900 dark:text-white">
+    <div ref={viewScrollRef} className="h-full min-h-0 overflow-y-auto bg-gradient-to-b from-slate-50 via-white to-slate-100/70 text-[#10244c] dark:from-slate-950 dark:via-slate-950 dark:to-slate-900 dark:text-white">
       <AddContactModal
         isOpen={showAddCustomerModal}
         onClose={() => setShowAddCustomerModal(false)}
@@ -1920,7 +2159,14 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             </header>
             <div className="overflow-y-auto p-4 sm:p-5">
               {activeWorkspacePanel === 'quota' && <section className="flex flex-col gap-4 rounded-xl border border-blue-200 bg-blue-50/70 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-blue-900 dark:bg-blue-950/30" aria-label="Your monthly sales quota" data-testid="daily-call-personal-quota"><div><h3 className="mb-1 text-sm font-bold text-blue-950 dark:text-blue-100">Your monthly sales quota</h3><PersonalSalesQuotaEditor quota={quota} /><p className="mt-1 text-xs text-blue-800/80 dark:text-blue-200/80">Visible only in your Daily Call workspace</p></div>{quota > 0 ? <dl className="flex flex-wrap gap-x-5 gap-y-2 text-sm tabular-nums"><div><dt className="text-xs text-slate-600 dark:text-slate-300">Assigned quota</dt><dd className="font-bold">{formatCurrency(quota)}</dd></div><div><dt className="text-xs text-slate-600 dark:text-slate-300">Achieved this month</dt><dd className="font-bold">{achievementsValue === null ? 'Loading' : formatCurrency(achievementsValue)}</dd></div>{remainingQuota !== null && <div><dt className="text-xs text-slate-600 dark:text-slate-300">Remaining</dt><dd className="font-bold">{formatCurrency(remainingQuota)}</dd></div>}{percentAchieved !== null && <div><dt className="text-xs text-slate-600 dark:text-slate-300">Progress</dt><dd className="font-bold">{percentAchieved}%</dd></div>}</dl> : <p className="text-sm font-semibold">No monthly quota assigned</p>}</section>}
-              {activeWorkspacePanel === 'calls' && <CallAccountabilityPanel title="Phone and hardware call activity" compact />}
+              {activeWorkspacePanel === 'calls' && <CallAccountabilityPanel
+                title="Phone and hardware call activity"
+                compact
+                agentId={currentUser?.id}
+                date={toLocalDateKey(selectedReferenceDate)}
+                boardContactIds={contacts.map((contact) => contact.id)}
+                reportedContactIds={[...dailySalesReportContactIds]}
+              />}
               {activeWorkspacePanel === 'actions' && <div className="flex flex-wrap items-center gap-2">
                 {canAdd && <button type="button" onClick={() => { setActiveWorkspacePanel(null); setAddCustomerKind('prospect'); setShowAddCustomerModal(true); }} className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-amber-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 sm:w-auto"><UserPlus className="h-4 w-4" />Add Prospect</button>}
                 {canEdit && <button type="button" onClick={() => { setActiveWorkspacePanel(null); setAddCustomerKind('verifiedProspect'); setShowAddCustomerModal(true); }} className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 sm:w-auto"><UserCheck className="h-4 w-4" />Request Verification</button>}
@@ -1958,7 +2204,17 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
       <section className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900" aria-label="Customer board controls">
         <div className="mr-auto min-w-[150px]"><p className="text-sm font-extrabold text-[#10244c] dark:text-white">Customer board</p><p className="text-[11px] text-slate-500 dark:text-slate-400">Assigned to {agentDisplayName}{initialSelectedDate ? ` · ${new Date(`${initialSelectedDate}T12:00:00`).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' })}` : ''}</p></div>
-        <div className="flex min-w-[200px] flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-950"><Search className="h-4 w-4 text-slate-400" /><input aria-label="Search customer, prospect, or agent" className="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-200" placeholder="Search customer, prospect, or agent" value={searchValue} onChange={(event) => setSearchValue(event.target.value)} /></div>
+        {([
+          ['customer', 'Customer name'],
+          ['phone', 'Phone number'],
+          ['contact', 'Contact person'],
+          ['agent', 'Sales agent'],
+        ] as const).map(([field, label]) => (
+          <label key={field} className="flex min-w-[160px] flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 dark:border-slate-800 dark:bg-slate-950 dark:focus-within:ring-blue-950">
+            {field === 'customer' ? <Search className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" /> : null}
+            <input aria-label={`Search by ${label.toLowerCase()}`} title={`Filter by ${label.toLowerCase()}`} className="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-200" placeholder={label} value={searchValue[field]} onChange={(event) => setSearchValue((current) => ({ ...current, [field]: event.target.value }))} />
+          </label>
+        ))}
         <button type="button" onClick={() => setActiveWorkspacePanel('filters')} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"><Filter className="h-4 w-4" />Filters{colorFilter !== 'all' || salesReportFilter !== 'all' ? <span className="h-2 w-2 rounded-full bg-blue-600" aria-label="Filters active" /> : null}</button>
         <button type="button" onClick={() => navigateWorkflow('sales-reports-sales-map')} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200 dark:hover:bg-blue-950/70"><MapPin className="h-4 w-4" aria-hidden="true" />Sales Map</button>
         <span className="shrink-0 text-sm font-bold text-slate-500 dark:text-slate-400">{masterRows.length} {masterRows.length === 1 ? 'customer' : 'customers'}</span>
@@ -2194,7 +2450,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 Full Details
               </button>
               <button
-                onClick={() => setDetailsPanelOpen(false)}
+                onClick={closeClientDetails}
                 className="p-1 rounded-full text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white"
                 aria-label="Close details panel"
               >
@@ -2542,7 +2798,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       {detailsPanelOpen && (
         <div
           className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
-          onClick={() => setDetailsPanelOpen(false)}
+          onClick={closeClientDetails}
         />
       )}
 
@@ -2775,7 +3031,30 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             </div>
           ) : fullDetailsError ? (
             <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
-              <div className="max-w-md text-rose-700" role="alert">{fullDetailsError}</div>
+              <div className="w-full max-w-xl rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div className="mb-3 max-w-md text-sm text-rose-700 dark:text-rose-300" role="alert">{fullDetailsError}</div>
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">{selectedClient.company}</h2>
+                <div aria-label="Customer contact details" className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/60">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Contact Person</p>
+                    <p className="break-words text-sm font-semibold text-slate-800 dark:text-slate-100">
+                      {selectedClient.contactPersons?.find((person) => person.enabled !== false)?.name
+                        || selectedClient.contactPersons?.[0]?.name
+                        || 'No Contact Person'}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/60">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Contact Number</p>
+                    <p className="break-words text-sm font-semibold text-slate-800 dark:text-slate-100">
+                      {Array.from(new Set([
+                        ...((selectedClient.contactPersons || []).flatMap((person) => [person.mobile, person.telephone])),
+                        selectedClient.mobile,
+                        selectedClient.phone,
+                      ].map((number) => String(number || '').trim()).filter(Boolean))).join(' / ') || 'No Contact Number'}
+                    </p>
+                  </div>
+                </div>
+              </div>
               <div className="flex gap-3">
                 <button
                   type="button"
@@ -2795,8 +3074,13 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             </div>
           ) : fullDetailsContact ? (
             <ContactDetails
+              key={selectedClient.id}
               contact={fullDetailsContact}
               currentUser={currentUser}
+              permissionPage={DAILY_CALL_PAGE_LABEL}
+              showAgentSalesReportInOverview={isSalesAgent}
+              viewOnly={selectedClientBlocked}
+              onSalesReportRead={handleSalesReportConversationRead}
               onClose={handleCloseFullDetails}
               onUpdate={(updated) => {
                 setFullDetailsContact(updated);

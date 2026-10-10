@@ -8,6 +8,7 @@ import CustomerHistoryTab from '../CustomerHistoryTab';
 import CustomerRequestsTab from '../CustomerRequestsTab';
 import { fetchAllCustomerRequests, fetchCustomerInquiries, fetchCustomerReturns, fetchCustomerRequests, reviewCustomerRequest, CustomerRequest } from '../../services/customerWorkflowLocalApiService';
 import type { UserProfile } from '../../types';
+import { WORKFLOW_NAVIGATE_EVENT } from '../../utils/workflowNavigate';
 vi.mock('../../services/customerWorkflowLocalApiService', () => ({ fetchAllCustomerRequests: vi.fn(), fetchCustomerInquiries: vi.fn(), fetchCustomerReturns: vi.fn(), fetchCustomerRequests: vi.fn(), reviewCustomerRequest: vi.fn() }));
 vi.mock('../../services/customerDatabaseLocalApiService', () => ({ fetchContacts: vi.fn() }));
 const pending: CustomerRequest = { id: 'r1', contact_id: 'c1', kind: 'customer_update', payload: { company: 'New company' }, status: 'pending', submitted_by_name: 'Agent', submitted_at: '2026-08-29', reviewed_at: null, review_note: '' };
@@ -52,6 +53,25 @@ describe('customer workflow screens', () => {
     expect(await screen.findByText('NEW')).toBeInTheDocument();
     resolveFirst([]);
     await waitFor(() => expect(screen.getByText('NEW')).toBeInTheDocument());
+  });
+  it('opens the exact sales inquiry when its displayed inquiry number is clicked', async () => {
+    const user = userEvent.setup();
+    const onNavigate = vi.fn();
+    window.addEventListener(WORKFLOW_NAVIGATE_EVENT, onNavigate);
+    vi.mocked(fetchCustomerInquiries).mockResolvedValueOnce([{
+      id: 'inquiry-ref-123', number: 'INQ26-0042', date: '2026-09-11', status: 'Pending', amount: 500, notes: '',
+    }]);
+
+    render(<CustomerHistoryTab contactId="c1" kind="inquiries" />);
+    const inquiryLink = await screen.findByRole('link', { name: 'Open sales inquiry INQ26-0042' });
+    expect(inquiryLink).toHaveAttribute('href', '#/sales-transaction-sales-inquiry?inquiryId=inquiry-ref-123');
+
+    await user.click(inquiryLink);
+
+    expect(onNavigate).toHaveBeenCalledWith(expect.objectContaining({
+      detail: { tab: 'sales-transaction-sales-inquiry', payload: { inquiryId: 'inquiry-ref-123' }, mode: 'push' },
+    }));
+    window.removeEventListener(WORKFLOW_NAVIGATE_EVENT, onNavigate);
   });
   it('lets an owner approve a persisted request and reloads the recorded result', async () => {
     const user = userEvent.setup();

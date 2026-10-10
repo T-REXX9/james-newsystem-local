@@ -1,33 +1,49 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useId, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, TrendingUp } from 'lucide-react';
+import { Area, AreaChart, CartesianGrid, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { buildYearlySales } from '../services/customerLedgerService';
 import type { CustomerLedgerDetailedRow, CustomerYearlySales as CustomerYearlySalesEntry } from '../services/customerLedgerService';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
-const compactPeso = new Intl.NumberFormat('en-PH', {
+const chartPeso = new Intl.NumberFormat('en-PH', {
   style: 'currency',
   currency: 'PHP',
-  maximumFractionDigits: 0,
+  maximumFractionDigits: 2,
+});
+const axisPeso = new Intl.NumberFormat('en-PH', {
+  style: 'currency',
+  currency: 'PHP',
+  notation: 'compact',
+  maximumFractionDigits: 1,
 });
 
-const COMPACT_YEARS_PER_COLUMN = 10;
+type ChartYear = { year: number; total: number; isCurrentYear: boolean };
+type SalesTrendTooltipProps = {
+  active?: boolean;
+  payload?: Array<{ payload?: ChartYear }>;
+};
 
-const chunkYears = <T,>(items: T[], size: number): T[][] => {
-  if (size <= 0 || items.length === 0) return items.length ? [items] : [];
-  const columns: T[][] = [];
-  for (let index = 0; index < items.length; index += size) {
-    columns.push(items.slice(index, index + size));
-  }
-  return columns;
+const SalesTrendTooltip: React.FC<SalesTrendTooltipProps> = ({ active, payload }) => {
+  const year = payload?.[0]?.payload;
+  if (!active || !year) return null;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-lg dark:border-slate-600 dark:bg-slate-800">
+      <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{year.year} {year.isCurrentYear ? 'year to date' : 'full year'}</p>
+      <p className="mt-0.5 text-sm font-bold tabular-nums text-brand-blue dark:text-blue-300">
+        {chartPeso.format(year.total)}
+      </p>
+    </div>
+  );
 };
 
 interface CustomerYearlySalesProps {
   rows?: CustomerLedgerDetailedRow[];
-  /** Pre-aggregated year totals (e.g. ledger report_type=yearly). */
+  /** Pre-aggregated qualifying sales grouped by year and month. */
   entries?: CustomerYearlySalesEntry[];
   error?: string;
   today?: Date;
-  /** Dense year/total chips for at-a-glance panels (no month accordion). */
+  /** Yearly trend chart for at-a-glance panels. */
   compact?: boolean;
 }
 
@@ -39,6 +55,7 @@ const CustomerYearlySales: React.FC<CustomerYearlySalesProps> = ({
   compact = false,
 }) => {
   const currentDate = useMemo(() => today || new Date(), [today]);
+  const chartGradientId = `customer-sales-trend-${useId().replace(/:/g, '')}`;
   const years = useMemo(() => {
     if (entries) {
       return [...entries].sort((left, right) =>
@@ -48,12 +65,24 @@ const CustomerYearlySales: React.FC<CustomerYearlySalesProps> = ({
     const built = buildYearlySales(rows, currentDate);
     return compact ? [...built].sort((left, right) => left.year - right.year) : built;
   }, [compact, currentDate, entries, rows]);
-  const yearColumns = useMemo(
-    () => (compact ? chunkYears(years, COMPACT_YEARS_PER_COLUMN) : []),
-    [compact, years]
-  );
   const currentYear = currentDate.getFullYear();
   const [expandedYear, setExpandedYear] = useState<number | null>(null);
+  const chartYears: ChartYear[] = years.length === 0 ? [] : Array.from(
+    { length: Math.max(years[years.length - 1].year, currentYear) - years[0].year + 1 },
+    (_, index) => {
+      const year = years[0].year + index;
+      return {
+        year,
+        total: years.find((entry) => entry.year === year)?.total ?? 0,
+        isCurrentYear: year === currentYear,
+      };
+    },
+  );
+  const headlineYear = chartYears.find((entry) => entry.isCurrentYear) ?? chartYears[chartYears.length - 1];
+  const yearTicks = chartYears.map((entry) => entry.year);
+  const chartAccessibleSummary = chartYears
+    .map(({ year, total, isCurrentYear }) => `${year}${isCurrentYear ? ' year to date' : ' full year'}: ${chartPeso.format(total)}`)
+    .join('; ');
 
   useEffect(() => {
     if (compact) {
@@ -67,53 +96,71 @@ const CustomerYearlySales: React.FC<CustomerYearlySalesProps> = ({
     return (
       <section
         aria-labelledby="customer-yearly-sales-heading"
-        className="rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm"
+        className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900"
         data-testid="customer-yearly-sales"
         data-compact="true"
         data-year-count={years.length}
-        data-years-per-column={COMPACT_YEARS_PER_COLUMN}
       >
-        <div className="mb-1.5 flex items-center justify-between gap-3">
-          <h3 id="customer-yearly-sales-heading" className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-800">
-            <TrendingUp className="h-3.5 w-3.5 text-brand-blue" /> Yearly Sales
-          </h3>
-          {years.length > 0 && (
-            <span className="text-[10px] font-semibold text-slate-400">
-              {years.length} year{years.length === 1 ? '' : 's'}
-            </span>
-          )}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white px-3.5 py-3 dark:border-slate-800 dark:from-slate-900 dark:to-slate-800/70">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="rounded-lg bg-blue-50 p-1.5 text-brand-blue dark:bg-blue-950/70 dark:text-blue-300"><TrendingUp className="h-4 w-4" /></span>
+            <div className="min-w-0">
+              <h3 id="customer-yearly-sales-heading" className="text-xs font-bold uppercase tracking-wide text-slate-800 dark:text-slate-100">Yearly Sales Trend</h3>
+              <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">Posted invoice and order slip sales</p>
+            </div>
+          </div>
+          {headlineYear ? <span className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">{headlineYear.year}</span> : null}
         </div>
 
         {error ? (
-          <p role="alert" className="rounded-lg bg-rose-50 px-2.5 py-2 text-xs text-rose-700">{error}</p>
+          <p role="alert" className="m-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">{error}</p>
         ) : years.length === 0 ? (
-          <p className="rounded-lg bg-slate-50 px-2.5 py-2 text-xs text-slate-500">No posted sales found in the customer ledger.</p>
+          <p className="m-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-400">No posted sales found in the customer ledger.</p>
         ) : (
-          <div className="flex flex-wrap items-start gap-x-4 gap-y-2" role="list">
-            {yearColumns.map((column, columnIndex) => (
-              <div
-                key={`year-column-${column[0]?.year ?? columnIndex}`}
-                role="group"
-                aria-label={`Years column ${columnIndex + 1}`}
-                data-testid="customer-yearly-sales-column"
-                className="flex min-w-[7.5rem] flex-1 flex-col gap-1"
-              >
-                {column.map((entry) => (
-                  <div
-                    key={entry.year}
-                    role="listitem"
-                    className="flex items-baseline justify-between gap-2 rounded border border-slate-200 bg-slate-50 px-2 py-1"
-                    aria-label={`${entry.year} sales ${compactPeso.format(entry.total)}`}
-                  >
-                    <span className="text-[11px] font-semibold text-slate-600">
-                      {entry.year}
-                      {entry.year === currentYear ? <span className="ml-1 text-[9px] font-bold uppercase text-blue-700">YTD</span> : null}
-                    </span>
-                    <span className="font-mono text-[11px] font-bold text-slate-800">{compactPeso.format(entry.total)}</span>
-                  </div>
-                ))}
+          <div className="px-3.5 pb-2.5 pt-3">
+            <div className="mb-1 flex items-end justify-between gap-3" aria-live="polite">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{headlineYear?.isCurrentYear ? 'Year to date' : 'Latest full year'}</p>
+                <p className="mt-0.5 text-lg font-bold leading-tight tabular-nums text-slate-900 dark:text-white">{chartPeso.format(headlineYear?.total ?? 0)}</p>
               </div>
-            ))}
+              {headlineYear?.isCurrentYear ? <span className="mb-0.5 rounded-full bg-blue-50 px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-brand-blue dark:bg-blue-950/70 dark:text-blue-300">YTD</span> : null}
+            </div>
+            {chartYears.length > 0 ? (
+              <div
+                className="h-40 w-full overflow-x-auto text-brand-blue focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue dark:text-blue-400 sm:h-44"
+                role="group"
+                aria-label={`Annual sales trend from ${chartYears[0].year} to ${chartYears[chartYears.length - 1].year}`}
+                aria-describedby={`${chartGradientId}-scroll-hint`}
+                tabIndex={0}
+                data-testid="customer-yearly-sales-chart"
+                data-year-count={chartYears.length}
+              >
+                <span className="sr-only">{chartAccessibleSummary}</span>
+                <div className="h-full" style={{ minWidth: `${Math.max(240, chartYears.length * 64)}px` }}>
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                    <AreaChart data={chartYears} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                    <defs>
+                      <linearGradient id={chartGradientId} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#0F5298" stopOpacity={0.18} />
+                        <stop offset="100%" stopColor="#0F5298" stopOpacity={0.01} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid vertical={false} stroke="#94a3b8" strokeDasharray="3 4" opacity={0.22} />
+                    <XAxis dataKey="year" type="category" ticks={yearTicks} tick={{ fill: 'currentColor', fontSize: 10 }} axisLine={false} tickLine={false} interval={0} tickMargin={8} />
+                    <YAxis width={52} tick={{ fill: 'currentColor', fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(value: number) => axisPeso.format(value)} domain={[0, (dataMax: number) => Math.max(dataMax, 1)]} />
+                    <Tooltip
+                      labelFormatter={(_, payload) => payload?.[0]?.payload?.year ?? ''}
+                      content={(props) => <SalesTrendTooltip active={props.active} payload={props.payload} />}
+                    />
+                    <Area type="monotone" dataKey="total" stroke="none" fill={`url(#${chartGradientId})`} isAnimationActive={false} />
+                    <Line type="monotone" dataKey="total" name="Sales" stroke="currentColor" strokeWidth={2.5} dot={{ r: 3, fill: '#ffffff', stroke: 'currentColor', strokeWidth: 2 }} activeDot={{ r: 5, fill: 'currentColor', stroke: '#ffffff', strokeWidth: 2 }} isAnimationActive={false} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            ) : null}
+            <p id={`${chartGradientId}-scroll-hint`} className="sr-only">Use the horizontal scroll area to view every year.</p>
+            <p className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">Current year is shown year to date.</p>
           </div>
         )}
       </section>

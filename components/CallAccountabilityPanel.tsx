@@ -14,6 +14,9 @@ interface CallAccountabilityPanelProps {
   compact?: boolean;
   agentId?: string | number;
   limit?: number;
+  date?: string;
+  boardContactIds?: string[];
+  reportedContactIds?: string[];
 }
 
 const formatAgentName = (device: CallDeviceHealth) => {
@@ -42,6 +45,25 @@ const formatDateTime = (value?: string | null) => {
   return Number.isNaN(parsed.getTime()) ? value : formatDisplayDateTime(parsed);
 };
 
+const localDateKey = (value: string) => {
+  const timestamp = value.trim();
+  const hasTimeZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(timestamp);
+  const parsed = new Date(`${timestamp.replace(' ', 'T')}${hasTimeZone ? '' : 'Z'}`);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
+};
+
+const utcDateRangeForLocalDay = (date: string) => {
+  const start = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(start.getTime())) return { fromDate: date, toDate: date };
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return {
+    fromDate: start.toISOString().slice(0, 10),
+    toDate: new Date(end.getTime() - 1).toISOString().slice(0, 10),
+  };
+};
+
 const statusLabel = (status?: string) => {
   switch (status) {
     case 'background_active': return 'Background active';
@@ -58,6 +80,9 @@ const CallAccountabilityPanel: React.FC<CallAccountabilityPanelProps> = ({
   compact = false,
   agentId,
   limit = 8,
+  date,
+  boardContactIds = [],
+  reportedContactIds = [],
 }) => {
   const [devices, setDevices] = useState<CallDeviceHealth[]>([]);
   const [logs, setLogs] = useState<HardwareCallLog[]>([]);
@@ -68,12 +93,13 @@ const CallAccountabilityPanel: React.FC<CallAccountabilityPanelProps> = ({
   const load = useCallback(async (showSpinner = true) => {
     if (showSpinner) setRefreshing(true);
     try {
+      const dateRange = date ? utcDateRangeForLocalDay(date) : {};
       const [nextDevices, nextLogs] = await Promise.all([
         fetchCallDeviceHealth(),
-        fetchHardwareCallLogs({ agentId }),
+        fetchHardwareCallLogs({ agentId, ...dateRange }),
       ]);
       setDevices(nextDevices);
-      setLogs(nextLogs.slice(0, limit));
+      setLogs(date ? nextLogs.filter((log) => localDateKey(log.lcall_timestamp) === date) : nextLogs);
     } catch (error) {
       toast.error('Unable to load calling accountability', {
         description: error instanceof Error ? error.message : 'Check the API connection and staff session.',
@@ -82,7 +108,7 @@ const CallAccountabilityPanel: React.FC<CallAccountabilityPanelProps> = ({
       setLoading(false);
       setRefreshing(false);
     }
-  }, [agentId, limit]);
+  }, [agentId, date, limit]);
 
   useEffect(() => {
     void load(false);
@@ -94,6 +120,13 @@ const CallAccountabilityPanel: React.FC<CallAccountabilityPanelProps> = ({
     () => devices.filter((device) => ['background_active', 'app_open'].includes(device.effective_status || device.lstatus || '')).length,
     [devices],
   );
+  const calledContactIds = new Set(logs
+    .filter((log) => log.ldirection === 'outbound' && log.customer_session_id)
+    .map((log) => String(log.customer_session_id)));
+  const listedIds = new Set(boardContactIds);
+  const calledCount = [...calledContactIds].filter((id) => listedIds.has(id)).length;
+  const reportedCount = new Set(reportedContactIds.filter((id) => listedIds.has(id))).size;
+  const visibleLogs = logs.slice(0, limit);
 
   return (
     <section className={`rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 ${compact ? 'p-3' : 'p-5'}`}>
@@ -129,6 +162,24 @@ const CallAccountabilityPanel: React.FC<CallAccountabilityPanelProps> = ({
         <div className="flex items-center gap-2 py-4 text-sm text-slate-500"><RefreshCw className="h-4 w-4 animate-spin" /> Loading calling data…</div>
       ) : (
         <>
+          {date && (
+            <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3" aria-label="Daily prospect activity summary">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/50">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Customers on list</p>
+                <p className="text-xl font-bold text-slate-900 dark:text-white">{boardContactIds.length}</p>
+              </div>
+              <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 dark:border-blue-900 dark:bg-blue-950/30">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">Called today</p>
+                <p className="text-xl font-bold text-blue-900 dark:text-blue-100">{calledCount}</p>
+                <p className="text-[10px] text-blue-700/80 dark:text-blue-300/80">Distinct listed customers with a matched outgoing call</p>
+              </div>
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 dark:border-emerald-900 dark:bg-emerald-950/30">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Business details collected</p>
+                <p className="text-xl font-bold text-emerald-900 dark:text-emerald-100">{reportedCount}</p>
+                <p className="text-[10px] text-emerald-700/80 dark:text-emerald-300/80">Agent Sales Reports submitted today</p>
+              </div>
+            </div>
+          )}
           <div className={`${compact ? 'mb-3 flex flex-wrap items-center gap-3' : 'mb-4 grid gap-3 sm:grid-cols-2'}`}>
             <div className={`rounded-lg bg-blue-50 dark:bg-blue-950/30 ${compact ? 'flex items-center gap-2 px-3 py-1.5' : 'p-3'}`}>
               <div className={`text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300`}>Registered phones</div>
@@ -176,9 +227,9 @@ const CallAccountabilityPanel: React.FC<CallAccountabilityPanelProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {logs.length === 0 ? (
+                {visibleLogs.length === 0 ? (
                   <tr><td colSpan={5} className={`px-2 ${compact ? 'py-3' : 'py-5'} text-center text-slate-500`}>No hardware call logs available.</td></tr>
-                ) : logs.map((log) => (
+                ) : visibleLogs.map((log) => (
                   <tr key={String(log.lid)} className="border-b border-slate-100 dark:border-slate-800/70">
                     <td className={`px-2 ${compact ? 'py-1.5' : 'py-2'} text-slate-600 dark:text-slate-300`}>{formatDateTime(log.lcall_timestamp)}</td>
                     <td className={`px-2 ${compact ? 'py-1.5' : 'py-2'} font-medium text-slate-800 dark:text-slate-100`}>{`${log.agent_first_name || ''} ${log.agent_last_name || ''}`.trim() || `Staff #${log.lagent_id}`}</td>

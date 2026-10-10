@@ -56,8 +56,15 @@ const formatDate = (value?: string | null) => {
     return formatDateTime(date);
 };
 
-export default function CustomerRequestsTab({ contactId, contact: contactProp, currentUser }: { contactId: string; contact?: Contact | null; currentUser: UserProfile | null }) {
+export default function CustomerRequestsTab({ contactId, contact: contactProp, currentUser, permissionPage = 'Customer Data' }: { contactId: string; contact?: Contact | null; currentUser: UserProfile | null; permissionPage?: string }) {
     const contact = contactProp ?? null;
+    const owner = isMasterUserAccount(currentUser);
+    const canAdd = hasActionPermission(currentUser, 'can_add', 'Customer Data');
+    const canEdit = hasActionPermission(currentUser, 'can_edit', permissionPage);
+    const availableCategories = useMemo(
+        () => (Object.keys(CATEGORY_LABELS) as RequestCategory[]).filter(category => category === 'discount' ? canAdd : canEdit),
+        [canAdd, canEdit]
+    );
     const [rows, setRows] = useState<CustomerRequest[]>([]);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(true);
@@ -66,19 +73,18 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
     const [notes, setNotes] = useState<Record<string, string>>({});
     const [refresh, setRefresh] = useState(0);
     const [showCreate, setShowCreate] = useState(false);
-    const [createCategory, setCreateCategory] = useState<RequestCategory>('contact_details');
+    const [createCategory, setCreateCategory] = useState<RequestCategory>(canEdit ? 'contact_details' : 'discount');
     const [createField, setCreateField] = useState<keyof Contact>('company');
     const [createValue, setCreateValue] = useState('');
     const [createNotes, setCreateNotes] = useState('');
     const [discountPercent, setDiscountPercent] = useState('');
     const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
     const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
-    const owner = isMasterUserAccount(currentUser);
-    const canAdd = hasActionPermission(currentUser, 'can_add', 'Customer Data');
     // Customer standing and detail requests are approved by the Master User,
     // never by a staff member whose ambient session happens to have approval
     // permissions for another page.
     const canApprove = isMasterUserAccount(currentUser);
+    const canSubmitCurrentRequest = createCategory === 'discount' ? canAdd : canEdit;
 
     useEffect(() => {
         let active = true;
@@ -91,6 +97,12 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
             .finally(() => { if (active) setLoading(false); });
         return () => { active = false; };
     }, [contactId, refresh]);
+
+    useEffect(() => {
+        if (!availableCategories.includes(createCategory) && availableCategories.length > 0) {
+            setCreateCategory(availableCategories[0]);
+        }
+    }, [availableCategories, createCategory]);
 
     useEffect(() => {
         const fields = CATEGORY_FIELDS[createCategory];
@@ -120,7 +132,7 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
     };
 
     const submit = async () => {
-        if (!canAdd || !contact) return;
+        if (!canSubmitCurrentRequest || !contact) return;
         setBusy('create');
         setError('');
         try {
@@ -210,7 +222,7 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
                         <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
                         Refresh
                     </button>
-                    {!owner && canAdd && contact && !showCreate && (
+                    {!owner && availableCategories.length > 0 && contact && !showCreate && (
                         <button
                             type="button"
                             onClick={() => setShowCreate(true)}
@@ -279,7 +291,7 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
                                 Request Type
                             </label>
                             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                                {(Object.keys(CATEGORY_LABELS) as RequestCategory[]).map(c => {
+                                {availableCategories.map(c => {
                                     const Icon = CATEGORY_ICONS[c];
                                     const active = createCategory === c;
                                     return (
@@ -402,7 +414,7 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
                             </button>
                             <button
                                 type="button"
-                                disabled={busy === 'create' || !canAdd}
+                                disabled={busy === 'create' || !canSubmitCurrentRequest}
                                 onClick={() => void submit()}
                                 className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:opacity-50"
                             >

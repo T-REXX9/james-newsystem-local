@@ -20,8 +20,9 @@ import CustomerSalesReportChat from './CustomerSalesReportChat';
 import CustomerStarIndicator from './CustomerStarIndicator';
 import CustomerYearlySales from './CustomerYearlySales';
 import { Suspense } from 'react';
-import { DailyCallCustomerRow, UserProfile, VipTierConfig } from '../types';
+import { Contact, DailyCallCustomerRow, UserProfile, VipTierConfig } from '../types';
 import { formatLegacyPriceGroupLabel } from '../constants/pricingGroups';
+import { DAILY_CALL_PAGE_LABEL } from '../constants';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import { getVipStandingSummary } from '../utils/vipStanding';
 import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
@@ -127,6 +128,7 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
   const [recordImage, setRecordImage] = useState('');
   const [recordImagePosition, setRecordImagePosition] = useState('50,50');
   const [recordImageFailed, setRecordImageFailed] = useState(false);
+  const [customerProfileState, setCustomerProfileState] = useState<{ customerId: string; contact: Contact | null } | null>(null);
 
   useEffect(() => {
     setActiveTab(normalizeTabId(initialTab));
@@ -137,14 +139,18 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
     setRecordImage('');
     setRecordImagePosition('50,50');
     setRecordImageFailed(false);
+    setCustomerProfileState(null);
     void fetchContactForDailyCall(customer.id)
       .then((contact) => {
         if (disposed) return;
+        setCustomerProfileState({ customerId: customer.id, contact });
         setRecordImage(contact.recordImage || '');
         setRecordImagePosition(contact.recordImagePosition || '50,50');
       })
       .catch(() => {
-        if (!disposed) setRecordImage('');
+        if (disposed) return;
+        setCustomerProfileState({ customerId: customer.id, contact: null });
+        setRecordImage('');
       });
     return () => { disposed = true; };
   }, [customer.id]);
@@ -209,6 +215,22 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
     [customer.lastMonthOrder, vipConfig]
   );
   const activities = useMemo(() => customer.dailyActivity || [], [customer.dailyActivity]);
+  const currentCustomerProfileState = customerProfileState?.customerId === customer.id ? customerProfileState : null;
+  const customerProfile = currentCustomerProfileState?.contact || null;
+  const contactPeople = (customerProfile?.contactPersons || []).filter((person) =>
+    [person.name, person.position, person.mobile, person.telephone, person.email].some((value) => String(value || '').trim())
+  );
+  const contactPeopleNumbers = new Set(contactPeople.flatMap((person) => [person.mobile, person.telephone])
+    .map((value) => String(value || '').trim())
+    .filter(Boolean));
+  const customerNumbers = [
+    { label: 'Mobile', value: String(customerProfile?.mobile || '').trim() },
+    { label: 'Telephone', value: String(customerProfile?.phone || '').trim() },
+    { label: 'Phone', value: String(customer.contactNumber || '').trim() },
+  ].filter(({ value }, index, numbers) =>
+    value && !contactPeopleNumbers.has(value) && numbers.findIndex((candidate) => candidate.value === value) === index
+  );
+  const summaryContactName = String(customer.contactPersonName || '').trim();
   const location = [customer.city, customer.province].filter((value) => value && value !== '—').join(', ') || customer.courier || '—';
   const isActive = String(customer.status).toLowerCase() === 'active';
   const totalActivity = activities.reduce((sum, activity) => sum + activity.activity_count, 0);
@@ -278,7 +300,12 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
     }
     if (activeTab === 'item-issues') return <ItemIssueReportTab contactId={customer.id} />;
     if (activeTab === 'incident') return <IncidentReportTab contactId={customer.id} currentUser={currentUser} />;
-    if (activeTab === 'requests') return <CustomerRequestsTab contactId={customer.id} currentUser={currentUser} />;
+    if (activeTab === 'requests') return <CustomerRequestsTab
+      contactId={customer.id}
+      contact={customerProfileState?.customerId === customer.id ? customerProfileState.contact : null}
+      currentUser={currentUser}
+      permissionPage={DAILY_CALL_PAGE_LABEL}
+    />;
     if (activeTab === 'product-images') {
       return (
         <Suspense fallback={<p className="p-5 text-sm text-slate-600">Loading product image export…</p>}>
@@ -302,7 +329,7 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
       );
     }
     return null;
-  }, [activeTab, activities, currentUser, customer, overview, readOnly]);
+  }, [activeTab, activities, currentUser, customer, customerProfileState, overview, readOnly]);
 
   return (
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-sm">
@@ -331,8 +358,26 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
               <span className={`rounded px-2.5 py-1 text-[10px] font-bold ${isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>{customer.status}</span>
               {vipStanding.badgeVisible && <span className="inline-flex items-center gap-1.5 rounded bg-amber-400 px-2.5 py-1 text-[10px] font-bold text-amber-950"><img src={vipBadgeIconUrl} alt={`${vipStanding.tierLabel} badge`} className="h-3.5 w-3.5" /> {vipStanding.tierLabel.toUpperCase()}</span>}
             </div>
+            <div aria-label="Customer contact details" className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
+              {contactPeople.length > 0 ? contactPeople.map((person, index) => (
+                <span key={person.id || `${person.name}-${index}`} className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="font-semibold text-slate-800">{person.name || summaryContactName || 'Contact person'}</span>
+                  {person.position && <span className="text-slate-500">{person.position}</span>}
+                  {person.mobile && <span>Mobile: <span className="font-semibold text-slate-800">{person.mobile}</span></span>}
+                  {person.telephone && <span>Telephone: <span className="font-semibold text-slate-800">{person.telephone}</span></span>}
+                  {person.email && <span>Email: <span className="font-semibold text-slate-800">{person.email}</span></span>}
+                </span>
+              )) : summaryContactName ? <span className="font-semibold text-slate-800">{summaryContactName}</span> : null}
+              {customerNumbers.map(({ label, value }) => <span key={value}>{label}: <span className="font-semibold text-slate-800">{value}</span></span>)}
+              {customerProfile?.email && !contactPeople.some((person) => person.email === customerProfile.email) && (
+                <span>Email: <span className="font-semibold text-slate-800">{customerProfile.email}</span></span>
+              )}
+              {contactPeople.length === 0 && !summaryContactName && customerNumbers.length === 0 && (
+                <span>{currentCustomerProfileState ? 'No contact details on file' : 'Loading contact details…'}</span>
+              )}
+            </div>
             <div className="mt-5 grid grid-cols-3 divide-x divide-slate-200 text-xs">
-              <dl className="space-y-4 pr-4"><div><dt className="text-slate-500">Contact</dt>{customer.contactPersonName && <dd className="mt-1 font-bold">{customer.contactPersonName}</dd>}<dd className={`${customer.contactPersonName ? 'mt-0.5' : 'mt-1'} font-bold`}>{customer.contactNumber || '—'}</dd></div><div><dt className="text-slate-500">Source</dt><dd className="mt-1 font-bold">{customer.source || '—'}</dd></div></dl>
+              <dl className="space-y-4 pr-4"><div><dt className="text-slate-500">Source</dt><dd className="mt-1 font-bold">{customer.source || '—'}</dd></div></dl>
               <dl className="space-y-4 px-4"><div><dt className="text-slate-500">Location</dt><dd className="mt-1 font-bold">{location}</dd></div><div><dt className="text-slate-500">Assigned Agent (Human)</dt><dd className="mt-1 font-bold">{customer.assignedTo || 'Unassigned'}</dd></div></dl>
               <dl className="space-y-4 pl-4"><div><dt className="text-slate-500">Last Purchase</dt><dd className="mt-1 font-bold">{formatDate(customer.lastPurchaseDate)}</dd></div><div><dt className="text-slate-500">Customer Since</dt><dd className="mt-1 font-bold">{formatDate(customer.clientSince)}</dd></div></dl>
             </div>

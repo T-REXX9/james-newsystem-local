@@ -4,6 +4,7 @@ import { Contact, Comment, CustomerStatus, UserProfile } from '../types';
 import CompanyName from './CompanyName';
 import CustomerMetricsView from './CustomerMetricsView';
 import SalesReportTab from './SalesReportTab';
+import CustomerSalesReportChat from './CustomerSalesReportChat';
 import IncidentReportTab from './IncidentReportTab';
 import SalesReturnTab from './SalesReturnTab';
 import PurchaseHistoryTab from './PurchaseHistoryTab';
@@ -26,11 +27,21 @@ import { normalizePriceGroup } from '../constants/pricingGroups';
 interface ContactDetailsProps {
   contact: Contact;
   currentUser?: UserProfile | null;
+  permissionPage?: string;
+  showAgentSalesReportInOverview?: boolean;
+  viewOnly?: boolean;
+  onSalesReportRead?: (contactId: string) => void;
   onClose: () => void;
   onUpdate: (updatedContact: Contact) => void;
 }
 
-const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, onClose, onUpdate }) => {
+const splitContactNumbers = (values: unknown[]): string[] => Array.from(new Set(
+  values.flatMap((value) => String(value || '').split(/[\/,;|]+/))
+    .map((number) => number.trim())
+    .filter(Boolean)
+));
+
+const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, permissionPage = 'Customer Data', showAgentSalesReportInOverview = false, viewOnly = false, onSalesReportRead, onClose, onUpdate }) => {
   const [activeTab, setActiveTab] = useState('Overview');
   const [recordImageFailed, setRecordImageFailed] = useState(false);
   const [newComment, setNewComment] = useState('');
@@ -151,6 +162,23 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
     .sort((a, b) => parseInt(a.name) - parseInt(b.name)) 
     : [];
   const normalizedPriceGroup = contact.priceGroup ? normalizePriceGroup(contact.priceGroup) : '';
+  const primaryContactPerson = contact.contactPersons?.find((person) => person.enabled !== false) || contact.contactPersons?.[0];
+  const contactHeaderName = primaryContactPerson?.name && primaryContactPerson.name !== 'N/A'
+    ? primaryContactPerson.name
+    : 'No Contact Person';
+  const contactHeaderNumbers = splitContactNumbers([
+    primaryContactPerson?.mobile,
+    primaryContactPerson?.telephone,
+    contact.mobile,
+    contact.phone,
+  ]);
+  const contactPersonDetails = (contact.contactPersons || []).map((person) => {
+    const mobileNumbers = splitContactNumbers([person.mobile]);
+    const mobileSet = new Set(mobileNumbers);
+    const telephoneNumbers = splitContactNumbers([person.telephone]).filter((number) => !mobileSet.has(number));
+    return { person, mobileNumbers, telephoneNumbers };
+  });
+  const contactLocation = [contact.province, contact.city].map((value) => String(value || '').trim()).filter(Boolean).join(', ');
 
   useEffect(() => {
     setRecordImageFailed(false);
@@ -168,9 +196,9 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
   ];
 
   return (
-    <div ref={scrollContainerRef} className="flex flex-col h-full bg-slate-50 dark:bg-slate-950 overflow-y-auto pb-20 animate-fadeIn relative z-30">
+    <div ref={scrollContainerRef} className="h-full bg-slate-50 dark:bg-slate-950 overflow-y-auto pb-20 animate-fadeIn relative z-30">
       {/* Top Navigation / Header Back */}
-      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-4 flex justify-between items-center sticky top-0 z-10 shadow-sm">
+      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-4 flex justify-between items-center shadow-sm">
           <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-brand-blue dark:hover:text-brand-blue cursor-pointer transition-colors" onClick={onClose}>
               <ChevronRight className="w-5 h-5 rotate-180" />
               <span className="font-medium text-sm">Back to Customer Database</span>
@@ -212,8 +240,10 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
                     onError={() => setRecordImageFailed(true)}
                   />
               ) : (
-                  <div className="flex h-full items-center justify-center text-6xl font-bold tracking-widest text-white/80" aria-hidden="true">
-                    {(contact.company || contact.name || '??').substring(0, 2).toUpperCase()}
+                  <div className="flex h-full items-center justify-center px-5 text-center sm:px-8" aria-label={`Company photo placeholder for ${contact.company || contact.name || 'Customer'}`}>
+                    <span className="max-w-5xl text-2xl font-bold leading-tight text-white/90 drop-shadow-md [overflow-wrap:anywhere] sm:text-4xl md:text-5xl">
+                      {contact.company || contact.name || 'Customer'}
+                    </span>
                   </div>
               )}
               <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-950/45 to-transparent" aria-hidden="true" />
@@ -237,9 +267,38 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
                           </span>
                            {contact.isHidden && <span className="bg-slate-800 text-white px-2 py-0.5 rounded text-[10px]">HIDDEN</span>}
                       </div>
-                      <p className="text-slate-500 dark:text-slate-400 font-medium mb-1">
-                          {contact.province}, {contact.city}
-                      </p>
+                      <div aria-label="Customer contact details" className="mt-3 grid w-full max-w-5xl grid-cols-1 gap-2 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+                          <div className="flex min-w-0 items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/60">
+                              <User className="mt-0.5 h-4 w-4 shrink-0 text-brand-blue" />
+                              <div className="min-w-0">
+                                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Contact Person</p>
+                                  <p className="break-words text-sm font-semibold text-slate-800 dark:text-slate-100">{contactHeaderName}</p>
+                              </div>
+                          </div>
+                          <div className="flex min-w-0 items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/60">
+                              <Phone className="mt-0.5 h-4 w-4 shrink-0 text-brand-blue" />
+                              <div className="min-w-0">
+                                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Contact Number</p>
+                                  {contactHeaderNumbers.length > 0 ? (
+                                      <ul className="mt-1 flex flex-wrap items-start gap-1.5" aria-label="Contact numbers">
+                                          {contactHeaderNumbers.map((number, index) => (
+                                              <li key={`${number}-${index}`} className="inline-flex max-w-full items-center overflow-x-auto whitespace-nowrap rounded-md bg-white px-2 py-1 font-mono text-xs font-semibold tabular-nums text-slate-800 dark:bg-slate-900/70 dark:text-slate-100">
+                                                  <span className="mr-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400">{index + 1}.</span>
+                                                  {number}
+                                              </li>
+                                          ))}
+                                      </ul>
+                                  ) : (
+                                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">No Contact Number</p>
+                                  )}
+                              </div>
+                          </div>
+                      </div>
+                      {contactLocation && (
+                          <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                              <MapPin className="h-3.5 w-3.5" />{contactLocation}
+                          </p>
+                      )}
                       
                       <div className="flex flex-wrap items-center gap-4 text-sm text-slate-400 dark:text-slate-500 mt-3">
                           <span className="flex items-center gap-1.5" title="Assigned Agent">
@@ -276,7 +335,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
       </div>
 
       {/* Tab Navigation */}
-      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-8 sticky top-[73px] z-10 overflow-x-auto">
+      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-8 overflow-x-auto">
         <div className="flex gap-1">
           {tabs.map(tab => {
             const Icon = tab.icon;
@@ -299,7 +358,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
       </div>
 
       {/* Tab Content */}
-      <div className="flex-1 overflow-y-auto">
+      <div>
         {/* Overview Tab */}
         {activeTab === 'Overview' && (
           <div className="p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -366,18 +425,18 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
                           <h3 className="font-bold text-slate-800 dark:text-white">Contact Persons</h3>
                       </div>
                       <div className="space-y-4">
-                          {contact.contactPersons && contact.contactPersons.length > 0 ? (
-                              contact.contactPersons.map((person, idx) => (
+                          {contactPersonDetails.length > 0 ? (
+                              contactPersonDetails.map(({ person, mobileNumbers, telephoneNumbers }, idx) => (
                                  <div key={idx} className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3 border border-slate-100 dark:border-slate-700">
-                                     <div className="flex items-center gap-2 mb-1">
-                                         <span className="font-bold text-slate-700 dark:text-slate-200 text-sm">{person.name}</span>
-                                         <span className="text-[10px] bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-slate-600 dark:text-slate-300">{person.position}</span>
+                                     <div className="flex flex-wrap items-center gap-2 mb-1">
+                                         <span className="min-w-0 break-words font-bold text-slate-700 dark:text-slate-200 text-sm">{person.name}</span>
+                                         <span className="break-words text-[10px] bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-slate-600 dark:text-slate-300">{person.position}</span>
                                      </div>
-                                     <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
-                                         {person.mobile && <div className="flex items-center gap-2"><Smartphone className="w-3 h-3" /> {person.mobile}</div>}
-                                         {person.telephone && <div className="flex items-center gap-2"><Phone className="w-3 h-3" /> {person.telephone}</div>}
-                                         {person.email && <div className="flex items-center gap-2"><Mail className="w-3 h-3" /> {person.email}</div>}
-                                         {person.birthday && <div className="flex items-center gap-2"><Cake className="w-3 h-3" /> {person.birthday}</div>}
+                                      <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                                         {mobileNumbers.map((number, numberIndex) => <span key={`mobile-${number}`} className="inline-flex max-w-full items-center gap-1.5 overflow-x-auto whitespace-nowrap rounded-md bg-white px-2 py-1 font-mono tabular-nums dark:bg-slate-900/70"><Smartphone className="w-3 h-3 shrink-0" /><span className="shrink-0 font-sans font-medium">M{numberIndex + 1}:</span><span>{number}</span></span>)}
+                                         {telephoneNumbers.map((number, numberIndex) => <span key={`telephone-${number}`} className="inline-flex max-w-full items-center gap-1.5 overflow-x-auto whitespace-nowrap rounded-md bg-white px-2 py-1 font-mono tabular-nums dark:bg-slate-900/70"><Phone className="w-3 h-3 shrink-0" /><span className="shrink-0 font-sans font-medium">T{numberIndex + 1}:</span><span>{number}</span></span>)}
+                                         {person.email && <div className="flex min-w-0 items-center gap-2 [overflow-wrap:anywhere]"><Mail className="w-3 h-3 shrink-0" /> {person.email}</div>}
+                                         {person.birthday && <div className="flex items-center gap-2 whitespace-nowrap"><Cake className="w-3 h-3 shrink-0" /> {person.birthday}</div>}
                                      </div>
                                  </div>
                               ))
@@ -419,8 +478,17 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
                     </div>
                   )}
                   
-                   {/* Comments Section */}
-                  <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col h-[400px]">
+                  {showAgentSalesReportInOverview ? (
+                    <CustomerSalesReportChat
+                      contactId={contact.id}
+                      currentUser={currentUser || null}
+                      viewOnly={viewOnly}
+                      onConversationRead={onSalesReportRead}
+                      className="min-h-[400px] w-full"
+                    />
+                  ) : (
+                  /* Comments Section */
+                  <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col min-h-[400px]">
                       <div className="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 rounded-t-xl">
                           <div className="flex items-center gap-2 text-slate-800 dark:text-white font-bold">
                               <MessageSquare className="w-5 h-5 text-brand-blue" />
@@ -428,7 +496,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
                           </div>
                       </div>
                       
-                      <div className="flex-1 overflow-y-auto p-4 space-y-5">
+                      <div className="flex-1 p-4 space-y-5">
                           {contact.comment && (
                               <div className="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-100 dark:border-yellow-900/20 p-3 rounded-lg text-sm text-yellow-800 dark:text-yellow-200 mb-4">
                                   <span className="font-bold">Important Note:</span> {contact.comment}
@@ -436,7 +504,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
                           )}
 
                           {comments.length === 0 ? (
-                              <div className="flex flex-col items-center justify-center h-full text-slate-400 text-sm">
+                              <div className="flex min-h-48 flex-col items-center justify-center text-slate-400 text-sm">
                                   <MessageSquare className="w-10 h-10 mb-2 opacity-20" />
                                   <p>No comments yet.</p>
                               </div>
@@ -495,6 +563,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
                           </div>
                       </div>
                   </div>
+                  )}
               </div>
           </div>
         )}
@@ -508,7 +577,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
         {/* Purchase History Tab */}
         {activeTab === 'PurchaseHistory' && <PurchaseHistoryTab contactId={contact.id} />}
 
-        {activeTab === 'Requests' && <CustomerRequestsTab contactId={contact.id} contact={contact} currentUser={currentUser || null} />}
+        {activeTab === 'Requests' && <CustomerRequestsTab contactId={contact.id} contact={contact} currentUser={currentUser || null} permissionPage={permissionPage} />}
 
         {/* Inquiry History Tab */}
         {activeTab === 'InquiryHistory' && <InquiryHistoryTab contactId={contact.id} />}

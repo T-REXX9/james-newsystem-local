@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   RefreshCw,
   ChevronLeft,
@@ -129,6 +129,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
   const userId = String(getLocalAuthSession()?.userProfile?.id || '').trim();
   const salesOrderExportRef = React.useRef<HTMLElement | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null);
+  const previousOrderRouteRef = useRef(initialOrderId || '');
   const [salesDateDraft, setSalesDateDraft] = useState(localTodayYmd());
   const [savingSalesDate, setSavingSalesDate] = useState(false);
   const [sendByDraft, setSendByDraft] = useState('');
@@ -383,8 +384,14 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
 
   const selectOrderAndSync = useCallback((order: SalesOrder) => {
     void selectOrder(order);
-    navigateWorkflow(SALES_ORDER_TAB_ID, { orderId: order.id }, 'replace');
+    navigateWorkflow(SALES_ORDER_TAB_ID, { orderId: order.id });
   }, [selectOrder]);
+
+  useEffect(() => {
+    const previousRouteId = previousOrderRouteRef.current;
+    previousOrderRouteRef.current = initialOrderId || '';
+    if (previousRouteId && !initialOrderId) setSelectedOrder(null);
+  }, [initialOrderId]);
 
   useEffect(() => {
     if (!initialOrderId) return;
@@ -1066,7 +1073,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                       <td className="border border-[#d7d7d7] px-2 py-[9px]">{legacyListDate(order.sales_date)}</td>
                       <td className="truncate border border-[#d7d7d7] px-2 py-[9px]" title={customer?.company || ''}>{customer?.company || ''}</td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{order.inquiry_id ? <ModuleRecordAction tab="sales-transaction-sales-inquiry" payload={{ inquiryId: order.inquiry_id }} className="underline" newWindowLabel="Open sales inquiry in new window">{order.inquiry_no || ''}</ModuleRecordAction> : (order.inquiry_no || '')}</td>
-                      <td className="border border-[#d7d7d7] px-2 py-[9px] underline"><ModuleRecordLink tab="sales-transaction-sales-order" payload={{ orderId: order.id }} mode="replace" onOpen={() => void selectOrder(order)}>{order.order_no || ''}</ModuleRecordLink></td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px] underline"><ModuleRecordLink tab="sales-transaction-sales-order" payload={{ orderId: order.id }} mode="push" onOpen={() => void selectOrder(order)}>{order.order_no || ''}</ModuleRecordLink></td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{order.invoice_no || order.order_slip_no || ''}</td>
                       <td className="truncate border border-[#d7d7d7] px-2 py-[9px]">{order.sales_person || ''}</td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px]">{legacyStatus(order.status)}</td>

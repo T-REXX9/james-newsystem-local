@@ -73,6 +73,56 @@ const mockUser = {
 } as unknown as UserProfile;
 
 describe('CustomerRequestsTab - Field to Update dropdown', () => {
+    it('allows sales agents with Customer Data edit but not add permission to submit customer update requests', async () => {
+        const user = userEvent.setup();
+        vi.mocked(requestCustomerUpdate).mockResolvedValue({ id: 'request-2' } as never);
+        const salesEditor = {
+            ...mockUser,
+            action_permissions: { pages: { 'Customer Data': { can_add: false, can_edit: true } } },
+        } as unknown as UserProfile;
+
+        render(<CustomerRequestsTab contactId="c1" contact={mockContact} currentUser={salesEditor} />);
+
+        await user.click(screen.getByRole('button', { name: /new request/i }));
+        expect(screen.getByRole('button', { name: /^contact details$/i })).toBeInTheDocument();
+        await user.type(screen.getByLabelText(/new value/i), 'Updated Acme Corp');
+        await user.click(screen.getByRole('button', { name: /submit for approval/i }));
+
+        await waitFor(() => expect(requestCustomerUpdate).toHaveBeenCalledWith('c1', { company: 'Updated Acme Corp' }));
+    });
+
+    it('uses the daily call dashboard Edit grant for customer change requests in the sales agent detail panel', async () => {
+        const user = userEvent.setup();
+        vi.mocked(requestCustomerUpdate).mockResolvedValue({ id: 'request-daily-call' } as never);
+        const salesEditor = {
+            ...mockUser,
+            action_permissions: { pages: { 'Daily Call Monitoring Dashboard': { can_edit: true, can_add: false } } },
+        } as unknown as UserProfile;
+
+        render(<CustomerRequestsTab contactId="c1" contact={mockContact} currentUser={salesEditor} permissionPage="Daily Call Monitoring Dashboard" />);
+
+        await user.click(screen.getByRole('button', { name: /new request/i }));
+        expect(screen.getByRole('button', { name: /^contact details$/i })).toBeInTheDocument();
+        await user.type(screen.getByLabelText(/new value/i), 'Updated Acme Corp');
+        await user.click(screen.getByRole('button', { name: /submit for approval/i }));
+
+        await waitFor(() => expect(requestCustomerUpdate).toHaveBeenCalledWith('c1', { company: 'Updated Acme Corp' }));
+    });
+
+    it('keeps discount requests limited to sales agents with Customer Data add permission', async () => {
+        const user = userEvent.setup();
+        const salesAdder = {
+            ...mockUser,
+            action_permissions: { pages: { 'Customer Data': { can_add: true, can_edit: false } } },
+        } as unknown as UserProfile;
+
+        render(<CustomerRequestsTab contactId="c1" contact={mockContact} currentUser={salesAdder} />);
+
+        await user.click(screen.getByRole('button', { name: /new request/i }));
+        expect(screen.getByLabelText(/discount percentage/i)).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^contact details$/i })).not.toBeInTheDocument();
+    });
+
     it('renders the New Request trigger button', () => {
         render(
             <CustomerRequestsTab

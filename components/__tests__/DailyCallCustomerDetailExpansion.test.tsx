@@ -6,10 +6,15 @@ import userEvent from '@testing-library/user-event';
 import DailyCallCustomerDetailExpansion from '../DailyCallCustomerDetailExpansion';
 
 const fetchContactCustomerLogsForDailyCallMock = vi.fn(async () => []);
+const fetchContactForDailyCallMock = vi.fn();
 const getLedgerMock = vi.fn();
 
 vi.mock('../../services/dailyCallMonitoringService', () => ({
   fetchContactCustomerLogsForDailyCall: (...args: unknown[]) => fetchContactCustomerLogsForDailyCallMock(...args),
+}));
+
+vi.mock('../../services/customerDatabaseLocalApiService', () => ({
+  fetchContactForDailyCall: (...args: unknown[]) => fetchContactForDailyCallMock(...args),
 }));
 
 vi.mock('../../services/customerLedgerService', async () => {
@@ -97,30 +102,39 @@ describe('DailyCallCustomerDetailExpansion', () => {
   beforeEach(() => {
     getLedgerMock.mockResolvedValue({ summary_rows: [], rows: [] });
     fetchContactCustomerLogsForDailyCallMock.mockResolvedValue([]);
+    fetchContactForDailyCallMock.mockResolvedValue({
+      recordImage: '',
+      recordImagePosition: '50,50',
+      contactPersons: [],
+      mobile: '',
+      phone: '',
+      email: '',
+    });
   });
 
   afterEach(() => {
     cleanup();
     getLedgerMock.mockReset();
     fetchContactCustomerLogsForDailyCallMock.mockReset();
+    fetchContactForDailyCallMock.mockReset();
     vi.restoreAllMocks();
   });
 
   it('shows ledger yearly sales on Overview without changing tabs', async () => {
     getLedgerMock.mockResolvedValue({
       summary_rows: [
-        { year: 2013, month: 0, month_name: '', debit: 26000, credit: 0, balance: 0 },
-        { year: 2014, month: 0, month_name: '', debit: 90000, credit: 0, balance: 0 },
-        { year: 2015, month: 0, month_name: '', debit: 45000, credit: 0, balance: 0 },
-        { year: 2016, month: 0, month_name: '', debit: 51000, credit: 0, balance: 0 },
-        { year: 2017, month: 0, month_name: '', debit: 62000, credit: 0, balance: 0 },
-        { year: 2018, month: 0, month_name: '', debit: 71000, credit: 0, balance: 0 },
-        { year: 2019, month: 0, month_name: '', debit: 80000, credit: 0, balance: 0 },
-        { year: 2020, month: 0, month_name: '', debit: 55000, credit: 0, balance: 0 },
-        { year: 2021, month: 0, month_name: '', debit: 88000, credit: 0, balance: 0 },
-        { year: 2022, month: 0, month_name: '', debit: 92000, credit: 0, balance: 0 },
-        { year: 2023, month: 0, month_name: '', debit: 99000, credit: 0, balance: 0 },
-        { year: 2024, month: 0, month_name: '', debit: 110000, credit: 0, balance: 0 },
+        { year: 2013, month: 1, month_name: 'January', debit: 26000, credit: 0, balance: 0 },
+        { year: 2014, month: 1, month_name: 'January', debit: 90000, credit: 0, balance: 0 },
+        { year: 2015, month: 1, month_name: 'January', debit: 45000, credit: 0, balance: 0 },
+        { year: 2016, month: 1, month_name: 'January', debit: 51000, credit: 0, balance: 0 },
+        { year: 2017, month: 1, month_name: 'January', debit: 62000, credit: 0, balance: 0 },
+        { year: 2018, month: 1, month_name: 'January', debit: 71000, credit: 0, balance: 0 },
+        { year: 2019, month: 1, month_name: 'January', debit: 80000, credit: 0, balance: 0 },
+        { year: 2020, month: 1, month_name: 'January', debit: 55000, credit: 0, balance: 0 },
+        { year: 2021, month: 1, month_name: 'January', debit: 88000, credit: 0, balance: 0 },
+        { year: 2022, month: 1, month_name: 'January', debit: 92000, credit: 0, balance: 0 },
+        { year: 2023, month: 1, month_name: 'January', debit: 99000, credit: 0, balance: 0 },
+        { year: 2024, month: 1, month_name: 'January', debit: 110000, credit: 0, balance: 0 },
       ],
       rows: [],
     });
@@ -132,12 +146,13 @@ describe('DailyCallCustomerDetailExpansion', () => {
     const yearlySales = await screen.findByTestId('customer-yearly-sales');
     expect(yearlySales).toHaveAttribute('data-compact', 'true');
     expect(yearlySales).toHaveAttribute('data-year-count', '12');
-    expect(within(yearlySales).getByRole('heading', { name: /Yearly Sales/i })).toBeInTheDocument();
-    for (const year of [2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024]) {
-      expect(within(yearlySales).getByText(String(year))).toBeInTheDocument();
-    }
-    expect(within(yearlySales).getByText('₱26,000')).toBeInTheDocument();
-    expect(within(yearlySales).getByText('₱90,000')).toBeInTheDocument();
+    expect(within(yearlySales).getByRole('heading', { name: /Yearly Sales Trend/i })).toBeInTheDocument();
+    expect(within(yearlySales).getByTestId('customer-yearly-sales-chart')).toHaveTextContent('2013 full year: ₱26,000.00');
+    expect(within(yearlySales).getByTestId('customer-yearly-sales-chart')).toHaveTextContent('2024 full year: ₱110,000.00');
+    const chart = within(yearlySales).getByTestId('customer-yearly-sales-chart');
+    expect(chart).toHaveAttribute('data-year-count', String(new Date().getFullYear() - 2013 + 1));
+    expect(chart).toHaveTextContent('2024 full year: ₱110,000.00');
+    expect(chart).toHaveTextContent(`${new Date().getFullYear()} year to date: ₱0.00`);
     expect(within(yearlySales).queryByRole('button')).not.toBeInTheDocument();
     expect(getLedgerMock).toHaveBeenCalledWith('customer-1', { reportType: 'yearly', dateType: 'all' });
   });
@@ -196,9 +211,60 @@ describe('DailyCallCustomerDetailExpansion', () => {
       />
     );
 
-    const contactLabel = screen.getByText('Contact');
-    expect(contactLabel.parentElement).toHaveTextContent('Maria Santos');
-    expect(contactLabel.parentElement).toHaveTextContent('09177081946');
+    const contactDetails = screen.getByLabelText('Customer contact details');
+    expect(contactDetails).toHaveTextContent('Maria Santos');
+    expect(contactDetails).toHaveTextContent('09177081946');
+  });
+
+  it('loads and displays the customer profile contact person and all contact details', async () => {
+    fetchContactForDailyCallMock.mockResolvedValueOnce({
+      recordImage: '',
+      recordImagePosition: '50,50',
+      contactPersons: [{
+        id: 'person-1',
+        enabled: true,
+        name: 'Maria Santos',
+        position: 'Owner',
+        mobile: '09171234567',
+        telephone: '0321234567',
+        email: 'maria@example.com',
+      }],
+      mobile: '09171234567',
+      phone: '0321234567',
+      email: 'shop@example.com',
+    });
+
+    render(
+      <DailyCallCustomerDetailExpansion
+        customer={{ ...customer, contactNumber: '', contactPersonName: '' }}
+        currentUser={null}
+      />
+    );
+
+    const contactDetails = screen.getByLabelText('Customer contact details');
+    expect(await screen.findByText('Maria Santos')).toBeInTheDocument();
+    expect(contactDetails).toHaveTextContent('Owner');
+    expect(contactDetails).toHaveTextContent('09171234567');
+    expect(contactDetails).toHaveTextContent('0321234567');
+    expect(contactDetails).toHaveTextContent('maria@example.com');
+    expect(contactDetails).toHaveTextContent('shop@example.com');
+    expect(fetchContactForDailyCallMock).toHaveBeenCalledWith('customer-1');
+  });
+
+  it('keeps list contact details visible when the full profile request fails', async () => {
+    fetchContactForDailyCallMock.mockRejectedValueOnce(new Error('Profile unavailable'));
+
+    render(
+      <DailyCallCustomerDetailExpansion
+        customer={{ ...customer, contactPersonName: 'Maria Santos' }}
+        currentUser={null}
+      />
+    );
+
+    const contactDetails = screen.getByLabelText('Customer contact details');
+    expect(contactDetails).toHaveTextContent('Maria Santos');
+    expect(contactDetails).toHaveTextContent('09177081946');
+    expect(contactDetails).not.toHaveTextContent('No contact details on file');
   });
 
   it('shows preferred brand on the master customer profile', () => {

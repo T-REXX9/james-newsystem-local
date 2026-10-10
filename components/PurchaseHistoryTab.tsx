@@ -180,7 +180,7 @@ const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ contactId }) =>
                       <tr key={purchase.id || `${month.key}-${index}`} className="align-top even:bg-slate-50 dark:even:bg-slate-900/40">
                         <td className="border-b border-slate-200 px-4 py-3 dark:border-slate-700">
                           <p className="font-semibold text-slate-900 dark:text-white">{formatPurchaseDate(purchase.purchase_date)}</p>
-                          <p className="mt-1 break-all text-sm text-slate-600 dark:text-slate-300">{purchase.invoice_number || purchase.id || '—'}</p>
+                          <p className="mt-1 break-all text-sm text-slate-600 dark:text-slate-300">{purchase.invoice_number?.trim() || 'Reference unavailable'}</p>
                         </td>
                         <td className="border-b border-slate-200 px-4 py-3 dark:border-slate-700">
                           {products.length > 0 ? (

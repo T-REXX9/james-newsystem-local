@@ -25,6 +25,13 @@ describe('customer workflow local API contracts', () => {
     fetchMock.mockResolvedValue(reply({ items: [{ inquiry_refno: 'i1', is_cancelled: 1, so_refno: 'old-order' }, { inquiry_refno: 'i2', so_refno: 'o1', grand_total: 30 }], meta: { total_pages: 1 } }));
     expect(await fetchCustomerInquiries('c1')).toEqual([expect.objectContaining({ status: 'Cancelled' }), expect.objectContaining({ status: 'Converted', amount: 30 })]);
   });
+  it('keeps the displayed inquiry number separate from the internal navigation reference', async () => {
+    fetchMock.mockResolvedValue(reply({ items: [{ inquiry_refno: 'inquiry-ref-123', inquiry_no: 'INQ26-0042' }], meta: { total_pages: 1 } }));
+
+    await expect(fetchCustomerInquiries('c1')).resolves.toEqual([
+      expect.objectContaining({ id: 'inquiry-ref-123', number: 'INQ26-0042' }),
+    ]);
+  });
   it('submits mapped changes as a pending request, not a direct customer PATCH', async () => {
     fetchMock.mockResolvedValue(reply({ id: 'req1', status: 'pending' }));
     await requestCustomerUpdate('c1', { company: 'Updated', deliveryAddress: 'New address', creditLimit: 200 });

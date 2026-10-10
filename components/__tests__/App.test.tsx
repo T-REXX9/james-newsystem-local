@@ -162,8 +162,7 @@ describe('App authentication flow', () => {
       __jamesWorkflowNavigation: expect.objectContaining({ fromHash: '#/home', index: 1 }),
     }));
 
-    window.history.replaceState(null, '', '/#/home');
-    window.dispatchEvent(new PopStateEvent('popstate'));
+    window.history.back();
 
     await waitFor(() => expect(window.location.hash).toBe('#/home'));
     expect(screen.getByText('OwnerDailyCallMonitoringUnifiedView')).toBeInTheDocument();

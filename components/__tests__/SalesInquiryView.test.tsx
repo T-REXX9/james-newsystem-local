@@ -395,7 +395,7 @@ describe('SalesInquiryView', () => {
     expect(workflowEvents).toContainEqual({
       tab: 'sales-transaction-sales-inquiry',
       payload: undefined,
-      mode: 'replace',
+      mode: 'push',
     });
   });
 

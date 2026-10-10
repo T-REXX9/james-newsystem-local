@@ -39,7 +39,7 @@ async function history(id: string, kind: 'inquiries' | 'returns'): Promise<Custo
       id: String(row.lrefno), number: String(row.lcredit_no || row.lrefno), date: String(row.ldate || ''),
       status: String(row.lstatus || 'Pending'), amount: Number(row.total_amount || 0), notes: String(row.lremark || ''),
     } : {
-      id: String(row.inquiry_refno), number: String(row.inquiry_no || row.inquiry_refno), date: String(row.sales_date || ''),
+      id: String(row.inquiry_refno || ''), number: String(row.inquiry_no || '').trim() || 'Inquiry number unavailable', date: String(row.sales_date || ''),
       status: Number(row.is_cancelled) ? 'Cancelled' : row.so_refno ? 'Converted' : String(row.status || 'Pending'),
       amount: Number(row.grand_total || 0), notes: String(row.remarks || ''),
     }));

@@ -9,6 +9,7 @@ const addToastMock = vi.fn();
 const fetchAgentSnapshotForDailyCallMock = vi.fn();
 const fetchContactCustomerLogsForDailyCallMock = vi.fn();
 const fetchSalesReportDirectoryStateMock = vi.fn();
+const fetchDailySubmittedSalesReportContactIdsMock = vi.fn();
 const createCallLogForDailyCallMock = vi.fn();
 const claimCustomerCallForDailyCallMock = vi.fn();
 const releaseCustomerCallForDailyCallMock = vi.fn();
@@ -37,6 +38,7 @@ vi.mock('../../services/dailyCallMonitoringService', () => ({
   fetchAgentSnapshotForDailyCall: (...args: unknown[]) => fetchAgentSnapshotForDailyCallMock(...args),
   fetchContactCustomerLogsForDailyCall: (...args: unknown[]) => fetchContactCustomerLogsForDailyCallMock(...args),
   fetchSalesReportDirectoryState: (...args: unknown[]) => fetchSalesReportDirectoryStateMock(...args),
+  fetchDailySubmittedSalesReportContactIds: (...args: unknown[]) => fetchDailySubmittedSalesReportContactIdsMock(...args),
   createCallLogForDailyCall: (...args: unknown[]) => createCallLogForDailyCallMock(...args),
   claimCustomerCallForDailyCall: (...args: unknown[]) => claimCustomerCallForDailyCallMock(...args),
   releaseCustomerCallForDailyCall: (...args: unknown[]) => releaseCustomerCallForDailyCallMock(...args),
@@ -67,8 +69,12 @@ vi.mock('../AgentCallActivity', () => ({
 }));
 
 vi.mock('../ContactDetails', () => ({
-  default: ({ contact }: { contact: { id: string; businessLine?: string } }) => (
-    <div data-testid="full-contact-details">{contact.id}:{contact.businessLine || 'blank-overview'}</div>
+  default: ({ contact, permissionPage, showAgentSalesReportInOverview }: { contact: { id: string; businessLine?: string; contactPersons?: Array<{ name?: string }>; phone?: string }; permissionPage?: string; showAgentSalesReportInOverview?: boolean }) => (
+    <div data-testid="full-contact-details" data-permission-page={permissionPage} data-unified-report={showAgentSalesReportInOverview ? 'true' : 'false'}>
+      {contact.id}:{contact.businessLine || 'blank-overview'}
+      <span>{contact.contactPersons?.[0]?.name || 'No Contact Person'}</span>
+      <span>{contact.phone || 'No Contact Number'}</span>
+    </div>
   ),
 }));
 
@@ -104,6 +110,7 @@ const baseSnapshot = {
     {
       id: 'contact-1',
       shopName: 'Test Shop',
+      contactPersonName: 'Maria Santos',
       assignedTo: 'Jane Doe',
       province: 'Davao del Sur',
       city: 'Davao City',
@@ -150,6 +157,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     fetchAgentSnapshotForDailyCallMock.mockReset();
     fetchContactCustomerLogsForDailyCallMock.mockReset();
     fetchSalesReportDirectoryStateMock.mockReset();
+    fetchDailySubmittedSalesReportContactIdsMock.mockReset();
     createCallLogForDailyCallMock.mockReset();
     claimCustomerCallForDailyCallMock.mockReset();
     releaseCustomerCallForDailyCallMock.mockReset();
@@ -166,6 +174,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     setDailyCallBookmarkMock.mockImplementation(async (contactId: string | null) => contactId);
     fetchContactCustomerLogsForDailyCallMock.mockResolvedValue([]);
     fetchSalesReportDirectoryStateMock.mockResolvedValue({ unreadByContact: {}, reportedContactIds: new Set() });
+    fetchDailySubmittedSalesReportContactIdsMock.mockResolvedValue(new Set());
     fetchContactByIdMock.mockResolvedValue({
       id: 'contact-1',
       company: 'Test Shop',
@@ -260,6 +269,28 @@ describe('DailyCallMonitoringView communication actions', () => {
       detail: { tab: 'sales-reports-sales-map' },
     });
     window.removeEventListener('workflow:navigate', navigationHandler);
+  });
+
+  it('restores board filters and search after browser Back remounts the page', async () => {
+    const user = userEvent.setup();
+    window.sessionStorage.clear();
+    window.history.replaceState(null, '', '/#/sales-transaction-daily-call-monitoring');
+    const firstRender = render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    const customerSearch = await screen.findByRole('textbox', { name: 'Search by customer name' });
+    await user.type(customerSearch, 'Test Shop');
+    await user.click(screen.getByText('Filters & legend').closest('button') as HTMLButtonElement);
+    await user.selectOptions(screen.getByLabelText('Color status'), 'green');
+
+    window.history.pushState(null, '', '/#/sales-reports-sales-map');
+    firstRender.unmount();
+    window.history.replaceState(null, '', '/#/sales-transaction-daily-call-monitoring');
+
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    expect(await screen.findByRole('textbox', { name: 'Search by customer name' })).toHaveValue('Test Shop');
+    await user.click(await screen.findByText('Filters & legend').then((label) => label.closest('button') as HTMLButtonElement));
+    expect(screen.getByLabelText('Color status')).toHaveValue('green');
   });
 
   it('uses API debt and customer status rather than outstanding balance for do-not-contact classification', async () => {
@@ -425,7 +456,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     render(<DailyCallMonitoringView currentUser={currentUser} />);
     await expandList('Recovery List', user);
     await user.click(await screen.findByRole('button', { name: 'Set calling stop at Filtered Recovery Shop' }));
-    await user.type(screen.getByRole('textbox', { name: 'Search customer, prospect, or agent' }), 'no matching customer');
+    await user.type(screen.getByRole('textbox', { name: 'Search by customer name' }), 'no matching customer');
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument());
     expect(screen.getByText('Stop after Filtered Recovery Shop')).toBeInTheDocument();
@@ -863,6 +894,7 @@ describe('DailyCallMonitoringView communication actions', () => {
 
   it('renders the customer details sheet responsively across screen sizes', async () => {
     const user = userEvent.setup();
+    window.history.replaceState(null, '', '/#/sales-transaction-daily-call-monitoring');
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
 
@@ -888,30 +920,76 @@ describe('DailyCallMonitoringView communication actions', () => {
     );
     expect(screen.queryByRole('button', { name: 'Open Patient Chart' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open Full Details' })).toHaveTextContent('Full Details');
+    expect(await screen.findByTestId('full-contact-details')).toHaveTextContent('contact-1:Diesel Injection');
     expect(screen.getByRole('region', { name: 'Agent Sales Report' })).toBeInTheDocument();
     expect(screen.queryByText('Customer Log')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Customer note')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Customer comments')).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Create Incident Report' }));
-    expect(screen.getByRole('dialog', { name: 'Create incident report for contact-1' })).toBeInTheDocument();
-
     const scrollArea = closeButton.closest('div.fixed')?.querySelector('div.min-h-0.flex-1');
 
     expect(scrollArea).not.toBeNull();
     expect(scrollArea).toHaveClass('min-h-0', 'overflow-y-auto');
+    expect(window.history.state).toMatchObject({ __jamesDailyCallDetail: { contactId: 'contact-1' } });
+    window.history.back();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Test Shop details' })).not.toBeInTheDocument());
+    expect(screen.queryByTestId('full-contact-details')).not.toBeInTheDocument();
   });
 
   it('opens ContactDetails for the selected customer from the agent workflow', async () => {
+    fetchContactForDailyCallMock.mockResolvedValueOnce({
+      id: 'contact-1',
+      company: 'Test Shop',
+      businessLine: 'Diesel Injection',
+      contactPersons: [{
+        id: 'person-1',
+        enabled: true,
+        name: '',
+        mobile: '',
+        telephone: '',
+      }],
+    });
     const user = userEvent.setup();
     render(<DailyCallMonitoringView currentUser={currentUser} />);
 
     await expandList('Unverified Prospects', user);
     await user.click(await screen.findByText('Test Shop'));
-    await user.click(screen.getByRole('button', { name: 'Open Full Details' }));
 
     expect(await screen.findByTestId('full-contact-details')).toHaveTextContent('contact-1:Diesel Injection');
+    expect(screen.getByTestId('full-contact-details')).toHaveAttribute('data-permission-page', 'Daily Call Monitoring Dashboard');
+    expect(screen.getByTestId('full-contact-details')).toHaveAttribute('data-unified-report', 'true');
+    expect(screen.getByTestId('full-contact-details')).toHaveTextContent('Maria Santos');
+    expect(screen.getByTestId('full-contact-details')).toHaveTextContent('09123456789');
     expect(fetchContactForDailyCallMock).toHaveBeenCalledWith('contact-1');
+  });
+
+  it('keeps the selected customer contact person and number visible when full-profile loading fails', async () => {
+    fetchContactForDailyCallMock.mockRejectedValueOnce(new Error('Profile unavailable'));
+    const user = userEvent.setup();
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    await expandList('Unverified Prospects', user);
+    await user.click(await screen.findByText('Test Shop'));
+
+    const contactDetails = await screen.findByLabelText('Customer contact details');
+    expect(contactDetails).toHaveTextContent('Maria Santos');
+    expect(contactDetails).toHaveTextContent('09123456789');
+    expect(screen.getByRole('alert')).toHaveTextContent('Profile unavailable');
+  });
+
+  it('keeps list contact details visible when profile loading ends with an auth session error', async () => {
+    const authError = new Error('');
+    authError.name = 'AuthSessionEndedError';
+    fetchContactForDailyCallMock.mockRejectedValueOnce(authError);
+    const user = userEvent.setup();
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    await expandList('Unverified Prospects', user);
+    await user.click(await screen.findByText('Test Shop'));
+
+    const contactDetails = await screen.findByLabelText('Customer contact details');
+    expect(contactDetails).toHaveTextContent('Maria Santos');
+    expect(contactDetails).toHaveTextContent('09123456789');
   });
 
   it('logs an outbound SMS and opens the messaging app with the composed body', async () => {
@@ -1115,7 +1193,9 @@ describe('DailyCallMonitoringView communication actions', () => {
         ...baseSnapshot.contacts[0],
         id: 'contact-ejurango',
         shopName: 'ARL KENT DIESEL CALIBRATION AND PARTS SALES',
-        contactPersonName: 'Arsolin T Ejurango',
+        contactPersonName: 'Primary Contact',
+        contactPersonNames: 'Primary Contact | Arsolin T Ejurango',
+        contactNumbers: '(02) 8123-4567 / +63 (917) 123-4567',
         status: 'active',
         verification: '',
       },
@@ -1123,6 +1203,7 @@ describe('DailyCallMonitoringView communication actions', () => {
         ...baseSnapshot.contacts[0],
         id: 'contact-other',
         shopName: 'Another Assigned Customer',
+        assignedTo: 'John Smith',
         status: 'active',
         verification: '',
       },
@@ -1144,12 +1225,23 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     await expandList('Recovery List');
     await screen.findByText('ARL KENT DIESEL CALIBRATION AND PARTS SALES');
-    await userEvent.setup().type(screen.getByPlaceholderText('Search customer, prospect, or agent'), 'Ejurango');
+    const user = userEvent.setup();
+    const searchFor = async (field: string, query: string) => {
+      const searchInput = screen.getByRole('textbox', { name: `Search by ${field}` });
+      await user.clear(searchInput);
+      await user.type(searchInput, query);
+      await waitFor(() => {
+        expect(screen.getByText('ARL KENT DIESEL CALIBRATION AND PARTS SALES')).toBeInTheDocument();
+        expect(screen.queryByText('Another Assigned Customer')).not.toBeInTheDocument();
+      });
+    };
 
-    await waitFor(() => {
-      expect(screen.getByText('ARL KENT DIESEL CALIBRATION AND PARTS SALES')).toBeInTheDocument();
-      expect(screen.queryByText('Another Assigned Customer')).not.toBeInTheDocument();
-    });
+    await searchFor('customer name', 'ARL KENT');
+    await searchFor('contact person', 'Ejurango');
+    await searchFor('phone number', '0917-123-4567');
+    await searchFor('phone number', '+63 917 123 4567');
+    await searchFor('phone number', '+63 (0) 917 123 4567');
+    await searchFor('sales agent', 'Jane Doe');
   });
 
   it('sums Priority List row current-month sales in the category summary', async () => {

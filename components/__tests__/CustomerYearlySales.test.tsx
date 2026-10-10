@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import CustomerYearlySales from '../CustomerYearlySales';
 
@@ -9,8 +9,29 @@ const row = (id: number, date: string, refType: string, debit: number) => ({
 });
 
 describe('CustomerYearlySales', () => {
+  beforeEach(() => {
+    vi.stubGlobal('ResizeObserver', class {
+      private callback: ResizeObserverCallback;
+
+      constructor(callback: ResizeObserverCallback) {
+        this.callback = callback;
+      }
+
+      observe(target: Element) {
+        const minWidth = Number.parseInt((target as HTMLElement).parentElement?.style.minWidth || '0', 10);
+        const width = Math.max(480, minWidth);
+        const contentRect = { x: 0, y: 0, width, height: 176, top: 0, right: width, bottom: 176, left: 0, toJSON: () => ({}) } as DOMRectReadOnly;
+        this.callback([{ target, contentRect } as ResizeObserverEntry], this as unknown as ResizeObserver);
+      }
+
+      unobserve() {}
+      disconnect() {}
+    });
+  });
+
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
   });
   it('shows ledger-backed yearly totals and expands months in calendar order', async () => {
     const user = userEvent.setup();
@@ -41,44 +62,56 @@ describe('CustomerYearlySales', () => {
     expect(screen.getByText('No posted sales found in the customer ledger.')).toBeInTheDocument();
   });
 
-  it('renders compact years in vertical columns of ten', () => {
-    const years = Array.from({ length: 12 }, (_, index) => {
-      const year = 2013 + index;
-      return {
-        year,
-        total: (index + 1) * 10000,
-        months: [],
-      };
-    });
+  it('renders a yearly trend chart with year labels and exact annual totals', async () => {
+    const years = [
+      { year: 2022, total: 1200, months: [] },
+      { year: 2024, total: 600, months: [] },
+      { year: 2025, total: 1800, months: [] },
+    ];
 
-    render(
-      <CustomerYearlySales
-        compact
-        entries={years}
-        today={new Date('2025-08-01T12:00:00')}
-      />
-    );
+    render(<CustomerYearlySales compact entries={years} today={new Date('2025-08-01T12:00:00')} />);
 
     const yearlySales = screen.getByTestId('customer-yearly-sales');
     expect(yearlySales).toHaveAttribute('data-compact', 'true');
-    expect(yearlySales).toHaveAttribute('data-year-count', '12');
-    expect(yearlySales).toHaveAttribute('data-years-per-column', '10');
+    expect(yearlySales).toHaveAttribute('data-year-count', '3');
+    expect(screen.getByRole('heading', { name: /Yearly Sales Trend/i })).toBeInTheDocument();
 
-    const columns = screen.getAllByTestId('customer-yearly-sales-column');
-    expect(columns).toHaveLength(2);
-    expect(columns[0].querySelectorAll('[role="listitem"]')).toHaveLength(10);
-    expect(columns[1].querySelectorAll('[role="listitem"]')).toHaveLength(2);
-    expect(columns[0]).toHaveTextContent('2013');
-    expect(columns[0]).toHaveTextContent('2022');
-    expect(columns[1]).toHaveTextContent('2023');
-    expect(columns[1]).toHaveTextContent('2024');
+    const chart = screen.getByTestId('customer-yearly-sales-chart');
+    expect(chart).toHaveAttribute('data-year-count', '4');
+    expect(chart).toHaveAttribute('tabindex', '0');
+    expect(chart).toHaveAttribute('aria-describedby');
+    await waitFor(() => expect(chart.querySelector('path.recharts-line-curve')).not.toBeNull());
+    const chartLabels = Array.from(chart.querySelectorAll('svg text')).map((tick) => tick.textContent);
+    expect(chartLabels).toEqual(expect.arrayContaining(['2022', '2023', '2024', '2025']));
+    expect(chartLabels).not.toContain('Jan');
+    expect(chart).toHaveTextContent('2022 full year: ₱1,200.00');
+    expect(chart).toHaveTextContent('2023 full year: ₱0.00');
+    expect(chart).toHaveTextContent('2024 full year: ₱600.00');
+    expect(chart).toHaveTextContent('2025 year to date: ₱1,800.00');
+    expect(screen.getByText('₱1,800.00')).toBeInTheDocument();
+  });
 
-    for (const year of years) {
-      expect(screen.getByText(String(year.year))).toBeInTheDocument();
-    }
-    expect(screen.getByText('₱10,000')).toBeInTheDocument();
-    expect(screen.getByText('₱120,000')).toBeInTheDocument();
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
-    expect(screen.queryByText('January')).not.toBeInTheDocument();
+  it('includes a zero YTD point and keeps every year label visible for long histories', async () => {
+    const years = Array.from({ length: 31 }, (_, index) => ({
+      year: 1994 + index,
+      total: 10000 + index * 100,
+      months: [],
+    }));
+
+    render(<CustomerYearlySales compact entries={years} today={new Date('2025-08-01T12:00:00')} />);
+
+    const chart = screen.getByTestId('customer-yearly-sales-chart');
+    expect(chart).toHaveAttribute('data-year-count', '32');
+    await waitFor(() => expect(chart.querySelector('path.recharts-line-curve')).not.toBeNull());
+    expect(chart).toHaveTextContent('2024 full year: ₱13,000.00');
+    expect(chart).toHaveTextContent('2025 year to date: ₱0.00');
+
+    const yearTicks = Array.from(chart.querySelectorAll('svg text'))
+      .map((tick) => tick.textContent || '')
+      .filter((label) => /^\d{4}$/.test(label));
+    expect(yearTicks[0]).toBe('1994');
+    expect(yearTicks[yearTicks.length - 1]).toBe('2025');
+    expect(yearTicks).toEqual(Array.from({ length: 32 }, (_, index) => String(1994 + index)));
+    expect(chart.querySelector('.recharts-responsive-container')?.parentElement).toHaveStyle({ minWidth: '2048px' });
   });
 });

@@ -65,6 +65,7 @@ export interface HardwareCallLog {
   lagent_id: number | string;
   ldevice_id: string;
   lcustomer_id?: number | string | null;
+  customer_session_id?: string | null;
   lphone_number: string;
   ldirection: 'inbound' | 'outbound' | 'missed' | string;
   lduration_seconds: number | string;

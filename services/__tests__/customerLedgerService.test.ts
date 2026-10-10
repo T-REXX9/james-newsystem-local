@@ -147,14 +147,16 @@ describe('customerLedgerService', () => {
     expect(years.flatMap((year) => year.months).reduce((sum, month) => sum + month.total, 0)).toBe(expectedLedgerSales);
   });
 
-  it('maps yearly summary rows oldest to newest', () => {
+  it('maps yearly summary month rows into exact annual totals and calendar months', () => {
     const years = buildYearlySalesFromSummary([
-      { year: 2015, month: 0, month_name: '', debit: 45000, credit: 0, balance: 0 },
-      { year: 2013, month: 0, month_name: '', debit: 26000, credit: 0, balance: 0 },
-      { year: 2014, month: 0, month_name: '', debit: 90000, credit: 0, balance: 0 },
+      { year: 2015, month: 12, month_name: 'December', debit: 45000, credit: 0, balance: 0 },
+      { year: 2013, month: 1, month_name: 'January', debit: 26000, credit: 0, balance: 0 },
+      { year: 2014, month: 2, month_name: 'February', debit: 40000, credit: 0, balance: 0 },
+      { year: 2014, month: 3, month_name: 'March', debit: 50000, credit: 0, balance: 0 },
     ], new Date('2025-08-01T12:00:00'));
 
     expect(years.map((entry) => entry.year)).toEqual([2013, 2014, 2015]);
     expect(years.map((entry) => entry.total)).toEqual([26000, 90000, 45000]);
+    expect(years[1].months.map((entry) => [entry.month, entry.total])).toEqual([[2, 40000], [3, 50000]]);
   });
 });

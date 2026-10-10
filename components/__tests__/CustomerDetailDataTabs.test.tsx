@@ -73,4 +73,20 @@ describe('customer detail data tabs', () => {
     expect(screen.getByText('September 2026 Total')).toBeInTheDocument();
     expect(screen.getByText('Grand Total: ₱3,500.00')).toBeInTheDocument();
   });
+
+  it('never shows an internal transaction ID when no invoice reference exists', async () => {
+    fetchDailyCallPurchaseHistoryMock.mockResolvedValueOnce([{
+      id: '2026091118412169759',
+      purchase_date: '2026-09-11',
+      invoice_number: '',
+      total_amount: 100,
+      payment_status: 'pending',
+      products: [],
+    }]);
+
+    render(<PurchaseHistoryTab contactId="contact-1" />);
+
+    expect(await screen.findByText('Reference unavailable')).toBeInTheDocument();
+    expect(screen.queryByText('2026091118412169759')).not.toBeInTheDocument();
+  });
 });

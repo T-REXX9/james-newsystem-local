@@ -475,6 +475,8 @@ const mapDailyCallCustomerRow = (row: any): DailyCallCustomerRow => ({
   pastName: cleanNullableText(row?.pastName ?? row?.past_name ?? row?.oldName ?? row?.old_name),
   contactNumber: cleanNullableText(row?.contactNumber ?? row?.contact_number, ''),
   contactPersonName: cleanNullableText(row?.contactPersonName ?? row?.contact_person_name),
+  contactPersonNames: cleanNullableText(row?.contactPersonNames ?? row?.contact_person_names),
+  contactNumbers: cleanNullableText(row?.contactNumbers ?? row?.contact_numbers),
   codeDate: cleanNullableText(row?.codeDate ?? row?.code_date, '—'),
   dealerPriceGroup: cleanNullableText(row?.dealerPriceGroup ?? row?.dealer_price_group),
   dealerPriceDate: cleanNullableText(row?.dealerPriceDate ?? row?.dealer_price_date),
@@ -1172,6 +1174,23 @@ export const fetchSalesReportDirectoryState = async (
       .filter(Boolean)
   );
   return { unreadByContact, reportedContactIds };
+};
+
+export const fetchDailySubmittedSalesReportContactIds = async (
+  contactIds: string[],
+  date: string,
+): Promise<Set<string>> => {
+  const uniqueIds = Array.from(new Set(contactIds.map((id) => String(id || '').trim()).filter(Boolean)));
+  if (uniqueIds.length === 0) return new Set();
+  const params = new URLSearchParams({
+    main_id: String(resolveMainId()),
+    date,
+    contact_ids: uniqueIds.join(','),
+  });
+  const payload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/sales-report-submissions?${params.toString()}`);
+  return new Set((payload?.data?.contact_ids || payload?.contact_ids || [])
+    .map((contactId: unknown) => String(contactId || '').trim())
+    .filter(Boolean));
 };
 
 /** Resolve a sales-report attachment URL to a browser-usable blob URL (auth required for API paths). */

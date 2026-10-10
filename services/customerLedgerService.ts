@@ -5,6 +5,7 @@ import { formatAccountingTimestamp } from '../utils/formatUtils';
 import { parseApiErrorMessage } from './localApiAuth';
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
+const monthNameFormatter = new Intl.DateTimeFormat('en-US', { month: 'long', timeZone: 'UTC' });
 
 export type LedgerReportType = 'detailed' | 'summary' | 'yearly';
 export type LedgerDateType = 'all' | 'today' | 'week' | 'month' | 'year' | 'custom';
@@ -101,7 +102,6 @@ export const buildYearlySales = (
   rows: CustomerLedgerDetailedRow[],
   today = new Date(),
 ): CustomerYearlySales[] => {
-  const monthFormatter = new Intl.DateTimeFormat('en-US', { month: 'long', timeZone: 'UTC' });
   const currentYear = today.getFullYear();
   const todayIso = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')].join('-');
   const grouped = new Map<number, Map<number, number>>();
@@ -128,7 +128,7 @@ export const buildYearlySales = (
         .sort(([left], [right]) => left - right)
         .map(([month, total]) => ({
           month,
-          label: monthFormatter.format(new Date(Date.UTC(2000, month - 1, 1))),
+          label: monthNameFormatter.format(new Date(Date.UTC(2000, month - 1, 1))),
           total,
         })),
     }));
@@ -140,17 +140,30 @@ export const buildYearlySalesFromSummary = (
   today = new Date(),
 ): CustomerYearlySales[] => {
   const currentYear = today.getFullYear();
-  const byYear = new Map<number, number>();
+  const byYear = new Map<number, Map<number, number>>();
 
   for (const row of summaryRows) {
     const year = Number(row.year);
-    if (!Number.isFinite(year) || year <= 0 || year > currentYear) continue;
-    byYear.set(year, (byYear.get(year) || 0) + Number(row.debit || 0));
+    const month = Number(row.month);
+    if (!Number.isFinite(year) || year <= 0 || year > currentYear || month < 1 || month > 12) continue;
+    const months = byYear.get(year) || new Map<number, number>();
+    months.set(month, (months.get(month) || 0) + Number(row.debit || 0));
+    byYear.set(year, months);
   }
 
   return [...byYear.entries()]
     .sort(([left], [right]) => left - right)
-    .map(([year, total]) => ({ year, total, months: [] }));
+    .map(([year, months]) => ({
+      year,
+      total: [...months.values()].reduce((sum, amount) => sum + amount, 0),
+      months: [...months.entries()]
+        .sort(([left], [right]) => left - right)
+        .map(([month, total]) => ({
+          month,
+          label: monthNameFormatter.format(new Date(Date.UTC(2000, month - 1, 1))),
+          total,
+        })),
+    }));
 };
 
 /**

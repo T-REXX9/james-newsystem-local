@@ -100,6 +100,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
   const { addToast } = useToast();
   const orderSlipExportRef = React.useRef<HTMLElement | null>(null);
   const [selectedSlip, setSelectedSlip] = useState<OrderSlip | null>(null);
+  const previousSlipRouteRef = useRef(`${initialSlipId || ''}:${initialSlipRefNo || ''}`);
   const [statusFilter, setStatusFilter] = useState<'all' | OrderSlipStatus>(initialStatus || 'all');
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -298,8 +299,18 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
 
   const selectSlipAndSync = useCallback((slip: OrderSlip) => {
     void selectSlip(slip);
-    navigateWorkflow(ORDER_SLIP_TAB_ID, { orderSlipId: slip.id, orderSlipRefNo: slip.slip_no }, 'replace');
+    navigateWorkflow(ORDER_SLIP_TAB_ID, { orderSlipId: slip.id, orderSlipRefNo: slip.slip_no });
   }, [selectSlip]);
+
+  useEffect(() => {
+    const routeKey = `${initialSlipId || ''}:${initialSlipRefNo || ''}`;
+    const previousRouteKey = previousSlipRouteRef.current;
+    previousSlipRouteRef.current = routeKey;
+    if (previousRouteKey && !routeKey) {
+      setSelectedSlip(null);
+      setTrackingNoDraft('');
+    }
+  }, [initialSlipId, initialSlipRefNo]);
 
   useEffect(() => {
     const slipById = initialSlipId ? orderSlips.find(entry => entry.id === initialSlipId) : null;
@@ -863,7 +874,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                       <td className="border border-[#d7d7d7] px-2 py-[9px]">{legacyListDate(slip.sales_date)}</td>
                       <td className="truncate border border-[#d7d7d7] px-2 py-[9px]" title={customer?.company || slip.customer_name || ''}>{customer?.company || slip.customer_name || ''}<CustomerStarIndicator customerId={slip.contact_id} className="ml-1 inline h-3.5 w-3.5" /></td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{slip.order_id ? <ModuleRecordAction tab="sales-transaction-sales-order" payload={{ orderId: slip.order_id }} className="underline" newWindowLabel="Open sales order in new window">{slip.sales_no || ''}</ModuleRecordAction> : (slip.sales_no || '')}</td>
-                      <td className="border border-[#d7d7d7] px-2 py-[9px] underline"><ModuleRecordLink tab="sales-transaction-order-slip" payload={{ orderSlipId: slip.id, orderSlipRefNo: slip.slip_no }} mode="replace" onOpen={() => void selectSlip(slip)}>{slip.slip_no || ''}</ModuleRecordLink></td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px] underline"><ModuleRecordLink tab="sales-transaction-order-slip" payload={{ orderSlipId: slip.id, orderSlipRefNo: slip.slip_no }} mode="push" onOpen={() => void selectSlip(slip)}>{slip.slip_no || ''}</ModuleRecordLink></td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px]">{slip.debit_memo_no || ''}</td>
                       <td className="truncate border border-[#d7d7d7] px-2 py-[9px]">{slip.tracking_no || ''}</td>
                       <td className="truncate border border-[#d7d7d7] px-2 py-[9px]">{slip.sales_person || ''}</td>
