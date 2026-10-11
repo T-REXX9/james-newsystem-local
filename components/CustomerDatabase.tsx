@@ -435,10 +435,6 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
           <ApprovalRequestsView
             currentUser={currentUser}
             initialRequestId={initialApprovalRequestId}
-            onSelectCustomer={(id) => {
-              setSelectedCustomerId(id);
-              setViewMode('customers');
-            }}
           />
         ) : selectedCustomerId ? (
           <CustomerDetailPanel

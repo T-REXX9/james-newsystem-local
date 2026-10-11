@@ -39,6 +39,7 @@ import AddContactModal from './AddContactModal';
 import ModuleRecordAction from './ModuleRecordAction';
 import DailyCallCustomerDetailModal from './DailyCallCustomerDetailModal';
 import CustomerSalesReportChat from './CustomerSalesReportChat';
+import SearchableSelect from './SearchableSelect';
 import DailyCallInlineAgentSelect, { formatAssignmentDateLabel } from './DailyCallInlineAgentSelect';
 import { useToast } from './ToastProvider';
 import type { DetailTabId } from './DailyCallCustomerDetailExpansion';
@@ -166,23 +167,29 @@ const canUseMasterDailyCallActions = (user?: UserProfile | null) => {
 const sumBy = (rows: DailyCallMasterCustomerRow[], field: 'totalSales' | 'currentMonthSales' | 'purchaseCount' | 'averageMonthlySales') =>
   rows.reduce((sum, row) => sum + row[field], 0);
 
-/** Instant client-side match: every whitespace token must appear in the searchable fields. */
-const matchesDailyCallMasterSearch = (row: DailyCallMasterCustomerRow, query: string) => {
-  const normalizedQuery = query.trim().toLowerCase();
-  if (!normalizedQuery) return true;
-  const haystack = [
-    row.shopName,
-    row.pastName || '',
-    row.city,
-    row.province,
-    row.contactNumber,
-    row.contactPersonName || '',
-    row.assignedTo,
-    row.assignedTeam || '',
-  ]
-    .join(' ')
-    .toLowerCase();
-  return normalizedQuery.split(/\s+/).every((token) => haystack.includes(token));
+const normalizePhoneDigits = (value: string) => value.replace(/\D/g, '');
+
+type DailyCallMasterSearch = { customer: string; phone: string; contact: string; agent: string };
+
+/** Each board field filters its matching customer data instantly on the loaded master list. */
+const matchesDailyCallMasterSearch = (row: DailyCallMasterCustomerRow, search: DailyCallMasterSearch) => {
+  const matches = (query: string, values: Array<string | undefined>) => {
+    const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!tokens.length) return true;
+    const haystack = values.join(' ').toLowerCase();
+    return tokens.every((token) => haystack.includes(token));
+  };
+
+  const phoneSearch = search.phone.trim();
+  const phoneQuery = normalizePhoneDigits(phoneSearch);
+  const phoneMatches = !phoneSearch || (Boolean(phoneQuery) && String(row.contactNumber || '')
+    .split(/[\/;,|\r\n]+/)
+    .some((phone) => normalizePhoneDigits(phone).includes(phoneQuery)));
+
+  return matches(search.customer, [row.shopName, row.pastName, row.city, row.province])
+    && phoneMatches
+    && matches(search.contact, [row.contactPersonName])
+    && matches(search.agent, [row.assignedTo, row.assignedTeam, row.assignedAgentTeam]);
 };
 
 const ageLabel = (row: DailyCallMasterCustomerRow) => {
@@ -368,7 +375,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const loadSequence = useRef(0);
   const [meta, setMeta] = useState<DailyCallMasterListMeta>(() => initialCachedResult?.meta || { fromDate, toDate: '', count: 0 });
   const rowsRef = useRef<DailyCallMasterCustomerRow[]>(initialCachedResult?.items || []);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState<DailyCallMasterSearch>({ customer: '', phone: '', contact: '', agent: '' });
   const [loading, setLoading] = useState(!initialCachedResult);
   const [error, setError] = useState<string | null>(null);
   const dashboardRef = useRef<HTMLDivElement>(null);
@@ -1152,17 +1159,26 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 </button>
               </div>
             </div>
-            <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-3">
-              <label className="relative block w-full max-w-md">
-                <span className="sr-only">Search master list customers</span>
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search customer, city, contact..."
-                  className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-10 pr-3 text-sm outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+            <div className="grid grid-cols-1 gap-2 border-b border-slate-200 bg-slate-50/70 px-4 py-3 sm:grid-cols-2 2xl:grid-cols-4">
+              {([
+                ['customer', 'Search customer, city, contact...'],
+                ['phone', 'Phone number'],
+                ['contact', 'Contact person'],
+                ['agent', 'Sales agent'],
+              ] as const).map(([field, placeholder]) => (
+                <SearchableSelect
+                  key={field}
+                  value=""
+                  options={[]}
+                  onChange={() => undefined}
+                  inputOnly
+                  inputValue={search[field]}
+                  onInputChange={(value) => setSearch((current) => ({ ...current, [field]: value }))}
+                  inputAriaLabel={`Search by ${field === 'customer' ? 'customer name' : field === 'contact' ? 'contact person' : field === 'agent' ? 'sales agent' : 'phone number'}`}
+                  searchPlaceholder={placeholder}
+                  searchInputClassName="rounded-lg border-slate-300 py-2.5"
                 />
-              </label>
+              ))}
             </div>
             {activeCategory.id === 'unverified' && (
               <div className="flex flex-wrap gap-2 border-b border-slate-200 bg-white px-4 py-3" role="group" aria-label="Unverified prospective list views">

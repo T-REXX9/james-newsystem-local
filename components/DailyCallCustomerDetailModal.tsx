@@ -15,6 +15,7 @@ interface DailyCallCustomerDetailModalProps {
   customer: DailyCallCustomerRow | null;
   currentUser: UserProfile | null;
   onClose: () => void;
+  footerActions?: React.ReactNode;
   initialTab?: DetailTabId;
   viewOnlyDoNotContact?: boolean;
 }
@@ -28,6 +29,7 @@ const DailyCallCustomerDetailModal: React.FC<DailyCallCustomerDetailModalProps> 
   customer,
   currentUser,
   onClose,
+  footerActions,
   initialTab = 'overview',
   viewOnlyDoNotContact = false,
 }) => {
@@ -154,7 +156,8 @@ const DailyCallCustomerDetailModal: React.FC<DailyCallCustomerDetailModalProps> 
         </div>
 
         <footer className="border-t border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/50 sm:px-6">
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {footerActions}
             <button
               type="button"
               onClick={onClose}

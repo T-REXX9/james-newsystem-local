@@ -1,5 +1,5 @@
 import React, { Component, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUp, Award, BarChart3, Clock3, Package, Table2, Target, Wallet, X } from 'lucide-react';
+import { ArrowUp, Award, BarChart3, ClipboardList, Clock3, Package, Table2, Target, Wallet, X } from 'lucide-react';
 import { VERIFIED_PROSPECT_POTENTIAL } from '../utils/dailyCallPotentialSales';
 import { matchesDailyCallMonitorBucket } from '../utils/dailyCallListCategory';
 import DailyCallMasterListView from './DailyCallMasterListView';
@@ -8,6 +8,8 @@ import PersonalSalesQuotaEditor from './PersonalSalesQuotaEditor';
 import { fetchDailyCallMasterList } from '../services/dailyCallMonitoringService';
 import { getSalesReportData } from '../services/salesReportService';
 import { DailyCallMasterCustomerRow, SalesReportData, UserProfile } from '../types';
+import { isMasterUserAccount } from '../constants';
+import ApprovalRequestsView from './ApprovalRequestsView';
 
 interface OwnerDailyCallMonitoringUnifiedViewProps {
   currentUser: UserProfile | null;
@@ -24,6 +26,7 @@ interface LocalErrorBoundaryState {
 
 const fromDate = '2025-10-01';
 const monthlyTarget = 3_000_000;
+const DAILY_CALL_WORKSPACE_HISTORY_KEY = '__jamesDailyCallWorkspace';
 
 const peso = new Intl.NumberFormat('en-PH', {
   style: 'currency',
@@ -206,17 +209,65 @@ class LocalErrorBoundary extends Component<LocalErrorBoundaryProps, LocalErrorBo
 }
 
 const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnifiedViewProps> = ({ currentUser }) => {
+  const [activeWorkspace, setActiveWorkspace] = useState<'customers' | 'approvals'>(() => {
+    const state = window.history.state as { [DAILY_CALL_WORKSPACE_HISTORY_KEY]?: string } | null;
+    return state?.[DAILY_CALL_WORKSPACE_HISTORY_KEY] === 'approvals' ? 'approvals' : 'customers';
+  });
+  const ownsApprovalsHistoryEntry = useRef(activeWorkspace === 'approvals');
+  const canReviewCustomerRequests = isMasterUserAccount(currentUser);
   const [summary, setSummary] = useState({ current: 0, totalPotential: 0 });
   const [salesReport, setSalesReport] = useState<SalesReportData | null>(null);
   const [isSalesBreakdownOpen, setIsSalesBreakdownOpen] = useState(false);
   const monthRange = useMemo(currentMonthRange, []);
   const closeSalesBreakdown = useCallback(() => setIsSalesBreakdownOpen(false), []);
 
+  const openApprovalsWorkspace = () => {
+    if (activeWorkspace === 'approvals') return;
+    const state = window.history.state && typeof window.history.state === 'object'
+      ? window.history.state as Record<string, unknown>
+      : {};
+    window.history.pushState(
+      { ...state, [DAILY_CALL_WORKSPACE_HISTORY_KEY]: 'approvals' },
+      '',
+      window.location.href,
+    );
+    ownsApprovalsHistoryEntry.current = true;
+    setActiveWorkspace('approvals');
+  };
+
+  const openMasterListWorkspace = () => {
+    if (activeWorkspace === 'customers') return;
+    const state = window.history.state && typeof window.history.state === 'object'
+      ? window.history.state as Record<string, unknown>
+      : {};
+    if (ownsApprovalsHistoryEntry.current && state[DAILY_CALL_WORKSPACE_HISTORY_KEY] === 'approvals') {
+      window.history.back();
+      return;
+    }
+    ownsApprovalsHistoryEntry.current = false;
+    setActiveWorkspace('customers');
+  };
+
+  useEffect(() => {
+    const syncWorkspaceWithHistory = (event: PopStateEvent) => {
+      const state = event.state && typeof event.state === 'object'
+        ? event.state as Record<string, unknown>
+        : {};
+      const isApprovalEntry = state[DAILY_CALL_WORKSPACE_HISTORY_KEY] === 'approvals';
+      ownsApprovalsHistoryEntry.current = isApprovalEntry;
+      setActiveWorkspace(isApprovalEntry && canReviewCustomerRequests ? 'approvals' : 'customers');
+    };
+    window.addEventListener('popstate', syncWorkspaceWithHistory);
+    return () => window.removeEventListener('popstate', syncWorkspaceWithHistory);
+  }, [canReviewCustomerRequests]);
+
   useEffect(() => {
     let isMounted = true;
     const { from, to } = monthRange;
     Promise.all([
-      fetchDailyCallMasterList({ fromDate, forceRefresh: true }),
+      // Share the list view's in-flight request and short-lived cache. Forcing
+      // a refresh here would run the expensive master-list query twice on load.
+      fetchDailyCallMasterList({ fromDate }),
       // The Sales Report is the authoritative sales calculation. Daily Call must
       // not add ledger and transaction figures on top of it.
       getSalesReportData({ dateFrom: from, dateTo: to, customerId: 'all' }),
@@ -292,10 +343,30 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
               <div className="mb-3 flex items-center justify-between gap-4">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Daily Call Monitoring Dashboard</p>
-                  <h2 className="mt-1 flex items-center gap-2 text-lg font-bold text-slate-900 dark:text-white">
-                    <Table2 className="h-5 w-5 text-blue-600" />
-                    Master List
-                  </h2>
+                  <div className="mt-1 flex flex-wrap items-center gap-2" role="group" aria-label="Daily Call Monitoring views">
+                    <button
+                      id="daily-call-customers-tab"
+                      type="button"
+                      aria-pressed={activeWorkspace === 'customers'}
+                      onClick={openMasterListWorkspace}
+                      className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${activeWorkspace === 'customers' ? 'bg-blue-700 text-white' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'}`}
+                    >
+                      <Table2 className="h-4 w-4" />
+                      Master List
+                    </button>
+                    {canReviewCustomerRequests && (
+                      <button
+                        id="daily-call-approvals-tab"
+                        type="button"
+                        aria-pressed={activeWorkspace === 'approvals'}
+                        onClick={openApprovalsWorkspace}
+                        className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${activeWorkspace === 'approvals' ? 'bg-amber-600 text-white' : 'border border-amber-200 bg-white text-amber-800 hover:bg-amber-50 dark:border-amber-800 dark:bg-slate-900 dark:text-amber-300'}`}
+                      >
+                        <ClipboardList className="h-4 w-4" />
+                        Customer Approvals
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-3">
                   <h3 className="text-sm font-bold uppercase tracking-wide text-slate-800 dark:text-slate-100">Quick Summary (MTD)</h3>
@@ -334,9 +405,17 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
           </header>
 
           <div className="min-h-0 flex-1 overflow-hidden">
-            <LocalErrorBoundary>
-              <DailyCallMasterListView currentUser={currentUser} />
-            </LocalErrorBoundary>
+            {activeWorkspace === 'approvals' && canReviewCustomerRequests ? (
+              <section className="h-full min-h-0 overflow-y-auto rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+                <ApprovalRequestsView currentUser={currentUser} />
+              </section>
+            ) : (
+              <section className="h-full min-h-0 overflow-hidden">
+                <LocalErrorBoundary>
+                  <DailyCallMasterListView currentUser={currentUser} />
+                </LocalErrorBoundary>
+              </section>
+            )}
         </div>
       </section>
       {isSalesBreakdownOpen && salesReport && (

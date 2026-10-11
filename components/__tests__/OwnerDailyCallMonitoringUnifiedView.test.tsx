@@ -18,6 +18,10 @@ vi.mock('../DailyCallMasterListView', () => ({
   default: () => <div data-testid="master-list-view">Master List View</div>,
 }));
 
+vi.mock('../ApprovalRequestsView', () => ({
+  default: () => <div data-testid="customer-approvals-view">Customer Approval Requests</div>,
+}));
+
 vi.mock('../../services/dailyCallMonitoringService', () => ({
   fetchDailyCallMasterList: (...args: unknown[]) => fetchDailyCallMasterListMock(...args),
   fetchDailyCallSalesColorBreakdown: (...args: unknown[]) => fetchDailyCallSalesColorBreakdownMock(...args),
@@ -45,6 +49,17 @@ describe('OwnerDailyCallMonitoringUnifiedView', () => {
     expect(screen.queryByRole('button', { name: /purchase follow-up/i })).not.toBeInTheDocument();
   });
 
+  it('lets a Master User open the customer approval queue from Daily Call Monitoring', async () => {
+    const user = userEvent.setup();
+    getSalesReportDataMock.mockResolvedValue({ summary: { grandTotal: { total: 0 } } });
+    render(<OwnerDailyCallMonitoringUnifiedView currentUser={{ id: '1', role: 'Owner', user_type: '1' } as any} />);
+
+    await user.click(screen.getByRole('button', { name: 'Customer Approvals' }));
+
+    expect(await screen.findByTestId('customer-approvals-view')).toBeInTheDocument();
+    expect(screen.queryByTestId('master-list-view')).not.toBeInTheDocument();
+  });
+
   it('does not render the removed owner workspace toolbar', () => {
     getSalesReportDataMock.mockResolvedValue({ summary: { grandTotal: { total: 0 } } });
     render(<OwnerDailyCallMonitoringUnifiedView currentUser={null} />);
@@ -62,7 +77,7 @@ describe('OwnerDailyCallMonitoringUnifiedView', () => {
 
     expect(await screen.findByText('₱45,678')).toBeInTheDocument();
     expect(getSalesReportDataMock).toHaveBeenCalledWith(expect.objectContaining({ customerId: 'all' }));
-    expect(fetchDailyCallMasterListMock).toHaveBeenCalledWith({ fromDate: '2025-10-01', forceRefresh: true });
+    expect(fetchDailyCallMasterListMock).toHaveBeenCalledWith({ fromDate: '2025-10-01' });
   });
 
   it('opens the month sales breakdown with ranked agents, customers, and products', async () => {

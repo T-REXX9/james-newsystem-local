@@ -21,6 +21,10 @@ interface SearchableSelectProps {
     buttonClassName?: string;
     searchInputClassName?: string;
     dropdownClassName?: string;
+    inputOnly?: boolean;
+    inputValue?: string;
+    onInputChange?: (value: string) => void;
+    inputAriaLabel?: string;
 }
 
 const SearchableSelect: React.FC<SearchableSelectProps> = ({
@@ -36,6 +40,10 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     buttonClassName = '',
     searchInputClassName = '',
     dropdownClassName = '',
+    inputOnly = false,
+    inputValue = '',
+    onInputChange,
+    inputAriaLabel,
 }) => {
     const selectId = useId().replace(/:/g, '-');
     const wrapperRef = useRef<HTMLDivElement>(null);
@@ -150,6 +158,20 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
 
     return (
         <div ref={wrapperRef} className={`relative ${className}`}>
+            {inputOnly ? (
+                <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} aria-hidden="true" />
+                    <input
+                        type="search"
+                        value={inputValue}
+                        onChange={(event) => onInputChange?.(event.target.value)}
+                        placeholder={searchPlaceholder}
+                        aria-label={inputAriaLabel || searchPlaceholder}
+                        disabled={disabled}
+                        className={`w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 ${searchInputClassName}`}
+                    />
+                </div>
+            ) : (
             <button
                 ref={buttonRef}
                 type="button"
@@ -171,8 +193,9 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                 </span>
                 <ChevronDown size={16} className={`shrink-0 transition ${isOpen ? 'rotate-180' : ''}`} />
             </button>
+            )}
 
-            {isOpen &&
+            {!inputOnly && isOpen &&
                 ReactDOM.createPortal(
                     <div
                         id={`${selectId}-dropdown`}

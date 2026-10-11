@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Loader2, Eye, EyeOff, Plus, Trash2 } from 'lucide-react';
 import { CustomerStatus, DealStage, Contact, ContactPerson, type CustomerVatType, type UserProfile } from '../types';
@@ -11,13 +11,45 @@ import { validateMaxLength, validateOptionalEmail, validateOptionalPhone, valida
 import { parseSupabaseError } from '../utils/errorHandler';
 import { formatCustomerSince } from '../utils/formatUtils';
 import { useToast } from './ToastProvider';
-import { fetchSalesAgents, fetchSimilarCustomerNames, type SimilarCustomerNameMatch } from '../services/customerDatabaseLocalApiService';
+import { fetchContactById, fetchSalesAgents, fetchSimilarCustomerNames, type SimilarCustomerNameMatch } from '../services/customerDatabaseLocalApiService';
 import RecordImagePicker from './RecordImagePicker';
 import { getLocalAuthSession } from '../services/localAuthService';
 import { isMasterUserAccount } from '../constants';
 import DuplicateApprovalModal from './DuplicateApprovalModal';
 
 const TRANSACTION_TYPE_OPTIONS = ['Order Slip', 'Invoice'] as const;
+
+const conflictComparisonFields: Array<[string, (contact: Partial<Contact>) => unknown]> = [
+  ['Company name', contact => contact.company], ['Previous company name', contact => contact.pastName],
+  ['Customer since', contact => contact.customerSince], ['Team', contact => contact.team],
+  ['Sales agent', contact => contact.salesman || contact.assignedAgent], ['Referred by', contact => contact.referBy],
+  ['Contact persons', contact => contact.contactPersons?.map(person => [person.name, person.position, person.telephone, person.mobile, person.email].filter(Boolean).join(' · ')).join('\n')],
+  ['Email', contact => contact.email], ['Phone', contact => [contact.phone, contact.mobile].filter(Boolean).join(' · ')],
+  ['Address', contact => [contact.address, contact.city, contact.province, contact.area].filter(Boolean).join(', ')],
+  ['Delivery addresses', contact => [contact.deliveryAddress, ...(contact.deliveryAddresses || [])].filter(Boolean).join('\n')],
+  ['TIN', contact => contact.tin], ['Business line', contact => contact.businessLine],
+  ['Payment terms', contact => contact.terms], ['Transaction type', contact => contact.transactionType],
+  ['VAT type', contact => contact.vatType], ['VAT percentage', contact => contact.vatPercentage],
+  ['Price group', contact => contact.priceGroup], ['Price code', contact => contact.priceCode],
+  ['Discount code', contact => contact.discountCode], ['Credit limit', contact => contact.creditLimit],
+  ['Dealership terms', contact => contact.dealershipTerms], ['Dealership since', contact => contact.dealershipSince],
+  ['Dealership quota', contact => contact.dealershipQuota], ['Preferred brand', contact => contact.preferredBrand],
+  ['Customer code', contact => contact.codeText], ['Status', contact => contact.status],
+  ['Verification', contact => contact.verification],
+  ['Hidden from lists', contact => contact.isHidden === undefined ? '' : contact.isHidden ? 'Yes' : 'No'],
+  ['Debt type', contact => contact.debtType], ['Customer note', contact => contact.comment],
+  ['Last contact date', contact => contact.lastContactDate], ['Deal value', contact => contact.dealValue],
+  ['Lead stage', contact => contact.stage],
+  ['Interactions', contact => contact.interactions?.map(item => [item.date, item.type, item.notes, item.sentiment].filter(Boolean).join(' · ')).join('\n')],
+  ['Sales history', contact => contact.salesHistory?.map(item => [item.date, item.product, item.amount, item.status].filter(Boolean).join(' · ')).join('\n')],
+  ['Top products', contact => contact.topProducts?.join('\n')],
+  ['AI score', contact => contact.aiScore], ['AI reasoning', contact => contact.aiReasoning],
+  ['Win probability', contact => contact.winProbability], ['Next best action', contact => contact.nextBestAction],
+  ['Recorded comments', contact => contact.comments?.map(comment => comment.text).join('\n')],
+  ['Duplicate override reason', contact => contact.duplicateOverrideReason],
+];
+
+const comparisonText = (value: unknown): string => value === null || value === undefined || String(value).trim() === '' ? '—' : String(value);
 
 interface ToastOverride {
   title?: string;
@@ -61,6 +93,11 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
   const [submitCount, setSubmitCount] = useState(0);
   const [similarNameMatches, setSimilarNameMatches] = useState<SimilarCustomerNameMatch[]>([]);
   const [checkingCompanyName, setCheckingCompanyName] = useState(false);
+  const [showConflictComparison, setShowConflictComparison] = useState(false);
+  const [conflictCustomers, setConflictCustomers] = useState<Array<Contact | null>>([]);
+  const [loadingConflictCustomers, setLoadingConflictCustomers] = useState(false);
+  const [conflictLoadError, setConflictLoadError] = useState('');
+  const conflictRequestRef = useRef(0);
   const [duplicateOverrideReason, setDuplicateOverrideReason] = useState('');
   const [salesAgents, setSalesAgents] = useState<UserProfile[]>([]);
   const [showDuplicateApprovalModal, setShowDuplicateApprovalModal] = useState(false);
@@ -199,9 +236,12 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
+    conflictRequestRef.current += 1;
     setLoading(false);
     setSubmitError(null);
     setSimilarNameMatches([]);
+    setShowConflictComparison(false);
+    setConflictCustomers([]);
     setDuplicateOverrideReason('');
     if (isEditMode && initialData) {
       setFormData(buildFormDataFromContact(initialData));
@@ -431,6 +471,28 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     }, 300);
   };
 
+  const handleViewConflicts = async () => {
+    const requestId = ++conflictRequestRef.current;
+    setShowConflictComparison(true);
+    setLoadingConflictCustomers(true);
+    setConflictLoadError('');
+    const results = await Promise.allSettled(similarNameMatches.map(match =>
+      match.session_id ? fetchContactById(match.session_id) : Promise.resolve(null)
+    ));
+    if (requestId !== conflictRequestRef.current) return;
+    const contacts = results.map(result => result.status === 'fulfilled' ? result.value : null);
+    setConflictCustomers(contacts);
+    if (contacts.some(contact => !contact)) {
+      setConflictLoadError('Some customer details could not be loaded. Close this window and try again.');
+    }
+    setLoadingConflictCustomers(false);
+  };
+
+  const closeConflictComparison = () => {
+    conflictRequestRef.current += 1;
+    setShowConflictComparison(false);
+  };
+
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
     const companyValidation = validateRequired(formData.company, 'a customer name');
@@ -544,14 +606,13 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                              <div className="mt-1 text-xs text-rose-600">{validationErrors.company}</div>
                            )}
                            {similarNameMatches.length > 0 && (
-                             <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900" role="status">
-                               <div className="font-semibold">Possible existing customer name{similarNameMatches.length > 1 ? 's' : ''} found{checkingCompanyName ? '…' : ':'}</div>
-                               {!checkingCompanyName && similarNameMatches.map((match) => (
-                                 <div key={`${match.session_id || match.company}-${match.is_blacklisted ? 'blocked' : 'customer'}`}>
-                                   <div>{match.company}{match.is_blacklisted ? ' — Do Not Contact' : ''}</div>
-                                   {match.matched_fields?.length ? <div className="text-amber-800">Matched: {match.matched_fields.join(', ')}</div> : null}
-                                 </div>
-                               ))}
+                             <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950" role="status">
+                               <div className="font-semibold">{checkingCompanyName ? 'Checking for customer conflicts…' : `${similarNameMatches.length} possible customer conflict${similarNameMatches.length === 1 ? '' : 's'} found.`}</div>
+                               {!checkingCompanyName && (
+                                 <button type="button" onClick={() => void handleViewConflicts()} className="mt-1 font-semibold text-amber-900 underline decoration-amber-500 underline-offset-2 hover:text-amber-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600" aria-haspopup="dialog">
+                                   View Conflicts
+                                 </button>
+                               )}
                                {!isEditMode && (
                                  <div className="mt-2">
                                    <label className="label normal-case">Reason for adding a separate record *</label>
@@ -985,6 +1046,65 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
           // Implementation for snooze functionality
         }}
       />
+      {showConflictComparison && (
+        <div className="fixed inset-0 z-[2100] flex items-center justify-center bg-slate-950/60 p-3 sm:p-6" onMouseDown={event => { if (event.target === event.currentTarget) closeConflictComparison(); }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="prospect-conflict-title" className="flex max-h-[92dvh] w-full max-w-7xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+            <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 dark:border-slate-700">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Customer conflict review</p>
+                <h2 id="prospect-conflict-title" className="mt-1 text-lg font-bold text-slate-950 dark:text-white">Compare customer details</h2>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Review the submitted prospect beside each possible existing customer.</p>
+              </div>
+              <button type="button" onClick={closeConflictComparison} aria-label="Close conflict comparison" className="rounded-md p-2 text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:bg-slate-800"><X className="h-5 w-5" /></button>
+            </header>
+            <div className="overflow-auto p-4 sm:p-5">
+              {loadingConflictCustomers ? <p role="status" className="py-8 text-center text-sm text-slate-600">Loading customer details…</p> : (
+                <>
+                  {conflictLoadError && <p role="alert" className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{conflictLoadError}</p>}
+                  {similarNameMatches.map((match, index) => {
+                    const submitted: Partial<Contact> = {
+                      ...formData,
+                      company: String(formData.company || '').trim(),
+                      salesman: String(formData.salesman || ''),
+                      contactPersons: contactPersons.map((person, personIndex) => ({ ...person, id: person.id || `submitted-${personIndex}`, enabled: person.enabled ?? true })),
+                      email: contactPersons[0]?.email || '',
+                      phone: contactPersons[0]?.telephone || '',
+                      mobile: contactPersons[0]?.mobile || '',
+                      duplicateOverrideReason,
+                    } as Partial<Contact>;
+                    const existing = conflictCustomers[index];
+                    return (
+                      <section key={`${match.session_id || match.company}-${index}`} className="mb-5 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
+                        <div className="grid min-w-[640px] grid-cols-[minmax(120px,0.55fr)_repeat(2,minmax(240px,1fr))] border-b border-slate-200 bg-slate-50 text-sm font-semibold dark:border-slate-700 dark:bg-slate-800">
+                          <div className="px-3 py-3 text-slate-500">Field</div>
+                          <div className="border-l border-slate-200 px-3 py-3 dark:border-slate-700">Submitted · {submitted.company || 'New prospect'}</div>
+                          <div className="border-l border-slate-200 px-3 py-3 dark:border-slate-700">Existing · {existing?.company || match.company}{match.is_blacklisted ? ' · Do Not Contact' : ''}</div>
+                        </div>
+                        <div className="min-w-[640px] divide-y divide-slate-100 dark:divide-slate-800">
+                          {conflictComparisonFields.map(([label, getValue]) => {
+                            const submittedValue = comparisonText(getValue(submitted));
+                            const existingValue = existing ? comparisonText(getValue(existing)) : 'Details unavailable';
+                            const differs = submittedValue !== existingValue;
+                            return (
+                              <div key={label} className="grid grid-cols-[minmax(120px,0.55fr)_repeat(2,minmax(240px,1fr))] text-sm">
+                                <div className="bg-slate-50 px-3 py-2 font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">{label}</div>
+                                <div className={`min-w-0 whitespace-pre-wrap break-words border-l border-slate-100 px-3 py-2 dark:border-slate-800 ${differs ? 'bg-amber-50/70 dark:bg-amber-950/20' : ''}`}>{submittedValue}</div>
+                                <div className={`min-w-0 whitespace-pre-wrap break-words border-l border-slate-100 px-3 py-2 dark:border-slate-800 ${differs ? 'bg-amber-50/70 dark:bg-amber-950/20' : ''}`}>{existingValue}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="border-t border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">Matched on: {match.matched_fields?.length ? match.matched_fields.join(', ') : 'customer duplicate review rules'}.</div>
+                      </section>
+                    );
+                  })}
+                </>
+              )}
+            </div>
+            <footer className="flex justify-end border-t border-slate-200 px-5 py-3 dark:border-slate-700"><button type="button" onClick={closeConflictComparison} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:bg-slate-100 dark:text-slate-900">Back to prospect</button></footer>
+          </section>
+        </div>
+      )}
     </>
   );
 

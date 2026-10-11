@@ -1,16 +1,19 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ClipboardList, RefreshCw, Search, CheckCircle2, XCircle, Clock3,
-    Building2, Tag, FileText, ChevronDown, ChevronUp, User,
+    Building2, Tag, FileText, User, Loader2,
 } from 'lucide-react';
 import {
     CustomerRequest, fetchAllCustomerRequests, reviewCustomerRequest,
 } from '../services/customerWorkflowLocalApiService';
-import { Contact, UserProfile } from '../types';
+import { Contact, DailyCallCustomerRow, UserProfile } from '../types';
 import { isMasterUserAccount } from '../constants';
 import { fetchContacts } from '../services/customerDatabaseLocalApiService';
+import { fetchCustomersForDailyCall } from '../services/dailyCallMonitoringService';
 import { toast } from 'sonner';
 import { formatDateTime } from '../utils/formatUtils';
+import DailyCallCustomerDetailModal from './DailyCallCustomerDetailModal';
+import { isBlockedDailyCallCustomerRow } from '../utils/dailyCallBlockedCustomer';
 
 import { shouldSuppressAuthError } from '../services/localApiAuth';
 type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected';
@@ -27,6 +30,8 @@ const formatDate = (value?: string | null) => {
     if (Number.isNaN(date.getTime())) return value;
     return formatDateTime(date);
 };
+
+const APPROVAL_CUSTOMER_DETAIL_HISTORY_KEY = '__jamesApprovalCustomerDetail';
 
 const summarizePayload = (row: CustomerRequest): string => {
     if (row.kind === 'discount') {
@@ -48,7 +53,6 @@ const summarizePayload = (row: CustomerRequest): string => {
 
 interface ApprovalRequestsViewProps {
     currentUser: UserProfile | null;
-    onSelectCustomer?: (contactId: string) => void;
     initialRequestId?: string;
     /** When true, restricts the view to owners/managers only. Default: true. */
     restrictToOwners?: boolean;
@@ -56,7 +60,6 @@ interface ApprovalRequestsViewProps {
 
 export default function ApprovalRequestsView({
     currentUser,
-    onSelectCustomer,
     initialRequestId,
     restrictToOwners = true,
 }: ApprovalRequestsViewProps) {
@@ -73,13 +76,85 @@ export default function ApprovalRequestsView({
     const [search, setSearch] = useState('');
     const reviewingRef = useRef(false);
     const [busyId, setBusyId] = useState('');
-    const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+    const [selectedCustomer, setSelectedCustomer] = useState<DailyCallCustomerRow | null>(null);
+    const [selectedApprovalRequest, setSelectedApprovalRequest] = useState<CustomerRequest | null>(null);
+    const dailyCallCustomersRef = useRef<DailyCallCustomerRow[] | null>(null);
+    const [loadingContactId, setLoadingContactId] = useState('');
     const [notes, setNotes] = useState<Record<string, string>>({});
     const [refreshTick, setRefreshTick] = useState(0);
+    const initialRequestHandled = useRef(false);
+    const ownsModalHistoryEntry = useRef(false);
+
+    const openCustomerDetails = useCallback(async (contactId: string, request: CustomerRequest) => {
+        setLoadingContactId(contactId);
+        try {
+            if (!dailyCallCustomersRef.current) {
+                dailyCallCustomersRef.current = await fetchCustomersForDailyCall({});
+            }
+            const customer = dailyCallCustomersRef.current.find((row) => String(row.id) === contactId);
+            if (!customer) {
+                toast.error('Customer details are unavailable.');
+                return;
+            }
+            const historyState = window.history.state && typeof window.history.state === 'object'
+                ? window.history.state as Record<string, unknown>
+                : {};
+            if (!ownsModalHistoryEntry.current) {
+                window.history.pushState(
+                    { ...historyState, [APPROVAL_CUSTOMER_DETAIL_HISTORY_KEY]: { contactId, requestId: request.id } },
+                    '',
+                    window.location.href,
+                );
+                ownsModalHistoryEntry.current = true;
+            }
+            setSelectedCustomer(customer);
+            setSelectedApprovalRequest(request);
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Customer details are unavailable.');
+        } finally {
+            setLoadingContactId('');
+        }
+    }, []);
+
+    const closeCustomerDetails = useCallback(() => {
+        if (ownsModalHistoryEntry.current) {
+            window.history.back();
+        } else {
+            setSelectedCustomer(null);
+            setSelectedApprovalRequest(null);
+        }
+    }, []);
 
     useEffect(() => {
-        if (initialRequestId) setExpandedIds(new Set([initialRequestId]));
-    }, [initialRequestId]);
+        const syncCustomerModalWithHistory = (event: PopStateEvent) => {
+            const historyState = event.state && typeof event.state === 'object'
+                ? event.state as Record<string, unknown>
+                : {};
+            const detail = historyState[APPROVAL_CUSTOMER_DETAIL_HISTORY_KEY] as { contactId?: string } | undefined;
+            if (!detail?.contactId) {
+                ownsModalHistoryEntry.current = false;
+                setSelectedCustomer(null);
+                setSelectedApprovalRequest(null);
+                return;
+            }
+            ownsModalHistoryEntry.current = true;
+            const customer = dailyCallCustomersRef.current?.find((row) => String(row.id) === detail.contactId);
+            if (customer) setSelectedCustomer(customer);
+            const request = rows.find((row) => String(row.id) === String(detail.requestId));
+            if (request) setSelectedApprovalRequest(request);
+        };
+        window.addEventListener('popstate', syncCustomerModalWithHistory);
+        return () => window.removeEventListener('popstate', syncCustomerModalWithHistory);
+    }, [rows]);
+
+    useEffect(() => {
+        if (!initialRequestId || initialRequestHandled.current) return;
+        const request = rows.find((row) => String(row.id) === String(initialRequestId));
+        if (request) {
+            initialRequestHandled.current = true;
+            void openCustomerDetails(String(request.contact_id), request);
+        }
+    }, [initialRequestId, openCustomerDetails, rows]);
 
     useEffect(() => {
         if (!visible) return;
@@ -168,6 +243,9 @@ export default function ApprovalRequestsView({
             toast.success(`Request ${decision === 'approved' ? 'approved' : 'rejected'}`);
             setRows(current => current.map(item => item.id === row.id ? { ...item, status: decision } : item));
             setRefreshTick((n) => n + 1);
+            if (String(selectedApprovalRequest?.id) === String(row.id)) {
+                closeCustomerDetails();
+            }
         } catch (err) {
       if (shouldSuppressAuthError(err)) return;
             const msg = err instanceof Error ? err.message : 'Review failed';
@@ -178,6 +256,32 @@ export default function ApprovalRequestsView({
             setBusyId('');
         }
     };
+
+    const activeApprovalRequest = selectedApprovalRequest
+        ? rows.find((row) => String(row.id) === String(selectedApprovalRequest.id)) || selectedApprovalRequest
+        : null;
+    const modalFooterActions = canApprove && activeApprovalRequest?.status === 'pending' ? (
+        <>
+            <button
+                type="button"
+                disabled={busyId === String(activeApprovalRequest.id)}
+                onClick={() => void review(activeApprovalRequest, 'approved')}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:opacity-50"
+            >
+                <CheckCircle2 className="h-4 w-4" />
+                Approve
+            </button>
+            <button
+                type="button"
+                disabled={busyId === String(activeApprovalRequest.id)}
+                onClick={() => void review(activeApprovalRequest, 'rejected')}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-600 transition-colors hover:bg-rose-50 disabled:opacity-50 dark:border-rose-800 dark:bg-slate-900 dark:text-rose-300 dark:hover:bg-rose-900/20"
+            >
+                <XCircle className="h-4 w-4" />
+                Reject
+            </button>
+        </>
+    ) : null;
 
     if (!visible) {
         return (
@@ -282,31 +386,29 @@ export default function ApprovalRequestsView({
                         const isDiscount = row.kind === 'discount';
                         const isDuplicateProspect = row.kind === 'duplicate_prospect';
                         const KindIcon = isDiscount ? Tag : FileText;
-                        const isExpanded = expandedIds.has(String(row.id));
                         const contact = contacts.get(String(row.contact_id));
                         const customerLabel = contact?.company || contact?.name || String(row.payload?.company || (isDuplicateProspect ? 'Duplicate prospect' : `Customer #${row.contact_id}`));
-                        const payloadEntries = Object.entries(row.payload || {}).filter(([k]) => k !== 'notes');
                         return (
                             <article
                                 key={row.id}
-                                className={`overflow-hidden rounded-xl border bg-white shadow-sm transition-shadow hover:shadow-md dark:bg-slate-900 ${status.border}`}
+                                className={`overflow-hidden rounded-xl border bg-white shadow-sm transition-shadow dark:bg-slate-900 ${status.border}`}
                             >
-                                <div className="flex flex-wrap items-start gap-3 p-4">
+                                <button
+                                    type="button"
+                                    aria-label={`View customer details for ${customerLabel}`}
+                                    onClick={() => void openCustomerDetails(String(row.contact_id), row)}
+                                    className="flex w-full flex-wrap items-start gap-3 p-4 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 dark:hover:bg-slate-800/60"
+                                >
                                     <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${status.bg}`}>
                                         <StatusIcon className={`h-4 w-4 ${status.text}`} />
                                     </div>
 
                                     <div className="min-w-0 flex-1">
                                         <div className="flex flex-wrap items-center gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => { if (!isDuplicateProspect) onSelectCustomer?.(String(row.contact_id)); }}
-                                                disabled={!onSelectCustomer || isDuplicateProspect}
-                                                className="flex items-center gap-1.5 truncate text-sm font-bold text-slate-900 hover:text-blue-700 disabled:cursor-default disabled:hover:text-slate-900 dark:text-white dark:hover:text-blue-300"
-                                            >
+                                            <span className="flex items-center gap-1.5 truncate text-sm font-bold text-slate-900 dark:text-white">
                                                 <Building2 className="h-3.5 w-3.5 text-slate-400" />
                                                 {customerLabel}
-                                            </button>
+                                            </span>
                                             <span className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                                                 <KindIcon className="h-2.5 w-2.5" />
                                                 {isDiscount ? 'Discount' : (isDuplicateProspect ? 'Duplicate Prospect' : 'Customer Update')}
@@ -331,54 +433,18 @@ export default function ApprovalRequestsView({
                                         </p>
                                     </div>
 
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setExpandedIds((prev) => {
-                                                const next = new Set(prev);
-                                                if (next.has(String(row.id))) next.delete(String(row.id));
-                                                else next.add(String(row.id));
-                                                return next;
-                                            });
-                                        }}
-                                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
-                                    >
-                                        {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                                        {isExpanded ? 'Hide' : 'Details'}
-                                    </button>
-                                </div>
+                                    {loadingContactId === String(row.contact_id)
+                                        ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-slate-400" />
+                                        : <Building2 className="h-4 w-4 shrink-0 text-slate-400" />}
+                                </button>
 
-                                {isExpanded && (
-                                    <div className="border-t border-slate-100 bg-slate-50/50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/50">
-                                        {payloadEntries.length > 0 && (
-                                            <dl className="space-y-1.5">
-                                                {payloadEntries.map(([key, value]) => (
-                                                    <div key={key} className="grid grid-cols-1 gap-1 sm:grid-cols-[180px_1fr]">
-                                                        <dt className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                                                            {key.replaceAll('_', ' ')}
-                                                        </dt>
-                                                        <dd className="break-words text-xs text-slate-800 dark:text-slate-200">
-                                                            {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value ?? '')}
-                                                        </dd>
-                                                    </div>
-                                                ))}
-                                            </dl>
-                                        )}
-                                        {typeof row.payload?.notes === 'string' && (
-                                            <p className="mt-2 text-xs italic text-slate-600 dark:text-slate-300">
-                                                <span className="font-bold not-italic">Note: </span>
-                                                {row.payload.notes}
-                                            </p>
-                                        )}
-                                        {row.review_note && (
-                                            <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">
-                                                <span className="font-bold">Review note: </span>
-                                                {row.review_note}
-                                            </p>
-                                        )}
-
+                                {row.review_note && (
+                                    <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-300">
+                                        <span className="font-bold">Review note: </span>{row.review_note}
+                                    </p>
+                                )}
                                 {canApprove && row.status === 'pending' && (
-                                            <div className="mt-3 space-y-2 border-t border-slate-200 pt-3 dark:border-slate-700">
+                                            <div className="space-y-2 border-t border-slate-100 p-4 dark:border-slate-800">
                                                 <input
                                                     maxLength={2000}
                                                     value={notes[String(row.id)] || ''}
@@ -408,13 +474,19 @@ export default function ApprovalRequestsView({
                                                 </div>
                                             </div>
                                         )}
-                                    </div>
-                                )}
                             </article>
                         );
                     })}
                 </div>
             )}
+            <DailyCallCustomerDetailModal
+                isOpen={Boolean(selectedCustomer)}
+                customer={selectedCustomer}
+                currentUser={currentUser}
+                viewOnlyDoNotContact={Boolean(selectedCustomer && isBlockedDailyCallCustomerRow(selectedCustomer))}
+                footerActions={modalFooterActions}
+                onClose={closeCustomerDetails}
+            />
         </div>
     );
 }
