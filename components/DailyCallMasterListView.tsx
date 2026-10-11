@@ -64,6 +64,29 @@ const compactPeso = new Intl.NumberFormat('en-PH', {
 
 type CategoryId = 'priority' | 'recovery' | 'verified' | 'unverified' | 'blocked' | 'all';
 type UnverifiedListTab = 'customers' | 'submissions';
+const DAILY_CALL_MASTER_LIST_HISTORY_KEY = '__jamesDailyCallMasterList';
+
+type DailyCallMasterListHistorySnapshot = {
+  activeCategoryId?: CategoryId;
+  unverifiedListTab?: UnverifiedListTab;
+  visibleLimit?: number;
+  search?: DailyCallMasterSearch;
+  currentVipFilter?: string;
+  nextVipFilter?: string;
+  lastPurchaseFilter?: string;
+  colorFilter?: string;
+  masterListScrollTop?: number;
+  tableScrollTop?: number;
+};
+
+const readDailyCallMasterListHistorySnapshot = (): DailyCallMasterListHistorySnapshot | null => {
+  if (typeof window === 'undefined') return null;
+  const state = window.history.state && typeof window.history.state === 'object'
+    ? window.history.state as Record<string, unknown>
+    : {};
+  const snapshot = state[DAILY_CALL_MASTER_LIST_HISTORY_KEY];
+  return snapshot && typeof snapshot === 'object' ? snapshot as DailyCallMasterListHistorySnapshot : null;
+};
 
 interface CategoryDefinition {
   id: CategoryId;
@@ -361,6 +384,7 @@ interface DailyCallMasterListViewProps {
 
 const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ currentUser }) => {
   const { addToast } = useToast();
+  const [initialHistorySnapshot] = useState(readDailyCallMasterListHistorySnapshot);
   const initialCachedResult = useMemo(() => getCachedDailyCallMasterList({ fromDate }), []);
   const [rows, setRows] = useState<DailyCallMasterCustomerRow[]>(() => initialCachedResult?.items || []);
   const [pendingDuplicateProspects, setPendingDuplicateProspects] = useState<PendingDuplicateProspect[]>(() => initialCachedResult?.pendingDuplicateProspects || []);
@@ -375,10 +399,12 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const loadSequence = useRef(0);
   const [meta, setMeta] = useState<DailyCallMasterListMeta>(() => initialCachedResult?.meta || { fromDate, toDate: '', count: 0 });
   const rowsRef = useRef<DailyCallMasterCustomerRow[]>(initialCachedResult?.items || []);
-  const [search, setSearch] = useState<DailyCallMasterSearch>({ customer: '', phone: '', contact: '', agent: '' });
+  const [search, setSearch] = useState<DailyCallMasterSearch>(initialHistorySnapshot?.search || { customer: '', phone: '', contact: '', agent: '' });
   const [loading, setLoading] = useState(!initialCachedResult);
   const [error, setError] = useState<string | null>(null);
   const dashboardRef = useRef<HTMLDivElement>(null);
+  const masterListScrollRef = useRef<HTMLDivElement>(null);
+  const tableScrollRef = useRef<HTMLDivElement>(null);
   const fullCustomerRowsRef = useRef<DailyCallCustomerRow[] | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<DailyCallCustomerRow | null>(null);
   const [showAddProspectModal, setShowAddProspectModal] = useState(false);
@@ -387,13 +413,13 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const [loadingCustomerId, setLoadingCustomerId] = useState<string | null>(null);
   const [pendingDoNotContactRow, setPendingDoNotContactRow] = useState<DailyCallMasterCustomerRow | null>(null);
   const [doNotContactReason, setDoNotContactReason] = useState('');
-  const [activeCategoryId, setActiveCategoryId] = useState<CategoryId>('priority');
-  const [unverifiedListTab, setUnverifiedListTab] = useState<UnverifiedListTab>('customers');
-  const [visibleLimit, setVisibleLimit] = useState(INITIAL_VISIBLE_ROWS);
-  const [currentVipFilter, setCurrentVipFilter] = useState('all');
-  const [nextVipFilter, setNextVipFilter] = useState('all');
-  const [lastPurchaseFilter, setLastPurchaseFilter] = useState('all');
-  const [colorFilter, setColorFilter] = useState('all');
+  const [activeCategoryId, setActiveCategoryId] = useState<CategoryId>(initialHistorySnapshot?.activeCategoryId || 'priority');
+  const [unverifiedListTab, setUnverifiedListTab] = useState<UnverifiedListTab>(initialHistorySnapshot?.unverifiedListTab || 'customers');
+  const [visibleLimit, setVisibleLimit] = useState(initialHistorySnapshot?.visibleLimit || INITIAL_VISIBLE_ROWS);
+  const [currentVipFilter, setCurrentVipFilter] = useState(initialHistorySnapshot?.currentVipFilter || 'all');
+  const [nextVipFilter, setNextVipFilter] = useState(initialHistorySnapshot?.nextVipFilter || 'all');
+  const [lastPurchaseFilter, setLastPurchaseFilter] = useState(initialHistorySnapshot?.lastPurchaseFilter || 'all');
+  const [colorFilter, setColorFilter] = useState(initialHistorySnapshot?.colorFilter || 'all');
   const [vipConfig, setVipConfig] = useState<VipTierConfig>(DEFAULT_VIP_TIER_CONFIG);
   const [salesAgents, setSalesAgents] = useState<UserProfile[]>([]);
   const [teams, setTeams] = useState<TeamRecord[]>([]);
@@ -404,6 +430,39 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const [assigningCustomerId, setAssigningCustomerId] = useState<string | null>(null);
   const [replyModalRow, setReplyModalRow] = useState<DailyCallMasterCustomerRow | null>(null);
   const duplicateComparisonSequence = useRef(0);
+  const filterResetKey = JSON.stringify([
+    activeCategoryId,
+    colorFilter,
+    currentVipFilter,
+    lastPurchaseFilter,
+    nextVipFilter,
+    search.customer,
+    search.phone,
+    search.contact,
+    search.agent,
+  ]);
+  const previousFilterResetKey = useRef(filterResetKey);
+
+  const saveHistorySnapshotBeforeCustomerNavigation = useCallback(() => {
+    const currentState = window.history.state && typeof window.history.state === 'object'
+      ? window.history.state as Record<string, unknown>
+      : {};
+    window.history.replaceState({
+      ...currentState,
+      [DAILY_CALL_MASTER_LIST_HISTORY_KEY]: {
+        activeCategoryId,
+        unverifiedListTab,
+        visibleLimit,
+        search,
+        currentVipFilter,
+        nextVipFilter,
+        lastPurchaseFilter,
+        colorFilter,
+        masterListScrollTop: masterListScrollRef.current?.scrollTop || 0,
+        tableScrollTop: tableScrollRef.current?.scrollTop || 0,
+      } satisfies DailyCallMasterListHistorySnapshot,
+    }, '', window.location.href);
+  }, [activeCategoryId, colorFilter, currentVipFilter, lastPurchaseFilter, nextVipFilter, search, unverifiedListTab, visibleLimit]);
 
   const handleSelectCategory = useCallback((categoryId: CategoryId) => {
     setActiveCategoryId(categoryId);
@@ -890,8 +949,23 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   }, [actionableCategoryRows, activeCategory, addToast, loadRows, salesAgents, selectedAssignmentAgentId]);
 
   useEffect(() => {
+    if (previousFilterResetKey.current === filterResetKey) return;
+    previousFilterResetKey.current = filterResetKey;
     setVisibleLimit(INITIAL_VISIBLE_ROWS);
-  }, [activeCategoryId, colorFilter, currentVipFilter, lastPurchaseFilter, nextVipFilter, search]);
+  }, [filterResetKey]);
+
+  useEffect(() => {
+    if (loading || !initialHistorySnapshot) return;
+    const frame = window.requestAnimationFrame(() => {
+      if (masterListScrollRef.current) {
+        masterListScrollRef.current.scrollTop = initialHistorySnapshot.masterListScrollTop || 0;
+      }
+      if (tableScrollRef.current) {
+        tableScrollRef.current.scrollTop = initialHistorySnapshot.tableScrollTop || 0;
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [initialHistorySnapshot, loading]);
 
   const loadMoreRows = useCallback(() => {
     setVisibleLimit((currentLimit) => Math.min(activeCategory.rows.length, currentLimit + VISIBLE_ROWS_STEP));
@@ -928,6 +1002,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
 
   return (
     <div
+      ref={masterListScrollRef}
       className="h-full min-h-0 overflow-auto"
       data-testid="master-list-scroll-region"
       onScroll={handleMasterListScroll}
@@ -1201,6 +1276,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
               </div>
             )}
             <div
+              ref={tableScrollRef}
               className="min-h-0 flex-1"
               data-testid="daily-call-table-scroll"
               onScroll={handleTableScroll}
@@ -1298,6 +1374,8 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                                       key={customer.sessionId}
                                       tab="sales-database-customer-database"
                                       payload={{ contactId: customer.sessionId }}
+                                      mode="push"
+                                      onOpen={saveHistorySnapshotBeforeCustomerNavigation}
                                       aria-label={`Open ${customer.company} in customer database`}
                                       wrapperClassName="flex min-w-0 items-center gap-1 rounded border border-amber-200 bg-white px-2 py-1"
                                       className="min-w-0 flex-1 rounded text-xs text-slate-700 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
