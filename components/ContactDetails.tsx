@@ -20,9 +20,11 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { updateContact } from '../services/customerDatabaseLocalApiService';
 import { requestCustomerUpdate } from '../services/customerWorkflowLocalApiService';
 import CustomerRequestsTab from './CustomerRequestsTab';
+import PersonalCommentsTab from './PersonalCommentsTab';
 import { hasActionPermission, isMasterUserAccount } from '../constants';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import { normalizePriceGroup } from '../constants/pricingGroups';
+import RecordImageLightbox from './RecordImageLightbox';
 
 interface ContactDetailsProps {
   contact: Contact;
@@ -30,6 +32,7 @@ interface ContactDetailsProps {
   permissionPage?: string;
   showAgentSalesReportInOverview?: boolean;
   viewOnly?: boolean;
+  allowDirectProspectEdit?: boolean;
   onSalesReportRead?: (contactId: string) => void;
   onClose: () => void;
   onUpdate: (updatedContact: Contact) => void;
@@ -41,9 +44,11 @@ const splitContactNumbers = (values: unknown[]): string[] => Array.from(new Set(
     .filter(Boolean)
 ));
 
-const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, permissionPage = 'Customer Data', showAgentSalesReportInOverview = false, viewOnly = false, onSalesReportRead, onClose, onUpdate }) => {
+const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, permissionPage = 'Customer Data', showAgentSalesReportInOverview = false, viewOnly = false, allowDirectProspectEdit = false, onSalesReportRead, onClose, onUpdate }) => {
   const [activeTab, setActiveTab] = useState('Overview');
   const [recordImageFailed, setRecordImageFailed] = useState(false);
+  const [showFullRecordImage, setShowFullRecordImage] = useState(false);
+  const imagePullStartYRef = useRef<number | null>(null);
   const [newComment, setNewComment] = useState('');
   const [comments, setComments] = useState<Comment[]>(contact.comments || []);
   const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
@@ -72,7 +77,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
 
   const isOwner = isMasterUserAccount(currentUser);
   const canAdd = hasActionPermission(currentUser, 'can_add', 'Customer Data');
-  const canEdit = hasActionPermission(currentUser, 'can_edit', 'Customer Data');
+  const canEdit = hasActionPermission(currentUser, 'can_edit', permissionPage);
 
   const buildChangedFields = (previous: Contact, next: Omit<Contact, 'id'>) => {
     const changed: Record<string, { oldValue: unknown; newValue: unknown }> = {};
@@ -98,7 +103,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
   };
 
   const handleSubmitContactEdit = async (data: Omit<Contact, 'id'>) => {
-    if (!canEdit) {
+    if (!canEdit && !allowDirectProspectEdit) {
       throw new Error('You do not have permission to edit customer records.');
     }
     if (!currentUser?.id) {
@@ -116,6 +121,16 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
         return contact;
       }
       const changes = Object.fromEntries(Object.keys(changedFields).map(key => [key, data[key as keyof typeof data]]));
+      if (allowDirectProspectEdit) {
+        const editableChanges = Object.fromEntries(Object.entries(changes).filter(([key]) =>
+          !['salesman', 'assignedAgent', 'assignedAgentId', 'team'].includes(key)
+        ));
+        if (Object.keys(editableChanges).length > 0) {
+          await updateContact(contact.id, editableChanges, currentUser.id, { preserveExistingContactPersons: true });
+          onUpdate({ ...contact, ...editableChanges });
+        }
+        return { ...contact, ...editableChanges };
+      }
       await requestCustomerUpdate(contact.id, changes);
       return contact;
     } catch (error) {
@@ -196,7 +211,23 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
   ];
 
   return (
-    <div ref={scrollContainerRef} className="h-full bg-slate-50 dark:bg-slate-950 overflow-y-auto pb-20 animate-fadeIn relative z-30">
+    <div
+      ref={scrollContainerRef}
+      className="h-full bg-slate-50 dark:bg-slate-950 overflow-y-auto pb-20 animate-fadeIn relative z-30"
+      onTouchStart={(event) => {
+        imagePullStartYRef.current = scrollContainerRef.current?.scrollTop === 0
+          ? event.touches[0]?.clientY ?? null
+          : null;
+      }}
+      onTouchEnd={(event) => {
+        const startY = imagePullStartYRef.current;
+        imagePullStartYRef.current = null;
+        const endY = event.changedTouches[0]?.clientY;
+        if (startY !== null && endY !== undefined && endY - startY > 96 && contact.recordImage && !recordImageFailed) {
+          setShowFullRecordImage(true);
+        }
+      }}
+    >
       {/* Top Navigation / Header Back */}
       <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-4 flex justify-between items-center shadow-sm">
           <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-brand-blue dark:hover:text-brand-blue cursor-pointer transition-colors" onClick={onClose}>
@@ -211,7 +242,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
                    <Gift className="w-4 h-4" />
                    Request Discount
                </button>}
-               {canEdit && <button
+               {canEdit && !allowDirectProspectEdit && <button
                 onClick={() => setIsEditModalOpen(true)}
                 className="flex items-center gap-2 px-3 py-2 bg-blue-100 hover:bg-blue-200 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded-lg text-sm font-bold transition-colors"
                >
@@ -232,13 +263,9 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
       <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
           <div className="relative h-[172px] bg-gradient-to-r from-slate-700 via-brand-blue to-blue-500 sm:h-[230px]">
               {contact.recordImage && !recordImageFailed ? (
-                  <img
-                    src={contact.recordImage}
-                    alt={`${contact.company || contact.name || 'Customer'} cover photo`}
-                    className="h-full w-full object-cover"
-                    style={{ objectPosition: contact.recordImagePosition?.replace(',', '% ') }}
-                    onError={() => setRecordImageFailed(true)}
-                  />
+                  <button type="button" className="h-full w-full cursor-zoom-in" aria-label="View full customer image" onClick={() => setShowFullRecordImage(true)}>
+                    <img src={contact.recordImage} alt={`${contact.company || contact.name || 'Customer'} cover photo`} className="h-full w-full object-cover" style={{ objectPosition: contact.recordImagePosition?.replace(',', '% ') }} onError={() => setRecordImageFailed(true)} />
+                  </button>
               ) : (
                   <div className="flex h-full items-center justify-center px-5 text-center sm:px-8" aria-label={`Company photo placeholder for ${contact.company || contact.name || 'Customer'}`}>
                     <span className="max-w-5xl text-2xl font-bold leading-tight text-white/90 drop-shadow-md [overflow-wrap:anywhere] sm:text-4xl md:text-5xl">
@@ -246,9 +273,10 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
                     </span>
                   </div>
               )}
-              <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-950/45 to-transparent" aria-hidden="true" />
-          </div>
-          <div className="px-4 py-5 sm:px-8 sm:py-6">
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-950/45 to-transparent" aria-hidden="true" />
+      </div>
+      <RecordImageLightbox src={contact.recordImage || ''} alt={`${contact.company || contact.name || 'Customer'} full image`} isOpen={showFullRecordImage} onOpen={() => setShowFullRecordImage(true)} onClose={() => setShowFullRecordImage(false)} />
+      <div className="px-4 py-5 sm:px-8 sm:py-6">
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
               <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-3 mb-1">
@@ -262,6 +290,16 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
                                 formerLabel="Formerly:"
                               />
                           </h1>
+                          {allowDirectProspectEdit && !viewOnly && (
+                            <button
+                              type="button"
+                              onClick={() => setIsEditModalOpen(true)}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 transition hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                              Edit details
+                            </button>
+                          )}
                           <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${getStatusColor(contact.status)} uppercase tracking-wide`}>
                               {contact.status}
                           </span>
@@ -613,9 +651,11 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
         onSubmit={handleSubmitContactEdit}
         mode="edit"
         initialData={contact}
+        preventContactPersonRemoval={allowDirectProspectEdit}
+        restrictProspectStatus={allowDirectProspectEdit}
         enableToasts
         toastOverrides={{
-          success: isOwner
+          success: isOwner || allowDirectProspectEdit
             ? {
                 title: 'Customer updated',
                 description: 'Customer information has been updated successfully.',

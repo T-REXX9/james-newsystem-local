@@ -6,6 +6,8 @@ import CustomerSalesReportChat from '../CustomerSalesReportChat';
 const fetchSalesReportConversationMock = vi.fn();
 const sendSalesReportMessageMock = vi.fn();
 const deleteSalesReportMessageMock = vi.fn();
+const updateSalesReportMessageMock = vi.fn();
+const fetchSalesReportMessageEditHistoryMock = vi.fn();
 const markSalesReportConversationReadMock = vi.fn();
 const uploadSalesReportAttachmentMock = vi.fn();
 const requestCustomerUpdateMock = vi.fn();
@@ -17,6 +19,8 @@ vi.mock('../../services/dailyCallMonitoringService', () => ({
   fetchSalesReportConversation: (...args: unknown[]) => fetchSalesReportConversationMock(...args),
   sendSalesReportMessage: (...args: unknown[]) => sendSalesReportMessageMock(...args),
   deleteSalesReportMessage: (...args: unknown[]) => deleteSalesReportMessageMock(...args),
+  updateSalesReportMessage: (...args: unknown[]) => updateSalesReportMessageMock(...args),
+  fetchSalesReportMessageEditHistory: (...args: unknown[]) => fetchSalesReportMessageEditHistoryMock(...args),
   markSalesReportConversationRead: (...args: unknown[]) => markSalesReportConversationReadMock(...args),
   uploadSalesReportAttachment: (...args: unknown[]) => uploadSalesReportAttachmentMock(...args),
   resolveSalesReportAttachmentDisplayUrl: (...args: unknown[]) => resolveSalesReportAttachmentDisplayUrlMock(...args as [string]),
@@ -93,6 +97,84 @@ describe('CustomerSalesReportChat', () => {
     });
     requestCustomerUpdateMock.mockResolvedValue({ id: 'request-1' });
     deleteSalesReportMessageMock.mockResolvedValue(undefined);
+    updateSalesReportMessageMock.mockImplementation(async (_contactId, messageId, body) => ({
+      id: messageId,
+      contact_id: 'c1',
+      kind: 'agent_report',
+      sender_user_id: 'a1',
+      sender_name: 'Agent Ana',
+      sender_role: 'agent',
+      body,
+      created_at: new Date().toISOString(),
+      is_from_current_user: true,
+      is_from_master: false,
+    }));
+    fetchSalesReportMessageEditHistoryMock.mockResolvedValue([
+      { body: 'Original report', actor_user_id: 'a1', actor_name: 'Agent Ana', edited_at: '2026-09-11 10:00:00' },
+    ]);
+  });
+
+  it('loads edited message history only when a Master User opens it', async () => {
+    const user = userEvent.setup();
+    fetchSalesReportConversationMock.mockResolvedValueOnce({
+      contact_id: 'c1', unread_count: 0,
+      messages: [{
+        id: 'report:2', contact_id: 'c1', kind: 'agent_report', sender_user_id: 'a1',
+        sender_name: 'Agent Ana', sender_role: 'agent', body: 'Corrected report', created_at: '2026-09-11 09:00:00',
+        is_from_current_user: false, is_from_master: false, is_edited: true,
+      }],
+    });
+    const { rerender } = render(<CustomerSalesReportChat contactId="c1" currentUser={{ id: 'a1', role: 'Sales Agent', full_name: 'Agent Ana', user_type: '2' } as any} />);
+    await screen.findByText('Corrected report');
+    expect(screen.queryByRole('button', { name: /edit history/i })).not.toBeInTheDocument();
+    expect(fetchSalesReportMessageEditHistoryMock).not.toHaveBeenCalled();
+
+    rerender(<CustomerSalesReportChat contactId="c1" currentUser={{ id: 'm1', role: 'Master User', full_name: 'Master User', user_type: '1' } as any} />);
+    await user.click(await screen.findByRole('button', { name: /edit history/i }));
+    expect(await screen.findByText('Original report')).toBeInTheDocument();
+    expect(screen.getByText(/Current version/i)).toBeInTheDocument();
+    expect(fetchSalesReportMessageEditHistoryMock).toHaveBeenCalledWith('c1', 'report:2');
+  });
+
+  it('lets a sales agent edit their own message within 24 hours', async () => {
+    const user = userEvent.setup();
+    const recent = new Date().toISOString();
+    fetchSalesReportConversationMock.mockResolvedValueOnce({
+      contact_id: 'c1', unread_count: 0,
+      messages: [{
+        id: 'report:2', contact_id: 'c1', kind: 'agent_report', sender_user_id: 'a1',
+        sender_name: 'Agent Ana', sender_role: 'agent', body: 'Original report',
+        created_at: recent, is_from_current_user: true, is_from_master: false,
+      }],
+    });
+    render(<CustomerSalesReportChat contactId="c1" currentUser={{ id: 'a1', role: 'Sales Agent', full_name: 'Agent Ana', user_type: '2' } as any} />);
+
+    await screen.findByText('Original report');
+    await user.click(screen.getByRole('button', { name: 'Edit message' }));
+    const editor = screen.getByRole('textbox', { name: 'Edit message' });
+    await user.clear(editor);
+    await user.type(editor, 'Corrected report');
+    await user.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => expect(updateSalesReportMessageMock).toHaveBeenCalledWith('c1', 'report:2', 'Corrected report'));
+    expect(await screen.findByText('Corrected report')).toBeInTheDocument();
+  });
+
+  it('hides editing for messages older than 24 hours and in view-only mode', async () => {
+    fetchSalesReportConversationMock.mockResolvedValueOnce({
+      contact_id: 'c1', unread_count: 0,
+      messages: [{
+        id: '4', contact_id: 'c1', kind: 'reply', sender_user_id: 'a1', sender_name: 'Agent Ana',
+        sender_role: 'agent', body: 'Too old', created_at: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
+        is_from_current_user: true, is_from_master: false,
+      }],
+    });
+    const { rerender } = render(<CustomerSalesReportChat contactId="c1" currentUser={{ id: 'a1', role: 'Sales Agent', full_name: 'Agent Ana', user_type: '2' } as any} />);
+    await screen.findByText('Too old');
+    expect(screen.queryByRole('button', { name: 'Edit message' })).not.toBeInTheDocument();
+
+    rerender(<CustomerSalesReportChat contactId="c1" currentUser={{ id: 'a1', role: 'Sales Agent', full_name: 'Agent Ana', user_type: '2' } as any} viewOnly />);
+    expect(screen.queryByRole('button', { name: 'Edit message' })).not.toBeInTheDocument();
   });
 
   it('renders a unified chronological conversation including legacy management instructions', async () => {

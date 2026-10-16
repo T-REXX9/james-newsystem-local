@@ -9,6 +9,19 @@ export const validateRecordImageFile = (file: File): string | null => {
   return null;
 };
 
+export const readRecordImage = (file: File): Promise<string> => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onerror = () => reject(new Error('Unable to read the selected image.'));
+  reader.onload = () => {
+    const dataUrl = String(reader.result || '');
+    const image = new Image();
+    image.onerror = () => reject(new Error('Unable to decode the selected image.'));
+    image.onload = () => resolve(dataUrl);
+    image.src = dataUrl;
+  };
+  reader.readAsDataURL(file);
+});
+
 export const optimizeRecordImage = (file: File): Promise<string> => new Promise((resolve, reject) => {
   const reader = new FileReader();
   reader.onerror = () => reject(new Error('Unable to read the selected image.'));

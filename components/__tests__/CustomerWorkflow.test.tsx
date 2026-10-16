@@ -7,10 +7,15 @@ import { fetchContacts } from '../../services/customerDatabaseLocalApiService';
 import CustomerHistoryTab from '../CustomerHistoryTab';
 import CustomerRequestsTab from '../CustomerRequestsTab';
 import { fetchAllCustomerRequests, fetchCustomerInquiries, fetchCustomerReturns, fetchCustomerRequests, reviewCustomerRequest, CustomerRequest } from '../../services/customerWorkflowLocalApiService';
-import type { UserProfile } from '../../types';
+import { fetchCustomersForDailyCall } from '../../services/dailyCallMonitoringService';
+import { CustomerStatus, type UserProfile } from '../../types';
 import { WORKFLOW_NAVIGATE_EVENT } from '../../utils/workflowNavigate';
 vi.mock('../../services/customerWorkflowLocalApiService', () => ({ fetchAllCustomerRequests: vi.fn(), fetchCustomerInquiries: vi.fn(), fetchCustomerReturns: vi.fn(), fetchCustomerRequests: vi.fn(), reviewCustomerRequest: vi.fn() }));
 vi.mock('../../services/customerDatabaseLocalApiService', () => ({ fetchContacts: vi.fn() }));
+vi.mock('../../services/dailyCallMonitoringService', () => ({ fetchCustomersForDailyCall: vi.fn() }));
+vi.mock('../DailyCallCustomerDetailModal', () => ({
+  default: ({ isOpen, footerActions }: { isOpen: boolean; footerActions?: React.ReactNode }) => isOpen ? <div role="dialog">{footerActions}</div> : null,
+}));
 const pending: CustomerRequest = { id: 'r1', contact_id: 'c1', kind: 'customer_update', payload: { company: 'New company' }, status: 'pending', submitted_by_name: 'Agent', submitted_at: '2026-08-29', reviewed_at: null, review_note: '' };
 const owner = { id: '1', role: 'Company Owner' } as UserProfile;
 beforeEach(() => { vi.resetAllMocks(); });
@@ -20,18 +25,27 @@ describe('customer workflow screens', () => {
     const fetchRequests = view === 'profile' ? vi.mocked(fetchCustomerRequests) : vi.mocked(fetchAllCustomerRequests);
     fetchRequests.mockResolvedValueOnce([pending]).mockResolvedValueOnce([{ ...pending, status: 'approved' }]);
     vi.mocked(fetchContacts).mockResolvedValue([]);
+    vi.mocked(fetchCustomersForDailyCall).mockResolvedValue([{
+      id: 'c1', shopName: 'New company', source: 'Manual', assignedTo: 'Agent', assignedAgentId: 'agent-1',
+      assignedDate: '', clientSince: '', province: '', city: '', contactNumber: '', contactPersonName: '',
+      codeDate: '', ishinomotoDealerSince: '', ishinomotoSignageSince: '', preferredBrand: '', quota: 0,
+      modeOfPayment: '', courier: '', status: CustomerStatus.ACTIVE, statusDate: '', outstandingBalance: 0,
+      averageMonthlyOrder: 0, monthlyOrder: 0, lastMonthOrder: 0, weeklyRangeTotals: [], dailyActivity: [],
+    }]);
     let fail!: (reason: Error) => void;
     vi.mocked(reviewCustomerRequest).mockImplementationOnce(() => new Promise((_, reject) => { fail = reject; }));
     render(view === 'profile' ? <CustomerRequestsTab contactId="c1" currentUser={owner} /> : <ApprovalRequestsView currentUser={owner} />);
-    await waitFor(() => expect(screen.queryByRole('button', { name: /Details|Hide/ })).toBeInTheDocument());
-    fireEvent.click(screen.getByRole('button', { name: 'Details' }));
+    const detailsButton = view === 'profile'
+      ? await screen.findByRole('button', { name: 'Details' })
+      : await screen.findByRole('button', { name: /View customer details/ });
+    fireEvent.click(detailsButton);
     const approve = await screen.findByRole('button', { name: 'Approve' });
     fireEvent.click(approve);
     fireEvent.click(approve);
-    fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Reject' })[0]);
     expect(reviewCustomerRequest).toHaveBeenCalledTimes(1);
     expect(approve).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Reject' })).toBeDisabled();
+    expect(screen.getAllByRole('button', { name: 'Reject' }).every((button) => (button as HTMLButtonElement).disabled)).toBe(true);
     fail(new Error('Request is already reviewed'));
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument());
     expect(fetchRequests).toHaveBeenCalledTimes(2);

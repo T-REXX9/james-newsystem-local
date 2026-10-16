@@ -11,6 +11,11 @@ export interface TeamRecord {
     member_count: number;
 }
 
+export interface ProspectTeamOption {
+    id: number;
+    name: string;
+}
+
 export interface TeamListResponse {
     items: TeamRecord[];
     meta: {
@@ -41,6 +46,12 @@ export const fetchTeams = async (search = ''): Promise<TeamListResponse> => {
     });
     const payload = await requestJson(`${API_BASE_URL}/teams?${query.toString()}`);
     return payload?.data || { items: [], meta: { page: 1, per_page: 500, total: 0, total_pages: 0 } };
+};
+
+export const fetchProspectTeamOptions = async (): Promise<ProspectTeamOption[]> => {
+    const query = new URLSearchParams({ main_id: String(API_MAIN_ID) });
+    const payload = await requestJson(`${API_BASE_URL}/prospect-team-options?${query.toString()}`);
+    return Array.isArray(payload?.data?.items) ? payload.data.items : [];
 };
 
 export const fetchTeamById = async (teamId: number): Promise<TeamRecord> => {

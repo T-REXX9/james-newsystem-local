@@ -1,6 +1,6 @@
 
 import React, { useEffect } from 'react';
-import { LogOut } from 'lucide-react';
+import { ArrowLeft, LogOut } from 'lucide-react';
 import { UserProfile } from '../types';
 import NotificationCenter from './NotificationCenter';
 import TopbarNavigation from './TopbarNavigation';
@@ -10,11 +10,13 @@ import ProductQuickSearchLauncher from './ProductQuickSearchLauncher';
 interface TopNavProps {
   activeTab?: string;
   onNavigate?: (tab: string) => void;
+  onBack?: () => void;
+  canGoBack?: boolean;
   user?: UserProfile | null;
   onSignOut?: () => void;
 }
 
-const TopNav: React.FC<TopNavProps> = ({ activeTab = 'home', onNavigate, user, onSignOut }) => {
+const TopNav: React.FC<TopNavProps> = ({ activeTab = 'home', onNavigate, onBack, canGoBack = false, user, onSignOut }) => {
   useEffect(() => {
     const html = document.documentElement;
     html.classList.remove('dark');
@@ -24,6 +26,7 @@ const TopNav: React.FC<TopNavProps> = ({ activeTab = 'home', onNavigate, user, o
   return (
     <header className="h-16 bg-gradient-to-r from-brand-blue to-[#0a3d74] flex items-center justify-between px-3 sm:px-4 2xl:px-6 fixed top-0 left-0 right-0 z-[1000] text-white shadow-md print:hidden">
       <div className="flex items-center gap-1 sm:gap-3 2xl:gap-6 flex-1 min-w-0">
+        {onBack && <button type="button" aria-label="Go back to previous page" onClick={onBack} disabled={!canGoBack} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/80 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:cursor-not-allowed disabled:opacity-40"><ArrowLeft className="h-5 w-5" aria-hidden="true" /></button>}
         <div className="flex shrink-0 items-center space-x-2 sm:space-x-3 cursor-pointer group" onClick={() => onNavigate?.('home')}>
            <div className="w-8 h-8 sm:w-9 sm:h-9 bg-white/10 rounded-lg flex items-center justify-center font-bold border border-white/10 group-hover:bg-white/20 transition-colors">T</div>
            <div className="flex items-center">

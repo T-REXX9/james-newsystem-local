@@ -16,6 +16,7 @@ import RecordImagePicker from './RecordImagePicker';
 import { getLocalAuthSession } from '../services/localAuthService';
 import { isMasterUserAccount } from '../constants';
 import DuplicateApprovalModal from './DuplicateApprovalModal';
+import { fetchProspectTeamOptions, type ProspectTeamOption } from '../services/teamLocalApiService';
 
 const TRANSACTION_TYPE_OPTIONS = ['Order Slip', 'Invoice'] as const;
 
@@ -73,6 +74,8 @@ interface AddContactModalProps {
   submitLabel?: string;
   enableToasts?: boolean;
   toastOverrides?: ToastOverrides;
+  preventContactPersonRemoval?: boolean;
+  restrictProspectStatus?: boolean;
 }
 
 const AddContactModal: React.FC<AddContactModalProps> = ({
@@ -86,6 +89,8 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
   submitLabel,
   enableToasts = false,
   toastOverrides,
+  preventContactPersonRemoval = false,
+  restrictProspectStatus = false,
 }) => {
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -100,6 +105,9 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
   const conflictRequestRef = useRef(0);
   const [duplicateOverrideReason, setDuplicateOverrideReason] = useState('');
   const [salesAgents, setSalesAgents] = useState<UserProfile[]>([]);
+  const [teams, setTeams] = useState<ProspectTeamOption[]>([]);
+  const [loadingTeams, setLoadingTeams] = useState(false);
+  const [teamLoadError, setTeamLoadError] = useState('');
   const [showDuplicateApprovalModal, setShowDuplicateApprovalModal] = useState(false);
   const [pendingDuplicates, setPendingDuplicates] = useState<any[]>([]);
   const checkCompanyNameTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
@@ -266,6 +274,38 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     };
   }, [isOpen, canAssignSalesAgent]);
 
+  useEffect(() => {
+    if (!isOpen || isEditMode || !isCreatingProspect) return;
+    let active = true;
+    setLoadingTeams(true);
+    setTeamLoadError('');
+    fetchProspectTeamOptions()
+      .then((options) => {
+        if (active) setTeams(options);
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          const errorMessage = error instanceof Error ? error.message : '';
+          const needsProspectCreateAccess = /forbidden: you do not have permission to add prospects/i.test(errorMessage);
+          const teamError = needsProspectCreateAccess
+            ? 'Daily Call Monitoring Dashboard or Customer Data access is required. Ask an administrator to enable View in System Access.'
+            : errorMessage || 'Unable to load teams.';
+          setTeamLoadError(teamError);
+          addToast({
+            type: 'error',
+            title: 'Unable to load teams',
+            description: needsProspectCreateAccess ? teamError : errorMessage || 'Team options may be unavailable until you refresh.',
+          });
+        }
+      })
+      .finally(() => {
+        if (active) setLoadingTeams(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [isOpen, isEditMode, isCreatingProspect, addToast]);
+
   // Cleanup debounce timeout on unmount
   useEffect(() => {
     return () => {
@@ -279,6 +319,9 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
   const statusOptions = (CustomerStatus && Object.keys(CustomerStatus).length > 0)
     ? Object.values(CustomerStatus)
     : ['Active', 'Inactive', 'Prospective', 'Blacklisted'];
+  const editableStatusOptions = restrictProspectStatus
+    ? statusOptions.filter((status) => String(status).toLowerCase() === String(CustomerStatus.PROSPECTIVE).toLowerCase())
+    : statusOptions;
 
   if (!isOpen) return null;
 
@@ -316,7 +359,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
           enabled: true
       })) as ContactPerson[];
 
-      const deliveryAddresses = Array.from(new Set(
+      const deliveryAddresses: string[] = Array.from(new Set<string>(
         (formData.deliveryAddresses || [formData.deliveryAddress || ''])
           .map((address) => String(address || '').trim())
           .filter(Boolean)
@@ -334,6 +377,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
       const newContact: Omit<Contact, 'id'> = {
         // Core Identifiers
         company: (formData.company || '').trim(),
+        comment: formData.comment || '',
         customerSince: isEditMode ? (formData.customerSince || '') : (formData.customerSince || today),
         team: formData.team || '',
         // A staff member may create or edit a customer, but only a Master User
@@ -377,9 +421,6 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
         isHidden: !!formData.isHidden,
         debtType: (formData.debtType as any) || 'Good',
         duplicateOverrideReason: duplicateOverrideReason.trim(),
-        // Snake_case versions for API compatibility with backend duplicate detection
-        duplicate_override_reason: duplicateOverrideReason.trim(),
-        duplicate_override_confirmed: similarNameMatches.length > 0 && duplicateOverrideReason.trim() !== '',
 
         // Nested Data
         contactPersons: fullContactPersons,
@@ -405,6 +446,11 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
         // Soft delete defaults
         is_deleted: isDeleted,
       };
+
+      if (!isEditMode && isCreatingProspect) {
+        (newContact as Omit<Contact, 'id'> & { __salesTeamId?: number | null }).__salesTeamId =
+          teams.find((team) => team.name === formData.team)?.id ?? null;
+      }
 
       if (!isEditMode && similarNameMatches.length > 0 && duplicateOverrideReason.trim() === '') {
         setSubmitError('A matching or similar customer was found. Enter a reason before continuing.');
@@ -652,7 +698,33 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                        </div>
                        <div>
                            <label className="label">Team</label>
-                           <input className="input" value={formData.team} onChange={e => setFormData({...formData, team: e.target.value})} />
+                           {isCreatingProspect ? (
+                             <select
+                               aria-label="Team"
+                               className="input"
+                               value={formData.team || ''}
+                               onChange={e => setFormData({...formData, team: e.target.value})}
+                               disabled={loadingTeams}
+                             >
+                               <option value="">
+                                 {loadingTeams ? 'Loading teams…' : teamLoadError ? 'Teams unavailable' : 'Select a team'}
+                               </option>
+                               {teams.map((team) => (
+                                 <option key={team.id} value={team.name}>{team.name}</option>
+                               ))}
+                             </select>
+                           ) : (
+                             <input
+                               className="input"
+                               value={formData.team}
+                               onChange={e => setFormData({...formData, team: e.target.value})}
+                               readOnly={restrictProspectStatus}
+                               aria-readonly={restrictProspectStatus}
+                             />
+                           )}
+                           {isCreatingProspect && teamLoadError && (
+                             <p className="mt-1 text-xs text-red-600" role="alert">{teamLoadError}</p>
+                           )}
                        </div>
                        {canAssignSalesAgent && (
                            <div>
@@ -687,7 +759,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                            {isCreatingProspect && <p className="mt-1 text-xs text-slate-500">Your staff name is added automatically when saved.</p>}
                        </div>
                   </div>
-                  <div className="mt-4 max-w-sm"><RecordImagePicker value={formData.recordImage} position={formData.recordImagePosition} onChange={(recordImage) => setFormData({ ...formData, recordImage })} onPositionChange={(recordImagePosition) => setFormData({ ...formData, recordImagePosition })} label="Customer / Prospect image" /></div>
+                  <div className="mt-4 max-w-sm"><RecordImagePicker value={formData.recordImage} position={formData.recordImagePosition} onChange={(recordImage) => setFormData((current) => ({ ...current, recordImage }))} onPositionChange={(recordImagePosition) => setFormData((current) => ({ ...current, recordImagePosition }))} preserveOriginal={isCreatingProspect} label="Customer / Prospect image" /></div>
               </section>
 
               {/* Address */}
@@ -832,7 +904,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                         <div>
                             <label className="label">Status</label>
                             <select className="input" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as CustomerStatus})}>
-                               {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                               {editableStatusOptions.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                         </div>
                       ) : (
@@ -884,13 +956,13 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                    <div className="space-y-4">
                        {contactPersons.map((person, idx) => (
                            <div key={idx} className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl relative group border border-slate-100 dark:border-slate-800">
-                               <button 
+                               {!preventContactPersonRemoval && <button
                                     type="button" 
                                     onClick={() => handleRemoveContactPerson(idx)} 
                                     className="absolute right-2 top-2 text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"
                                 >
                                    <Trash2 className="w-4 h-4" />
-                               </button>
+                               </button>}
                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                                    <div>
                                        <label className="label">Name</label>

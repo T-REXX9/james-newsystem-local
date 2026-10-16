@@ -13,11 +13,13 @@ import {
   DailyCallMasterListMeta,
   DailyCallSalesColorBreakdown,
   PendingDuplicateProspect,
+  PendingDuplicateConflict,
   Inquiry,
   LBCRTORecord,
   Purchase,
   SalesReportConversation,
   SalesReportConversationMessage,
+  SalesReportMessageEditHistoryEntry,
   TeamMessage,
 } from '../types';
 import { formatDateFull } from '../utils/formatUtils';
@@ -462,6 +464,7 @@ const mapApiStatusToCustomerStatus = (status: string): CustomerStatus => {
 
 const mapDailyCallCustomerRow = (row: any): DailyCallCustomerRow => ({
   id: String(row?.id || ''),
+  doNotContact: Boolean(row?.doNotContact ?? row?.do_not_contact),
   source: cleanNullableText(row?.source, 'Manual'),
   assignedTo: cleanNullableText(row?.assignedTo ?? row?.assigned_to, 'Unassigned'),
   assignedAgentId: cleanNullableText(row?.assignedAgentId ?? row?.assigned_agent_id ?? row?.sales_person_id ?? row?.salesPersonId),
@@ -514,6 +517,7 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
 
   return {
     id: String(row?.id || ''),
+    doNotContact: Boolean(row?.doNotContact ?? row?.do_not_contact),
     shopName: cleanNullableText(row?.shopName ?? row?.shop_name, 'Unnamed Shop'),
     isStarred: row?.is_starred === true || row?.is_starred === 1 || row?.is_starred === '1',
     pastName: cleanNullableText(row?.pastName ?? row?.past_name ?? row?.oldName ?? row?.old_name),
@@ -537,6 +541,7 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
     verifiedInSystem: Boolean(row?.verifiedInSystem ?? row?.verified_in_system),
     prospectSource: cleanNullableText(row?.prospectSource ?? row?.prospect_source),
     prospectCreatedBy: cleanNullableText(row?.prospectCreatedBy ?? row?.prospect_created_by),
+    prospectCreatorId: cleanNullableText(row?.prospectCreatorId ?? row?.prospect_creator_id),
     latestSalesReportMessage: cleanNullableText(row?.latestSalesReportMessage ?? row?.latest_sales_report_message),
     latestSalesReportAuthor: cleanNullableText(row?.latestSalesReportAuthor ?? row?.latest_sales_report_author),
     latestSalesReportSource: cleanNullableText(row?.latestSalesReportSource ?? row?.latest_sales_report_source),
@@ -584,6 +589,15 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
   };
 };
 
+export const setDailyCallDoNotContactFlag = async (contactId: string, marked: boolean): Promise<boolean> => {
+  const payload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/do-not-contact-flag`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ main_id: resolveMainId(), contact_id: contactId, marked }),
+  });
+  return Boolean(payload?.data?.marked);
+};
+
 const mapDailyCallDoNotContactCustomer = (row: any): DailyCallDoNotContactCustomer => ({
   id: String(row?.id || ''),
   shopName: cleanNullableText(row?.shopName ?? row?.shop_name, 'Unnamed Shop'),
@@ -629,8 +643,7 @@ export const fetchCustomerDailyActivity = async (
   dateRange: DailyActivityDateRange
 ): Promise<DailyActivityRecord[]> => {
   try {
-    const session = await getLocalAuthSession();
-    const mainId = session?.user?.main_id || 1;
+    const mainId = resolveMainId();
     const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 
     const url = new URL(`${API_BASE_URL}/daily-call-monitoring/customers/${contactId}/call-logs`, window.location.origin);
@@ -651,8 +664,7 @@ export const fetchCustomerDailyActivity = async (
 
 export const fetchLBCRTOData = async (contactId: string): Promise<LBCRTORecord[]> => {
   try {
-    const session = await getLocalAuthSession();
-    const mainId = session?.user?.main_id || 1;
+    const mainId = resolveMainId();
     const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 
     const url = new URL(`${API_BASE_URL}/daily-call-monitoring/customers/${contactId}/returns`, window.location.origin);
@@ -1029,6 +1041,7 @@ const mapSalesReportConversationMessage = (row: any): SalesReportConversationMes
     call_ended_at: row?.call_ended_at ? String(row.call_ended_at) : undefined,
     duration_seconds: row?.duration_seconds !== undefined ? Number(row.duration_seconds) : undefined,
     replyable: row?.replyable !== false,
+    is_edited: Boolean(row?.is_edited),
   };
 };
 
@@ -1108,6 +1121,39 @@ export const deleteSalesReportMessage = async (contactId: string, messageId: str
   );
 };
 
+export const updateSalesReportMessage = async (
+  contactId: string,
+  messageId: string,
+  body: string
+): Promise<SalesReportConversationMessage> => {
+  const payload = await requestJson(
+    `${API_BASE_URL}/daily-call-monitoring/customers/${encodeURIComponent(contactId)}/sales-report-messages/${encodeURIComponent(messageId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ main_id: resolveMainId(), body }),
+    }
+  );
+  return mapSalesReportConversationMessage(payload?.data || {});
+};
+
+export const fetchSalesReportMessageEditHistory = async (
+  contactId: string,
+  messageId: string
+): Promise<SalesReportMessageEditHistoryEntry[]> => {
+  const mainId = resolveMainId();
+  const payload = await requestJson(
+    `${API_BASE_URL}/daily-call-monitoring/customers/${encodeURIComponent(contactId)}/sales-report-messages/${encodeURIComponent(messageId)}/edit-history?main_id=${mainId}`
+  );
+  const history = payload?.data?.history || payload?.history;
+  return Array.isArray(history) ? history.map((entry: any) => ({
+    body: String(entry?.body || ''),
+    actor_user_id: String(entry?.actor_user_id || ''),
+    actor_name: String(entry?.actor_name || ''),
+    edited_at: String(entry?.edited_at || ''),
+  })) : [];
+};
+
 export const uploadSalesReportAttachment = async (
   contactId: string,
   imageData: string
@@ -1168,7 +1214,7 @@ export const fetchSalesReportDirectoryState = async (
   Object.entries(payload?.data?.counts || payload?.counts || {}).forEach(([contactId, value]) => {
     unreadByContact[String(contactId)] = Number(value) || 0;
   });
-  const reportedContactIds = new Set(
+  const reportedContactIds = new Set<string>(
     (payload?.data?.reported_contact_ids || payload?.reported_contact_ids || [])
       .map((contactId: unknown) => String(contactId || '').trim())
       .filter(Boolean)

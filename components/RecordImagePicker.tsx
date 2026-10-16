@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { ImagePlus, Trash2 } from 'lucide-react';
-import { optimizeRecordImage, RECORD_IMAGE_ACCEPT, validateRecordImageFile } from '../utils/recordImage';
+import { optimizeRecordImage, readRecordImage, RECORD_IMAGE_ACCEPT, validateRecordImageFile } from '../utils/recordImage';
 
 interface RecordImagePickerProps {
   value?: string;
@@ -8,9 +8,10 @@ interface RecordImagePickerProps {
   position?: string;
   onPositionChange?: (value: string) => void;
   label?: string;
+  preserveOriginal?: boolean;
 }
 
-const RecordImagePicker: React.FC<RecordImagePickerProps> = ({ value, onChange, position, onPositionChange, label = 'Record image' }) => {
+const RecordImagePicker: React.FC<RecordImagePickerProps> = ({ value, onChange, position, onPositionChange, label = 'Record image', preserveOriginal = false }) => {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
@@ -38,7 +39,8 @@ const RecordImagePicker: React.FC<RecordImagePickerProps> = ({ value, onChange, 
     }
     try {
       setError('');
-      onChange(await optimizeRecordImage(file));
+      onChange(await (preserveOriginal ? readRecordImage(file) : optimizeRecordImage(file)));
+      if (preserveOriginal) onPositionChange?.('50,50');
     } catch (selectionError) {
       setError(selectionError instanceof Error ? selectionError.message : 'Unable to process the selected image.');
     }
@@ -67,7 +69,7 @@ const RecordImagePicker: React.FC<RecordImagePickerProps> = ({ value, onChange, 
         className={`relative flex min-h-[150px] cursor-pointer items-center justify-center overflow-hidden rounded-xl border-2 border-dashed ${dragging ? 'border-blue-500 bg-blue-50' : 'border-slate-300 bg-slate-50'}`}
       >
         {value ? (
-          <img src={value} alt="Selected record image preview" className="h-36 w-36 rounded-lg object-cover" style={{ objectPosition: `${cropPosition.x}% ${cropPosition.y}%` }} />
+          <img src={value} alt="Selected record image preview" className={`h-36 w-36 rounded-lg ${preserveOriginal ? 'object-contain' : 'object-cover'}`} style={!preserveOriginal ? { objectPosition: `${cropPosition.x}% ${cropPosition.y}%` } : undefined} />
         ) : (
           <div className="text-center text-sm text-slate-500"><ImagePlus className="mx-auto mb-2 h-8 w-8" /><span>Choose an image or drag and drop it here</span></div>
         )}
@@ -79,12 +81,14 @@ const RecordImagePicker: React.FC<RecordImagePickerProps> = ({ value, onChange, 
         <input ref={cameraInputRef} type="file" accept={RECORD_IMAGE_ACCEPT} capture="environment" className="sr-only" onChange={(event) => { void selectFiles(event.target.files || []); event.currentTarget.value = ''; }} />
       </div>
       {value && <div className="flex items-center gap-3 text-xs text-slate-600">
-        <label>Horizontal crop <input aria-label="Horizontal crop" type="range" min="0" max="100" value={cropPosition.x} onChange={(event) => updatePosition({ ...cropPosition, x: Number(event.target.value) })} /></label>
-        <label>Vertical crop <input aria-label="Vertical crop" type="range" min="0" max="100" value={cropPosition.y} onChange={(event) => updatePosition({ ...cropPosition, y: Number(event.target.value) })} /></label>
+        {!preserveOriginal && <>
+          <label>Horizontal crop <input aria-label="Horizontal crop" type="range" min="0" max="100" value={cropPosition.x} onChange={(event) => updatePosition({ ...cropPosition, x: Number(event.target.value) })} /></label>
+          <label>Vertical crop <input aria-label="Vertical crop" type="range" min="0" max="100" value={cropPosition.y} onChange={(event) => updatePosition({ ...cropPosition, y: Number(event.target.value) })} /></label>
+        </>}
         <button type="button" className="inline-flex items-center gap-1 text-rose-600" onClick={() => { onChange(''); setError(''); }}><Trash2 className="h-4 w-4" /> Remove</button>
       </div>}
       {error && <div role="alert" className="text-xs text-rose-600">{error}</div>}
-      <p className="text-[11px] text-slate-500">JPG, PNG, or WebP up to 5 MB. Optional.</p>
+      <p className="text-[11px] text-slate-500">JPG, PNG, or WebP up to 5 MB. {preserveOriginal ? 'The full image is saved.' : ''} Optional.</p>
     </div>
   );
 };

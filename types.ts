@@ -334,6 +334,9 @@ export interface Contact {
   team: string;
   salesman: string; // "salesman" (Assigned Agent)
   assignedAgentId?: string; // Staff account ID used for access filtering
+  prospectCreatorId?: string;
+  profileType?: string;
+  verifiedInSystem?: boolean;
   referBy: string;
 
   // Location
@@ -703,6 +706,15 @@ export interface SalesReportConversationMessage {
   call_ended_at?: string;
   duration_seconds?: number;
   replyable?: boolean;
+  /** Present only in Master User conversations; history bodies are loaded separately on demand. */
+  is_edited?: boolean;
+}
+
+export interface SalesReportMessageEditHistoryEntry {
+  body: string;
+  actor_user_id: string;
+  actor_name: string;
+  edited_at: string;
 }
 
 export interface SalesReportConversation {
@@ -754,10 +766,13 @@ export interface LBCRTORecord {
 
 export interface DailyCallCustomerRow {
   id: string;
+  doNotContact?: boolean;
   isStarred?: boolean;
   source: string;
   assignedTo: string;
   assignedAgentId?: string;
+  assignedTeamId?: string;
+  assignedTeam?: string;
   assignedDate?: string;
   clientSince: string;
   province?: string;
@@ -779,6 +794,8 @@ export interface DailyCallCustomerRow {
   modeOfPayment: string;
   courier: string;
   status: CustomerStatus;
+  debtType?: string;
+  customerStatus?: number;
   verification?: string;
   statusDate?: string;
   lastPurchaseDate?: string;
@@ -792,6 +809,7 @@ export interface DailyCallCustomerRow {
 
 export interface DailyCallMasterCustomerRow {
   id: string;
+  doNotContact?: boolean;
   shopName: string;
   isStarred?: boolean;
   pastName?: string;
@@ -817,6 +835,7 @@ export interface DailyCallMasterCustomerRow {
   prospectSource?: string;
   /** Staff who created the prospect (tblpatient.lencoded_by → account name). */
   prospectCreatedBy?: string;
+  prospectCreatorId?: string;
   /** True only when a Verify Prospect audit entry was written by this system. */
   verifiedInSystem?: boolean;
   createdAt?: string;

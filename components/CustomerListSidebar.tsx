@@ -1,8 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Search, Filter, Eye, EyeOff, CheckSquare, Square, ChevronRight } from 'lucide-react';
 import { Contact, CustomerStatus } from '../types';
 import CompanyName from './CompanyName';
 import { normalizePriceGroup } from '../constants/pricingGroups';
+import RecordImageLightbox from './RecordImageLightbox';
 
 interface CustomerListSidebarProps {
     customers: Contact[];
@@ -35,6 +36,7 @@ const CustomerListSidebar: React.FC<CustomerListSidebarProps> = ({
     onToggleAll,
     onCreateNew
 }) => {
+    const [fullImage, setFullImage] = useState<{ src: string; alt: string } | null>(null);
 
     const customerStatusOptions = Object.values(CustomerStatus);
 
@@ -191,7 +193,7 @@ const CustomerListSidebar: React.FC<CustomerListSidebarProps> = ({
                                         </div>
                                     </div>
 
-                                    {customer.recordImage ? <img src={customer.recordImage} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover" style={{ objectPosition: customer.recordImagePosition?.replace(',', '% ') }} onError={(event) => { event.currentTarget.style.display = 'none'; }} /> : null}
+                                    {customer.recordImage ? <button type="button" aria-label={`View full image for ${customer.company || customer.name || 'customer'}`} className="h-10 w-10 shrink-0 cursor-zoom-in overflow-hidden rounded-lg" onClick={(event) => { event.stopPropagation(); setFullImage({ src: customer.recordImage || '', alt: `${customer.company || customer.name || 'Customer'} full image` }); }}><img src={customer.recordImage} alt="" className="h-full w-full object-cover" style={{ objectPosition: customer.recordImagePosition?.replace(',', '% ') }} onError={(event) => { event.currentTarget.style.display = 'none'; }} /></button> : null}
 
                                     {isSelected && (
                                         <ChevronRight className="w-4 h-4 text-brand-blue opacity-100 self-center" />
@@ -202,6 +204,7 @@ const CustomerListSidebar: React.FC<CustomerListSidebarProps> = ({
                     })
                 )}
             </div>
+            <RecordImageLightbox src={fullImage?.src || ''} alt={fullImage?.alt || ''} isOpen={!!fullImage} onClose={() => setFullImage(null)} />
         </div>
     );
 };

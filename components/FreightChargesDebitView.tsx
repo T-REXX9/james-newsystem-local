@@ -438,7 +438,7 @@ const FreightChargesDebitView: React.FC<{ initialFreightRefNo?: string; initialC
       previousYmd: null,
       todayYmd: dateMax,
     });
-    if (!dateCheck.ok) {
+    if (dateCheck.ok === false) {
       setError(dateCheck.reason);
       return;
     }
@@ -493,7 +493,7 @@ const FreightChargesDebitView: React.FC<{ initialFreightRefNo?: string; initialC
       previousYmd,
       todayYmd: dateMax,
     });
-    if (!dateCheck.ok) {
+    if (dateCheck.ok === false) {
       setError(dateCheck.reason);
       return;
     }
@@ -584,8 +584,8 @@ const FreightChargesDebitView: React.FC<{ initialFreightRefNo?: string; initialC
 
   const getTransactionNo = (row: FreightCharge | null) => {
     if (!row) return '';
-    if (row.ltransaction_type === 'No Reference') return 'No Reference';
-    return row.linvoice_no || row.ltrans_refno || row.ltransaction_type;
+    if (row.linvoice_no) return row.linvoice_no;
+    return row.ltransaction_type === 'No Reference' ? 'No Reference' : '-';
   };
 
   const applySearchModal = () => {

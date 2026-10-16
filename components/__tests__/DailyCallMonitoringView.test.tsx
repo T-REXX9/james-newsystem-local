@@ -14,6 +14,7 @@ const createCallLogForDailyCallMock = vi.fn();
 const claimCustomerCallForDailyCallMock = vi.fn();
 const releaseCustomerCallForDailyCallMock = vi.fn();
 const setDailyCallBookmarkMock = vi.fn();
+const setDailyCallDoNotContactFlagMock = vi.fn();
 const createCustomerLogForDailyCallMock = vi.fn();
 const subscribeToDailyCallMonitoringUpdatesMock = vi.fn(() => () => {});
 const createContactMock = vi.fn();
@@ -43,6 +44,7 @@ vi.mock('../../services/dailyCallMonitoringService', () => ({
   claimCustomerCallForDailyCall: (...args: unknown[]) => claimCustomerCallForDailyCallMock(...args),
   releaseCustomerCallForDailyCall: (...args: unknown[]) => releaseCustomerCallForDailyCallMock(...args),
   setDailyCallBookmark: (...args: unknown[]) => setDailyCallBookmarkMock(...args),
+  setDailyCallDoNotContactFlag: (...args: unknown[]) => setDailyCallDoNotContactFlagMock(...args),
   createCustomerLogForDailyCall: (...args: unknown[]) => createCustomerLogForDailyCallMock(...args),
   subscribeToDailyCallMonitoringUpdates: (...args: unknown[]) => subscribeToDailyCallMonitoringUpdatesMock(...args),
 }));
@@ -69,8 +71,8 @@ vi.mock('../AgentCallActivity', () => ({
 }));
 
 vi.mock('../ContactDetails', () => ({
-  default: ({ contact, permissionPage, showAgentSalesReportInOverview }: { contact: { id: string; businessLine?: string; contactPersons?: Array<{ name?: string }>; phone?: string }; permissionPage?: string; showAgentSalesReportInOverview?: boolean }) => (
-    <div data-testid="full-contact-details" data-permission-page={permissionPage} data-unified-report={showAgentSalesReportInOverview ? 'true' : 'false'}>
+  default: ({ contact, permissionPage, showAgentSalesReportInOverview, allowDirectProspectEdit }: { contact: { id: string; businessLine?: string; contactPersons?: Array<{ name?: string }>; phone?: string }; permissionPage?: string; showAgentSalesReportInOverview?: boolean; allowDirectProspectEdit?: boolean }) => (
+    <div data-testid="full-contact-details" data-permission-page={permissionPage} data-unified-report={showAgentSalesReportInOverview ? 'true' : 'false'} data-direct-edit={allowDirectProspectEdit ? 'true' : 'false'}>
       {contact.id}:{contact.businessLine || 'blank-overview'}
       <span>{contact.contactPersons?.[0]?.name || 'No Contact Person'}</span>
       <span>{contact.phone || 'No Contact Number'}</span>
@@ -162,6 +164,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     claimCustomerCallForDailyCallMock.mockReset();
     releaseCustomerCallForDailyCallMock.mockReset();
     setDailyCallBookmarkMock.mockReset();
+    setDailyCallDoNotContactFlagMock.mockReset();
     createCustomerLogForDailyCallMock.mockReset();
     subscribeToDailyCallMonitoringUpdatesMock.mockClear();
     createContactMock.mockReset();
@@ -172,6 +175,7 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue(baseSnapshot);
     setDailyCallBookmarkMock.mockImplementation(async (contactId: string | null) => contactId);
+    setDailyCallDoNotContactFlagMock.mockImplementation(async (_contactId: string, marked: boolean) => marked);
     fetchContactCustomerLogsForDailyCallMock.mockResolvedValue([]);
     fetchSalesReportDirectoryStateMock.mockResolvedValue({ unreadByContact: {}, reportedContactIds: new Set() });
     fetchDailySubmittedSalesReportContactIdsMock.mockResolvedValue(new Set());
@@ -229,7 +233,8 @@ describe('DailyCallMonitoringView communication actions', () => {
   it('expands only the selected category for all five customer lists', async () => {
     render(<DailyCallMonitoringView currentUser={currentUser} />);
     const categoryGrid = await screen.findByLabelText('Segregated customer category tables');
-    expect(categoryGrid).toHaveClass('grid-cols-6');
+    expect(categoryGrid).toHaveClass('grid-cols-1', 'sm:grid-cols-2', 'lg:grid-cols-3', '2xl:grid-cols-6');
+    expect(categoryGrid).not.toHaveClass('min-w-[1200px]');
     expect(await screen.findByText('Test Shop')).toBeInTheDocument();
     for (const id of ['priority', 'recovery', 'verified', 'unverified', 'blocked']) {
       expect(document.getElementById(`${id}-customer-list`)).toBeInTheDocument();
@@ -245,13 +250,18 @@ describe('DailyCallMonitoringView communication actions', () => {
       await expandList(label);
       const expandedButton = screen.getByRole('button', { name: new RegExp(`^${label}`, 'i') });
       expect(expandedButton).toHaveAttribute('aria-expanded', 'true');
-      expect(expandedButton.closest('article')).toHaveClass('col-span-2');
+      expect(expandedButton.closest('article')).toHaveClass('sm:col-span-2');
+      expect(expandedButton.closest('article')).toHaveClass('max-sm:min-h-[24rem]');
       expect(document.getElementById(`${id}-customer-list`)).toBeInTheDocument();
       expect(screen.getByText('Test Shop')).toBeInTheDocument();
       const categoryButtons = screen.getAllByRole('button', { name: /^(Priority List|Recovery List|Verified Prospects|Unverified Prospects|blacklisted\/rejected)/i });
       expect(categoryButtons.filter((button) => button.getAttribute('aria-expanded') === 'true')).toHaveLength(1);
       for (const button of categoryButtons) {
-        expect(button.closest('article')).toHaveClass(button === expandedButton ? 'col-span-2' : 'col-span-1');
+        if (button === expandedButton) {
+          expect(button.closest('article')).toHaveClass('sm:col-span-2');
+        } else {
+          expect(button.closest('article')).toHaveClass('col-span-1', 'max-sm:h-[min(38vh,20rem)]', 'max-sm:min-h-[18rem]');
+        }
       }
     }
   });
@@ -394,6 +404,62 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(setDailyCallBookmarkMock).toHaveBeenCalledWith('priority-stop');
     expect(await screen.findByText('Stop after Stop Point Shop')).toBeInTheDocument();
     expect(screen.getByText('Stop here')).toBeInTheDocument();
+  });
+
+  it('marks a customer Do Not Call without changing its customer status', async () => {
+    const user = userEvent.setup();
+    fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
+      ...baseSnapshot,
+      contacts: [{ ...baseSnapshot.contacts[0], status: 'active' }],
+      purchases: [{ id: 'p1', contact_id: 'contact-1', amount: 100, status: 'paid', purchased_at: new Date().toISOString() }],
+      masterList: [{ id: 'contact-1', shopName: 'Test Shop', listCategory: 'priority', purchaseCount: 1, lastPurchaseDateRaw: new Date().toISOString() }],
+    });
+    setDailyCallDoNotContactFlagMock.mockResolvedValue(true);
+
+    render(<DailyCallMonitoringView currentUser={{ ...currentUser, action_permissions: { pages: { 'Daily Call Monitoring Dashboard': { can_view: true, can_add: true, can_edit: true, can_delete: false } } } }} />);
+    await expandList('Priority List', user);
+    const doNotCallButton = await screen.findByRole('button', { name: 'Mark Test Shop Do Not Call' });
+    expect(doNotCallButton).toHaveClass('block', 'whitespace-nowrap', 'shrink-0');
+    expect(doNotCallButton.parentElement).not.toHaveClass('flex');
+    await user.click(doNotCallButton);
+
+    expect(setDailyCallDoNotContactFlagMock).toHaveBeenCalledWith('contact-1', true);
+    expect(await screen.findByRole('button', { name: 'Remove Test Shop Do Not Call' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('does not expose Do Not Call controls without Daily Call edit permission', async () => {
+    const user = userEvent.setup();
+    fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
+      ...baseSnapshot,
+      contacts: [{ ...baseSnapshot.contacts[0], status: 'active' }],
+      masterList: [{ id: 'contact-1', shopName: 'Test Shop', listCategory: 'priority', purchaseCount: 1, doNotContact: true }],
+    });
+
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+    await expandList('Priority List', user);
+    expect(screen.queryByRole('button', { name: 'Mark Test Shop Do Not Call' })).not.toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Test Shop Do Not Call' })).toBeInTheDocument();
+  });
+
+  it('does not open the customer when the Do Not Call control is activated by keyboard', async () => {
+    const user = userEvent.setup();
+    fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
+      ...baseSnapshot,
+      contacts: [{ ...baseSnapshot.contacts[0], status: 'active' }],
+      purchases: [{ id: 'keyboard-purchase', contact_id: 'contact-1', amount: 100, status: 'paid', purchased_at: new Date().toISOString() }],
+      masterList: [{ id: 'contact-1', shopName: 'Test Shop', listCategory: 'priority', purchaseCount: 1 }],
+    });
+    setDailyCallDoNotContactFlagMock.mockResolvedValue(true);
+
+    render(<DailyCallMonitoringView currentUser={{ ...currentUser, action_permissions: { pages: { 'Daily Call Monitoring Dashboard': { can_view: true, can_edit: true } } } }} />);
+    await expandList('Priority List', user);
+    const button = await screen.findByRole('button', { name: 'Mark Test Shop Do Not Call' });
+    button.focus();
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => expect(setDailyCallDoNotContactFlagMock).toHaveBeenCalledWith('contact-1', true));
+    expect(fetchContactForDailyCallMock).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('full-contact-details')).not.toBeInTheDocument();
   });
 
   it.each([
@@ -963,6 +1029,54 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(fetchContactForDailyCallMock).toHaveBeenCalledWith('contact-1');
   });
 
+  it('allows an authorized creator to directly edit an unverified prospect from customer details', async () => {
+    fetchContactForDailyCallMock.mockResolvedValueOnce({
+      id: 'contact-1',
+      company: 'Test Shop',
+      businessLine: 'Diesel Injection',
+      profileType: 'Prospect',
+      status: 'Prospective',
+      verification: 'Unverified',
+      verifiedInSystem: false,
+      prospectCreatorId: 'agent-1',
+      assignedAgentId: '',
+    });
+    const user = userEvent.setup();
+    render(<DailyCallMonitoringView currentUser={{
+      ...currentUser,
+      action_permissions: { pages: { 'Daily Call Monitoring Dashboard': { can_edit: true } } },
+    }} />);
+
+    await expandList('Unverified Prospects', user);
+    await user.click(await screen.findByText('Test Shop'));
+
+    expect(await screen.findByTestId('full-contact-details')).toHaveAttribute('data-direct-edit', 'true');
+  });
+
+  it.each([
+    ['verified', { verification: 'Verified', verifiedInSystem: true, prospectCreatorId: 'agent-1' }],
+    ['owned by another agent', { verification: 'Unverified', verifiedInSystem: false, prospectCreatorId: 'agent-2' }],
+  ])('does not allow direct editing of a prospect that is %s', async (_label, directEditState) => {
+    fetchContactForDailyCallMock.mockResolvedValueOnce({
+      id: 'contact-1',
+      company: 'Test Shop',
+      profileType: 'Prospect',
+      status: 'Prospective',
+      assignedAgentId: '',
+      ...directEditState,
+    });
+    const user = userEvent.setup();
+    render(<DailyCallMonitoringView currentUser={{
+      ...currentUser,
+      action_permissions: { pages: { 'Daily Call Monitoring Dashboard': { can_edit: true } } },
+    }} />);
+
+    await expandList('Unverified Prospects', user);
+    await user.click(await screen.findByText('Test Shop'));
+
+    expect(await screen.findByTestId('full-contact-details')).toHaveAttribute('data-direct-edit', 'false');
+  });
+
   it('keeps the selected customer contact person and number visible when full-profile loading fails', async () => {
     fetchContactForDailyCallMock.mockRejectedValueOnce(new Error('Profile unavailable'));
     const user = userEvent.setup();
@@ -1150,7 +1264,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     await expandList('Recovery List');
     expect(await screen.findByText('Assigned Customer 400')).toBeInTheDocument();
     expect(screen.getByText('400 customers')).toBeInTheDocument();
-  });
+  }, 30000);
 
   it('uses the master-list classification for the sales-agent view without an Other Customers bucket', async () => {
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue({

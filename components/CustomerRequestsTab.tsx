@@ -5,6 +5,7 @@ import {
     Wallet, UserCog, Hash
 } from 'lucide-react';
 import { CustomerRequest, createDiscountRequest, fetchCustomerRequests, requestCustomerUpdate, reviewCustomerRequest } from '../services/customerWorkflowLocalApiService';
+import { sendSalesReportMessage } from '../services/dailyCallMonitoringService';
 import { Contact, CustomerStatus, UserProfile } from '../types';
 import { hasActionPermission, isMasterUserAccount } from '../constants';
 import { toast } from 'sonner';
@@ -135,6 +136,7 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
         if (!canSubmitCurrentRequest || !contact) return;
         setBusy('create');
         setError('');
+        let reportEntryMissing = false;
         try {
             if (createCategory === 'discount') {
                 if (!discountPercent.trim() || !createNotes.trim() || createNotes.trim().length < 10) {
@@ -159,6 +161,15 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
                     // persisted in the approval payload as `notes`.
                     comment: createNotes.trim(),
                 });
+                try {
+                    await sendSalesReportMessage({
+                        contactId,
+                        body: `Do Not Contact request\nReason: ${createNotes.trim()}`,
+                        senderName: currentUser?.full_name || currentUser?.email || 'Staff',
+                    });
+                } catch {
+                    reportEntryMissing = true;
+                }
             } else {
                 if (!createValue.trim()) {
                     setError('Please enter a proposed value');
@@ -174,7 +185,11 @@ export default function CustomerRequestsTab({ contactId, contact: contactProp, c
             setDiscountPercent('');
             setShowCreate(false);
             setRefresh(n => n + 1);
-            toast.success('Request submitted for approval');
+            if (reportEntryMissing) {
+                toast.warning('Request submitted, but its reason could not be added to Agent Sales Report.');
+            } else {
+                toast.success('Request submitted for approval');
+            }
         } catch (err) {
       if (shouldSuppressAuthError(err)) return;
             const msg = err instanceof Error ? err.message : 'Submission failed';

@@ -65,6 +65,7 @@ import {
   fetchSalesReportDirectoryState,
   releaseCustomerCallForDailyCall,
   setDailyCallBookmark,
+  setDailyCallDoNotContactFlag,
   subscribeToDailyCallMonitoringUpdates
 } from '../services/dailyCallMonitoringService';
 import { createContact, fetchContactById, fetchContactForDailyCall, isPendingDuplicateProspectApproval, updateContact } from '../services/customerDatabaseLocalApiService';
@@ -107,7 +108,7 @@ import {
 import { VERIFIED_PROSPECT_POTENTIAL, averageMonthlyPaidSales } from '../utils/dailyCallPotentialSales';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import { DEFAULT_CUSTOMER_VAT_TYPE } from '../constants/customerVat';
-import { DAILY_CALL_PAGE_LABEL, isMasterUserAccount } from '../constants';
+import { DAILY_CALL_PAGE_LABEL, hasActionPermission, isMasterUserAccount } from '../constants';
 import { createWorkflowHistoryState } from '../utils/workflowHistory';
 import { canPerformAction } from '../utils/actionPermissions';
 import {
@@ -653,11 +654,14 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const { addToast } = useToast();
   const canAdd = canPerformAction('can_add');
   const canEdit = canPerformAction('can_edit');
+  const canEditDoNotCall = isMasterUserAccount(currentUser)
+    || (Boolean(currentUser?.action_permissions) && hasActionPermission(currentUser, 'can_edit', DAILY_CALL_PAGE_LABEL));
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [masterListRows, setMasterListRows] = useState<DailyCallMasterCustomerRow[]>([]);
   const [doNotContactCustomers, setDoNotContactCustomers] = useState<DailyCallDoNotContactCustomer[]>([]);
   const [bookmarkedContactId, setBookmarkedContactId] = useState<string | null>(null);
   const [savingBookmark, setSavingBookmark] = useState(false);
+  const [savingDoNotCallId, setSavingDoNotCallId] = useState<string | null>(null);
   const [activeWorkspacePanel, setActiveWorkspacePanel] = useState<'quota' | 'calls' | 'summaries' | 'filters' | 'actions' | null>(null);
   const [callLogs, setCallLogs] = useState<CallLogEntry[]>([]);
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
@@ -1609,7 +1613,9 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       };
     };
 
-    const classificationById = new Map(masterListRows.map((row) => [row.id, row]));
+    const classificationById = new Map<string, DailyCallMasterCustomerRow>(
+      masterListRows.map((row) => [row.id, row])
+    );
     const isMasterBlocked = (row: MasterRow) => {
       const classification = classificationById.get(row.contact.id);
       return classification
@@ -1681,6 +1687,15 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       summarize(blockedRows, 'blocked', DO_NOT_CONTACT_LABEL, 'View only — no contact or sales inquiry', 'red', 'Average Monthly Sales'),
     ];
   }, [debouncedSearch, doNotContactCustomers, masterListRows, masterRows]);
+
+  const totalPotentialSales = useMemo(() => masterListRows.reduce((total, row) => {
+    const bucket = resolveDailyCallMonitorBucket(row);
+    if (bucket === 'priority' || bucket === 'recovery' || bucket === 'blocked') {
+      return total + row.averageMonthlySales;
+    }
+    if (bucket === 'verified') return total + VERIFIED_PROSPECT_POTENTIAL;
+    return total;
+  }, 0), [masterListRows]);
 
   useEffect(() => {
     if (!masterRows.length) {
@@ -1956,6 +1971,21 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     }
   }, [addToast, masterRows, savingBookmark]);
 
+  const handleToggleDoNotCall = useCallback(async (contactId: string) => {
+    if (!canEditDoNotCall || savingDoNotCallId) return;
+    const current = masterListRows.find(row => row.id === contactId)?.doNotContact ?? false;
+    setSavingDoNotCallId(contactId);
+    try {
+      const marked = await setDailyCallDoNotContactFlag(contactId, !current);
+      setMasterListRows(rows => rows.map(row => row.id === contactId ? { ...row, doNotContact: marked } : row));
+      addToast({ type: 'success', title: marked ? 'Do Not Call marked' : 'Do Not Call removed', description: 'The customer badge was updated.' });
+    } catch {
+      addToast({ type: 'error', title: 'Unable to update Do Not Call', description: 'Please try again.' });
+    } finally {
+      setSavingDoNotCallId(null);
+    }
+  }, [addToast, canEditDoNotCall, masterListRows, savingDoNotCallId]);
+
   const handleMasterRowCall = useCallback((contact: Contact) => {
     handleOpenCallContact(contact);
   }, [handleOpenCallContact]);
@@ -2150,6 +2180,18 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         ))}
       </section>
 
+      <article
+        className="flex min-h-[78px] max-w-sm items-center justify-between rounded-xl border border-violet-200 bg-violet-50/70 px-3 py-2 text-violet-700"
+        aria-label="Total Potential Sales"
+        data-testid="sales-agent-total-potential-sales"
+      >
+        <div className="min-w-0">
+          <p className="text-xs font-bold">Total Potential Sales</p>
+          <p className="mt-1 truncate text-xl font-extrabold text-slate-950">{formatCurrency(totalPotentialSales)}</p>
+        </div>
+        <BarChart3 className="h-6 w-6 shrink-0 text-violet-700" aria-hidden="true" />
+      </article>
+
       {activeWorkspacePanel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) setActiveWorkspacePanel(null); }} onKeyDown={(event) => { if (event.key === 'Escape') setActiveWorkspacePanel(null); }}>
           <section role="dialog" aria-modal="true" aria-labelledby="daily-call-tools-title" className="flex max-h-[90dvh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
@@ -2220,8 +2262,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         <span className="shrink-0 text-sm font-bold text-slate-500 dark:text-slate-400">{masterRows.length} {masterRows.length === 1 ? 'customer' : 'customers'}</span>
       </section>
 
-      <div className="overflow-x-auto">
-      <section className="grid min-w-[1200px] grid-cols-6 gap-3" aria-label="Segregated customer category tables">
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6" aria-label="Segregated customer category tables">
         {customerListSummaries.map((summary) => {
           const tone = summaryToneClasses[summary.tone];
           const isExpanded = expandedCustomerCategory === summary.id;
@@ -2229,7 +2270,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             ? baseMasterRows.find((row) => row.contact.id === bookmarkedContactId && !isBlockedContact(row.contact))
             : undefined;
           return (
-            <article key={`${summary.id}-table`} className={`flex min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 shadow-sm transition-[grid-column] duration-300 dark:border-slate-800 dark:bg-slate-900/95 motion-safe:animate-[james-fade-up_500ms_cubic-bezier(0.22,1,0.36,1)_both] ${isExpanded ? 'col-span-2 h-[560px]' : 'col-span-1 h-[560px]'}`}>
+            <article key={`${summary.id}-table`} className={`flex min-w-0 min-h-[24rem] h-[min(70vh,35rem)] flex-col overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 shadow-sm transition-[grid-column,height] duration-300 dark:border-slate-800 dark:bg-slate-900/95 motion-safe:animate-[james-fade-up_500ms_cubic-bezier(0.22,1,0.36,1)_both] ${isExpanded ? 'sm:col-span-2 max-sm:min-h-[24rem]' : 'col-span-1 max-sm:h-[min(38vh,20rem)] max-sm:min-h-[18rem]'}`}>
               <h2 className="min-w-0">
                 <button
                   type="button"
@@ -2288,15 +2329,18 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                   <span className="text-[11px] font-extrabold text-slate-400">{index + 1}</span>
                                   <span className="min-w-0">
                                     <span className="block truncate text-[11px] font-extrabold uppercase leading-tight text-[#10244c] dark:text-white" title={row.contact.company}>{row.contact.company}</span>
+                                    {canEditDoNotCall ? <button type="button" onClick={(event) => { event.stopPropagation(); void handleToggleDoNotCall(row.contact.id); }} onKeyDown={(event) => event.stopPropagation()} aria-pressed={Boolean(masterListRows.find(item => item.id === row.contact.id)?.doNotContact)} aria-label={`${masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'Remove' : 'Mark'} ${row.contact.company} Do Not Call`} className="mt-1 inline-flex max-w-full whitespace-normal break-words rounded bg-rose-100 px-1.5 py-1 text-left text-[9px] font-extrabold uppercase leading-tight text-rose-800 hover:bg-rose-200 disabled:opacity-50" disabled={savingDoNotCallId === row.contact.id}>
+                                      {savingDoNotCallId === row.contact.id ? 'Saving…' : masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'Do Not Call' : '+ Do Not Call'}
+                                    </button> : masterListRows.find(item => item.id === row.contact.id)?.doNotContact && <span role="status" aria-label={`${row.contact.company} Do Not Call`} className="mt-1 inline-flex rounded bg-rose-100 px-1.5 py-1 text-[9px] font-extrabold uppercase leading-tight text-rose-800">Do Not Call</span>}
                                     <span className="mt-0.5 block truncate text-[10px] font-semibold text-slate-600 dark:text-slate-300">Assigned to {row.contact.salesman || 'Unassigned'}{row.contact.team ? ` · ${row.contact.team}` : ''}</span>
                                     <span className="mt-1 inline-flex rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-extrabold uppercase text-red-800 dark:bg-red-900/50 dark:text-red-200">Do not contact</span>
                                   </span>
                                 </div>
-                              ) : <div className={`grid w-full grid-cols-[1.25rem_minmax(0,1fr)_4.2rem_7rem] items-center gap-2 rounded-lg border p-2 text-left shadow-sm transition-colors group-hover:border-blue-200 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800 ${highlight.className} ${selectedClientId === row.contact.id ? 'border-blue-300 ring-1 ring-blue-200 dark:bg-brand-blue/10' : ''}`}>
-                              <span className="text-[11px] font-extrabold text-slate-400">{index + 1}</span>
-                              <span className="min-w-0">
+                              ) : <div className={`grid w-full grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-2 gap-y-1 rounded-lg border p-2 text-left shadow-sm transition-colors group-hover:border-blue-200 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800 ${highlight.className} ${selectedClientId === row.contact.id ? 'border-blue-300 ring-1 ring-blue-200 dark:bg-brand-blue/10' : ''}`}>
+                              <span className="row-span-3 pt-0.5 text-[11px] font-extrabold text-slate-400">{index + 1}</span>
+                              <span className="col-start-2 min-w-0">
                                 <span className="flex min-w-0 items-center gap-1.5">
-                                  <span className="block truncate text-[11px] font-extrabold uppercase leading-tight text-[#10244c] dark:text-white" title={row.contact.company}>
+                                  <span className="min-w-0 truncate text-[11px] font-extrabold uppercase leading-tight text-[#10244c] dark:text-white" title={row.contact.company}>
                                     {row.contact.company}
                                   </span>
                                   <CustomerStarIndicator customerId={row.contact.id} isStarred={row.contact.isStarred} />
@@ -2317,6 +2361,9 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                     </span>
                                   )}
                                 </span>
+                                {canEditDoNotCall ? <button type="button" onClick={(event) => { event.stopPropagation(); void handleToggleDoNotCall(row.contact.id); }} onKeyDown={(event) => event.stopPropagation()} aria-pressed={Boolean(masterListRows.find(item => item.id === row.contact.id)?.doNotContact)} aria-label={`${masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'Remove' : 'Mark'} ${row.contact.company} Do Not Call`} className={`mt-1 block w-fit max-w-full shrink-0 whitespace-nowrap rounded px-1 py-0.5 text-left text-[8px] font-extrabold uppercase leading-tight disabled:opacity-50 ${masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'bg-rose-100 text-rose-800' : 'border border-slate-200 text-slate-500 hover:bg-rose-50 hover:text-rose-700'}`} disabled={savingDoNotCallId === row.contact.id}>
+                                  {savingDoNotCallId === row.contact.id ? 'Saving…' : masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'Do Not Call' : '+ Do Not Call'}
+                                </button> : masterListRows.find(item => item.id === row.contact.id)?.doNotContact && <span role="status" aria-label={`${row.contact.company} Do Not Call`} className="mt-1 block w-fit rounded bg-rose-100 px-1 py-0.5 text-[8px] font-extrabold uppercase leading-tight text-rose-800">Do Not Call</span>}
                                 {row.contact.team && (
                                   <span className="mt-0.5 block truncate text-[9px] font-bold uppercase leading-tight text-indigo-700 dark:text-indigo-300" title={`Team: ${row.contact.team}`}>
                                     Team: {row.contact.team}
@@ -2329,15 +2376,15 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                   {formatDate(row.lastPurchase)} · {formatRelativeTime(row.lastPurchase)}
                                 </span>
                               </span>
-                              <span className="min-w-0 text-right">
-                                <span className="block truncate text-[11px] font-extrabold text-[#10244c] dark:text-white" title={formatCurrency(row.totalSales)}>
+                              <span className="col-start-2 flex min-w-0 flex-wrap items-center justify-between gap-x-2 text-left">
+                                <span className="min-w-0 truncate text-[11px] font-extrabold text-[#10244c] dark:text-white" title={formatCurrency(row.totalSales)}>
                                   {formatCompactCurrency(row.totalSales)}
                                 </span>
-                                <span className="mt-0.5 block truncate text-[9px] font-bold uppercase leading-tight text-slate-500 dark:text-slate-400" title={row.contact.salesman || agentDisplayName}>
+                                <span className="min-w-0 truncate text-[9px] font-bold uppercase leading-tight text-slate-500 dark:text-slate-400" title={row.contact.salesman || agentDisplayName}>
                                   {row.contact.salesman || agentDisplayName}
                                 </span>
                               </span>
-                              <span className="grid grid-cols-4 place-items-center gap-1">
+                              <span className="col-start-2 flex flex-wrap items-center gap-1">
                                 {canEdit && summary.id === 'unverified' && (
                                   <button
                                     type="button"
@@ -2419,7 +2466,6 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           );
         })}
       </section>
-      </div>
       </div>
       {detailsPanelOpen && selectedClient && (
         <div
@@ -2523,195 +2569,6 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 <AlertTriangle className="h-4 w-4" />
                 Incident Report
               </button>}
-            </div>
-            )}
-            {false && !selectedClientBlocked && (
-            <div className="space-y-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/40 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h4 className="text-sm font-bold text-slate-800 dark:text-white">Customer Log</h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Sales and Payment notes only. Staff comments and management replies use Agent Sales Report above.</p>
-                </div>
-                {canEdit && <button
-                  type="button"
-                  onClick={handleSaveCustomerStatus}
-                  disabled={savingStatusLog}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {savingStatusLog ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                  {savingStatusLog ? 'Updating...' : 'Update Status'}
-                </button>}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {CUSTOMER_LOG_TOPICS.map((topic) => (
-                  <button
-                    key={topic}
-                    type="button"
-                    onClick={() => setCustomerLogTopic(topic)}
-                    className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                      customerLogTopic === topic
-                        ? 'border-brand-blue bg-brand-blue/10 text-brand-blue'
-                        : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    {topic}
-                  </button>
-                ))}
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <label className="space-y-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Topic</span>
-                  <select
-                    aria-label="Customer log topic"
-                    value={customerLogTopic}
-                    onChange={(event) => setCustomerLogTopic(event.target.value as CustomerLogTopic)}
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
-                  >
-                    {CUSTOMER_LOG_TOPICS.map((topic) => (
-                      <option key={topic} value={topic}>{topic}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Status</span>
-                  <select
-                    aria-label="Customer log status"
-                    value={customerLogStatus}
-                    onChange={(event) => setCustomerLogStatus(event.target.value as CustomerLogStatus)}
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
-                  >
-                    {CUSTOMER_LOG_STATUSES.map((status) => (
-                      <option key={status} value={status}>{status}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <label className="space-y-1">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Note</span>
-                <textarea
-                  aria-label="Customer note"
-                  value={customerLogNote}
-                  onChange={(event) => setCustomerLogNote(event.target.value)}
-                  placeholder="Add the conversation note"
-                  rows={4}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
-                />
-              </label>
-              <div className="grid gap-3 md:grid-cols-2">
-                <label className="space-y-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Promise To Pay</span>
-                  <textarea
-                    aria-label="Customer promise to pay"
-                    value={customerLogPromiseToPay}
-                    onChange={(event) => setCustomerLogPromiseToPay(event.target.value)}
-                    placeholder="Optional promise to pay details"
-                    rows={3}
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Comments</span>
-                  <textarea
-                    aria-label="Customer comments"
-                    value={customerLogComments}
-                    onChange={(event) => setCustomerLogComments(event.target.value)}
-                    placeholder="Optional internal comments"
-                    rows={3}
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
-                  />
-                </label>
-              </div>
-              <div className="flex justify-end">
-                {canEdit && <button
-                  type="button"
-                  onClick={handleSaveCustomerLog}
-                  disabled={savingCustomerLog}
-                  className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-xs font-semibold text-white hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {savingCustomerLog ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-                  {savingCustomerLog ? 'Saving...' : 'Save Note'}
-                </button>}
-              </div>
-              <div className="grid gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{customerLogTopic} History</span>
-                    <span className="text-[11px] text-slate-400 dark:text-slate-500">{filteredCustomerLogs.length} entr{filteredCustomerLogs.length === 1 ? 'y' : 'ies'}</span>
-                  </div>
-                  <div className="max-h-64 space-y-2 overflow-y-auto">
-                    {customerLogsLoading ? (
-                      <div className="rounded-lg border border-slate-200 bg-white px-3 py-4 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-                        Loading customer logs...
-                      </div>
-                    ) : filteredCustomerLogs.length === 0 ? (
-                      <div className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                        No {customerLogTopic.toLowerCase()} notes yet.
-                      </div>
-                    ) : (
-                      filteredCustomerLogs.map((entry) => (
-                        <div
-                          key={entry.id}
-                          className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-2">
-                              <span className="rounded-full bg-brand-blue/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-blue">
-                                {entry.status || 'Note'}
-                              </span>
-                              <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{entry.created_by_name || 'Unknown user'}</span>
-                            </div>
-                            <span className="text-[11px] text-slate-400 dark:text-slate-500">{formatDate(entry.occurred_at)}</span>
-                          </div>
-                          {entry.note && (
-                            <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">{entry.note}</p>
-                          )}
-                          {entry.promise_to_pay && (
-                            <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-300">Promise to pay: {entry.promise_to_pay}</p>
-                          )}
-                          {entry.comments && (
-                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Comments: {entry.comments}</p>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">Status History</span>
-                    <span className="text-[11px] text-slate-400 dark:text-slate-500">{statusUpdateLogs.length} update{statusUpdateLogs.length === 1 ? '' : 's'}</span>
-                  </div>
-                  <div className="max-h-64 space-y-2 overflow-y-auto">
-                    {customerLogsLoading ? (
-                      <div className="rounded-lg border border-slate-200 bg-white px-3 py-4 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-                        Loading statuses...
-                      </div>
-                    ) : statusUpdateLogs.length === 0 ? (
-                      <div className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                        No status updates yet.
-                      </div>
-                    ) : (
-                      statusUpdateLogs.map((entry) => (
-                        <div
-                          key={entry.id}
-                          className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-                              {entry.status}
-                            </span>
-                            <span className="text-[11px] text-slate-400 dark:text-slate-500">{formatDate(entry.occurred_at)}</span>
-                          </div>
-                          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{entry.created_by_name || 'Unknown user'}</p>
-                          {entry.note && (
-                            <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">Reason: {entry.note}</p>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
             </div>
             )}
             <div className="space-y-3">
@@ -3080,6 +2937,20 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               permissionPage={DAILY_CALL_PAGE_LABEL}
               showAgentSalesReportInOverview={isSalesAgent}
               viewOnly={selectedClientBlocked}
+              allowDirectProspectEdit={Boolean(
+                isSalesAgent
+                && currentUser?.id
+                && currentUser.action_permissions
+                && hasActionPermission(currentUser, 'can_edit', DAILY_CALL_PAGE_LABEL)
+                && fullDetailsContact.profileType?.trim().toLowerCase().includes('prospect')
+                && fullDetailsContact.status === CustomerStatus.PROSPECTIVE
+                && fullDetailsContact.verification?.trim().toLowerCase() !== 'verified'
+                && !fullDetailsContact.verifiedInSystem
+                && (
+                  String(fullDetailsContact.prospectCreatorId || '') === String(currentUser.id)
+                  || String(fullDetailsContact.assignedAgentId || '') === String(currentUser.id)
+                )
+              )}
               onSalesReportRead={handleSalesReportConversationRead}
               onClose={handleCloseFullDetails}
               onUpdate={(updated) => {

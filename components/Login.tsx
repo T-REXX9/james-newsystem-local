@@ -7,14 +7,12 @@ import { loginWithLocalApi } from '../services/localAuthService';
 export default function Login() {
   const { addToast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [view, setView] = useState<'signin' | 'signup'>('signin');
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState<{ type: 'error' | 'success' | 'warning' | '', text: string }>({ type: '', text: '' });
   
   const [formData, setFormData] = useState({
     email: '',
-    password: '',
-    fullName: ''
+    password: ''
   });
 
   useEffect(() => {
@@ -66,20 +64,6 @@ export default function Login() {
     void attemptedEmail;
     void status;
     void reason;
-  };
-
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setMessage({
-      type: 'warning',
-      text: 'Sign up via UI is disabled in local API mode. Please create users in MySQL/old system for now.',
-    });
-    addToast({
-      type: 'warning',
-      title: 'Sign up disabled',
-      description: 'Use an existing account from the local MySQL database.',
-      durationMs: 6000,
-    });
   };
 
   const handleSignIn = async (e: React.FormEvent) => {
@@ -134,10 +118,10 @@ export default function Login() {
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-card p-8 w-full max-w-md border border-slate-200 dark:border-slate-800 relative transition-colors duration-200">
         <div className="text-center mb-8">
           <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-1">
-            {view === 'signin' ? 'Sign In' : 'Create Account'}
+            Sign In
           </h2>
           <p className="text-sm text-slate-400 dark:text-slate-500">
-            {view === 'signin' ? 'Enter your credentials to access the dashboard' : 'Register a new sales agent account'}
+            Enter your credentials to access the dashboard
           </p>
         </div>
 
@@ -158,27 +142,7 @@ export default function Login() {
           </div>
         )}
 
-        <form onSubmit={view === 'signin' ? handleSignIn : handleSignUp} className="space-y-4">
-          {view === 'signup' && (
-            <div>
-              <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-2">
-                Full Name
-              </label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <input
-                  type="text"
-                  name="fullName"
-                  value={formData.fullName}
-                  onChange={handleInputChange}
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-blue focus:border-transparent transition-all outline-none"
-                  placeholder="John Doe"
-                  required={view === 'signup'}
-                />
-              </div>
-            </div>
-          )}
-
+        <form onSubmit={handleSignIn} className="space-y-4">
           <div>
             <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-2">
               Email or Username
@@ -191,7 +155,7 @@ export default function Login() {
                 value={formData.email}
                 onChange={handleInputChange}
                 className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-blue focus:border-transparent transition-all outline-none"
-                placeholder={view === 'signin' ? "e.g. main" : "john@tnd-opc.com"}
+                placeholder="e.g. main"
                 required
               />
             </div>
@@ -227,26 +191,9 @@ export default function Login() {
             disabled={loading}
             className="w-full bg-brand-blue hover:bg-blue-700 text-white font-bold py-3.5 px-4 rounded-xl transition-all duration-200 shadow-lg shadow-blue-900/10 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed mt-6"
           >
-            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : (view === 'signin' ? 'Sign In' : 'Create Account')}
+            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Sign In'}
           </button>
         </form>
-
-        <div className="mt-8 text-center">
-           <p className="text-sm text-slate-500 dark:text-slate-400">
-             {view === 'signin' ? "Don't have an account yet?" : "Already have an account?"}
-             <button 
-                onClick={() => {
-                    setView(view === 'signin' ? 'signup' : 'signin');
-                    setMessage({ type: '', text: '' });
-                    setFormData({ email: '', password: '', fullName: '' });
-                }}
-                className="ml-2 font-bold text-brand-blue hover:underline"
-             >
-                 {view === 'signin' ? 'Sign Up' : 'Sign In'}
-             </button>
-           </p>
-        </div>
-        
       </div>
     </div>
   );

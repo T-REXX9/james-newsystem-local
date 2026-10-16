@@ -171,6 +171,32 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
     if (!selectedOption) return;
 
     try {
+      if (!isMasterUserAccount(currentUser)) {
+        const ids = Array.from(selectedIds, String);
+        const results = await Promise.allSettled(ids.map((id) => requestCustomerUpdate(id, { priceGroup })));
+        const failedIds = ids.filter((_, index) => results[index].status === 'rejected');
+        const submittedCount = ids.length - failedIds.length;
+        if (failedIds.length > 0) {
+          setSelectedIds(new Set(failedIds));
+          if (submittedCount > 0) setShowSetPriceGroupModal(false);
+          addToast({
+            type: submittedCount > 0 ? 'warning' : 'error',
+            title: submittedCount > 0 ? 'Some requests failed' : 'Unable to submit requests',
+            description: submittedCount > 0
+              ? `${submittedCount} request${submittedCount === 1 ? '' : 's'} submitted; ${failedIds.length} failed. Failed customers remain selected.`
+              : `All ${failedIds.length} requests failed. Your selected customers remain available to retry.`,
+          });
+          return;
+        }
+        addToast({
+          type: 'success',
+          title: 'Change requests submitted',
+          description: `Price group changes for ${ids.length} customer${ids.length === 1 ? '' : 's'} are waiting for Master User approval.`,
+        });
+        setShowSetPriceGroupModal(false);
+        setSelectedIds(new Set());
+        return;
+      }
       await bulkUpdateContacts(Array.from(selectedIds), { priceGroup });
       addToast({
         type: 'success',

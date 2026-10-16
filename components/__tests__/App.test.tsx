@@ -108,7 +108,7 @@ describe('App authentication flow', () => {
     await waitFor(() => expect(mockedLogoutFromLocalApi).toHaveBeenCalled());
   });
 
-  it('starts on a blank workspace when no page is specified', async () => {
+  it('starts on Daily Call Monitoring when no page is specified', async () => {
     mockedRestoreLocalAuthSession.mockResolvedValue({
       token: 'token-blank',
       context: { user: { id: 1 } },
@@ -123,8 +123,8 @@ describe('App authentication flow', () => {
 
     render(<App />);
 
-    expect(await screen.findByLabelText('Blank workspace')).toBeInTheDocument();
-    expect(window.location.hash).toBe('');
+    expect(await screen.findByText('OwnerDailyCallMonitoringUnifiedView')).toBeInTheDocument();
+    expect(window.location.hash).toBe('#/home');
   });
 
   it('uses browser Back to return to the previous module without logging out', async () => {
@@ -237,6 +237,7 @@ describe('App authentication flow', () => {
   });
 
   it('reacts to local auth changed event after bootstrap', async () => {
+    window.history.replaceState(null, '', '/#/maintenance-profile-system-access');
     mockedRestoreLocalAuthSession.mockResolvedValue(null);
 
     render(<App />);
@@ -267,6 +268,8 @@ describe('App authentication flow', () => {
     );
 
     expect(await screen.findByTestId('topnav')).toBeInTheDocument();
+    expect(await screen.findByText('DailyCallMonitoringView')).toBeInTheDocument();
+    expect(window.location.hash).toBe('#/home');
   });
 
   it('renders login when restored session fails', async () => {

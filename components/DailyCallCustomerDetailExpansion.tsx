@@ -18,6 +18,7 @@ import IncidentReportTab from './IncidentReportTab';
 import CustomerRequestsTab from './CustomerRequestsTab';
 import CustomerSalesReportChat from './CustomerSalesReportChat';
 import CustomerStarIndicator from './CustomerStarIndicator';
+import RecordImageLightbox from './RecordImageLightbox';
 import CustomerYearlySales from './CustomerYearlySales';
 import { Suspense } from 'react';
 import { Contact, DailyCallCustomerRow, UserProfile, VipTierConfig } from '../types';
@@ -51,9 +52,11 @@ interface DailyCallCustomerDetailExpansionProps {
   vipConfig?: VipTierConfig;
 }
 
-const normalizeTabId = (tab?: DetailTabId): DetailTabId => {
+const normalizeTabId = (tab?: string): DetailTabId => {
   if (tab === 'comments' || tab === 'human') return 'sales-report';
-  return tab || 'overview';
+  if (tab === 'overview' || tab === 'sales-report' || tab === 'sales' || tab === 'item-issues'
+    || tab === 'incident' || tab === 'requests' || tab === 'product-images') return tab;
+  return 'overview';
 };
 
 const tabs: Array<{
@@ -128,6 +131,7 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
   const [recordImage, setRecordImage] = useState('');
   const [recordImagePosition, setRecordImagePosition] = useState('50,50');
   const [recordImageFailed, setRecordImageFailed] = useState(false);
+  const [showFullRecordImage, setShowFullRecordImage] = useState(false);
   const [customerProfileState, setCustomerProfileState] = useState<{ customerId: string; contact: Contact | null } | null>(null);
 
   useEffect(() => {
@@ -333,23 +337,20 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
 
   return (
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-sm">
+      <RecordImageLightbox src={recordImage} alt={`${customer.shopName || 'Customer'} full image`} isOpen={showFullRecordImage} onOpen={() => setShowFullRecordImage(true)} onClose={() => setShowFullRecordImage(false)} />
       <header className="border-b border-slate-200 bg-white p-4">
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <div className="relative h-[172px] bg-gradient-to-r from-slate-700 via-brand-blue to-blue-500 sm:h-[230px]">
             {recordImage && !recordImageFailed ? (
-              <img
-                src={recordImage}
-                alt={`${customer.shopName || 'Customer'} cover photo`}
-                className="h-full w-full object-cover"
-                style={{ objectPosition: recordImagePosition.replace(',', '% ') }}
-                onError={() => setRecordImageFailed(true)}
-              />
+              <button type="button" className="h-full w-full cursor-zoom-in" aria-label="View full customer image" onClick={() => setShowFullRecordImage(true)}>
+                <img src={recordImage} alt={`${customer.shopName || 'Customer'} cover photo`} className="h-full w-full object-cover" style={{ objectPosition: recordImagePosition.replace(',', '% ') }} onError={() => setRecordImageFailed(true)} />
+              </button>
             ) : (
               <div className="flex h-full items-center justify-center text-6xl font-bold tracking-widest text-white/80" aria-hidden="true">
                 {(customer.shopName || '??').substring(0, 2).toUpperCase()}
               </div>
             )}
-            <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-950/45 to-transparent" aria-hidden="true" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-950/45 to-transparent" aria-hidden="true" />
           </div>
           <div className="grid gap-4 p-3 sm:p-4 xl:grid-cols-[1.55fr_1fr_0.85fr]">
           <div className="min-w-0 py-1">

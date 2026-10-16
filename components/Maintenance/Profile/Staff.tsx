@@ -39,6 +39,7 @@ const StaffForm: React.FC<StaffFormProps> = ({ initialData, onClose, onSuccess }
     const [email, setEmail] = useState(initialData?.email || '');
     const [password, setPassword] = useState('');
     const [birthday, setBirthday] = useState(initialData?.birthday || '');
+    const [salesQuota, setSalesQuota] = useState(String(initialData?.monthly_quota ?? 0));
     const [groups, setGroups] = useState<AccessGroup[]>([]);
     const [groupsLoading, setGroupsLoading] = useState(true);
 
@@ -79,10 +80,26 @@ const StaffForm: React.FC<StaffFormProps> = ({ initialData, onClose, onSuccess }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        const parsedSalesQuota = Number(salesQuota);
+        if (initialData && formData.role === 'Sales Agent'
+            && (!Number.isFinite(parsedSalesQuota) || parsedSalesQuota < 0 || parsedSalesQuota > 9999999999999.99)) {
+            addToast({
+                type: 'error',
+                title: 'Invalid sales quota',
+                description: 'Enter a quota between 0 and 9,999,999,999,999.99.',
+                durationMs: 6000,
+            });
+            return;
+        }
         setLoading(true);
         try {
             if (initialData?.id) {
-                await updateStaff(initialData.id, { ...formData, birthday: birthday || null, group_id: formData.group_id || null });
+                await updateStaff(initialData.id, {
+                    ...formData,
+                    ...(formData.role === 'Sales Agent' ? { sales_quota: parsedSalesQuota } : {}),
+                    birthday: birthday || null,
+                    group_id: formData.group_id || null,
+                });
             } else {
                 const createdStaff = await createStaff({
                     full_name: String(formData.full_name || '').trim(),
@@ -202,6 +219,22 @@ const StaffForm: React.FC<StaffFormProps> = ({ initialData, onClose, onSuccess }
                     className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 bg-white"
                 />
             </div>
+            {initialData && formData.role === 'Sales Agent' && (
+                <div>
+                    <label htmlFor="staff-sales-quota" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Monthly sales quota (PHP)</label>
+                    <input
+                        id="staff-sales-quota"
+                        type="number"
+                        min="0"
+                        max="9999999999999.99"
+                        step="0.01"
+                        required
+                        value={salesQuota}
+                        onChange={(e) => setSalesQuota(e.target.value)}
+                        className="mt-1 block w-full rounded-md border-gray-300 bg-white p-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:border-gray-600 dark:bg-gray-700"
+                    />
+                </div>
+            )}
             <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Birthday</label>
                 <input

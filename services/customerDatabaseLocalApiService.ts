@@ -63,6 +63,9 @@ interface ApiCustomerRow {
   assigned_to?: string | null;
   sales_person_id?: string | number | null;
   lsales_person?: string | number | null;
+  prospect_creator_id?: string | number | null;
+  profile_type?: string | null;
+  verified_in_system?: boolean | number | string | null;
   refer_by?: string | null;
   address?: string | null;
   province?: string | null;
@@ -87,7 +90,6 @@ interface ApiCustomerRow {
   status?: ApiCustomerStatus | null;
   debt_type?: string | null;
   preferred_brand?: string | null;
-  profile_type?: string | null;
   notes?: string | null;
   duplicate_override_reason?: string | null;
   record_image?: string | null;
@@ -327,6 +329,9 @@ export const mapApiCustomerToContact = (row: ApiCustomerRow): LocalContact => {
     team: sanitizeLegacyString(row?.team || ''),
     salesman: resolvedSalesName,
     assignedAgentId: salesPersonId,
+    prospectCreatorId: sanitizeLegacyString(row?.prospect_creator_id || ''),
+    profileType: sanitizeLegacyString(row?.profile_type || ''),
+    verifiedInSystem: row?.verified_in_system === true || row?.verified_in_system === 1 || row?.verified_in_system === '1',
     referBy: sanitizeLegacyString(row?.refer_by || ''),
     address: sanitizeLegacyString(row?.address || ''),
     province: sanitizeLegacyString(row?.province || ''),
@@ -404,6 +409,9 @@ export const mapContactPayloadToApi = (contact: ContactPayloadWithSalesPersonId)
     phone: String(contact?.phone || ''),
     mobile: String(contact?.mobile || ''),
     sales_person_id: resolvedSalesPerson,
+    ...(Object.prototype.hasOwnProperty.call(contact, '__salesTeamId')
+      ? { sales_team_id: contact.__salesTeamId === '' || contact.__salesTeamId == null ? null : Number(contact.__salesTeamId) }
+      : {}),
     refer_by: String(contact?.referBy || ''),
     address: String(contact?.address || ''),
     delivery_address: String(contact?.deliveryAddress || contact?.address || ''),
@@ -750,12 +758,18 @@ export const deleteCustomer = async (sessionId: string): Promise<void> => {
   );
 };
 
-const syncContactPersons = async (sessionId: string, contactPersons: ContactPerson[] | undefined): Promise<void> => {
+const syncContactPersons = async (
+  sessionId: string,
+  contactPersons: ContactPerson[] | undefined,
+  preserveExisting = false
+): Promise<void> => {
   if (!Array.isArray(contactPersons)) return;
 
-  const detailPayload = await requestJson<ApiCustomerDatabaseResponse>(
-    `${API_BASE_URL}/customer-database/${encodeURIComponent(String(sessionId))}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`
-  );
+  const detailPayload = preserveExisting
+    ? null
+    : await requestJson<ApiCustomerDatabaseResponse>(
+        `${API_BASE_URL}/customer-database/${encodeURIComponent(String(sessionId))}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`
+      );
   const existingRows = Array.isArray(detailPayload?.data?.contacts) ? detailPayload.data.contacts : [];
   const existingById = new Map<string, ApiContactPersonRow>();
   existingRows.forEach((row: ApiContactPersonRow) => {
@@ -767,7 +781,8 @@ const syncContactPersons = async (sessionId: string, contactPersons: ContactPers
 
   for (const cp of contactPersons) {
     const candidateId = String(cp?.id || '').trim();
-    const isExisting = candidateId !== '' && /^\d+$/.test(candidateId) && existingById.has(candidateId);
+    const hasNumericId = candidateId !== '' && /^\d+$/.test(candidateId);
+    const isExisting = hasNumericId && (preserveExisting || existingById.has(candidateId));
     const cpPayload = {
       main_id: API_MAIN_ID,
       ...mapContactPersonPayloadToApi(cp),
@@ -791,7 +806,7 @@ const syncContactPersons = async (sessionId: string, contactPersons: ContactPers
     });
   }
 
-  for (const existingId of existingById.keys()) {
+  for (const existingId of preserveExisting ? [] : existingById.keys()) {
     if (seenExistingIds.has(existingId)) continue;
     await requestJson(
       `${API_BASE_URL}/customer-database/contacts/${encodeURIComponent(existingId)}?main_id=${encodeURIComponent(String(API_MAIN_ID))}`,
@@ -800,7 +815,12 @@ const syncContactPersons = async (sessionId: string, contactPersons: ContactPers
   }
 };
 
-export const updateContact = async (id: string, updates: Partial<ContactPayloadWithSalesPersonId>, actorId?: string): Promise<void> => {
+export const updateContact = async (
+  id: string,
+  updates: Partial<ContactPayloadWithSalesPersonId>,
+  actorId?: string,
+  options: { preserveExistingContactPersons?: boolean } = {}
+): Promise<void> => {
   const payload: Record<string, unknown> = {
     main_id: API_MAIN_ID,
     user_id: actorId || String(getUserContext().userId),
@@ -832,7 +852,7 @@ export const updateContact = async (id: string, updates: Partial<ContactPayloadW
   });
 
   if (updates?.contactPersons) {
-    await syncContactPersons(id, updates.contactPersons);
+    await syncContactPersons(id, updates.contactPersons, options.preserveExistingContactPersons);
   }
 
   invalidateDailyCallMasterListCache();

@@ -7,8 +7,8 @@
 
 
 
-import React, { useState, useEffect } from 'react';
-import { createWorkflowHistoryState, ensureWorkflowHistoryState, preserveCurrentHistoryState } from './utils/workflowHistory';
+import React, { useState, useEffect, useRef } from 'react';
+import { canRetraceWorkflowHistory, createWorkflowHistoryState, ensureWorkflowHistoryState, preserveCurrentHistoryState, retraceWorkflowHistory } from './utils/workflowHistory';
 import { compactWorkflowPayload, isSalesReportResultsView, type WorkflowNavigateDetail } from './utils/workflowNavigate';
 import TopNav from './components/TopNav';
 import Login from './components/Login';
@@ -108,9 +108,8 @@ const CANONICAL_TO_ALIASES: Record<string, string[]> = Object.entries(MODULE_ID_
 
 const normalizeModuleId = (moduleId: string): string => MODULE_ID_ALIASES[moduleId] || moduleId;
 
-// Start authenticated sessions on an intentionally blank workspace. A page is
-// selected only when it is present in the URL or the user navigates to it.
-const DEFAULT_ACTIVE_TAB = '';
+// Home is the single Daily Call Monitoring Dashboard route.
+const DEFAULT_ACTIVE_TAB = 'home';
 
 const getRouteStateFromLocation = (): { tab: string; payload?: Record<string, string> } => {
   if (typeof window === 'undefined') {
@@ -169,6 +168,7 @@ const getModuleLabel = (moduleId: string): string => {
 const App: React.FC = () => {
   const initialRouteState = getRouteStateFromLocation();
   const initialStoredSession = getLocalAuthSession();
+  const currentSessionRef = useRef<LocalAuthSession | null>(initialStoredSession);
   const [session, setSession] = useState<any>(() => initialStoredSession ? {
     token: initialStoredSession.token,
     user: { id: initialStoredSession.userProfile.id },
@@ -185,6 +185,7 @@ const App: React.FC = () => {
   );
 
   const applyLocalAuthSession = (authSession: LocalAuthSession | null) => {
+    currentSessionRef.current = authSession;
     if (!authSession) {
       setSession(null);
       setUserProfile(null);
@@ -221,8 +222,11 @@ const App: React.FC = () => {
 
     const handler = (event: Event) => {
       const custom = event as CustomEvent<LocalAuthSession | null>;
+      const isNewLogin = !!custom.detail && !currentSessionRef.current;
       applyLocalAuthSession(custom.detail || null);
-      const routeState = getRouteStateFromLocation();
+      const routeState = isNewLogin
+        ? { tab: DEFAULT_ACTIVE_TAB }
+        : getRouteStateFromLocation();
       setActiveTab(routeState.tab);
       setModuleContext(routeState.payload ? { [routeState.tab]: routeState.payload } : {});
       writeRouteStateToLocation(routeState.tab, routeState.payload, 'replace');
@@ -786,7 +790,6 @@ const App: React.FC = () => {
                 setModuleContext((prev) => ({ ...prev, [targetTab]: { contactId: id } }));
                 setActiveTab(targetTab);
                 writeRouteStateToLocation(targetTab, { contactId: id }, 'push');
-                setCanNavigateBack(canRetraceWorkflowHistory());
               }}
             />
           </div>
@@ -973,6 +976,8 @@ const App: React.FC = () => {
             <TopNav
               activeTab={activeTab}
               onNavigate={handleSetActiveTab}
+              onBack={() => retraceWorkflowHistory(() => handleSetActiveTab('home'))}
+              canGoBack={canRetraceWorkflowHistory()}
               user={userProfile}
               onSignOut={handleSignOut}
             />

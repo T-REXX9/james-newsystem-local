@@ -22,6 +22,7 @@ import CustomerCallHistoryCard from './CustomerCallHistoryCard';
 import IncidentReportTab from './IncidentReportTab';
 import CustomerYearlySales from './CustomerYearlySales';
 import CustomerSalesReportChat from './CustomerSalesReportChat';
+import RecordImageLightbox from './RecordImageLightbox';
 
 interface CustomerDetailPanelProps {
     contactId: string;
@@ -83,6 +84,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     const [selectedSalesAgent, setSelectedSalesAgent] = useState<string>('');
     const [isSaving, setIsSaving] = useState(false);
     const [recordImageFailed, setRecordImageFailed] = useState(false);
+    const [showFullRecordImage, setShowFullRecordImage] = useState(false);
     const [isSavingStar, setIsSavingStar] = useState(false);
 
     useEffect(() => {
@@ -237,17 +239,13 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                 <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
                     <div className="relative h-[172px] bg-gradient-to-r from-slate-700 via-brand-blue to-blue-500 sm:h-[230px]">
                         {contact.recordImage && !recordImageFailed ? (
-                            <img
-                                src={contact.recordImage}
-                                alt={`${contact.company || contact.name || 'Customer'} cover photo`}
-                                className="h-full w-full object-cover"
-                                style={{ objectPosition: contact.recordImagePosition?.replace(',', '% ') }}
-                                onError={() => setRecordImageFailed(true)}
-                            />
+                            <button type="button" className="h-full w-full cursor-zoom-in" aria-label="View full customer image" onClick={() => setShowFullRecordImage(true)}>
+                                <img src={contact.recordImage} alt={`${contact.company || contact.name || 'Customer'} cover photo`} className="h-full w-full object-cover" style={{ objectPosition: contact.recordImagePosition?.replace(',', '% ') }} onError={() => setRecordImageFailed(true)} />
+                            </button>
                         ) : (
                             <div className="flex h-full items-center justify-center text-6xl font-bold tracking-widest text-white/80" aria-hidden="true">{Initials}</div>
                         )}
-                        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-950/45 to-transparent" aria-hidden="true" />
+                        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-950/45 to-transparent" aria-hidden="true" />
                     </div>
                     <div className="flex flex-wrap items-start justify-between gap-4 p-4 sm:p-5">
                     <div className="min-w-0">
@@ -360,6 +358,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                     ))}
                 </div>
             </div>
+            <RecordImageLightbox src={contact.recordImage || ''} alt={`${contact.company || contact.name || 'Customer'} full image`} isOpen={showFullRecordImage} onClose={() => setShowFullRecordImage(false)} />
 
             {/* 2. Content Area */}
             <div className="flex-none p-4">

@@ -12,6 +12,7 @@ import {
   Info,
   Loader2,
   Phone,
+  Pencil,
   RefreshCw,
   Search,
   Star,
@@ -19,9 +20,9 @@ import {
   Users,
   XCircle,
 } from 'lucide-react';
-import { createCustomerLogForDailyCall, fetchCustomersForDailyCall, fetchDailyCallMasterList, getCachedDailyCallMasterList } from '../services/dailyCallMonitoringService';
-import { bulkUpdateContacts, createContact, fetchContactById, fetchSalesAgents, getAssignmentHistory, isPendingDuplicateProspectApproval, mapApiCustomerToContact, updateContact } from '../services/customerDatabaseLocalApiService';
-import { createDuplicateProspectRequest, fetchAllCustomerRequests, reviewCustomerRequest } from '../services/customerWorkflowLocalApiService';
+import { createCustomerLogForDailyCall, fetchCustomersForDailyCall, fetchDailyCallMasterList, getCachedDailyCallMasterList, sendSalesReportMessage, setDailyCallDoNotContactFlag } from '../services/dailyCallMonitoringService';
+import { bulkUpdateContacts, createContact, fetchContactById, fetchSalesAgents, getAssignmentHistory, isPendingDuplicateProspectApproval, mapApiCustomerToContact, setCustomerStarred, updateContact } from '../services/customerDatabaseLocalApiService';
+import { createDuplicateProspectRequest, fetchAllCustomerRequests, requestCustomerUpdate, reviewCustomerRequest } from '../services/customerWorkflowLocalApiService';
 import type { CustomerRequest } from '../services/customerWorkflowLocalApiService';
 import { fetchTeams, TeamRecord } from '../services/teamLocalApiService';
 import { getVipTierConfig } from '../services/vipTierSettingsService';
@@ -31,7 +32,7 @@ import { resolveVipDiscountLevel } from '../utils/vipStanding';
 import { DO_NOT_CONTACT_LABEL, isBlockedDailyCallMasterRow } from '../utils/dailyCallBlockedCustomer';
 import { matchesDailyCallMonitorBucket, resolveDailyCallListCategory } from '../utils/dailyCallListCategory';
 import { resolveDailyCallPurchaseHighlightColor } from '../utils/dailyCallPurchaseHighlight';
-import { hasActionPermission, isMasterUserAccount } from '../constants';
+import { DAILY_CALL_PAGE_LABEL, hasActionPermission, isMasterUserAccount } from '../constants';
 import { VERIFIED_PROSPECT_POTENTIAL } from '../utils/dailyCallPotentialSales';
 import CustomerStarIndicator from './CustomerStarIndicator';
 import { getUserFacingErrorMessage } from '../services/localApiAuth';
@@ -48,6 +49,24 @@ const fromDate = '2025-10-01';
 const INITIAL_VISIBLE_ROWS = 30;
 const VISIBLE_ROWS_STEP = 30;
 const DO_NOT_CONTACT_CUSTOMER_STATUS = 4;
+const DAILY_CALL_BATCH_DNC_HISTORY_KEY = '__jamesDailyCallBatchDoNotContact';
+const DO_NOT_CONTACT_REASON_OPTIONS = [
+  'Contact number can’t be reached',
+  'Do not sell diesel parts',
+  'Shop is closed',
+  'Other',
+] as const;
+
+const sendDoNotContactSalesReportEntry = (
+  contactId: string,
+  reason: string,
+  currentUser: UserProfile | null | undefined,
+  isRequest = false
+) => sendSalesReportMessage({
+  contactId,
+  body: `${isRequest ? 'Do Not Contact request' : 'Do Not Contact'}\nReason: ${reason}`,
+  senderName: currentUser?.full_name || currentUser?.email || 'Staff',
+});
 
 const peso = new Intl.NumberFormat('en-PH', {
   style: 'currency',
@@ -179,6 +198,23 @@ const categories: CategoryDefinition[] = [
 const isProspectRow = (row: DailyCallMasterCustomerRow) => {
   const profileType = String(row.profileType || '').trim().toLowerCase();
   return profileType.includes('prospect');
+};
+
+const isVerifiedByWorkflow = (row: { verification?: string; verifiedInSystem?: boolean }) =>
+  String(row.verification || '').trim().toLowerCase() === 'verified' && row.verifiedInSystem === true;
+
+const canDirectlyEditUnverifiedProspect = (
+  user: UserProfile | null | undefined,
+  row: DailyCallMasterCustomerRow
+) => {
+  if (isMasterUserAccount(user)) return true;
+  const role = String(user?.role || '').trim().toLowerCase();
+  const userId = String(user?.id || '');
+  return role.includes('agent')
+    && Boolean(user?.action_permissions)
+    && hasActionPermission(user, 'can_edit', 'Daily Call Monitoring Dashboard')
+    && userId !== ''
+    && (userId === String(row.prospectCreatorId || '') || userId === String(row.assignedAgentId || ''));
 };
 
 const canUseMasterDailyCallActions = (user?: UserProfile | null) => {
@@ -384,6 +420,8 @@ interface DailyCallMasterListViewProps {
 
 const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ currentUser }) => {
   const { addToast } = useToast();
+  const canEditDailyCall = isMasterUserAccount(currentUser)
+    || (Boolean(currentUser?.action_permissions) && hasActionPermission(currentUser, 'can_edit', DAILY_CALL_PAGE_LABEL));
   const [initialHistorySnapshot] = useState(readDailyCallMasterListHistorySnapshot);
   const initialCachedResult = useMemo(() => getCachedDailyCallMasterList({ fromDate }), []);
   const [rows, setRows] = useState<DailyCallMasterCustomerRow[]>(() => initialCachedResult?.items || []);
@@ -407,12 +445,23 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const fullCustomerRowsRef = useRef<DailyCallCustomerRow[] | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<DailyCallCustomerRow | null>(null);
+  const [selectedMasterRow, setSelectedMasterRow] = useState<DailyCallMasterCustomerRow | null>(null);
   const [showAddProspectModal, setShowAddProspectModal] = useState(false);
+  const [editingProspect, setEditingProspect] = useState<Contact | null>(null);
+  const [loadingProspectEdit, setLoadingProspectEdit] = useState(false);
   const [detailInitialTab, setDetailInitialTab] = useState<DetailTabId>('overview');
   const [detailViewOnly, setDetailViewOnly] = useState(false);
   const [loadingCustomerId, setLoadingCustomerId] = useState<string | null>(null);
+  const [savingStarId, setSavingStarId] = useState<string | null>(null);
+  const [savingDoNotCallId, setSavingDoNotCallId] = useState<string | null>(null);
   const [pendingDoNotContactRow, setPendingDoNotContactRow] = useState<DailyCallMasterCustomerRow | null>(null);
   const [doNotContactReason, setDoNotContactReason] = useState('');
+  const [selectedUnverifiedIds, setSelectedUnverifiedIds] = useState<Set<string>>(() => new Set());
+  const [showBatchDoNotContactModal, setShowBatchDoNotContactModal] = useState(false);
+  const [batchDoNotContactReasonOption, setBatchDoNotContactReasonOption] = useState<string>('');
+  const [batchDoNotContactCustomReason, setBatchDoNotContactCustomReason] = useState('');
+  const [savingBatchDoNotContact, setSavingBatchDoNotContact] = useState(false);
+  const batchDoNotContactOwnsHistoryEntry = useRef(false);
   const [activeCategoryId, setActiveCategoryId] = useState<CategoryId>(initialHistorySnapshot?.activeCategoryId || 'priority');
   const [unverifiedListTab, setUnverifiedListTab] = useState<UnverifiedListTab>(initialHistorySnapshot?.unverifiedListTab || 'customers');
   const [visibleLimit, setVisibleLimit] = useState(initialHistorySnapshot?.visibleLimit || INITIAL_VISIBLE_ROWS);
@@ -467,11 +516,50 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const handleSelectCategory = useCallback((categoryId: CategoryId) => {
     setActiveCategoryId(categoryId);
     setVisibleLimit(INITIAL_VISIBLE_ROWS);
+    setSelectedUnverifiedIds(new Set());
   }, []);
+
+  const handleToggleDoNotCall = useCallback(async (row: DailyCallMasterCustomerRow) => {
+    if (!canEditDailyCall || savingDoNotCallId) return;
+    setSavingDoNotCallId(row.id);
+    try {
+      const marked = await setDailyCallDoNotContactFlag(row.id, !row.doNotContact);
+      setRows(current => current.map(item => item.id === row.id ? { ...item, doNotContact: marked } : item));
+      addToast({ type: 'success', title: marked ? 'Do Not Call marked' : 'Do Not Call removed', description: `${row.shopName} was updated.` });
+    } catch {
+      addToast({ type: 'error', title: 'Unable to update Do Not Call', description: 'Please try again.' });
+    } finally {
+      setSavingDoNotCallId(null);
+    }
+  }, [addToast, canEditDailyCall, savingDoNotCallId]);
+
+  const handleToggleCustomerStar = useCallback(async (row: DailyCallMasterCustomerRow) => {
+    if (!isMasterUserAccount(currentUser) || savingStarId) return;
+    const isStarred = !row.isStarred;
+    setSavingStarId(row.id);
+    try {
+      await setCustomerStarred(row.id, isStarred);
+      setRows((current) => current.map((item) => item.id === row.id ? { ...item, isStarred } : item));
+      addToast({
+        type: 'success',
+        title: isStarred ? 'Customer starred' : 'Customer star removed',
+        description: `${row.shopName} was updated.`,
+      });
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: 'Unable to update customer star',
+        description: getUserFacingErrorMessage(error, 'Please try again.'),
+      });
+    } finally {
+      setSavingStarId(null);
+    }
+  }, [addToast, currentUser, savingStarId]);
 
   const openCustomerDetails = useCallback(async (row: DailyCallMasterCustomerRow, initialTab: DetailTabId = 'overview') => {
     setDetailInitialTab(initialTab);
     setDetailViewOnly(isBlockedDailyCallMasterRow(row) || Boolean(row.dataIntegrityException));
+    setSelectedMasterRow(row);
     setSelectedCustomer(masterRowFallback(row));
 
     // Open from the row already in memory. Hydrate the richer customer profile
@@ -615,6 +703,39 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     return created;
   }, [loadRows]);
 
+  const handleEditUnverifiedProspect = useCallback(async (row: DailyCallMasterCustomerRow) => {
+    if (!canDirectlyEditUnverifiedProspect(currentUser, row)) return;
+    setSelectedCustomer(null);
+    setLoadingProspectEdit(true);
+    try {
+      const contact = await fetchContactById(row.id);
+      if (!contact) throw new Error('Customer details could not be loaded.');
+      const isUnverifiedProspect = String(contact.profileType || '').toLowerCase().includes('prospect')
+        && !isVerifiedByWorkflow(contact)
+        && (contact.status === CustomerStatus.PROSPECTIVE || String(contact.status).toLowerCase() === 'prospective');
+      if (!isUnverifiedProspect) throw new Error('Only unverified prospective customers can be edited directly.');
+      setEditingProspect(contact);
+    } catch (error) {
+      addToast({ type: 'error', title: 'Unable to edit prospect', description: getUserFacingErrorMessage(error, 'Please refresh the list and try again.') });
+    } finally {
+      setLoadingProspectEdit(false);
+    }
+  }, [addToast, currentUser]);
+
+  const handleSubmitProspectEdit = useCallback(async (data: Omit<Contact, 'id'>) => {
+    if (!editingProspect) return;
+    const isMaster = isMasterUserAccount(currentUser);
+    const updates = isMaster
+      ? data
+      : Object.fromEntries(Object.entries(data).filter(([key]) =>
+          !['salesman', 'assignedAgent', 'assignedAgentId', 'team'].includes(key)
+        )) as Omit<Contact, 'id'>;
+    await updateContact(editingProspect.id, updates, currentUser?.id, { preserveExistingContactPersons: !isMaster });
+    setEditingProspect(null);
+    addToast({ type: 'success', title: 'Prospect updated', description: 'Customer information has been updated.' });
+    void loadRows(false, true);
+  }, [addToast, currentUser?.id, editingProspect, loadRows]);
+
   const handleVerifyExistingProspect = useCallback(async (row: DailyCallMasterCustomerRow) => {
     setLoadingCustomerId(row.id);
     try {
@@ -628,11 +749,11 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
         title: 'Prospect verified',
         description: `${row.shopName} moved to Verified Prospects.`,
       });
-    } catch {
+    } catch (error) {
       addToast({
         type: 'error',
         title: 'Unable to verify prospect',
-        description: 'Please try again or verify from Customer Database.',
+        description: getUserFacingErrorMessage(error, 'Please refresh the list and try again.'),
       });
     } finally {
       setLoadingCustomerId(null);
@@ -651,7 +772,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
       });
       return;
     }
-    const shouldRejectProspect = isProspectRow(row) && row.verification !== 'Verified';
+    const shouldRejectProspect = isProspectRow(row) && !isVerifiedByWorkflow(row);
     const updates = {
       status: CustomerStatus.BLACKLISTED,
       debtType: 'Bad' as const,
@@ -660,6 +781,29 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
 
     setLoadingCustomerId(row.id);
     try {
+      // Changing a customer status is a protected action. Staff may edit the
+      // allowed prospect details directly, but blacklist/rejection must go
+      // through the approval workflow enforced by the API.
+      if (!isMasterUserAccount(currentUser)) {
+        await requestCustomerUpdate(row.id, { ...updates, comment: reason });
+        try {
+          await sendDoNotContactSalesReportEntry(row.id, reason, currentUser, true);
+        } catch {
+          addToast({
+            type: 'warning',
+            title: 'Request submitted; report entry missing',
+            description: 'The Do Not Contact request was submitted, but its reason could not be added to Agent Sales Report.',
+          });
+        }
+        addToast({
+          type: 'success',
+          title: 'Change request submitted',
+          description: 'The Do Not Contact change is waiting for Master User approval.',
+        });
+        setDoNotContactReason('');
+        setPendingDoNotContactRow(null);
+        return;
+      }
       await updateContact(row.id, updates, currentUser?.id);
       await createCustomerLogForDailyCall({
         contact_id: row.id,
@@ -668,6 +812,15 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
         status: 'Do Not Contact',
         note: reason,
       });
+      try {
+        await sendDoNotContactSalesReportEntry(row.id, reason, currentUser);
+      } catch {
+        addToast({
+          type: 'warning',
+          title: 'Customer updated; report entry missing',
+          description: 'The customer was marked Do Not Contact, but the reason could not be added to Agent Sales Report.',
+        });
+      }
       setRows((prev) => prev.map((item) =>
         item.id === row.id
           ? {
@@ -690,7 +843,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     } finally {
       setLoadingCustomerId(null);
     }
-  }, [addToast, currentUser?.id, doNotContactReason, loadRows, pendingDoNotContactRow]);
+  }, [addToast, currentUser, doNotContactReason, loadRows, pendingDoNotContactRow]);
 
   useEffect(() => {
     // Sales totals must not be rendered from an in-memory list from a
@@ -867,12 +1020,176 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const showingUnverifiedSubmissions = activeCategory.id === 'unverified' && unverifiedListTab === 'submissions';
   const visibleRows = showingUnverifiedSubmissions ? [] : activeCategory.rows.slice(0, visibleLimit);
   const hasMoreRows = !showingUnverifiedSubmissions && visibleRows.length < activeCategory.rows.length;
+  const isUnverifiedCustomerList = activeCategory.id === 'unverified' && !showingUnverifiedSubmissions;
+  // Selection is scoped to the currently displayed customer rows. Duplicate
+  // submissions are rendered in their separate tab and never enter visibleRows.
+  const selectableUnverifiedRows = isUnverifiedCustomerList ? visibleRows : [];
+  const selectableUnverifiedIds = new Set(selectableUnverifiedRows.map((row) => row.id));
+  const selectedUnverifiedRows = selectableUnverifiedRows.filter((row) => selectedUnverifiedIds.has(row.id));
+  const allVisibleUnverifiedSelected = selectableUnverifiedRows.length > 0
+    && selectableUnverifiedRows.every((row) => selectedUnverifiedIds.has(row.id));
   const showMasterActions = canUseMasterDailyCallActions(currentUser);
   // Daily Call actions follow the explicit Customer Database edit grant. Keep
   // the legacy master-user access, but do not treat missing action metadata as
   // permission (the shared helper defaults missing metadata to allow).
   const canEditCustomerDatabase = showMasterActions || Boolean(currentUser?.action_permissions)
     && hasActionPermission(currentUser, 'can_edit', 'Customer Data');
+
+  const handleToggleUnverifiedSelection = useCallback((id: string) => {
+    setSelectedUnverifiedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleToggleAllVisibleUnverified = useCallback(() => {
+    setSelectedUnverifiedIds((current) => {
+      const next = new Set(current);
+      if (allVisibleUnverifiedSelected) selectableUnverifiedRows.forEach((row) => next.delete(row.id));
+      else selectableUnverifiedRows.forEach((row) => next.add(row.id));
+      return next;
+    });
+  }, [allVisibleUnverifiedSelected, selectableUnverifiedRows]);
+
+  const closeBatchDoNotContactModal = useCallback(() => {
+    if (savingBatchDoNotContact) return;
+    const historyState = window.history.state && typeof window.history.state === 'object'
+      ? window.history.state as Record<string, unknown>
+      : {};
+    if (batchDoNotContactOwnsHistoryEntry.current && historyState[DAILY_CALL_BATCH_DNC_HISTORY_KEY] === true) {
+      window.history.back();
+      return;
+    }
+    batchDoNotContactOwnsHistoryEntry.current = false;
+    setShowBatchDoNotContactModal(false);
+    setBatchDoNotContactReasonOption('');
+    setBatchDoNotContactCustomReason('');
+  }, [savingBatchDoNotContact]);
+
+  useEffect(() => {
+    if (!showBatchDoNotContactModal) return;
+    const currentState = window.history.state && typeof window.history.state === 'object'
+      ? window.history.state as Record<string, unknown>
+      : {};
+    if (currentState[DAILY_CALL_BATCH_DNC_HISTORY_KEY] !== true) {
+      window.history.pushState({ ...currentState, [DAILY_CALL_BATCH_DNC_HISTORY_KEY]: true }, '');
+      batchDoNotContactOwnsHistoryEntry.current = true;
+    }
+  }, [showBatchDoNotContactModal]);
+
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      const state = event.state && typeof event.state === 'object'
+        ? event.state as Record<string, unknown>
+        : {};
+      const shouldShowModal = state[DAILY_CALL_BATCH_DNC_HISTORY_KEY] === true;
+      batchDoNotContactOwnsHistoryEntry.current = shouldShowModal;
+      setShowBatchDoNotContactModal(shouldShowModal);
+      if (!shouldShowModal) {
+        setBatchDoNotContactReasonOption('');
+        setBatchDoNotContactCustomReason('');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  useEffect(() => {
+    if (!showBatchDoNotContactModal) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeBatchDoNotContactModal();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [closeBatchDoNotContactModal, showBatchDoNotContactModal]);
+
+  const handleConfirmBatchDoNotContact = useCallback(async () => {
+    const selectedIds = selectedUnverifiedRows.map((row) => row.id);
+    const reason = batchDoNotContactReasonOption === 'Other'
+      ? batchDoNotContactCustomReason.trim()
+      : batchDoNotContactReasonOption.trim();
+    if (selectedIds.length === 0 || !reason || savingBatchDoNotContact) return;
+
+    setSavingBatchDoNotContact(true);
+    const salesReportEntryFailures: string[] = [];
+    const results = await Promise.allSettled(selectedUnverifiedRows.map(async (row) => {
+      // Selection is only available from the Unverified customers bucket.
+      const shouldRejectProspect = true;
+      const updates = {
+        status: CustomerStatus.BLACKLISTED,
+        debtType: 'Bad' as const,
+        ...(shouldRejectProspect ? { verification: 'Rejected' } : {}),
+      };
+      // Batch status changes follow the same approval path as the single-row
+      // action; direct prospect editing does not authorize a status transition.
+      if (!isMasterUserAccount(currentUser)) {
+        await requestCustomerUpdate(row.id, { ...updates, comment: reason });
+        try {
+          await sendDoNotContactSalesReportEntry(row.id, reason, currentUser, true);
+        } catch {
+          salesReportEntryFailures.push(row.shopName);
+        }
+        return;
+      }
+      await updateContact(row.id, updates, currentUser?.id);
+      await createCustomerLogForDailyCall({
+        contact_id: row.id,
+        entry_type: 'Status',
+        topic: 'Status',
+        status: 'Do Not Contact',
+        note: reason,
+      });
+      try {
+        await sendDoNotContactSalesReportEntry(row.id, reason, currentUser);
+      } catch {
+        salesReportEntryFailures.push(row.shopName);
+      }
+    }));
+    const succeededIds = selectedIds.filter((_, index) => results[index].status === 'fulfilled');
+    const failedRows = selectedUnverifiedRows.filter((_, index) => results[index].status === 'rejected');
+    setSelectedUnverifiedIds(new Set(failedRows.map((row) => row.id)));
+    setSavingBatchDoNotContact(false);
+    setBatchDoNotContactReasonOption('');
+    setBatchDoNotContactCustomReason('');
+    const historyState = window.history.state && typeof window.history.state === 'object'
+      ? window.history.state as Record<string, unknown>
+      : {};
+    if (batchDoNotContactOwnsHistoryEntry.current && historyState[DAILY_CALL_BATCH_DNC_HISTORY_KEY] === true) {
+      const completedState = { ...historyState };
+      delete completedState[DAILY_CALL_BATCH_DNC_HISTORY_KEY];
+      window.history.replaceState(completedState, '');
+      batchDoNotContactOwnsHistoryEntry.current = false;
+      window.history.back();
+    } else {
+      batchDoNotContactOwnsHistoryEntry.current = false;
+      setShowBatchDoNotContactModal(false);
+    }
+    await loadRows(false, true);
+    if (failedRows.length === 0) {
+      addToast({
+        type: 'success',
+        title: 'Customers marked Do Not Contact',
+        description: `${succeededIds.length} customer${succeededIds.length === 1 ? '' : 's'} updated successfully.`,
+      });
+    } else {
+      addToast({
+        type: succeededIds.length > 0 ? 'warning' : 'error',
+        title: succeededIds.length > 0 ? 'Some customers were not updated' : 'Unable to update selected customers',
+        description: `${succeededIds.length} succeeded; ${failedRows.length} failed. Failed customers remain selected so you can retry.`,
+        durationMs: 7000,
+      });
+    }
+    if (salesReportEntryFailures.length > 0) {
+      addToast({
+        type: 'warning',
+        title: 'Some Agent Sales Report entries were not added',
+        description: `Do Not Contact was processed, but the reason could not be added for: ${salesReportEntryFailures.join(', ')}.`,
+        durationMs: 7000,
+      });
+    }
+  }, [addToast, batchDoNotContactCustomReason, batchDoNotContactReasonOption, currentUser, loadRows, savingBatchDoNotContact, selectedUnverifiedRows]);
 
   const handleAssignTeamToCategory = useCallback(async () => {
     if (!selectedAssignmentTeamId || actionableCategoryRows.length === 0) return;
@@ -952,7 +1269,14 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     if (previousFilterResetKey.current === filterResetKey) return;
     previousFilterResetKey.current = filterResetKey;
     setVisibleLimit(INITIAL_VISIBLE_ROWS);
+    setSelectedUnverifiedIds(new Set());
   }, [filterResetKey]);
+
+  useEffect(() => {
+    if (activeCategoryId !== 'unverified' || unverifiedListTab !== 'customers') {
+      setSelectedUnverifiedIds(new Set());
+    }
+  }, [activeCategoryId, unverifiedListTab]);
 
   useEffect(() => {
     if (loading || !initialHistorySnapshot) return;
@@ -1275,6 +1599,37 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 </button>
               </div>
             )}
+            {isUnverifiedCustomerList && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-orange-100 bg-orange-50/60 px-4 py-2.5">
+                <label className="inline-flex min-h-9 items-center gap-2 text-sm font-semibold text-slate-700">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all visible unverified prospects"
+                    checked={allVisibleUnverifiedSelected}
+                    disabled={selectableUnverifiedRows.length === 0 || savingBatchDoNotContact}
+                    onChange={handleToggleAllVisibleUnverified}
+                    className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                  />
+                  Select all visible ({selectableUnverifiedRows.length})
+                </label>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-semibold text-slate-600" aria-live="polite">{selectedUnverifiedRows.length} selected</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBatchDoNotContactReasonOption('');
+                      setBatchDoNotContactCustomReason('');
+                      setShowBatchDoNotContactModal(true);
+                    }}
+                    disabled={selectedUnverifiedRows.length === 0 || savingBatchDoNotContact}
+                    className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-rose-700 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <XCircle className="h-4 w-4" />
+                    Mark selected Do Not Contact
+                  </button>
+                </div>
+              </div>
+            )}
             <div
               ref={tableScrollRef}
               className="min-h-0 flex-1"
@@ -1284,6 +1639,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
               <table className="min-w-[1450px] w-full table-fixed border-separate border-spacing-0 text-left text-sm">
                 <thead className="sticky top-0 z-20 bg-slate-50 text-xs text-slate-600 shadow-sm [&_th]:sticky [&_th]:top-0 [&_th]:z-20 [&_th]:border-b [&_th]:border-slate-200 [&_th]:bg-slate-50">
                   <tr>
+                    {isUnverifiedCustomerList && <th className="w-10 px-2 py-2.5 text-center" aria-label="Select prospect" />}
                     <th className="w-12 px-3 py-2.5">#</th>
                     <th className="w-[200px] px-2 py-2.5">Customer / Mobile</th>
                     <th className="w-[125px] px-2 py-2.5 text-center">VIP Status</th>
@@ -1304,7 +1660,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                     <th className="w-[200px] px-2 py-2.5">Latest Agent Sales Report</th>
                     <th className="w-[140px] px-2 py-2.5">Source</th>
                     <th className="w-[110px] px-2 py-2.5">Verified By</th>
-                    <th className="w-[95px] px-2 py-2.5 text-center">Action</th>
+                    <th className="w-[240px] px-2 py-2.5 text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1335,7 +1691,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                         <td className="px-2 py-2.5 text-slate-400">—</td>
                         <td className="break-words px-2 py-2.5 text-xs text-slate-500">{pending.referBy || '—'}</td>
                         <td className="px-2 py-2.5 text-slate-400">—</td>
-                        <td className="px-2 py-2.5 text-center">
+                        <td className="w-[240px] px-2 py-2.5 text-center">
                           <div className="flex justify-center gap-1">
                             <button
                               type="button"
@@ -1406,6 +1762,16 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                     const TrendIcon = trend.Icon;
                     return (
                       <tr key={row.id} title={highlight.label} className={`border-t border-slate-100 align-top transition-colors ${highlight.row}`}>
+                        {isUnverifiedCustomerList && <td className="px-2 py-2.5 text-center">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${row.shopName}`}
+                            checked={selectedUnverifiedIds.has(row.id)}
+                            disabled={!selectableUnverifiedIds.has(row.id) || savingBatchDoNotContact}
+                            onChange={() => handleToggleUnverifiedSelection(row.id)}
+                            className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                          />
+                        </td>}
                         <td className="px-3 py-2.5 text-sm font-bold">{index + 1}</td>
                         <td className="px-2 py-2.5">
                           <button
@@ -1418,7 +1784,32 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                             {loadingCustomerId === row.id && <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />}
                             {row.shopName}
                           </button>
-                          <CustomerStarIndicator customerId={row.id} isStarred={row.isStarred} className="ml-1 inline h-3.5 w-3.5" />
+                          {isMasterUserAccount(currentUser) ? (
+                            <button
+                              type="button"
+                              onClick={(event) => { event.stopPropagation(); void handleToggleCustomerStar(row); }}
+                              disabled={savingStarId !== null}
+                              aria-label={`${row.isStarred ? 'Remove star from' : 'Star'} ${row.shopName}`}
+                              aria-pressed={Boolean(row.isStarred)}
+                              title={row.isStarred ? 'Remove customer star' : 'Star customer'}
+                              className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded align-middle hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:opacity-50"
+                            >
+                              <Star aria-hidden="true" className={`h-3.5 w-3.5 ${row.isStarred ? 'fill-amber-500 text-amber-500' : 'text-slate-400'}`} />
+                            </button>
+                          ) : (
+                            <CustomerStarIndicator customerId={row.id} isStarred={row.isStarred} className="ml-1 inline h-3.5 w-3.5" />
+                          )}
+                          {canEditDailyCall ? <button
+                            type="button"
+                            onClick={() => void handleToggleDoNotCall(row)}
+                            disabled={savingDoNotCallId === row.id}
+                            aria-pressed={Boolean(row.doNotContact)}
+                            aria-label={`${row.doNotContact ? 'Remove' : 'Mark'} ${row.shopName} Do Not Call`}
+                            title={row.doNotContact ? 'Remove Do Not Call badge' : 'Mark Do Not Call'}
+                            className={`ml-1 inline-flex rounded px-1.5 py-0.5 align-middle text-[9px] font-extrabold uppercase disabled:opacity-50 ${row.doNotContact ? 'bg-rose-100 text-rose-800' : 'border border-slate-200 text-slate-500 hover:bg-rose-50 hover:text-rose-700'}`}
+                          >
+                            {savingDoNotCallId === row.id ? 'Saving…' : row.doNotContact ? 'Do Not Call' : '+ Do Not Call'}
+                          </button> : row.doNotContact && <span role="status" aria-label={`${row.shopName} Do Not Call`} className="ml-1 inline-flex rounded bg-rose-100 px-1.5 py-0.5 align-middle text-[9px] font-extrabold uppercase text-rose-800">Do Not Call</span>}
                           {row.dataIntegrityException && (
                             <p className="mt-1 inline-flex rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800" title={row.dataIntegrityMessage || 'Missing active customer record'}>
                               Data repair needed
@@ -1530,20 +1921,39 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                           })()}
                         </td>
                         <td className="whitespace-normal break-normal px-2 py-2.5 text-sm font-semibold text-slate-600">
-                          {row.verification === 'Verified' ? (row.verifiedBy || 'Verification recorded') : '—'}
+                          {isVerifiedByWorkflow(row) ? (row.verifiedBy || 'Verification recorded') : '—'}
                         </td>
-                        <td className="px-2 py-2.5">
-                          <div className="flex justify-center gap-1.5">
-                            {activeCategory.id === 'unverified' && canEditCustomerDatabase && (
+                        <td className="w-[240px] px-2 py-2.5">
+                          <div className="flex w-full flex-nowrap items-center justify-center gap-1.5">
+                            {activeCategory.id === 'unverified' && canDirectlyEditUnverifiedProspect(currentUser, row)
+                              && isProspectRow(row)
+                              && !isVerifiedByWorkflow(row)
+                              && !viewOnlyRow && (
+                              <button
+                                type="button"
+                                aria-label={`Edit ${row.shopName}`}
+                                title={`Edit ${row.shopName}`}
+                                onClick={() => void handleEditUnverifiedProspect(row)}
+                                disabled={loadingCustomerId === row.id || loadingProspectEdit}
+                                className="shrink-0 rounded-full border border-blue-200 p-1.5 text-blue-600 transition hover:bg-blue-50 disabled:opacity-60"
+                              >
+                                {loadingProspectEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}
+                              </button>
+                            )}
+                            {activeCategory.id === 'unverified' && showMasterActions && isProspectRow(row)
+                              && !isVerifiedByWorkflow(row) && (
                               <><button
                                 type="button"
-                                aria-label={`Approve verification for ${row.shopName}`}
+                                aria-label={`Verify prospect for ${row.shopName}`}
                                 title={`Verify ${row.shopName} prospect`}
-                                onClick={() => handleVerifyExistingProspect(row)}
+                                onClick={() => void handleVerifyExistingProspect(row)}
                                 disabled={loadingCustomerId === row.id}
-                                className="rounded-full border border-blue-200 p-1.5 text-blue-600 transition hover:bg-blue-50 disabled:opacity-60"
+                                className="inline-flex shrink-0 items-center justify-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-center text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-wait disabled:opacity-60"
                               >
-                                <UserRoundCheck className="h-4 w-4" />
+                                {loadingCustomerId === row.id
+                                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                                  : <UserRoundCheck className="h-4 w-4" />}
+                                Verify
                               </button>
                               </>
                             )}
@@ -1554,7 +1964,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                                 title={`View-only record for ${row.shopName}`}
                                 onClick={() => openCustomerDetails(row, 'overview')}
                                 disabled={loadingCustomerId === row.id}
-                                className="rounded-full border border-red-200 p-1.5 text-red-600 transition hover:bg-red-50 disabled:opacity-60"
+                                className="shrink-0 rounded-full border border-red-200 p-1.5 text-red-600 transition hover:bg-red-50 disabled:opacity-60"
                               >
                                 <Eye className="h-4 w-4" />
                               </button>
@@ -1569,7 +1979,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                                     setPendingDoNotContactRow(row);
                                   }}
                                   disabled={loadingCustomerId === row.id}
-                                  className="rounded-full border border-rose-200 p-1.5 text-rose-600 transition hover:bg-rose-50 disabled:opacity-60"
+                                  className="shrink-0 rounded-full border border-rose-200 p-1.5 text-rose-600 transition hover:bg-rose-50 disabled:opacity-60"
                                 >
                                   <XCircle className="h-4 w-4" />
                                 </button>
@@ -1579,7 +1989,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                                   title={`Open call details for ${row.shopName}`}
                                   onClick={() => openCustomerDetails(row, 'overview')}
                                   disabled={loadingCustomerId === row.id}
-                                  className="rounded-full border border-emerald-200 p-1.5 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-60"
+                                  className="shrink-0 rounded-full border border-emerald-200 p-1.5 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-60"
                                 >
                                   <Phone className="h-4 w-4" />
                                 </button>
@@ -1591,7 +2001,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                                 title={`Open call details for ${row.shopName}`}
                                 onClick={() => openCustomerDetails(row, 'overview')}
                                 disabled={loadingCustomerId === row.id}
-                                className="rounded-full border border-emerald-200 p-1.5 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-60"
+                                className="shrink-0 rounded-full border border-emerald-200 p-1.5 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-60"
                               >
                                 <Phone className="h-4 w-4" />
                               </button>
@@ -1604,7 +2014,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                   {((showingUnverifiedSubmissions && pendingDuplicateProspects.length === 0)
                     || (activeCategory.id === 'unverified' && !showingUnverifiedSubmissions && activeCategory.rows.length === 0)
                     || (activeCategory.id !== 'unverified' && activeCategory.rows.length === 0)) && (
-                    <tr><td colSpan={11} className="px-3 py-12 text-center text-xs text-slate-400">
+                    <tr><td colSpan={isUnverifiedCustomerList ? 12 : 11} className="px-3 py-12 text-center text-xs text-slate-400">
                       {showingUnverifiedSubmissions ? 'No duplicate prospect submissions from sales agents awaiting review.' : 'No customers in this category.'}
                     </td></tr>
                   )}
@@ -1676,16 +2086,108 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
         </div>
       )}
 
+      {showBatchDoNotContactModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/50 px-4 py-6" role="presentation">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="batch-do-not-contact-title"
+            className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-5 shadow-2xl"
+          >
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 rounded-full bg-rose-50 p-2 text-rose-600"><XCircle className="h-5 w-5" /></div>
+              <div className="min-w-0 flex-1">
+                <h2 id="batch-do-not-contact-title" className="text-base font-bold text-slate-950">Mark selected prospects Do Not Contact</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">This will apply one reason to {selectedUnverifiedRows.length} selected customer{selectedUnverifiedRows.length === 1 ? '' : 's'}. Unverified prospects will be marked Rejected.</p>
+                <label className="mt-4 block text-xs font-semibold text-slate-700" htmlFor="batch-do-not-contact-reason">
+                  Reason <span className="text-rose-600">*</span>
+                  <select
+                    id="batch-do-not-contact-reason"
+                    aria-label="Reason for selected customers"
+                    value={batchDoNotContactReasonOption}
+                    onChange={(event) => setBatchDoNotContactReasonOption(event.target.value)}
+                    disabled={savingBatchDoNotContact}
+                    className="mt-1 block min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-900 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-100 disabled:opacity-60"
+                  >
+                    <option value="">Choose a reason</option>
+                    {DO_NOT_CONTACT_REASON_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                  </select>
+                </label>
+                {batchDoNotContactReasonOption === 'Other' && (
+                  <label className="mt-3 block text-xs font-semibold text-slate-700" htmlFor="batch-do-not-contact-custom-reason">
+                    Your reason <span className="text-rose-600">*</span>
+                    <textarea
+                      id="batch-do-not-contact-custom-reason"
+                      aria-label="Other Do Not Contact reason"
+                      value={batchDoNotContactCustomReason}
+                      onChange={(event) => setBatchDoNotContactCustomReason(event.target.value)}
+                      maxLength={2000}
+                      rows={3}
+                      placeholder="State your reason"
+                      disabled={savingBatchDoNotContact}
+                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal text-slate-900 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-100 disabled:opacity-60"
+                    />
+                  </label>
+                )}
+                <p className="mt-2 text-xs text-slate-500">Each customer is processed separately. If any update fails, those customers stay selected for retry.</p>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeBatchDoNotContactModal}
+                disabled={savingBatchDoNotContact}
+                className="min-h-9 rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+              >Cancel</button>
+              <button
+                type="button"
+                onClick={() => void handleConfirmBatchDoNotContact()}
+                disabled={savingBatchDoNotContact || selectedUnverifiedRows.length === 0 || !batchDoNotContactReasonOption || (batchDoNotContactReasonOption === 'Other' && !batchDoNotContactCustomReason.trim())}
+                className="inline-flex min-h-9 items-center rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {savingBatchDoNotContact && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {savingBatchDoNotContact ? 'Updating customers…' : `Mark ${selectedUnverifiedRows.length} Do Not Contact`}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
       <DailyCallCustomerDetailModal
         isOpen={Boolean(selectedCustomer)}
         customer={selectedCustomer}
         currentUser={currentUser || null}
         initialTab={detailInitialTab}
         viewOnlyDoNotContact={detailViewOnly}
+        footerActions={selectedMasterRow && canDirectlyEditUnverifiedProspect(currentUser, selectedMasterRow) && isProspectRow(selectedMasterRow)
+          && !isVerifiedByWorkflow(selectedMasterRow)
+          && !isBlockedDailyCallMasterRow(selectedMasterRow) && !selectedMasterRow.dataIntegrityException ? (
+          <button
+            type="button"
+            onClick={() => void handleEditUnverifiedProspect(selectedMasterRow)}
+            disabled={loadingProspectEdit}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
+          >
+            {loadingProspectEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}
+            Edit prospect
+          </button>
+        ) : null}
         onClose={() => {
           setSelectedCustomer(null);
+          setSelectedMasterRow(null);
           setDetailViewOnly(false);
         }}
+      />
+      <AddContactModal
+        isOpen={Boolean(editingProspect)}
+        onClose={() => setEditingProspect(null)}
+        onSubmit={handleSubmitProspectEdit}
+        mode="edit"
+        initialData={editingProspect || undefined}
+        title="Edit Unverified Prospect"
+        submitLabel="Save changes"
+        preventContactPersonRemoval={!isMasterUserAccount(currentUser)}
+        restrictProspectStatus={!isMasterUserAccount(currentUser)}
       />
       {selectedDuplicateSubmission && createPortal(
         <div

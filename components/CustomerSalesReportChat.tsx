@@ -1,15 +1,17 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Ban, ImagePlus, Loader2, Send, Trash2, X } from 'lucide-react';
+import { Ban, Check, History, ImagePlus, Loader2, Pencil, Send, Trash2, X } from 'lucide-react';
 import {
   deleteSalesReportMessage,
   fetchSalesReportConversation,
+  fetchSalesReportMessageEditHistory,
   markSalesReportConversationRead,
   resolveSalesReportAttachmentDisplayUrl,
   sendSalesReportMessage,
+  updateSalesReportMessage,
   uploadSalesReportAttachment,
 } from '../services/dailyCallMonitoringService';
 import ConfirmModal from './ConfirmModal';
-import { CustomerStatus, SalesReportConversationMessage, UserProfile } from '../types';
+import { CustomerStatus, SalesReportConversationMessage, SalesReportMessageEditHistoryEntry, UserProfile } from '../types';
 import { useToast } from './ToastProvider';
 import { optimizeRecordImage, RECORD_IMAGE_ACCEPT, validateRecordImageFile } from '../utils/recordImage';
 
@@ -68,6 +70,15 @@ const formatTimestamp = (value?: string) => {
     second: '2-digit',
     hour12: true,
   }).format(date)} PHT`;
+};
+
+const isWithinEditWindow = (value: string): boolean => {
+  if (!value) return false;
+  const normalized = value.includes(' ') && !value.includes('T') ? value.replace(' ', 'T') : value;
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized);
+  const createdAt = new Date(hasTimezone ? normalized : `${normalized}+08:00`).getTime();
+  const age = Date.now() - createdAt;
+  return Number.isFinite(createdAt) && age >= 0 && age <= 24 * 60 * 60 * 1000;
 };
 
 
@@ -145,6 +156,13 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
   const [blacklistReason, setBlacklistReason] = useState('');
   const [messageToDelete, setMessageToDelete] = useState<SalesReportConversationMessage | null>(null);
   const [deleteReason, setDeleteReason] = useState('');
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [messageForHistory, setMessageForHistory] = useState<SalesReportConversationMessage | null>(null);
+  const [editHistory, setEditHistory] = useState<SalesReportMessageEditHistoryEntry[]>([]);
+  const [loadingEditHistory, setLoadingEditHistory] = useState(false);
+  const [editHistoryError, setEditHistoryError] = useState('');
   const onConversationReadRef = useRef(onConversationRead);
 
   useEffect(() => {
@@ -152,6 +170,7 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
   }, [onConversationRead]);
 
   const isMasterUser = String(currentUser?.user_type || '') === '1' || currentUser?.role === 'Master User';
+  const isSalesAgent = String(currentUser?.user_type || '') === '2' || currentUser?.role === 'Sales Agent';
 
   const loadConversation = useCallback(async () => {
     setLoading(true);
@@ -292,6 +311,40 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
     }
   };
 
+  const handleSaveEdit = async (message: SalesReportConversationMessage) => {
+    const body = editDraft.trim();
+    if (!body || savingEdit) return;
+    setSavingEdit(true);
+    try {
+      const updated = await updateSalesReportMessage(contactId, message.id, body);
+      setMessages((previous) => previous.map((item) => item.id === updated.id ? updated : item));
+      setEditingMessageId(null);
+      setEditDraft('');
+      addToast({ type: 'success', message: 'Message updated.' });
+    } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
+      addToast({ type: 'error', message: error instanceof Error ? error.message : 'Unable to edit message.' });
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleShowEditHistory = async (message: SalesReportConversationMessage) => {
+    if (!isMasterUser || !message.is_edited) return;
+    setMessageForHistory(message);
+    setEditHistory([]);
+    setEditHistoryError('');
+    setLoadingEditHistory(true);
+    try {
+      setEditHistory(await fetchSalesReportMessageEditHistory(contactId, message.id));
+    } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
+      setEditHistoryError(error instanceof Error ? error.message : 'Unable to load edit history.');
+    } finally {
+      setLoadingEditHistory(false);
+    }
+  };
+
   const visibleMessages = compact ? messages.slice(-8) : messages;
 
   if (loading) {
@@ -327,6 +380,10 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
         ) : (
           visibleMessages.map((message) => {
             const isMine = message.is_from_current_user;
+            const canEdit = !viewOnly && isSalesAgent && isMine && message.sender_role === 'agent'
+              && (message.kind === 'agent_report' || message.kind === 'reply')
+              && isWithinEditWindow(message.created_at);
+            const isEditing = editingMessageId === message.id;
             const showBody = message.body && message.body !== '[Picture]';
             const sender = senderLabel(message);
             return (
@@ -343,13 +400,51 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
                   <p className={`mb-1 text-[10px] font-semibold ${isMine ? 'text-blue-100' : 'text-slate-500'}`}>
                     {sender}{isMine ? ' (You)' : ''} · {roleLabel(message.sender_role)} · {kindLabel(message.kind)}
                   </p>
-                  {showBody && <p className="whitespace-pre-wrap leading-6">{message.body}</p>}
+                  {isEditing ? (
+                    <div className="mt-2 space-y-2">
+                      <textarea
+                        aria-label="Edit message"
+                        value={editDraft}
+                        onChange={(event) => setEditDraft(event.target.value)}
+                        maxLength={2000}
+                        rows={3}
+                        className="w-full resize-y rounded-lg border border-white/40 bg-white/95 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                      />
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <button type="button" disabled={savingEdit} onClick={() => { setEditingMessageId(null); setEditDraft(''); }} className="inline-flex items-center gap-1 rounded-lg border border-white/40 px-2.5 py-1.5 text-xs font-semibold disabled:opacity-50">
+                          <X className="h-3 w-3" /> Cancel
+                        </button>
+                        <button type="button" disabled={savingEdit || !editDraft.trim()} onClick={() => void handleSaveEdit(message)} className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-xs font-semibold text-brand-blue disabled:opacity-50">
+                          {savingEdit ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Save
+                        </button>
+                      </div>
+                    </div>
+                  ) : showBody && <p className="whitespace-pre-wrap leading-6">{message.body}</p>}
                   {message.attachment_url && (
                     <AuthenticatedAttachmentImage attachmentUrl={message.attachment_url} />
                   )}
                   <p className={`mt-2 text-[10px] ${isMine ? 'text-blue-100' : 'text-slate-400 dark:text-slate-500'}`}>
                     {formatTimestamp(message.created_at)}
                   </p>
+                  {canEdit && !isEditing && (
+                    <button
+                      type="button"
+                      aria-label="Edit message"
+                      onClick={() => { setEditingMessageId(message.id); setEditDraft(message.body); }}
+                      className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-blue-100 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                    >
+                      <Pencil className="h-3 w-3" /> Edit
+                    </button>
+                  )}
+                  {isMasterUser && message.is_edited && (
+                    <button
+                      type="button"
+                      onClick={() => void handleShowEditHistory(message)}
+                      className={`mt-2 ml-3 inline-flex items-center gap-1 text-[10px] font-semibold ${isMine ? 'text-blue-100 hover:text-white' : 'text-slate-600 hover:text-brand-blue dark:text-slate-300'}`}
+                    >
+                      <History className="h-3 w-3" /> Edit history
+                    </button>
+                  )}
                   {!viewOnly && isMasterUser && (message.id.startsWith('report:') || /^\d+$/.test(message.id)) && (
                     <button
                       type="button"
@@ -457,6 +552,39 @@ const CustomerSalesReportChat: React.FC<CustomerSalesReportChatProps> = ({
         reasonLabel="Reason"
         reasonRequired
       />
+      {messageForHistory && (
+        <div className="fixed inset-0 z-[70] grid place-items-center bg-slate-950/50 p-4" role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setMessageForHistory(null);
+        }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="sales-report-edit-history-title" className="max-h-[85vh] w-full max-w-xl overflow-y-auto rounded-xl bg-white p-5 shadow-xl dark:bg-slate-900">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="sales-report-edit-history-title" className="text-base font-bold text-slate-900 dark:text-white">Message edit history</h2>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Previous versions are listed from oldest to newest.</p>
+              </div>
+              <button type="button" aria-label="Close edit history" onClick={() => setMessageForHistory(null)} className="rounded-md p-1 text-slate-500 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 dark:hover:bg-slate-800"><X className="h-4 w-4" /></button>
+            </div>
+            {loadingEditHistory ? (
+              <p className="mt-5 flex items-center gap-2 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading edit history…</p>
+            ) : editHistoryError ? (
+              <p role="alert" className="mt-5 text-sm text-rose-600">{editHistoryError}</p>
+            ) : (
+              <ol className="mt-4 space-y-3">
+                {editHistory.map((entry, index) => (
+                  <li key={`${entry.edited_at}-${index}`} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                    <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Version {index + 1} · {entry.actor_name || `User #${entry.actor_user_id}`} · {formatTimestamp(entry.edited_at)}</p>
+                    <p className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-800 dark:text-slate-100">{entry.body}</p>
+                  </li>
+                ))}
+                <li className="rounded-lg border border-blue-200 bg-blue-50/70 p-3 dark:border-blue-900 dark:bg-blue-950/30">
+                  <p className="text-[11px] font-semibold text-blue-700 dark:text-blue-300">Current version</p>
+                  <p className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-800 dark:text-slate-100">{messageForHistory.body}</p>
+                </li>
+              </ol>
+            )}
+          </section>
+        </div>
+      )}
     </div>
   );
 };

@@ -106,6 +106,26 @@ describe('Staff Management', () => {
     await waitFor(() => expect(updateStaff).toHaveBeenCalledWith('staff-64', expect.objectContaining({ birthday: null })));
   });
 
+  it('saves the edited monthly sales quota for a sales agent', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchStaff).mockResolvedValue({
+      items: [{ id: 'staff-64', full_name: 'Jane Doe', email: 'jane@example.com', role: 'Sales Agent', mobile: '', team_id: '', status: 1, monthly_quota: 12500, created_at: '' }],
+      meta: { page: 1, per_page: 100, total: 1, total_pages: 1 },
+    });
+    vi.mocked(updateStaff).mockResolvedValue({ id: 'staff-64' } as any);
+    render(<ToastProvider><Staff /></ToastProvider>);
+
+    const staffRow = (await screen.findByText('Jane Doe')).closest('tr');
+    await user.click(staffRow!.querySelectorAll('button')[1]);
+    const quotaInput = screen.getByLabelText('Monthly sales quota (PHP)');
+    expect(quotaInput).toHaveValue(12500);
+    await user.clear(quotaInput);
+    await user.type(quotaInput, '25000.50');
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+
+    await waitFor(() => expect(updateStaff).toHaveBeenCalledWith('staff-64', expect.objectContaining({ sales_quota: 25000.5 })));
+  });
+
   it('does not expose the password action to staff users', async () => {
     window.localStorage.setItem('local_api_auth_session', JSON.stringify({
       token: 'staff-token',

@@ -87,6 +87,12 @@ describe('customer database price and discount codes', () => {
     expect(payload.discount_code).toBe('vip platinum');
   });
 
+  it('writes the selected team ID when creating a prospect', () => {
+    const payload = mapContactPayloadToApi({ __salesTeamId: 23 } as any);
+
+    expect(payload.sales_team_id).toBe(23);
+  });
+
   it('maps and writes the ordered customer delivery addresses', () => {
     const contact = mapApiCustomerToContact({
       session_id: 'cust-delivery-addresses',
@@ -112,6 +118,29 @@ describe('customer database saves and daily call cache', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     invalidateDailyCallMasterListCache();
+  });
+
+  it('saves prospect contact-person edits without a Customer Database read or delete request', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: async () => ({ data: { updated: true } }),
+    } as Response);
+
+    await updateContact('prospect-1', {
+      company: 'Updated Prospect',
+      contactPersons: [
+        { id: '123', enabled: true, name: 'Updated Contact', position: 'Buyer', birthday: '', telephone: '5551234', mobile: '09123456789', email: 'buyer@example.com' },
+        { id: 'new-person', enabled: true, name: 'New Contact', position: '', birthday: '', telephone: '', mobile: '', email: '' },
+      ],
+    }, '42', { preserveExistingContactPersons: true });
+
+    const requests = fetchSpy.mock.calls.map(([url, init]) => ({ url: String(url), method: (init as RequestInit)?.method }));
+    expect(requests).toEqual([
+      expect.objectContaining({ url: expect.stringContaining('/customer-database/prospect-1'), method: 'PATCH' }),
+      expect.objectContaining({ url: expect.stringContaining('/customer-database/contacts/123'), method: 'PATCH' }),
+      expect.objectContaining({ url: expect.stringContaining('/customer-database/prospect-1/contacts'), method: 'POST' }),
+    ]);
   });
 
   it('shows a Daily Call recovery buyer as Inactive in Customer Data', async () => {
