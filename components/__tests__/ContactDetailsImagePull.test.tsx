@@ -1,5 +1,5 @@
 import React from 'react';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ContactDetails from '../ContactDetails';
 import { CustomerStatus } from '../../types';
@@ -62,6 +62,18 @@ describe('ContactDetails image expansion', () => {
     fireEvent.touchEnd(profileScroller!, { changedTouches: [{ identifier: 1, clientY: 210 }] });
 
     expect(screen.getByRole('dialog', { name: 'Full customer image' })).toBeInTheDocument();
+  });
+
+  it('opens the full image when hovering over the header photo and allows it to close', async () => {
+    renderProfile();
+
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'View full customer image' }));
+
+    const lightbox = screen.getByRole('dialog', { name: 'Full customer image' });
+    expect(lightbox).toBeInTheDocument();
+    fireEvent.mouseLeave(screen.getByRole('button', { name: 'View full customer image' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close full image' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Full customer image' })).not.toBeInTheDocument());
   });
 
   it('opens when a downward pull starts below the top and reaches the top', () => {
