@@ -264,7 +264,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
           <div className="relative h-[172px] bg-gradient-to-r from-slate-700 via-brand-blue to-blue-500 sm:h-[230px]">
               {contact.recordImage && !recordImageFailed ? (
                   <button type="button" className="h-full w-full cursor-zoom-in" aria-label="View full customer image" onClick={() => setShowFullRecordImage(true)}>
-                    <img src={contact.recordImage} alt={`${contact.company || contact.name || 'Customer'} cover photo`} className="h-full w-full object-cover" style={{ objectPosition: contact.recordImagePosition?.replace(',', '% ') }} onError={() => setRecordImageFailed(true)} />
+                    <img src={contact.recordImage} alt={`${contact.company || contact.name || 'Customer'} cover photo`} className="h-full w-full object-contain object-center" onError={() => setRecordImageFailed(true)} />
                   </button>
               ) : (
                   <div className="flex h-full items-center justify-center px-5 text-center sm:px-8" aria-label={`Company photo placeholder for ${contact.company || contact.name || 'Customer'}`}>

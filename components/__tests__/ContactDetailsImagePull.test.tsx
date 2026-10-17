@@ -37,6 +37,7 @@ describe('ContactDetails image expansion', () => {
           company: 'Example Customer',
           status: CustomerStatus.ACTIVE,
           recordImage: 'data:image/png;base64,abc',
+          recordImagePosition: '20,80',
         } as any}
         currentUser={{ id: 'master-1', role: 'Master User' } as any}
         onClose={vi.fn()}
@@ -45,6 +46,9 @@ describe('ContactDetails image expansion', () => {
     );
 
     const imageButton = screen.getByRole('button', { name: 'View full customer image' });
+    const headerImage = screen.getByAltText('Example Customer cover photo');
+    expect(headerImage).toHaveClass('object-contain', 'object-center');
+    expect(headerImage).not.toHaveStyle({ objectPosition: '20% 80%' });
     const profileScroller = imageButton.closest('.overflow-y-auto');
     expect(profileScroller).not.toBeNull();
     expect(screen.queryByRole('dialog', { name: 'Full customer image' })).not.toBeInTheDocument();
