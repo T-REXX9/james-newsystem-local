@@ -215,15 +215,13 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
       ref={scrollContainerRef}
       className="h-full bg-slate-50 dark:bg-slate-950 overflow-y-auto pb-20 animate-fadeIn relative z-30"
       onTouchStart={(event) => {
-        imagePullStartYRef.current = scrollContainerRef.current?.scrollTop === 0
-          ? event.touches[0]?.clientY ?? null
-          : null;
+        imagePullStartYRef.current = event.touches[0]?.clientY ?? null;
       }}
       onTouchEnd={(event) => {
         const startY = imagePullStartYRef.current;
         imagePullStartYRef.current = null;
         const endY = event.changedTouches[0]?.clientY;
-        if (startY !== null && endY !== undefined && endY - startY > 96 && contact.recordImage && !recordImageFailed) {
+        if (startY !== null && endY !== undefined && endY - startY > 96 && scrollContainerRef.current?.scrollTop === 0 && contact.recordImage && !recordImageFailed) {
           setShowFullRecordImage(true);
         }
       }}

@@ -1,6 +1,6 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ContactDetails from '../ContactDetails';
 import { CustomerStatus } from '../../types';
 
@@ -29,7 +29,9 @@ describe('ContactDetails image expansion', () => {
     HTMLElement.prototype.scrollIntoView = vi.fn();
   });
 
-  it('opens the full image after a downward pull from the top of the profile', () => {
+  afterEach(() => cleanup());
+
+  const renderProfile = () => {
     render(
       <ContactDetails
         contact={{
@@ -44,18 +46,51 @@ describe('ContactDetails image expansion', () => {
         onUpdate={vi.fn()}
       />
     );
-
     const imageButton = screen.getByRole('button', { name: 'View full customer image' });
+    return imageButton.closest('.overflow-y-auto')!;
+  };
+
+  it('opens the full image after a downward pull from the top of the profile', () => {
+    const profileScroller = renderProfile();
+
     const headerImage = screen.getByAltText('Example Customer cover photo');
     expect(headerImage).toHaveClass('object-cover', 'object-center');
     expect(headerImage).not.toHaveStyle({ objectPosition: '20% 80%' });
-    const profileScroller = imageButton.closest('.overflow-y-auto');
-    expect(profileScroller).not.toBeNull();
     expect(screen.queryByRole('dialog', { name: 'Full customer image' })).not.toBeInTheDocument();
 
     fireEvent.touchStart(profileScroller!, { touches: [{ identifier: 1, clientY: 100 }] });
     fireEvent.touchEnd(profileScroller!, { changedTouches: [{ identifier: 1, clientY: 210 }] });
 
     expect(screen.getByRole('dialog', { name: 'Full customer image' })).toBeInTheDocument();
+  });
+
+  it('opens when a downward pull starts below the top and reaches the top', () => {
+    const profileScroller = renderProfile();
+    profileScroller.scrollTop = 200;
+
+    fireEvent.touchStart(profileScroller, { touches: [{ identifier: 1, clientY: 100 }] });
+    profileScroller.scrollTop = 0;
+    fireEvent.touchEnd(profileScroller, { changedTouches: [{ identifier: 1, clientY: 210 }] });
+
+    expect(screen.getByRole('dialog', { name: 'Full customer image' })).toBeInTheDocument();
+  });
+
+  it('does not open when a downward pull ends while still below the top', () => {
+    const profileScroller = renderProfile();
+    profileScroller.scrollTop = 200;
+
+    fireEvent.touchStart(profileScroller, { touches: [{ identifier: 1, clientY: 100 }] });
+    fireEvent.touchEnd(profileScroller, { changedTouches: [{ identifier: 1, clientY: 210 }] });
+
+    expect(screen.queryByRole('dialog', { name: 'Full customer image' })).not.toBeInTheDocument();
+  });
+
+  it('does not open after a short downward pull at the top', () => {
+    const profileScroller = renderProfile();
+
+    fireEvent.touchStart(profileScroller, { touches: [{ identifier: 1, clientY: 100 }] });
+    fireEvent.touchEnd(profileScroller, { changedTouches: [{ identifier: 1, clientY: 180 }] });
+
+    expect(screen.queryByRole('dialog', { name: 'Full customer image' })).not.toBeInTheDocument();
   });
 });
