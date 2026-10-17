@@ -93,6 +93,46 @@ describe('AddContactModal legacy mobile on edit', () => {
     expect(screen.queryByText(/keep mobile number under 15 characters/i)).not.toBeInTheDocument();
   });
 
+  it('preserves legacy primary email and phones when no contact-person rows exist', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn(async (data: any) => ({ id: 'c-1', ...data }));
+    const legacyContact = {
+      ...baseEditContact,
+      contactPersons: [],
+      name: 'Existing Contact',
+      email: 'buyer@example.com',
+      phone: '02-1234567',
+      mobile: '09171234567',
+    };
+
+    render(
+      <ToastProvider>
+        <AddContactModal
+          isOpen
+          onClose={() => undefined}
+          onSubmit={onSubmit}
+          mode="edit"
+          initialData={legacyContact}
+        />
+      </ToastProvider>
+    );
+
+    await user.selectOptions(screen.getByLabelText('Preferred Brand'), 'Ishinomoto');
+    await user.click(screen.getByRole('button', { name: /update customer/i }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0][0].contactPersons[0]).toMatchObject({
+      email: 'buyer@example.com',
+      telephone: '02-1234567',
+      mobile: '09171234567',
+    });
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({
+      email: 'buyer@example.com',
+      phone: '02-1234567',
+      mobile: '09171234567',
+    });
+  });
+
   it('still blocks when the user changes mobile to a new oversize value', async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn(async (data: any) => ({ id: 'c-1', ...data }));

@@ -220,6 +220,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     render(<DailyCallMonitoringView currentUser={currentUser} />);
 
     const toggle = await screen.findByRole('button', { name: /Sales summaries/i });
+    expect(screen.getByLabelText('Daily call customer category summary cards')).toBeInTheDocument();
     expect(screen.queryByLabelText('Customer category summaries')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Segregated customer category tables')).toBeInTheDocument();
 
@@ -228,6 +229,69 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(screen.getByRole('dialog', { name: 'Sales summaries' })).toBeInTheDocument();
     expect(screen.getByLabelText('Customer category summaries')).toBeInTheDocument();
     expect(await screen.findByText('Team sales by Daily Call status')).toBeInTheDocument();
+  });
+
+  it('keeps all five category summary cards visible on the main view, including zero counts', async () => {
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    expect(await screen.findByLabelText('Daily call customer category summary cards')).toBeInTheDocument();
+    for (const id of ['priority', 'recovery', 'verified', 'unverified', 'blocked']) {
+      expect(screen.getByTestId(`daily-call-summary-${id}`)).toBeInTheDocument();
+    }
+    expect(within(screen.getByTestId('daily-call-summary-priority')).getByText('0', { exact: true })).toBeInTheDocument();
+    expect(within(screen.getByTestId('daily-call-summary-recovery')).getByText('0', { exact: true })).toBeInTheDocument();
+    expect(within(screen.getByTestId('daily-call-summary-verified')).getByText('0', { exact: true })).toBeInTheDocument();
+    expect(within(screen.getByTestId('daily-call-summary-unverified')).getByText('1', { exact: true })).toBeInTheDocument();
+    const blockedCard = within(screen.getByTestId('daily-call-summary-blocked'));
+    expect(blockedCard.getByText(/View only · no contact or sales inquiry/i)).toBeInTheDocument();
+    expect(blockedCard.getByText('Current Month Sales')).toBeInTheDocument();
+    expect(blockedCard.getByText('Monthly Potential Sales')).toBeInTheDocument();
+    expect(blockedCard.getAllByText(/₱0/)).toHaveLength(2);
+  });
+
+  it('shows Recovery current-month sales as the primary metric while retaining monthly potential', async () => {
+    fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
+      ...baseSnapshot,
+      contacts: [{ ...baseSnapshot.contacts[0], id: 'recovery-metrics', shopName: 'Recovery Metrics Shop', status: 'active' }],
+      purchases: [{
+        id: 'recovery-metrics-history', contact_id: 'recovery-metrics', amount: 27000, status: 'paid', purchased_at: '2025-09-01',
+      }],
+      masterList: [{
+        id: 'recovery-metrics', shopName: 'Recovery Metrics Shop', listCategory: 'recovery', currentMonthSales: 1250,
+        averageMonthlySales: 9000, averageMonthlySalesMonthCount: 3, totalSales: 27000, purchaseCount: 3,
+        ledgerTransactionCount: 3, purchaseAgeGroup: 'over_one_month', lastPurchaseDateRaw: '2025-09-01',
+      }],
+    });
+
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    const recoveryCard = within(await screen.findByTestId('daily-call-summary-recovery'));
+    expect(recoveryCard.getByText('Current Month Sales')).toBeInTheDocument();
+    expect(recoveryCard.getByText(/1,250/)).toBeInTheDocument();
+    expect(recoveryCard.getByText('Potential Sales')).toBeInTheDocument();
+    expect(recoveryCard.getByText(/₱9K/)).toBeInTheDocument();
+  });
+
+  it('hides summary totals after snapshot failure but shows zero totals after a successful empty snapshot', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    fetchAgentSnapshotForDailyCallMock.mockRejectedValueOnce(new Error('snapshot unavailable'));
+    const failedRender = render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    expect(await screen.findByText('Unable to load call activity')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Daily call customer category summary cards')).not.toBeInTheDocument();
+    failedRender.unmount();
+    consoleError.mockRestore();
+
+    fetchAgentSnapshotForDailyCallMock.mockResolvedValueOnce({
+      ...baseSnapshot,
+      contacts: [],
+      masterList: [],
+      doNotContactCustomers: [],
+    });
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    expect(await screen.findByLabelText('Daily call customer category summary cards')).toBeInTheDocument();
+    expect(within(screen.getByTestId('daily-call-summary-priority')).getByText('0', { exact: true })).toBeInTheDocument();
   });
 
   it('expands only the selected category for all five customer lists', async () => {

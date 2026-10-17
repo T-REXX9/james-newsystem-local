@@ -332,6 +332,7 @@ export interface Contact {
   searchPhoneNumbers?: string;
   customerSince: string; // "since"
   team: string;
+  teamId?: string;
   salesman: string; // "salesman" (Assigned Agent)
   assignedAgentId?: string; // Staff account ID used for access filtering
   prospectCreatorId?: string;

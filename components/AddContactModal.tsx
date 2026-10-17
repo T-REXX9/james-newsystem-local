@@ -222,7 +222,16 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
 
   const buildContactPersonsFromContact = (contact?: Contact): ContactPersonDraft[] => {
     const persons = contact?.contactPersons || [];
-    if (persons.length === 0) return [createEmptyContactPerson()];
+    if (persons.length === 0) {
+      const fallbackPerson = createEmptyContactPerson();
+      return [{
+        ...fallbackPerson,
+        name: contact?.name && contact.name !== contact.company ? contact.name : '',
+        telephone: contact?.phone || '',
+        mobile: contact?.mobile || '',
+        email: contact?.email || '',
+      }];
+    }
     return persons.map(person => ({
       id: person.id,
       enabled: person.enabled ?? true,
@@ -275,7 +284,8 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
   }, [isOpen, canAssignSalesAgent]);
 
   useEffect(() => {
-    if (!isOpen || isEditMode || !isCreatingProspect) return;
+    const shouldLoadTeams = isCreatingProspect || (isEditMode && canAssignSalesAgent);
+    if (!isOpen || !shouldLoadTeams) return;
     let active = true;
     setLoadingTeams(true);
     setTeamLoadError('');
@@ -304,7 +314,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     return () => {
       active = false;
     };
-  }, [isOpen, isEditMode, isCreatingProspect, addToast]);
+  }, [isOpen, isEditMode, isCreatingProspect, canAssignSalesAgent, addToast]);
 
   // Cleanup debounce timeout on unmount
   useEffect(() => {
@@ -446,6 +456,14 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
         // Soft delete defaults
         is_deleted: isDeleted,
       };
+
+      if (isEditMode && canAssignSalesAgent) {
+        const selectedTeamId = teams.find((team) => team.name === formData.team)?.id;
+        (newContact as Omit<Contact, 'id'> & { __salesTeamId?: number | null }).__salesTeamId =
+          formData.team === ''
+            ? null
+            : selectedTeamId ?? (formData.team === initialData?.team ? Number(initialData?.teamId) || null : null);
+      }
 
       if (!isEditMode && isCreatingProspect) {
         (newContact as Omit<Contact, 'id'> & { __salesTeamId?: number | null }).__salesTeamId =
@@ -698,7 +716,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                        </div>
                        <div>
                            <label className="label">Team</label>
-                           {isCreatingProspect ? (
+                           {isCreatingProspect || (isEditMode && canAssignSalesAgent) ? (
                              <select
                                aria-label="Team"
                                className="input"
@@ -709,6 +727,9 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                                <option value="">
                                  {loadingTeams ? 'Loading teams…' : teamLoadError ? 'Teams unavailable' : 'Select a team'}
                                </option>
+                               {formData.team && !teams.some((team) => team.name === formData.team) && (
+                                 <option value={formData.team}>{formData.team}</option>
+                               )}
                                {teams.map((team) => (
                                  <option key={team.id} value={team.name}>{team.name}</option>
                                ))}

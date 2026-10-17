@@ -112,6 +112,40 @@ describe('customer database price and discount codes', () => {
       discount_code: 'vip silver',
     });
   });
+
+  it('round-trips dealership terms through the customer update payload', () => {
+    const contact = mapApiCustomerToContact({
+      session_id: 'cust-dealer-terms',
+      dealer_terms: 'Minimum monthly purchase',
+    });
+
+    expect(contact.dealershipTerms).toBe('Minimum monthly purchase');
+    expect(mapContactUpdatesToApi({ dealershipTerms: contact.dealershipTerms })).toEqual({
+      dealer_terms: 'Minimum monthly purchase',
+    });
+  });
+
+  it('maps the existing sales team ID for authorized edits', () => {
+    const contact = mapApiCustomerToContact({
+      session_id: 'cust-team',
+      sales_team_id: '23',
+    });
+
+    expect(contact.teamId).toBe('23');
+    expect(mapContactUpdatesToApi({ __salesTeamId: contact.teamId })).toEqual({ sales_team_id: 23 });
+  });
+
+  it('saves a hidden prospective as hidden while retaining its prospect status', () => {
+    expect(mapContactUpdatesToApi({
+      status: CustomerStatus.PROSPECTIVE,
+      verification: 'Unverified',
+      isHidden: true,
+    })).toMatchObject({
+      status: 0,
+      profile_type: 'Prospect',
+      verification: 'Unverified',
+    });
+  });
 });
 
 describe('customer database saves and daily call cache', () => {

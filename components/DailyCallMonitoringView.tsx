@@ -1586,16 +1586,21 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       id: 'priority' | 'recovery' | 'verified' | 'unverified' | 'blocked',
       label: string,
       note: string,
-      tone: 'emerald' | 'rose' | 'blue' | 'orange' | 'red',
-      metricLabel: string
+      tone: 'emerald' | 'rose' | 'blue' | 'orange' | 'red'
     ) => {
       const currentMonthSales = rows.reduce((sum, row) => sum + row.currentMonthSales, 0);
       const averageMonthlySales = rows.reduce((sum, row) => sum + row.averageMonthlySales, 0);
-      const primaryMetric = id === 'priority'
+      const primaryMetric = id === 'priority' || id === 'recovery'
         ? currentMonthSales
         : id === 'verified' || id === 'unverified'
           ? 0
           : averageMonthlySales;
+      const modalMetricLabel = id === 'priority'
+        ? 'Current Month Sales'
+        : id === 'verified' || id === 'unverified'
+          ? 'Average Monthly Purchase'
+          : 'Average Monthly Sales';
+      const modalMetric = id === 'priority' ? currentMonthSales : id === 'verified' || id === 'unverified' ? 0 : averageMonthlySales;
       const potentialSales = id === 'verified'
         ? rows.length * VERIFIED_PROSPECT_POTENTIAL
         : id === 'unverified'
@@ -1608,8 +1613,10 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         tone,
         rows,
         primaryMetric,
+        modalMetric,
+        modalMetricLabel,
         potentialSales,
-        metricLabel,
+        metricLabel: 'Current Month Sales',
       };
     };
 
@@ -1680,11 +1687,11 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     const blockedRows = [...assignedBlockedRows, ...companyBlockedRows];
 
     return [
-      summarize(priorityRows, 'priority', 'Priority List', 'Any ledger activity since October 2025 onwards', 'emerald', 'Current Month Sales'),
-      summarize(recoveryRows, 'recovery', 'Recovery List', 'Purchase history before October 2025, with none since', 'rose', 'Average Monthly Sales'),
-      summarize(verifiedRows, 'verified', 'Verified Prospects', 'Verified, awaiting first purchase', 'blue', 'Average Monthly Purchase'),
-      summarize(unverifiedRows, 'unverified', 'Unverified Prospects', 'No purchases yet', 'orange', 'Average Monthly Purchase'),
-      summarize(blockedRows, 'blocked', DO_NOT_CONTACT_LABEL, 'View only — no contact or sales inquiry', 'red', 'Average Monthly Sales'),
+      summarize(priorityRows, 'priority', 'Priority List', 'Any ledger activity since October 2025 onwards', 'emerald'),
+      summarize(recoveryRows, 'recovery', 'Recovery List', 'Purchase history before October 2025, with none since', 'rose'),
+      summarize(verifiedRows, 'verified', 'Verified Prospects', 'Verified, awaiting first purchase', 'blue'),
+      summarize(unverifiedRows, 'unverified', 'Unverified Prospects', 'No purchases yet', 'orange'),
+      summarize(blockedRows, 'blocked', DO_NOT_CONTACT_LABEL, 'View only — no contact or sales inquiry', 'red'),
     ];
   }, [debouncedSearch, doNotContactCustomers, masterListRows, masterRows]);
 
@@ -2192,6 +2199,56 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         <BarChart3 className="h-6 w-6 shrink-0 text-violet-700" aria-hidden="true" />
       </article>
 
+      {hasLoadedData && <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5" aria-label="Daily call customer category summary cards">
+        {customerListSummaries.map((summary) => {
+          const tone = summaryToneClasses[summary.tone];
+          return (
+            <article key={`${summary.id}-summary-card`} data-testid={`daily-call-summary-${summary.id}`} className={`min-w-0 rounded-xl border p-4 shadow-sm ${tone.card}`}>
+              <h2 className={`text-sm font-extrabold uppercase leading-snug ${tone.title}`}>
+                {summary.label} <span className="text-[11px] font-semibold normal-case">({summary.note})</span>
+              </h2>
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <p className="shrink-0 text-2xl font-extrabold tabular-nums text-[#10244c] dark:text-white">
+                  {summary.rows.length}<span className="ml-1 text-xs font-semibold">Customers</span>
+                </p>
+                {summary.id === 'blocked' ? (
+                  <div className="min-w-0 border-l border-slate-200 pl-3 text-right text-xs dark:border-slate-700">
+                    <p className={`mb-1 font-bold ${tone.value}`}>View only · no contact or sales inquiry</p>
+                    <dl className={tone.value}>
+                      <div>
+                        <dt className="text-slate-600 dark:text-slate-300">Current Month Sales</dt>
+                        <dd className="font-extrabold tabular-nums">
+                          {formatCurrency(summary.rows.reduce((sum, row) => sum + row.currentMonthSales, 0))}
+                        </dd>
+                      </div>
+                      <div className="mt-1">
+                        <dt className="text-slate-600 dark:text-slate-300">Monthly Potential Sales</dt>
+                        <dd className="font-extrabold tabular-nums">{formatCompactCurrency(summary.potentialSales)}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                ) : (
+                  <dl className={`min-w-0 border-l border-slate-200 pl-3 text-right text-xs ${tone.value} dark:border-slate-700`}>
+                    <div>
+                      <dt className="text-slate-600 dark:text-slate-300">{summary.metricLabel}</dt>
+                      <dd className="font-extrabold tabular-nums">
+                        {summary.metricLabel === 'Current Month Sales'
+                          ? formatCurrency(summary.primaryMetric)
+                          : formatCompactCurrency(summary.primaryMetric)}
+                      </dd>
+                    </div>
+                    <div className="mt-1">
+                      <dt className="text-slate-600 dark:text-slate-300">Potential Sales</dt>
+                      <dd className="font-extrabold tabular-nums">{formatCompactCurrency(summary.potentialSales)}</dd>
+                    </div>
+                  </dl>
+                )}
+              </div>
+            </article>
+          );
+        })}
+      </section>}
+
       {activeWorkspacePanel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) setActiveWorkspacePanel(null); }} onKeyDown={(event) => { if (event.key === 'Escape') setActiveWorkspacePanel(null); }}>
           <section role="dialog" aria-modal="true" aria-labelledby="daily-call-tools-title" className="flex max-h-[90dvh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
@@ -2215,7 +2272,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 {canAdd && canCreateCustomer && <button type="button" onClick={() => { setActiveWorkspacePanel(null); setAddCustomerKind('customer'); setShowAddCustomerModal(true); }} className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-brand-blue px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-2 sm:w-auto"><UserPlus className="h-4 w-4" />New Customer</button>}
                 <button type="button" onClick={() => { setActiveWorkspacePanel(null); void loadAgentData(); }} className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-2 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 sm:w-auto"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />Refresh board</button>
               </div>}
-              {activeWorkspacePanel === 'summaries' && <div className="space-y-4"><DailyCallSalesColorBreakdown /><section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Customer category summaries">{customerListSummaries.map((summary) => { const tone = summaryToneClasses[summary.tone]; return <article key={summary.id} className={`rounded-lg border p-4 ${tone.card}`}><h3 className={`text-xs font-extrabold uppercase ${tone.title}`}>{summary.label}</h3><p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{summary.note}</p><p className="mt-3 text-2xl font-extrabold text-[#10244c] dark:text-white">{summary.rows.length}<span className="ml-1 text-xs font-semibold">customers</span></p>{summary.id === 'blocked' ? <p className={`mt-2 text-sm font-bold ${tone.value}`}>Customer identities only · no contact actions</p> : <><p className={`mt-2 text-sm font-bold ${tone.value}`}>{summary.metricLabel}: {summary.metricLabel === 'Current Month Sales' ? formatCurrency(summary.primaryMetric) : formatCompactCurrency(summary.primaryMetric)}</p><p className={`text-sm font-bold ${tone.value}`}>Potential sales: {formatCompactCurrency(summary.potentialSales)}</p></>}</article>; })}</section></div>}
+              {activeWorkspacePanel === 'summaries' && <div className="space-y-4"><DailyCallSalesColorBreakdown /><section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Customer category summaries">{customerListSummaries.map((summary) => { const tone = summaryToneClasses[summary.tone]; return <article key={summary.id} className={`rounded-lg border p-4 ${tone.card}`}><h3 className={`text-xs font-extrabold uppercase ${tone.title}`}>{summary.label}</h3><p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{summary.note}</p><p className="mt-3 text-2xl font-extrabold text-[#10244c] dark:text-white">{summary.rows.length}<span className="ml-1 text-xs font-semibold">customers</span></p>{summary.id === 'blocked' ? <p className={`mt-2 text-sm font-bold ${tone.value}`}>Customer identities only · no contact actions</p> : <><p className={`mt-2 text-sm font-bold ${tone.value}`}>{summary.modalMetricLabel}: {summary.modalMetricLabel === 'Current Month Sales' ? formatCurrency(summary.modalMetric) : formatCompactCurrency(summary.modalMetric)}</p><p className={`text-sm font-bold ${tone.value}`}>Potential sales: {formatCompactCurrency(summary.potentialSales)}</p></>}</article>; })}</section></div>}
               {activeWorkspacePanel === 'filters' && <div className="space-y-5"><div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><label className="text-xs font-bold text-slate-600 dark:text-slate-300">Color status<select aria-label="Color status" value={colorFilter} onChange={(event) => setColorFilter(event.target.value as 'all' | PurchaseHighlightColor)} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium dark:border-slate-700 dark:bg-slate-950"><option value="all">All color statuses</option><option value="green">Green — bought this month</option><option value="yellow">Yellow — 1 month no purchase</option><option value="purple">Purple — 2 months no purchase</option><option value="white">White — 3+ months / no purchase</option><option value="red">Red — blacklisted/rejected -do not contact</option></select></label><label className="text-xs font-bold text-slate-600 dark:text-slate-300">Agent Sales Report<select aria-label="Agent Sales Report filter" value={salesReportFilter} onChange={(event) => setSalesReportFilter(event.target.value as 'all' | 'reported' | 'unread')} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium dark:border-slate-700 dark:bg-slate-950"><option value="all">All customers</option><option value="reported">Has a sales report</option><option value="unread">Unread sales reports</option></select></label></div><div className="flex flex-wrap gap-3 text-[11px] font-semibold text-slate-600 dark:text-slate-300" aria-label="Automatic purchase highlight legend"><span><i className="mr-1 inline-block h-3 w-3 rounded bg-green-500" />Bought this month</span><span><i className="mr-1 inline-block h-3 w-3 rounded bg-yellow-400" />1 month no purchase</span><span><i className="mr-1 inline-block h-3 w-3 rounded bg-purple-500" />2 months no purchase</span><span><i className="mr-1 inline-block h-3 w-3 rounded border border-slate-300 bg-white" />3+ months / no purchase</span><span><i className="mr-1 inline-block h-3 w-3 rounded bg-[#f94449]" />blacklisted/rejected -do not contact</span></div></div>}
             </div>
           </section>

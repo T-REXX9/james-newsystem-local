@@ -728,7 +728,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     const updates = isMaster
       ? data
       : Object.fromEntries(Object.entries(data).filter(([key]) =>
-          !['salesman', 'assignedAgent', 'assignedAgentId', 'team'].includes(key)
+          !['salesman', 'assignedAgent', 'assignedAgentId', '__salesTeamId', 'team'].includes(key)
         )) as Omit<Contact, 'id'>;
     await updateContact(editingProspect.id, updates, currentUser?.id, { preserveExistingContactPersons: !isMaster });
     setEditingProspect(null);

@@ -58,6 +58,8 @@ interface ApiCustomerRow {
   customer_since?: string | null;
   lsince?: string | null;
   team?: string | null;
+  sales_team_id?: string | number | null;
+  assigned_team_id?: string | number | null;
   sales_person_name?: string | null;
   salesman?: string | null;
   assigned_to?: string | null;
@@ -327,6 +329,7 @@ export const mapApiCustomerToContact = (row: ApiCustomerRow): LocalContact => {
     pastName: sanitizeLegacyString(row?.old_name || row?.past_name || ''),
     customerSince: sanitizeCustomerDate(row?.since || row?.customer_since || row?.lsince || ''),
     team: sanitizeLegacyString(row?.team || ''),
+    teamId: sanitizeLegacyString(row?.sales_team_id ?? row?.assigned_team_id ?? ''),
     salesman: resolvedSalesName,
     assignedAgentId: salesPersonId,
     prospectCreatorId: sanitizeLegacyString(row?.prospect_creator_id || ''),
@@ -431,6 +434,7 @@ export const mapContactPayloadToApi = (contact: ContactPayloadWithSalesPersonId)
     vat_percent: toNumber(contact?.vatPercentage, 12) / 100,
     since: sanitizeCustomerDate(contact?.customerSince || ''),
     dealer_since: sanitizeCustomerDate(contact?.dealershipSince || ''),
+    dealer_terms: String(contact?.dealershipTerms || ''),
     dealer_quota: toNumber(contact?.dealershipQuota, 0),
     credit_limit: toNumber(contact?.creditLimit, 0),
     preferred_brand: normalizePreferredBrand(contact?.preferredBrand),
@@ -487,6 +491,7 @@ export const mapContactUpdatesToApi = (contact: Partial<ContactPayloadWithSalesP
   if (hasOwn(contact, 'vatPercentage')) payload.vat_percent = toNumber(contact.vatPercentage, 12) / 100;
   if (hasOwn(contact, 'customerSince')) payload.since = sanitizeCustomerDate(contact.customerSince || '');
   if (hasOwn(contact, 'dealershipSince')) payload.dealer_since = sanitizeCustomerDate(contact.dealershipSince || '');
+  if (hasOwn(contact, 'dealershipTerms')) payload.dealer_terms = String(contact.dealershipTerms || '');
   if (hasOwn(contact, 'dealershipQuota')) payload.dealer_quota = toNumber(contact.dealershipQuota, 0);
   if (hasOwn(contact, 'creditLimit')) payload.credit_limit = toNumber(contact.creditLimit, 0);
   if (hasOwn(contact, 'preferredBrand')) payload.preferred_brand = normalizePreferredBrand(contact.preferredBrand);
@@ -497,13 +502,14 @@ export const mapContactUpdatesToApi = (contact: Partial<ContactPayloadWithSalesP
   if (hasOwn(contact, 'recordImagePosition')) payload.record_image_position = String(contact.recordImagePosition || '50,50');
 
   if (hasOwn(contact, 'status')) {
-    const status = mapUiStatusToApi(contact.status as CustomerStatus | undefined);
+    const uiStatus = contact.status as CustomerStatus | undefined;
+    const status = contact.isHidden ? 0 : mapUiStatusToApi(uiStatus);
     payload.status = status;
-    if (contact.status !== CustomerStatus.BLACKLISTED) {
-      payload.profile_type = status === 3 ? 'Prospect' : 'Old';
+    if (uiStatus !== CustomerStatus.BLACKLISTED) {
+      payload.profile_type = mapUiStatusToApi(uiStatus) === 3 ? 'Prospect' : 'Old';
     }
-    payload.debt_type = debtTypeForUiStatus(contact.status as CustomerStatus | undefined);
-    const verification = verificationForUiStatus(contact.status as CustomerStatus | undefined);
+    payload.debt_type = debtTypeForUiStatus(uiStatus);
+    const verification = verificationForUiStatus(uiStatus);
     if (verification !== undefined) payload.verification = verification;
   } else if (hasOwn(contact, 'isHidden')) {
     payload.status = contact.isHidden ? 0 : 1;
