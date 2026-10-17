@@ -64,7 +64,7 @@ describe('ContactDetails image expansion', () => {
     expect(screen.getByRole('dialog', { name: 'Full customer image' })).toBeInTheDocument();
   });
 
-  it('shows an immediate hover preview without opening the full image viewer', () => {
+  it('shows an immediate, animated hover preview and fades it closed on pointer exit', async () => {
     renderProfile();
 
     const imageButton = screen.getByRole('button', { name: 'View full customer image' });
@@ -73,11 +73,28 @@ describe('ContactDetails image expansion', () => {
 
     expect(image).toHaveClass('object-contain');
     expect(imageButton).toHaveClass('fixed', 'z-[2000]');
+    expect(imageButton.className).toContain('james-modal-in');
     expect(screen.queryByRole('dialog', { name: 'Full customer image' })).not.toBeInTheDocument();
 
-    fireEvent.mouseLeave(imageButton);
+    fireEvent.mouseLeave(image);
+    expect(imageButton).toHaveClass('opacity-0', 'transition-opacity');
+    await waitFor(() => expect(imageButton).not.toHaveClass('fixed'));
     expect(image).toHaveClass('object-cover');
-    expect(imageButton).not.toHaveClass('fixed');
+  });
+
+  it('cancels the close fade when the pointer re-enters the preview', async () => {
+    renderProfile();
+    const imageButton = screen.getByRole('button', { name: 'View full customer image' });
+    const image = screen.getByAltText('Example Customer cover photo');
+
+    fireEvent.mouseEnter(imageButton);
+    fireEvent.mouseLeave(image);
+    expect(imageButton).toHaveClass('opacity-0');
+
+    fireEvent.mouseEnter(image);
+    expect(imageButton).not.toHaveClass('opacity-0');
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    expect(imageButton).toHaveClass('fixed');
   });
 
   it('keeps click-to-open and does not reopen the hover preview after close until pointer leaves', async () => {

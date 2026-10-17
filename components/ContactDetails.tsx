@@ -49,7 +49,9 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
   const [recordImageFailed, setRecordImageFailed] = useState(false);
   const [showFullRecordImage, setShowFullRecordImage] = useState(false);
   const [showRecordImageHoverPreview, setShowRecordImageHoverPreview] = useState(false);
+  const [isClosingRecordImageHoverPreview, setIsClosingRecordImageHoverPreview] = useState(false);
   const suppressRecordImageHoverPreviewRef = useRef(false);
+  const recordImageHoverCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const imagePullStartYRef = useRef<number | null>(null);
   const [newComment, setNewComment] = useState('');
   const [comments, setComments] = useState<Comment[]>(contact.comments || []);
@@ -58,6 +60,10 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
   const commentsEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isInitialMount = useRef(true);
+
+  useEffect(() => () => {
+    if (recordImageHoverCloseTimeoutRef.current) clearTimeout(recordImageHoverCloseTimeoutRef.current);
+  }, []);
 
   useEffect(() => {
     // Auto-scroll to new comments
@@ -198,15 +204,41 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
   const contactLocation = [contact.province, contact.city].map((value) => String(value || '').trim()).filter(Boolean).join(', ');
 
   const openFullRecordImage = () => {
+    if (recordImageHoverCloseTimeoutRef.current) clearTimeout(recordImageHoverCloseTimeoutRef.current);
+    recordImageHoverCloseTimeoutRef.current = null;
     suppressRecordImageHoverPreviewRef.current = true;
+    setIsClosingRecordImageHoverPreview(false);
     setShowRecordImageHoverPreview(false);
     setShowFullRecordImage(true);
   };
 
   const closeFullRecordImage = () => {
+    if (recordImageHoverCloseTimeoutRef.current) clearTimeout(recordImageHoverCloseTimeoutRef.current);
+    recordImageHoverCloseTimeoutRef.current = null;
     suppressRecordImageHoverPreviewRef.current = true;
+    setIsClosingRecordImageHoverPreview(false);
     setShowRecordImageHoverPreview(false);
     setShowFullRecordImage(false);
+  };
+
+  const closeRecordImageHoverPreview = () => {
+    suppressRecordImageHoverPreviewRef.current = false;
+    if (!showRecordImageHoverPreview) return;
+    if (recordImageHoverCloseTimeoutRef.current) clearTimeout(recordImageHoverCloseTimeoutRef.current);
+    setIsClosingRecordImageHoverPreview(true);
+    recordImageHoverCloseTimeoutRef.current = setTimeout(() => {
+      setShowRecordImageHoverPreview(false);
+      setIsClosingRecordImageHoverPreview(false);
+      recordImageHoverCloseTimeoutRef.current = null;
+    }, 150);
+  };
+
+  const openRecordImageHoverPreview = () => {
+    if (suppressRecordImageHoverPreviewRef.current) return;
+    if (recordImageHoverCloseTimeoutRef.current) clearTimeout(recordImageHoverCloseTimeoutRef.current);
+    recordImageHoverCloseTimeoutRef.current = null;
+    setIsClosingRecordImageHoverPreview(false);
+    setShowRecordImageHoverPreview(true);
   };
 
   useEffect(() => {
@@ -278,22 +310,23 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
                   <button
                     type="button"
                     className={showRecordImageHoverPreview
-                      ? 'fixed inset-0 z-[2000] flex h-screen w-screen cursor-zoom-out items-center justify-center bg-slate-950/90 p-3 sm:p-8'
+                      ? `pointer-events-none fixed inset-0 z-[2000] flex h-screen w-screen items-center justify-center bg-slate-950/90 p-3 sm:p-8 ${isClosingRecordImageHoverPreview
+                        ? 'pointer-events-none cursor-zoom-in opacity-0 transition-opacity duration-150 ease-out'
+                        : 'cursor-zoom-out animate-[james-modal-in_180ms_ease-out]'}`
                       : 'h-full w-full cursor-zoom-in'}
                     aria-label="View full customer image"
                     onClick={openFullRecordImage}
-                    onMouseEnter={() => {
-                      if (!suppressRecordImageHoverPreviewRef.current) setShowRecordImageHoverPreview(true);
-                    }}
-                    onMouseLeave={() => {
-                      setShowRecordImageHoverPreview(false);
-                      suppressRecordImageHoverPreviewRef.current = false;
-                    }}
+                    onMouseEnter={openRecordImageHoverPreview}
+                    onMouseLeave={closeRecordImageHoverPreview}
                   >
                     <img
                       src={contact.recordImage}
                       alt={`${contact.company || contact.name || 'Customer'} cover photo`}
-                      className={showRecordImageHoverPreview ? 'h-full w-full object-contain' : 'h-full w-full object-cover object-center'}
+                      className={showRecordImageHoverPreview
+                        ? 'pointer-events-auto h-auto w-auto max-h-[92vh] max-w-[94vw] cursor-zoom-out object-contain'
+                        : 'h-full w-full object-cover object-center'}
+                      onMouseEnter={showRecordImageHoverPreview ? openRecordImageHoverPreview : undefined}
+                      onMouseLeave={showRecordImageHoverPreview ? closeRecordImageHoverPreview : undefined}
                       onError={() => setRecordImageFailed(true)}
                     />
                   </button>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import DailyCallMonitoringView from '../DailyCallMonitoringView';
@@ -1091,6 +1091,25 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(screen.getByTestId('full-contact-details')).toHaveTextContent('Maria Santos');
     expect(screen.getByTestId('full-contact-details')).toHaveTextContent('09123456789');
     expect(fetchContactForDailyCallMock).toHaveBeenCalledWith('contact-1');
+  });
+
+  it('keeps loaded customer details when the lightbox Back entry returns to the same profile', async () => {
+    const user = userEvent.setup();
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    await expandList('Unverified Prospects', user);
+    await user.click(await screen.findByText('Test Shop'));
+    expect(await screen.findByTestId('full-contact-details')).toBeInTheDocument();
+    expect(fetchContactForDailyCallMock).toHaveBeenCalledTimes(1);
+    expect(window.history.state).toMatchObject({ __jamesDailyCallDetail: { contactId: 'contact-1', fullDetails: true } });
+
+    act(() => {
+      window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }));
+    });
+
+    expect(screen.getByTestId('full-contact-details')).toBeInTheDocument();
+    expect(screen.queryByText('Loading customer details...')).not.toBeInTheDocument();
+    expect(fetchContactForDailyCallMock).toHaveBeenCalledTimes(1);
   });
 
   it('allows an authorized creator to directly edit an unverified prospect from customer details', async () => {

@@ -1942,7 +1942,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         setDetailsPanelOpen(true);
         if (detail?.fullDetails) {
           const contact = contacts.find((item) => item.id === contactId);
-          if (contact) void handleOpenFullDetails(contact);
+          if (contact && fullDetailsContact?.id !== contactId) void handleOpenFullDetails(contact);
         }
       } else {
         setDetailsPanelOpen(false);
@@ -1951,7 +1951,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     };
     window.addEventListener('popstate', syncDetailsFromHistory);
     return () => window.removeEventListener('popstate', syncDetailsFromHistory);
-  }, [contacts, handleCloseFullDetails, handleOpenFullDetails]);
+  }, [contacts, fullDetailsContact?.id, handleCloseFullDetails, handleOpenFullDetails]);
 
   const handleSetCallBookmark = useCallback(async (contactId: string | null) => {
     if (savingBookmark) return;
