@@ -64,16 +64,38 @@ describe('ContactDetails image expansion', () => {
     expect(screen.getByRole('dialog', { name: 'Full customer image' })).toBeInTheDocument();
   });
 
-  it('opens the full image when hovering over the header photo and allows it to close', async () => {
+  it('shows an immediate hover preview without opening the full image viewer', () => {
     renderProfile();
 
-    fireEvent.mouseEnter(screen.getByRole('button', { name: 'View full customer image' }));
+    const imageButton = screen.getByRole('button', { name: 'View full customer image' });
+    const image = screen.getByAltText('Example Customer cover photo');
+    fireEvent.mouseEnter(imageButton);
 
-    const lightbox = screen.getByRole('dialog', { name: 'Full customer image' });
-    expect(lightbox).toBeInTheDocument();
-    fireEvent.mouseLeave(screen.getByRole('button', { name: 'View full customer image' }));
+    expect(image).toHaveClass('object-contain');
+    expect(imageButton).toHaveClass('fixed', 'z-[2000]');
+    expect(screen.queryByRole('dialog', { name: 'Full customer image' })).not.toBeInTheDocument();
+
+    fireEvent.mouseLeave(imageButton);
+    expect(image).toHaveClass('object-cover');
+    expect(imageButton).not.toHaveClass('fixed');
+  });
+
+  it('keeps click-to-open and does not reopen the hover preview after close until pointer leaves', async () => {
+    renderProfile();
+    const imageButton = screen.getByRole('button', { name: 'View full customer image' });
+
+    fireEvent.mouseEnter(imageButton);
+    fireEvent.click(imageButton);
+    expect(screen.getByRole('dialog', { name: 'Full customer image' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Close full image' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Full customer image' })).not.toBeInTheDocument());
+
+    fireEvent.mouseEnter(imageButton);
+    expect(imageButton).not.toHaveClass('fixed');
+
+    fireEvent.mouseLeave(imageButton);
+    fireEvent.mouseEnter(imageButton);
+    expect(imageButton).toHaveClass('fixed');
   });
 
   it('opens when a downward pull starts below the top and reaches the top', () => {

@@ -48,6 +48,8 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
   const [activeTab, setActiveTab] = useState('Overview');
   const [recordImageFailed, setRecordImageFailed] = useState(false);
   const [showFullRecordImage, setShowFullRecordImage] = useState(false);
+  const [showRecordImageHoverPreview, setShowRecordImageHoverPreview] = useState(false);
+  const suppressRecordImageHoverPreviewRef = useRef(false);
   const imagePullStartYRef = useRef<number | null>(null);
   const [newComment, setNewComment] = useState('');
   const [comments, setComments] = useState<Comment[]>(contact.comments || []);
@@ -195,6 +197,18 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
   });
   const contactLocation = [contact.province, contact.city].map((value) => String(value || '').trim()).filter(Boolean).join(', ');
 
+  const openFullRecordImage = () => {
+    suppressRecordImageHoverPreviewRef.current = true;
+    setShowRecordImageHoverPreview(false);
+    setShowFullRecordImage(true);
+  };
+
+  const closeFullRecordImage = () => {
+    suppressRecordImageHoverPreviewRef.current = true;
+    setShowRecordImageHoverPreview(false);
+    setShowFullRecordImage(false);
+  };
+
   useEffect(() => {
     setRecordImageFailed(false);
   }, [contact.recordImage]);
@@ -222,7 +236,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
         imagePullStartYRef.current = null;
         const endY = event.changedTouches[0]?.clientY;
         if (startY !== null && endY !== undefined && endY - startY > 96 && scrollContainerRef.current?.scrollTop === 0 && contact.recordImage && !recordImageFailed) {
-          setShowFullRecordImage(true);
+          openFullRecordImage();
         }
       }}
     >
@@ -261,8 +275,27 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
       <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
           <div className="relative h-[172px] bg-gradient-to-r from-slate-700 via-brand-blue to-blue-500 sm:h-[230px]">
               {contact.recordImage && !recordImageFailed ? (
-                  <button type="button" className="h-full w-full cursor-zoom-in" aria-label="View full customer image" onClick={() => setShowFullRecordImage(true)} onMouseEnter={() => setShowFullRecordImage(true)}>
-                    <img src={contact.recordImage} alt={`${contact.company || contact.name || 'Customer'} cover photo`} className="h-full w-full object-cover object-center" onError={() => setRecordImageFailed(true)} />
+                  <button
+                    type="button"
+                    className={showRecordImageHoverPreview
+                      ? 'fixed inset-0 z-[2000] flex h-screen w-screen cursor-zoom-out items-center justify-center bg-slate-950/90 p-3 sm:p-8'
+                      : 'h-full w-full cursor-zoom-in'}
+                    aria-label="View full customer image"
+                    onClick={openFullRecordImage}
+                    onMouseEnter={() => {
+                      if (!suppressRecordImageHoverPreviewRef.current) setShowRecordImageHoverPreview(true);
+                    }}
+                    onMouseLeave={() => {
+                      setShowRecordImageHoverPreview(false);
+                      suppressRecordImageHoverPreviewRef.current = false;
+                    }}
+                  >
+                    <img
+                      src={contact.recordImage}
+                      alt={`${contact.company || contact.name || 'Customer'} cover photo`}
+                      className={showRecordImageHoverPreview ? 'h-full w-full object-contain' : 'h-full w-full object-cover object-center'}
+                      onError={() => setRecordImageFailed(true)}
+                    />
                   </button>
               ) : (
                   <div className="flex h-full items-center justify-center px-5 text-center sm:px-8" aria-label={`Company photo placeholder for ${contact.company || contact.name || 'Customer'}`}>
@@ -273,7 +306,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
               )}
               <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-950/45 to-transparent" aria-hidden="true" />
       </div>
-      <RecordImageLightbox src={contact.recordImage || ''} alt={`${contact.company || contact.name || 'Customer'} full image`} isOpen={showFullRecordImage} onOpen={() => setShowFullRecordImage(true)} onClose={() => setShowFullRecordImage(false)} />
+      <RecordImageLightbox src={contact.recordImage || ''} alt={`${contact.company || contact.name || 'Customer'} full image`} isOpen={showFullRecordImage} onOpen={() => setShowFullRecordImage(true)} onClose={closeFullRecordImage} />
       <div className="px-4 py-5 sm:px-8 sm:py-6">
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
               <div className="min-w-0">
