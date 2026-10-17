@@ -47,7 +47,7 @@ describe('ContactDetails image expansion', () => {
 
     const imageButton = screen.getByRole('button', { name: 'View full customer image' });
     const headerImage = screen.getByAltText('Example Customer cover photo');
-    expect(headerImage).toHaveClass('object-contain', 'object-center');
+    expect(headerImage).toHaveClass('object-cover', 'object-center');
     expect(headerImage).not.toHaveStyle({ objectPosition: '20% 80%' });
     const profileScroller = imageButton.closest('.overflow-y-auto');
     expect(profileScroller).not.toBeNull();
