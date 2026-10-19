@@ -47,6 +47,7 @@ describe('ManagementView', () => {
     render(<ManagementView currentUser={{ id: 'master-1', role: 'Master User', user_type: '1', full_name: 'Master User', main_id: 1 }} />);
 
     expect(await screen.findByRole('heading', { name: /Sales Performance Dashboard/i })).toBeInTheDocument();
+    expect(screen.getByText('Sales transactions and ledger collections by calendar month.')).toBeInTheDocument();
     expect(screen.getByText('Total Sales (YTD)')).toBeInTheDocument();
     expect(screen.getByText('₱15,722,431.20')).toBeInTheDocument();
     expect(screen.getByText('Estancia Calibration')).toBeInTheDocument();

@@ -172,7 +172,7 @@ export const ManagementView: React.FC<ManagementViewProps> = ({ currentUser }) =
         <section className="grid gap-4 xl:grid-cols-[1.65fr_1fr]">
           <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div><h2 className="text-sm font-extrabold uppercase tracking-wide text-emerald-700">Monthly Sales for {selectedYear}</h2><p className="mt-1 text-xs text-slate-500">Ledger debits and credits by calendar month.</p></div>
+              <div><h2 className="text-sm font-extrabold uppercase tracking-wide text-emerald-700">Monthly Sales for {selectedYear}</h2><p className="mt-1 text-xs text-slate-500">Sales transactions and ledger collections by calendar month.</p></div>
               <div className="text-right text-xs text-slate-500"><p>{monthLabel} sales <strong className="text-slate-800">{formatCurrencyLocal(selectedMonthSales)}</strong></p><p>{monthLabel} collections <strong className="text-slate-800">{formatCurrencyLocal(selectedMonthCollections)}</strong></p></div>
             </div>
             <div className="mt-4 h-72 w-full">
