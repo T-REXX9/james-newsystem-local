@@ -16,11 +16,12 @@ import {
   RefreshCw,
   Search,
   Star,
+  UserX,
   UserRoundCheck,
   Users,
   XCircle,
 } from 'lucide-react';
-import { createCustomerLogForDailyCall, fetchCustomersForDailyCall, fetchDailyCallMasterList, getCachedDailyCallMasterList, sendSalesReportMessage, setDailyCallDoNotContactFlag } from '../services/dailyCallMonitoringService';
+import { createCustomerLogForDailyCall, fetchCustomersForDailyCall, fetchDailyCallMasterList, getCachedDailyCallMasterList, sendSalesReportMessage, setDailyCallDoNotContactFlag, setDailyCallDoNotContactFlagsBulk } from '../services/dailyCallMonitoringService';
 import { bulkUpdateContacts, createContact, fetchContactById, fetchSalesAgents, getAssignmentHistory, isPendingDuplicateProspectApproval, mapApiCustomerToContact, setCustomerStarred, updateContact } from '../services/customerDatabaseLocalApiService';
 import { createDuplicateProspectRequest, fetchAllCustomerRequests, requestCustomerUpdate, reviewCustomerRequest } from '../services/customerWorkflowLocalApiService';
 import type { CustomerRequest } from '../services/customerWorkflowLocalApiService';
@@ -32,7 +33,7 @@ import { resolveVipDiscountLevel } from '../utils/vipStanding';
 import { DO_NOT_CONTACT_LABEL, isBlockedDailyCallMasterRow } from '../utils/dailyCallBlockedCustomer';
 import { matchesDailyCallMonitorBucket, resolveDailyCallListCategory } from '../utils/dailyCallListCategory';
 import { resolveDailyCallPurchaseHighlightColor } from '../utils/dailyCallPurchaseHighlight';
-import { DAILY_CALL_PAGE_LABEL, hasActionPermission, isMasterUserAccount } from '../constants';
+import { hasActionPermission, isMasterUserAccount } from '../constants';
 import { VERIFIED_PROSPECT_POTENTIAL } from '../utils/dailyCallPotentialSales';
 import CustomerStarIndicator from './CustomerStarIndicator';
 import { getUserFacingErrorMessage } from '../services/localApiAuth';
@@ -420,8 +421,6 @@ interface DailyCallMasterListViewProps {
 
 const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ currentUser }) => {
   const { addToast } = useToast();
-  const canEditDailyCall = isMasterUserAccount(currentUser)
-    || (Boolean(currentUser?.action_permissions) && hasActionPermission(currentUser, 'can_edit', DAILY_CALL_PAGE_LABEL));
   const [initialHistorySnapshot] = useState(readDailyCallMasterListHistorySnapshot);
   const initialCachedResult = useMemo(() => getCachedDailyCallMasterList({ fromDate }), []);
   const [rows, setRows] = useState<DailyCallMasterCustomerRow[]>(() => initialCachedResult?.items || []);
@@ -453,9 +452,16 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const [detailViewOnly, setDetailViewOnly] = useState(false);
   const [loadingCustomerId, setLoadingCustomerId] = useState<string | null>(null);
   const [savingStarId, setSavingStarId] = useState<string | null>(null);
-  const [savingDoNotCallId, setSavingDoNotCallId] = useState<string | null>(null);
   const [pendingDoNotContactRow, setPendingDoNotContactRow] = useState<DailyCallMasterCustomerRow | null>(null);
   const [doNotContactReason, setDoNotContactReason] = useState('');
+  const [pendingDoNotCallRow, setPendingDoNotCallRow] = useState<DailyCallMasterCustomerRow | null>(null);
+  const [doNotCallReason, setDoNotCallReason] = useState('');
+  const [savingDoNotCallId, setSavingDoNotCallId] = useState<string | null>(null);
+  const [doNotCallSelectionMode, setDoNotCallSelectionMode] = useState(false);
+  const [selectedDoNotCallIds, setSelectedDoNotCallIds] = useState<Set<string>>(() => new Set());
+  const [showBulkDoNotCallModal, setShowBulkDoNotCallModal] = useState(false);
+  const [bulkDoNotCallReason, setBulkDoNotCallReason] = useState('');
+  const [savingBulkDoNotCall, setSavingBulkDoNotCall] = useState(false);
   const [selectedUnverifiedIds, setSelectedUnverifiedIds] = useState<Set<string>>(() => new Set());
   const [showBatchDoNotContactModal, setShowBatchDoNotContactModal] = useState(false);
   const [batchDoNotContactReasonOption, setBatchDoNotContactReasonOption] = useState<string>('');
@@ -519,20 +525,6 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     setSelectedUnverifiedIds(new Set());
   }, []);
 
-  const handleToggleDoNotCall = useCallback(async (row: DailyCallMasterCustomerRow) => {
-    if (!canEditDailyCall || savingDoNotCallId) return;
-    setSavingDoNotCallId(row.id);
-    try {
-      const marked = await setDailyCallDoNotContactFlag(row.id, !row.doNotContact);
-      setRows(current => current.map(item => item.id === row.id ? { ...item, doNotContact: marked } : item));
-      addToast({ type: 'success', title: marked ? 'Do Not Call marked' : 'Do Not Call removed', description: `${row.shopName} was updated.` });
-    } catch {
-      addToast({ type: 'error', title: 'Unable to update Do Not Call', description: 'Please try again.' });
-    } finally {
-      setSavingDoNotCallId(null);
-    }
-  }, [addToast, canEditDailyCall, savingDoNotCallId]);
-
   const handleToggleCustomerStar = useCallback(async (row: DailyCallMasterCustomerRow) => {
     if (!isMasterUserAccount(currentUser) || savingStarId) return;
     const isStarred = !row.isStarred;
@@ -555,6 +547,86 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
       setSavingStarId(null);
     }
   }, [addToast, currentUser, savingStarId]);
+
+  const handleToggleDoNotCall = useCallback(async (row: DailyCallMasterCustomerRow, reason?: string) => {
+    if (!isMasterUserAccount(currentUser) || savingDoNotCallId) return;
+    if (row.doNotContact) {
+      setSavingDoNotCallId(row.id);
+      try {
+        await setDailyCallDoNotContactFlag(row.id, false);
+        setRows((current) => current.map((item) => item.id === row.id
+          ? { ...item, doNotContact: false, doNotContactReason: '' }
+          : item));
+        addToast({ type: 'success', title: 'Do Not Call removed', description: `${row.shopName} was updated.` });
+      } catch (error) {
+        addToast({ type: 'error', title: 'Unable to update Do Not Call', description: getUserFacingErrorMessage(error, 'Please try again.') });
+      } finally {
+        setSavingDoNotCallId(null);
+      }
+      return;
+    }
+    const cleanReason = reason?.trim() || '';
+    if (!cleanReason) {
+      setDoNotCallReason('');
+      setPendingDoNotCallRow(row);
+      return;
+    }
+    setSavingDoNotCallId(row.id);
+    try {
+      await setDailyCallDoNotContactFlag(row.id, true, cleanReason);
+      setRows((current) => current.map((item) => item.id === row.id
+        ? { ...item, doNotContact: true, doNotContactReason: cleanReason }
+        : item));
+      setPendingDoNotCallRow(null);
+      setDoNotCallReason('');
+      addToast({ type: 'success', title: 'Do Not Call marked', description: `${row.shopName} was updated.` });
+    } catch (error) {
+      addToast({ type: 'error', title: 'Unable to update Do Not Call', description: getUserFacingErrorMessage(error, 'Please try again.') });
+    } finally {
+      setSavingDoNotCallId(null);
+    }
+  }, [addToast, currentUser, savingDoNotCallId]);
+
+  const handleConfirmDoNotCall = useCallback(() => {
+    if (!pendingDoNotCallRow || !doNotCallReason.trim()) return;
+    void handleToggleDoNotCall(pendingDoNotCallRow, doNotCallReason);
+  }, [doNotCallReason, handleToggleDoNotCall, pendingDoNotCallRow]);
+
+  const handleToggleDoNotCallSelection = useCallback((id: string) => {
+    setSelectedDoNotCallIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleConfirmBulkDoNotCall = useCallback(async () => {
+    const reason = bulkDoNotCallReason.trim();
+    const selectedRows = rows.filter((row) => selectedDoNotCallIds.has(row.id) && !row.dataIntegrityException);
+    if (!isMasterUserAccount(currentUser) || savingBulkDoNotCall || !reason || selectedRows.length === 0) return;
+    setSavingBulkDoNotCall(true);
+    try {
+      const markedCount = await setDailyCallDoNotContactFlagsBulk(selectedRows.map((row) => row.id), reason);
+      const selectedIds = new Set(selectedRows.map((row) => row.id));
+      setRows((current) => current.map((row) => selectedIds.has(row.id)
+        ? { ...row, doNotContact: true, doNotContactReason: reason }
+        : row));
+      setSelectedDoNotCallIds(new Set());
+      setDoNotCallSelectionMode(false);
+      setShowBulkDoNotCallModal(false);
+      setBulkDoNotCallReason('');
+      addToast({
+        type: 'success',
+        title: 'Customers marked Do Not Call',
+        description: `${markedCount} customer${markedCount === 1 ? '' : 's'} were marked with the shared reason.`,
+      });
+    } catch (error) {
+      addToast({ type: 'error', title: 'Unable to mark selected customers', description: getUserFacingErrorMessage(error, 'No customers were changed. Please try again.') });
+    } finally {
+      setSavingBulkDoNotCall(false);
+    }
+  }, [addToast, bulkDoNotCallReason, currentUser, rows, savingBulkDoNotCall, selectedDoNotCallIds]);
 
   const openCustomerDetails = useCallback(async (row: DailyCallMasterCustomerRow, initialTab: DetailTabId = 'overview') => {
     setDetailInitialTab(initialTab);
@@ -1015,7 +1087,11 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     return Math.max(0, threshold - (row.lastMonthSales || 0));
   };
 
-  const activeCategory = categoryData.find((category) => category.id === activeCategoryId) || categoryData[0];
+  const selectedCategory = categoryData.find((category) => category.id === activeCategoryId) || categoryData[0];
+  const hasActiveSearch = Object.values(search).some((value) => value.trim().length > 0);
+  const activeCategory = hasActiveSearch && isMasterUserAccount(currentUser)
+    ? categoryData.find((category) => category.id === 'all') || selectedCategory
+    : selectedCategory;
   const actionableCategoryRows = activeCategory.rows.filter((row) => !row.dataIntegrityException);
   const showingUnverifiedSubmissions = activeCategory.id === 'unverified' && unverifiedListTab === 'submissions';
   const visibleRows = showingUnverifiedSubmissions ? [] : activeCategory.rows.slice(0, visibleLimit);
@@ -1029,11 +1105,32 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const allVisibleUnverifiedSelected = selectableUnverifiedRows.length > 0
     && selectableUnverifiedRows.every((row) => selectedUnverifiedIds.has(row.id));
   const showMasterActions = canUseMasterDailyCallActions(currentUser);
+  const selectableDoNotCallRows = doNotCallSelectionMode && showMasterActions && !showingUnverifiedSubmissions
+    ? visibleRows.filter((row) => !row.dataIntegrityException)
+    : [];
+  const isDoNotCallSelectionMode = doNotCallSelectionMode && showMasterActions && !showingUnverifiedSubmissions;
+  const selectableDoNotCallIds = new Set(selectableDoNotCallRows.map((row) => row.id));
+  const selectedDoNotCallRows = rows.filter((row) => selectedDoNotCallIds.has(row.id) && !row.dataIntegrityException);
+  const allVisibleDoNotCallSelected = selectableDoNotCallRows.length > 0
+    && selectableDoNotCallRows.every((row) => selectedDoNotCallIds.has(row.id));
   // Daily Call actions follow the explicit Customer Database edit grant. Keep
   // the legacy master-user access, but do not treat missing action metadata as
   // permission (the shared helper defaults missing metadata to allow).
   const canEditCustomerDatabase = showMasterActions || Boolean(currentUser?.action_permissions)
     && hasActionPermission(currentUser, 'can_edit', 'Customer Data');
+
+  const handleToggleAllVisibleDoNotCall = useCallback(() => {
+    setSelectedDoNotCallIds((current) => {
+      const next = new Set(current);
+      const allSelected = selectableDoNotCallRows.length > 0
+        && selectableDoNotCallRows.every((row) => next.has(row.id));
+      for (const row of selectableDoNotCallRows) {
+        if (allSelected) next.delete(row.id);
+        else next.add(row.id);
+      }
+      return next;
+    });
+  }, [selectableDoNotCallRows]);
 
   const handleToggleUnverifiedSelection = useCallback((id: string) => {
     setSelectedUnverifiedIds((current) => {
@@ -1501,7 +1598,6 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
       <section aria-label="Customer category table">
         {activeCategory && (
           <article
-            key={activeCategory.id}
             tabIndex={-1}
             data-testid={`category-table-${activeCategory.id}`}
             className="flex min-h-[430px] scroll-mt-4 flex-col overflow-visible rounded-xl border border-slate-200 bg-white shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-blue-500 2xl:min-h-[500px]"
@@ -1510,8 +1606,21 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
               <h3 className={`text-xl font-bold uppercase ${activeCategory.accent}`}>
                 {activeCategory.label} <span className="ml-2 text-sm normal-case">({activeCategory.note})</span>
               </h3>
-              <div className="flex items-center gap-3">
-                <span className="flex items-center gap-2 text-sm"><i className={`h-3 w-3 rounded-full ${activeCategory.dot}`} />{activeCategory.state}</span>
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              {showMasterActions && !showingUnverifiedSubmissions && (
+                <button
+                  type="button"
+                  aria-pressed={isDoNotCallSelectionMode}
+                  onClick={() => {
+                    setDoNotCallSelectionMode((active) => !active);
+                    setSelectedDoNotCallIds(new Set());
+                  }}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 ${isDoNotCallSelectionMode ? 'border-red-300 bg-red-50 text-red-800 hover:bg-red-100' : 'border-red-200 bg-white text-red-700 hover:bg-red-50'}`}
+                >
+                  {isDoNotCallSelectionMode ? 'Cancel Do Not Call selection' : 'Bulk Do Not Call'}
+                </button>
+              )}
+              <span className="flex items-center gap-2 text-sm"><i className={`h-3 w-3 rounded-full ${activeCategory.dot}`} />{activeCategory.state}</span>
                 {showMasterActions && !showingUnverifiedSubmissions && (
                   <div className="flex items-center gap-2">
                     <select
@@ -1592,14 +1701,18 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 <button
                   type="button"
                   aria-pressed={unverifiedListTab === 'submissions'}
-                  onClick={() => setUnverifiedListTab('submissions')}
+                  onClick={() => {
+                    setUnverifiedListTab('submissions');
+                    setDoNotCallSelectionMode(false);
+                    setSelectedDoNotCallIds(new Set());
+                  }}
                   className={`rounded-lg border px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${unverifiedListTab === 'submissions' ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
                 >
                   Duplicate submissions <span className="ml-1 rounded-full bg-white/80 px-2 py-0.5 text-xs">{pendingDuplicateProspects.length}</span>
                 </button>
               </div>
             )}
-            {isUnverifiedCustomerList && (
+            {isUnverifiedCustomerList && !isDoNotCallSelectionMode && (
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-orange-100 bg-orange-50/60 px-4 py-2.5">
                 <label className="inline-flex min-h-9 items-center gap-2 text-sm font-semibold text-slate-700">
                   <input
@@ -1630,6 +1743,33 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 </div>
               </div>
             )}
+            {isDoNotCallSelectionMode && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-red-100 bg-red-50/60 px-4 py-2.5">
+                <label className="inline-flex min-h-9 items-center gap-2 text-sm font-semibold text-slate-700">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all visible customers for Do Not Call"
+                    checked={allVisibleDoNotCallSelected}
+                    disabled={selectableDoNotCallRows.length === 0 || savingBulkDoNotCall}
+                    onChange={handleToggleAllVisibleDoNotCall}
+                    className="h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500"
+                  />
+                  Select all visible ({selectableDoNotCallRows.length})
+                </label>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-xs font-semibold text-slate-600" aria-live="polite">{selectedDoNotCallRows.length} selected</span>
+                  <button
+                    type="button"
+                    onClick={() => { setBulkDoNotCallReason(''); setShowBulkDoNotCallModal(true); }}
+                    disabled={selectedDoNotCallRows.length === 0 || savingBulkDoNotCall}
+                    className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-red-700 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <UserX className="h-4 w-4" aria-hidden="true" />
+                    Mark selected Do Not Call
+                  </button>
+                </div>
+              </div>
+            )}
             <div
               ref={tableScrollRef}
               className="min-h-0 flex-1"
@@ -1639,7 +1779,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
               <table className="min-w-[1450px] w-full table-fixed border-separate border-spacing-0 text-left text-sm">
                 <thead className="sticky top-0 z-20 bg-slate-50 text-xs text-slate-600 shadow-sm [&_th]:sticky [&_th]:top-0 [&_th]:z-20 [&_th]:border-b [&_th]:border-slate-200 [&_th]:bg-slate-50">
                   <tr>
-                    {isUnverifiedCustomerList && <th className="w-10 px-2 py-2.5 text-center" aria-label="Select prospect" />}
+                    {isDoNotCallSelectionMode ? <th className="w-10 px-2 py-2.5 text-center" aria-label="Select customer for Do Not Call" /> : isUnverifiedCustomerList && <th className="w-10 px-2 py-2.5 text-center" aria-label="Select prospect" />}
                     <th className="w-12 px-3 py-2.5">#</th>
                     <th className="w-[200px] px-2 py-2.5">Customer / Mobile</th>
                     <th className="w-[125px] px-2 py-2.5 text-center">VIP Status</th>
@@ -1762,7 +1902,16 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                     const TrendIcon = trend.Icon;
                     return (
                       <tr key={row.id} title={highlight.label} className={`border-t border-slate-100 align-top transition-colors ${highlight.row}`}>
-                        {isUnverifiedCustomerList && <td className="px-2 py-2.5 text-center">
+                        {isDoNotCallSelectionMode ? <td className="px-2 py-2.5 text-center">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${row.shopName} for Do Not Call`}
+                            checked={selectedDoNotCallIds.has(row.id)}
+                            disabled={!selectableDoNotCallIds.has(row.id) || savingBulkDoNotCall}
+                            onChange={() => handleToggleDoNotCallSelection(row.id)}
+                            className="h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500"
+                          />
+                        </td> : isUnverifiedCustomerList && <td className="px-2 py-2.5 text-center">
                           <input
                             type="checkbox"
                             aria-label={`Select ${row.shopName}`}
@@ -1799,17 +1948,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                           ) : (
                             <CustomerStarIndicator customerId={row.id} isStarred={row.isStarred} className="ml-1 inline h-3.5 w-3.5" />
                           )}
-                          {canEditDailyCall ? <button
-                            type="button"
-                            onClick={() => void handleToggleDoNotCall(row)}
-                            disabled={savingDoNotCallId === row.id}
-                            aria-pressed={Boolean(row.doNotContact)}
-                            aria-label={`${row.doNotContact ? 'Remove' : 'Mark'} ${row.shopName} Do Not Call`}
-                            title={row.doNotContact ? 'Remove Do Not Call badge' : 'Mark Do Not Call'}
-                            className={`ml-1 inline-flex rounded px-1.5 py-0.5 align-middle text-[9px] font-extrabold uppercase disabled:opacity-50 ${row.doNotContact ? 'bg-rose-100 text-rose-800' : 'border border-slate-200 text-slate-500 hover:bg-rose-50 hover:text-rose-700'}`}
-                          >
-                            {savingDoNotCallId === row.id ? 'Saving…' : row.doNotContact ? 'Do Not Call' : '+ Do Not Call'}
-                          </button> : row.doNotContact && <span role="status" aria-label={`${row.shopName} Do Not Call`} className="ml-1 inline-flex rounded bg-rose-100 px-1.5 py-0.5 align-middle text-[9px] font-extrabold uppercase text-rose-800">Do Not Call</span>}
+                          {row.doNotContact && <span role="status" aria-label={`${row.shopName} Do Not Call`} className="ml-1 inline-flex rounded bg-red-100 px-1.5 py-0.5 align-middle text-[9px] font-extrabold uppercase text-red-800">Do Not Call</span>}
                           {row.dataIntegrityException && (
                             <p className="mt-1 inline-flex rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800" title={row.dataIntegrityMessage || 'Missing active customer record'}>
                               Data repair needed
@@ -1925,6 +2064,20 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                         </td>
                         <td className="w-[240px] px-2 py-2.5">
                           <div className="flex w-full flex-nowrap items-center justify-center gap-1.5">
+                            {isMasterUserAccount(currentUser) && !row.dataIntegrityException && (
+                              <button
+                                type="button"
+                                aria-label={`${row.doNotContact ? 'Remove' : 'Mark'} ${row.shopName} Do Not Call`}
+                                aria-pressed={Boolean(row.doNotContact)}
+                                title={row.doNotContact ? 'Remove Do Not Call mark' : 'Mark Do Not Call'}
+                                onClick={() => void handleToggleDoNotCall(row)}
+                                disabled={savingDoNotCallId === row.id}
+                                className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-1.5 text-[10px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-60 ${row.doNotContact ? 'border-red-600 bg-red-700 text-white hover:bg-red-800' : 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100'}`}
+                              >
+                                {savingDoNotCallId === row.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <UserX className="h-3.5 w-3.5" aria-hidden="true" />}
+                                <span>{row.doNotContact ? 'Remove DNC' : 'Mark DNC'}</span>
+                              </button>
+                            )}
                             {activeCategory.id === 'unverified' && canDirectlyEditUnverifiedProspect(currentUser, row)
                               && isProspectRow(row)
                               && !isVerifiedByWorkflow(row)
@@ -2014,7 +2167,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                   {((showingUnverifiedSubmissions && pendingDuplicateProspects.length === 0)
                     || (activeCategory.id === 'unverified' && !showingUnverifiedSubmissions && activeCategory.rows.length === 0)
                     || (activeCategory.id !== 'unverified' && activeCategory.rows.length === 0)) && (
-                    <tr><td colSpan={isUnverifiedCustomerList ? 12 : 11} className="px-3 py-12 text-center text-xs text-slate-400">
+                    <tr><td colSpan={isDoNotCallSelectionMode || isUnverifiedCustomerList ? 12 : 11} className="px-3 py-12 text-center text-xs text-slate-400">
                       {showingUnverifiedSubmissions ? 'No duplicate prospect submissions from sales agents awaiting review.' : 'No customers in this category.'}
                     </td></tr>
                   )}
@@ -2083,6 +2236,84 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {showBulkDoNotCallModal && isMasterUserAccount(currentUser) && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 px-4 py-6" role="presentation">
+          <form
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="bulk-do-not-call-title"
+            className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-2xl"
+            onSubmit={(event) => { event.preventDefault(); void handleConfirmBulkDoNotCall(); }}
+          >
+            <h2 id="bulk-do-not-call-title" className="text-base font-bold text-slate-950">Mark {selectedDoNotCallRows.length} customers as Do Not Call</h2>
+            <p className="mt-1 text-sm text-slate-600">This shared reason will appear on each customer profile.</p>
+            <label className="mt-4 block text-xs font-semibold text-slate-700" htmlFor="bulk-do-not-call-reason">Shared reason</label>
+            <textarea
+              id="bulk-do-not-call-reason"
+              value={bulkDoNotCallReason}
+              onChange={(event) => setBulkDoNotCallReason(event.target.value)}
+              maxLength={500}
+              required
+              rows={3}
+              placeholder="e.g. not a real customer"
+              className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setShowBulkDoNotCallModal(false); setBulkDoNotCallReason(''); }}
+                disabled={savingBulkDoNotCall}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+              >Cancel</button>
+              <button
+                type="submit"
+                disabled={!bulkDoNotCallReason.trim() || savingBulkDoNotCall || selectedDoNotCallRows.length === 0}
+                className="rounded-lg bg-red-700 px-3 py-2 text-sm font-bold text-white hover:bg-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              >{savingBulkDoNotCall ? 'Saving…' : `Mark ${selectedDoNotCallRows.length} customers`}</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {pendingDoNotCallRow && isMasterUserAccount(currentUser) && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 px-4 py-6" role="presentation">
+          <form
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="do-not-call-reason-title"
+            className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-2xl"
+            onSubmit={(event) => { event.preventDefault(); handleConfirmDoNotCall(); }}
+          >
+            <h2 id="do-not-call-reason-title" className="text-base font-bold text-slate-950">Mark {pendingDoNotCallRow.shopName} as Do Not Call</h2>
+            <p className="mt-1 text-sm text-slate-600">Add a reason. Sales agents will see it on the customer profile.</p>
+            <label className="mt-4 block text-xs font-semibold text-slate-700" htmlFor="do-not-call-reason">Reason</label>
+            <textarea
+              id="do-not-call-reason"
+              value={doNotCallReason}
+              onChange={(event) => setDoNotCallReason(event.target.value)}
+              maxLength={500}
+              required
+              rows={3}
+              placeholder="e.g. not a real customer"
+              className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setPendingDoNotCallRow(null); setDoNotCallReason(''); }}
+                disabled={savingDoNotCallId === pendingDoNotCallRow.id}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+              >Cancel</button>
+              <button
+                type="submit"
+                disabled={!doNotCallReason.trim() || savingDoNotCallId !== null}
+                className="rounded-lg bg-red-700 px-3 py-2 text-sm font-bold text-white hover:bg-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              >{savingDoNotCallId === pendingDoNotCallRow.id ? 'Saving…' : 'Mark Do Not Call'}</button>
+            </div>
+          </form>
         </div>
       )}
 

@@ -390,14 +390,16 @@ describe('DailyCallMonitoringView communication actions', () => {
           outstandingBalance: 0,
         },
       ],
+      masterList: [{ id: 'blacklisted-by-status', shopName: 'Blacklisted By Status', customerStatus: 4, debtType: 'Good', listCategory: 'blocked', purchaseCount: 0 }],
     });
 
-    render(<DailyCallMonitoringView currentUser={currentUser} />);
+    render(<DailyCallMonitoringView currentUser={{ ...currentUser, user_type: '1' }} />);
 
     await expandList('blacklisted/rejected -do not contact');
     const blockedList = (await screen.findByText('Blacklisted By Status')).closest('article')!;
     expect(within(blockedList).getByText('Blacklisted By Status')).toBeInTheDocument();
     expect(within(blockedList).queryByText('Good Debt With Balance')).not.toBeInTheDocument();
+    expect(within(blockedList).getByRole('button', { name: 'Mark Blacklisted By Status Do Not Call' })).toHaveClass('bg-red-100');
   });
 
   it('shows company-wide do-not-contact identities without exposing contact or sales actions', async () => {
@@ -470,7 +472,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(screen.getByText('Stop here')).toBeInTheDocument();
   });
 
-  it('marks a customer Do Not Call without changing its customer status', async () => {
+  it('requires a reason when a master user marks a customer Do Not Call', async () => {
     const user = userEvent.setup();
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
       ...baseSnapshot,
@@ -480,18 +482,20 @@ describe('DailyCallMonitoringView communication actions', () => {
     });
     setDailyCallDoNotContactFlagMock.mockResolvedValue(true);
 
-    render(<DailyCallMonitoringView currentUser={{ ...currentUser, action_permissions: { pages: { 'Daily Call Monitoring Dashboard': { can_view: true, can_add: true, can_edit: true, can_delete: false } } } }} />);
+    render(<DailyCallMonitoringView currentUser={{ ...currentUser, user_type: '1' }} />);
     await expandList('Priority List', user);
     const doNotCallButton = await screen.findByRole('button', { name: 'Mark Test Shop Do Not Call' });
-    expect(doNotCallButton).toHaveClass('block', 'whitespace-nowrap', 'shrink-0');
-    expect(doNotCallButton.parentElement).not.toHaveClass('flex');
     await user.click(doNotCallButton);
+    const dialog = await screen.findByRole('dialog', { name: 'Mark Test Shop as Do Not Call' });
+    expect(within(dialog).getByRole('button', { name: 'Mark Do Not Call' })).toBeDisabled();
+    await user.type(within(dialog).getByLabelText('Reason'), 'not a real customer');
+    await user.click(within(dialog).getByRole('button', { name: 'Mark Do Not Call' }));
 
-    expect(setDailyCallDoNotContactFlagMock).toHaveBeenCalledWith('contact-1', true);
+    expect(setDailyCallDoNotContactFlagMock).toHaveBeenCalledWith('contact-1', true, 'not a real customer');
     expect(await screen.findByRole('button', { name: 'Remove Test Shop Do Not Call' })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('does not expose Do Not Call controls without Daily Call edit permission', async () => {
+  it('does not expose Do Not Call controls to non-master users', async () => {
     const user = userEvent.setup();
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
       ...baseSnapshot,
@@ -505,7 +509,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(screen.getByRole('status', { name: 'Test Shop Do Not Call' })).toBeInTheDocument();
   });
 
-  it('does not open the customer when the Do Not Call control is activated by keyboard', async () => {
+  it('opens the reason dialog without opening the customer when the action is clicked', async () => {
     const user = userEvent.setup();
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
       ...baseSnapshot,
@@ -515,13 +519,13 @@ describe('DailyCallMonitoringView communication actions', () => {
     });
     setDailyCallDoNotContactFlagMock.mockResolvedValue(true);
 
-    render(<DailyCallMonitoringView currentUser={{ ...currentUser, action_permissions: { pages: { 'Daily Call Monitoring Dashboard': { can_view: true, can_edit: true } } } }} />);
+    render(<DailyCallMonitoringView currentUser={{ ...currentUser, user_type: '1' }} />);
     await expandList('Priority List', user);
     const button = await screen.findByRole('button', { name: 'Mark Test Shop Do Not Call' });
-    button.focus();
-    await user.keyboard('{Enter}');
+    await user.click(button);
 
-    await waitFor(() => expect(setDailyCallDoNotContactFlagMock).toHaveBeenCalledWith('contact-1', true));
+    expect(await screen.findByRole('dialog', { name: 'Mark Test Shop as Do Not Call' })).toBeInTheDocument();
+    expect(setDailyCallDoNotContactFlagMock).not.toHaveBeenCalled();
     expect(fetchContactForDailyCallMock).not.toHaveBeenCalled();
     expect(screen.queryByTestId('full-contact-details')).not.toBeInTheDocument();
   });

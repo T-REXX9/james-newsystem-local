@@ -768,6 +768,7 @@ export interface LBCRTORecord {
 export interface DailyCallCustomerRow {
   id: string;
   doNotContact?: boolean;
+  doNotContactReason?: string;
   isStarred?: boolean;
   source: string;
   assignedTo: string;
@@ -811,6 +812,7 @@ export interface DailyCallCustomerRow {
 export interface DailyCallMasterCustomerRow {
   id: string;
   doNotContact?: boolean;
+  doNotContactReason?: string;
   shopName: string;
   isStarred?: boolean;
   pastName?: string;

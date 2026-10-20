@@ -120,6 +120,16 @@ export const isMasterUserAccount = (user?: { role?: string | null; user_type?: s
   return isCompanyOwnerRole(user?.role) || ['master user', 'owner', 'company owner', 'main'].includes(role);
 };
 
+/** Sales staff account claims used to hide company-wide potential sales totals. */
+export const isSalesStaffAccount = (user?: { role?: string | null; user_type?: string | number | null } | null): boolean => {
+  const role = String(user?.role || '').trim().toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
+  return String(user?.user_type ?? '') === '2'
+    || role.includes('sales agent')
+    || role === 'sales staff'
+    || role === 'sales person'
+    || role === 'salesperson';
+};
+
 export const DEFAULT_ACTION_PERMISSIONS = {
   can_view: true,
   can_approve: true,

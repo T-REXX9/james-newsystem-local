@@ -108,7 +108,7 @@ import {
 import { VERIFIED_PROSPECT_POTENTIAL, averageMonthlyPaidSales } from '../utils/dailyCallPotentialSales';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import { DEFAULT_CUSTOMER_VAT_TYPE } from '../constants/customerVat';
-import { DAILY_CALL_PAGE_LABEL, hasActionPermission, isMasterUserAccount } from '../constants';
+import { DAILY_CALL_PAGE_LABEL, hasActionPermission, isMasterUserAccount, isSalesStaffAccount } from '../constants';
 import { createWorkflowHistoryState } from '../utils/workflowHistory';
 import { canPerformAction } from '../utils/actionPermissions';
 import {
@@ -654,14 +654,15 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const { addToast } = useToast();
   const canAdd = canPerformAction('can_add');
   const canEdit = canPerformAction('can_edit');
-  const canEditDoNotCall = isMasterUserAccount(currentUser)
-    || (Boolean(currentUser?.action_permissions) && hasActionPermission(currentUser, 'can_edit', DAILY_CALL_PAGE_LABEL));
+  const canManageDoNotCall = isMasterUserAccount(currentUser);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [masterListRows, setMasterListRows] = useState<DailyCallMasterCustomerRow[]>([]);
   const [doNotContactCustomers, setDoNotContactCustomers] = useState<DailyCallDoNotContactCustomer[]>([]);
   const [bookmarkedContactId, setBookmarkedContactId] = useState<string | null>(null);
   const [savingBookmark, setSavingBookmark] = useState(false);
   const [savingDoNotCallId, setSavingDoNotCallId] = useState<string | null>(null);
+  const [pendingDoNotCallContact, setPendingDoNotCallContact] = useState<{ id: string; company: string } | null>(null);
+  const [doNotCallReason, setDoNotCallReason] = useState('');
   const [activeWorkspacePanel, setActiveWorkspacePanel] = useState<'quota' | 'calls' | 'summaries' | 'filters' | 'actions' | null>(null);
   const [callLogs, setCallLogs] = useState<CallLogEntry[]>([]);
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
@@ -1227,6 +1228,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     () => contacts.find((contact) => contact.id === selectedClientId) || null,
     [contacts, selectedClientId]
   );
+  const selectedClientDoNotCall = Boolean(masterListRows.find((row) => row.id === selectedClientId)?.doNotContact);
+  const selectedClientDoNotCallReason = masterListRows.find((row) => row.id === selectedClientId)?.doNotContactReason || '';
   const selectedClientBlocked = selectedClient ? isBlockedContact(selectedClient) : false;
 
   const handleSalesReportConversationRead = useCallback((contactId: string) => {
@@ -1703,7 +1706,6 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     if (bucket === 'verified') return total + VERIFIED_PROSPECT_POTENTIAL;
     return total;
   }, 0), [masterListRows]);
-
   useEffect(() => {
     if (!masterRows.length) {
       if (selectedClientId !== null) {
@@ -1979,19 +1981,42 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   }, [addToast, masterRows, savingBookmark]);
 
   const handleToggleDoNotCall = useCallback(async (contactId: string) => {
-    if (!canEditDoNotCall || savingDoNotCallId) return;
-    const current = masterListRows.find(row => row.id === contactId)?.doNotContact ?? false;
+    if (!canManageDoNotCall || savingDoNotCallId) return;
+    const currentRow = masterListRows.find(row => row.id === contactId);
+    if (!currentRow?.doNotContact) {
+      setDoNotCallReason('');
+      setPendingDoNotCallContact({ id: contactId, company: currentRow?.shopName || contacts.find(contact => contact.id === contactId)?.company || 'Customer' });
+      return;
+    }
     setSavingDoNotCallId(contactId);
     try {
-      const marked = await setDailyCallDoNotContactFlag(contactId, !current);
-      setMasterListRows(rows => rows.map(row => row.id === contactId ? { ...row, doNotContact: marked } : row));
-      addToast({ type: 'success', title: marked ? 'Do Not Call marked' : 'Do Not Call removed', description: 'The customer badge was updated.' });
+      await setDailyCallDoNotContactFlag(contactId, false);
+      setMasterListRows(rows => rows.map(row => row.id === contactId ? { ...row, doNotContact: false, doNotContactReason: '' } : row));
+      addToast({ type: 'success', title: 'Do Not Call removed', description: 'The customer flag was updated.' });
     } catch {
       addToast({ type: 'error', title: 'Unable to update Do Not Call', description: 'Please try again.' });
     } finally {
       setSavingDoNotCallId(null);
     }
-  }, [addToast, canEditDoNotCall, masterListRows, savingDoNotCallId]);
+  }, [addToast, canManageDoNotCall, contacts, masterListRows, savingDoNotCallId]);
+
+  const handleConfirmDoNotCall = useCallback(async () => {
+    if (!canManageDoNotCall || !pendingDoNotCallContact || savingDoNotCallId || !doNotCallReason.trim()) return;
+    const { id, company } = pendingDoNotCallContact;
+    const reason = doNotCallReason.trim();
+    setSavingDoNotCallId(id);
+    try {
+      await setDailyCallDoNotContactFlag(id, true, reason);
+      setMasterListRows(rows => rows.map(row => row.id === id ? { ...row, doNotContact: true, doNotContactReason: reason } : row));
+      setPendingDoNotCallContact(null);
+      setDoNotCallReason('');
+      addToast({ type: 'success', title: 'Do Not Call marked', description: `${company} was updated.` });
+    } catch {
+      addToast({ type: 'error', title: 'Unable to update Do Not Call', description: 'Please try again.' });
+    } finally {
+      setSavingDoNotCallId(null);
+    }
+  }, [addToast, canManageDoNotCall, doNotCallReason, pendingDoNotCallContact, savingDoNotCallId]);
 
   const handleMasterRowCall = useCallback((contact: Contact) => {
     handleOpenCallContact(contact);
@@ -2187,17 +2212,19 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         ))}
       </section>
 
-      <article
-        className="flex min-h-[78px] max-w-sm items-center justify-between rounded-xl border border-violet-200 bg-violet-50/70 px-3 py-2 text-violet-700"
-        aria-label="Total Potential Sales"
-        data-testid="sales-agent-total-potential-sales"
-      >
-        <div className="min-w-0">
-          <p className="text-xs font-bold">Total Potential Sales</p>
-          <p className="mt-1 truncate text-xl font-extrabold text-slate-950">{formatCurrency(totalPotentialSales)}</p>
-        </div>
-        <BarChart3 className="h-6 w-6 shrink-0 text-violet-700" aria-hidden="true" />
-      </article>
+      {!isSalesStaffAccount(currentUser) && (
+        <article
+          className="flex min-h-[78px] max-w-sm items-center justify-between rounded-xl border border-violet-200 bg-violet-50/70 px-3 py-2 text-violet-700"
+          aria-label="Total Potential Sales"
+          data-testid="sales-agent-total-potential-sales"
+        >
+          <div className="min-w-0">
+            <p className="text-xs font-bold">Total Potential Sales</p>
+            <p className="mt-1 truncate text-xl font-extrabold text-slate-950">{formatCurrency(totalPotentialSales)}</p>
+          </div>
+          <BarChart3 className="h-6 w-6 shrink-0 text-violet-700" aria-hidden="true" />
+        </article>
+      )}
 
       {hasLoadedData && <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5" aria-label="Daily call customer category summary cards">
         {customerListSummaries.map((summary) => {
@@ -2382,16 +2409,30 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                           >
                             <td className="p-0">
                               {summary.id === 'blocked' ? (
-                                <div className="grid w-full grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-2 text-left shadow-sm dark:border-red-900/70 dark:bg-red-950/20">
+                                <div className="grid w-full grid-cols-[1.25rem_minmax(0,1fr)_1.5rem] items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-2 text-left shadow-sm dark:border-red-900/70 dark:bg-red-950/20">
                                   <span className="text-[11px] font-extrabold text-slate-400">{index + 1}</span>
                                   <span className="min-w-0">
                                     <span className="block truncate text-[11px] font-extrabold uppercase leading-tight text-[#10244c] dark:text-white" title={row.contact.company}>{row.contact.company}</span>
-                                    {canEditDoNotCall ? <button type="button" onClick={(event) => { event.stopPropagation(); void handleToggleDoNotCall(row.contact.id); }} onKeyDown={(event) => event.stopPropagation()} aria-pressed={Boolean(masterListRows.find(item => item.id === row.contact.id)?.doNotContact)} aria-label={`${masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'Remove' : 'Mark'} ${row.contact.company} Do Not Call`} className="mt-1 inline-flex max-w-full whitespace-normal break-words rounded bg-rose-100 px-1.5 py-1 text-left text-[9px] font-extrabold uppercase leading-tight text-rose-800 hover:bg-rose-200 disabled:opacity-50" disabled={savingDoNotCallId === row.contact.id}>
-                                      {savingDoNotCallId === row.contact.id ? 'Saving…' : masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'Do Not Call' : '+ Do Not Call'}
-                                    </button> : masterListRows.find(item => item.id === row.contact.id)?.doNotContact && <span role="status" aria-label={`${row.contact.company} Do Not Call`} className="mt-1 inline-flex rounded bg-rose-100 px-1.5 py-1 text-[9px] font-extrabold uppercase leading-tight text-rose-800">Do Not Call</span>}
+                                    {masterListRows.find(item => item.id === row.contact.id)?.doNotContact && <span role="status" aria-label={`${row.contact.company} Do Not Call`} className="mt-1 inline-flex rounded bg-red-100 px-1.5 py-1 text-[9px] font-extrabold uppercase leading-tight text-red-800">Do Not Call</span>}
                                     <span className="mt-0.5 block truncate text-[10px] font-semibold text-slate-600 dark:text-slate-300">Assigned to {row.contact.salesman || 'Unassigned'}{row.contact.team ? ` · ${row.contact.team}` : ''}</span>
                                     <span className="mt-1 inline-flex rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-extrabold uppercase text-red-800 dark:bg-red-900/50 dark:text-red-200">Do not contact</span>
                                   </span>
+                                  {canManageDoNotCall && masterListRows.some(item => item.id === row.contact.id) && (
+                                    <button
+                                      type="button"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        void handleToggleDoNotCall(row.contact.id);
+                                      }}
+                                      disabled={savingDoNotCallId === row.contact.id}
+                                      aria-pressed={Boolean(masterListRows.find(item => item.id === row.contact.id)?.doNotContact)}
+                                      aria-label={`${masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'Remove' : 'Mark'} ${row.contact.company} Do Not Call`}
+                                      title={masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'Remove Do Not Call' : 'Mark Do Not Call'}
+                                      className={`grid h-6 w-6 place-items-center rounded-full border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1 disabled:opacity-50 ${masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'border-red-500 bg-red-700 text-white hover:bg-red-800' : 'border-red-300 bg-red-100 text-red-800 hover:bg-red-200 dark:border-red-700 dark:bg-red-950 dark:text-red-200'}`}
+                                    >
+                                      {savingDoNotCallId === row.contact.id ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : <UserX className="h-3 w-3" aria-hidden="true" />}
+                                    </button>
+                                  )}
                                 </div>
                               ) : <div className={`grid w-full grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-2 gap-y-1 rounded-lg border p-2 text-left shadow-sm transition-colors group-hover:border-blue-200 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800 ${highlight.className} ${selectedClientId === row.contact.id ? 'border-blue-300 ring-1 ring-blue-200 dark:bg-brand-blue/10' : ''}`}>
                               <span className="row-span-3 pt-0.5 text-[11px] font-extrabold text-slate-400">{index + 1}</span>
@@ -2418,9 +2459,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                     </span>
                                   )}
                                 </span>
-                                {canEditDoNotCall ? <button type="button" onClick={(event) => { event.stopPropagation(); void handleToggleDoNotCall(row.contact.id); }} onKeyDown={(event) => event.stopPropagation()} aria-pressed={Boolean(masterListRows.find(item => item.id === row.contact.id)?.doNotContact)} aria-label={`${masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'Remove' : 'Mark'} ${row.contact.company} Do Not Call`} className={`mt-1 block w-fit max-w-full shrink-0 whitespace-nowrap rounded px-1 py-0.5 text-left text-[8px] font-extrabold uppercase leading-tight disabled:opacity-50 ${masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'bg-rose-100 text-rose-800' : 'border border-slate-200 text-slate-500 hover:bg-rose-50 hover:text-rose-700'}`} disabled={savingDoNotCallId === row.contact.id}>
-                                  {savingDoNotCallId === row.contact.id ? 'Saving…' : masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'Do Not Call' : '+ Do Not Call'}
-                                </button> : masterListRows.find(item => item.id === row.contact.id)?.doNotContact && <span role="status" aria-label={`${row.contact.company} Do Not Call`} className="mt-1 block w-fit rounded bg-rose-100 px-1 py-0.5 text-[8px] font-extrabold uppercase leading-tight text-rose-800">Do Not Call</span>}
+                                {masterListRows.find(item => item.id === row.contact.id)?.doNotContact && <span role="status" aria-label={`${row.contact.company} Do Not Call`} className="mt-1 block w-fit rounded bg-red-100 px-1 py-0.5 text-[8px] font-extrabold uppercase leading-tight text-red-800">Do Not Call</span>}
                                 {row.contact.team && (
                                   <span className="mt-0.5 block truncate text-[9px] font-bold uppercase leading-tight text-indigo-700 dark:text-indigo-300" title={`Team: ${row.contact.team}`}>
                                     Team: {row.contact.team}
@@ -2442,6 +2481,22 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                 </span>
                               </span>
                               <span className="col-start-2 flex flex-wrap items-center gap-1">
+                                {canManageDoNotCall && (
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      void handleToggleDoNotCall(row.contact.id);
+                                    }}
+                                    disabled={savingDoNotCallId === row.contact.id}
+                                    aria-pressed={Boolean(masterListRows.find(item => item.id === row.contact.id)?.doNotContact)}
+                                    aria-label={`${masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'Remove' : 'Mark'} ${row.contact.company} Do Not Call`}
+                                    title={masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'Remove Do Not Call' : 'Mark Do Not Call'}
+                                    className={`grid h-6 w-6 place-items-center rounded-full border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1 disabled:opacity-50 ${masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'border-red-500 bg-red-700 text-white hover:bg-red-800' : 'border-red-300 bg-red-100 text-red-800 hover:bg-red-200 dark:border-red-700 dark:bg-red-950 dark:text-red-200'}`}
+                                  >
+                                    {savingDoNotCallId === row.contact.id ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : <UserX className="h-3 w-3" aria-hidden="true" />}
+                                  </button>
+                                )}
                                 {canEdit && summary.id === 'unverified' && (
                                   <button
                                     type="button"
@@ -2537,7 +2592,10 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 <Phone className="w-5 h-5 text-brand-blue" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-800 dark:text-white">{selectedClient.company}</h3>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-base font-bold text-slate-800 dark:text-white">{selectedClient.company}</h3>
+                  {selectedClientDoNotCall && <span role="status" aria-label={`${selectedClient.company} Do Not Call`} className="inline-flex max-w-full break-words rounded bg-red-100 px-2 py-0.5 text-[10px] font-extrabold uppercase text-red-800">Do Not Call{selectedClientDoNotCallReason ? `: ${selectedClientDoNotCallReason}` : ''}</span>}
+                </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400">{selectedClient.province}</p>
               </div>
             </div>
@@ -2860,6 +2918,49 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       )}
 
 
+      {pendingDoNotCallContact && canManageDoNotCall && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/50 p-4" role="presentation">
+          <form
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="do-not-call-reason-title"
+            className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+            onSubmit={(event) => { event.preventDefault(); void handleConfirmDoNotCall(); }}
+          >
+            <h2 id="do-not-call-reason-title" className="text-base font-bold text-slate-900 dark:text-white">Mark {pendingDoNotCallContact.company} as Do Not Call</h2>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Add a reason. Sales agents will see it on the customer profile.</p>
+            <label htmlFor="do-not-call-reason" className="mt-4 block text-xs font-semibold text-slate-700 dark:text-slate-200">Reason</label>
+            <textarea
+              id="do-not-call-reason"
+              value={doNotCallReason}
+              onChange={(event) => setDoNotCallReason(event.target.value)}
+              maxLength={500}
+              required
+              rows={3}
+              placeholder="e.g. not a real customer"
+              className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:ring-red-950"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setPendingDoNotCallContact(null); setDoNotCallReason(''); }}
+                disabled={savingDoNotCallId === pendingDoNotCallContact.id}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={!doNotCallReason.trim() || savingDoNotCallId !== null}
+                className="rounded-lg bg-red-700 px-3 py-2 text-sm font-bold text-white hover:bg-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {savingDoNotCallId === pendingDoNotCallContact.id ? 'Saving…' : 'Mark Do Not Call'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {showSMSModal && smsRecipient && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl w-full max-w-lg mx-4">
@@ -2993,6 +3094,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               currentUser={currentUser}
               permissionPage={DAILY_CALL_PAGE_LABEL}
               showAgentSalesReportInOverview={isSalesAgent}
+              doNotCall={selectedClientDoNotCall}
+              doNotCallReason={selectedClientDoNotCallReason}
               viewOnly={selectedClientBlocked}
               allowDirectProspectEdit={Boolean(
                 isSalesAgent

@@ -13,6 +13,7 @@ import {
   fetchOwnerSnapshotForDailyCall,
   invalidateDailyCallMasterListCache,
   subscribeToDailyCallMonitoringUpdates,
+  setDailyCallDoNotContactFlagsBulk,
 } from '../dailyCallMonitoringService';
 
 describe('dailyCallMonitoringService', () => {
@@ -23,6 +24,24 @@ describe('dailyCallMonitoringService', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('submits a shared reason and all selected IDs to the bulk Do Not Call endpoint', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { marked_count: 2 } }),
+    } as Response);
+
+    const markedCount = await setDailyCallDoNotContactFlagsBulk(['customer-1', 'customer-2'], 'not a real customer');
+
+    expect(markedCount).toBe(2);
+    expect(String(fetchSpy.mock.calls[0][0])).toContain('/daily-call-monitoring/do-not-contact-flags/bulk');
+    expect(fetchSpy.mock.calls[0][1]?.method).toBe('PATCH');
+    expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toMatchObject({
+      main_id: 1,
+      contact_ids: ['customer-1', 'customer-2'],
+      reason: 'not a real customer',
+    });
   });
 
   it('fetchCustomersForDailyCall calls local API with expected query params', async () => {

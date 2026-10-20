@@ -465,6 +465,7 @@ const mapApiStatusToCustomerStatus = (status: string): CustomerStatus => {
 const mapDailyCallCustomerRow = (row: any): DailyCallCustomerRow => ({
   id: String(row?.id || ''),
   doNotContact: Boolean(row?.doNotContact ?? row?.do_not_contact),
+  doNotContactReason: cleanNullableText(row?.doNotContactReason ?? row?.do_not_contact_reason),
   source: cleanNullableText(row?.source, 'Manual'),
   assignedTo: cleanNullableText(row?.assignedTo ?? row?.assigned_to, 'Unassigned'),
   assignedAgentId: cleanNullableText(row?.assignedAgentId ?? row?.assigned_agent_id ?? row?.sales_person_id ?? row?.salesPersonId),
@@ -518,6 +519,7 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
   return {
     id: String(row?.id || ''),
     doNotContact: Boolean(row?.doNotContact ?? row?.do_not_contact),
+    doNotContactReason: cleanNullableText(row?.doNotContactReason ?? row?.do_not_contact_reason),
     shopName: cleanNullableText(row?.shopName ?? row?.shop_name, 'Unnamed Shop'),
     isStarred: row?.is_starred === true || row?.is_starred === 1 || row?.is_starred === '1',
     pastName: cleanNullableText(row?.pastName ?? row?.past_name ?? row?.oldName ?? row?.old_name),
@@ -589,13 +591,22 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
   };
 };
 
-export const setDailyCallDoNotContactFlag = async (contactId: string, marked: boolean): Promise<boolean> => {
+export const setDailyCallDoNotContactFlag = async (contactId: string, marked: boolean, reason = ''): Promise<boolean> => {
   const payload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/do-not-contact-flag`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ main_id: resolveMainId(), contact_id: contactId, marked }),
+    body: JSON.stringify({ main_id: resolveMainId(), contact_id: contactId, marked, reason }),
   });
   return Boolean(payload?.data?.marked);
+};
+
+export const setDailyCallDoNotContactFlagsBulk = async (contactIds: string[], reason: string): Promise<number> => {
+  const payload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/do-not-contact-flags/bulk`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ main_id: resolveMainId(), contact_ids: contactIds, reason }),
+  });
+  return Number(payload?.data?.marked_count ?? 0);
 };
 
 const mapDailyCallDoNotContactCustomer = (row: any): DailyCallDoNotContactCustomer => ({

@@ -31,6 +31,8 @@ interface ContactDetailsProps {
   currentUser?: UserProfile | null;
   permissionPage?: string;
   showAgentSalesReportInOverview?: boolean;
+  doNotCall?: boolean;
+  doNotCallReason?: string;
   viewOnly?: boolean;
   allowDirectProspectEdit?: boolean;
   onSalesReportRead?: (contactId: string) => void;
@@ -44,7 +46,7 @@ const splitContactNumbers = (values: unknown[]): string[] => Array.from(new Set(
     .filter(Boolean)
 ));
 
-const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, permissionPage = 'Customer Data', showAgentSalesReportInOverview = false, viewOnly = false, allowDirectProspectEdit = false, onSalesReportRead, onClose, onUpdate }) => {
+const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, permissionPage = 'Customer Data', showAgentSalesReportInOverview = false, doNotCall = false, doNotCallReason = '', viewOnly = false, allowDirectProspectEdit = false, onSalesReportRead, onClose, onUpdate }) => {
   const [activeTab, setActiveTab] = useState('Overview');
   const [recordImageFailed, setRecordImageFailed] = useState(false);
   const [showFullRecordImage, setShowFullRecordImage] = useState(false);
@@ -354,6 +356,11 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
                                 formerLabel="Formerly:"
                               />
                           </h1>
+                          {doNotCall && (
+                            <span role="status" aria-label={`${contact.company} Do Not Call`} className="inline-flex max-w-full whitespace-normal break-words rounded bg-red-100 px-2.5 py-1 text-xs font-extrabold uppercase text-red-800">
+                              Do Not Call{doNotCallReason ? `: ${doNotCallReason}` : ''}
+                            </span>
+                          )}
                           {allowDirectProspectEdit && !viewOnly && (
                             <button
                               type="button"
