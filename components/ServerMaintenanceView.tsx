@@ -69,6 +69,7 @@ export const ServerMaintenanceView: React.FC<ServerMaintenanceViewProps> = ({ cu
   const [importProgress, setImportProgress] = useState('');
   const [importReport, setImportReport] = useState<CorporateDumpImportReport | null>(null);
   const [selectedDumpName, setSelectedDumpName] = useState('');
+  const [overwriteProductPrices, setOverwriteProductPrices] = useState(false);
   const [loadError, setLoadError] = useState('');
 
   const loadAll = useCallback(async () => {
@@ -260,8 +261,19 @@ export const ServerMaintenanceView: React.FC<ServerMaintenanceViewProps> = ({ cu
           </div>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
             {status?.corporate_dump_import?.safety ||
-              'Loads a corporate .sql / .sql.gz dump into a temporary staging database, then inserts only new rows using shared columns on existing tables. Never drops, truncates, deletes, or updates live data. Local-only tables and columns stay untouched.'}
+              'Loads a corporate .sql / .sql.gz dump into a temporary staging database, then inserts only new rows using shared columns on existing tables. Product prices are preserved unless you choose to overwrite them. Never drops, truncates, or deletes live data.'}
           </p>
+
+          <label className="mt-4 flex items-start gap-3 text-sm text-slate-700 dark:text-slate-200">
+            <input
+              type="checkbox"
+              checked={overwriteProductPrices}
+              onChange={(event) => setOverwriteProductPrices(event.target.checked)}
+              disabled={importing || loading}
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-blue-700"
+            />
+            <span>Overwrite existing product prices from the dump</span>
+          </label>
 
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
@@ -280,6 +292,7 @@ export const ServerMaintenanceView: React.FC<ServerMaintenanceViewProps> = ({ cu
                     setImportProgress('Preparing upload…');
                     try {
                       const report = await importCorporateDumpFile(file, {
+                        overwriteProductPrices,
                         onProgress: ({ uploadedBytes, totalBytes, phase }) => {
                           if (phase === 'upload') {
                             const pct = totalBytes > 0 ? Math.round((uploadedBytes / totalBytes) * 100) : 0;

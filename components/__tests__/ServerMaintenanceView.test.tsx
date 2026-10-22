@@ -159,6 +159,9 @@ describe('ServerMaintenanceView', () => {
 
     expect(await screen.findByRole('heading', { name: 'Import corporate dump' })).toBeInTheDocument();
     expect(screen.getByText(/Never drops or truncates live tables/i)).toBeInTheDocument();
+    const overwritePrices = screen.getByRole('checkbox', { name: 'Overwrite existing product prices from the dump' });
+    expect(overwritePrices).not.toBeChecked();
+    await user.click(overwritePrices);
 
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     expect(fileInput).toBeTruthy();
@@ -166,7 +169,10 @@ describe('ServerMaintenanceView', () => {
     await user.upload(fileInput, file);
 
     await waitFor(() => {
-      expect(importCorporateDump).toHaveBeenCalled();
+      expect(importCorporateDump).toHaveBeenCalledWith(
+        file,
+        expect.objectContaining({ overwriteProductPrices: true })
+      );
       expect(addToast).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
     });
     expect(await screen.findByText(/Merged 10 tables/i)).toBeInTheDocument();

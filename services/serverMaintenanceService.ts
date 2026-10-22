@@ -253,6 +253,7 @@ export async function importCorporateDumpFile(
   file: File,
   options?: {
     chunkSize?: number;
+    overwriteProductPrices?: boolean;
     onProgress?: (progress: { uploadedBytes: number; totalBytes: number; phase: 'upload' | 'import' }) => void;
   }
 ): Promise<CorporateDumpImportReport> {
@@ -337,7 +338,7 @@ export async function importCorporateDumpFile(
         'Content-Type': 'application/json',
         ...authHeaders(),
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ overwrite_product_prices: options?.overwriteProductPrices === true }),
     }
   );
   return unwrapCorporateDumpImportData<CorporateDumpImportReport>('starting import', importResponse, {
