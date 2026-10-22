@@ -11,7 +11,7 @@ const addToast = vi.fn();
 
 vi.mock('../../services/receivingService', () => ({ receivingService: service }));
 vi.mock('../ToastProvider', () => ({ useToast: () => ({ addToast }) }));
-vi.mock('../ReceivingStock/ReceivingForm', () => ({ default: ({ onClose, onSuccess }: { onClose: () => void; onSuccess: (report: unknown) => void }) => <div><button type="button" onClick={onClose}>Close form</button><button type="button" onClick={() => onSuccess({ id: 'RRREF-1' })}>Save receiving report</button></div> }));
+vi.mock('../ReceivingStock/ReceivingForm', () => ({ default: ({ onClose, onSuccess, initialPurchaseOrderRefNo }: { onClose: () => void; onSuccess: (report: unknown) => void; initialPurchaseOrderRefNo?: string }) => <div><span>Prefilled PO {initialPurchaseOrderRefNo || 'none'}</span><button type="button" onClick={onClose}>Close form</button><button type="button" onClick={() => onSuccess({ id: 'RRREF-1' })}>Save receiving report</button></div> }));
 vi.mock('../ReceivingStock/ReceivingView', () => ({ default: ({ rrId, onBack, onCreateNew }: { rrId: string; onBack: () => void; onCreateNew: () => void }) => <div><span>Receiving detail {rrId}</span><button type="button" onClick={onBack}>Back to receiving list</button><button type="button" onClick={onCreateNew}>New RR</button></div> }));
 
 const report = { id: 'RRREF-1', rr_no: 'RR-2601', receive_date: '2026-08-20', supplier_name: 'Supplier 1', po_no: 'PO-2601', status: 'Draft', item_count: 2, items: [] };
@@ -88,6 +88,23 @@ describe('ReceivingStock module', () => {
     const { default: ReceivingStock } = await import('../ReceivingStock');
     render(<ReceivingStock initialRRId="RRREF-1" />);
     expect(await screen.findByText('Receiving detail RRREF-1')).toBeInTheDocument();
+  });
+
+  it('opens a new receiving form preselected for the requested PO', async () => {
+    const { default: ReceivingStock } = await import('../ReceivingStock');
+    render(<ReceivingStock initialCreateFromPO initialPORefNo="POREF-1" />);
+    expect(screen.getByText('Prefilled PO POREF-1')).toBeInTheDocument();
+  });
+
+  it('returns to the source PO when a linked receiving draft is closed', async () => {
+    window.history.replaceState(createWorkflowHistoryState('#/warehouse-purchasing-purchase-order?poId=POREF-1'), '', '/#/warehouse-purchasing-receiving-stock?createFromPO=1&poRefNo=POREF-1');
+    const backSpy = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+    const { default: ReceivingStock } = await import('../ReceivingStock');
+    render(<ReceivingStock initialCreateFromPO initialPORefNo="POREF-1" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close form' }));
+    expect(backSpy).toHaveBeenCalledOnce();
+    backSpy.mockRestore();
   });
 
   it('retraces the previous workflow from a linked receiving report', async () => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ReceivingReport, ReceivingReportInsert, ReceivingReportItemInsert, Supplier } from '../../receiving.types';
 import { EligiblePurchaseOrder, receivingService } from '../../services/receivingService';
 import { useToast } from '../ToastProvider';
@@ -20,6 +20,7 @@ import { shouldSuppressAuthError } from '../../services/localApiAuth';
 interface ReceivingFormProps {
     onClose: () => void;
     onSuccess: (report: ReceivingReport) => void;
+    initialPurchaseOrderRefNo?: string;
 }
 
 interface LineItem extends Omit<ReceivingReportItemInsert, 'rr_id'> {
@@ -30,7 +31,7 @@ interface LineItem extends Omit<ReceivingReportItemInsert, 'rr_id'> {
     qty_already_received: number;
 }
 
-const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => {
+const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess, initialPurchaseOrderRefNo }) => {
     const { addToast } = useToast();
     const canAdd = canPerformAction('can_add');
     const canEdit = canPerformAction('can_edit');
@@ -56,33 +57,14 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
     // Data Sources
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [eligiblePurchaseOrders, setEligiblePurchaseOrders] = useState<EligiblePurchaseOrder[]>([]);
+    const initializedPurchaseOrderRef = useRef('');
 
     // Line Items
     const [items, setItems] = useState<LineItem[]>([]);
     const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
     const [submitCount, setSubmitCount] = useState(0);
 
-    useEffect(() => {
-        const init = async () => {
-            try {
-                // Fetch Suppliers
-                const [suppliersData, purchaseOrders] = await Promise.all([
-                    receivingService.getSuppliers(),
-                    receivingService.getEligiblePurchaseOrders(),
-                ]);
-                setSuppliers(suppliersData);
-                setEligiblePurchaseOrders(purchaseOrders);
-            } catch (error) {
-                console.error("Error initializing form:", error);
-                addToast({ type: 'error', message: 'Failed to initialize form' });
-            } finally {
-                setInitializing(false);
-            }
-        };
-        init();
-    }, []);
-
-    const handlePurchaseOrderChange = async (id: string) => {
+    const handlePurchaseOrderChange = useCallback(async (id: string) => {
         setPoRefno(id);
         const selected = eligiblePurchaseOrders.find((po) => po.id === id);
         setPoNo(selected?.poNumber || '');
@@ -92,6 +74,23 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
         if (!id) return;
         try {
             const details = await receivingService.getEligiblePurchaseOrderDetails(id);
+            const resolvedSupplierId = selected?.supplierId || String(details.supplier_id || '');
+            const resolvedSupplierName = selected?.supplierName || String(details.supplier?.company || details.supplier_name || '');
+            const resolvedPONumber = selected?.poNumber || String(details.po_number || '');
+            setSupplierId(resolvedSupplierId);
+            setSupplierName(resolvedSupplierName);
+            setPoNo(resolvedPONumber);
+            if (!selected) {
+                setEligiblePurchaseOrders((current) => current.some((po) => po.id === id) ? current : [...current, {
+                    id,
+                    poNumber: resolvedPONumber,
+                    prNumber: String(details.pr_reference || ''),
+                    supplierId: resolvedSupplierId,
+                    supplierName: resolvedSupplierName,
+                    orderDate: String(details.order_date || ''),
+                    remainingLineCount: (details.items || []).filter((line: any) => Number(line.qty || 0) > Number(line.quantity_received || 0)).length,
+                }]);
+            }
             setItems((details.items || []).flatMap((line: any) => {
                 const ordered = Number(line.qty || 0);
                 const received = Number(line.quantity_received || 0);
@@ -117,7 +116,33 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
       if (shouldSuppressAuthError(error)) return;
             addToast({ type: 'error', title: 'Unable to load purchase order', description: error.message });
         }
-    };
+    }, [addToast, eligiblePurchaseOrders]);
+
+    useEffect(() => {
+        const poRefNo = String(initialPurchaseOrderRefNo || '').trim();
+        if (initializing || !poRefNo || initializedPurchaseOrderRef.current === poRefNo) return;
+        initializedPurchaseOrderRef.current = poRefNo;
+        void handlePurchaseOrderChange(poRefNo);
+    }, [handlePurchaseOrderChange, initialPurchaseOrderRefNo, initializing]);
+
+    useEffect(() => {
+        const init = async () => {
+            try {
+                const [suppliersData, purchaseOrders] = await Promise.all([
+                    receivingService.getSuppliers(),
+                    receivingService.getEligiblePurchaseOrders(),
+                ]);
+                setSuppliers(suppliersData);
+                setEligiblePurchaseOrders(purchaseOrders);
+            } catch (error) {
+                console.error("Error initializing form:", error);
+                addToast({ type: 'error', message: 'Failed to initialize form' });
+            } finally {
+                setInitializing(false);
+            }
+        };
+        init();
+    }, []);
 
     const updateItem = (id: string, field: keyof LineItem, value: any) => {
         setItems(items.map(item => {

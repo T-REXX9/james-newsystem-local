@@ -26,7 +26,7 @@ vi.mock('../../services/purchaseOrderService', () => ({ purchaseOrderService: se
 vi.mock('../../services/purchaseRequestService', () => ({ purchaseRequestService: prService }));
 const addToast = vi.fn();
 vi.mock('../ToastProvider', () => ({ useToast: () => ({ addToast }) }));
-vi.mock('../../services/localAuthService', () => ({ getLocalAuthSession: () => ({ userProfile: { id: '7', role: 'Purchasing Manager' } }) }));
+vi.mock('../../services/localAuthService', () => ({ getLocalAuthSession: () => ({ userProfile: { id: '7', role: 'Purchasing Manager', access_rights: ['warehouse-purchasing-purchase-order', 'warehouse-purchasing-receiving-stock'] } }) }));
 vi.mock('../../services/notificationLocalApiService', () => ({
   dispatchWorkflowNotification: vi.fn().mockResolvedValue(undefined),
   markNotificationsAsReadByEntityKey: vi.fn().mockResolvedValue(undefined),
@@ -117,6 +117,29 @@ describe('PurchaseOrderView', () => {
     expect(navigationEvent.detail).toEqual(expect.objectContaining({
       tab: 'warehouse-purchasing-purchase-request',
       payload: { prId: 'PRREF-1' },
+    }));
+    window.removeEventListener('workflow:navigate', navigationSpy);
+  });
+
+  it('opens a prefilled receiving draft from a posted PO with remaining quantity', async () => {
+    const navigationSpy = vi.fn();
+    window.addEventListener('workflow:navigate', navigationSpy);
+    service.getPurchaseOrderById.mockResolvedValue({ ...po, status: 'Posted', remaining_qty: 13 });
+    const { default: PurchaseOrderView } = await import('../PurchaseOrderView');
+
+    render(<PurchaseOrderView initialPOId="POREF-1" />);
+
+    const createReceivingLink = await screen.findByRole('link', { name: 'Create Receiving Report for PO-2601' });
+    expect(createReceivingLink).toHaveAttribute(
+      'href',
+      '#/warehouse-purchasing-receiving-stock?createFromPO=1&poRefNo=POREF-1',
+    );
+    fireEvent.click(createReceivingLink);
+
+    const navigationEvent = navigationSpy.mock.calls[0][0] as CustomEvent;
+    expect(navigationEvent.detail).toEqual(expect.objectContaining({
+      tab: 'warehouse-purchasing-receiving-stock',
+      payload: { createFromPO: '1', poRefNo: 'POREF-1' },
     }));
     window.removeEventListener('workflow:navigate', navigationSpy);
   });

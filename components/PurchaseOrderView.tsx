@@ -24,7 +24,7 @@ import {
 import ModuleRecordLink from './ModuleRecordLink';
 import ProcurementDocumentBanner from './ProcurementDocumentBanner';
 import { retraceWorkflowHistory } from '../utils/workflowHistory';
-import { canBackdatePosting, canPerformAction } from '../utils/actionPermissions';
+import { canBackdatePosting, canPerformAction, canViewPage } from '../utils/actionPermissions';
 import {
   canMutateDocumentDateField,
   localTodayYmd,
@@ -130,6 +130,11 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
     || selectedPO?.items?.find((item) => String(item.eta_date || '').trim())?.eta_date
     || selectedPO?.last_eta_date
     || null;
+  const selectedPORemainingQty = selectedPO
+    ? selectedPO.remaining_qty != null && Number.isFinite(Number(selectedPO.remaining_qty))
+      ? Number(selectedPO.remaining_qty)
+      : selectedPO.items.reduce((remaining, item) => remaining + Math.max(0, Number(item.qty || 0) - Number(item.quantity_received || 0)), 0)
+    : 0;
 
   // Item Add State
   const [showAddItem, setShowAddItem] = useState(false);
@@ -1165,6 +1170,17 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId, init
               <div className="flex items-center gap-3">
                 <span className="text-sm font-bold text-slate-500">PO No:</span>
                 <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-bold text-slate-700">{selectedPO.po_number}</span>
+                {selectedPO.status === 'Posted' && String(selectedPO.pr_reference || '').trim() && selectedPORemainingQty > 0 && canViewPage('warehouse-purchasing-receiving-stock') && canPerformAction('can_add', 'Receiving Stock') && (
+                  <ModuleRecordLink
+                    tab="warehouse-purchasing-receiving-stock"
+                    payload={{ createFromPO: '1', poRefNo: selectedPO.id }}
+                    className="inline-flex min-h-9 items-center justify-center gap-2 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-bold text-white hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                    aria-label={`Create Receiving Report for ${selectedPO.po_number}`}
+                    title="Create a receiving report from this purchase order"
+                  >
+                    Create Receiving Report
+                  </ModuleRecordLink>
+                )}
                 <button onClick={() => setPrintMode(true)} className="ml-2 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Print</button>
                 {['Pending', 'Unposted'].includes(selectedPO.status) && canPost && <button onClick={() => handleStatusChange('Posted')} className="rounded-md bg-emerald-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-emerald-700">Post</button>}
                 {['Posted', 'Completed'].includes(selectedPO.status) && canUnpost && <button onClick={() => setRecoveryAction('unpost')} className="rounded-md bg-amber-500 px-4 py-1.5 text-sm font-bold text-white hover:bg-amber-600">Unpost</button>}

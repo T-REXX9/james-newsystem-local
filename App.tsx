@@ -569,6 +569,14 @@ const App: React.FC = () => {
                 moduleContext['warehouse-purchasing-receiving-stock']?.rrRefNo ||
                 moduleContext.receivingstock?.rrRefNo
               }
+              initialCreateFromPO={
+                (moduleContext['warehouse-purchasing-receiving-stock']?.createFromPO ||
+                  moduleContext.receivingstock?.createFromPO) === '1'
+              }
+              initialPORefNo={
+                moduleContext['warehouse-purchasing-receiving-stock']?.poRefNo ||
+                moduleContext.receivingstock?.poRefNo
+              }
             />
           </div>
         );

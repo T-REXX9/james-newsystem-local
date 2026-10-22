@@ -13,9 +13,11 @@ import { shouldSuppressAuthError } from '../../services/localApiAuth';
 interface ReceivingStockProps {
     initialRRId?: string;
     initialRRRefNo?: string;
+    initialCreateFromPO?: boolean;
+    initialPORefNo?: string;
 }
 
-const ReceivingStock: React.FC<ReceivingStockProps> = ({ initialRRId, initialRRRefNo }) => {
+const ReceivingStock: React.FC<ReceivingStockProps> = ({ initialRRId, initialRRRefNo, initialCreateFromPO = false, initialPORefNo }) => {
     const { addToast } = useToast();
     const [loading, setLoading] = useState(true);
     const [rrs, setRrs] = useState<ReceivingReportWithDetails[]>([]);
@@ -27,7 +29,7 @@ const ReceivingStock: React.FC<ReceivingStockProps> = ({ initialRRId, initialRRR
     const [statusFilter, setStatusFilter] = useState('');
 
     // Views
-    const [viewMode, setViewMode] = useState<'list' | 'create' | 'view'>('list');
+    const [viewMode, setViewMode] = useState<'list' | 'create' | 'view'>(() => initialCreateFromPO ? 'create' : 'list');
     const [selectedRrId, setSelectedRrId] = useState<string | null>(null);
     const consumedDeepLinkRef = useRef<string>('');
 
@@ -72,6 +74,12 @@ const ReceivingStock: React.FC<ReceivingStockProps> = ({ initialRRId, initialRRR
         setViewMode('view');
     }, [initialRRId, initialRRRefNo]);
 
+    useEffect(() => {
+        if (!initialCreateFromPO || !String(initialPORefNo || '').trim()) return;
+        setSelectedRrId(null);
+        setViewMode('create');
+    }, [initialCreateFromPO, initialPORefNo]);
+
     const handleCreateSuccess = (report: ReceivingReport) => {
         setSelectedRrId(report.id);
         setViewMode('view');
@@ -98,15 +106,23 @@ const ReceivingStock: React.FC<ReceivingStockProps> = ({ initialRRId, initialRRR
             setSelectedRrId(null);
             void fetchRRs(); // Refresh list to reflect changes
         };
-        if (String(initialRRId || initialRRRefNo || '').trim()) {
+        if (initialCreateFromPO || String(initialRRId || initialRRRefNo || '').trim()) {
             retraceWorkflowHistory(returnToList);
             return;
         }
         returnToList();
     };
 
+    const handleCloseCreate = () => {
+        if (initialCreateFromPO) {
+            retraceWorkflowHistory(() => setViewMode('list'));
+            return;
+        }
+        setViewMode('list');
+    };
+
     if (viewMode === 'create') {
-        return <ReceivingForm onClose={() => setViewMode('list')} onSuccess={handleCreateSuccess} />;
+        return <ReceivingForm initialPurchaseOrderRefNo={initialCreateFromPO ? initialPORefNo : undefined} onClose={handleCloseCreate} onSuccess={handleCreateSuccess} />;
     }
 
     return (
