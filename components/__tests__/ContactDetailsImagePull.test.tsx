@@ -1,5 +1,5 @@
 import React from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ContactDetails from '../ContactDetails';
 import { CustomerStatus } from '../../types';
@@ -143,5 +143,36 @@ describe('ContactDetails image expansion', () => {
     fireEvent.touchEnd(profileScroller, { changedTouches: [{ identifier: 1, clientY: 180 }] });
 
     expect(screen.queryByRole('dialog', { name: 'Full customer image' })).not.toBeInTheDocument();
+  });
+
+  it('shows a contact number only once when duplicate fields use different formatting', () => {
+    render(
+      <ContactDetails
+        contact={{
+          id: 'customer-1',
+          company: 'Example Customer',
+          status: CustomerStatus.ACTIVE,
+          phone: '09171234567',
+          mobile: '0917-123-4567',
+          contactPersons: [{
+            id: 'person-1',
+            enabled: true,
+            name: 'Alex Customer',
+            position: '',
+            birthday: '',
+            telephone: '0917 123 4567',
+            mobile: '0917-123-4567',
+            email: '',
+          }],
+        } as any}
+        currentUser={{ id: 'master-1', role: 'Master User' } as any}
+        onClose={vi.fn()}
+        onUpdate={vi.fn()}
+      />
+    );
+
+    const numbersList = screen.getByRole('list', { name: 'Contact numbers' });
+    expect(within(numbersList).getAllByText('0917-123-4567')).toHaveLength(1);
+    expect(screen.queryByText('T1:')).not.toBeInTheDocument();
   });
 });

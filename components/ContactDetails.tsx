@@ -40,11 +40,23 @@ interface ContactDetailsProps {
   onUpdate: (updatedContact: Contact) => void;
 }
 
-const splitContactNumbers = (values: unknown[]): string[] => Array.from(new Set(
-  values.flatMap((value) => String(value || '').split(/[\/,;|]+/))
+const contactNumberKey = (number: string): string => {
+  const digits = number.replace(/\D/g, '');
+  return digits || number.trim().toLocaleLowerCase();
+};
+
+const splitContactNumbers = (values: unknown[]): string[] => {
+  const seen = new Set<string>();
+  return values.flatMap((value) => String(value || '').split(/[\/,;|]+/))
     .map((number) => number.trim())
-    .filter(Boolean)
-));
+    .filter((number) => {
+      if (!number) return false;
+      const key = contactNumberKey(number);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+};
 
 const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, permissionPage = 'Customer Data', showAgentSalesReportInOverview = false, doNotCall = false, doNotCallReason = '', viewOnly = false, allowDirectProspectEdit = false, onSalesReportRead, onClose, onUpdate }) => {
   const [activeTab, setActiveTab] = useState('Overview');
@@ -199,8 +211,8 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
   ]);
   const contactPersonDetails = (contact.contactPersons || []).map((person) => {
     const mobileNumbers = splitContactNumbers([person.mobile]);
-    const mobileSet = new Set(mobileNumbers);
-    const telephoneNumbers = splitContactNumbers([person.telephone]).filter((number) => !mobileSet.has(number));
+    const mobileSet = new Set(mobileNumbers.map(contactNumberKey));
+    const telephoneNumbers = splitContactNumbers([person.telephone]).filter((number) => !mobileSet.has(contactNumberKey(number)));
     return { person, mobileNumbers, telephoneNumbers };
   });
   const contactLocation = [contact.province, contact.city].map((value) => String(value || '').trim()).filter(Boolean).join(', ');
