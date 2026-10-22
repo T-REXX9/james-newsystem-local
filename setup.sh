@@ -970,7 +970,11 @@ deploy_production_files() {
 
   sudo install -d -m 0755 "$PRODUCTION_ROOT" "$PRODUCTION_WEB_DIR" "$PRODUCTION_API_DIR" "$PRODUCTION_REALTIME_DIR"
   sudo rsync -a --delete "$WEB_DIR/dist/" "$PRODUCTION_WEB_DIR/"
-  sudo rsync -a --delete --exclude='.git' "$API_DIR/" "$PRODUCTION_API_DIR/"
+  # Attachment files are runtime data and must survive source-based API deploys.
+  sudo rsync -a --delete \
+    --exclude='.git' \
+    --exclude='/storage/call-report-attachments/***' \
+    "$API_DIR/" "$PRODUCTION_API_DIR/"
   # Never copy a workstation's node_modules to production. Native/platform
   # package layouts can be incomplete or incompatible after rsync. Install a
   # clean, production-only dependency tree on the server instead.

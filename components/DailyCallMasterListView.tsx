@@ -457,7 +457,6 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const [pendingDoNotCallRow, setPendingDoNotCallRow] = useState<DailyCallMasterCustomerRow | null>(null);
   const [doNotCallReason, setDoNotCallReason] = useState('');
   const [savingDoNotCallId, setSavingDoNotCallId] = useState<string | null>(null);
-  const [doNotCallSelectionMode, setDoNotCallSelectionMode] = useState(false);
   const [selectedDoNotCallIds, setSelectedDoNotCallIds] = useState<Set<string>>(() => new Set());
   const [showBulkDoNotCallModal, setShowBulkDoNotCallModal] = useState(false);
   const [bulkDoNotCallReason, setBulkDoNotCallReason] = useState('');
@@ -523,6 +522,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     setActiveCategoryId(categoryId);
     setVisibleLimit(INITIAL_VISIBLE_ROWS);
     setSelectedUnverifiedIds(new Set());
+    setSelectedDoNotCallIds(new Set());
   }, []);
 
   const handleToggleCustomerStar = useCallback(async (row: DailyCallMasterCustomerRow) => {
@@ -592,15 +592,6 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     void handleToggleDoNotCall(pendingDoNotCallRow, doNotCallReason);
   }, [doNotCallReason, handleToggleDoNotCall, pendingDoNotCallRow]);
 
-  const handleToggleDoNotCallSelection = useCallback((id: string) => {
-    setSelectedDoNotCallIds((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-
   const handleConfirmBulkDoNotCall = useCallback(async () => {
     const reason = bulkDoNotCallReason.trim();
     const selectedRows = rows.filter((row) => selectedDoNotCallIds.has(row.id) && !row.dataIntegrityException);
@@ -613,7 +604,6 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
         ? { ...row, doNotContact: true, doNotContactReason: reason }
         : row));
       setSelectedDoNotCallIds(new Set());
-      setDoNotCallSelectionMode(false);
       setShowBulkDoNotCallModal(false);
       setBulkDoNotCallReason('');
       addToast({
@@ -1099,25 +1089,27 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const isUnverifiedCustomerList = activeCategory.id === 'unverified' && !showingUnverifiedSubmissions;
   // Selection is scoped to the currently displayed customer rows. Duplicate
   // submissions are rendered in their separate tab and never enter visibleRows.
-  const selectableUnverifiedRows = isUnverifiedCustomerList ? visibleRows : [];
-  const selectableUnverifiedIds = new Set(selectableUnverifiedRows.map((row) => row.id));
-  const selectedUnverifiedRows = selectableUnverifiedRows.filter((row) => selectedUnverifiedIds.has(row.id));
-  const allVisibleUnverifiedSelected = selectableUnverifiedRows.length > 0
-    && selectableUnverifiedRows.every((row) => selectedUnverifiedIds.has(row.id));
+  const selectedUnverifiedRows = rows.filter((row) => selectedUnverifiedIds.has(row.id));
   const showMasterActions = canUseMasterDailyCallActions(currentUser);
-  const selectableDoNotCallRows = doNotCallSelectionMode && showMasterActions && !showingUnverifiedSubmissions
-    ? visibleRows.filter((row) => !row.dataIntegrityException)
+  const selectableDoNotCallRows = showMasterActions && !showingUnverifiedSubmissions
+    ? visibleRows.filter((row) => !row.dataIntegrityException && !isBlockedDailyCallMasterRow(row))
     : [];
-  const isDoNotCallSelectionMode = doNotCallSelectionMode && showMasterActions && !showingUnverifiedSubmissions;
-  const selectableDoNotCallIds = new Set(selectableDoNotCallRows.map((row) => row.id));
+  const selectedMasterRows = rows.filter((row) => selectedDoNotCallIds.has(row.id) || selectedUnverifiedIds.has(row.id));
   const selectedDoNotCallRows = rows.filter((row) => selectedDoNotCallIds.has(row.id) && !row.dataIntegrityException);
+  const canBatchBlacklistSelection = selectedMasterRows.length > 0
+    && selectedMasterRows.every((row) => selectedUnverifiedIds.has(row.id));
   const allVisibleDoNotCallSelected = selectableDoNotCallRows.length > 0
     && selectableDoNotCallRows.every((row) => selectedDoNotCallIds.has(row.id));
-  // Daily Call actions follow the explicit Customer Database edit grant. Keep
-  // the legacy master-user access, but do not treat missing action metadata as
-  // permission (the shared helper defaults missing metadata to allow).
+  // Keep the master-user access and either supported customer database page grant,
+  // but do not treat missing action metadata as permission.
+  const customerActionPages = (currentUser?.action_permissions as {
+    pages?: Record<string, { can_edit?: boolean }>;
+  } | undefined)?.pages;
   const canEditCustomerDatabase = showMasterActions || Boolean(currentUser?.action_permissions)
-    && hasActionPermission(currentUser, 'can_edit', 'Customer Data');
+    && (hasActionPermission(currentUser, 'can_edit', 'Customer Data')
+      || hasActionPermission(currentUser, 'can_edit', 'Customer Database')
+      || customerActionPages?.['Customer Data']?.can_edit === true
+      || customerActionPages?.['Customer Database']?.can_edit === true);
 
   const handleToggleAllVisibleDoNotCall = useCallback(() => {
     setSelectedDoNotCallIds((current) => {
@@ -1130,25 +1122,33 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
       }
       return next;
     });
-  }, [selectableDoNotCallRows]);
-
-  const handleToggleUnverifiedSelection = useCallback((id: string) => {
     setSelectedUnverifiedIds((current) => {
       const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      const allSelected = selectableDoNotCallRows.length > 0
+        && selectableDoNotCallRows.every((row) => selectedDoNotCallIds.has(row.id));
+      for (const row of selectableDoNotCallRows) {
+        if (allSelected) next.delete(row.id);
+        else if (isProspectRow(row) && String(row.verification || '').trim().toLowerCase() !== 'verified') next.add(row.id);
+      }
       return next;
     });
-  }, []);
+  }, [selectableDoNotCallRows, selectedDoNotCallIds]);
 
-  const handleToggleAllVisibleUnverified = useCallback(() => {
+  const handleToggleMasterSelection = useCallback((row: DailyCallMasterCustomerRow) => {
+    const isSelected = selectedDoNotCallIds.has(row.id) || selectedUnverifiedIds.has(row.id);
+    setSelectedDoNotCallIds((current) => {
+      const next = new Set(current);
+      if (isSelected || row.dataIntegrityException) next.delete(row.id);
+      else next.add(row.id);
+      return next;
+    });
     setSelectedUnverifiedIds((current) => {
       const next = new Set(current);
-      if (allVisibleUnverifiedSelected) selectableUnverifiedRows.forEach((row) => next.delete(row.id));
-      else selectableUnverifiedRows.forEach((row) => next.add(row.id));
+      if (isSelected) next.delete(row.id);
+      else if (isProspectRow(row) && String(row.verification || '').trim().toLowerCase() !== 'verified') next.add(row.id);
       return next;
     });
-  }, [allVisibleUnverifiedSelected, selectableUnverifiedRows]);
+  }, [selectedDoNotCallIds, selectedUnverifiedIds]);
 
   const closeBatchDoNotContactModal = useCallback(() => {
     if (savingBatchDoNotContact) return;
@@ -1247,6 +1247,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     const succeededIds = selectedIds.filter((_, index) => results[index].status === 'fulfilled');
     const failedRows = selectedUnverifiedRows.filter((_, index) => results[index].status === 'rejected');
     setSelectedUnverifiedIds(new Set(failedRows.map((row) => row.id)));
+    setSelectedDoNotCallIds(new Set(failedRows.filter((row) => !row.dataIntegrityException).map((row) => row.id)));
     setSavingBatchDoNotContact(false);
     setBatchDoNotContactReasonOption('');
     setBatchDoNotContactCustomReason('');
@@ -1367,13 +1368,8 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     previousFilterResetKey.current = filterResetKey;
     setVisibleLimit(INITIAL_VISIBLE_ROWS);
     setSelectedUnverifiedIds(new Set());
+    setSelectedDoNotCallIds(new Set());
   }, [filterResetKey]);
-
-  useEffect(() => {
-    if (activeCategoryId !== 'unverified' || unverifiedListTab !== 'customers') {
-      setSelectedUnverifiedIds(new Set());
-    }
-  }, [activeCategoryId, unverifiedListTab]);
 
   useEffect(() => {
     if (loading || !initialHistorySnapshot) return;
@@ -1607,19 +1603,6 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 {activeCategory.label} <span className="ml-2 text-sm normal-case">({activeCategory.note})</span>
               </h3>
             <div className="flex flex-wrap items-center justify-end gap-3">
-              {showMasterActions && !showingUnverifiedSubmissions && (
-                <button
-                  type="button"
-                  aria-pressed={isDoNotCallSelectionMode}
-                  onClick={() => {
-                    setDoNotCallSelectionMode((active) => !active);
-                    setSelectedDoNotCallIds(new Set());
-                  }}
-                  className={`rounded-lg border px-3 py-1.5 text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 ${isDoNotCallSelectionMode ? 'border-red-300 bg-red-50 text-red-800 hover:bg-red-100' : 'border-red-200 bg-white text-red-700 hover:bg-red-50'}`}
-                >
-                  {isDoNotCallSelectionMode ? 'Cancel Do Not Call selection' : 'Bulk Do Not Call'}
-                </button>
-              )}
               <span className="flex items-center gap-2 text-sm"><i className={`h-3 w-3 rounded-full ${activeCategory.dot}`} />{activeCategory.state}</span>
                 {showMasterActions && !showingUnverifiedSubmissions && (
                   <div className="flex items-center gap-2">
@@ -1703,8 +1686,8 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                   aria-pressed={unverifiedListTab === 'submissions'}
                   onClick={() => {
                     setUnverifiedListTab('submissions');
-                    setDoNotCallSelectionMode(false);
                     setSelectedDoNotCallIds(new Set());
+                    setSelectedUnverifiedIds(new Set());
                   }}
                   className={`rounded-lg border px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${unverifiedListTab === 'submissions' ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
                 >
@@ -1712,45 +1695,14 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 </button>
               </div>
             )}
-            {isUnverifiedCustomerList && !isDoNotCallSelectionMode && (
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-orange-100 bg-orange-50/60 px-4 py-2.5">
+            {showMasterActions && !showingUnverifiedSubmissions && (
+              <div className={`flex flex-wrap items-center justify-between gap-3 border-b px-4 py-2.5 ${isUnverifiedCustomerList ? 'border-orange-100 bg-orange-50/60' : 'border-red-100 bg-red-50/60'}`}>
                 <label className="inline-flex min-h-9 items-center gap-2 text-sm font-semibold text-slate-700">
                   <input
                     type="checkbox"
-                    aria-label="Select all visible unverified prospects"
-                    checked={allVisibleUnverifiedSelected}
-                    disabled={selectableUnverifiedRows.length === 0 || savingBatchDoNotContact}
-                    onChange={handleToggleAllVisibleUnverified}
-                    className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
-                  />
-                  Select all visible ({selectableUnverifiedRows.length})
-                </label>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-semibold text-slate-600" aria-live="polite">{selectedUnverifiedRows.length} selected</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBatchDoNotContactReasonOption('');
-                      setBatchDoNotContactCustomReason('');
-                      setShowBatchDoNotContactModal(true);
-                    }}
-                    disabled={selectedUnverifiedRows.length === 0 || savingBatchDoNotContact}
-                    className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-rose-700 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <XCircle className="h-4 w-4" />
-                    Mark selected Do Not Contact
-                  </button>
-                </div>
-              </div>
-            )}
-            {isDoNotCallSelectionMode && (
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-red-100 bg-red-50/60 px-4 py-2.5">
-                <label className="inline-flex min-h-9 items-center gap-2 text-sm font-semibold text-slate-700">
-                  <input
-                    type="checkbox"
-                    aria-label="Select all visible customers for Do Not Call"
+                    aria-label="Select all visible customers"
                     checked={allVisibleDoNotCallSelected}
-                    disabled={selectableDoNotCallRows.length === 0 || savingBulkDoNotCall}
+                    disabled={selectableDoNotCallRows.length === 0 || savingBulkDoNotCall || savingBatchDoNotContact}
                     onChange={handleToggleAllVisibleDoNotCall}
                     className="h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500"
                   />
@@ -1758,15 +1710,28 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 </label>
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="text-xs font-semibold text-slate-600" aria-live="polite">{selectedDoNotCallRows.length} selected</span>
-                  <button
+                  {canBatchBlacklistSelection && <button
+                    type="button"
+                    onClick={() => {
+                      setBatchDoNotContactReasonOption('');
+                      setBatchDoNotContactCustomReason('');
+                      setShowBatchDoNotContactModal(true);
+                    }}
+                    disabled={savingBatchDoNotContact}
+                    className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-rose-700 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <XCircle className="h-4 w-4" />
+                    Blacklist / Reject selected
+                  </button>}
+                  {selectedDoNotCallRows.length > 0 && <button
                     type="button"
                     onClick={() => { setBulkDoNotCallReason(''); setShowBulkDoNotCallModal(true); }}
                     disabled={selectedDoNotCallRows.length === 0 || savingBulkDoNotCall}
                     className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-red-700 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <UserX className="h-4 w-4" aria-hidden="true" />
-                    Mark selected Do Not Call
-                  </button>
+                    Do Not Call
+                  </button>}
                 </div>
               </div>
             )}
@@ -1779,7 +1744,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
               <table className="min-w-[1450px] w-full table-fixed border-separate border-spacing-0 text-left text-sm">
                 <thead className="sticky top-0 z-20 bg-slate-50 text-xs text-slate-600 shadow-sm [&_th]:sticky [&_th]:top-0 [&_th]:z-20 [&_th]:border-b [&_th]:border-slate-200 [&_th]:bg-slate-50">
                   <tr>
-                    {isDoNotCallSelectionMode ? <th className="w-10 px-2 py-2.5 text-center" aria-label="Select customer for Do Not Call" /> : isUnverifiedCustomerList && <th className="w-10 px-2 py-2.5 text-center" aria-label="Select prospect" />}
+                    {showMasterActions && !showingUnverifiedSubmissions && <th className="w-10 px-2 py-2.5 text-center" aria-label="Select customer" />}
                     <th className="w-12 px-3 py-2.5">#</th>
                     <th className="w-[200px] px-2 py-2.5">Customer / Mobile</th>
                     <th className="w-[125px] px-2 py-2.5 text-center">VIP Status</th>
@@ -1902,23 +1867,14 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                     const TrendIcon = trend.Icon;
                     return (
                       <tr key={row.id} title={highlight.label} className={`border-t border-slate-100 align-top transition-colors ${highlight.row}`}>
-                        {isDoNotCallSelectionMode ? <td className="px-2 py-2.5 text-center">
-                          <input
-                            type="checkbox"
-                            aria-label={`Select ${row.shopName} for Do Not Call`}
-                            checked={selectedDoNotCallIds.has(row.id)}
-                            disabled={!selectableDoNotCallIds.has(row.id) || savingBulkDoNotCall}
-                            onChange={() => handleToggleDoNotCallSelection(row.id)}
-                            className="h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500"
-                          />
-                        </td> : isUnverifiedCustomerList && <td className="px-2 py-2.5 text-center">
+                        {showMasterActions && !showingUnverifiedSubmissions && <td className="px-2 py-2.5 text-center">
                           <input
                             type="checkbox"
                             aria-label={`Select ${row.shopName}`}
-                            checked={selectedUnverifiedIds.has(row.id)}
-                            disabled={!selectableUnverifiedIds.has(row.id) || savingBatchDoNotContact}
-                            onChange={() => handleToggleUnverifiedSelection(row.id)}
-                            className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                            checked={selectedDoNotCallIds.has(row.id) || selectedUnverifiedIds.has(row.id)}
+                            disabled={isBlockedDailyCallMasterRow(row) || (row.dataIntegrityException && !(isProspectRow(row) && String(row.verification || '').trim().toLowerCase() !== 'verified')) || savingBulkDoNotCall || savingBatchDoNotContact}
+                            onChange={() => handleToggleMasterSelection(row)}
+                            className="h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500"
                           />
                         </td>}
                         <td className="px-3 py-2.5 text-sm font-bold">{index + 1}</td>
@@ -2167,7 +2123,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                   {((showingUnverifiedSubmissions && pendingDuplicateProspects.length === 0)
                     || (activeCategory.id === 'unverified' && !showingUnverifiedSubmissions && activeCategory.rows.length === 0)
                     || (activeCategory.id !== 'unverified' && activeCategory.rows.length === 0)) && (
-                    <tr><td colSpan={isDoNotCallSelectionMode || isUnverifiedCustomerList ? 12 : 11} className="px-3 py-12 text-center text-xs text-slate-400">
+                    <tr><td colSpan={showMasterActions && !showingUnverifiedSubmissions ? 12 : 11} className="px-3 py-12 text-center text-xs text-slate-400">
                       {showingUnverifiedSubmissions ? 'No duplicate prospect submissions from sales agents awaiting review.' : 'No customers in this category.'}
                     </td></tr>
                   )}
