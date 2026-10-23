@@ -702,6 +702,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
   const today = new Date();
   const [rows, setRows] = useState<SalesReturnRecord[]>([]);
   const [selectedRefno, setSelectedRefno] = useState(initialSalesReturnRefNo || '');
+  const [ignoreInitialSalesReturnRefNo, setIgnoreInitialSalesReturnRefNo] = useState(false);
   const [selected, setSelected] = useState<SalesReturnRecord | null>(null);
   const [items, setItems] = useState<SalesReturnItem[]>([]);
   const [detailCustomers, setDetailCustomers] = useState<Contact[]>([]);
@@ -820,14 +821,14 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
     }
   };
 
-  const loadList = useCallback(async () => {
+  const loadList = useCallback(async (skipInitialRef = false) => {
     setLoadingList(true);
     setError('');
     try {
       const data = await salesReturnService.list({ search, status, month, year, page, perPage });
       setRows(data.items);
 
-      if (initialSalesReturnRefNo) {
+      if (initialSalesReturnRefNo && !ignoreInitialSalesReturnRefNo && !skipInitialRef) {
         if (selectedRefno !== initialSalesReturnRefNo) setSelectedRefno(initialSalesReturnRefNo);
       } else if (!selectedRefno && data.items[0]?.lrefno) {
         setSelectedRefno(data.items[0].lrefno);
@@ -844,7 +845,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
     } finally {
       setLoadingList(false);
     }
-  }, [search, status, month, year, page, perPage, selectedRefno]);
+  }, [search, status, month, year, page, perPage, selectedRefno, initialSalesReturnRefNo, ignoreInitialSalesReturnRefNo]);
 
   const loadDetail = useCallback(
     async (refno: string) => {
@@ -1015,6 +1016,33 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
     });
   };
 
+  const handleDeleteSalesReturn = () => {
+    if (!canDelete || !selected || !isPending) return;
+    const refno = selected.lrefno;
+    setConfirmAction({
+      open: true,
+      title: 'Delete Sales Return',
+      message: 'Delete this pending sales return and all of its items? This action cannot be undone.',
+      confirmLabel: 'Delete',
+      action: async () => {
+        setActionLoading(true);
+        try {
+          await salesReturnService.delete(refno);
+          if (refno === initialSalesReturnRefNo) setIgnoreInitialSalesReturnRefNo(true);
+          setSelected(null);
+          setItems([]);
+          setSelectedRefno('');
+          await loadList(true);
+        } catch (err: any) {
+          if (shouldSuppressAuthError(err)) return;
+          setError(err?.message || 'Failed to delete sales return');
+        } finally {
+          setActionLoading(false);
+        }
+      },
+    });
+  };
+
   const handlePost = () => {
     if (!canPost) return;
     setConfirmAction({
@@ -1129,6 +1157,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
             <div className="flex items-center gap-2 font-['Oswald'] text-[18px] text-[#263f52]">
               {selected && isPending && items.length > 0 && canPost && <button type="button" onClick={handlePost} disabled={actionLoading} className="rounded-[4px] bg-[#51b957] px-4 py-2 text-[12px] font-bold text-white">POST <u>Credit Memo</u></button>}
               {selected && isPosted && canUnpost && <button type="button" onClick={handleUnpost} disabled={actionLoading} className="rounded-[4px] bg-[#f0ad4e] px-4 py-2 text-[12px] font-bold text-white">UNPOST</button>}
+              {selected && isPending && canDelete && <button type="button" onClick={handleDeleteSalesReturn} disabled={actionLoading} className="rounded-[4px] bg-[#d9534f] px-4 py-2 text-[12px] font-bold text-white">DELETE</button>}
               <span>CM No. :</span>
               <input readOnly value={selected?.lcredit_no || ''} className="h-[34px] w-[130px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3 font-sans text-[13px]" />
             </div>

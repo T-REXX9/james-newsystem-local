@@ -289,6 +289,14 @@ export const salesReturnService = {
     );
   },
 
+  async delete(refno: string): Promise<void> {
+    const query = new URLSearchParams({ main_id: String(getMainId()) });
+    await mutateApi<any>(
+      `${API_BASE_URL}/sales-returns/${encodeURIComponent(refno)}?${query.toString()}`,
+      'DELETE'
+    );
+  },
+
   async post(refno: string): Promise<SalesReturnRecord> {
     const session = getLocalAuthSession();
     const userId = Number(session?.context?.user?.id || 0);

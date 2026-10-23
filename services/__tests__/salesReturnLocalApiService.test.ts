@@ -72,4 +72,14 @@ describe('salesReturnLocalApiService source documents', () => {
       remark: 'Customer reported damage',
     });
   });
+
+  it('deletes a whole sales return by reference number with tenant context', async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(() => okResponse({ deleted: true, refno: 'cm-1' }));
+
+    await salesReturnService.delete('cm-1');
+
+    const [url, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(String(url)).toContain('/sales-returns/cm-1?main_id=');
+    expect((init as RequestInit).method).toBe('DELETE');
+  });
 });
