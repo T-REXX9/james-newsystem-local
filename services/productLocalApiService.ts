@@ -278,6 +278,23 @@ export const searchProducts = async (
   return page.items;
 };
 
+export const searchSalesInquiryProducts = async (query: string): Promise<Product[]> => {
+  const { mainId } = getLocalProductContext();
+  const params = new URLSearchParams({
+    main_id: String(mainId),
+    search: query,
+    status: 'active',
+    page: '1',
+    per_page: '50',
+  });
+  const response = await fetch(`${API_BASE_URL}/sales-inquiry-products?${params.toString()}`);
+  if (!response.ok) throw new Error(await parseApiErrorMessage(response));
+
+  const payload = await response.json();
+  const rows = Array.isArray(payload?.data?.items) ? payload.data.items : [];
+  return rows.map(normalizeApiProduct);
+};
+
 export const createProduct = async (product: Omit<Product, 'id'>): Promise<void> => {
   const { mainId, userId } = getLocalProductContext();
   const response = await fetch(`${API_BASE_URL}/products`, {
@@ -309,6 +326,16 @@ export const updateProduct = async (id: string, updates: Partial<Product>): Prom
 export const fetchProductById = async (id: string): Promise<Product | null> => {
   const query = new URLSearchParams({ main_id: String(getLocalProductContext().mainId) });
   const response = await fetch(`${API_BASE_URL}/products/${encodeURIComponent(id)}?${query.toString()}`);
+  if (!response.ok) return null;
+  const payload = await response.json();
+  const raw = payload?.data ?? payload;
+  if (!raw?.id) return null;
+  return normalizeApiProduct(raw);
+};
+
+export const fetchSalesInquiryProductById = async (id: string): Promise<Product | null> => {
+  const query = new URLSearchParams({ main_id: String(getLocalProductContext().mainId) });
+  const response = await fetch(`${API_BASE_URL}/sales-inquiry-products/${encodeURIComponent(id)}?${query.toString()}`);
   if (!response.ok) return null;
   const payload = await response.json();
   const raw = payload?.data ?? payload;

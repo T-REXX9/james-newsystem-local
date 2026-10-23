@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import { Search, Loader2, Package, AlertCircle, X, Check } from 'lucide-react';
+import { Search, Package, AlertCircle, X, Check } from 'lucide-react';
 import type { Product, UserProfile } from '../types';
-import { searchProducts } from '../services/productLocalApiService';
+import { searchSalesInquiryProducts } from '../services/productLocalApiService';
 import { useDebounce } from '../hooks/useDebounce';
 import { getCentralStock } from '../utils/productStock';
 import { canExportProductImages, isSalesAgentUser } from '../utils/productImageExportAccess';
 import ProductImageExportActions from './ProductImageExportActions';
+import SearchableSelect from './SearchableSelect';
 
 interface ProductSearchModalProps {
     isOpen: boolean;
@@ -23,8 +24,8 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({ isOpen, onClose
     const [loading, setLoading] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState(-1);
     const [noResults, setNoResults] = useState(false);
+    const [searchError, setSearchError] = useState('');
     const [exportSelection, setExportSelection] = useState<Map<string, Product>>(() => new Map());
-    const inputRef = useRef<HTMLInputElement>(null);
 
     const debouncedQuery = useDebounce(query, 300);
     const canExport = canExportProductImages(currentUser, assignedAgentId);
@@ -39,36 +40,36 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({ isOpen, onClose
             setSelectedIndex(-1);
             setNoResults(false);
             setExportSelection(new Map());
-            // Fetch default results immediately on open
-            searchProducts('').then(data => setResults(data));
-
-            // Focus input after a small delay to ensure render
-            setTimeout(() => {
-                inputRef.current?.focus();
-            }, 50);
         }
     }, [isOpen]);
 
     // Search effect
     useEffect(() => {
+        if (!isOpen) return undefined;
+
+        let isCurrentRequest = true;
         const fetchProducts = async () => {
             setLoading(true);
+            setSearchError('');
             try {
-                const data = await searchProducts(debouncedQuery);
+                const data = await searchSalesInquiryProducts(debouncedQuery);
+                if (!isCurrentRequest) return;
                 setResults(data);
                 setNoResults(data.length === 0);
                 setSelectedIndex(-1);
             } catch (error) {
                 console.error('Error searching products:', error);
+                if (!isCurrentRequest) return;
                 setResults([]);
+                setNoResults(false);
+                setSearchError(error instanceof Error ? error.message : 'Unable to search products. Please try again.');
             } finally {
-                setLoading(false);
+                if (isCurrentRequest) setLoading(false);
             }
         };
 
-        if (isOpen) {
-            fetchProducts();
-        }
+        void fetchProducts();
+        return () => { isCurrentRequest = false; };
     }, [debouncedQuery, isOpen]);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -129,15 +130,19 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({ isOpen, onClose
                 {/* Header / Search */}
                 <div className="flex items-center gap-3 p-4 border-b border-slate-100 dark:border-slate-800">
                     <Search className="h-5 w-5 text-slate-400" />
-                    <input
-                        ref={inputRef}
-                        type="text"
-                        className="flex-1 bg-transparent text-lg text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none"
-                        placeholder="Search products..."
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        autoComplete="off"
+                    <SearchableSelect
+                        value=""
+                        options={[]}
+                        onChange={() => undefined}
+                        inputOnly
+                        autoFocus
+                        inputValue={query}
+                        onInputChange={setQuery}
+                        onInputKeyDown={handleKeyDown}
+                        inputAriaLabel="Search products"
+                        searchPlaceholder="Search products..."
+                        searchInputClassName="border-0 bg-transparent py-0 pl-0 text-lg shadow-none focus:border-0 focus:ring-0 dark:bg-transparent"
+                        className="min-w-0 flex-1"
                     />
                     <button
                         onClick={onClose}
@@ -156,7 +161,12 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({ isOpen, onClose
 
                 {/* Results List */}
                 <div className="flex-1 overflow-y-auto min-h-[300px] p-2">
-                    {results.length > 0 ? (
+                    {searchError ? (
+                        <div className="flex h-full flex-col items-center justify-center py-12 text-center text-rose-600" role="alert">
+                            <AlertCircle className="mb-3 h-12 w-12 text-rose-300" aria-hidden="true" />
+                            <p className="text-sm">{searchError}</p>
+                        </div>
+                    ) : results.length > 0 ? (
                         <ul className="space-y-1">
                             {results.map((product, index) => {
                                 const isSelected = index === selectedIndex;

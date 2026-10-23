@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchProductsPage, searchProducts } from '../productLocalApiService';
+import { fetchProductsPage, searchProducts, searchSalesInquiryProducts } from '../productLocalApiService';
 
 const okResponse = (data: unknown) =>
   Promise.resolve({
@@ -46,6 +46,23 @@ describe('productLocalApiService', () => {
 
     const [url] = (global.fetch as any).mock.calls[0];
     expect(String(url)).toContain('status=all');
+  });
+
+  it('searches products through the Sales Inquiry permission route', async () => {
+    (global.fetch as any).mockImplementation(() =>
+      okResponse({
+        items: [{ id: 'product-1', part_no: 'P-001', status: 'Active' }],
+        meta: { page: 1, per_page: 50, total: 1, total_pages: 1 },
+      })
+    );
+
+    const result = await searchSalesInquiryProducts('brake');
+
+    const [url] = (global.fetch as any).mock.calls[0];
+    expect(String(url)).toContain('/sales-inquiry-products?');
+    expect(String(url)).toContain('search=brake');
+    expect(String(url)).toContain('status=active');
+    expect(result[0]).toMatchObject({ id: 'product-1', part_no: 'P-001' });
   });
 
   it('requests only products below a positive reorder quantity when required', async () => {

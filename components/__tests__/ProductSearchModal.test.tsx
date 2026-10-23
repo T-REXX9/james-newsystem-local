@@ -2,10 +2,10 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Product } from '../../types';
 
-const searchProductsMock = vi.fn();
+const searchSalesInquiryProductsMock = vi.fn();
 
 vi.mock('../../services/productLocalApiService', () => ({
-  searchProducts: (...args: unknown[]) => searchProductsMock(...args),
+  searchSalesInquiryProducts: (...args: unknown[]) => searchSalesInquiryProductsMock(...args),
 }));
 
 import ProductSearchModal from '../ProductSearchModal';
@@ -30,7 +30,7 @@ describe('ProductSearchModal', () => {
   });
 
   it('shows all three VIP prices for each product result', async () => {
-    searchProductsMock.mockResolvedValue([product]);
+    searchSalesInquiryProductsMock.mockResolvedValue([product]);
 
     render(<ProductSearchModal isOpen onClose={vi.fn()} onSelect={vi.fn()} />);
 
@@ -49,7 +49,7 @@ describe('ProductSearchModal', () => {
   });
 
   it('lets the assigned sales agent select product images to export without selecting an inquiry item', async () => {
-    searchProductsMock.mockResolvedValue([{ ...product, recordImage: 'base64-image' }]);
+    searchSalesInquiryProductsMock.mockResolvedValue([{ ...product, recordImage: 'base64-image' }]);
     const onSelect = vi.fn();
     render(
       <ProductSearchModal
@@ -73,7 +73,7 @@ describe('ProductSearchModal', () => {
   });
 
   it('does not show image export controls to a sales agent who is not assigned to the inquiry customer', async () => {
-    searchProductsMock.mockResolvedValue([{ ...product, recordImage: 'base64-image' }]);
+    searchSalesInquiryProductsMock.mockResolvedValue([{ ...product, recordImage: 'base64-image' }]);
     render(
       <ProductSearchModal
         isOpen
@@ -87,5 +87,14 @@ describe('ProductSearchModal', () => {
 
     expect(await screen.findByText(/Select a customer assigned to you in Sales Inquiry/i)).toBeInTheDocument();
     expect(screen.queryByRole('checkbox', { name: /image for export/i })).not.toBeInTheDocument();
+  });
+
+  it('shows search failures instead of leaving the modal in its empty initial state', async () => {
+    searchSalesInquiryProductsMock.mockRejectedValue(new Error('Forbidden: You do not have permission to view'));
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    render(<ProductSearchModal isOpen onClose={vi.fn()} onSelect={vi.fn()} />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Forbidden: You do not have permission to view');
   });
 });

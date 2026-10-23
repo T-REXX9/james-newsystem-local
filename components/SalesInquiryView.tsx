@@ -35,7 +35,7 @@ import {
   getAllSalesInquiries,
   updateSalesInquiry,
 } from '../services/salesInquiryLocalApiService';
-import { getProductPrice, fetchProductById } from '../services/productLocalApiService';
+import { getProductPrice, fetchSalesInquiryProductById } from '../services/productLocalApiService';
 import { getSalesOrderByInquiry, getSalesOrder } from '../services/salesOrderLocalApiService';
 
 import ProductSearchModal from './ProductSearchModal';
@@ -495,7 +495,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     if (itemsWithProduct.length === 0) return;
 
     const productResults = await Promise.all(
-      itemsWithProduct.map((item) => fetchProductById(item.item_id).catch(() => null))
+      itemsWithProduct.map((item) => fetchSalesInquiryProductById(item.item_id).catch(() => null))
     );
 
     const priceMap = new Map<string, number>();

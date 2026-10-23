@@ -24,6 +24,8 @@ interface SearchableSelectProps {
     inputOnly?: boolean;
     inputValue?: string;
     onInputChange?: (value: string) => void;
+    onInputKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
+    autoFocus?: boolean;
     inputAriaLabel?: string;
 }
 
@@ -43,6 +45,8 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     inputOnly = false,
     inputValue = '',
     onInputChange,
+    onInputKeyDown,
+    autoFocus = false,
     inputAriaLabel,
 }) => {
     const selectId = useId().replace(/:/g, '-');
@@ -165,9 +169,11 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                         type="search"
                         value={inputValue}
                         onChange={(event) => onInputChange?.(event.target.value)}
+                        onKeyDown={onInputKeyDown}
                         placeholder={searchPlaceholder}
                         aria-label={inputAriaLabel || searchPlaceholder}
                         disabled={disabled}
+                        autoFocus={autoFocus}
                         className={`w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 ${searchInputClassName}`}
                     />
                 </div>
