@@ -199,6 +199,7 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
     }
 
     for (const transaction of transactions) {
+      if (transaction.type === 'so') continue;
       const name = transaction.salesperson.trim() || 'Unassigned';
       const transactionAgentId = (transaction.currentAgentId || '').trim();
       const rosterAgentId = transactionAgentId || (idByUniqueRosterName.get(name.toLocaleLowerCase()) || '');
@@ -240,7 +241,7 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
       };
       existing.soAmount += transaction.soAmount || 0;
       existing.drAmount += transaction.drAmount || 0;
-      existing.invoiceAmount += transaction.invoiceAmount || 0;
+      existing.invoiceAmount += transaction.reportInvoiceAmount ?? transaction.invoiceAmount ?? 0;
       groups.set(key, existing);
     }
     const rows = [...groups.entries()].map(([key, value]) => ({ key, ...value })).sort((left, right) => {
@@ -354,9 +355,9 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
                         <td className="break-words px-2 py-2">{transaction.terms}</td>
                         <td className="break-words px-2 py-2">{transaction.refNo}</td>
                         <td className="break-words px-2 py-2">{transaction.soNo}</td>
-                        <td className="break-words px-2 py-2 text-right">{money.format(transaction.soAmount || 0)}</td>
+                        <td className="break-words px-2 py-2 text-right">{money.format(transaction.reportAmount ?? transaction.soAmount ?? 0)}</td>
                         <td className="break-words px-2 py-2 text-right">{money.format(transaction.drAmount || 0)}</td>
-                        <td className="break-words px-2 py-2 text-right">{money.format(transaction.invoiceAmount || 0)}</td>
+                        <td className="break-words px-2 py-2 text-right">{money.format(transaction.reportInvoiceAmount ?? transaction.invoiceAmount ?? 0)}</td>
                         <td className="break-words px-2 py-2">{transaction.salesperson}</td>
                       </tr>
                     ))}
@@ -384,8 +385,8 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
                     {reportType !== 'today' && (
                       <tr>
                         <td colSpan={5} className="px-2 py-3 text-right text-[16px] font-semibold">TOTAL  --&gt;</td>
-                        <td />
-                        <td colSpan={2} className="px-2 py-3 text-center font-semibold">{money.format(reportData?.summary.grandTotal.total || 0)}</td>
+                        <td className="px-2 py-3 text-center font-semibold">{money.format(reportData?.summary.grandTotal.total || 0)}</td>
+                        <td colSpan={2} />
                         <td />
                       </tr>
                     )}
@@ -396,8 +397,8 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
                     </tr>
                     <tr>
                       <td colSpan={5} className="px-2 py-3 text-right text-[16px] font-semibold">GRAND TOTAL --&gt;</td>
-                      <td />
-                      <td colSpan={2} className="border-b-4 border-double border-black px-2 py-3 text-center font-semibold">{money.format(reportData?.summary.grandTotal.total || 0)}</td>
+                      <td className="border-b-4 border-double border-black px-2 py-3 text-center font-semibold">{money.format(reportData?.summary.grandTotal.total || 0)}</td>
+                      <td colSpan={2} className="border-b-4 border-double border-black" />
                       <td />
                     </tr>
                   </tbody>
@@ -438,7 +439,7 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
                 <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                   <div>
                     <h2 id="agent-performance-heading" className="text-[15px] font-semibold">SALES PERFORMANCE BY AGENT</h2>
-                    <p className="mt-1 text-xs text-[#666]">Posted sales are delivery receipts plus invoices, matching the report total.</p>
+                    <p className="mt-1 text-xs text-[#666]">The legacy Invoice column uses OnStock sales-order values; agent totals use posted invoice and receipt amounts.</p>
                   </div>
                   <div className="flex flex-wrap gap-2 text-[11px]" aria-label="Customer type color legend">
                     {(Object.entries(customerTypeStyles) as [keyof typeof customerTypeStyles, (typeof customerTypeStyles)['new']][]).map(([type, style]) => (

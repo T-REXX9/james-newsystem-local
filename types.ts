@@ -1962,8 +1962,10 @@ export interface SalesReportTransaction {
   refNo: string;
   soNo: string;
   soAmount: number;
+  reportAmount?: number;
   drAmount: number;
   invoiceAmount: number;
+  reportInvoiceAmount?: number;
   salesperson: string;
   currentAgentId?: string;
   customerType?: 'new' | 'old' | 'unclassified';
