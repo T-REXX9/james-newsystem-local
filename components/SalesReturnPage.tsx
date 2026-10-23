@@ -573,8 +573,8 @@ const CreateModal: React.FC<{
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/40">
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto mx-4 p-6">
+    <section className="overflow-hidden rounded-[5px] border border-[#d8d8d8] bg-white">
+      <div className="mx-auto max-w-[720px] p-6 md:p-8">
         <h3 className="text-lg font-semibold mb-4 text-slate-900 dark:text-slate-100">New Credit Memo</h3>
 
         {error && (
@@ -678,7 +678,7 @@ const CreateModal: React.FC<{
           </button>
         </div>
       </div>
-    </div>
+    </section>
   );
 };
 
@@ -1099,6 +1099,10 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
   return (
     <div className="min-h-full bg-[#f4f4f4] px-4 py-10 text-[13px] text-[#222]">
       <div className="mx-auto max-w-[1140px] space-y-6">
+        {showCreate ? (
+          <CreateModal open onCreated={handleCreated} onClose={() => setShowCreate(false)} />
+        ) : (
+          <>
         <section className="overflow-hidden rounded-[5px] border border-[#d8d8d8] bg-white">
           <div className="flex min-h-[82px] flex-wrap items-center justify-between gap-4 border-b border-[#ddd] px-9 py-5">
             <div className="flex gap-1">
@@ -1272,11 +1276,11 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
             )}
           </div>
         </section>
+          </>
+        )}
       </div>
 
       {/* Modals */}
-      <CreateModal open={showCreate} onCreated={handleCreated} onClose={() => setShowCreate(false)} />
-
       <SourceItemsModal
         open={showSourceItems}
         sourceItems={sourceItems}
