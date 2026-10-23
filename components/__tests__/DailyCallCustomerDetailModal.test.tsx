@@ -86,11 +86,11 @@ describe('DailyCallCustomerDetailModal', () => {
     expect(screen.getByAltText(/VIP Gold badge|VIP Silver badge/i)).toBeInTheDocument();
   });
 
-  it('does not show a VIP badge when last month spend has no discount tier', () => {
+  it('does not show a VIP badge when current month spend has no discount tier', () => {
     render(
       <DailyCallCustomerDetailModal
         isOpen
-        customer={{ ...baseCustomer, dealerPriceGroup: 'VIP 1', lastMonthOrder: 5000 }}
+        customer={{ ...baseCustomer, monthlyOrder: 5000, dealerPriceGroup: 'VIP 1', lastMonthOrder: 35000 }}
         currentUser={null}
         onClose={() => {}}
       />
