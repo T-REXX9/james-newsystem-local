@@ -379,7 +379,7 @@ const comparisonText = (value: unknown): string => {
 };
 
 const vipDetails = (row: DailyCallMasterCustomerRow, config: VipTierConfig) => {
-  const level = resolveVipDiscountLevel(row.lastMonthSales || 0, config);
+  const level = resolveVipDiscountLevel(row.currentMonthSales || 0, config);
   if (level === 'gold') {
     return {
       label: 'VIP Gold',
@@ -1022,7 +1022,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   }, [addToast, currentUser]);
 
   const getCurrentVip = (row: DailyCallMasterCustomerRow) => {
-    return resolveVipDiscountLevel(row.lastMonthSales || 0, vipConfig);
+    return resolveVipDiscountLevel(row.currentMonthSales || 0, vipConfig);
   };
 
   const getNextVip = (row: DailyCallMasterCustomerRow) => {
@@ -1074,7 +1074,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     const threshold = current === 'silver'
       ? vipConfig.unlimited_discount_threshold
       : vipConfig.one_time_discount_threshold;
-    return Math.max(0, threshold - (row.lastMonthSales || 0));
+    return Math.max(0, threshold - (row.currentMonthSales || 0));
   };
 
   const selectedCategory = categoryData.find((category) => category.id === activeCategoryId) || categoryData[0];

@@ -45,7 +45,7 @@ const DailyCallCustomerDetailModal: React.FC<DailyCallCustomerDetailModalProps> 
   }, [isOpen]);
 
   const vipStanding = customer
-    ? getVipStandingSummary('', customer.lastMonthOrder, vipConfig)
+    ? getVipStandingSummary('', customer.monthlyOrder, vipConfig)
     : null;
 
   useEffect(() => {

@@ -427,7 +427,7 @@ describe('DailyCallMasterListView', () => {
     expect(updateContact).toHaveBeenCalledWith('pending-verified-1', { verification: 'Verified' }, 'master-1');
   });
 
-  it('classifies current VIP status from last month sales instead of stored price group', async () => {
+  it('classifies current VIP status and remaining amount from current month sales', async () => {
     vi.mocked(getVipTierConfig).mockResolvedValueOnce({
       one_time_discount_threshold: 10000,
       unlimited_discount_threshold: 30000,
@@ -436,20 +436,20 @@ describe('DailyCallMasterListView', () => {
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
       meta: { fromDate: '2025-10-01', toDate: '2026-09-03', count: 1 },
       items: [{
-        id: 'last-month-vip-1',
-        shopName: 'Last Month Qualified Shop',
+        id: 'current-month-vip-1',
+        shopName: 'Current Month Qualified Shop',
         province: 'Cebu',
         city: 'Cebu City',
         contactNumber: '0917',
         assignedTo: 'Unassigned',
         priceGroup: 'regular',
-        lastPurchaseDate: 'Aug 29, 2026',
-        lastPurchaseDateRaw: '2026-08-29',
+        lastPurchaseDate: 'Sep 2, 2026',
+        lastPurchaseDateRaw: '2026-09-02',
         purchaseCount: 2,
         listCategory: 'priority',
-        totalSales: 35043,
-        currentMonthSales: 0,
-        lastMonthSales: 35043,
+        totalSales: 20590,
+        currentMonthSales: 15590,
+        lastMonthSales: 5000,
         averageMonthlySales: 35043,
         averageMonthlySalesMonthCount: 1,
         recentThreeMonthSales: 35043,
@@ -463,9 +463,10 @@ describe('DailyCallMasterListView', () => {
 
     render(<DailyCallMasterListView />);
 
-    const row = (await screen.findByText('Last Month Qualified Shop')).closest('tr');
+    const row = (await screen.findByText('Current Month Qualified Shop')).closest('tr');
     expect(row).not.toBeNull();
-    expect(within(row as HTMLElement).getByText('VIP Gold')).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText('VIP Silver')).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText('₱14,410 to next VIP')).toBeInTheDocument();
     expect(within(row as HTMLElement).queryByText('Regular')).not.toBeInTheDocument();
   });
 
