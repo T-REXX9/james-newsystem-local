@@ -57,6 +57,7 @@ import {
   WRITABLE_PRICING_GROUP_OPTIONS,
 } from '../constants/pricingGroups';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
+import { isMasterUserAccount } from '../constants';
 import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
 import { buildSalesInquiryCustomerSummary } from '../utils/salesInquirySummary';
 import {
@@ -1473,7 +1474,6 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     if (!printableInquiry) return;
     setJpegCaptureMode(false);
     setShowPrintPreview(true);
-    window.setTimeout(() => window.print(), 150);
   };
   const handleExportJpeg = () => {
     if (!printableInquiry) {
@@ -1854,6 +1854,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
           preparedBy={String(printableInquiry.created_by_name || getLocalAuthSession()?.userProfile?.full_name || '').trim()}
           vipConfig={vipConfig}
           currentMonthSales={postedSales.currentMonthSales}
+          canEditWarranty={isMasterUserAccount(currentUser)}
           captureMode={jpegCaptureMode}
           onSheetReady={handlePrintSheetReady}
           onClose={() => {
@@ -2739,6 +2740,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
           preparedBy={String(printableInquiry.created_by_name || getLocalAuthSession()?.userProfile?.full_name || '').trim()}
           vipConfig={vipConfig}
           currentMonthSales={postedSales.currentMonthSales}
+          canEditWarranty={isMasterUserAccount(currentUser)}
           onClose={() => setShowPrintPreview(false)}
         />
       )}

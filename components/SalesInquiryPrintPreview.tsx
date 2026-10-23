@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Printer, XCircle } from 'lucide-react';
 import { formatSalesInquiryBrand } from '../constants/salesInquiryBrand';
 import { Contact, SalesInquiry, VipTierConfig } from '../types';
@@ -19,7 +19,10 @@ interface SalesInquiryPrintPreviewProps {
   /** When true, hide preview chrome and mount off-screen for JPEG capture. */
   captureMode?: boolean;
   onSheetReady?: (sheet: HTMLElement) => void;
+  canEditWarranty?: boolean;
 }
+
+const DEFAULT_WARRANTY_TEXT = 'ISHINOMOTO products only — covered against factory defects found upon installation, subject to inspection.';
 
 const moneyFormatter = new Intl.NumberFormat('en-PH', {
   minimumFractionDigits: 2,
@@ -272,8 +275,10 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
   onClose,
   captureMode = false,
   onSheetReady,
+  canEditWarranty = false,
 }) => {
   const sheetRef = useRef<HTMLDivElement | null>(null);
+  const [warrantyText, setWarrantyText] = useState(DEFAULT_WARRANTY_TEXT);
   const lineItems = inquiry.items || [];
   const totalAmount = lineItems.reduce(
     (sum, item) => sum + Number(item.amount || Number(item.qty || 0) * Number(item.unit_price || 0)),
@@ -433,7 +438,19 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
                 <td />
                 <td />
                 <td className="sales-inquiry-label">Warranty:</td>
-                <td>ISHINOMOTO products only — covered against factory defects found upon installation, subject to inspection.</td>
+                <td>
+                  {canEditWarranty ? (
+                    <textarea
+                      aria-label="Warranty"
+                      rows={Math.max(2, warrantyText.split('\n').length)}
+                      value={warrantyText}
+                      onChange={(event) => setWarrantyText(event.target.value)}
+                      className="sales-inquiry-warranty-input min-h-[3.5rem] w-full resize-y rounded border border-slate-300 bg-white px-2 py-1 text-black print:resize-none print:border-0 print:p-0"
+                    />
+                  ) : (
+                    warrantyText
+                  )}
+                </td>
               </tr>
               <tr>
                 <td className="sales-inquiry-label">Promise to Pay:</td>

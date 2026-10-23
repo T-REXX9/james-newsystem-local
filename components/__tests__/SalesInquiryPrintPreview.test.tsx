@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import SalesInquiryPrintPreview from '../SalesInquiryPrintPreview';
 import { Contact, SalesInquiryStatus } from '../../types';
 
@@ -85,6 +85,7 @@ describe('SalesInquiryPrintPreview', () => {
     expect(screen.getByText('ISHINOMOTO')).toBeInTheDocument();
     expect(screen.getByText('Warranty:')).toBeInTheDocument();
     expect(screen.getByText(/ISHINOMOTO products only/)).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Warranty' })).not.toBeInTheDocument();
     expect(screen.getByText('Validity:')).toBeInTheDocument();
     expect(screen.getByText(/Orders not confirmed by 6:00 PM/)).toBeInTheDocument();
     expect(screen.getByText('Order Cut-off for Same-Day Delivery:')).toBeInTheDocument();
@@ -96,7 +97,29 @@ describe('SalesInquiryPrintPreview', () => {
     expect(screen.getByText('P29,800.00 MORE NEEDED THIS MONTH')).toBeInTheDocument();
   });
 
-  it('maps non-Ishinomoto product brands to OTHERS in the Brand column', () => {
+  it('lets a Master User edit warranty text in the print preview', () => {
+    render(
+      <SalesInquiryPrintPreview
+        inquiry={inquiry}
+        customer={{
+          id: 'c-1',
+          company: 'Acme Corp',
+          address: '123 Main St',
+        } as Contact}
+        inquiryNumberLabel="INQ26-99"
+        preparedBy="Melson Creator"
+        canEditWarranty
+        onClose={() => undefined}
+      />
+    );
+
+    const warrantyField = screen.getByRole('textbox', { name: 'Warranty' });
+    fireEvent.change(warrantyField, { target: { value: 'Custom warranty terms.' } });
+
+    expect(warrantyField).toHaveValue('Custom warranty terms.');
+  });
+
+  it('prints the product brand as stored in the Brand column', () => {
     render(
       <SalesInquiryPrintPreview
         inquiry={{
@@ -119,8 +142,8 @@ describe('SalesInquiryPrintPreview', () => {
       />
     );
 
-    expect(screen.getByText('OTHERS')).toBeInTheDocument();
-    expect(screen.queryByText('ITALY A')).not.toBeInTheDocument();
+    expect(screen.getByText('ITALY A')).toBeInTheDocument();
+    expect(screen.queryByText('OTHERS')).not.toBeInTheDocument();
   });
 
   it('uses currentMonthSales for VIP qualification when provided', () => {
