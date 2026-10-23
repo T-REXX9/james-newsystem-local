@@ -22,6 +22,9 @@ type SourceDocument = SalesReturnSourceDocument;
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
+export const calculateSalesReturnPostedAmount = (subtotal: number, discount: number, taxType: string): number =>
+  Math.max(0, subtotal - discount) * (taxType.trim().toLowerCase() === 'exclusive' ? 1.12 : 1);
+
 const formatDate = (value?: string): string => {
   if (!value) return 'N/A';
   return formatPhilippineDate(value);
@@ -45,8 +48,8 @@ const ConfirmDialog: React.FC<{
 }> = ({ open, title, message, confirmLabel = 'Confirm', onConfirm, onCancel }) => {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-sm w-full mx-4 p-6">
+    <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/40">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-h-[90vh] max-w-sm w-full overflow-y-auto mx-4 p-6">
         <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">{title}</h3>
         <p className="text-sm text-slate-600 dark:text-slate-300 mb-6">{message}</p>
         <div className="flex justify-end gap-2">
@@ -76,11 +79,12 @@ const SourceItemsModal: React.FC<{
   sourceItems: SourceItem[];
   loading: boolean;
   emptyMessage?: string;
-  onAdd: (item: SourceItem, qty: number) => void;
+  onAdd: (item: SourceItem, qty: number, remark: string) => void;
   onClose: () => void;
   onSearch?: (query: string) => void;
 }> = ({ open, sourceItems, loading, emptyMessage, onAdd, onClose, onSearch }) => {
   const [quantities, setQuantities] = useState<Record<number, number>>({});
+  const [remarks, setRemarks] = useState<Record<number, string>>({});
   const [itemSearch, setItemSearch] = useState('');
 
   useEffect(() => {
@@ -91,6 +95,7 @@ const SourceItemsModal: React.FC<{
         defaults[si.source_item_id] = si.is_catalog_item ? 1 : si.remaining_qty;
       });
       setQuantities(defaults);
+      setRemarks(Object.fromEntries(sourceItems.map((si) => [si.source_item_id, si.remark || ''])));
     }
   }, [open, sourceItems]);
 
@@ -102,7 +107,7 @@ const SourceItemsModal: React.FC<{
     .slice(0, 150);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/40">
       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-3xl w-full mx-4 max-h-[80vh] flex flex-col">
         <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
           <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Add Return Items</h3>
@@ -134,6 +139,7 @@ const SourceItemsModal: React.FC<{
                   <th className="px-3 py-2 text-right">Available</th>
                   <th className="px-3 py-2 text-right">Return Qty</th>
                   <th className="px-3 py-2 text-right">Price</th>
+                  <th className="px-3 py-2">Remark</th>
                   <th className="px-3 py-2"></th>
                 </tr>
               </thead>
@@ -159,9 +165,10 @@ const SourceItemsModal: React.FC<{
                       />
                     </td>
                     <td className="px-3 py-2 text-right">{peso.format(si.unit_price)}</td>
+                    <td className="px-3 py-2"><input aria-label={`Remark for ${si.item_code}`} value={remarks[si.source_item_id] || ''} onChange={(event) => setRemarks((prev) => ({ ...prev, [si.source_item_id]: event.target.value }))} className="w-32 rounded border border-slate-300 px-2 py-1 text-sm" /></td>
                     <td className="px-3 py-2 text-right">
                       <button
-                        onClick={() => onAdd(si, quantities[si.source_item_id] ?? (si.is_catalog_item ? 1 : si.remaining_qty))}
+                        onClick={() => onAdd(si, quantities[si.source_item_id] ?? (si.is_catalog_item ? 1 : si.remaining_qty), remarks[si.source_item_id] || '')}
                         className="px-3 py-1 rounded bg-blue-600 text-white text-xs hover:bg-blue-700"
                       >
                         Add
@@ -452,6 +459,8 @@ const CreateModal: React.FC<{
     salesman: '',
     remark: '',
     date: new Date().toISOString().slice(0, 10),
+    ship_via: '', tracking_no: '', note: '', complaint_note: '',
+    discount_amt: '0', tax_type: 'Exclusive', invoice_no: '', transaction_refno: '',
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -479,6 +488,8 @@ const CreateModal: React.FC<{
         salesman: '',
         remark: '',
         date: new Date().toISOString().slice(0, 10),
+        ship_via: '', tracking_no: '', note: '', complaint_note: '',
+        discount_amt: '0', tax_type: 'Exclusive', invoice_no: '', transaction_refno: '',
       });
       fetchContacts().then(setCustomers).catch(() => setCustomers([]));
       salesReturnService.sourceDocuments('', 50).then(setSourceDocs).catch(() => setSourceDocs([]));
@@ -502,6 +513,7 @@ const CreateModal: React.FC<{
     setForm((f) => ({
       ...f,
       invoice_refno: doc.id,
+      invoice_no: doc.doc_no,
       type: doc.type,
       salesman: doc.sales_person || f.salesman,
     }));
@@ -524,7 +536,7 @@ const CreateModal: React.FC<{
     setForm((current) => ({
       ...current,
       invoice_refno: '',
-      type: mode === 'none' ? 'No Reference' : 'Invoice',
+      type: mode === 'none' ? '' : 'Invoice',
     }));
   };
 
@@ -561,8 +573,8 @@ const CreateModal: React.FC<{
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-lg w-full mx-4 p-6">
+    <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/40">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto mx-4 p-6">
         <h3 className="text-lg font-semibold mb-4 text-slate-900 dark:text-slate-100">New Credit Memo</h3>
 
         {error && (
@@ -571,7 +583,7 @@ const CreateModal: React.FC<{
 
         <div className="grid grid-cols-1 gap-3 text-sm">
           <div className="flex items-center gap-5">
-            <span className="text-slate-600 dark:text-slate-300">Type</span>
+            <span className="text-slate-600 dark:text-slate-300">Reference</span>
             <label className="inline-flex items-center gap-2">
               <input type="radio" checked={referenceMode === 'with'} onChange={() => handleReferenceMode('with')} />
               With Reference
@@ -582,7 +594,7 @@ const CreateModal: React.FC<{
             </label>
           </div>
           {referenceMode === 'with' && <div className="block">
-            <span className="text-slate-600 dark:text-slate-300 text-sm">Invoice / OR No.</span>
+            <span className="text-slate-600 dark:text-slate-300 text-sm">DR/Invoice</span>
             <SourceDocAutocomplete
               documents={sourceDocs}
               customers={customers}
@@ -607,34 +619,25 @@ const CreateModal: React.FC<{
               inputClassName="border-slate-300 dark:border-slate-600"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            {referenceMode === 'with' && <label className="block">
-              <span className="text-slate-600 dark:text-slate-300">Type</span>
-              <select
-                value={form.type}
-                onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
-                className="w-full mt-1 px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
-              >
-                <option value="Invoice">Invoice</option>
-                <option value="OR">OR (Delivery Receipt)</option>
-              </select>
-            </label>}
-            <label className="block">
-              <span className="text-slate-600 dark:text-slate-300">Date</span>
-              <input
-                type="date"
-                value={form.date}
-                max={localTodayYmd()}
-                disabled={!canMutateDocumentDateField({
-                  canEdit: true,
-                  hasBackdatedPosting: canBackdatePosting(),
-                  isPosted: false,
-                })}
-                onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-                className="w-full mt-1 px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 disabled:bg-slate-100"
-              />
-            </label>
-          </div>
+          <label className="block">
+            <span className="text-slate-600 dark:text-slate-300">Ship Via</span>
+            <input value={form.ship_via} onChange={(e) => setForm((f) => ({ ...f, ship_via: e.target.value }))} className="w-full mt-1 px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800" />
+          </label>
+          <label className="block">
+            <span className="text-slate-600 dark:text-slate-300">Date</span>
+            <input
+              type="date"
+              value={form.date}
+              max={localTodayYmd()}
+              disabled={!canMutateDocumentDateField({
+                canEdit: true,
+                hasBackdatedPosting: canBackdatePosting(),
+                isPosted: false,
+              })}
+              onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+              className="w-full mt-1 px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 disabled:bg-slate-100"
+            />
+          </label>
           <label className="block">
             <span className="text-slate-600 dark:text-slate-300">Sales Agent</span>
             <input
@@ -642,6 +645,10 @@ const CreateModal: React.FC<{
               onChange={(e) => setForm((f) => ({ ...f, salesman: e.target.value }))}
               className="w-full mt-1 px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
             />
+          </label>
+          <label className="block">
+            <span className="text-slate-600 dark:text-slate-300">Tracking No.</span>
+            <input value={form.tracking_no} onChange={(e) => setForm((f) => ({ ...f, tracking_no: e.target.value }))} className="w-full mt-1 px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800" />
           </label>
           <label className="block">
             <span className="text-slate-600 dark:text-slate-300">Remark</span>
@@ -697,8 +704,11 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
   const [selectedRefno, setSelectedRefno] = useState(initialSalesReturnRefNo || '');
   const [selected, setSelected] = useState<SalesReturnRecord | null>(null);
   const [items, setItems] = useState<SalesReturnItem[]>([]);
+  const [detailCustomers, setDetailCustomers] = useState<Contact[]>([]);
   const [dateDraft, setDateDraft] = useState(localTodayYmd());
   const [savingDate, setSavingDate] = useState(false);
+  const [headerDraft, setHeaderDraft] = useState<Record<string, string>>({});
+  const [savingHeader, setSavingHeader] = useState(false);
 
   const [loadingList, setLoadingList] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -742,6 +752,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
 
   const isPending = selected?.lstatus?.toLowerCase() === 'pending' || selected?.lstatus === '';
   const isPosted = selected?.lstatus?.toLowerCase() === 'posted';
+  const isNoReference = Boolean(selected && (!selected.linvoice_refno || selected.ltype === 'No Reference'));
   const canMutateDocDate = canMutateDocumentDateField({
     canEdit,
     hasBackdatedPosting,
@@ -750,7 +761,38 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
 
   useEffect(() => {
     setDateDraft((selected?.ldate || '').slice(0, 10) || localTodayYmd());
-  }, [selected?.lrefno, selected?.ldate]);
+    if (selected) setHeaderDraft({
+      customer_id: selected.customer_id, invoice_refno: selected.linvoice_refno, invoice_no: selected.linvoice_no,
+      transaction_refno: selected.ltransaction_refno, type: selected.linvoice_refno ? selected.ltype : '', discount_amt: String(selected.ldiscount_amt),
+      tax_type: selected.ltax_type, salesman: selected.salesman, ship_via: selected.ship_via,
+      tracking_no: selected.tracking_no, remark: selected.lremark, note: selected.lnote,
+      complaint_note: selected.lcomplaintnote,
+    });
+  }, [selected]);
+
+  useEffect(() => {
+    fetchContacts().then(setDetailCustomers).catch(() => setDetailCustomers([]));
+  }, []);
+
+  const updateHeaderDraft = (key: string, value: string) => setHeaderDraft((prev) => ({ ...prev, [key]: value }));
+  const saveHeader = async () => {
+    if (!selected || !isPending || !canEdit) return;
+    setSavingHeader(true);
+    setError('');
+    try {
+      const updated = await salesReturnService.update(selected.lrefno, {
+        ...headerDraft,
+        discount_amt: Number(headerDraft.discount_amt) || 0,
+      });
+      setSelected(updated);
+      setRows((prev) => prev.map((row) => row.lrefno === updated.lrefno ? updated : row));
+    } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
+      setError(err?.message || 'Failed to update sales return');
+    } finally { setSavingHeader(false); }
+  };
+
+  const selectedDetailCustomer = detailCustomers.find((contact) => contact.id === headerDraft.customer_id) || null;
 
   const saveDocumentDate = async () => {
     if (!selected || !canMutateDocDate) return;
@@ -861,7 +903,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
     setSourceSearch('');
     setLoadingSource(true);
     try {
-      if (selected?.ltype === 'No Reference') {
+      if (selected && (!selected.linvoice_refno || selected.ltype === 'No Reference')) {
         await loadPurchasedReturnItems('');
       } else {
         const sourceRows = await salesReturnService.sourceItems(selectedRefno);
@@ -890,6 +932,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
         source_item_id: index + 1,
         is_catalog_item: false,
         linv_refno: '',
+        location: String((item as any).location || ''),
         item_code: item.item_code,
         part_no: item.part_no,
         brand: item.brand,
@@ -903,7 +946,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
   };
 
   useEffect(() => {
-    if (!showSourceItems || selected?.ltype !== 'No Reference') return;
+    if (!showSourceItems || (selected?.linvoice_refno && selected.ltype !== 'No Reference')) return;
     setLoadingSource(true);
     loadPurchasedReturnItems(debouncedSourceSearch)
       .catch((err: any) => {
@@ -911,9 +954,9 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
         setSourceItems([]);
       })
       .finally(() => setLoadingSource(false));
-  }, [debouncedSourceSearch, showSourceItems, selected?.ltype, selected?.customer_id]);
+  }, [debouncedSourceSearch, showSourceItems, selected?.ltype, selected?.linvoice_refno, selected?.customer_id]);
 
-  const handleAddSourceItem = async (si: SourceItem, qty: number) => {
+  const handleAddSourceItem = async (si: SourceItem, qty: number, remark: string) => {
     setActionLoading(true);
     try {
       await salesReturnService.addItem(selectedRefno, {
@@ -921,17 +964,19 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
         part_no: si.part_no,
         brand: si.brand,
         description: si.description,
+        location: si.location || '',
         unit_price: si.unit_price,
         qty,
         linv_refno: si.linv_refno,
         original_qty: si.original_qty,
         unit: si.unit,
         discount: si.discount,
+        remark,
       });
       // Refresh items and source items
       const updatedItems = await salesReturnService.items(selectedRefno);
       setItems(updatedItems);
-      if (selected?.ltype === 'No Reference') {
+      if (selected && (!selected.linvoice_refno || selected.ltype === 'No Reference')) {
         await loadPurchasedReturnItems(debouncedSourceSearch);
       } else if (!si.is_catalog_item) {
         setSourceItems(await salesReturnService.sourceItems(selectedRefno));
@@ -1097,7 +1142,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
               <>
                 <div className="mx-auto grid max-w-[1000px] grid-cols-[90px_1fr_80px_170px_100px_190px] items-center gap-x-3 gap-y-4">
                   <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Type:</label>
-                  <span>{selected.ltype === 'OR' ? 'No Reference' : 'With Reference'}</span>
+                  {isPending && canEdit ? <select aria-label="Type" value={headerDraft.type ?? ''} onChange={(e) => { updateHeaderDraft('type', e.target.value); if (!e.target.value) updateHeaderDraft('invoice_refno', ''); }} className="h-[34px] rounded border px-2"><option value="">No Reference</option><option value="Invoice">Invoice</option><option value="OR">OR</option></select> : <span>{isNoReference ? 'No Reference' : 'With Reference'}</span>}
                   <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Date :</label>
                   {canMutateDocDate ? (
                     <div className="flex items-center gap-2">
@@ -1121,22 +1166,28 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
                     <input readOnly value={formatDate(selected.ldate)} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
                   )}
                   <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Sales Agent:</label>
-                  <input readOnly value={selected.sales_person || ''} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
+                  <input aria-label="Sales Agent" readOnly={!isPending || !canEdit} value={isPending && canEdit ? (headerDraft.salesman || '') : (selected.salesman || '')} onChange={(e) => updateHeaderDraft('salesman', e.target.value)} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
 
                   <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">DR/Invoice</label>
-                  <input readOnly value={selected.linvoice_no || ''} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
+                  <input aria-label="Invoice No." readOnly={!isPending || !canEdit} value={headerDraft.invoice_no || ''} onChange={(e) => updateHeaderDraft('invoice_no', e.target.value)} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
                   <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Ship VIA :</label>
-                  <input readOnly value={selected.ship_via || ''} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
+                  <input aria-label="Ship Via" readOnly={!isPending || !canEdit} value={headerDraft.ship_via || ''} onChange={(e) => updateHeaderDraft('ship_via', e.target.value)} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
                   <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Tracking No.:</label>
-                  <input readOnly value={selected.tracking_no || ''} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
+                  <input aria-label="Tracking No." readOnly={!isPending || !canEdit} value={headerDraft.tracking_no || ''} onChange={(e) => updateHeaderDraft('tracking_no', e.target.value)} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
 
                   <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Customer:</label>
-                  <input readOnly value={selected.customer_name || ''} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
+                  {isPending && canEdit ? <CustomerAutocomplete contacts={detailCustomers} selectedCustomer={selectedDetailCustomer} onSelect={(customer) => updateHeaderDraft('customer_id', customer.id)} placeholder="Search customer..." inputClassName="border-[#ccc]" /> : <input readOnly value={selected.customer_name || ''} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />}
                   <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Status:</label>
                   <span>{selected.lstatus || 'Pending'}</span>
                   <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Remark:</label>
-                  <input readOnly value={selected.lremark || ''} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
+                  <input aria-label="Remark" readOnly={!isPending || !canEdit} value={headerDraft.remark || ''} onChange={(e) => updateHeaderDraft('remark', e.target.value)} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
+                  <label className="text-right">Discount:</label><input aria-label="Discount Amount" type="number" min="0" step="0.01" readOnly={!isPending || !canEdit} value={headerDraft.discount_amt || '0'} onChange={(e) => updateHeaderDraft('discount_amt', e.target.value)} className="h-[34px] rounded border px-3" />
+                  <label className="text-right">Tax Type:</label><select aria-label="Tax Type" disabled={!isPending || !canEdit} value={headerDraft.tax_type || 'Exclusive'} onChange={(e) => updateHeaderDraft('tax_type', e.target.value)} className="h-[34px] rounded border px-3"><option>Exclusive</option><option>Inclusive</option><option>None</option></select>
+                  <label className="text-right">Comment / Instruction:</label><input aria-label="Comment / Instruction" readOnly={!isPending || !canEdit} value={headerDraft.note || ''} onChange={(e) => updateHeaderDraft('note', e.target.value)} className="h-[34px] rounded border px-3" />
+                  <label className="text-right">Customer Complaint:</label><input aria-label="Customer Complaint" readOnly={!isPending || !canEdit} value={headerDraft.complaint_note || ''} onChange={(e) => updateHeaderDraft('complaint_note', e.target.value)} className="h-[34px] rounded border px-3" />
                 </div>
+
+                {isPending && canEdit && <div className="mt-4 flex justify-end"><button type="button" onClick={() => void saveHeader()} disabled={savingHeader} className="rounded bg-[#5d82a2] px-4 py-2 text-white disabled:opacity-50">{savingHeader ? 'Saving...' : 'Save Changes'}</button></div>}
 
                 {isPending && canEdit && (
                   <div className="mt-5">
@@ -1150,7 +1201,6 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
                       <tr className="border-b-2 border-[#ddd]">
                         {isPending && canDelete && <th className="w-8 px-2 py-2" />}
                         <th className="px-2 py-2">Item Code</th>
-                        <th className="px-2 py-2">Timestamp</th>
                         <th className="px-2 py-2 text-right">Quantity</th>
                         <th className="px-2 py-2">Location.</th>
                         <th className="px-2 py-2">Part No.</th>
@@ -1162,13 +1212,12 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
                       </tr>
                     </thead>
                     <tbody>
-                      {loadingDetail && <tr><td colSpan={isPending && canDelete ? 11 : 10} className="px-2 py-5 text-slate-500">Loading items...</td></tr>}
-                      {!loadingDetail && items.length === 0 && <tr><td colSpan={isPending && canDelete ? 11 : 10} className="px-2 py-5 text-slate-500">No line items for this record.</td></tr>}
+                      {loadingDetail && <tr><td colSpan={isPending && canDelete ? 10 : 9} className="px-2 py-5 text-slate-500">Loading items...</td></tr>}
+                      {!loadingDetail && items.length === 0 && <tr><td colSpan={isPending && canDelete ? 10 : 9} className="px-2 py-5 text-slate-500">No line items for this record.</td></tr>}
                       {!loadingDetail && items.map((item) => (
                         <tr key={item.id} className="border-b border-[#ddd]">
                           {isPending && canDelete && <td className="px-2 py-2"><button type="button" onClick={() => handleDeleteItem(item.id)} disabled={actionLoading} className="text-[#d9534f]" title="Remove item"><Trash2 className="h-4 w-4" /></button></td>}
                           <td className="px-2 py-2">{item.item_code || '-'}</td>
-                          <td className="whitespace-nowrap px-2 py-2">{formatAccountingTimestamp(item.created_at)}</td>
                           <td className="px-2 py-2 text-right">{item.qty.toFixed(2)}</td>
                           <td className="px-2 py-2">{item.location || '-'}</td>
                           <td className="px-2 py-2">{item.part_no || '-'}</td>
@@ -1182,10 +1231,10 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
                     </tbody>
                     <tfoot className="font-semibold">
                       <tr>
-                        <td colSpan={isPending ? 2 : 1} className="px-2 py-3 text-right">Total Qty:</td>
+                        <td colSpan={isPending && canDelete ? 2 : 1} className="px-2 py-3 text-right">Total Qty:</td>
                         <td className="px-2 py-3 text-right"><span className="rounded-full bg-[#5d82a2] px-2 py-0.5 text-white">{items.reduce((sum, item) => sum + item.qty, 0).toFixed(2)}</span></td>
                         <td colSpan={6} className="px-2 py-3 text-right">Grand Total:</td>
-                        <td className="px-2 py-3 text-right"><span className="rounded-full bg-[#5d82a2] px-2 py-0.5 text-white">{peso.format(items.reduce((sum, item) => sum + item.amount, 0))}</span></td>
+                        <td className="px-2 py-3 text-right"><span className="rounded-full bg-[#5d82a2] px-2 py-0.5 text-white">{peso.format(calculateSalesReturnPostedAmount(items.reduce((sum, item) => sum + item.amount, 0), selected.ldiscount_amt || 0, selected.ltax_type || 'Exclusive'))}</span></td>
                       </tr>
                     </tfoot>
                   </table>
@@ -1203,12 +1252,12 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
         open={showSourceItems}
         sourceItems={sourceItems}
         loading={loadingSource}
-        emptyMessage={selected?.ltype === 'No Reference'
+        emptyMessage={isNoReference
           ? 'No purchased items found for this customer. Only parts in purchase history can be returned.'
           : undefined}
         onAdd={handleAddSourceItem}
         onClose={() => setShowSourceItems(false)}
-        onSearch={selected?.ltype === 'No Reference' ? setSourceSearch : undefined}
+        onSearch={isNoReference ? setSourceSearch : undefined}
       />
 
       <ConfirmDialog
@@ -1220,8 +1269,8 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
         onCancel={() => setConfirmAction((prev) => ({ ...prev, open: false }))}
       />
       {showSearchModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
-          <div className="w-full max-w-[600px] rounded-[5px] bg-white shadow-xl">
+        <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/45 p-4">
+          <div className="max-h-[90vh] w-full max-w-[600px] overflow-y-auto rounded-[5px] bg-white shadow-xl">
             <div className="flex items-center justify-between border-b px-5 py-4">
               <h3 className="text-[20px] font-semibold">Search Options</h3>
               <button type="button" onClick={() => setShowSearchModal(false)} className="text-2xl text-slate-500">×</button>

@@ -8,6 +8,7 @@ export interface SalesReturnRecord {
   lrefno: string;
   lcredit_no: string;
   linvoice_no: string;
+  linvoice_refno: string;
   ldate: string;
   created_at: string;
   lstatus: string;
@@ -18,6 +19,13 @@ export interface SalesReturnRecord {
   tracking_no: string;
   ship_via: string;
   lremark: string;
+  salesman: string;
+  lnote: string;
+  lcomplaintnote: string;
+  ltransaction_refno: string;
+  ldiscount_amt: number;
+  ltax_type: string;
+  internal_remarks: string;
   total_qty: number;
   total_amount: number;
 }
@@ -50,6 +58,8 @@ export interface SourceItem {
   source_item_id: number;
   is_catalog_item?: boolean;
   linv_refno: string;
+  location?: string;
+  remark?: string;
   item_code: string;
   part_no: string;
   brand: string;
@@ -123,10 +133,11 @@ const mutateApi = async <T>(url: string, method: string, body?: Record<string, u
   return payload.data as T;
 };
 
-const mapRecord = (row: any): SalesReturnRecord => ({
+export const mapSalesReturnRecord = (row: any): SalesReturnRecord => ({
   lrefno: String(row?.lrefno || ''),
   lcredit_no: String(row?.lcredit_no || ''),
   linvoice_no: String(row?.linvoice_no || ''),
+  linvoice_refno: String(row?.linvoice_refno || ''),
   ldate: String(row?.ldate || ''),
   created_at: String(row?.created_at || ''),
   lstatus: String(row?.lstatus || 'Pending'),
@@ -137,6 +148,13 @@ const mapRecord = (row: any): SalesReturnRecord => ({
   tracking_no: String(row?.tracking_no || ''),
   ship_via: String(row?.ship_via || ''),
   lremark: String(row?.lremark || ''),
+  salesman: String(row?.salesman || ''),
+  lnote: String(row?.lnote || ''),
+  lcomplaintnote: String(row?.lcomplaintnote || ''),
+  ltransaction_refno: String(row?.ltransaction_refno || ''),
+  ldiscount_amt: toNumber(row?.ldiscount_amt),
+  ltax_type: String(row?.ltax_type || 'Exclusive'),
+  internal_remarks: String(row?.internal_remarks || ''),
   total_qty: toNumber(row?.total_qty),
   total_amount: toNumber(row?.total_amount),
 });
@@ -196,7 +214,7 @@ export const salesReturnService = {
 
     const data = await requestApi<any>(`${API_BASE_URL}/sales-returns?${query.toString()}`);
     return {
-      items: Array.isArray(data?.items) ? data.items.map(mapRecord) : [],
+      items: Array.isArray(data?.items) ? data.items.map(mapSalesReturnRecord) : [],
       meta: {
         page: toNumber(data?.meta?.page, 1),
         per_page: toNumber(data?.meta?.per_page, 50),
@@ -211,7 +229,7 @@ export const salesReturnService = {
       main_id: String(getMainId()),
     });
     const data = await requestApi<any>(`${API_BASE_URL}/sales-returns/${encodeURIComponent(refno)}?${query.toString()}`);
-    return mapRecord(data);
+    return mapSalesReturnRecord(data);
   },
 
   async items(refno: string): Promise<SalesReturnItem[]> {
@@ -233,7 +251,7 @@ export const salesReturnService = {
       main_id: getMainId(),
       user_id: userId,
     });
-    return mapRecord(data);
+    return mapSalesReturnRecord(data);
   },
 
   async update(refno: string, payload: Record<string, unknown>): Promise<SalesReturnRecord> {
@@ -242,7 +260,7 @@ export const salesReturnService = {
       'PATCH',
       { ...payload, main_id: getMainId() }
     );
-    return mapRecord(data);
+    return mapSalesReturnRecord(data);
   },
 
   async sourceItems(refno: string): Promise<SourceItem[]> {
@@ -279,7 +297,7 @@ export const salesReturnService = {
       'POST',
       { main_id: getMainId(), user_id: userId }
     );
-    return mapRecord(data);
+    return mapSalesReturnRecord(data);
   },
 
   async unpost(refno: string): Promise<SalesReturnRecord> {
@@ -290,6 +308,6 @@ export const salesReturnService = {
       'POST',
       { main_id: getMainId(), user_id: userId }
     );
-    return mapRecord(data);
+    return mapSalesReturnRecord(data);
   },
 };

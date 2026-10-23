@@ -53,4 +53,23 @@ describe('salesReturnLocalApiService source documents', () => {
 
     await expect(salesReturnService.sourceDocuments('missing')).resolves.toEqual([]);
   });
+
+  it('forwards item location and remark with the add-item request', async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(() => okResponse({ id: 12 }));
+
+    await salesReturnService.addItem('cm-1', {
+      item_code: 'ITEM-1',
+      qty: 1,
+      location: 'Warehouse A',
+      remark: 'Customer reported damage',
+    });
+
+    const [, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(JSON.parse(String((init as RequestInit).body))).toMatchObject({
+      item_code: 'ITEM-1',
+      qty: 1,
+      location: 'Warehouse A',
+      remark: 'Customer reported damage',
+    });
+  });
 });
