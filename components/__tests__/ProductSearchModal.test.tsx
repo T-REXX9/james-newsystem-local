@@ -33,18 +33,19 @@ describe('ProductSearchModal', () => {
     searchSalesInquiryProductsMock.mockResolvedValue([product]);
 
     render(<ProductSearchModal isOpen onClose={vi.fn()} onSelect={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
     await waitFor(() => expect(screen.getByText('P-DSLA150PN926')).toBeInTheDocument());
 
-    expect(screen.getByText('VIP 1')).toBeInTheDocument();
-    expect(screen.getByText('VIP 2')).toBeInTheDocument();
-    expect(screen.getByText('VIP 3')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'VIP 1' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'VIP 2' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'VIP 3' })).toBeInTheDocument();
     expect(screen.getByText('₱445.00')).toBeInTheDocument();
     expect(screen.getByText('₱440.00')).toBeInTheDocument();
     expect(screen.getByText('₱0.00')).toBeInTheDocument();
-    expect(screen.getByText('Application:')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Application' })).toBeInTheDocument();
     expect(screen.getByText('ISUZU 4JA1 / 4JB1')).toBeInTheDocument();
-    expect(screen.getByText('Brand:')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Brand' })).toBeInTheDocument();
     expect(screen.getByText('DENSO')).toBeInTheDocument();
   });
 
@@ -61,6 +62,7 @@ describe('ProductSearchModal', () => {
         currentUser={{ id: 'agent-1', email: 'agent@example.test', role: 'Sales Agent' }}
       />
     );
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
     const imageCheckbox = await screen.findByRole('checkbox', { name: 'Select NOZZLE image for export' });
     fireEvent.click(imageCheckbox);
@@ -84,9 +86,36 @@ describe('ProductSearchModal', () => {
         currentUser={{ id: 'agent-1', email: 'agent@example.test', role: 'Sales Agent' }}
       />
     );
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
     expect(await screen.findByText(/Select a customer assigned to you in Sales Inquiry/i)).toBeInTheDocument();
     expect(screen.queryByRole('checkbox', { name: /image for export/i })).not.toBeInTheDocument();
+  });
+
+
+  it('sends every legacy field filter and selects a product from the results table', async () => {
+    searchSalesInquiryProductsMock.mockResolvedValue([product]);
+    const onSelect = vi.fn();
+    render(<ProductSearchModal isOpen onClose={vi.fn()} onSelect={onSelect} />);
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search by Part No.' }), { target: { value: 'P-DSLA' } });
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search by Item Code' }), { target: { value: 'QK2' } });
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search by Description' }), { target: { value: 'NOZZLE' } });
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search by Application' }), { target: { value: 'ISUZU' } });
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search by Original P/N' }), { target: { value: 'OPN-1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+    await waitFor(() => expect(searchSalesInquiryProductsMock).toHaveBeenCalledWith('', {
+      part_no: 'P-DSLA', item_code: 'QK2', description: 'NOZZLE', application: 'ISUZU', original_pn: 'OPN-1',
+    }));
+    expect(screen.getByRole('columnheader', { name: 'Part No.' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Item Code' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Description' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Reorder Qty' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Stock' })).toBeInTheDocument();
+    fireEvent.click(screen.getByText('P-DSLA150PN926'));
+    fireEvent.click(screen.getByRole('button', { name: 'ADD SELECTED' }));
+    expect(onSelect).toHaveBeenCalledWith(product);
   });
 
   it('shows search failures instead of leaving the modal in its empty initial state', async () => {
@@ -94,6 +123,7 @@ describe('ProductSearchModal', () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     render(<ProductSearchModal isOpen onClose={vi.fn()} onSelect={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Forbidden: You do not have permission to view');
   });

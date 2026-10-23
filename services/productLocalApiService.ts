@@ -278,7 +278,10 @@ export const searchProducts = async (
   return page.items;
 };
 
-export const searchSalesInquiryProducts = async (query: string): Promise<Product[]> => {
+export const searchSalesInquiryProducts = async (
+  query: string,
+  filters: { part_no?: string; item_code?: string; description?: string; application?: string; original_pn?: string } = {},
+): Promise<Product[]> => {
   const { mainId } = getLocalProductContext();
   const params = new URLSearchParams({
     main_id: String(mainId),
@@ -286,6 +289,9 @@ export const searchSalesInquiryProducts = async (query: string): Promise<Product
     status: 'active',
     page: '1',
     per_page: '50',
+  });
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value?.trim()) params.set(key, value.trim());
   });
   const response = await fetch(`${API_BASE_URL}/sales-inquiry-products?${params.toString()}`);
   if (!response.ok) throw new Error(await parseApiErrorMessage(response));

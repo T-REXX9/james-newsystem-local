@@ -56,6 +56,7 @@ vi.mock('../../services/localAuthService', () => ({
 vi.mock('../../services/productLocalApiService', () => ({
   getProductPrice: (...args: any[]) => getProductPriceMock(...args),
   fetchProductById: (...args: any[]) => fetchProductByIdMock(...args),
+  fetchSalesInquiryProductById: (...args: any[]) => fetchProductByIdMock(...args),
 }));
 
 vi.mock('../../services/notificationLocalApiService', () => ({

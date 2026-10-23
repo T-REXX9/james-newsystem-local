@@ -215,8 +215,8 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
   );
 
   const vipStanding = useMemo(
-    () => getVipStandingSummary('', customer.monthlyOrder, vipConfig),
-    [customer.monthlyOrder, vipConfig]
+    () => getVipStandingSummary('', customer.lastMonthOrder, vipConfig),
+    [customer.lastMonthOrder, vipConfig]
   );
   const activities = useMemo(() => customer.dailyActivity || [], [customer.dailyActivity]);
   const currentCustomerProfileState = customerProfileState?.customerId === customer.id ? customerProfileState : null;

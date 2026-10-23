@@ -65,6 +65,19 @@ describe('productLocalApiService', () => {
     expect(result[0]).toMatchObject({ id: 'product-1', part_no: 'P-001' });
   });
 
+  it('forwards all Sales Inquiry field filters to the permission-scoped product search route', async () => {
+    (global.fetch as any).mockImplementation(() => okResponse({ items: [], meta: { page: 1, per_page: 50, total: 0, total_pages: 1 } }));
+
+    await searchSalesInquiryProducts('', { part_no: 'P-1', item_code: 'C-1', description: 'FILTER', application: 'TRUCK', original_pn: 'O-1' });
+
+    const [url] = (global.fetch as any).mock.calls[0];
+    expect(String(url)).toContain('part_no=P-1');
+    expect(String(url)).toContain('item_code=C-1');
+    expect(String(url)).toContain('description=FILTER');
+    expect(String(url)).toContain('application=TRUCK');
+    expect(String(url)).toContain('original_pn=O-1');
+  });
+
   it('requests only products below a positive reorder quantity when required', async () => {
     (global.fetch as any).mockImplementation(() =>
       okResponse({

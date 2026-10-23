@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
-import { Search, Package, AlertCircle, X, Check } from 'lucide-react';
+import { AlertCircle, Search, X } from 'lucide-react';
 import type { Product, UserProfile } from '../types';
 import { searchSalesInquiryProducts } from '../services/productLocalApiService';
-import { useDebounce } from '../hooks/useDebounce';
 import { getCentralStock } from '../utils/productStock';
 import { canExportProductImages, isSalesAgentUser } from '../utils/productImageExportAccess';
 import ProductImageExportActions from './ProductImageExportActions';
@@ -18,303 +17,137 @@ interface ProductSearchModalProps {
     currentUser?: UserProfile | null;
 }
 
+type SearchFields = { part_no: string; item_code: string; description: string; application: string; original_pn: string };
+const emptySearchFields: SearchFields = { part_no: '', item_code: '', description: '', application: '', original_pn: '' };
+const searchInputs: Array<{ key: keyof SearchFields; label: string; placeholder: string }> = [
+    { key: 'part_no', label: 'Part No.', placeholder: 'Search Part No.' },
+    { key: 'item_code', label: 'Item Code', placeholder: 'Search Item Code' },
+    { key: 'description', label: 'Description', placeholder: 'Search Item Description' },
+    { key: 'application', label: 'Application', placeholder: 'Search Item Application' },
+    { key: 'original_pn', label: 'Original P/N', placeholder: 'Search Original P/N' },
+];
+
 const ProductSearchModal: React.FC<ProductSearchModalProps> = ({ isOpen, onClose, onSelect, customerName = '', assignedAgentId, currentUser = null }) => {
-    const [query, setQuery] = useState('');
+    const [fields, setFields] = useState<SearchFields>(emptySearchFields);
     const [results, setResults] = useState<Product[]>([]);
+    const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
     const [loading, setLoading] = useState(false);
-    const [selectedIndex, setSelectedIndex] = useState(-1);
-    const [noResults, setNoResults] = useState(false);
+    const [hasSearched, setHasSearched] = useState(false);
     const [searchError, setSearchError] = useState('');
     const [exportSelection, setExportSelection] = useState<Map<string, Product>>(() => new Map());
+    const searchRequestId = useRef(0);
 
-    const debouncedQuery = useDebounce(query, 300);
     const canExport = canExportProductImages(currentUser, assignedAgentId);
     const isUnassignedSalesAgent = Boolean(currentUser?.id && isSalesAgentUser(currentUser) && !canExport);
     const selectedExportProducts = Array.from(exportSelection.values());
 
-    // Reset state when opened
     useEffect(() => {
-        if (isOpen) {
-            setQuery('');
-            setResults([]);
-            setSelectedIndex(-1);
-            setNoResults(false);
-            setExportSelection(new Map());
+        if (!isOpen) {
+            searchRequestId.current += 1;
+            return;
         }
+        setFields(emptySearchFields);
+        setResults([]);
+        setSelectedProduct(null);
+        setHasSearched(false);
+        setSearchError('');
+        setLoading(false);
+        setExportSelection(new Map());
+        return () => { searchRequestId.current += 1; };
     }, [isOpen]);
 
-    // Search effect
+    const runSearch = useCallback(async () => {
+        const requestId = ++searchRequestId.current;
+        setLoading(true);
+        setSearchError('');
+        setSelectedProduct(null);
+        setHasSearched(true);
+        try {
+            const data = await searchSalesInquiryProducts('', fields);
+            if (requestId === searchRequestId.current) setResults(data);
+        } catch (error) {
+            if (requestId === searchRequestId.current) {
+                console.error('Error searching products:', error);
+                setResults([]);
+                setSearchError(error instanceof Error ? error.message : 'Unable to search products. Please try again.');
+            }
+        } finally {
+            if (requestId === searchRequestId.current) setLoading(false);
+        }
+    }, [fields]);
+
     useEffect(() => {
         if (!isOpen) return undefined;
-
-        let isCurrentRequest = true;
-        const fetchProducts = async () => {
-            setLoading(true);
-            setSearchError('');
-            try {
-                const data = await searchSalesInquiryProducts(debouncedQuery);
-                if (!isCurrentRequest) return;
-                setResults(data);
-                setNoResults(data.length === 0);
-                setSelectedIndex(-1);
-            } catch (error) {
-                console.error('Error searching products:', error);
-                if (!isCurrentRequest) return;
-                setResults([]);
-                setNoResults(false);
-                setSearchError(error instanceof Error ? error.message : 'Unable to search products. Please try again.');
-            } finally {
-                if (isCurrentRequest) setLoading(false);
-            }
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') { searchRequestId.current += 1; onClose(); }
         };
-
-        void fetchProducts();
-        return () => { isCurrentRequest = false; };
-    }, [debouncedQuery, isOpen]);
-
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            setSelectedIndex(prev => (prev < results.length - 1 ? prev + 1 : prev));
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            setSelectedIndex(prev => (prev > 0 ? prev - 1 : prev));
-        } else if (e.key === 'Enter') {
-            e.preventDefault();
-            if (selectedIndex >= 0 && results[selectedIndex]) {
-                onSelect(results[selectedIndex]);
-                onClose();
-            }
-        } else if (e.key === 'Escape') {
-            onClose();
-        }
-    };
-
-    // Highlight helper
-    const highlightMatch = (text: string, query: string) => {
-        if (!text) return '';
-        if (!query) return text;
-        const parts = text.split(new RegExp(`(${query})`, 'gi'));
-        return (
-            <span>
-                {parts.map((part, i) =>
-                    part.toLowerCase() === query.toLowerCase() ? (
-                        <span key={i} className="bg-brand-blue/20 text-brand-blue font-bold rounded px-0.5">{part}</span>
-                    ) : part
-                )}
-            </span>
-        );
-    };
-
-    const getMatchLabel = (product: Product): string => {
-        const q = query.toLowerCase();
-        if (product.part_no.toLowerCase().includes(q)) return 'Part No';
-        if (product.item_code.toLowerCase().includes(q)) return 'Item Code';
-        if (product.description.toLowerCase().includes(q)) return 'Description';
-        return 'Product';
-    };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isOpen, onClose]);
 
     if (!isOpen) return null;
 
+    const handleClose = () => {
+        searchRequestId.current += 1;
+        onClose();
+    };
+
+    const handleSelect = () => {
+        if (!selectedProduct) return;
+        onSelect(selectedProduct);
+        handleClose();
+    };
+
     return ReactDOM.createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6">
-            {/* Backdrop */}
-            <div
-                className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity"
-                onClick={onClose}
-            />
-
-            {/* Modal Panel */}
-            <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-xl shadow-2xl ring-1 ring-slate-900/5 flex flex-col max-h-[80vh] animate-in fade-in zoom-in-95 duration-200">
-
-                {/* Header / Search */}
-                <div className="flex items-center gap-3 p-4 border-b border-slate-100 dark:border-slate-800">
-                    <Search className="h-5 w-5 text-slate-400" />
-                    <SearchableSelect
-                        value=""
-                        options={[]}
-                        onChange={() => undefined}
-                        inputOnly
-                        autoFocus
-                        inputValue={query}
-                        onInputChange={setQuery}
-                        onInputKeyDown={handleKeyDown}
-                        inputAriaLabel="Search products"
-                        searchPlaceholder="Search products..."
-                        searchInputClassName="border-0 bg-transparent py-0 pl-0 text-lg shadow-none focus:border-0 focus:ring-0 dark:bg-transparent"
-                        className="min-w-0 flex-1"
-                    />
-                    <button
-                        onClick={onClose}
-                        className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 transition-colors"
-                    >
-                        <X className="h-5 w-5" />
-                    </button>
-                </div>
-
-                {/* Loading Bar */}
-                {loading && (
-                    <div className="h-0.5 w-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                        <div className="h-full bg-brand-blue animate-progress origin-left" style={{ width: '50%' }}></div>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-3 sm:p-5" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) handleClose(); }}>
+            <section role="dialog" aria-modal="true" aria-labelledby="product-search-title" className="relative flex h-[82vh] max-h-[760px] min-h-[min(560px,70vh)] w-full max-w-[1210px] flex-col overflow-hidden rounded-[5px] bg-white shadow-2xl">
+                <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#ddd] px-4 py-3 sm:px-5">
+                    <h2 id="product-search-title" className="text-[18px] font-semibold text-[#333]">Inquire Product</h2>
+                    <div className="flex items-center gap-2">
+                        <button type="button" onClick={() => void runSearch()} disabled={loading} className="rounded-[4px] border border-[#ccc] bg-white px-3 py-1.5 text-[13px] hover:bg-[#f5f5f5] disabled:opacity-50"><span className="inline-flex items-center gap-1.5"><Search className="h-3.5 w-3.5" />Search</span></button>
+                        <button type="button" disabled={loading} onClick={() => { setFields(emptySearchFields); setResults([]); setSelectedProduct(null); setHasSearched(false); setSearchError(''); }} className="rounded-[4px] border border-[#ccc] bg-white px-3 py-1.5 text-[13px] hover:bg-[#f5f5f5]">Refresh</button>
+                        <button type="button" aria-label="Close product search" onClick={handleClose} className="rounded p-1 text-[#777] hover:bg-[#eee] hover:text-[#333]"><X className="h-5 w-5" /></button>
                     </div>
-                )}
+                </header>
 
-                {/* Results List */}
-                <div className="flex-1 overflow-y-auto min-h-[300px] p-2">
-                    {searchError ? (
-                        <div className="flex h-full flex-col items-center justify-center py-12 text-center text-rose-600" role="alert">
-                            <AlertCircle className="mb-3 h-12 w-12 text-rose-300" aria-hidden="true" />
-                            <p className="text-sm">{searchError}</p>
-                        </div>
-                    ) : results.length > 0 ? (
-                        <ul className="space-y-1">
-                            {results.map((product, index) => {
-                                const isSelected = index === selectedIndex;
-                                const matchType = getMatchLabel(product);
+                <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 sm:px-5">
+                    <form onSubmit={(event) => { event.preventDefault(); void runSearch(); }} className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        {searchInputs.map(({ key, label, placeholder }) => (
+                            <label key={key} className="grid min-w-0 grid-cols-1 items-center gap-1.5 sm:grid-cols-[105px_minmax(0,1fr)]">
+                                <span className="text-[13px] text-[#333]">{label}</span>
+                                <SearchableSelect value="" options={[]} onChange={() => undefined} inputOnly disabled={loading} inputValue={fields[key]} onInputChange={(value) => setFields((current) => ({ ...current, [key]: value }))} inputAriaLabel={`Search by ${label}`} searchPlaceholder={placeholder} searchInputClassName="h-[34px] rounded-[4px] border-[#ccc] py-1.5 text-[13px] focus:border-[#66afe9] focus:ring-[#66afe9]/20" />
+                            </label>
+                        ))}
+                    </form>
 
-                                return (
-                                    <li
-                                        key={product.id}
-                                        className={`group flex items-start gap-4 p-3 rounded-lg cursor-pointer transition-all ${isSelected
-                                                ? 'bg-brand-blue/5 ring-1 ring-brand-blue/20'
-                                                : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
-                                            }`}
-                                        onClick={() => {
-                                            onSelect(product);
-                                            onClose();
-                                        }}
-                                        onMouseEnter={() => setSelectedIndex(index)}
-                                    >
-                                        {canExport && product.recordImage?.trim() && (
-                                            <input
-                                                type="checkbox"
-                                                aria-label={`Select ${product.description || product.part_no} image for export`}
-                                                checked={exportSelection.has(product.id)}
-                                                onClick={(event) => event.stopPropagation()}
-                                                onChange={(event) => setExportSelection((current) => {
-                                                    const next = new Map(current);
-                                                    if (event.target.checked) next.set(product.id, product); else next.delete(product.id);
-                                                    return next;
-                                                })}
-                                                className="mt-2 h-4 w-4 shrink-0 accent-blue-700"
-                                            />
-                                        )}
-                                        <div className={`mt-1 p-2 rounded-lg ${isSelected ? 'bg-brand-blue text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
-                                            <Package className="h-5 w-5" />
-                                        </div>
-
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center justify-between mb-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-mono font-bold text-sm text-slate-900 dark:text-white">
-                                                        {highlightMatch(product.part_no, query)}
-                                                    </span>
-                                                    {matchType !== 'Product' && query && (
-                                                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500">
-                                                            via {matchType}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            <p className="text-sm text-slate-600 dark:text-slate-300 mb-1.5 line-clamp-2">
-                                                {highlightMatch(product.description, query)}
-                                            </p>
-
-                                            {product.application && (
-                                                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1.5 line-clamp-2">
-                                                    <span className="font-medium text-slate-600 dark:text-slate-300">Application:</span>{' '}
-                                                    {highlightMatch(product.application, query)}
-                                                </p>
-                                            )}
-
-                                            <div className="flex items-center gap-4 text-xs text-slate-500">
-                                                <span className="flex items-center gap-1">
-                                                    Brand: <span className="font-medium text-slate-700 dark:text-slate-300">{product.brand || '—'}</span>
-                                                </span>
-                                                <span className="flex items-center gap-1">
-                                                    Code: <span className="font-mono text-slate-700 dark:text-slate-300">{highlightMatch(product.item_code, query)}</span>
-                                                </span>
-                                                <span className="flex items-center gap-1">
-                                                    Stock: <span className={`font-medium ${getCentralStock(product) > 0 ? 'text-green-600' : 'text-red-500'}`}>
-                                                        {getCentralStock(product)}
-                                                    </span>
-                                                </span>
-                                            </div>
-
-                                            <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
-                                                {[
-                                                    ['VIP 1', product.price_vip1],
-                                                    ['VIP 2', product.price_vip2],
-                                                    ['VIP 3', product.price_vip3],
-                                                ].map(([label, amount]) => (
-                                                    <div key={label} className="rounded bg-slate-50 px-2 py-1.5 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                                                        <div className="font-medium">{label}</div>
-                                                        <div className="font-mono font-semibold text-slate-900 dark:text-white">₱{Number(amount || 0).toFixed(2)}</div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        {isSelected && (
-                                            <div className="self-center pr-2">
-                                                <Check className="h-4 w-4 text-brand-blue" />
-                                            </div>
-                                        )}
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                    ) : (
-                        <div className="h-full flex flex-col items-center justify-center text-slate-400 py-12">
-                            {noResults ? (
-                                <>
-                                    <AlertCircle className="h-12 w-12 mb-3 text-slate-200 dark:text-slate-700" />
-                                    <p className="text-sm">No products found for "{query}"</p>
-                                </>
-                            ) : (
-                                <p className="text-sm">Start typing to search products...</p>
-                            )}
-                        </div>
-                    )}
-                </div>
-
-                {canExport && selectedExportProducts.length > 0 && (
-                    <div className="space-y-2 border-t border-slate-100 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                            <span className="text-xs text-slate-600 dark:text-slate-300">{selectedExportProducts.length} product image{selectedExportProducts.length === 1 ? '' : 's'} selected</span>
-                            <ProductImageExportActions products={selectedExportProducts} customerName={customerName || 'product'} compact />
-                        </div>
-                        <ul aria-label="Selected product images" className="flex max-h-14 flex-wrap gap-1.5 overflow-y-auto">
-                            {selectedExportProducts.map((product) => (
-                                <li key={product.id} className="flex max-w-full items-center gap-1 rounded-full border border-slate-200 bg-slate-50 py-0.5 pl-2.5 pr-1 text-[11px] text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                                    <span className="max-w-40 truncate">{product.description || product.part_no || product.item_code}</span>
-                                    <button type="button" aria-label={`Remove ${product.description || product.part_no || product.item_code} from image export`} onClick={() => setExportSelection((current) => {
-                                        const next = new Map(current);
-                                        next.delete(product.id);
-                                        return next;
-                                    })} className="rounded-full px-1.5 py-0.5 font-bold text-slate-500 hover:bg-slate-200">×</button>
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
-                )}
-                {isUnassignedSalesAgent && (
-                    <p className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">Select a customer assigned to you in Sales Inquiry to export product images.</p>
-                )}
-
-                {/* Footer Legend */}
-                <div className="px-4 py-2 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 rounded-b-xl flex justify-between text-xs text-slate-400">
-                    <div>
-                        Showing top 50 results
-                    </div>
-                    <div className="flex gap-4">
-                        <span className="flex items-center gap-1"><kbd className="font-mono bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded px-1">↑↓</kbd> Navigate</span>
-                        <span className="flex items-center gap-1"><kbd className="font-mono bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded px-1">↵</kbd> Select</span>
-                        <span className="flex items-center gap-1"><kbd className="font-mono bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded px-1">Esc</kbd> Close</span>
+                    {loading && <p className="py-3 text-center text-[13px] text-[#666]" role="status">Loading products...</p>}
+                    {searchError && <p className="flex items-center justify-center gap-2 py-5 text-[13px] text-rose-700" role="alert"><AlertCircle className="h-4 w-4" />{searchError}</p>}
+                    <div className="mt-4 min-h-[240px] flex-1 overflow-auto border border-[#ddd]">
+                        <table className="w-full min-w-[980px] border-collapse text-left text-[12px]">
+                            <thead className="sticky top-0 z-10 bg-[#f5f5f5] text-[#333] shadow-sm">
+                                <tr>{canExport && <th className="border-b border-[#ccc] px-2 py-2" aria-label="Export selection" />}{['Part No.', 'Item Code', 'Description', 'Brand', 'Application', 'Reorder Qty', 'VIP 1', 'VIP 2', 'VIP 3', 'Stock'].map((heading) => <th key={heading} className="border-b border-[#ccc] px-2.5 py-2 font-semibold">{heading}</th>)}</tr>
+                            </thead>
+                            <tbody>
+                                {results.map((product) => {
+                                    const isSelected = selectedProduct?.id === product.id;
+                                    return <tr key={product.id} tabIndex={0} onClick={() => setSelectedProduct(product)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedProduct(product); } }} aria-selected={isSelected} className={`cursor-pointer border-b border-[#e5e5e5] ${isSelected ? 'bg-[#eaf3ff] text-[#1d4ed8]' : 'hover:bg-[#f7faff]'}`}>
+                                        {canExport && <td className="px-2 py-2" onClick={(event) => event.stopPropagation()}>{product.recordImage?.trim() && <input type="checkbox" aria-label={`Select ${product.description || product.part_no} image for export`} checked={exportSelection.has(product.id)} onChange={(event) => setExportSelection((current) => { const next = new Map(current); if (event.target.checked) next.set(product.id, product); else next.delete(product.id); return next; })} className="h-4 w-4 accent-blue-700" />}</td>}
+                                        <td className="px-2.5 py-2 font-semibold">{product.part_no || '—'}</td><td className="px-2.5 py-2">{product.item_code || '—'}</td><td className="min-w-[180px] px-2.5 py-2">{product.description || '—'}{product.original_pn_no && <div className="mt-1 text-[11px] text-[#666]"><b>ORIG P/N No:</b> {product.original_pn_no}</div>}</td><td className="px-2.5 py-2">{product.brand || '—'}</td><td className="min-w-[150px] px-2.5 py-2">{product.application || '—'}</td><td className="px-2.5 py-2 text-right">{product.reorder_quantity ?? '—'}</td><td className="px-2.5 py-2 text-right">₱{Number(product.price_vip1 || 0).toFixed(2)}</td><td className="px-2.5 py-2 text-right">₱{Number(product.price_vip2 || 0).toFixed(2)}</td><td className="px-2.5 py-2 text-right">₱{Number(product.price_vip3 || 0).toFixed(2)}</td><td className="px-2.5 py-2 text-right">{getCentralStock(product)}</td>
+                                    </tr>;
+                                })}
+                                {results.length === 0 && <tr><td colSpan={canExport ? 11 : 10} className="px-3 py-8 text-center text-[#777]">{searchError ? '' : loading ? 'Loading products...' : hasSearched ? 'No Record Found' : 'Enter one or more product filters, then select Search.'}</td></tr>}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
-            </div>
+
+                {canExport && selectedExportProducts.length > 0 && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#ddd] px-4 py-3"><span className="text-xs text-slate-600">{selectedExportProducts.length} product image{selectedExportProducts.length === 1 ? '' : 's'} selected</span><ProductImageExportActions products={selectedExportProducts} customerName={customerName || 'product'} compact /></div>}
+                {isUnassignedSalesAgent && <p className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">Select a customer assigned to you in Sales Inquiry to export product images.</p>}
+                <footer className="flex justify-end gap-2 border-t border-[#ddd] bg-[#fafafa] px-4 py-3 sm:px-5">
+                    <button type="button" onClick={handleClose} className="rounded-[4px] border border-[#ccc] bg-white px-4 py-2 text-[13px] hover:bg-[#f5f5f5]">Close</button>
+                    <button type="button" onClick={handleSelect} disabled={!selectedProduct} className="rounded-[4px] bg-[#337ab7] px-4 py-2 text-[13px] text-white hover:bg-[#286090] disabled:cursor-not-allowed disabled:opacity-50">ADD SELECTED</button>
+                </footer>
+            </section>
         </div>,
         document.body
     );
