@@ -22,7 +22,7 @@ interface SalesInquiryPrintPreviewProps {
   canEditWarranty?: boolean;
 }
 
-const DEFAULT_WARRANTY_TEXT = 'ISHINOMOTO products only — covered against factory defects found upon installation, subject to inspection.';
+const DEFAULT_WARRANTY_TEXT = 'all brands covers warranty against factory defects. Condition apply';
 
 const moneyFormatter = new Intl.NumberFormat('en-PH', {
   minimumFractionDigits: 2,

@@ -84,7 +84,7 @@ describe('SalesInquiryPrintPreview', () => {
     expect(screen.getByText('Brand')).toBeInTheDocument();
     expect(screen.getByText('ISHINOMOTO')).toBeInTheDocument();
     expect(screen.getByText('Warranty:')).toBeInTheDocument();
-    expect(screen.getByText(/ISHINOMOTO products only/)).toBeInTheDocument();
+    expect(screen.getByText('all brands covers warranty against factory defects. Condition apply')).toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: 'Warranty' })).not.toBeInTheDocument();
     expect(screen.getByText('Validity:')).toBeInTheDocument();
     expect(screen.getByText(/Orders not confirmed by 6:00 PM/)).toBeInTheDocument();
